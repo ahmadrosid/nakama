@@ -1,5 +1,5 @@
 import type { UserOrgSummary } from "@nakama/core/contract";
-import { Add01Icon, ArrowDown01Icon, PencilIcon } from "hugeicons-react";
+import { Add01Icon, ArrowDown01Icon, Edit03Icon } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -206,7 +206,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                     type="button"
                     variant="ghost"
                   >
-                    <PencilIcon aria-hidden className="size-3.5" />
+                    <Edit03Icon aria-hidden className="size-3.5" />
                   </Button>
                 ) : null}
               </DropdownMenuItem>
