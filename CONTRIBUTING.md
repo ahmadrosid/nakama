@@ -120,7 +120,7 @@ git push -u origin HEAD
 gh pr create
 ```
 
-4. PR body should state what changed, what you verified, and remaining risks
+4. PR body uses the ADHD PR format in [`.agents/skills/adhd-pr-description/SKILL.md`](./.agents/skills/adhd-pr-description/SKILL.md) — outcome lead, Before/After, Why safe (≤3), residual risk, tight test plan. Agents opening PRs via `ce-commit-push-pr` must follow that skill.
 5. CI must pass before merge
 
 Do not rewrite `AGENTS.md`, `README.md`, or `ARCHITECTURE.md` unless the change is specifically about those files.
