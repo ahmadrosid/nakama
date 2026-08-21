@@ -24,6 +24,7 @@
     "./cloudflare-provider-config": "./src/cloudflare-provider-config.ts",
     "./minimax-provider-config": "./src/minimax-provider-config.ts",
     "./ollama-provider-config": "./src/ollama-provider-config.ts",
+    "./discovery-providers": "./src/discovery-providers.ts",
     "./provider-inference": "./src/provider-inference.ts",
     "./provider-label": "./src/provider-label.ts",
     "./provider-resolution": "./src/provider-resolution.ts",
