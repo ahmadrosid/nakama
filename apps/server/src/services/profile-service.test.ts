@@ -15,6 +15,17 @@ const tinyPngBase64 =
 
 const ORG_ID = "org_test";
 
+const PYTHON_ECHO_TOOL = `import json
+import sys
+
+def run(input, context):
+    return {"echoed": input.get("message")}
+
+if __name__ == "__main__":
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
+`;
+
 describe("profile service createTool", () => {
   let tempConfigDir = "";
 
@@ -66,10 +77,7 @@ describe("profile service createTool", () => {
     const toolsDir = path.join(tempConfigDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
-    await writeFile(
-      path.join(toolsDir, "echo.py"),
-      `def run(input, context):\n    return {"echoed": input.get("message")}\n`
-    );
+    await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const tool = await service.createTool({
@@ -90,10 +98,7 @@ describe("profile service createTool", () => {
     const toolsDir = path.join(tempConfigDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
-    await writeFile(
-      path.join(toolsDir, "echo.py"),
-      `def run(input, context):\n    return {"echoed": input.get("message")}\n`
-    );
+    await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const parameters = {
       properties: { message: { type: "string" } },
@@ -127,10 +132,7 @@ describe("profile service createTool", () => {
     const toolsDir = path.join(tempConfigDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
-    await writeFile(
-      path.join(toolsDir, "echo.py"),
-      `def run(input, context):\n    return {"echoed": input.get("message")}\n`
-    );
+    await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const tool = await service.createTool({
