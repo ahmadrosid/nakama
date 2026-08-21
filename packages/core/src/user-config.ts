@@ -82,6 +82,8 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  zhipu: "GLM (Z.ai)",
+  zhipu_cn: "GLM (CN)",
 };
 
 export function createProviderInstanceId(): string {

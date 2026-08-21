@@ -12,6 +12,10 @@ import {
   MINIMAX_CN_DEFAULT_BASE_URL,
   MINIMAX_DEFAULT_BASE_URL,
 } from "@nakama/core/minimax-provider-config";
+import {
+  ZHIPU_CN_DEFAULT_BASE_URL,
+  ZHIPU_DEFAULT_BASE_URL,
+} from "@nakama/core/zhipu-provider-config";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { createCerebrasProvider } from "./cerebras";
@@ -90,6 +94,20 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? MINIMAX_CN_DEFAULT_BASE_URL,
         model,
         providerName: "minimax_cn",
+      });
+    case "zhipu":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? ZHIPU_DEFAULT_BASE_URL,
+        model,
+        providerName: "zhipu",
+      });
+    case "zhipu_cn":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? ZHIPU_CN_DEFAULT_BASE_URL,
+        model,
+        providerName: "zhipu_cn",
       });
     case "opencode_go":
       return createOpenCodeGoProvider({

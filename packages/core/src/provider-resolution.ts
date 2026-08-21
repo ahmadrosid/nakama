@@ -1,6 +1,7 @@
 import { readEnvValue } from "./config";
-
 import type { ProviderName } from "./contract";
+import { defaultMinimaxBaseUrl } from "./minimax-provider-config";
+import { defaultZhipuBaseUrl } from "./zhipu-provider-config";
 
 export type UserProviderName = ProviderName;
 
@@ -18,6 +19,8 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "cloudflare",
   "minimax",
   "minimax_cn",
+  "zhipu",
+  "zhipu_cn",
 ] as const;
 
 // Providers whose model lists are discovered live from the platform's
@@ -25,10 +28,24 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
 // hardcoded catalog. Adding a discovery-based provider is one entry here
 // plus its type/env-key/label/base-URL wiring — no resolution edits.
 export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<UserProviderName> =
-  new Set<UserProviderName>(["openai_compatible", "minimax", "minimax_cn"]);
+  new Set<UserProviderName>([
+    "openai_compatible",
+    "minimax",
+    "minimax_cn",
+    "zhipu",
+    "zhipu_cn",
+  ]);
 
 export function isDiscoveryModelProvider(provider: UserProviderName): boolean {
   return DISCOVERY_MODEL_PROVIDERS.has(provider);
+}
+
+// Region-default base URL for a discovery provider, or null when the family
+// has no fixed default (openai_compatible users supply their own endpoint).
+export function defaultDiscoveryBaseUrl(
+  provider: UserProviderName
+): string | null {
+  return defaultMinimaxBaseUrl(provider) ?? defaultZhipuBaseUrl(provider);
 }
 
 export function parseProviderName(
@@ -49,7 +66,9 @@ export function parseProviderName(
     normalized === "opencode_go" ||
     normalized === "cloudflare" ||
     normalized === "minimax" ||
-    normalized === "minimax_cn"
+    normalized === "minimax_cn" ||
+    normalized === "zhipu" ||
+    normalized === "zhipu_cn"
   ) {
     return normalized;
   }
@@ -87,6 +106,10 @@ export function apiKeyEnvVarForProvider(
       return "MINIMAX_API_KEY";
     case "minimax_cn":
       return "MINIMAX_CN_API_KEY";
+    case "zhipu":
+      return "ZHIPU_API_KEY";
+    case "zhipu_cn":
+      return "ZHIPU_CN_API_KEY";
   }
 }
 
