@@ -91,7 +91,8 @@ function ToolPlaygroundPageContent({
 }) {
   const [searchParams] = useSearchParams();
   const back = toolPlaygroundBackTarget(searchParams);
-  const isJavascriptTool = tool.handlerType === "javascript";
+  const isCustomTool =
+    tool.handlerType === "javascript" || tool.handlerType === "python";
   const run = useToolPlaygroundRun(tool, superBotProfileId);
   const [mainTab, setMainTab] = useState<"output" | "detail">("output");
 
@@ -103,14 +104,14 @@ function ToolPlaygroundPageContent({
         className={cn(sectionClass, "flex min-h-0 flex-1 overflow-hidden")}
       >
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          {isJavascriptTool ? (
+          {isCustomTool ? (
             <aside className="order-2 shrink-0 overflow-y-auto border-border border-t lg:order-1 lg:w-80 lg:border-t-0 lg:border-r xl:w-96">
               <ToolPlaygroundRunForm run={run} tool={tool} />
             </aside>
           ) : null}
 
           <main className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-2">
-            {isJavascriptTool ? (
+            {isCustomTool ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                   aria-label="Tool playground"
@@ -165,8 +166,8 @@ function ToolPlaygroundPageContent({
                   className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-amber-800 text-sm dark:text-amber-200"
                   role="status"
                 >
-                  Playground is available for custom JavaScript tools only.
-                  Built-in and MCP tools cannot be run here.{" "}
+                  Playground is available for custom JavaScript or Python tools
+                  only. Built-in and MCP tools cannot be run here.{" "}
                   <Link
                     className="font-medium underline underline-offset-2"
                     to={back.href}

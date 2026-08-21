@@ -49,6 +49,28 @@ describe("readToolSource", () => {
     expect(source.content).toContain('return "ok"');
   });
 
+  test("reads python tool modules from the tools directory", async () => {
+    await writeFile(
+      path.join(toolsDir, "echo.py"),
+      'def run(input, context):\n    return {"ok": True}\n',
+      "utf8"
+    );
+
+    const source = await readToolSource({
+      createdAt: new Date().toISOString(),
+      description: "Echo",
+      handlerConfig: { modulePath: "echo.py" },
+      handlerType: "python",
+      id: "tool_echo_py",
+      name: "echo_py",
+      updatedAt: new Date().toISOString(),
+    });
+
+    expect(source.path).toBe("echo.py");
+    expect(source.language).toBe("python");
+    expect(source.content).toContain("def run");
+  });
+
   test("reads built-in write_file source", async () => {
     const source = await readToolSource({
       createdAt: new Date().toISOString(),

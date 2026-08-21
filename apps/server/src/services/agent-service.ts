@@ -232,6 +232,10 @@ import {
   buildComposioToolDefinitions,
 } from "./composio-tool-bridge";
 import {
+  customToolTypesLabel,
+  getCustomToolHandler,
+} from "./custom-tool-handlers";
+import {
   generateImageWithOpenAI,
   IMAGE_MODEL_REQUIRED_MESSAGE,
   resolveImageGenerationSelection,
@@ -245,7 +249,6 @@ import {
 } from "./image-vision-fallback";
 import {
   invalidateJavascriptModuleCache,
-  loadJavascriptTool,
   resolveJavascriptModulePath,
 } from "./javascript-tool-loader";
 import type { LlmUsageTracker } from "./llm-usage-tracker";
@@ -2434,10 +2437,11 @@ export class AgentService {
     context: { orgId: string; userId: string }
   ): Promise<RunToolResponse> {
     const { tool } = await this.profileService.getTool(toolId);
+    const handler = getCustomToolHandler(tool.handlerType);
 
-    if (tool.handlerType !== "javascript") {
+    if (!handler) {
       throw new Error(
-        "Only custom JavaScript tools can be run in the playground."
+        `Only custom ${customToolTypesLabel()} tools can be run in the playground.`
       );
     }
 
@@ -2452,22 +2456,25 @@ export class AgentService {
       toolId
     );
 
-    const handlerConfig =
-      typeof record.handlerConfig === "object" && record.handlerConfig !== null
-        ? (record.handlerConfig as { modulePath?: string })
-        : null;
+    if (tool.handlerType === "javascript") {
+      const handlerConfig =
+        typeof record.handlerConfig === "object" &&
+        record.handlerConfig !== null
+          ? (record.handlerConfig as { modulePath?: string })
+          : null;
 
-    if (handlerConfig?.modulePath) {
-      try {
-        invalidateJavascriptModuleCache(
-          resolveJavascriptModulePath(handlerConfig.modulePath)
-        );
-      } catch {
-        // Invalid module paths fail when loading the tool.
+      if (handlerConfig?.modulePath) {
+        try {
+          invalidateJavascriptModuleCache(
+            resolveJavascriptModulePath(handlerConfig.modulePath)
+          );
+        } catch {
+          // Invalid module paths fail when loading the tool.
+        }
       }
     }
 
-    const loaded = await loadJavascriptTool(record);
+    const loaded = await handler.load(record);
 
     if (!loaded) {
       throw new Error(`Failed to load tool "${tool.name}".`);
@@ -2502,10 +2509,11 @@ export class AgentService {
     prompt: string
   ): Promise<SuggestToolParamsResponse> {
     const { tool } = await this.profileService.getTool(toolId);
+    const handler = getCustomToolHandler(tool.handlerType);
 
-    if (tool.handlerType !== "javascript") {
+    if (!handler) {
       throw new Error(
-        "Only custom JavaScript tools support parameter suggestions."
+        `Only custom ${customToolTypesLabel()} tools support parameter suggestions.`
       );
     }
 
@@ -2515,7 +2523,7 @@ export class AgentService {
       throw new Error("Tool not found.");
     }
 
-    const loaded = await loadJavascriptTool(record);
+    const loaded = await handler.load(record);
     const provider = createProviderFromSources(process.env, this.userConfig);
     const parameters = await suggestToolParamsFromPrompt(
       {

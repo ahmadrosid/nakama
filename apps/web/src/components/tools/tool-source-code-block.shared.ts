@@ -16,6 +16,8 @@ export function languageFromSourcePath(path: string): string {
       return "jsx";
     case ".json":
       return "json";
+    case ".py":
+      return "python";
     default:
       return "javascript";
   }

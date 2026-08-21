@@ -12,7 +12,7 @@ import { emailTool } from "@nakama/core/tools/email";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
-import { loadJavascriptTool } from "./javascript-tool-loader";
+import { getCustomToolHandler } from "./custom-tool-handlers";
 
 let registeredSubAgentTool: ToolDefinition | null = null;
 let registeredGenerateImageTool: ToolDefinition | null = null;
@@ -98,8 +98,10 @@ async function resolveStoredTool(
     return serverTools.get(record.name) ?? null;
   }
 
-  if (record.handlerType === "javascript") {
-    return loadJavascriptTool(record);
+  const customHandler = getCustomToolHandler(record.handlerType);
+
+  if (customHandler) {
+    return customHandler.load(record);
   }
 
   return null;

@@ -1700,7 +1700,7 @@ export interface ToolResponse {
 
 export interface ToolSourceResponse {
   content: string;
-  language: "javascript" | "typescript";
+  language: "javascript" | "python" | "typescript";
   path: string;
 }
 

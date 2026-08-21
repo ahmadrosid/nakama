@@ -388,6 +388,48 @@ Exports are `.zip` backups and should be handled as sensitive files because they
 Import first previews the ZIP manifest and restore impact.
 Confirmed restore replaces the current local data root; selective merge, scheduled backups, cloud destinations, and encrypted archives are not part of the first version.
 
+## Custom tools
+
+Custom tools live in `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set) and are registered by a platform admin from **System → Tools**. Each tool points at a module file and can then be assigned to profiles like any builtin.
+
+Two handler types are supported:
+
+| Type | File | Runs on |
+|---|---|---|
+| `javascript` | `*.js` | The Nakama process (module import) |
+| `python` | `*.py` | A `python3` subprocess per call |
+
+### Authoring a Python tool
+
+A Python tool is a `.py` file that defines a `run(input, context)` function and prints one JSON object to stdout when run as a script:
+
+```python
+# ~/.nakama/tools/word_count.py
+import json
+import sys
+
+def run(input, context):
+    text = str(input.get("text", ""))
+    return {"words": len(text.split())}
+
+if __name__ == "__main__":
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
+```
+
+The contract:
+
+- Nakama invokes `python3 <file>` once per call and writes the call arguments to stdin as JSON.
+- Whatever the script prints to stdout must be one JSON value — that becomes the tool result the agent sees.
+- A non-zero exit code or non-JSON stdout is returned to the agent as an error message (stderr is included).
+- Calls time out after 30 seconds.
+- The child process inherits your environment plus two extras: `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) and `NAKAMA_CONFIG_DIR`.
+- Set `NAKAMA_PYTHON_BIN` before starting Nakama if your interpreter is not on `PATH` as `python3`.
+
+Parameters are declared as a JSON Schema in the tool's `handlerConfig.parameters`, the same way as JavaScript tools.
+
+Python tools run sequentially by default and cannot opt into parallel execution, because each call spawns a new process.
+
 ## Safety boundaries
 
 File tools (`read_file`, `write_file`, `edit_file`, `delete_file`) are scoped to:

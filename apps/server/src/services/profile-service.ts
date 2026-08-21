@@ -55,9 +55,12 @@ import {
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
 import {
-  loadJavascriptTool,
-  validateJavascriptToolModule,
-} from "./javascript-tool-loader";
+  CUSTOM_TOOL_HANDLERS,
+  type CustomToolType,
+  customToolTypesLabel,
+  getCustomToolHandler,
+  isCustomToolType,
+} from "./custom-tool-handlers";
 import { toMcpServerSummaries } from "./mcp-service";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
@@ -420,11 +423,14 @@ export class ProfileService {
     }
 
     const handlerType = readToolHandlerType(request.handlerType);
-    const handlerConfig = readJavascriptToolHandlerConfig(
+    const handlerConfig = readCustomToolHandlerConfig(
+      handlerType,
       request.handlerConfig
     );
 
-    await validateJavascriptToolModule(handlerConfig.modulePath);
+    await CUSTOM_TOOL_HANDLERS[handlerType].validateModule(
+      handlerConfig.modulePath
+    );
 
     const now = new Date().toISOString();
     const record: StoredToolRecord = {
@@ -782,7 +788,9 @@ async function enrichToolParameters(
   detail: ToolDetail,
   record?: StoredToolRecord
 ): Promise<ToolDetail> {
-  if (detail.handlerType !== "javascript") {
+  const handler = getCustomToolHandler(detail.handlerType);
+
+  if (!handler) {
     return detail;
   }
 
@@ -798,7 +806,7 @@ async function enrichToolParameters(
       updatedAt: detail.updatedAt,
     } satisfies StoredToolRecord);
 
-  const loaded = await loadJavascriptTool(source);
+  const loaded = await handler.load(source);
   if (!loaded?.parameters) {
     return detail;
   }
@@ -817,14 +825,44 @@ function toToolDetail(record: StoredToolRecord): ToolDetail {
 
 export type { ProfileDetail };
 
-function readToolHandlerType(handlerType: string | undefined): "javascript" {
-  if (handlerType === undefined || handlerType === "javascript") {
+function readToolHandlerType(handlerType: string | undefined): CustomToolType {
+  if (handlerType === undefined) {
     return "javascript";
   }
 
+  if (isCustomToolType(handlerType)) {
+    return handlerType;
+  }
+
   throw new Error(
-    'Only JavaScript tools can be created. Use handlerType "javascript".'
+    `Only ${customToolTypesLabel()} tools can be created. Use handlerType ${customToolTypesLabel()}.`
   );
+}
+
+function readCustomToolHandlerConfig(
+  handlerType: CustomToolType,
+  handlerConfig: unknown
+): { modulePath: string } {
+  const { extension } = CUSTOM_TOOL_HANDLERS[handlerType];
+
+  if (typeof handlerConfig !== "object" || handlerConfig === null) {
+    throw new Error(
+      `Custom tools require handlerConfig.modulePath ending in "${extension}".`
+    );
+  }
+
+  const modulePath = (handlerConfig as Record<string, unknown>).modulePath;
+
+  if (
+    typeof modulePath !== "string" ||
+    !modulePath.trim().endsWith(extension)
+  ) {
+    throw new Error(
+      `Custom tools require handlerConfig.modulePath ending in "${extension}".`
+    );
+  }
+
+  return { modulePath: modulePath.trim() };
 }
 
 async function writeGeneratedSoulFiles(
@@ -873,24 +911,4 @@ function validateGeneratedSoulFiles(
       throw new Error(`Soul file content must be a string: ${key}`);
     }
   }
-}
-
-function readJavascriptToolHandlerConfig(handlerConfig: unknown): {
-  modulePath: string;
-} {
-  if (typeof handlerConfig !== "object" || handlerConfig === null) {
-    throw new Error(
-      'JavaScript tools require handlerConfig.modulePath ending in ".js".'
-    );
-  }
-
-  const modulePath = (handlerConfig as Record<string, unknown>).modulePath;
-
-  if (typeof modulePath !== "string" || !modulePath.trim().endsWith(".js")) {
-    throw new Error(
-      'JavaScript tools require handlerConfig.modulePath ending in ".js".'
-    );
-  }
-
-  return { modulePath: modulePath.trim() };
 }

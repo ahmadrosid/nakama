@@ -58,7 +58,31 @@ describe("profile service createTool", () => {
     expect(tool.handlerType).toBe("javascript");
   });
 
-  test("rejects non-javascript handler types", async () => {
+  test("creates a python tool when handlerType is python", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-tool-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const toolsDir = path.join(tempConfigDir, "tools");
+    await mkdir(toolsDir, { recursive: true });
+
+    await writeFile(
+      path.join(toolsDir, "echo.py"),
+      `def run(input, context):\n    return {"echoed": input.get("message")}\n`
+    );
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const tool = await service.createTool({
+      description: "Echo input",
+      handlerConfig: { modulePath: "echo.py" },
+      handlerType: "python",
+      name: "echo_py",
+    });
+
+    expect(tool.handlerType).toBe("python");
+  });
+
+  test("rejects unsupported handler types", async () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
     await expect(
@@ -68,7 +92,7 @@ describe("profile service createTool", () => {
         handlerType: "custom",
         name: "bad-tool",
       })
-    ).rejects.toThrow(/only javascript tools can be created/i);
+    ).rejects.toThrow(/javascript or python tools can be created/i);
   });
 });
 
