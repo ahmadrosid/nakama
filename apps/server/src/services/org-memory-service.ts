@@ -69,16 +69,7 @@ export interface ProposeOrgMemoryInput {
   sessionId?: string | null;
 }
 
-export interface OrgMemoryApprovedBulletMerger {
-  merge(
-    content: string,
-    bullet: string,
-    options: { pin: boolean; dateUtc: string }
-  ): Promise<string | null>;
-}
-
 export interface OrgMemoryServiceOptions {
-  approvedBulletMerger?: OrgMemoryApprovedBulletMerger;
   configDir?: string;
 }
 
@@ -527,23 +518,10 @@ export class OrgMemoryService {
     const dateUtc = utcDateString();
     const content = await this.getMemory(orgId);
 
-    let next = applyApprovedOrgMemoryBullet(content, proposal.bullet, {
+    const next = applyApprovedOrgMemoryBullet(content, proposal.bullet, {
       dateUtc,
       pin,
     });
-    if (this.options.approvedBulletMerger) {
-      const merged = await this.options.approvedBulletMerger.merge(
-        content,
-        proposal.bullet,
-        {
-          dateUtc,
-          pin,
-        }
-      );
-      if (merged) {
-        next = merged;
-      }
-    }
 
     await this.commitMemory(orgId, next, {
       action: "approve",

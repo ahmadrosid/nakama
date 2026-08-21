@@ -66,11 +66,6 @@ export {
   expandLearnUserMessage,
   tryParseLearnCommand,
 } from "./learn-prompt";
-export type { MergeOrgMemoryWithApprovedBulletOptions } from "./org-memory-merge";
-export {
-  mergeOrgMemoryWithApprovedBullet,
-  mergeOrgMemoryWithApprovedBulletFallback,
-} from "./org-memory-merge";
 export {
   buildSessionTitlePrompt,
   generateSessionTitleFromMessages,
