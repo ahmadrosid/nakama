@@ -10,8 +10,12 @@ import {
 } from "@nakama/core";
 
 const COMPACTION_BUFFER = 20_000;
-const PRUNE_MINIMUM = 20_000;
-const PRUNE_PROTECT = 40_000;
+// Pruning thresholds are fractions of the model's usable context so that
+// large-window models keep their history intact when tool output is small
+// relative to the window, while small-window models still reclaim tokens
+// before overflow. See #342.
+const PRUNE_PROTECT_FRACTION = 0.5;
+const PRUNE_MINIMUM_FRACTION = 0.1;
 const TAIL_TURNS = 2;
 const TOKEN_ESTIMATE_RATIO = 4;
 const PRUNE_TRUNCATION = "[output truncated by compaction]";
@@ -218,9 +222,20 @@ export function selectCompactionRange(
   };
 }
 
-export function pruneToolOutputs(messages: ChatMessage[]): {
-  prunedTokens: number;
-} {
+export function pruneToolOutputs(
+  messages: ChatMessage[],
+  compaction: CompactionConfig
+): { prunedTokens: number } {
+  const usable = usableContextTokens(compaction);
+  const protect = Math.floor(usable * PRUNE_PROTECT_FRACTION);
+  const minimum = Math.floor(usable * PRUNE_MINIMUM_FRACTION);
+
+  // Degenerate configs (small contextWindow vs. maxOutputTokens) yield a
+  // non-positive usable budget; pruning would have nothing to protect.
+  if (usable <= 0) {
+    return { prunedTokens: 0 };
+  }
+
   let total = 0;
   let pruned = 0;
   const toPrune: Extract<ChatMessage, { role: "tool" }>[] = [];
@@ -260,7 +275,7 @@ export function pruneToolOutputs(messages: ChatMessage[]): {
     const estimate = estimateTokens(message.content);
     total += estimate;
 
-    if (total <= PRUNE_PROTECT) {
+    if (total <= protect) {
       continue;
     }
 
@@ -268,7 +283,7 @@ export function pruneToolOutputs(messages: ChatMessage[]): {
     toPrune.push(message);
   }
 
-  if (pruned <= PRUNE_MINIMUM) {
+  if (pruned <= minimum) {
     return { prunedTokens: 0 };
   }
 
@@ -283,7 +298,7 @@ export async function compactHistory(
   input: CompactHistoryInput
 ): Promise<CompactionResponse> {
   const messagesBefore = input.history.length;
-  const { prunedTokens } = pruneToolOutputs(input.history);
+  const { prunedTokens } = pruneToolOutputs(input.history, input.compaction);
   const usedTokens = estimateHistoryTokens(
     input.history,
     input.systemPrompt,

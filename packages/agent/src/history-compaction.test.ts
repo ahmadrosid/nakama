@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   ChatCompletionResult,
   ChatMessage,
+  CompactionConfig,
   ProviderClient,
 } from "@nakama/core";
 import {
@@ -14,8 +15,18 @@ import {
   usableContextTokens,
 } from "./history-compaction";
 
-const compaction = {
+const compaction: CompactionConfig = {
   contextWindow: 100_000,
+  maxOutputTokens: 8192,
+};
+
+const largeWindow: CompactionConfig = {
+  contextWindow: 1_000_000,
+  maxOutputTokens: 8192,
+};
+
+const smallWindow: CompactionConfig = {
+  contextWindow: 128_000,
   maxOutputTokens: 8192,
 };
 
@@ -30,6 +41,26 @@ function createToolMessage(content: string): ChatMessage {
     role: "tool",
     toolCallId: "call_1",
   };
+}
+
+// Builds the 14-message transcript used by the prune tests: three turns
+// each carrying one tool result, followed by a tail turn with no tool call.
+// The last two user turns are protected, so only the older tool messages
+// are pruning candidates.
+function seedHistory(toolChars: number): ChatMessage[] {
+  return [
+    { content: "turn 1", role: "user" },
+    createToolMessage(repeat("a", toolChars)),
+    { content: "done 1", role: "assistant" },
+    { content: "turn 2", role: "user" },
+    createToolMessage(repeat("b", toolChars)),
+    { content: "done 2", role: "assistant" },
+    { content: "turn 3", role: "user" },
+    createToolMessage(repeat("c", toolChars)),
+    { content: "done 3", role: "assistant" },
+    { content: "turn 4", role: "user" },
+    { content: "done 4", role: "assistant" },
+  ];
 }
 
 describe("history compaction", () => {
@@ -55,7 +86,7 @@ describe("history compaction", () => {
       { content: "done 4", role: "assistant" },
     ];
 
-    const result = pruneToolOutputs(messages);
+    const result = pruneToolOutputs(messages, compaction);
 
     expect(result.prunedTokens).toBeGreaterThan(0);
     expect(messages[1]?.role === "tool" && messages[1].content).toContain(
@@ -63,6 +94,56 @@ describe("history compaction", () => {
     );
     expect(messages[10]?.role === "assistant" && messages[10].content).toBe(
       "done 4"
+    );
+  });
+
+  test("does not prune when tool output is well below the model's usable window (#342)", () => {
+    // Three 30k-token tool results; the last 2 turns are protected, so two
+    // candidates (60k tokens) are considered. On a 1M window the protect
+    // fraction is ~496k, so the loop must leave the stored transcript intact.
+    const messages = seedHistory(120_000);
+    const result = pruneToolOutputs(messages, largeWindow);
+
+    expect(result.prunedTokens).toBe(0);
+    expect(messages[1]?.role === "tool" && messages[1].content).toBe(
+      repeat("a", 120_000)
+    );
+    expect(messages[4]?.role === "tool" && messages[4].content).toBe(
+      repeat("b", 120_000)
+    );
+    expect(messages[7]?.role === "tool" && messages[7].content).toBe(
+      repeat("c", 120_000)
+    );
+  });
+
+  test("still prunes when accumulated tool output crosses the protect fraction", () => {
+    // Same three 30k-token tool results against a 128k window. The protect
+    // fraction is ~60k, so the older candidate crosses the threshold and the
+    // function must truncate it.
+    const messages = seedHistory(120_000);
+    const result = pruneToolOutputs(messages, smallWindow);
+
+    expect(result.prunedTokens).toBeGreaterThan(0);
+    expect(messages[1]?.role === "tool" && messages[1].content).toContain(
+      "truncated"
+    );
+    expect(messages[4]?.role === "tool" && messages[4].content).toBe(
+      repeat("b", 120_000)
+    );
+  });
+
+  test("does not prune when usable tokens are non-positive", () => {
+    const degenerate: CompactionConfig = {
+      contextWindow: 4096,
+      maxOutputTokens: 8192,
+    };
+
+    const messages = seedHistory(200_000);
+    const result = pruneToolOutputs(messages, degenerate);
+
+    expect(result.prunedTokens).toBe(0);
+    expect(messages[1]?.role === "tool" && messages[1].content).toBe(
+      repeat("a", 200_000)
     );
   });
 
