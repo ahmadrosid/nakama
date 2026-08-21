@@ -36,7 +36,7 @@ describe("super bot create_tool", () => {
     }
   });
 
-  test("always registers agent-authored tools as javascript", async () => {
+  test("defaults agent-authored tools to javascript when handlerType is omitted", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     const toolsDir = path.join(tempConfigDir, "tools");
@@ -97,6 +97,68 @@ describe("super bot create_tool", () => {
     });
   });
 
+  test("registers python tools when handlerType is python", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const toolsDir = path.join(tempConfigDir, "tools");
+    await mkdir(toolsDir, { recursive: true });
+
+    await writeFile(
+      path.join(toolsDir, "echo.py"),
+      `import json
+import sys
+
+def run(input, context):
+    return input
+
+if __name__ == "__main__":
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
+`,
+      "utf8"
+    );
+
+    const capturedRequests: CreateToolRequest[] = [];
+
+    const createTool = getCreateToolTool({
+      async createTool(request: CreateToolRequest): Promise<ToolDetail> {
+        capturedRequests.push(request);
+
+        return {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          description: request.description,
+          handlerConfig: request.handlerConfig ?? {},
+          handlerType: request.handlerType ?? "javascript",
+          id: "tool_echo_py",
+          name: request.name,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+      },
+    });
+
+    const result = await createTool.run(
+      {
+        description: "Echo input in Python",
+        handlerConfig: { modulePath: "echo.py" },
+        handlerType: "python",
+        name: "echo_py",
+      },
+      { sessionId: SESSION_ID }
+    );
+
+    expect(capturedRequests[0]?.handlerType).toBe("python");
+    expect(capturedRequests[0]?.handlerConfig).toEqual({
+      modulePath: "echo.py",
+    });
+    expect(result).toMatchObject({
+      tool: {
+        handlerType: "python",
+        id: "tool_echo_py",
+        name: "echo_py",
+      },
+    });
+  });
+
   test('rejects handlerType "custom"', async () => {
     let createToolCalled = false;
 
@@ -119,7 +181,33 @@ describe("super bot create_tool", () => {
       )
     );
 
-    expect(error?.message).toMatch(/only create javascript tools/i);
+    expect(error?.message).toMatch(/javascript or python/i);
+    expect(createToolCalled).toBe(false);
+  });
+
+  test("rejects shell wrapper module paths", async () => {
+    let createToolCalled = false;
+
+    const createTool = getCreateToolTool({
+      async createTool(): Promise<ToolDetail> {
+        createToolCalled = true;
+        throw new Error("should not be called");
+      },
+    });
+
+    const error = await captureError(
+      createTool.run(
+        {
+          description: "Shell wrapper",
+          handlerConfig: { modulePath: "wrapper.sh" },
+          handlerType: "javascript",
+          name: "wrapper",
+        },
+        { sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error?.message).toMatch(/ending in "\.js"/i);
     expect(createToolCalled).toBe(false);
   });
 

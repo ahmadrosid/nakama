@@ -4,7 +4,11 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
-import { validateJavascriptToolModule } from "../services/javascript-tool-loader";
+import {
+  CUSTOM_TOOL_HANDLERS,
+  customToolTypesLabel,
+  isCustomToolType,
+} from "../services/custom-tool-handlers";
 import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_CREATE_CONFIRMATION_MESSAGE,
@@ -169,7 +173,7 @@ export function createSuperBotTools(
     },
     {
       description:
-        "Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.",
+        "Register a custom tool (javascript or python). Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js|.py) → create_tool. Do not call list_profiles as part of this workflow.",
       name: "create_tool",
       parameters: {
         additionalProperties: false,
@@ -178,11 +182,11 @@ export function createSuperBotTools(
           handlerConfig: {
             additionalProperties: true,
             description:
-              'For javascript tools: { "modulePath": "my-tool.js" } relative to ~/.nakama/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.',
+              'Handler config: { "modulePath": "my-tool.js" } or { "modulePath": "my-tool.py" } relative to ~/.nakama/tools/. The file must already exist. JS modules export run(input, context) plus optional parameters. Python modules define def run(input, context) and a __main__ stdin/stdout JSON harness.',
             type: "object",
           },
           handlerType: {
-            description: 'Handler type. Must be "javascript".',
+            description: 'Handler type: "javascript" (default) or "python".',
             type: "string",
           },
           name: { description: "Unique tool name.", type: "string" },
@@ -199,24 +203,25 @@ export function createSuperBotTools(
         }
 
         const requestedHandlerType = readString(input, "handlerType");
-        const handlerType = "javascript";
-        const handlerConfig = readObject(input, "handlerConfig");
+        const handlerType = requestedHandlerType ?? "javascript";
 
-        if (requestedHandlerType && requestedHandlerType !== handlerType) {
+        if (!isCustomToolType(handlerType)) {
           throw new Error(
-            'Super Bot can only create JavaScript tools. Use handlerType "javascript".'
+            `Super Bot can only create ${customToolTypesLabel()} tools. Use handlerType "javascript" or "python".`
           );
         }
 
+        const handler = CUSTOM_TOOL_HANDLERS[handlerType];
+        const handlerConfig = readObject(input, "handlerConfig");
         const modulePath = readModulePath(handlerConfig);
 
-        if (!modulePath?.endsWith(".js")) {
+        if (!modulePath?.endsWith(handler.extension)) {
           throw new Error(
-            'JavaScript tools require handlerConfig.modulePath ending in ".js". Write the module with write_file to ~/.nakama/tools/ first.'
+            `${handlerType} tools require handlerConfig.modulePath ending in "${handler.extension}". Write the module with write_file to ~/.nakama/tools/ first.`
           );
         }
 
-        await validateJavascriptToolModule(modulePath);
+        await handler.validateModule(modulePath);
 
         const tool = await profileService.createTool({
           description,
