@@ -2,6 +2,7 @@ import type { ProviderName } from "@nakama/core";
 import {
   type CustomModelEntry,
   findCustomModel,
+  isDiscoveryModelProvider,
   validateCustomModels,
 } from "@nakama/core";
 import type { ProviderModelOption as ContractProviderModelOption } from "@nakama/core/contract";
@@ -526,13 +527,10 @@ export function getDefaultModel(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): string {
-  if (
-    provider === "openai_compatible" ||
-    provider === "minimax" ||
-    provider === "minimax_cn"
-  ) {
-    // MiniMax model lists are fetched live from the platform (/models) and
-    // stored as instance custom models — no hardcoded catalog.
+  if (isDiscoveryModelProvider(provider)) {
+    // Discovery providers fetch model lists live from the platform
+    // (/models) and store them as instance custom models — no hardcoded
+    // catalog.
     return resolveCompatibleDefaultModel(customModels);
   }
 
@@ -628,12 +626,7 @@ export function resolveModel(
     return resolveCompatibleDefaultModel(customModels, trimmed);
   }
 
-  if (
-    trimmed &&
-    (provider === "openai_compatible" ||
-      provider === "minimax" ||
-      provider === "minimax_cn")
-  ) {
+  if (trimmed && isDiscoveryModelProvider(provider)) {
     // Dynamic catalog: accept ids discovered from the platform's /models
     // endpoint (stored as instance custom models); otherwise resolve the
     // instance default.
@@ -696,11 +689,9 @@ export function modelSupportsVision(
   }
 
   if (
-    provider === "openai_compatible" ||
+    isDiscoveryModelProvider(provider) ||
     provider === "opencode_go" ||
-    provider === "deepseek" ||
-    provider === "minimax" ||
-    provider === "minimax_cn"
+    provider === "deepseek"
   ) {
     return false;
   }

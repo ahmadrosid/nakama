@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   apiKeyEnvVarForProvider,
+  isDiscoveryModelProvider,
   parseProviderName,
   resolveProvider,
 } from "./provider-resolution";
@@ -113,5 +114,19 @@ describe("apiKeyEnvVarForProvider", () => {
   test("maps MiniMax regions to distinct env keys", () => {
     expect(apiKeyEnvVarForProvider("minimax")).toBe("MINIMAX_API_KEY");
     expect(apiKeyEnvVarForProvider("minimax_cn")).toBe("MINIMAX_CN_API_KEY");
+  });
+});
+
+describe("isDiscoveryModelProvider", () => {
+  test("includes providers whose models are discovered from /models", () => {
+    expect(isDiscoveryModelProvider("openai_compatible")).toBe(true);
+    expect(isDiscoveryModelProvider("minimax")).toBe(true);
+    expect(isDiscoveryModelProvider("minimax_cn")).toBe(true);
+  });
+
+  test("excludes catalog providers", () => {
+    expect(isDiscoveryModelProvider("deepseek")).toBe(false);
+    expect(isDiscoveryModelProvider("openai")).toBe(false);
+    expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
   });
 });

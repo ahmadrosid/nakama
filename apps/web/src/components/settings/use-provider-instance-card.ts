@@ -4,6 +4,7 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { defaultMinimaxBaseUrl } from "@nakama/core/minimax-provider-config";
+import { isDiscoveryModelProvider } from "@nakama/core/provider-resolution";
 import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import type { ModelListRow } from "@/components/ModelListEditor";
@@ -54,12 +55,12 @@ export function useProviderInstanceCard({
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
 
   const providerType = instance.type as SelectedProvider;
-  const isCompatible = providerType === "openai_compatible";
   const isOllama = providerType === "ollama";
-  const isMinimax = providerType === "minimax" || providerType === "minimax_cn";
-  // MiniMax models are discovered live from the platform's /models endpoint,
-  // so its instances use the same base-URL + remote-browse editing flow.
-  const isCompatibleLike = isCompatible || isOllama || isMinimax;
+  // Discovery providers (OpenAI-compatible, MiniMax, …) fetch model lists
+  // live from the platform's /models endpoint, so their instances use the
+  // same base-URL + remote-browse editing flow.
+  const isDiscovery = isDiscoveryModelProvider(providerType);
+  const isCompatibleLike = isDiscovery || isOllama;
   const isOpenRouter = providerType === "openrouter";
   const isShortlistBrowse = isShortlistBrowseProvider(providerType);
   const isCatalogShortlist = isCatalogShortlistProvider(providerType);
@@ -108,8 +109,8 @@ export function useProviderInstanceCard({
       instance.baseUrl ??
         (isOllama
           ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local")
-          : isMinimax
-            ? defaultMinimaxBaseUrl(providerType)
+          : isDiscovery
+            ? (defaultMinimaxBaseUrl(providerType) ?? "")
             : "")
     );
     setManageModels(seedManageModelRows(instance.customModels, instanceModels));

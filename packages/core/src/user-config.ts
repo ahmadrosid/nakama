@@ -33,6 +33,7 @@ import {
 export type { UserProviderName } from "./provider-resolution";
 export {
   apiKeyEnvVarForProvider,
+  isDiscoveryModelProvider,
   parseProviderName,
   resolveProvider,
 } from "./provider-resolution";
