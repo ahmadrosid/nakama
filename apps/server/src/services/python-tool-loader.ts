@@ -89,12 +89,24 @@ export async function validatePythonToolModule(
     throw new Error(`Tool module not found: ${modulePath}`);
   }
 
-  // Static check: requires a `run(` definition so the obvious failure is
-  // caught at load/create time. Syntax errors still surface at invocation.
+  // Static checks catch the obvious authoring failures before registration.
+  // Syntax errors still surface at invocation.
   const source = await readFile(resolvedPath, "utf8");
 
   if (!/\bdef\s+run\s*\(/.test(source)) {
     throw new Error("Tool module must define a run(input, context) function.");
+  }
+
+  if (!/if\s+__name__\s*==\s*["']__main__["']\s*:/.test(source)) {
+    throw new Error(
+      'Python tools must include an if __name__ == "__main__" harness that reads JSON from sys.stdin and writes JSON to sys.stdout.'
+    );
+  }
+
+  if (!(source.includes("sys.stdin") && source.includes("sys.stdout"))) {
+    throw new Error(
+      "Python tool __main__ harness must read JSON from sys.stdin and write JSON to sys.stdout."
+    );
   }
 }
 

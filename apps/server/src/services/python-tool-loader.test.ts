@@ -113,19 +113,43 @@ print("hi")
     expect(result.error).toMatch(/run\s*\(/i);
   });
 
+  test("returns an error tool when the module lacks a stdin/stdout harness", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "noharness.py"),
+      `def run(input, context):
+    return input
+`,
+      "utf8"
+    );
+
+    const tool = await loadPythonTool(
+      makeRecord({
+        handlerConfig: { modulePath: "noharness.py" },
+        name: "noharness",
+      })
+    );
+
+    const result = (await tool!.run({}, {})) as { error: string };
+    expect(result.error).toMatch(/__main__/i);
+  });
+
   test("returns an error tool when the module exits non-zero", async () => {
     const { configDir: dir, toolsDir } = await setupToolsDir();
     configDir = dir;
 
     await writeFile(
       path.join(toolsDir, "boom.py"),
-      `import sys
+      `import json, sys
 def run(input, context):
     sys.stderr.write("kaboom\\n")
     sys.exit(7)
 
 if __name__ == "__main__":
-    run({}, {})
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
 `,
       "utf8"
     );
@@ -145,13 +169,14 @@ if __name__ == "__main__":
 
     await writeFile(
       path.join(toolsDir, "badjson.py"),
-      `import sys
+      `import json, sys
 def run(input, context):
-    sys.stdout.write("not json")
     return None
 
 if __name__ == "__main__":
-    run({}, {})
+    payload = json.loads(sys.stdin.read() or "{}")
+    run(payload, {})
+    sys.stdout.write("not json")
 `,
       "utf8"
     );
@@ -173,11 +198,15 @@ if __name__ == "__main__":
 
     await writeFile(
       path.join(toolsDir, "silent.py"),
-      `def run(input, context):
+      `import json, sys
+def run(input, context):
     return None
 
 if __name__ == "__main__":
-    run({}, {})
+    payload = json.loads(sys.stdin.read() or "{}")
+    result = run(payload, {})
+    if result is not None:
+        sys.stdout.write(json.dumps(result))
 `,
       "utf8"
     );

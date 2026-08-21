@@ -159,6 +159,45 @@ if __name__ == "__main__":
     });
   });
 
+  test("rejects python tools that lack a stdin/stdout harness", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const toolsDir = path.join(tempConfigDir, "tools");
+    await mkdir(toolsDir, { recursive: true });
+
+    await writeFile(
+      path.join(toolsDir, "noharness.py"),
+      `def run(input, context):
+    return input
+`,
+      "utf8"
+    );
+
+    let createToolCalled = false;
+
+    const createTool = getCreateToolTool({
+      async createTool(): Promise<ToolDetail> {
+        createToolCalled = true;
+        throw new Error("should not be called");
+      },
+    });
+
+    const error = await captureError(
+      createTool.run(
+        {
+          description: "Missing harness",
+          handlerConfig: { modulePath: "noharness.py" },
+          handlerType: "python",
+          name: "noharness",
+        },
+        { sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error?.message).toMatch(/__main__/i);
+    expect(createToolCalled).toBe(false);
+  });
+
   test('rejects handlerType "custom"', async () => {
     let createToolCalled = false;
 
