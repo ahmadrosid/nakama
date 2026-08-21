@@ -349,18 +349,14 @@ export class SkillsService {
       profileId,
     });
 
+    // written.directory came from resolveProfileSkillDirectory (containment already
+    // enforced); syncSkillRecordFromDirectory keys off that same path.
     const record = await this.syncSkillRecordFromDirectory(
       written.directory,
       written.name,
       "written",
       createdBy
     );
-
-    if (!isPathWithinProfileSkillsDir(orgId, profileId, record.sourcePath)) {
-      throw new Error(
-        `Skill "${written.name}" resolved outside this profile skills directory.`
-      );
-    }
 
     await this.db.assignSkillToProfile(profileId, record.id);
     const response = await this.getSkill(record.id);

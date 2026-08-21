@@ -34,9 +34,31 @@ export async function writeArtifactShareSnapshot(input: {
   return storagePath;
 }
 
+function assertArtifactShareStoragePath(
+  orgId: string,
+  storagePath: string
+): void {
+  if (!path.isAbsolute(storagePath)) {
+    throw new Error(
+      "Artifact share storage path must be absolute; relative paths resolve against process.cwd()."
+    );
+  }
+
+  const root = path.resolve(getArtifactSharesDir(orgId));
+  const resolved = path.resolve(storagePath);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error(
+      "Artifact share storage path escapes the org artifact-shares directory."
+    );
+  }
+}
+
 export async function readArtifactShareSnapshot(
+  orgId: string,
   storagePath: string
 ): Promise<Buffer> {
+  assertArtifactShareStoragePath(orgId, storagePath);
+
   if (!(await pathExists(storagePath))) {
     throw new Error(`Artifact share snapshot not found: ${storagePath}`);
   }
@@ -45,8 +67,11 @@ export async function readArtifactShareSnapshot(
 }
 
 export async function deleteArtifactShareSnapshot(
+  orgId: string,
   storagePath: string
 ): Promise<void> {
+  assertArtifactShareStoragePath(orgId, storagePath);
+
   try {
     await unlink(storagePath);
   } catch (error) {

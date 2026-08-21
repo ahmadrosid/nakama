@@ -327,6 +327,7 @@ export async function createSkillFile(
   options: CreateSkillFileOptions
 ): Promise<string> {
   const name = assertValidSkillName(options.name);
+  assertNotBundledSkillName(name);
   const description = options.description.trim();
   const orgId = options.orgId?.trim();
   const profileId = options.profileId?.trim();

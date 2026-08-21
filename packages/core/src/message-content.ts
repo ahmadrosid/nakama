@@ -75,12 +75,12 @@ export function normalizeUserContent(
     return message;
   }
 
-  if (hasImages) {
-    validateImageAttachments(images!);
+  if (images?.length) {
+    validateImageAttachments(images);
   }
 
-  if (hasDocuments) {
-    validateDocumentAttachments(documents!);
+  if (documents?.length) {
+    validateDocumentAttachments(documents);
   }
 
   validateCombinedAttachmentCount(images?.length ?? 0, documents?.length ?? 0);

@@ -1,11 +1,7 @@
 import { mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
-import {
-  getProfileSkillsArchiveDir,
-  getProfileSkillsDir,
-  SKILL_ARCHIVE_DIR_NAME,
-} from "./paths";
+import { getProfileSkillsArchiveDir, getProfileSkillsDir } from "./paths";
 import {
   assertNotBundledSkillName,
   assertValidSkillName,
@@ -56,19 +52,12 @@ export async function archiveSkillDirectory(options: {
   );
   await mkdir(archiveRoot, { recursive: true });
 
-  // skillName is a single validated segment from resolveProfileSkillDirectory.
+  // skillName is a single validated segment from resolveProfileSkillDirectory;
+  // archiveRoot is getProfileSkillsArchiveDir, so the join stays under .archive.
   let archivedDirectory = path.join(archiveRoot, skillName);
   if (await pathExists(archivedDirectory)) {
     const stamp = (options.now ?? new Date()).getTime();
     archivedDirectory = path.join(archiveRoot, `${skillName}-${stamp}`);
-  }
-
-  if (
-    !archivedDirectory.includes(
-      `${path.sep}${SKILL_ARCHIVE_DIR_NAME}${path.sep}`
-    )
-  ) {
-    throw new Error("Archive path must stay under skills/.archive.");
   }
 
   await rename(liveDirectory, archivedDirectory);

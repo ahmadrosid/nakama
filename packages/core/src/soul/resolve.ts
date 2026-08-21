@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { getUserConfigDir } from "../user-config";
 import { getSoulStatus, loadSoulStack } from "./load";
 import type { LoadedSoulStack, SoulStatus } from "./types";
@@ -65,6 +65,11 @@ export function getOrgMemoryDir(
   orgId: string,
   configDir = getUserConfigDir()
 ): string {
+  if (!isAbsolute(configDir)) {
+    throw new Error(
+      "configDir must be an absolute path; relative paths resolve against process.cwd() and break org isolation."
+    );
+  }
   return join(configDir, "orgs", assertConfigPathSegment(orgId, "orgId"));
 }
 

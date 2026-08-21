@@ -157,7 +157,7 @@ export class ArtifactShareService {
       orgId: string;
     }
   ): Promise<StoredArtifactShareRecord> {
-    await deleteArtifactShareSnapshot(existing.storagePath);
+    await deleteArtifactShareSnapshot(input.orgId, existing.storagePath);
 
     const storagePath = await writeArtifactShareSnapshot({
       bytes: input.bytes,
@@ -285,7 +285,7 @@ export class ArtifactShareService {
       new Date().toISOString()
     );
     if (revoked) {
-      await deleteArtifactShareSnapshot(share.storagePath);
+      await deleteArtifactShareSnapshot(input.orgId, share.storagePath);
     }
 
     return { id: share.id, revoked };
@@ -308,7 +308,10 @@ export class ArtifactShareService {
       throw new NakamaApiError("Not found", 404);
     }
 
-    const bytes = await readArtifactShareSnapshot(share.storagePath);
+    const bytes = await readArtifactShareSnapshot(
+      share.orgId,
+      share.storagePath
+    );
     // Sidecars sometimes store application/octet-stream; resolve from the filename
     // so <video>/<img> can play with X-Content-Type-Options: nosniff.
     const mimeType = resolveArtifactMimeType(share.mimeType, share.filename);

@@ -6,6 +6,7 @@ import {
   createOrgMemoryChangeId,
   detectOrgMemoryInjectionWarnings,
   getOrgMemoryArchiveDir,
+  getOrgMemoryArchiveFilePath,
   getOrgMemoryDir,
   getOrgMemoryFilePath,
   getOrgMemoryHistoryEntry,
@@ -365,7 +366,11 @@ export class OrgMemoryService {
     const archivedAt = options.archivedAt ?? new Date();
     const yearMonth = `${archivedAt.getFullYear()}-${String(archivedAt.getMonth() + 1).padStart(2, "0")}`;
     const archiveDir = getOrgMemoryArchiveDir(orgId, this.options.configDir);
-    const archivePath = join(archiveDir, `${yearMonth}.md`);
+    const archivePath = getOrgMemoryArchiveFilePath(
+      orgId,
+      yearMonth,
+      this.options.configDir
+    );
     const appendLines = [`<!-- archived: ${archivedAt.toISOString()} -->`];
     if (options.reason?.trim()) {
       appendLines.push(

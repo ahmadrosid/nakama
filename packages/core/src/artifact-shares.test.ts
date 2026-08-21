@@ -49,7 +49,7 @@ describe("artifact shares", () => {
     });
 
     expect(storagePath.startsWith(getArtifactSharesDir(orgId))).toBe(true);
-    expect(await readArtifactShareSnapshot(storagePath)).toEqual(bytes);
-    await deleteArtifactShareSnapshot(storagePath);
+    expect(await readArtifactShareSnapshot(orgId, storagePath)).toEqual(bytes);
+    await deleteArtifactShareSnapshot(orgId, storagePath);
   });
 });
