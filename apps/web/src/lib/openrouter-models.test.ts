@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isOpenRouterModelDeprecated,
   isOpenRouterModelFree,
   mergeOpenRouterModelOptions,
   normalizeOpenRouterModels,
@@ -37,6 +38,16 @@ const fixture = {
       name: "Owl Alpha",
       pricing: { completion: "0", prompt: "0" },
       supported_parameters: [],
+    },
+    {
+      architecture: { input_modalities: ["text", "image", "video"] },
+      context_length: 1_048_576,
+      description: "Stealth preview",
+      expiration_date: "2098-12-31",
+      id: "stealth/ox-alpha",
+      name: "Ox Alpha",
+      pricing: { completion: "0", prompt: "0" },
+      supported_parameters: ["tools", "reasoning"],
     },
   ],
 };
@@ -83,10 +94,11 @@ describe("normalizeOpenRouterModels", () => {
   test("marks free models and sorts free first", () => {
     const rows = normalizeOpenRouterModels(fixture);
 
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows[0]?.isFree).toBe(true);
     expect(rows[1]?.isFree).toBe(true);
-    expect(rows[2]?.isFree).toBe(false);
+    expect(rows[2]?.isFree).toBe(true);
+    expect(rows[3]?.isFree).toBe(false);
     expect(rows.find((row) => row.id.endsWith(":free"))?.isFree).toBe(true);
   });
 
@@ -103,11 +115,33 @@ describe("normalizeOpenRouterModels", () => {
     expect(paid?.outputPerMillionUsd).toBe(2.5);
   });
 
-  test("marks deprecated when expiration_date is set", () => {
+  test("marks deprecated when expiration_date is a real sunset", () => {
     const rows = normalizeOpenRouterModels(fixture);
     const owl = rows.find((row) => row.id === "openrouter/owl-alpha");
 
     expect(owl?.deprecated).toBe(true);
+  });
+
+  test("does not treat OpenRouter sentinel expiration dates as deprecated", () => {
+    const rows = normalizeOpenRouterModels(fixture);
+    const oxAlpha = rows.find((row) => row.id === "stealth/ox-alpha");
+
+    expect(oxAlpha?.deprecated).toBe(false);
+  });
+});
+
+describe("isOpenRouterModelDeprecated", () => {
+  test("returns false for missing expiration", () => {
+    expect(isOpenRouterModelDeprecated(null)).toBe(false);
+    expect(isOpenRouterModelDeprecated(undefined)).toBe(false);
+  });
+
+  test("returns true for a scheduled sunset", () => {
+    expect(isOpenRouterModelDeprecated("2026-08-24")).toBe(true);
+  });
+
+  test("returns false for far-future sentinel dates", () => {
+    expect(isOpenRouterModelDeprecated("2098-12-31")).toBe(false);
   });
 });
 
