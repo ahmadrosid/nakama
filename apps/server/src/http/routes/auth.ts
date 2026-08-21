@@ -558,7 +558,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       userId: auth.user.id,
     });
 
-    return json({ ok: true });
+    const response = c.json({ ok: true }, 200);
+    clearBrowserSessionCookies(response.headers);
+    return response;
   });
 
   app.openAPIRegistry.registerPath(acceptInviteRoute);

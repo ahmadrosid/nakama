@@ -715,6 +715,7 @@ export class OrgService {
       await this.authService.hashPassword(newPassword),
       now
     );
+    await this.databaseAdapter.revokeBrowserSessionsForUser(user.id, now);
   }
 
   private async assertCanChangeAdminMembership(

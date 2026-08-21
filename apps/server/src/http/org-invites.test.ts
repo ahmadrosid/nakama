@@ -176,6 +176,13 @@ describe("direct org member provisioning", () => {
 
     expect(changePasswordResponse.status).toBe(200);
 
+    const staleMe = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        headers: memberSession.headers(),
+      })
+    );
+    expect(staleMe.status).toBe(401);
+
     const relogin = await app.fetch(
       new Request("http://localhost:4310/v1/auth/login", {
         body: JSON.stringify({

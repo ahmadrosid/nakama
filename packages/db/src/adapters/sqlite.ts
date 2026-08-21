@@ -1207,6 +1207,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET revoked_at = ?
     WHERE session_token_hash = ? AND revoked_at IS NULL
   `);
+  const revokeBrowserSessionsForUserStmt = db.prepare(`
+    UPDATE browser_sessions
+    SET revoked_at = ?
+    WHERE user_id = ? AND revoked_at IS NULL
+  `);
   const updateBrowserSessionLastUsedAtStmt = db.prepare(`
     UPDATE browser_sessions
     SET last_used_at = ?
@@ -2590,6 +2595,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         sessionTokenHash
       );
       return result.changes > 0;
+    },
+
+    async revokeBrowserSessionsForUser(userId, revokedAt) {
+      const result = revokeBrowserSessionsForUserStmt.run(revokedAt, userId);
+      return result.changes;
     },
 
     async setUserContext(orgId, userId, content, _updatedAt) {

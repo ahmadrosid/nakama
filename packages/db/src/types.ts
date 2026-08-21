@@ -840,6 +840,10 @@ export interface DatabaseAdapter {
     sessionTokenHash: string,
     revokedAt: string
   ): Promise<boolean>;
+  revokeBrowserSessionsForUser(
+    userId: string,
+    revokedAt: string
+  ): Promise<number>;
   setUserContext(
     orgId: string,
     userId: string,

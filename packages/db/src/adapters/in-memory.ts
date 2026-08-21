@@ -1175,6 +1175,21 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       return true;
     },
 
+    async revokeBrowserSessionsForUser(userId, revokedAt) {
+      let revoked = 0;
+
+      for (const [hash, session] of browserSessionsByHash) {
+        if (session.userId !== userId || session.revokedAt) {
+          continue;
+        }
+
+        browserSessionsByHash.set(hash, { ...session, revokedAt });
+        revoked += 1;
+      }
+
+      return revoked;
+    },
+
     async setUserContext(orgId, userId, content, updatedAt) {
       const memberKey = `${orgId}:${userId}`;
       const member = orgMembers.get(memberKey);

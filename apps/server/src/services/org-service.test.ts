@@ -247,6 +247,58 @@ describe("OrgService", () => {
     });
   });
 
+  test("revokes all browser sessions when password changes", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const created = await orgService.createOrganization({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        phone: "+628123456789",
+      },
+      name: "Acme",
+      slug: "acme-revoke-sessions",
+    });
+
+    const userId = created.adminMember!.member.userId;
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+
+    await databaseAdapter.createBrowserSession({
+      createdAt: now,
+      csrfTokenHash: "csrf_a",
+      expiresAt,
+      id: "bs_a",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "hash_a",
+      userId,
+    });
+    await databaseAdapter.createBrowserSession({
+      createdAt: now,
+      csrfTokenHash: "csrf_b",
+      expiresAt,
+      id: "bs_b",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "hash_b",
+      userId,
+    });
+
+    await orgService.changePassword({
+      currentPassword: created.adminMember!.temporaryPassword!,
+      newPassword: "new-password-123",
+      userId,
+    });
+
+    const sessionA =
+      await databaseAdapter.getBrowserSessionBySessionTokenHash("hash_a");
+    const sessionB =
+      await databaseAdapter.getBrowserSessionBySessionTokenHash("hash_b");
+
+    expect(sessionA?.revokedAt).toBeTruthy();
+    expect(sessionB?.revokedAt).toBeTruthy();
+  });
+
   test("updates own profile email phone and name", async () => {
     const { orgService } = createOrgService();
     const created = await orgService.createOrganization({
