@@ -83,7 +83,8 @@ export function CatalogProviderModelFields({
   modelsError,
   onCustomModelsChange,
 }: CatalogProviderModelFieldsProps) {
-  const [isBrowsing, setIsBrowsing] = useState(false);
+  const [isBrowsing, setIsBrowsing] = useState(customModels.length === 0);
+  const showBrowse = isBrowsing || customModels.length === 0;
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);
   const canDiscoverRemote =
@@ -111,7 +112,7 @@ export function CatalogProviderModelFields({
     isLoading: remoteLoading,
     error: remoteError,
   } = useQuery({
-    enabled: isBrowsing && canDiscoverRemote,
+    enabled: showBrowse && canDiscoverRemote,
     queryFn: () => client.discoverModels({ providerId: providerInstanceId! }),
     queryKey: queryKeys.providerModelDiscovery(providerInstanceId ?? ""),
     staleTime: 1000 * 60,
@@ -171,7 +172,7 @@ export function CatalogProviderModelFields({
       id={`${provider}-provider-models`}
       label="Models"
     >
-      {isBrowsing ? (
+      {showBrowse ? (
         <div className="space-y-2">
           {remoteLoading ? (
             <div className="flex h-72 items-center justify-center rounded-md border border-border">
@@ -198,15 +199,17 @@ export function CatalogProviderModelFields({
             >
               Add all
             </Button>
-            <Button
-              disabled={disabled}
-              onClick={() => setIsBrowsing(false)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Back
-            </Button>
+            {customModels.length > 0 ? (
+              <Button
+                disabled={disabled}
+                onClick={() => setIsBrowsing(false)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Back
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (

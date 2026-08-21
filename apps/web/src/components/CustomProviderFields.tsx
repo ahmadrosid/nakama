@@ -1,3 +1,4 @@
+import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
   ModelListEditor,
@@ -57,7 +58,8 @@ export function CustomProviderFields({
   onBaseUrlChange,
   onCustomModelsChange,
 }: CustomProviderFieldsProps) {
-  const [isBrowsing, setIsBrowsing] = useState(false);
+  const [isBrowsing, setIsBrowsing] = useState(customModels.length === 0);
+  const showBrowse = isBrowsing || customModels.length === 0;
   const identityDisabled = disabled || identityReadOnly;
   const resolvedBrowseLabel =
     browseLabel ?? (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
@@ -169,7 +171,7 @@ export function CustomProviderFields({
           id="provider-models"
           label="Models"
         >
-          {isBrowsing ? (
+          {showBrowse ? (
             <div className="space-y-2">
               {browseSource === "remote" ? (
                 <RemoteModelsBrowseList
@@ -188,15 +190,33 @@ export function CustomProviderFields({
                   onSelect={handleModelsDevSelect}
                 />
               )}
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <Button
-                  onClick={() => setIsBrowsing(false)}
+                  disabled={disabled}
+                  onClick={() => {
+                    onCustomModelsChange([
+                      ...customModels,
+                      { id: "", name: "" },
+                    ]);
+                    setIsBrowsing(false);
+                  }}
                   size="sm"
                   type="button"
                   variant="outline"
                 >
-                  Back
+                  <Add01Icon className="mr-1 size-4" />
+                  Add model
                 </Button>
+                {customModels.length > 0 ? (
+                  <Button
+                    onClick={() => setIsBrowsing(false)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Back
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : (

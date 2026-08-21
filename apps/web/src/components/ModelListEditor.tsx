@@ -55,144 +55,149 @@ export function ModelListEditor({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table
-          className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[44rem]" : "min-w-[32rem]"}`}
-        >
-          <thead className="border-border border-b bg-muted/30 text-muted-foreground">
-            <tr>
-              <th className="px-2 py-2 font-medium">Model ID</th>
-              <th className="px-2 py-2 font-medium">Display name</th>
-              {showThinking ? (
-                <th className="px-2 py-2 font-medium">Reasoning</th>
-              ) : null}
-              {showVision ? (
-                <th className="px-2 py-2 font-medium">Vision</th>
-              ) : null}
-              {showPricing ? (
-                <>
-                  <th className="px-2 py-2 font-medium">$/1M in</th>
-                  <th className="px-2 py-2 font-medium">$/1M out</th>
-                </>
-              ) : null}
-              <th aria-label="Actions" className="w-10 px-2 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {models.map((row, index) => (
-              <tr
-                className="border-border/60 border-b last:border-0"
-                key={row.id.trim() || rowKeysRef.current[index]}
-              >
-                <td className="px-2 py-1.5">
-                  <InputGroup>
-                    <InputGroupInput
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateRow(index, { id: event.target.value })
-                      }
-                      placeholder="llama3.2"
-                      value={row.id}
-                    />
-                  </InputGroup>
-                </td>
-                <td className="px-2 py-1.5">
-                  <InputGroup>
-                    <InputGroupInput
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateRow(index, { name: event.target.value })
-                      }
-                      placeholder="Optional label"
-                      value={row.name ?? ""}
-                    />
-                  </InputGroup>
-                </td>
+      {models.length > 0 ? (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table
+            className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[44rem]" : "min-w-[32rem]"}`}
+          >
+            <thead className="border-border border-b bg-muted/30 text-muted-foreground">
+              <tr>
+                <th className="px-2 py-2 font-medium">Model ID</th>
+                <th className="px-2 py-2 font-medium">Display name</th>
                 {showThinking ? (
-                  <td className="px-2 py-1.5">
-                    <Switch
-                      aria-label={`Reasoning for ${row.id.trim() || "model"}`}
-                      checked={row.supportsThinking === true}
-                      disabled={disabled}
-                      onCheckedChange={(checked) =>
-                        updateRow(index, { supportsThinking: checked })
-                      }
-                      size="sm"
-                    />
-                  </td>
+                  <th className="px-2 py-2 font-medium">Reasoning</th>
                 ) : null}
                 {showVision ? (
-                  <td className="px-2 py-1.5">
-                    <Switch
-                      aria-label={`Vision for ${row.id.trim() || "model"}`}
-                      checked={modelListRowVisionEnabled(row, visionDefaultOn)}
-                      disabled={disabled}
-                      onCheckedChange={(checked) =>
-                        updateRow(index, { supportsVision: checked })
-                      }
-                      size="sm"
-                    />
-                  </td>
+                  <th className="px-2 py-2 font-medium">Vision</th>
                 ) : null}
                 {showPricing ? (
                   <>
-                    <td className="px-2 py-1.5">
-                      <InputGroup>
-                        <InputGroupInput
-                          disabled={disabled}
-                          min={0}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            updateRow(index, {
-                              inputPerMillionUsd:
-                                value === "" ? undefined : Number(value),
-                            });
-                          }}
-                          placeholder="—"
-                          step="any"
-                          type="number"
-                          value={row.inputPerMillionUsd ?? ""}
-                        />
-                      </InputGroup>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <InputGroup>
-                        <InputGroupInput
-                          disabled={disabled}
-                          min={0}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            updateRow(index, {
-                              outputPerMillionUsd:
-                                value === "" ? undefined : Number(value),
-                            });
-                          }}
-                          placeholder="—"
-                          step="any"
-                          type="number"
-                          value={row.outputPerMillionUsd ?? ""}
-                        />
-                      </InputGroup>
-                    </td>
+                    <th className="px-2 py-2 font-medium">$/1M in</th>
+                    <th className="px-2 py-2 font-medium">$/1M out</th>
                   </>
                 ) : null}
-                <td className="px-2 py-1.5 text-right">
-                  <Button
-                    aria-label="Remove model"
-                    disabled={disabled || models.length <= 1}
-                    onClick={() => removeRow(index)}
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Delete02Icon className="size-4" />
-                  </Button>
-                </td>
+                <th aria-label="Actions" className="w-10 px-2 py-2" />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {models.map((row, index) => (
+                <tr
+                  className="border-border/60 border-b last:border-0"
+                  key={row.id.trim() || rowKeysRef.current[index]}
+                >
+                  <td className="px-2 py-1.5">
+                    <InputGroup>
+                      <InputGroupInput
+                        disabled={disabled}
+                        onChange={(event) =>
+                          updateRow(index, { id: event.target.value })
+                        }
+                        placeholder="llama3.2"
+                        value={row.id}
+                      />
+                    </InputGroup>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <InputGroup>
+                      <InputGroupInput
+                        disabled={disabled}
+                        onChange={(event) =>
+                          updateRow(index, { name: event.target.value })
+                        }
+                        placeholder="Optional label"
+                        value={row.name ?? ""}
+                      />
+                    </InputGroup>
+                  </td>
+                  {showThinking ? (
+                    <td className="px-2 py-1.5">
+                      <Switch
+                        aria-label={`Reasoning for ${row.id.trim() || "model"}`}
+                        checked={row.supportsThinking === true}
+                        disabled={disabled}
+                        onCheckedChange={(checked) =>
+                          updateRow(index, { supportsThinking: checked })
+                        }
+                        size="sm"
+                      />
+                    </td>
+                  ) : null}
+                  {showVision ? (
+                    <td className="px-2 py-1.5">
+                      <Switch
+                        aria-label={`Vision for ${row.id.trim() || "model"}`}
+                        checked={modelListRowVisionEnabled(
+                          row,
+                          visionDefaultOn
+                        )}
+                        disabled={disabled}
+                        onCheckedChange={(checked) =>
+                          updateRow(index, { supportsVision: checked })
+                        }
+                        size="sm"
+                      />
+                    </td>
+                  ) : null}
+                  {showPricing ? (
+                    <>
+                      <td className="px-2 py-1.5">
+                        <InputGroup>
+                          <InputGroupInput
+                            disabled={disabled}
+                            min={0}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              updateRow(index, {
+                                inputPerMillionUsd:
+                                  value === "" ? undefined : Number(value),
+                              });
+                            }}
+                            placeholder="—"
+                            step="any"
+                            type="number"
+                            value={row.inputPerMillionUsd ?? ""}
+                          />
+                        </InputGroup>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <InputGroup>
+                          <InputGroupInput
+                            disabled={disabled}
+                            min={0}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              updateRow(index, {
+                                outputPerMillionUsd:
+                                  value === "" ? undefined : Number(value),
+                              });
+                            }}
+                            placeholder="—"
+                            step="any"
+                            type="number"
+                            value={row.outputPerMillionUsd ?? ""}
+                          />
+                        </InputGroup>
+                      </td>
+                    </>
+                  ) : null}
+                  <td className="px-2 py-1.5 text-right">
+                    <Button
+                      aria-label="Remove model"
+                      disabled={disabled}
+                      onClick={() => removeRow(index)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Delete02Icon className="size-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button

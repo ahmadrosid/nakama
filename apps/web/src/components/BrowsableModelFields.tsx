@@ -1,3 +1,4 @@
+import { Add01Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import {
   ModelListEditor,
@@ -12,7 +13,7 @@ interface BrowsableModelFieldsProps<T> {
   density?: "default" | "compact";
   disabled?: boolean;
   fieldId: string;
-  footerHint: ReactNode;
+  footerHint?: ReactNode;
   modelsError?: string | null;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   renderBrowse: (onSelect: (row: T) => void) => ReactNode;
@@ -39,7 +40,8 @@ export function BrowsableModelFields<T>({
   toModelRow,
   renderBrowse,
 }: BrowsableModelFieldsProps<T>) {
-  const [isBrowsing, setIsBrowsing] = useState(false);
+  const [isBrowsing, setIsBrowsing] = useState(customModels.length === 0);
+  const showBrowse = isBrowsing || customModels.length === 0;
 
   const handleBrowseSelect = (row: T) => {
     const nextModel = toModelRow(row);
@@ -61,26 +63,41 @@ export function BrowsableModelFields<T>({
           <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>
-        ) : (
+        ) : footerHint ? (
           <p className="text-muted-foreground text-xs">{footerHint}</p>
-        )
+        ) : undefined
       }
       id={fieldId}
       label="Models"
     >
-      {isBrowsing ? (
+      {showBrowse ? (
         <div className="space-y-2">
           {renderBrowse(handleBrowseSelect)}
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
               disabled={disabled}
-              onClick={() => setIsBrowsing(false)}
+              onClick={() => {
+                onCustomModelsChange([...customModels, { id: "", name: "" }]);
+                setIsBrowsing(false);
+              }}
               size="sm"
               type="button"
               variant="outline"
             >
-              Back
+              <Add01Icon className="mr-1 size-4" />
+              Add model
             </Button>
+            {customModels.length > 0 ? (
+              <Button
+                disabled={disabled}
+                onClick={() => setIsBrowsing(false)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Back
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (
