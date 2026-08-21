@@ -83,7 +83,7 @@ export function CatalogProviderModelFields({
   modelsError,
   onCustomModelsChange,
 }: CatalogProviderModelFieldsProps) {
-  const [isBrowsing, setIsBrowsing] = useState(customModels.length === 0);
+  const [isBrowsing, setIsBrowsing] = useState(false);
   const showBrowse = isBrowsing || customModels.length === 0;
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);

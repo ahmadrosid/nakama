@@ -1,15 +1,9 @@
-import { Add01Icon } from "hugeicons-react";
-import { useState } from "react";
-import {
-  ModelListEditor,
-  type ModelListRow,
-} from "@/components/ModelListEditor";
+import { BrowsableModelFields } from "@/components/BrowsableModelFields";
+import type { ModelListRow } from "@/components/ModelListEditor";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
-import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
-import type { ModelsDevRow } from "@/hooks/use-models-dev";
 
 interface CustomProviderFieldsProps {
   apiKey: string;
@@ -58,53 +52,9 @@ export function CustomProviderFields({
   onBaseUrlChange,
   onCustomModelsChange,
 }: CustomProviderFieldsProps) {
-  const [isBrowsing, setIsBrowsing] = useState(customModels.length === 0);
-  const showBrowse = isBrowsing || customModels.length === 0;
   const identityDisabled = disabled || identityReadOnly;
   const resolvedBrowseLabel =
     browseLabel ?? (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
-
-  const handleModelsDevSelect = (
-    _provider: string,
-    modelId: string,
-    row: ModelsDevRow
-  ) => {
-    const nextModel = {
-      id: modelId,
-      name: row.modelName,
-      supportsVision: row.vision,
-    };
-    if (customModels.some((model) => model.id === nextModel.id)) {
-      setIsBrowsing(false);
-      return;
-    }
-
-    onCustomModelsChange([...customModels, nextModel]);
-    setIsBrowsing(false);
-  };
-
-  const handleRemoteSelect = (row: {
-    id: string;
-    name: string;
-    supportsVision?: boolean;
-  }) => {
-    if (customModels.some((model) => model.id === row.id)) {
-      setIsBrowsing(false);
-      return;
-    }
-
-    onCustomModelsChange([
-      ...customModels,
-      {
-        id: row.id,
-        name: row.name,
-        ...(row.supportsVision === undefined
-          ? {}
-          : { supportsVision: row.supportsVision }),
-      },
-    ]);
-    setIsBrowsing(false);
-  };
 
   return (
     <div className="space-y-4">
@@ -159,83 +109,48 @@ export function CustomProviderFields({
       </FormField>
 
       {showModelsEditor ? (
-        <FormField
-          density={density}
-          footer={
-            modelsError ? (
-              <p className="text-destructive text-sm" role="alert">
-                {modelsError}
-              </p>
-            ) : null
+        <BrowsableModelFields
+          browseLabel={
+            browseSource === "remote"
+              ? `Browse ${resolvedBrowseLabel}`
+              : "Browse models.dev"
           }
-          id="provider-models"
-          label="Models"
-        >
-          {showBrowse ? (
-            <div className="space-y-2">
-              {browseSource === "remote" ? (
-                <RemoteModelsBrowseList
-                  apiKey={apiKey}
-                  baseUrl={baseUrl}
-                  browseLabel={resolvedBrowseLabel}
-                  className="h-72 rounded-md border border-border"
-                  hostMode={hostMode}
-                  onSelect={handleRemoteSelect}
-                  provider={remoteProvider}
-                  providerId={providerInstanceId}
-                />
-              ) : (
-                <ModelsBrowseList
-                  className="h-72 rounded-md border border-border"
-                  onSelect={handleModelsDevSelect}
-                />
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button
-                  disabled={disabled}
-                  onClick={() => {
-                    onCustomModelsChange([
-                      ...customModels,
-                      { id: "", name: "" },
-                    ]);
-                    setIsBrowsing(false);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <Add01Icon className="mr-1 size-4" />
-                  Add model
-                </Button>
-                {customModels.length > 0 ? (
-                  <Button
-                    onClick={() => setIsBrowsing(false)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Back
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <ModelListEditor
-              browseLabel={
-                browseSource === "remote"
-                  ? `Browse ${resolvedBrowseLabel}`
-                  : "Browse models.dev"
-              }
-              disabled={disabled}
-              models={customModels}
-              onBrowse={() => setIsBrowsing(true)}
-              onChange={onCustomModelsChange}
-              showPricing={false}
-              showThinking
-              showVision
-            />
-          )}
-        </FormField>
+          customModels={customModels}
+          density={density}
+          disabled={disabled}
+          fieldId="provider-models"
+          modelsError={modelsError}
+          onCustomModelsChange={onCustomModelsChange}
+          renderBrowse={(onSelect) =>
+            browseSource === "remote" ? (
+              <RemoteModelsBrowseList
+                apiKey={apiKey}
+                baseUrl={baseUrl}
+                browseLabel={resolvedBrowseLabel}
+                className="h-72 rounded-md border border-border"
+                hostMode={hostMode}
+                onSelect={onSelect}
+                provider={remoteProvider}
+                providerId={providerInstanceId}
+              />
+            ) : (
+              <ModelsBrowseList
+                className="h-72 rounded-md border border-border"
+                onSelect={(_provider, modelId, row) =>
+                  onSelect({
+                    id: modelId,
+                    name: row.modelName,
+                    supportsVision: row.vision,
+                  })
+                }
+              />
+            )
+          }
+          showPricing={false}
+          showThinking
+          showVision
+          toModelRow={(row: ModelListRow) => row}
+        />
       ) : null}
     </div>
   );

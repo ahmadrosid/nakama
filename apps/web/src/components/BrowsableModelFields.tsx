@@ -40,7 +40,7 @@ export function BrowsableModelFields<T>({
   toModelRow,
   renderBrowse,
 }: BrowsableModelFieldsProps<T>) {
-  const [isBrowsing, setIsBrowsing] = useState(customModels.length === 0);
+  const [isBrowsing, setIsBrowsing] = useState(false);
   const showBrowse = isBrowsing || customModels.length === 0;
 
   const handleBrowseSelect = (row: T) => {
