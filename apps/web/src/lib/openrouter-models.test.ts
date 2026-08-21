@@ -91,6 +91,17 @@ describe("openRouterPricingPerMillion", () => {
 });
 
 describe("normalizeOpenRouterModels", () => {
+  test("marks free models and sorts free first", () => {
+    const rows = normalizeOpenRouterModels(fixture);
+
+    expect(rows).toHaveLength(4);
+    expect(rows[0]?.isFree).toBe(true);
+    expect(rows[1]?.isFree).toBe(true);
+    expect(rows[2]?.isFree).toBe(true);
+    expect(rows[3]?.isFree).toBe(false);
+    expect(rows.find((row) => row.id.endsWith(":free"))?.isFree).toBe(true);
+  });
+
   test("detects vision and capability chips", () => {
     const rows = normalizeOpenRouterModels(fixture);
     const paid = rows.find(
