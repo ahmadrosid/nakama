@@ -1942,7 +1942,8 @@ export type ProviderName =
   | "minimax"
   | "minimax_cn"
   | "zhipu"
-  | "zhipu_cn";
+  | "zhipu_cn"
+  | "xai";
 
 export type OllamaHostMode = "local" | "cloud";
 

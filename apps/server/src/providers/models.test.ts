@@ -176,6 +176,18 @@ describe("resolveModel", () => {
     expect(getDefaultModel("zhipu_cn", customModels)).toBe("glm-5.2");
   });
 
+  test("resolves xAI Grok models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "grok-4" },
+      { id: "grok-4-fast" },
+    ];
+
+    expect(resolveModel("xai", "grok-4-fast", customModels)).toBe(
+      "grok-4-fast"
+    );
+    expect(getDefaultModel("xai", customModels)).toBe("grok-4");
+  });
+
   test("falls back to instance default for unknown Zhipu ids", () => {
     const customModels = [{ default: true, id: "glm-5.2" }];
     expect(resolveModel("zhipu_cn", "not-a-real-model", customModels)).toBe(
@@ -201,6 +213,16 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("glm-4v", "zhipu_cn", [
         { id: "glm-4v", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
+
+  test("keeps xAI models opt-in only (vision variants flag via discovery)", () => {
+    expect(modelSupportsVision("grok-4", "xai")).toBe(false);
+
+    expect(
+      modelSupportsVision("grok-4-vision", "xai", [
+        { id: "grok-4-vision", supportsVision: true },
       ])
     ).toBe(true);
   });

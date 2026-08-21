@@ -1,6 +1,7 @@
 import { readEnvValue } from "./config";
 import type { ProviderName } from "./contract";
 import { defaultMinimaxBaseUrl } from "./minimax-provider-config";
+import { defaultXaiBaseUrl } from "./xai-provider-config";
 import { defaultZhipuBaseUrl } from "./zhipu-provider-config";
 
 export type UserProviderName = ProviderName;
@@ -21,6 +22,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "minimax_cn",
   "zhipu",
   "zhipu_cn",
+  "xai",
 ] as const;
 
 // Providers whose model lists are discovered live from the platform's
@@ -34,6 +36,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<UserProviderName> =
     "minimax_cn",
     "zhipu",
     "zhipu_cn",
+    "xai",
   ]);
 
 export function isDiscoveryModelProvider(provider: UserProviderName): boolean {
@@ -45,7 +48,11 @@ export function isDiscoveryModelProvider(provider: UserProviderName): boolean {
 export function defaultDiscoveryBaseUrl(
   provider: UserProviderName
 ): string | null {
-  return defaultMinimaxBaseUrl(provider) ?? defaultZhipuBaseUrl(provider);
+  return (
+    defaultXaiBaseUrl(provider) ??
+    defaultMinimaxBaseUrl(provider) ??
+    defaultZhipuBaseUrl(provider)
+  );
 }
 
 export function parseProviderName(
@@ -68,7 +75,8 @@ export function parseProviderName(
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
     normalized === "zhipu" ||
-    normalized === "zhipu_cn"
+    normalized === "zhipu_cn" ||
+    normalized === "xai"
   ) {
     return normalized;
   }
@@ -110,6 +118,8 @@ export function apiKeyEnvVarForProvider(
       return "ZHIPU_API_KEY";
     case "zhipu_cn":
       return "ZHIPU_CN_API_KEY";
+    case "xai":
+      return "XAI_API_KEY";
   }
 }
 

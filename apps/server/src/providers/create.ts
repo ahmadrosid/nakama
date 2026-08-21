@@ -12,6 +12,7 @@ import {
   MINIMAX_CN_DEFAULT_BASE_URL,
   MINIMAX_DEFAULT_BASE_URL,
 } from "@nakama/core/minimax-provider-config";
+import { XAI_DEFAULT_BASE_URL } from "@nakama/core/xai-provider-config";
 import {
   ZHIPU_CN_DEFAULT_BASE_URL,
   ZHIPU_DEFAULT_BASE_URL,
@@ -108,6 +109,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? ZHIPU_CN_DEFAULT_BASE_URL,
         model,
         providerName: "zhipu_cn",
+      });
+    case "xai":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? XAI_DEFAULT_BASE_URL,
+        model,
+        providerName: "xai",
       });
     case "opencode_go":
       return createOpenCodeGoProvider({
