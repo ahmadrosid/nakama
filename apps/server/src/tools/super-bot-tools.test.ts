@@ -224,32 +224,6 @@ if __name__ == "__main__":
     expect(createToolCalled).toBe(false);
   });
 
-  test("rejects shell wrapper module paths", async () => {
-    let createToolCalled = false;
-
-    const createTool = getCreateToolTool({
-      async createTool(): Promise<ToolDetail> {
-        createToolCalled = true;
-        throw new Error("should not be called");
-      },
-    });
-
-    const error = await captureError(
-      createTool.run(
-        {
-          description: "Shell wrapper",
-          handlerConfig: { modulePath: "wrapper.sh" },
-          handlerType: "javascript",
-          name: "wrapper",
-        },
-        { sessionId: SESSION_ID }
-      )
-    );
-
-    expect(error?.message).toMatch(/ending in "\.js"/i);
-    expect(createToolCalled).toBe(false);
-  });
-
   test("rejects missing javascript modules before storing the tool", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;

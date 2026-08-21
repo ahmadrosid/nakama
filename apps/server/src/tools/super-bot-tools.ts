@@ -207,7 +207,7 @@ export function createSuperBotTools(
 
         if (!isCustomToolType(handlerType)) {
           throw new Error(
-            `Super Bot can only create ${customToolTypesLabel()} tools. Use handlerType "javascript" or "python".`
+            `Super Bot can only create ${customToolTypesLabel()} tools. Use handlerType ${customToolTypesLabel()}.`
           );
         }
 
