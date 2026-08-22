@@ -1284,9 +1284,12 @@ export class NakamaClient {
     );
   }
 
-  async runAutomationInternal(automationId: string): Promise<void> {
+  async runAutomationInternal(
+    automationId: string,
+    orgId: string
+  ): Promise<void> {
     await this.request(
-      `/v1/internal/automations/${encodeURIComponent(automationId)}/run`,
+      `/v1/internal/automations/${encodeURIComponent(automationId)}/run?orgId=${encodeURIComponent(orgId)}`,
       withStreamFetchIdle({
         method: "POST",
       })

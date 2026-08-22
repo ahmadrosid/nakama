@@ -9,7 +9,8 @@ export interface AutomationSchedulerDelegate {
   getDefaultTimezone(): Promise<string>;
   listScheduledAutomations(): Promise<AutomationSchedule[]>;
   runAutomation(
-    automationId: string
+    automationId: string,
+    orgId: string
   ): Promise<{ ok: boolean; skipped?: boolean; error?: string }>;
 }
 
@@ -83,7 +84,7 @@ export class AutomationScheduler {
         },
         () => {
           void this.delegate
-            .runAutomation(automation.id)
+            .runAutomation(automation.id, automation.orgId)
             .catch((error: unknown) => {
               const message =
                 error instanceof Error ? error.message : String(error);
@@ -110,7 +111,7 @@ export class AutomationScheduler {
     const timer = setTimeout(() => {
       this.timers.delete(automation.id);
       void this.delegate
-        .runAutomation(automation.id)
+        .runAutomation(automation.id, automation.orgId)
         .catch((error: unknown) => {
           const message =
             error instanceof Error ? error.message : String(error);

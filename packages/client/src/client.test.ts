@@ -62,10 +62,10 @@ test("automation run requests disable Bun fetch idle timeout", async () => {
     },
   });
 
-  await client.runAutomationInternal("auto_1");
+  await client.runAutomationInternal("auto_1", "org_1");
 
   expect(String(fetchCalls[0]!.input)).toBe(
-    "http://localhost:4310/v1/internal/automations/auto_1/run"
+    "http://localhost:4310/v1/internal/automations/auto_1/run?orgId=org_1"
   );
   expect(
     (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number }).idleTimeout

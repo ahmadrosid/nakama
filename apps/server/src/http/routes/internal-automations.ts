@@ -65,7 +65,12 @@ export function registerInternalAutomationRoutes(
     }
 
     const automationId = decodeURIComponent(c.req.param("automationId"));
-    const automation = await automationService.get(automationId);
+    const orgId = c.req.query("orgId")?.trim();
+    if (!orgId) {
+      return errorResponse("orgId query parameter is required.", 400);
+    }
+
+    const automation = await automationService.get(automationId, orgId);
 
     if (!automation) {
       return errorResponse("Automation not found", 404);

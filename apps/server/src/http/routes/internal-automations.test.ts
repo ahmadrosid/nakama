@@ -109,7 +109,39 @@ describe("internal automation routes", () => {
     expect(response.status).toBe(401);
   });
 
-  test("runs automation via internal endpoint", async () => {
+  test("runs automation via internal endpoint for the owning org", async () => {
+    const options = createServerOptions();
+    await seedOrgAndProfile(options.databaseAdapter);
+    await seedLocalClientUser(options.databaseAdapter);
+
+    const automation = await options.automationService.create(
+      ORG_ID,
+      {
+        description: "Ping",
+        name: "Hourly",
+        prompt: "Ping",
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+
+    const app = createHonoApp(options);
+    const token = await loadLocalAuthToken();
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run?orgId=${ORG_ID}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(204);
+  });
+
+  test("rejects a run without an orgId assertion", async () => {
     const options = createServerOptions();
     await seedOrgAndProfile(options.databaseAdapter);
     await seedLocalClientUser(options.databaseAdapter);
@@ -138,7 +170,68 @@ describe("internal automation routes", () => {
       )
     );
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(400);
+  });
+
+  test("refuses to run an automation under another org's id", async () => {
+    const runCalls: string[] = [];
+    const options = createServerOptions({
+      agent: {
+        providerConfigured: true,
+        runAutomation: async (automationId: string) => {
+          runCalls.push(automationId);
+          return { skipped: false };
+        },
+      } as any,
+    });
+    await seedOrgAndProfile(options.databaseAdapter);
+    await seedLocalClientUser(options.databaseAdapter);
+
+    const now = new Date().toISOString();
+    await options.databaseAdapter.upsertOrganization({
+      createdAt: now,
+      id: "org_other",
+      name: "Other Org",
+      slug: "other-org",
+      updatedAt: now,
+    });
+    await options.databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "profile_other",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: "org_other",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const otherAutomation = await options.automationService.create(
+      "org_other",
+      {
+        description: "Ping",
+        name: "Hourly",
+        prompt: "Ping",
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
+      },
+      "profile_other"
+    );
+
+    const app = createHonoApp(options);
+    const token = await loadLocalAuthToken();
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(otherAutomation.id)}/run?orgId=${ORG_ID}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(404);
+    expect(runCalls).toEqual([]);
   });
 
   test("returns 404 for unknown automation run", async () => {
@@ -151,7 +244,7 @@ describe("internal automation routes", () => {
 
     const response = await app.fetch(
       new Request(
-        "http://localhost:4310/v1/internal/automations/unknown-automation/run",
+        `http://localhost:4310/v1/internal/automations/unknown-automation/run?orgId=${ORG_ID}`,
         {
           headers: { Authorization: `Bearer ${token}` },
           method: "POST",
@@ -191,7 +284,7 @@ describe("internal automation routes", () => {
 
     const response = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run`,
+        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run?orgId=${ORG_ID}`,
         {
           headers: { Authorization: `Bearer ${token}` },
           method: "POST",
@@ -267,7 +360,7 @@ describe("internal automation routes", () => {
     const token = await loadLocalAuthToken();
     const response = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run`,
+        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run?orgId=${ORG_ID}`,
         {
           headers: { Authorization: `Bearer ${token}` },
           method: "POST",
