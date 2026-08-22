@@ -49,6 +49,31 @@ describe("AutomationScheduler", () => {
     scheduler.stop();
   });
 
+  test("passes orgId from the schedule into runAutomation", async () => {
+    const runs: Array<{ id: string; orgId: string }> = [];
+    const delegate = createDelegate({
+      listScheduledAutomations: async () => [
+        schedule({
+          cron: undefined,
+          id: "a1",
+          orgId: "org_z",
+          runAt: new Date(Date.now() + 5).toISOString(),
+        }),
+      ],
+      runAutomation: async (id, orgId) => {
+        runs.push({ id, orgId });
+        return { ok: true };
+      },
+    });
+
+    const scheduler = new AutomationScheduler(delegate);
+    await scheduler.start();
+    await Bun.sleep(30);
+    scheduler.stop();
+
+    expect(runs).toEqual([{ id: "a1", orgId: "org_z" }]);
+  });
+
   test("reload stops old jobs and registers current schedules", async () => {
     let automations: AutomationSchedule[] = [schedule({ id: "a1" })];
     const delegate = createDelegate({

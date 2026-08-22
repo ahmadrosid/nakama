@@ -1284,9 +1284,13 @@ export class NakamaClient {
     );
   }
 
-  async runAutomationInternal(automationId: string): Promise<void> {
+  async runAutomationInternal(
+    automationId: string,
+    orgId: string
+  ): Promise<void> {
+    const params = new URLSearchParams({ orgId });
     await this.request(
-      `/v1/internal/automations/${encodeURIComponent(automationId)}/run`,
+      `/v1/internal/automations/${encodeURIComponent(automationId)}/run?${params}`,
       withStreamFetchIdle({
         method: "POST",
       })

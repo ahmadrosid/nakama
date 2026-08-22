@@ -9,14 +9,14 @@ import { AutomationWorkerScheduler } from "./scheduler";
 function createMockClient(
   overrides: Partial<{
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
-    runAutomationInternal: (id: string) => Promise<void>;
+    runAutomationInternal: (id: string, orgId: string) => Promise<void>;
     getTimezone: () => Promise<string>;
   }> = {}
 ): NakamaClient {
   return {
     getTimezone: async () => "UTC",
     listAutomationSchedules: async () => [],
-    runAutomationInternal: async () => {},
+    runAutomationInternal: async (_id: string, _orgId: string) => {},
     ...overrides,
   } as unknown as NakamaClient;
 }
