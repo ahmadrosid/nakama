@@ -1,4 +1,8 @@
-import type { ToolDefinition, ToolSourceResponse } from "@nakama/core";
+import type {
+  ToolContext,
+  ToolDefinition,
+  ToolSourceResponse,
+} from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import {
   loadJavascriptTool,
@@ -42,13 +46,93 @@ export const CUSTOM_TOOL_HANDLERS = {
 
 export type CustomToolType = keyof typeof CUSTOM_TOOL_HANDLERS;
 
+/**
+ * How many times a failed custom tool run is retried after the first attempt
+ * (up to 3 attempts total) before the last error is surfaced unchanged.
+ */
+export const TOOL_RETRY_LIMIT = 2;
+
+/** Base backoff between attempts; each retry doubles it: 500ms, then 1s. */
+export const TOOL_RETRY_BASE_DELAY_MS = 500;
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("Tool execution aborted");
+}
+
+/** Resolves after `ms`, or rejects immediately when the signal aborts. */
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(abortReason(signal));
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal as AbortSignal));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Wraps a custom tool run with at-most-two retries and exponential backoff.
+ *
+ * Thrown errors (including timeouts) are transient by default and get
+ * retried; an aborted `context.signal` stops immediately and is never
+ * retried, including mid-backoff. The final failure is re-thrown unchanged
+ * so callers keep the current error message shape.
+ */
+export function withToolRetries(
+  run: (input: unknown, context: ToolContext) => Promise<unknown>
+): (input: unknown, context: ToolContext) => Promise<unknown> {
+  return async (input, context) => {
+    let attempts = 0;
+    for (;;) {
+      if (context.signal?.aborted) {
+        throw abortReason(context.signal);
+      }
+      try {
+        return await run(input, context);
+      } catch (error) {
+        attempts += 1;
+        if (attempts > TOOL_RETRY_LIMIT || context.signal?.aborted) {
+          throw error;
+        }
+        await abortableDelay(
+          TOOL_RETRY_BASE_DELAY_MS * 2 ** (attempts - 1),
+          context.signal
+        );
+      }
+    }
+  };
+}
+
 export function getCustomToolHandler(
   handlerType: string
 ): CustomToolHandler | null {
-  return (
+  const handler =
     (CUSTOM_TOOL_HANDLERS as Record<string, CustomToolHandler>)[handlerType] ??
-    null
-  );
+    null;
+  if (!handler) {
+    return null;
+  }
+  return {
+    ...handler,
+    // Both loader types resolve through this seam, so wrapping load here
+    // applies the retry policy to JavaScript and Python in one place.
+    load: async (record) => {
+      const definition = await handler.load(record);
+      if (!definition) {
+        return null;
+      }
+      return { ...definition, run: withToolRetries(definition.run) };
+    },
+  };
 }
 
 export function isCustomToolType(
