@@ -52,8 +52,10 @@ export type CustomToolType = keyof typeof CUSTOM_TOOL_HANDLERS;
  */
 export const TOOL_RETRY_LIMIT = 2;
 
-/** Base backoff between attempts; each retry doubles it: 500ms, then 1s. */
-export const TOOL_RETRY_BASE_DELAY_MS = 500;
+/**
+ * Base backoff between attempts; each retry doubles it: 500ms, then 1s.
+ */
+const TOOL_RETRY_BASE_DELAY_MS = 500;
 
 function abortReason(signal: AbortSignal): unknown {
   return signal.reason instanceof Error
