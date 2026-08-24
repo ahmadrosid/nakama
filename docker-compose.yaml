@@ -1,0 +1,19 @@
+services:
+  nakama:
+    image: ghcr.io/ahmadrosid/nakama:latest
+    ports:
+      - "4310:4310"
+    environment:
+      - NAKAMA_CONFIG_DIR=/nakama/data
+      # Optional headless first boot credentials:
+      # - NAKAMA_SEED_ADMIN_EMAIL=admin@example.com
+      # - NAKAMA_SEED_ADMIN_PASSWORD=changeme123
+      # - NAKAMA_PROVIDER=openai
+      # - OPENAI_API_KEY=sk-...
+      # - NAKAMA_WEB_PUBLIC_URL=https://nakama.example.com
+    volumes:
+      - nakama-data:/nakama/data
+    restart: unless-stopped
+
+volumes:
+  nakama-data: null
