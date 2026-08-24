@@ -1,0 +1,24 @@
+# documentation: https://github.com/ahmadrosid/nakama#readme
+# slogan: AI agent platform built to work with your team
+# category: ai
+# tags: ai,agents,chat,self-hosted
+# logo: svgs/nakama.svg
+# port: 4310
+
+services:
+  nakama:
+    image: ghcr.io/ahmadrosid/nakama:latest
+    environment:
+      - NAKAMA_CONFIG_DIR=/nakama/data
+      # Headless first boot - skips the browser setup wizard:
+      - NAKAMA_SEED_ADMIN_EMAIL=${SERVICE_USER_EMAIL}
+      - NAKAMA_SEED_ADMIN_NAME=Admin
+      - NAKAMA_SEED_ADMIN_PASSWORD=${SERVICE_PASSWORD_ADMIN}
+      # Public origin for OAuth callbacks and shared links:
+      - NAKAMA_WEB_PUBLIC_URL=${SERVICE_FQDN_NAKAMA_4310}
+    volumes:
+      - nakama-data:/nakama/data
+    restart: unless-stopped
+
+volumes:
+  nakama-data: null
