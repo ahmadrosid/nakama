@@ -95,12 +95,7 @@ export async function createWhatsAppSocket(
         }
       });
 
-      socket.ev.on("creds.update", () => {
-        void saveCreds().catch((error) => {
-          console.error("WhatsApp auth persistence failed.", error);
-          handle.stop();
-        });
-      });
+      socket.ev.on("creds.update", saveCreds);
 
       socket.ev.on("messages.upsert", async (m) => {
         console.log(
