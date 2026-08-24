@@ -157,10 +157,14 @@ if __name__ == "__main__":
     const tool = await loadPythonTool(
       makeRecord({ handlerConfig: { modulePath: "boom.py" }, name: "boom" })
     );
-    const result = (await tool!.run({}, {})) as { error: string };
 
-    expect(result.error).toMatch(/exit code/i);
-    expect(result.error).toContain("kaboom");
+    // A failed spawn must reject so the retry policy can retry transient
+    // failures; executeToolCall turns the throw into `{ error }` for callers.
+    const err = await tool!.run({}, {}).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/exit code/i);
+    expect((err as Error).message).toContain("kaboom");
   });
 
   test("returns an error tool when stdout is not valid JSON", async () => {
@@ -187,9 +191,8 @@ if __name__ == "__main__":
         name: "badjson",
       })
     );
-    const result = (await tool!.run({}, {})) as { error: string };
 
-    expect(result.error).toMatch(/non-json/i);
+    await expect(tool!.run({}, {})).rejects.toThrow(/non-json/i);
   });
 
   test("returns an error tool when the module prints nothing to stdout", async () => {
@@ -217,10 +220,8 @@ if __name__ == "__main__":
         name: "silent",
       })
     );
-    const result = (await tool!.run({}, {})) as { error?: unknown };
 
-    expect(result.error).toBeTruthy();
-    expect(result.error).toMatch(/no output/i);
+    await expect(tool!.run({}, {})).rejects.toThrow(/no output/i);
   });
 
   test("rejects on timeout even when the module exits 0", async () => {
@@ -261,9 +262,7 @@ if __name__ == "__main__":
 
     process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS = "200";
     try {
-      const result = (await tool!.run({}, {})) as { error?: unknown };
-      expect(result.error).toBeTruthy();
-      expect(result.error).toMatch(/timed out/i);
+      await expect(tool!.run({}, {})).rejects.toThrow(/timed out/i);
     } finally {
       delete process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS;
     }

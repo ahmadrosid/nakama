@@ -119,13 +119,11 @@ async function runPythonTool(
     env.NAKAMA_WORKSPACE_ROOT = workspaceRoot;
   }
 
-  try {
-    return await spawnAndParse(modulePath, input, context, env);
-  } catch (error) {
-    return {
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+  // No try/catch here on purpose: a failed spawn must reject so the retry
+  // policy in withToolRetries can retry transient failures. executeToolCall
+  // (packages/agent/src/tool-loop.ts) converts the throw into the same
+  // `{ error: message }` shape callers already expect.
+  return spawnAndParse(modulePath, input, context, env);
 }
 
 async function spawnAndParse(
