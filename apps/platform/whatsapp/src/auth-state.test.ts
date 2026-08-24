@@ -61,6 +61,22 @@ describe("private WhatsApp auth state", () => {
   );
 
   test.skipIf(!POSIX)(
+    "preserves a stricter existing process umask",
+    async () => {
+      const root = await createTemporaryDirectory();
+      const authDirectory = join(root, "auth");
+      process.umask(0o177);
+
+      const { saveCreds } = await usePrivateMultiFileAuthState(authDirectory);
+      await saveCreds();
+
+      expect(process.umask()).toBe(0o177);
+      expect(await modeOf(authDirectory)).toBe(0o700);
+      expect(await modeOf(join(authDirectory, "creds.json"))).toBe(0o600);
+    }
+  );
+
+  test.skipIf(!POSIX)(
     "repairs existing loose permissions during startup",
     async () => {
       const root = await createTemporaryDirectory();

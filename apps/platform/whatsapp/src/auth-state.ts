@@ -17,6 +17,8 @@ export async function usePrivateMultiFileAuthState(
   directory: string
 ): Promise<PrivateMultiFileAuthState> {
   if (process.platform !== "win32") {
+    // The bridge is a dedicated process whose only child starts before auth setup.
+    // Keep this mask in place for every later Baileys credential and key creation.
     // biome-ignore lint/suspicious/noBitwiseOperators: preserve stricter existing process restrictions.
     process.umask(process.umask() | PRIVATE_UMASK);
   }
