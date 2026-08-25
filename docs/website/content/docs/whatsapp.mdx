@@ -112,6 +112,19 @@ Useful WhatsApp commands:
 | `/new` | Starts a fresh conversation |
 | `/compact` | Compacts the current conversation history |
 | `/stop` | Stops an in-progress reply |
+| `/attach` | Sends the most recent saved artifact as a WhatsApp document |
+
+## Saved artifacts and share links
+
+When your agent saves a file for you with the `save-artifact` skill (content file plus `.nakama-meta.json` sidecar in the same turn), Nakama posts a **Publish-style share link** after the reply in WhatsApp.
+
+Opening that link does not require a Nakama login. Anyone who can read the WhatsApp message can open the file until the share is revoked from the dashboard.
+
+To receive the file itself in WhatsApp, ask in plain language — for example, “send the file” or “attach it” — or type `/attach`. Nakama sends a native WhatsApp document when the file is within the attach size limit. If the file is too large, use the share link instead.
+
+In a WhatsApp **group**, both the share link and a requested document go to the whole group (same visibility as the bot’s other replies).
+
+Unpaired saves (content without a sidecar in the same turn) do not produce share links or attachments.
 
 ## Troubleshooting
 

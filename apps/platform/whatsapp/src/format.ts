@@ -164,5 +164,6 @@ export const HELP_TEXT = `Nakama WhatsApp commands:
 /new \u2014 start a new conversation
 /org \u2014 choose or switch organization
 /status \u2014 server and model status
+/attach \u2014 send the most recent saved artifact as a WhatsApp document
 
-Send text to chat with the agent.`;
+Send text to chat with the agent. After a save, ask to "send the file" for a native attachment.`;

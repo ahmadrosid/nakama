@@ -16,7 +16,11 @@ import {
 const PAIRED_JID = "1234567890@s.whatsapp.net";
 
 function createMockSocket() {
-  const sent: Array<{ jid: string; text: string }> = [];
+  const sent: Array<{
+    jid: string;
+    text: string;
+    content: Record<string, unknown>;
+  }> = [];
 
   const socket = {
     end: () => {},
@@ -24,13 +28,23 @@ function createMockSocket() {
       off: () => {},
       on: () => {},
     },
-    sendMessage: async (jid: string, content: { text: string }) => {
-      sent.push({ jid, text: content.text });
+    sendMessage: async (jid: string, content: Record<string, unknown>) => {
+      sent.push({
+        content,
+        jid,
+        text: typeof content.text === "string" ? content.text : "",
+      });
     },
     sendPresenceUpdate: async () => {},
   };
 
   return { sent, socket };
+}
+
+function documentSendCount(
+  sent: Array<{ content: Record<string, unknown> }>
+): number {
+  return sent.filter((entry) => entry.content.document !== undefined).length;
 }
 
 beforeEach(() => {
@@ -413,8 +427,9 @@ describe("createChatHandler", () => {
 
       await handleMessage({ jid: PAIRED_JID, text: "/help" });
 
-      expect(sent.length).toBe(1);
-      expect(sent[0].text).toContain("/help");
+      const helpText = sent.map((message) => message.text).join("\n");
+      expect(helpText).toContain("/help");
+      expect(helpText).toContain("/attach");
       expect(calls.sendStream).toBe(0);
     });
   });
@@ -1243,6 +1258,358 @@ describe("createChatHandler group chats", () => {
       );
 
       expect(calls.sendStream).toBe(1);
+    });
+  });
+});
+
+describe("createChatHandler artifact delivery", () => {
+  const metaJson = JSON.stringify({
+    mimeType: "text/markdown",
+    savedAt: "2026-07-13T10:00:00.000Z",
+    sizeBytes: 42,
+  });
+
+  const artifactMessages = [
+    { content: "save report", role: "user" as const },
+    {
+      content: "",
+      role: "assistant" as const,
+      toolCalls: [
+        {
+          arguments: { content: "# Report", path: "artifacts/report.md" },
+          id: "tool_1",
+          name: "write_file",
+        },
+        {
+          arguments: {
+            content: metaJson,
+            path: "artifacts/report.md.nakama-meta.json",
+          },
+          id: "tool_2",
+          name: "write_file",
+        },
+      ],
+    },
+    {
+      content: JSON.stringify({
+        bytesWritten: 8,
+        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md",
+      }),
+      name: "write_file",
+      role: "tool" as const,
+      toolCallId: "tool_1",
+    },
+    {
+      content: JSON.stringify({
+        bytesWritten: metaJson.length,
+        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md.nakama-meta.json",
+      }),
+      name: "write_file",
+      role: "tool" as const,
+      toolCallId: "tool_2",
+    },
+    { content: "Saved the report.", role: "assistant" as const },
+  ];
+
+  test("posts a publish share link after a paired save-artifact turn", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient({
+        messages: artifactMessages,
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "thanks" });
+
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(
+        sent.some((message) =>
+          message.text.includes("https://app.example/s/tok_test")
+        )
+      ).toBe(true);
+    });
+  });
+
+  test("does not publish when the turn has no sidecar pair", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient({
+        messages: [
+          { content: "save", role: "user" },
+          {
+            content: "",
+            role: "assistant",
+            toolCalls: [
+              {
+                arguments: { content: "draft", path: "artifacts/draft.md" },
+                id: "tool_1",
+                name: "write_file",
+              },
+            ],
+          },
+          {
+            content: JSON.stringify({
+              bytesWritten: 5,
+              path: "/home/.nakama/orgs/org/profiles/default/artifacts/draft.md",
+            }),
+            name: "write_file",
+            role: "tool",
+            toolCallId: "tool_1",
+          },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "thanks" });
+
+      expect(calls.publishProfileArtifactShare).toBe(0);
+      expect(sent.some((message) => message.text.includes("/s/"))).toBe(false);
+    });
+  });
+
+  test("sends a document when the user asks to attach a saved artifact", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        deliverableArtifacts: [
+          {
+            filename: "report.md",
+            mimeType: "text/markdown",
+            path: "report.md",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sharePath: "/s/tok_test",
+            shareUrl: "https://app.example/s/tok_test",
+            sizeBytes: 42,
+          },
+        ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "send me the file" });
+
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(documentSendCount(sent)).toBe(1);
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
+  test("sends a document for /attach without an agent turn", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        deliverableArtifacts: [
+          {
+            filename: "report.md",
+            mimeType: "text/markdown",
+            path: "report.md",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sharePath: "/s/tok_test",
+            shareUrl: "https://app.example/s/tok_test",
+            sizeBytes: 42,
+          },
+        ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "/attach" });
+
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(documentSendCount(sent)).toBe(1);
+      expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("reports when /attach has no artifact available", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "/attach" });
+
+      expect(calls.readProfileArtifactContent).toBe(0);
+      expect(documentSendCount(sent)).toBe(0);
+      expect(
+        sent.some((message) => message.text.includes("No saved artifact"))
+      ).toBe(true);
+      expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("clears deliverable artifacts on /clear", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        deliverableArtifacts: [
+          {
+            filename: "report.md",
+            mimeType: "text/markdown",
+            path: "report.md",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sharePath: "/s/tok_test",
+            shareUrl: "https://app.example/s/tok_test",
+            sizeBytes: 42,
+          },
+        ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "/clear" });
+
+      expect(sessionStore.getDeliverableArtifacts(PAIRED_JID)).toEqual([]);
     });
   });
 });

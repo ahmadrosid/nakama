@@ -1,4 +1,5 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import { isAttachOnlyCommand } from "@nakama/core";
 import {
   clearActiveStream,
   isAbortError,
@@ -17,6 +18,11 @@ import { pickProfileForOrg } from "@nakama/core/profiles";
 import { normalizePairingCode } from "@nakama/core/whatsapp-config";
 import type { WASocket } from "@whiskeysockets/baileys";
 import type { WhatsAppAuthStore } from "./auth-store";
+import {
+  deliverWhatsAppTurnArtifactShares,
+  maybeSendRequestedWhatsAppArtifactAttachment,
+  maybeSendWhatsAppAttachOnlyCommand,
+} from "./channel-artifact-flow";
 import type { WhatsAppBridgeConfig } from "./config";
 import {
   formatError,
@@ -158,18 +164,32 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
       }
 
+      const attachUserText = isGroup
+        ? stripWhatsAppBotMention(trimmed)
+        : trimmed;
+
+      // After pairing + org-ready: `/attach` skips handleCommand, not auth/org.
+      if (isAttachOnlyCommand(attachUserText)) {
+        await handleAttachOnlyCommand(conversationKey, jid, attachUserText);
+        return;
+      }
+
       if (trimmed.startsWith("/")) {
         await handleCommand(conversationKey, channelOrgKey, jid, trimmed);
         return;
       }
 
-      const messageText = isGroup ? stripWhatsAppBotMention(trimmed) : trimmed;
-      await handleChatMessage(conversationKey, jid, {
-        message: withGroupContext(
-          withQuotedContext(messageText, inbound.quotedText),
-          isGroup
-        ),
-      });
+      await handleChatMessage(
+        conversationKey,
+        jid,
+        {
+          message: withGroupContext(
+            withQuotedContext(attachUserText, inbound.quotedText),
+            isGroup
+          ),
+        },
+        attachUserText
+      );
     });
   };
 
@@ -207,6 +227,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       case "/clear": {
         const session = await resolveSession(conversationKey);
         await session.clear();
+        await clearSessionArtifactState(conversationKey);
         await sendText(jid, "History cleared.");
         return;
       }
@@ -316,12 +337,57 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     await sendText(jid, formatOrgSwitchConfirmation(picked.name));
   }
 
+  async function handleAttachOnlyCommand(
+    conversationKey: string,
+    jid: string,
+    attachUserText: string
+  ): Promise<void> {
+    const socket = getSocket();
+    if (!socket) {
+      await sendText(jid, "WhatsApp is not connected.");
+      return;
+    }
+
+    await resolveSession(conversationKey);
+    const profileId =
+      sessionStore.get(conversationKey)?.profileId ??
+      (await resolveProfileId());
+
+    await maybeSendWhatsAppAttachOnlyCommand({
+      attachUserText,
+      client,
+      conversationKey,
+      jid,
+      profileId,
+      sendPlain: (text) => sendText(jid, text),
+      sessionStore,
+      socket,
+    });
+  }
+
   async function handleChatMessage(
     conversationKey: string,
     jid: string,
-    input: SendMessageInput
+    input: SendMessageInput,
+    attachUserText: string
   ): Promise<void> {
     const session = await resolveSession(conversationKey);
+    const profileId = sessionStore.get(conversationKey)?.profileId;
+    const socket = getSocket();
+
+    if (profileId && socket) {
+      await maybeSendRequestedWhatsAppArtifactAttachment({
+        attachUserText,
+        client,
+        conversationKey,
+        jid,
+        profileId,
+        sendPlain: (text) => sendText(jid, text),
+        sessionStore,
+        socket,
+      });
+    }
+
     const typingLoop = createTypingLoop(getSocket(), jid);
     const todoStatus = new WhatsAppTodoStatusMessage(getSocket(), jid);
     const signal = registerActiveStream(conversationKey);
@@ -384,10 +450,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (reply.trim()) {
       await sendText(jid, reply.trim());
-      return;
+    } else {
+      await sendText(jid, "(empty reply)");
     }
 
-    await sendText(jid, "(empty reply)");
+    if (profileId) {
+      await deliverWhatsAppTurnArtifactShares({
+        client,
+        conversationKey,
+        profileId,
+        sendRaw: (text) => sendRawText(jid, text),
+        session,
+        sessionStore,
+      });
+    }
   }
 
   async function replyStatus(jid: string): Promise<void> {
@@ -479,6 +555,39 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     for (const chunk of splitWhatsAppMessage(prepared)) {
       await socket.sendMessage(jid, { text: chunk });
     }
+  }
+
+  /** Share footers bypass markdown stripping so tokens with `_` stay intact. */
+  async function sendRawText(jid: string, text: string): Promise<void> {
+    const socket = getSocket();
+    if (!socket) {
+      return;
+    }
+
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    for (const chunk of splitWhatsAppMessage(trimmed)) {
+      await socket.sendMessage(jid, { text: chunk });
+    }
+  }
+
+  async function clearSessionArtifactState(
+    conversationKey: string
+  ): Promise<void> {
+    const existing = sessionStore.get(conversationKey);
+    if (!existing) {
+      return;
+    }
+
+    sessionStore.set(conversationKey, {
+      profileId: existing.profileId,
+      sessionId: existing.sessionId,
+      updatedAt: new Date().toISOString(),
+    });
+    await sessionStore.save();
   }
 }
 

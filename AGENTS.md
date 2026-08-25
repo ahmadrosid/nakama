@@ -124,7 +124,7 @@ Path: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Load
 | `skill_manage` | Interactive web/cli with `manage-skills` — create/patch/edit/delete profile skills + supporting-file write/remove + auto-assign (`apps/server/src/tools/skill-manage-tool.ts`). When org/profile **write approval** is enabled, mutations stage as proposals for org-admin review instead of writing immediately. When present, file tools refuse any path under `skills/*/` (`forbidProfileSkillMarkdownWrites`). Not injected for automations or Telegram/WhatsApp/Discord. Opt-in **post-turn skill review** (`skills_post_turn_review`) may suggest or stage create/patch after complex turns without writing into model history. Opt-in **skill curator** (`skills_curator_enabled`, default off) archives unused agent/human profile skills at 90 days (stale report at 30 days) via `SkillCuratorService` — rename to `skills/.archive/`, never delete; bundled skills and profiles with enabled automations are skipped. |
 | Composio | Org toolkits + per-user OAuth — `docs/website/composio.md` |
 
-**Channel artifacts (Telegram/Discord):** `packages/core/src/channel-artifacts.ts`, `channel-artifact-delivery.ts`; handlers in `apps/platform/{telegram,discord}/src/channel-artifact-flow.ts`.
+**Channel artifacts (Telegram/Discord/WhatsApp):** `packages/core/src/channel-artifacts.ts`, `channel-artifact-delivery.ts`; handlers in `apps/platform/{telegram,discord,whatsapp}/src/channel-artifact-flow.ts`.
 
 ## Tool execution & workspace
 

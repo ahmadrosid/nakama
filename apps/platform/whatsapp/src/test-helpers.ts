@@ -8,7 +8,11 @@ import {
   parseListUserOrgsResponse,
 } from "@nakama/core/bridge-api";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
-import type { ProfileSummary, UserOrgSummary } from "@nakama/core/contract";
+import type {
+  ChatMessage,
+  ProfileSummary,
+  UserOrgSummary,
+} from "@nakama/core/contract";
 
 export interface MockStreamControl {
   complete(reply?: string): void;
@@ -67,14 +71,18 @@ export function createMockClient(
     autoComplete?: boolean;
     profiles?: ProfileSummary[];
     orgs?: UserOrgSummary[];
+    messages?: ChatMessage[];
   } = {}
 ) {
   const calls = {
     compact: 0,
     createSession: 0,
+    listProfileArtifacts: 0,
     listProfiles: 0,
     listUserOrgs: 0,
     profileIds: [] as string[],
+    publishProfileArtifactShare: 0,
+    readProfileArtifactContent: 0,
     sendStream: 0,
     setOrgId: 0,
     streamInputs: [] as unknown[],
@@ -190,7 +198,7 @@ export function createMockClient(
       };
     },
     createAutomation: async () => ({}),
-    getMessages: async () => [],
+    getMessages: async () => options.messages ?? [],
     id: "session_test",
     purge: async () => {},
     send: async () => "ok",
@@ -214,6 +222,10 @@ export function createMockClient(
       providers: [],
     }),
     health: async () => ({ ok: true, providerConfigured: false }),
+    listProfileArtifacts: async () => {
+      calls.listProfileArtifacts += 1;
+      return { artifacts: [] };
+    },
     listProfiles: async () => {
       calls.listProfiles += 1;
       return parseListProfilesResponse({
@@ -223,6 +235,24 @@ export function createMockClient(
     listUserOrgs: async () => {
       calls.listUserOrgs += 1;
       return parseListUserOrgsResponse({ orgs });
+    },
+    publishProfileArtifactShare: async () => {
+      calls.publishProfileArtifactShare += 1;
+      return {
+        id: "share_test",
+        refreshed: false,
+        sharePath: "/s/tok_test",
+        shareUrl: "https://app.example/s/tok_test",
+        token: "tok_test",
+        webPublicUrlConfigured: true,
+      };
+    },
+    readProfileArtifactContent: async () => {
+      calls.readProfileArtifactContent += 1;
+      return {
+        contentType: "text/markdown",
+        data: new TextEncoder().encode("# Report").buffer,
+      };
     },
     setOrgId: (orgId: string | null) => {
       calls.setOrgId += 1;
