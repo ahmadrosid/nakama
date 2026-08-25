@@ -367,7 +367,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const socket = getSocket();
 
     if (profileId && socket) {
-      await maybeSendRequestedWhatsAppArtifactAttachment({
+      const attached = await maybeSendRequestedWhatsAppArtifactAttachment({
         attachUserText,
         client,
         conversationKey,
@@ -377,6 +377,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         sessionStore,
         socket,
       });
+      // Same as /attach: once a document is sent, do not run the agent.
+      if (attached) {
+        return;
+      }
     }
 
     const typingLoop = createTypingLoop(getSocket(), jid);
@@ -454,6 +458,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         session,
         sessionStore,
       });
+
+      // Same-turn "save and send me the file": registry is empty before the
+      // agent runs, so attach after shares are minted.
+      const postTurnSocket = getSocket();
+      if (postTurnSocket) {
+        await maybeSendRequestedWhatsAppArtifactAttachment({
+          attachUserText,
+          client,
+          conversationKey,
+          jid,
+          profileId,
+          sendPlain: (text) => sendText(jid, text),
+          sessionStore,
+          socket: postTurnSocket,
+        });
+      }
     }
   }
 

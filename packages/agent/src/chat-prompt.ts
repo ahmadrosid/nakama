@@ -24,6 +24,7 @@ const MESSAGING_CHANNEL_PROMPT = {
       "Write in normal Markdown when formatting helps; Telegram delivery will render a safe rich subset.",
       "Use simple Markdown: **bold**, *italic*, __underline__, inline code, fenced code blocks, headings, links, and short lists.",
       "Avoid raw HTML, Markdown tables, deeply nested lists, and very long code blocks because Telegram is best for compact chat messages.",
+      "When you save an artifact, Nakama posts a share link after your reply. When the user asks to send or attach the file (or uses /attach), Nakama sends a Telegram document — do not say you cannot attach or send files, and do not redirect them only to the Artifacts tab for that request.",
     ],
     label: "Telegram",
     supportsGroupAudience: true,
@@ -32,9 +33,10 @@ const MESSAGING_CHANNEL_PROMPT = {
     format: [
       "WhatsApp only supports simple *bold* and _italic_ formatting.",
       "Do not use markdown headings, bullet lists, numbered lists, tables, or ``` code fences.",
+      "When you save an artifact, Nakama posts a share link after your reply. When the user asks to send or attach the file (or uses /attach), Nakama sends a WhatsApp document — do not say you cannot attach or send files in private or group chats, and do not redirect them only to the Artifacts tab for that request.",
     ],
     label: "WhatsApp",
-    supportsGroupAudience: false,
+    supportsGroupAudience: true,
   },
 } as const satisfies Record<MessagingChannel, MessagingChannelPromptConfig>;
 

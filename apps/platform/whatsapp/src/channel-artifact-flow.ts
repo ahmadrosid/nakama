@@ -16,6 +16,11 @@ import {
 } from "./send-artifact-document";
 import type { SessionStore } from "./session-store";
 
+/**
+ * When the user asks to attach/send a file and a registry artifact exists,
+ * sends the WhatsApp document. Returns true when attach was attempted so the
+ * chat handler can skip the agent turn (avoids invented "can't attach" replies).
+ */
 export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
   client: NakamaClient;
   conversationKey: string;
@@ -26,16 +31,16 @@ export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
   socket: WASocket;
   jid: string;
   sendPlain: (text: string) => Promise<void>;
-}): Promise<void> {
+}): Promise<boolean> {
   if (!isAttachIntent(input.attachUserText)) {
-    return;
+    return false;
   }
 
   const artifact = getMostRecentDeliverableArtifact(
     input.sessionStore.getDeliverableArtifacts(input.conversationKey)
   );
   if (!artifact) {
-    return;
+    return false;
   }
 
   await sendArtifactDocumentForPath({
@@ -45,6 +50,7 @@ export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
     path: artifact.path,
     sizeBytes: artifact.sizeBytes,
   });
+  return true;
 }
 
 /** `/attach` shortcut: most recent registry artifact, or a missing-artifact message. */

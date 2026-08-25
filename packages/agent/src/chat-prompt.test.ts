@@ -197,3 +197,25 @@ test("buildChatSystemPrompt omits Discord ack-before-tools guidance on Telegram"
 
   expect(prompt).not.toContain("Discord");
 });
+
+test("buildChatSystemPrompt tells WhatsApp not to invent attach refusals", () => {
+  const prompt = buildChatSystemPrompt([], {
+    channel: "whatsapp",
+    chatKind: "group",
+    enableToolLoop: true,
+  });
+
+  expect(prompt).toContain("WhatsApp channel");
+  expect(prompt).toContain("do not say you cannot attach");
+  expect(prompt).toContain("WhatsApp document");
+});
+
+test("buildChatSystemPrompt tells Telegram not to invent attach refusals", () => {
+  const prompt = buildChatSystemPrompt([], {
+    channel: "telegram",
+    enableToolLoop: true,
+  });
+
+  expect(prompt).toContain("do not say you cannot attach");
+  expect(prompt).toContain("Telegram document");
+});

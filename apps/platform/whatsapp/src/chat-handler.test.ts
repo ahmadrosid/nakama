@@ -1436,9 +1436,87 @@ describe("createChatHandler artifact delivery", () => {
 
         expect(ctx.calls.readProfileArtifactContent).toBe(1);
         expect(documentSendCount(ctx.sent)).toBe(1);
-        expect(ctx.calls.sendStream).toBe(1);
+        expect(ctx.calls.sendStream).toBe(0);
       }
     );
+  });
+
+  test("skips the agent after NL attach so it cannot invent a refusal", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT] },
+      async (ctx) => {
+        await ctx.handleMessage({ jid: PAIRED_JID, text: "attach the csv" });
+
+        expect(documentSendCount(ctx.sent)).toBe(1);
+        expect(ctx.calls.sendStream).toBe(0);
+        expect(
+          ctx.sent.some((message) =>
+            message.text.toLowerCase().includes("cannot attach")
+          )
+        ).toBe(false);
+      }
+    );
+  });
+
+  test("attaches after a same-turn paired save when the user asked to send the file", async () => {
+    await withArtifactChat({ messages: artifactMessages }, async (ctx) => {
+      await ctx.handleMessage({
+        jid: PAIRED_JID,
+        text: "save it and send me the file",
+      });
+
+      expect(ctx.calls.publishProfileArtifactShare).toBe(1);
+      expect(ctx.calls.readProfileArtifactContent).toBe(1);
+      expect(documentSendCount(ctx.sent)).toBe(1);
+      expect(ctx.calls.sendStream).toBe(1);
+    });
+  });
+
+  test("attaches in a group when the user asks to send the file", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(GROUP_JID, {
+        deliverableArtifacts: [SAMPLE_ARTIFACT],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(
+        groupInbound({
+          mentionedJids: [BOT_ME.id],
+          text: "@Nakama send me the file",
+        })
+      );
+
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(documentSendCount(sent)).toBe(1);
+      expect(calls.sendStream).toBe(0);
+      expect(sent.some((message) => message.jid === GROUP_JID)).toBe(true);
+    });
   });
 
   test("sends a document for /attach without an agent turn", async () => {
