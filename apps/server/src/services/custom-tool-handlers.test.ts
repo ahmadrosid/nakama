@@ -203,30 +203,16 @@ if __name__ == "__main__":
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const toolsDir = path.join(configDir, "tools");
-    const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
-    await mkdir(wsDir, { recursive: true });
 
-    // Persist attempt count in the workspace so retries are observable across
-    // in-process module calls (mirrors the python seam test).
+    // In-process module counter — JS retries share the cached module.
     await writeFile(
       path.join(toolsDir, "flaky.js"),
-      `import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
-
-export async function run(_input, context) {
-  const root = context.workspaceRoot ?? "/tmp";
-  const counter = path.join(root, "attempts.txt");
-  let n = 0;
-  if (existsSync(counter)) {
-    n = Number.parseInt(readFileSync(counter, "utf8").trim() || "0", 10);
-  }
-  n += 1;
-  writeFileSync(counter, String(n));
-  if (n < 3) {
-    throw new Error("flaky");
-  }
-  return { ok: true, attempts: n };
+      `let attempts = 0;
+export async function run() {
+  attempts += 1;
+  if (attempts < 3) throw new Error("flaky");
+  return { ok: true, attempts };
 }
 `,
       "utf8"
@@ -239,13 +225,11 @@ export async function run(_input, context) {
         makeRecord({
           handlerConfig: { modulePath: "flaky.js" },
           handlerType: "javascript",
-          id: "tool_flaky_js",
-          name: "flaky_js",
         })
       );
       expect(tool).not.toBeNull();
 
-      const result = (await tool!.run({}, { workspaceRoot: wsDir })) as {
+      const result = (await tool!.run({}, {})) as {
         ok: boolean;
         attempts: number;
       };
