@@ -54,7 +54,7 @@ export class McpService {
     const name = request.name.trim();
 
     if (!name) {
-      throw new Error("MCP server name is required.");
+      throw invalidMcpServerRequest("MCP server name is required.");
     }
 
     const transport = normalizeTransport(request.transport);
@@ -63,11 +63,11 @@ export class McpService {
     const existing = await this.db.getMcpServerByName(name);
 
     if (existing) {
-      throw new Error(`MCP server already exists: ${name}`);
+      throw new NakamaApiError(`MCP server already exists: ${name}`, 409);
     }
 
     const now = new Date().toISOString();
-    const record: StoredMcpServerRecord = {
+    let record: StoredMcpServerRecord = {
       cachedTools: [],
       config: request.config,
       createdAt: now,
@@ -80,12 +80,22 @@ export class McpService {
       updatedAt: now,
     };
 
-    await this.db.upsertMcpServer(record);
-
+    // Connect before persisting so a failed initial connection is a client
+    // error (4xx) and never leaves a broken server row behind.
     if (request.connect !== false && record.enabled) {
-      await this.connectServer(record.id);
-      return this.getServer(record.id);
+      try {
+        const cachedTools = await this.manager.connect(record);
+        record = { ...record, cachedTools, status: "connected" };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new NakamaApiError(
+          `Could not connect MCP server "${name}": ${message}`,
+          422
+        );
+      }
     }
+
+    await this.db.upsertMcpServer(record);
 
     return { server: toMcpServerDetail(record) };
   }
@@ -567,6 +577,10 @@ function redactStringRecord(
   return redacted;
 }
 
+function invalidMcpServerRequest(message: string): NakamaApiError {
+  return new NakamaApiError(message, 400);
+}
+
 function normalizeTransport(transport: string | undefined): McpTransport {
   const value = transport?.trim().toLowerCase();
 
@@ -578,7 +592,7 @@ function normalizeTransport(transport: string | undefined): McpTransport {
     return "stdio";
   }
 
-  throw new Error('MCP transport must be "http" or "stdio".');
+  throw invalidMcpServerRequest('MCP transport must be "http" or "stdio".');
 }
 
 function validateTransport(
@@ -589,7 +603,7 @@ function validateTransport(
 
 function validateConfig(transport: McpTransport, config: unknown): void {
   if (typeof config !== "object" || config === null) {
-    throw new Error("MCP server config is required.");
+    throw invalidMcpServerRequest("MCP server config is required.");
   }
 
   const record = config as Record<string, unknown>;
@@ -598,13 +612,13 @@ function validateConfig(transport: McpTransport, config: unknown): void {
     const url = record.url;
 
     if (typeof url !== "string" || !url.trim()) {
-      throw new Error("HTTP MCP servers require config.url.");
+      throw invalidMcpServerRequest("HTTP MCP servers require config.url.");
     }
 
     try {
       new URL(url);
     } catch {
-      throw new Error(`Invalid MCP server URL: ${url}`);
+      throw invalidMcpServerRequest(`Invalid MCP server URL: ${url}`);
     }
 
     return;
@@ -613,7 +627,7 @@ function validateConfig(transport: McpTransport, config: unknown): void {
   const command = record.command;
 
   if (typeof command !== "string" || !command.trim()) {
-    throw new Error("stdio MCP servers require config.command.");
+    throw invalidMcpServerRequest("stdio MCP servers require config.command.");
   }
 }
 

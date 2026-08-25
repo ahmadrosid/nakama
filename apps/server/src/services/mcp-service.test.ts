@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { nanoid } from "@nakama/core";
+import { NakamaApiError, nanoid } from "@nakama/core";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import {
   createInMemoryDatabaseAdapter,
@@ -142,6 +142,25 @@ describe("McpService", () => {
         transport: "stdio",
       })
     ).rejects.toThrow("stdio MCP servers require config.command.");
+  });
+
+  test("does not persist a stdio server whose command fails to connect", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new McpService(db, new McpClientManager());
+
+    const error = await service
+      .createServer({
+        config: { command: "qa-nonexistent-cmd-xyz" },
+        name: "broken",
+        transport: "stdio",
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error instanceof NakamaApiError).toBe(true);
+    expect((error as NakamaApiError).status).toBe(422);
+
+    const listed = await service.listServers();
+    expect(listed.servers).toHaveLength(0);
   });
 
   test("updates stdio MCP server config while preserving blank env values", async () => {
