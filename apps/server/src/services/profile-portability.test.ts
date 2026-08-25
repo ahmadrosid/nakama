@@ -136,7 +136,9 @@ describe("profile portability", () => {
     );
     expect(preview.manifest.kind).toBe(PROFILE_PACK_KIND);
     expect(preview.plannedName).toBe("Support Bot");
-    expect(preview.resolvedAssignments.toolNames).toContain("custom_tool");
+    expect(
+      preview.skippedAssignments.some((item) => item.path.startsWith("tool:"))
+    ).toBe(false);
 
     const countBefore = (await db.listProfilesForOrg(DEST_ORG_ID)).length;
 

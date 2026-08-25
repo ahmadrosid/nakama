@@ -1,6 +1,5 @@
 import { Copy01Icon, Delete02Icon, Upload04Icon } from "hugeicons-react";
 import { createPortal } from "react-dom";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
@@ -234,20 +233,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               <SoulTab profileId={selectedId} />
             </div>
           ) : null
-        ) : selectedProfileSummary ? (
-          <div className="flex min-h-48 flex-col items-center justify-center gap-3 p-4 text-center sm:p-5">
-            <ProfileAvatar profile={selectedProfileSummary} size="lg" />
-            <div className="space-y-1">
-              <p className="font-medium text-foreground text-sm">
-                {selectedProfileSummary.name}
-              </p>
-              <p className="text-muted-foreground text-sm">
-                {selectedProfileSummary.isSuper
-                  ? "Super Bot can't be exported."
-                  : "Use Export above to download this profile as a pack."}
-              </p>
-            </div>
-          </div>
         ) : (
           <div className="flex min-h-48 items-center justify-center p-4 text-center text-muted-foreground text-sm sm:p-5">
             {canCreateProfile

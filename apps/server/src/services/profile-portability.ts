@@ -19,6 +19,7 @@ import {
   readProfileAvatar,
   SKILL_ARCHIVE_DIR_NAME,
   saveProfileAvatar,
+  slugifyProfileName,
   writePrivateBytesFile,
 } from "@nakama/core";
 import type {
@@ -30,8 +31,8 @@ import type {
 import { unzipSync, zipSync } from "fflate";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
-export const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
-export const PROFILE_PACK_FORMAT_VERSION = 1;
+const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
+const PROFILE_PACK_FORMAT_VERSION = 1;
 
 /** Only these workspace paths ever leave (export) or enter (import) a pack. */
 const ROOT_ALLOWED_FILES = new Set([
@@ -147,7 +148,7 @@ export async function createProfilePackExport(
 
   return {
     data: Buffer.from(zipSync(entries)),
-    filename: `nakama-profile-export-${slugifyForFilename(profile.name)}-${createdAt.replace(/[:.]/g, "-")}.zip`,
+    filename: `nakama-profile-export-${slugifyProfileName(profile.name)}-${createdAt.replace(/[:.]/g, "-")}.zip`,
     manifest,
   };
 }
@@ -161,46 +162,50 @@ export async function previewProfilePackImport(
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
-  const toolNames = await filterResolvable(
+  await eachNamedOrSkip(
     manifest.meta.toolNames,
-    async (name) => Boolean(await db.getToolByName(name)),
-    "tool",
-    skippedAssignments
+    (name) => db.getToolByName(name),
+    skippedAssignments,
+    (name) => ({
+      path: `tool:${name}`,
+      reason: `Tool "${name}" was not found in the destination and will be skipped.`,
+    })
   );
-  const mcpServerNames = await filterResolvable(
+  await eachNamedOrSkip(
     manifest.meta.mcpServerNames,
-    async (name) => Boolean(await db.getMcpServerByName(name)),
-    "MCP server",
-    skippedAssignments
+    (name) => db.getMcpServerByName(name),
+    skippedAssignments,
+    (name) => ({
+      path: `MCP server:${name}`,
+      reason: `MCP server "${name}" was not found in the destination and will be skipped.`,
+    })
   );
-  const composioToolkitSlugs = await filterResolvable(
+  await eachNamedOrSkip(
     manifest.meta.composioToolkitSlugs,
-    async (slug) => Boolean(await db.getComposioToolkitBySlug(orgId, slug)),
-    "Composio toolkit",
-    skippedAssignments
+    (slug) => db.getComposioToolkitBySlug(orgId, slug),
+    skippedAssignments,
+    (slug) => ({
+      path: `Composio toolkit:${slug}`,
+      reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
+    })
   );
-  const bundledSkillNames = await filterResolvable(
+  await eachNamedOrSkip(
     manifest.meta.bundledSkillNames,
-    async (name) => Boolean(await db.getSkillByName(name, orgId)),
-    "bundled skill",
-    skippedAssignments
+    (name) => db.getSkillByName(name, orgId),
+    skippedAssignments,
+    (name) => ({
+      path: `bundled skill:${name}`,
+      reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
+    })
   );
 
-  const packedSkills = readSkillNamesFromZip(entries);
-  const packedSkillNames: string[] = [];
-
-  for (const skill of packedSkills) {
-    const existing = await db.getSkillByName(skill.name, orgId);
-
-    if (existing) {
+  for (const skill of readSkillNamesFromZip(entries)) {
+    if (await db.getSkillByName(skill.name, orgId)) {
       skippedAssignments.push({
         path: `skills/${skill.folder}`,
         reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
       });
-      continue;
     }
-
-    packedSkillNames.push(skill.name);
   }
 
   const restorableEntries = entries.filter(
@@ -215,12 +220,6 @@ export async function previewProfilePackImport(
   return {
     manifest,
     plannedName: manifest.meta.name,
-    resolvedAssignments: {
-      composioToolkitSlugs,
-      mcpServerNames,
-      skillNames: [...bundledSkillNames, ...packedSkillNames].sort(),
-      toolNames,
-    },
     skippedAssignments,
     topLevelPaths,
   };
@@ -268,34 +267,53 @@ export async function importProfilePack(
     const skippedAssignments: ProfilePackSkippedItem[] = [];
     const soulDir = getProfileSoulDir(orgId, profileId);
     await initSoulDirectory(soulDir);
-    await writePackedWorkspaceFiles(soulDir, entries, skippedAssignments);
+    await writePackedWorkspaceFiles(
+      orgId,
+      profileId,
+      entries,
+      skippedAssignments
+    );
     createdSkillIds = await recreatePackedSkills(
       db,
       orgId,
       profileId,
-      soulDir,
       skippedAssignments
     );
-    await assignByNameOrSkip(
+    await eachNamedOrSkip(
       manifest.meta.toolNames,
-      async (toolName) => db.getToolByName(toolName),
-      async (tool) => db.assignToolToProfile(profileId, tool.id),
-      "tool",
-      skippedAssignments
+      (toolName) => db.getToolByName(toolName),
+      skippedAssignments,
+      (name) => ({
+        path: `tool:${name}`,
+        reason: `Tool "${name}" was not found in the destination and was skipped.`,
+      }),
+      async (tool) => {
+        await db.assignToolToProfile(profileId, tool.id);
+      }
     );
-    await assignByNameOrSkip(
+    await eachNamedOrSkip(
       manifest.meta.mcpServerNames,
-      async (serverName) => db.getMcpServerByName(serverName),
-      async (server) => db.assignMcpServerToProfile(profileId, server.id),
-      "MCP server",
-      skippedAssignments
+      (serverName) => db.getMcpServerByName(serverName),
+      skippedAssignments,
+      (name) => ({
+        path: `MCP server:${name}`,
+        reason: `MCP server "${name}" was not found in the destination and was skipped.`,
+      }),
+      async (server) => {
+        await db.assignMcpServerToProfile(profileId, server.id);
+      }
     );
-    await assignByNameOrSkip(
+    await eachNamedOrSkip(
       manifest.meta.bundledSkillNames,
-      async (skillName) => db.getSkillByName(skillName, orgId),
-      async (skill) => db.assignSkillToProfile(profileId, skill.id),
-      "bundled skill",
-      skippedAssignments
+      (skillName) => db.getSkillByName(skillName, orgId),
+      skippedAssignments,
+      (name) => ({
+        path: `bundled skill:${name}`,
+        reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
+      }),
+      async (skill) => {
+        await db.assignSkillToProfile(profileId, skill.id);
+      }
     );
     await assignComposioToolkitsBySlug(
       db,
@@ -466,17 +484,20 @@ async function buildProfilePackMeta(
 }
 
 async function writePackedWorkspaceFiles(
-  soulDir: string,
+  orgId: string,
+  profileId: string,
   entries: ProfilePackZipEntry[],
   skipped: ProfilePackSkippedItem[]
 ): Promise<void> {
+  const soulDir = getProfileSoulDir(orgId, profileId);
+
   for (const entry of entries) {
     if (entry.name === PROFILE_PACK_MANIFEST_FILENAME) {
       continue;
     }
 
     if (isAvatarEntry(entry.name)) {
-      await writePackedAvatar(soulDir, entry);
+      await writePackedAvatar(orgId, profileId, entry);
       continue;
     }
 
@@ -491,7 +512,8 @@ async function writePackedWorkspaceFiles(
 }
 
 async function writePackedAvatar(
-  soulDir: string,
+  orgId: string,
+  profileId: string,
   entry: ProfilePackZipEntry
 ): Promise<void> {
   const extension = entry.name
@@ -503,26 +525,16 @@ async function writePackedAvatar(
     return;
   }
 
-  const [orgId, profileId] = splitProfileSoulDir(soulDir);
   await saveProfileAvatar(orgId, profileId, {
     data: entry.data.toString("base64"),
     mediaType,
   });
 }
 
-/** `getProfileSoulDir` joins `.../orgs/{orgId}/profiles/{profileId}`. */
-function splitProfileSoulDir(soulDir: string): [string, string] {
-  const segments = soulDir.split(sep);
-  const profileId = segments.at(-1) ?? "";
-  const orgId = segments.at(-3) ?? "";
-  return [orgId, profileId];
-}
-
 async function recreatePackedSkills(
   db: DatabaseAdapter,
   orgId: string,
   profileId: string,
-  soulDir: string,
   skipped: ProfilePackSkippedItem[]
 ): Promise<string[]> {
   const skillsDir = getProfileSkillsDir(orgId, profileId);
@@ -586,23 +598,23 @@ async function recreatePackedSkills(
   return createdSkillIds;
 }
 
-async function assignByNameOrSkip<T extends { id: string }>(
+async function eachNamedOrSkip<T extends { id: string }>(
   names: string[],
   lookup: (name: string) => Promise<T | null>,
-  assign: (record: T) => Promise<void>,
-  label: string,
-  skipped: ProfilePackSkippedItem[]
+  skipped: ProfilePackSkippedItem[],
+  notFound: (name: string) => ProfilePackSkippedItem,
+  onHit?: (record: T) => Promise<void>
 ): Promise<void> {
   for (const name of names) {
     const record = await lookup(name);
 
-    if (record) {
-      await assign(record);
-    } else {
-      skipped.push({
-        path: `${label}:${name}`,
-        reason: `${capitalize(label)} "${name}" was not found in the destination and was skipped.`,
-      });
+    if (!record) {
+      skipped.push(notFound(name));
+      continue;
+    }
+
+    if (onHit) {
+      await onHit(record);
     }
   }
 }
@@ -636,28 +648,6 @@ async function assignComposioToolkitsBySlug(
   if (assignments.length > 0) {
     await db.replaceProfileComposioToolkits(profileId, assignments);
   }
-}
-
-async function filterResolvable(
-  names: string[],
-  exists: (name: string) => Promise<boolean>,
-  label: string,
-  skipped: ProfilePackSkippedItem[]
-): Promise<string[]> {
-  const resolved: string[] = [];
-
-  for (const name of names) {
-    if (await exists(name)) {
-      resolved.push(name);
-    } else {
-      skipped.push({
-        path: `${label}:${name}`,
-        reason: `${capitalize(label)} "${name}" was not found in the destination and will be skipped.`,
-      });
-    }
-  }
-
-  return resolved;
 }
 
 function readSkillNamesFromZip(
@@ -724,7 +714,7 @@ async function resolveImportedProfileId(
   db: DatabaseAdapter,
   name: string
 ): Promise<string> {
-  const base = slugifyForFilename(name) || "profile";
+  const base = slugifyProfileName(name);
 
   for (let suffix = 1; suffix <= PROFILE_ID_ATTEMPTS; suffix++) {
     const candidate = suffix === 1 ? base : `${base}-${suffix}`;
@@ -738,15 +728,6 @@ async function resolveImportedProfileId(
     `Could not find a free profile id for "${name}".`,
     409
   );
-}
-
-function slugifyForFilename(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
 }
 
 function isAvatarEntry(relativePath: string): boolean {
@@ -771,12 +752,6 @@ function isAllowlistedProfilePackPath(relativePath: string): boolean {
   }
 
   return Boolean(second);
-}
-
-function capitalize(value: string): string {
-  return value.length > 0
-    ? `${value[0]?.toUpperCase()}${value.slice(1)}`
-    : value;
 }
 
 function readProfilePackZip(

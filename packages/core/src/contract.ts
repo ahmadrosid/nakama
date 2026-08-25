@@ -387,17 +387,9 @@ export interface ProfilePackManifest {
   version: number;
 }
 
-export interface ProfilePackResolvedAssignments {
-  composioToolkitSlugs: string[];
-  mcpServerNames: string[];
-  skillNames: string[];
-  toolNames: string[];
-}
-
 export interface ProfilePackPreviewResponse {
   manifest: ProfilePackManifest;
   plannedName: string;
-  resolvedAssignments: ProfilePackResolvedAssignments;
   skippedAssignments: ProfilePackSkippedItem[];
   topLevelPaths: string[];
 }

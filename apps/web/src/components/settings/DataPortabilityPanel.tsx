@@ -14,6 +14,7 @@ import {
   useRestoreDataImport,
 } from "@/hooks/use-data-portability";
 import { formatError } from "@/lib/client";
+import { downloadArchive } from "@/lib/download-archive";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -166,17 +167,4 @@ export function DataPortabilityPanel() {
       ) : null}
     </div>
   );
-}
-
-function downloadArchive(filename: string, data: ArrayBuffer) {
-  const url = URL.createObjectURL(
-    new Blob([data], { type: "application/zip" })
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
 }

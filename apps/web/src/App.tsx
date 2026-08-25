@@ -3,7 +3,6 @@ import { type ComponentType, lazy, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthGuard } from "@/components/AuthGuard";
 import { Layout } from "@/components/Layout";
-import { OrgAdminOrPlatformAdminGuard } from "@/components/OrgAdminOrPlatformAdminGuard";
 import { PlatformAdminGuard } from "@/components/PlatformAdminGuard";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { SetupGuard } from "@/components/SetupGuard";
@@ -125,7 +124,7 @@ function AppShell() {
                     path="/system/playground/:toolId"
                   />
                   <Route element={<SystemPage />} path="/system" />
-                  <Route element={<OrgAdminOrPlatformAdminGuard />}>
+                  <Route element={<PlatformAdminGuard allowOrgAdmin />}>
                     <Route element={<ProfilesPage />} path="/profiles" />
                   </Route>
                   <Route element={<PlatformAdminGuard />}>

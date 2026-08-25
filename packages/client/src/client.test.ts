@@ -162,12 +162,6 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
         return Response.json({
           manifest: { kind: "nakama-profile-export" },
           plannedName: "Bot",
-          resolvedAssignments: {
-            composioToolkitSlugs: [],
-            mcpServerNames: [],
-            skillNames: [],
-            toolNames: [],
-          },
           skippedAssignments: [],
           topLevelPaths: ["SOUL.md"],
         });

@@ -1,17 +1,10 @@
 import { Download04Icon } from "hugeicons-react";
-import type { SVGProps } from "react";
 import { PendingIcon } from "@/components/data-portability/DataImportPreview";
 import { Button } from "@/components/ui/button";
-import {
-  downloadProfilePackArchive,
-  useExportProfilePackMutation,
-} from "@/hooks/use-profile-pack";
+import { useExportProfilePackMutation } from "@/hooks/use-profile-pack";
 import { formatError } from "@/lib/client";
+import { downloadArchive } from "@/lib/download-archive";
 import { toast } from "@/lib/toast";
-
-const ExportIcon = ({ className }: SVGProps<SVGSVGElement>) => (
-  <Download04Icon className={className} />
-);
 
 export function ExportProfileButton({
   profileId,
@@ -25,7 +18,7 @@ export function ExportProfileButton({
   async function handleExport() {
     try {
       const result = await exportMutation.mutateAsync(profileId);
-      downloadProfilePackArchive(result.filename, result.data);
+      downloadArchive(result.filename, result.data);
       toast("Profile pack ready.");
     } catch (err) {
       toast(formatError(err));
@@ -42,7 +35,7 @@ export function ExportProfileButton({
       type="button"
       variant="outline"
     >
-      <PendingIcon idle={ExportIcon} pending={exportMutation.isPending} />
+      <PendingIcon idle={Download04Icon} pending={exportMutation.isPending} />
       <span>Export</span>
     </Button>
   );
