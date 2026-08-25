@@ -143,16 +143,6 @@ export function deriveSummary(status: SystemStatusResponse): {
     };
   }
 
-  if (status.telegramWorker.configured && !status.telegramWorker.running) {
-    return {
-      action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
-      description:
-        "Start the Telegram worker (bun run dev:telegram) to receive messages.",
-      title: "Telegram bridge offline",
-      tone: "warn",
-    };
-  }
-
   if (status.whatsappWorker.configured && !status.whatsappWorker.running) {
     return {
       action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
