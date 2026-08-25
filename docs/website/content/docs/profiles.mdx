@@ -206,8 +206,30 @@ Two things are deliberately not carried over:
 - `MEMORY.md` starts empty, so the clone does not inherit the source's continuity
 - Super Bot cannot be cloned, the same rule that stops it being deleted
 
+## Export and import a profile pack
+
+Use a **profile pack** when you need to move or share **one** agent between organizations or Nakama installs — without a full backup.
+
+Org admins and platform admins can:
+
+1. Open **System → Profiles**, select a profile, and choose **Export profile** to download a `.zip`
+2. On Profiles, choose **Import profile**, preview what will be created or skipped, then confirm
+
+Import always creates a **new** profile in the active org. It never overwrites an existing one.
+
+| Included | Excluded |
+|----------|----------|
+| Soul files (including `MEMORY.md`), knowledge base, avatar | API keys, auth tokens, provider config |
+| Profile skills on that profile | Saved artifacts, chat history, attachments |
+| Tool / MCP / Composio toolkit **names** (matched on the destination) | Other profiles, org-wide config, Super Bot |
+
+Missing tool or MCP names on the destination are listed in the preview and skipped — reconnect or assign them after import. Destination providers and keys stay local.
+
+Profile packs are a different format from [Backup and restore](/backup-restore). A pack cannot restore a whole install, and a full backup ZIP cannot be imported as a profile pack.
+
 ## Next steps
 
 - [Builtin tools](/builtin-tools) — what each profile can do
 - [MCP servers](/mcp) — extend a profile with external tools
+- [Backup and restore](/backup-restore) — whole-install ZIP backup
 - [Multi-tenancy](/multi-tenancy) — who can manage profiles and members

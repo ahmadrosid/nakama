@@ -29,6 +29,12 @@ Plan for downtime during restore. This replaces the active data root rather than
 
 On a fresh install, you can also restore during [first-time setup](/first-time-setup) before creating a new admin account.
 
+## Profile packs (single agent)
+
+To move **one** profile without a full-root backup, use **System → Profiles → Export profile / Import profile**. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
+
+Those packs deliberately omit secrets and are not interchangeable with Export ZIP above.
+
 ## Docker volumes
 
 When Nakama runs in Docker, persist `/nakama/data` with a named volume or bind mount. Back up that volume (or use Export ZIP from the dashboard) before upgrades or migrations.

@@ -67,7 +67,7 @@ Orgs isolate profiles, sessions, automations, tasks, tools, MCP, skills, usage (
 | Role | Can |
 |---|---|
 | Platform admin | Orgs (`/v1/platform/orgs`), profiles/tools/MCP/skills |
-| Org admin | Members/invites (`/v1/orgs/{orgId}/members`) |
+| Org admin | Members/invites (`/v1/orgs/{orgId}/members`); profile pack export/import for the active org (not general create/clone) |
 | Org member | Chat, agents, automations/tasks |
 | Org viewer | Read chat only — no agent invoke / mutations |
 
@@ -166,7 +166,7 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 - `packages/db` — DB
 - `packages/client` — API client
 
-Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI from `openapi.ts` (`/openapi.json`). Platform-admin-only: profile/tool/MCP/skill mutations (org admins use provisioned profiles or Super Bot `create-profile`). Org-admin: `/v1/orgs/{orgId}/…` members. Viewers blocked by `requireNotViewer` on worker control and agent invoke.
+Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI from `openapi.ts` (`/openapi.json`). Platform-admin-only: profile/tool/MCP/skill mutations (org admins use provisioned profiles, Super Bot `create-profile`, or **profile pack import/export** on pack routes only). Org-admin: `/v1/orgs/{orgId}/…` members. Viewers blocked by `requireNotViewer` on worker control and agent invoke.
 
 ## Developing 
 

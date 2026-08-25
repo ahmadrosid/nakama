@@ -80,12 +80,14 @@ That hides the organization from the switcher, chat, and workers. Members, profi
 
 ## Important limitation
 
-Org admins manage members, but profile and tool provisioning is still a platform-admin responsibility.
+Org admins manage members, but creating and cloning profiles (and most tool / MCP / skill provisioning) is still a platform-admin responsibility.
+
+**Exception:** org admins can **export and import a single profile pack** (secrets-free zip) for profiles in their active org. Import creates a new profile and re-links tools/MCP by name when they already exist in the destination — it does not open general profile create/clone or unrestricted tool assignment. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
 
 So the split is:
 
-- Org admin manages people
-- Platform admin manages the bot system
+- Org admin manages people, plus profile pack export/import for their org
+- Platform admin manages the broader bot system
 
 ## Next steps
 
