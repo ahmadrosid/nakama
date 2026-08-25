@@ -350,6 +350,70 @@ export interface SetupRestoreDataImportResponse
   requiresRestart: boolean;
 }
 
+/**
+ * Single-profile "pack" portability, distinct from full-root `nakama-export`.
+ * Contains only one profile's portable workspace + name-based assignment
+ * references — never provider keys, MCP config, or Composio connections.
+ */
+export interface ProfilePackSkippedItem {
+  path: string;
+  reason: string;
+}
+
+export interface ProfilePackMeta {
+  bundledSkillNames: string[];
+  composioToolkitSlugs: string[];
+  mcpServerNames: string[];
+  model: string | null;
+  name: string;
+  profileSkillNames: string[];
+  skillsCuratorConsolidateEnabled: boolean | null;
+  skillsPostTurnReview: boolean | null;
+  skillsWriteApproval: boolean | null;
+  systemPrompt: string;
+  thinkingEffort: ThinkingEffort | null;
+  thinkingEnabled: boolean | null;
+  toolNames: string[];
+}
+
+export interface ProfilePackManifest {
+  apiVersion: typeof NAKAMA_API_VERSION;
+  createdAt: string;
+  kind: "nakama-profile-export";
+  meta: ProfilePackMeta;
+  skipped: ProfilePackSkippedItem[];
+  sourceProfileId: string;
+  topLevelPaths: string[];
+  version: number;
+}
+
+export interface ProfilePackResolvedAssignments {
+  composioToolkitSlugs: string[];
+  mcpServerNames: string[];
+  skillNames: string[];
+  toolNames: string[];
+}
+
+export interface ProfilePackPreviewResponse {
+  manifest: ProfilePackManifest;
+  plannedName: string;
+  resolvedAssignments: ProfilePackResolvedAssignments;
+  skippedAssignments: ProfilePackSkippedItem[];
+  topLevelPaths: string[];
+}
+
+export interface ProfilePackImportRequest {
+  confirm: boolean;
+  data: string;
+  name?: string;
+}
+
+export interface ProfilePackImportResponse {
+  manifest: ProfilePackManifest;
+  profileId: string;
+  skippedAssignments: ProfilePackSkippedItem[];
+}
+
 export interface AuthCredentialsRequest {
   email: string;
   password: string;
