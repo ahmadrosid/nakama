@@ -8,6 +8,7 @@ import {
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { usePrivateMultiFileAuthState } from "./auth-state";
+import { createBaileysLogger } from "./baileys-logger";
 import {
   extractInboundText,
   isPrivateWhatsAppChat,
@@ -198,21 +199,4 @@ function summarizeMissingTextPayload(msg: {
   };
 
   return JSON.stringify(summary);
-}
-
-// ponytail: keep Baileys on silent; worker logs what matters itself
-function createBaileysLogger() {
-  const noop = () => {};
-  const logger = {
-    child: () => logger,
-    debug: noop,
-    error: console.error.bind(console),
-    fatal: console.error.bind(console),
-    info: noop,
-    level: "silent",
-    trace: noop,
-    warn: console.warn.bind(console),
-  };
-
-  return logger;
 }
