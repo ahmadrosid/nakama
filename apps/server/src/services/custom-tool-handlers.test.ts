@@ -198,4 +198,57 @@ if __name__ == "__main__":
       await rm(configDir, { force: true, recursive: true });
     }
   });
+
+  test("javascript handler failures are actually retried through the seam", async () => {
+    const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const toolsDir = path.join(configDir, "tools");
+    await mkdir(toolsDir, { recursive: true });
+
+    // The loader caches module instances, so a module-level counter persists
+    // across the retried run() calls — fail twice, succeed on the third.
+    await writeFile(
+      path.join(toolsDir, "flaky.js"),
+      `let attempts = 0;
+export async function run(input, context) {
+  attempts += 1;
+  if (attempts < 3) {
+    throw new Error("flaky");
+  }
+  return { ok: true, attempts };
+}
+`,
+      "utf8"
+    );
+
+    try {
+      const handler = getCustomToolHandler("javascript");
+      expect(handler).not.toBeNull();
+      const tool = await handler!.load(
+        makeRecord({
+          handlerConfig: { modulePath: "flaky.js" },
+          handlerType: "javascript",
+          name: "flaky",
+        })
+      );
+      expect(tool).not.toBeNull();
+
+      const result = (await tool!.run({}, {})) as {
+        ok: boolean;
+        attempts: number;
+      };
+
+      // Succeeded on attempt 3 after two thrown failures — proves the retry
+      // policy reaches the javascript loader through the seam.
+      expect(result.ok).toBe(true);
+      expect(result.attempts).toBe(3);
+    } finally {
+      if (originalConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+      }
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
 });
