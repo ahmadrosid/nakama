@@ -104,6 +104,10 @@ export function ProviderSettingsCard({
                     <ProviderInstanceCard
                       catalog={catalog}
                       instance={instance}
+                      isDefaultProvider={
+                        providersResponse?.defaultProviderId === instance.id
+                      }
+                      isLastProvider={providers.length === 1}
                       key={instance.id}
                       onDelete={async (providerId) => {
                         await deleteProviderMutation.mutateAsync(providerId);
