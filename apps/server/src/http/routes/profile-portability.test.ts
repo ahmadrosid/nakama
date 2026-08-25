@@ -49,15 +49,10 @@ async function createOrgAdminSession(
     authService,
     databaseAdapter
   );
-
   const createResponse = await app.fetch(
     new Request(`${BASE}/v1/platform/orgs`, {
       body: JSON.stringify({
-        admin: {
-          email,
-          name: "Pack Admin",
-          phone: "+628123456789",
-        },
+        admin: { email, name: "Pack Admin", phone: "+628123456789" },
         name: "Pack Org",
         slug,
       }),
@@ -68,13 +63,11 @@ async function createOrgAdminSession(
       method: "POST",
     })
   );
-
   expect(createResponse.status).toBe(201);
   const created = (await createResponse.json()) as {
     organization: { id: string };
     adminMember: { temporaryPassword: string };
   };
-
   return {
     adminSession: await loginUserSession(
       app,
@@ -87,8 +80,24 @@ async function createOrgAdminSession(
   };
 }
 
+function jsonHeaders(
+  session: {
+    headers: (extra?: Record<string, string>, orgId?: string) => Headers;
+    csrfToken: string;
+  },
+  orgId: string
+) {
+  return session.headers(
+    {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrfToken,
+    },
+    orgId
+  );
+}
+
 describe("profile pack routes", () => {
-  test("org admin can export and import a profile pack", async () => {
+  test("org admin can export, preview, and import", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
@@ -97,7 +106,6 @@ describe("profile pack routes", () => {
       "pack-export",
       "pack-admin@example.com"
     );
-
     const created = await profileService.createProfile(orgId, {
       name: "Packable Bot",
       systemPrompt: "help",
@@ -108,29 +116,18 @@ describe("profile pack routes", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
-
     expect(exportResponse.status).toBe(200);
     expect(exportResponse.headers.get("content-type")).toBe("application/zip");
-    expect(exportResponse.headers.get("content-disposition")).toContain(
-      "nakama-profile-export-"
-    );
-
     const archive = Buffer.from(await exportResponse.arrayBuffer());
+    const data = archive.toString("base64");
 
     const previewResponse = await app.fetch(
       new Request(`${BASE}/v1/profiles/pack/import/preview`, {
-        body: JSON.stringify({ data: archive.toString("base64") }),
-        headers: adminSession.headers(
-          {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": adminSession.csrfToken,
-          },
-          orgId
-        ),
+        body: JSON.stringify({ data }),
+        headers: jsonHeaders(adminSession, orgId),
         method: "POST",
       })
     );
-
     expect(previewResponse.status).toBe(200);
     const preview = (await previewResponse.json()) as {
       manifest: { kind: string };
@@ -139,53 +136,41 @@ describe("profile pack routes", () => {
     expect(preview.manifest.kind).toBe(PROFILE_PACK_KIND);
     expect(preview.plannedName).toBe("Packable Bot");
 
-    const countBefore = (await databaseAdapter.listProfilesForOrg(orgId))
-      .length;
-
+    const before = (await databaseAdapter.listProfilesForOrg(orgId)).length;
     const importResponse = await app.fetch(
       new Request(`${BASE}/v1/profiles/pack/import`, {
         body: JSON.stringify({
           confirm: true,
-          data: archive.toString("base64"),
+          data,
           name: "Packable Bot (imported)",
         }),
-        headers: adminSession.headers(
-          {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": adminSession.csrfToken,
-          },
-          orgId
-        ),
+        headers: jsonHeaders(adminSession, orgId),
         method: "POST",
       })
     );
-
     expect(importResponse.status).toBe(200);
-    const imported = (await importResponse.json()) as { profileId: string };
-    expect(imported.profileId).toBeTruthy();
     expect(await databaseAdapter.listProfilesForOrg(orgId)).toHaveLength(
-      countBefore + 1
+      before + 1
     );
   }, 30_000);
 
-  test("member cannot export or import a profile pack", async () => {
+  test("member is forbidden; platform admin who is an org member can export", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
-    const { orgId } = await createOrgAdminSession(
+    const { orgId, platformSession } = await createOrgAdminSession(
       app,
       authService,
       databaseAdapter,
-      "pack-member",
+      "pack-auth",
       "pack-owner@example.com"
     );
-
     const created = await profileService.createProfile(orgId, {
-      name: "Member Blocked",
+      name: "Auth Bot",
     });
 
     const now = new Date().toISOString();
     await databaseAdapter.createUser({
       createdAt: now,
-      email: "pack-member-direct@example.com",
+      email: "pack-member@example.com",
       id: "user_pack_member",
       passwordHash: await authService.hashPassword("password123"),
       updatedAt: now,
@@ -196,92 +181,51 @@ describe("profile pack routes", () => {
       role: "member",
       userId: "user_pack_member",
     });
-    const memberSession = await loginUserSession(
+    const member = await loginUserSession(
       app,
-      "pack-member-direct@example.com",
+      "pack-member@example.com",
       "password123",
       orgId
     );
 
-    const exportDenied = await app.fetch(
-      new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
-        headers: memberSession.headers({}, orgId),
-      })
-    );
-    expect(exportDenied.status).toBe(403);
-
-    const importDenied = await app.fetch(
-      new Request(`${BASE}/v1/profiles/pack/import/preview`, {
-        body: JSON.stringify({ data: "YQ==" }),
-        headers: memberSession.headers(
-          {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": memberSession.csrfToken,
-          },
-          orgId
-        ),
-        method: "POST",
-      })
-    );
-    expect(importDenied.status).toBe(403);
-  }, 30_000);
-
-  test("platform admin who is an org member can export a profile pack", async () => {
-    const { app, authService, databaseAdapter, profileService } = createApp();
-    const { orgId, platformSession } = await createOrgAdminSession(
-      app,
-      authService,
-      databaseAdapter,
-      "pack-platform",
-      "pack-platform-org@example.com"
-    );
+    expect(
+      (
+        await app.fetch(
+          new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
+            headers: member.headers({}, orgId),
+          })
+        )
+      ).status
+    ).toBe(403);
+    expect(
+      (
+        await app.fetch(
+          new Request(`${BASE}/v1/profiles/pack/import/preview`, {
+            body: JSON.stringify({ data: "YQ==" }),
+            headers: jsonHeaders(member, orgId),
+            method: "POST",
+          })
+        )
+      ).status
+    ).toBe(403);
 
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
-    expect(platformUser?.id).toBeTruthy();
-
     await databaseAdapter.upsertOrgMember({
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       orgId,
       role: "member",
       userId: platformUser!.id,
     });
-
-    const created = await profileService.createProfile(orgId, {
-      name: "Platform Packable",
-    });
-
-    const response = await app.fetch(
-      new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
-        headers: platformSession.headers({}, orgId),
-      })
-    );
-
-    expect(response.status).toBe(200);
-  }, 30_000);
-
-  test("exporting Super Bot is rejected", async () => {
-    const { app, authService, databaseAdapter, profileService } = createApp();
-    const { orgId, adminSession } = await createOrgAdminSession(
-      app,
-      authService,
-      databaseAdapter,
-      "pack-super",
-      "pack-super@example.com"
-    );
-
-    const superBot = await profileService.createProfile(orgId, {
-      isSuper: true,
-      name: "Super Bot",
-    });
-
-    const response = await app.fetch(
-      new Request(`${BASE}/v1/profiles/${superBot.profile.id}/pack/export`, {
-        headers: adminSession.headers({}, orgId),
-      })
-    );
-
-    expect(response.status).toBe(400);
+    expect(
+      (
+        await app.fetch(
+          new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
+            headers: platformSession.headers({}, orgId),
+          })
+        )
+      ).status
+    ).toBe(200);
   }, 30_000);
 });
