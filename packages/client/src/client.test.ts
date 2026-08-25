@@ -140,6 +140,73 @@ test("data export downloads zip bytes with filename metadata", async () => {
   expect(Array.from(new Uint8Array(result.data))).toEqual([1, 2, 3]);
 });
 
+test("profile pack helpers export zip and upload base64 preview/import bodies", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      const url = input.toString();
+      if (url.includes("/pack/export")) {
+        return new Response(new Uint8Array([9, 8, 7]), {
+          headers: {
+            "Content-Disposition":
+              'attachment; filename="nakama-profile-export-bot.zip"',
+            "Content-Type": "application/zip",
+          },
+        });
+      }
+      if (url.endsWith("/pack/import/preview")) {
+        return Response.json({
+          manifest: { kind: "nakama-profile-export" },
+          plannedName: "Bot",
+          resolvedAssignments: {
+            composioToolkitSlugs: [],
+            mcpServerNames: [],
+            skillNames: [],
+            toolNames: [],
+          },
+          skippedAssignments: [],
+          topLevelPaths: ["SOUL.md"],
+        });
+      }
+      return Response.json({
+        manifest: { kind: "nakama-profile-export" },
+        profileId: "profile_new",
+        skippedAssignments: [],
+      });
+    },
+    orgId: "org_test",
+  });
+
+  const exported = await client.exportProfilePack("profile_1");
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://localhost:4310/v1/profiles/profile_1/pack/export"
+  );
+  expect(exported.filename).toBe("nakama-profile-export-bot.zip");
+
+  await expect(
+    client.previewProfilePackImport(new Uint8Array([1, 2, 3]))
+  ).resolves.toMatchObject({ plannedName: "Bot" });
+  await expect(
+    client.importProfilePack(new Uint8Array([4, 5, 6]), {
+      confirm: true,
+      name: "Bot Copy",
+    })
+  ).resolves.toMatchObject({ profileId: "profile_new" });
+
+  expect(JSON.parse(fetchCalls[1]!.init?.body as string)).toEqual({
+    data: Buffer.from([1, 2, 3]).toString("base64"),
+  });
+  expect(JSON.parse(fetchCalls[2]!.init?.body as string)).toEqual({
+    confirm: true,
+    data: Buffer.from([4, 5, 6]).toString("base64"),
+    name: "Bot Copy",
+  });
+});
+
 test("readProfileArtifactContent fetches artifact bytes with inline query", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];

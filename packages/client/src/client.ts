@@ -103,6 +103,9 @@ import type {
   PatchSkillRequest,
   PinOrgMemoryRequest,
   PreviewDataImportRequest,
+  ProfilePackImportRequest,
+  ProfilePackImportResponse,
+  ProfilePackPreviewResponse,
   ProfileResponse,
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
@@ -378,6 +381,55 @@ export class NakamaClient {
         method: "POST",
       }
     );
+  }
+
+  async exportProfilePack(profileId: string): Promise<{
+    data: ArrayBuffer;
+    filename: string;
+  }> {
+    const response = await this.fetchRaw(
+      `/v1/profiles/${encodeURIComponent(profileId)}/pack/export`
+    );
+    return {
+      data: await response.arrayBuffer(),
+      filename:
+        readContentDispositionFilename(response.headers) ??
+        "nakama-profile-export.zip",
+    };
+  }
+
+  async previewProfilePackImport(
+    data: Blob | BinaryBufferSource | string,
+    options: { name?: string } = {}
+  ): Promise<ProfilePackPreviewResponse> {
+    const request: { data: string; name?: string } = {
+      data: await encodeArchiveData(data),
+    };
+    if (options.name?.trim()) {
+      request.name = options.name.trim();
+    }
+    return this.request<ProfilePackPreviewResponse>(
+      "/v1/profiles/pack/import/preview",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+  }
+
+  async importProfilePack(
+    data: Blob | BinaryBufferSource | string,
+    options: { confirm: boolean; name?: string }
+  ): Promise<ProfilePackImportResponse> {
+    const request: ProfilePackImportRequest = {
+      confirm: options.confirm,
+      data: await encodeArchiveData(data),
+      name: options.name,
+    };
+    return this.request<ProfilePackImportResponse>("/v1/profiles/pack/import", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
   }
 
   async startWorker(name: string): Promise<{ ok: boolean }> {
