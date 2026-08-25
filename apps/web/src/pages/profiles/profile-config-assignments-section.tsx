@@ -14,6 +14,7 @@ export function ProfileConfigAssignmentsSection({
   const {
     detail,
     busy,
+    canManageProfile,
     availableTools,
     handleAssignTool,
     setRemoveConfirm,
@@ -32,6 +33,7 @@ export function ProfileConfigAssignmentsSection({
     selectedId,
   } = state;
   const { navigateToSkillDetail } = useAppNavigation();
+  const readOnly = busy || !canManageProfile;
 
   if (!detail) {
     return null;
@@ -41,14 +43,14 @@ export function ProfileConfigAssignmentsSection({
     <>
       <ProfileToolsSection
         availableTools={availableTools}
-        busy={busy}
+        busy={readOnly}
         detail={detail}
         onAssign={handleAssignTool}
         onRemove={setRemoveConfirm}
       />
       <ProfileMcpSection
         allMcpServers={allMcpServers}
-        busy={busy}
+        busy={readOnly}
         detail={detail}
         onCreateOpen={() => setMcpCreateOpen(true)}
         onRemove={setRemoveConfirm}
@@ -56,7 +58,7 @@ export function ProfileConfigAssignmentsSection({
       <ProfileComposioSection
         assignedComposioToolkits={assignedComposioToolkits}
         availableComposioToolkits={availableComposioToolkits}
-        busy={busy}
+        busy={readOnly}
         composioToolkitsData={composioToolkitsData}
         onAssign={handleAssignComposioToolkit}
         onRemove={setRemoveConfirm}
@@ -64,7 +66,7 @@ export function ProfileConfigAssignmentsSection({
       <ProfileSkillsSection
         allSkills={allSkills}
         assignedSkillIds={assignedSkillIds}
-        busy={busy}
+        busy={readOnly}
         detail={detail}
         onAssign={handleAssignSkill}
         onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
