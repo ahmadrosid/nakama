@@ -170,7 +170,26 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       // After pairing + org-ready: `/attach` skips handleCommand, not auth/org.
       if (isAttachOnlyCommand(attachUserText)) {
-        await handleAttachOnlyCommand(conversationKey, jid, attachUserText);
+        const socket = getSocket();
+        if (!socket) {
+          await sendText(jid, "WhatsApp is not connected.");
+          return;
+        }
+
+        await resolveSession(conversationKey);
+        const profileId =
+          sessionStore.get(conversationKey)?.profileId ??
+          (await resolveProfileId());
+
+        await maybeSendWhatsAppAttachOnlyCommand({
+          client,
+          conversationKey,
+          jid,
+          profileId,
+          sendPlain: (text) => sendText(jid, text),
+          sessionStore,
+          socket,
+        });
         return;
       }
 
@@ -337,34 +356,6 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     await sendText(jid, formatOrgSwitchConfirmation(picked.name));
   }
 
-  async function handleAttachOnlyCommand(
-    conversationKey: string,
-    jid: string,
-    attachUserText: string
-  ): Promise<void> {
-    const socket = getSocket();
-    if (!socket) {
-      await sendText(jid, "WhatsApp is not connected.");
-      return;
-    }
-
-    await resolveSession(conversationKey);
-    const profileId =
-      sessionStore.get(conversationKey)?.profileId ??
-      (await resolveProfileId());
-
-    await maybeSendWhatsAppAttachOnlyCommand({
-      attachUserText,
-      client,
-      conversationKey,
-      jid,
-      profileId,
-      sendPlain: (text) => sendText(jid, text),
-      sessionStore,
-      socket,
-    });
-  }
-
   async function handleChatMessage(
     conversationKey: string,
     jid: string,
@@ -459,7 +450,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         client,
         conversationKey,
         profileId,
-        sendRaw: (text) => sendRawText(jid, text),
+        sendRaw: (text) => sendText(jid, text, { raw: true }),
         session,
         sessionStore,
       });
@@ -541,35 +532,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     return session;
   }
 
-  async function sendText(jid: string, text: string): Promise<void> {
+  async function sendText(
+    jid: string,
+    text: string,
+    options?: { raw?: boolean }
+  ): Promise<void> {
     const socket = getSocket();
     if (!socket) {
       return;
     }
 
-    const prepared = prepareWhatsAppReply(text);
+    const prepared = options?.raw ? text.trim() : prepareWhatsAppReply(text);
     if (!prepared) {
       return;
     }
 
     for (const chunk of splitWhatsAppMessage(prepared)) {
-      await socket.sendMessage(jid, { text: chunk });
-    }
-  }
-
-  /** Share footers bypass markdown stripping so tokens with `_` stay intact. */
-  async function sendRawText(jid: string, text: string): Promise<void> {
-    const socket = getSocket();
-    if (!socket) {
-      return;
-    }
-
-    const trimmed = text.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    for (const chunk of splitWhatsAppMessage(trimmed)) {
       await socket.sendMessage(jid, { text: chunk });
     }
   }

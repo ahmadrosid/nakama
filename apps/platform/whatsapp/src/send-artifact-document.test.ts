@@ -5,15 +5,24 @@ import {
   WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
 } from "./send-artifact-document";
 
+function mockSendMessage(options?: { throwError?: string }) {
+  const calls: unknown[] = [];
+  const socket = {
+    sendMessage: async (_jid: string, content: unknown) => {
+      if (options?.throwError) {
+        throw new Error(options.throwError);
+      }
+      calls.push(content);
+      return {};
+    },
+  } as unknown as WASocket;
+
+  return { calls, socket };
+}
+
 describe("sendWhatsAppArtifactDocument", () => {
   test("sends a document under the size cap", async () => {
-    const calls: unknown[] = [];
-    const socket = {
-      sendMessage: async (_jid: string, content: unknown) => {
-        calls.push(content);
-        return {};
-      },
-    } as unknown as WASocket;
+    const { calls, socket } = mockSendMessage();
 
     const result = await sendWhatsAppArtifactDocument(
       socket,
@@ -34,13 +43,7 @@ describe("sendWhatsAppArtifactDocument", () => {
   });
 
   test("allows files exactly at the size cap", async () => {
-    const calls: unknown[] = [];
-    const socket = {
-      sendMessage: async (_jid: string, content: unknown) => {
-        calls.push(content);
-        return {};
-      },
-    } as unknown as WASocket;
+    const { calls, socket } = mockSendMessage();
 
     const result = await sendWhatsAppArtifactDocument(
       socket,
@@ -57,13 +60,7 @@ describe("sendWhatsAppArtifactDocument", () => {
   });
 
   test("rejects files over the size cap", async () => {
-    let sendCalls = 0;
-    const socket = {
-      sendMessage: async () => {
-        sendCalls += 1;
-        return {};
-      },
-    } as unknown as WASocket;
+    const { calls, socket } = mockSendMessage();
 
     const result = await sendWhatsAppArtifactDocument(
       socket,
@@ -78,15 +75,11 @@ describe("sendWhatsAppArtifactDocument", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("too large");
     expect(result.error).toContain("share link");
-    expect(sendCalls).toBe(0);
+    expect(calls).toHaveLength(0);
   });
 
   test("returns ok false when sendMessage throws", async () => {
-    const socket = {
-      sendMessage: async () => {
-        throw new Error("upload failed");
-      },
-    } as unknown as WASocket;
+    const { socket } = mockSendMessage({ throwError: "upload failed" });
 
     const result = await sendWhatsAppArtifactDocument(
       socket,

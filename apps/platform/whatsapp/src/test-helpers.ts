@@ -77,7 +77,6 @@ export function createMockClient(
   const calls = {
     compact: 0,
     createSession: 0,
-    listProfileArtifacts: 0,
     listProfiles: 0,
     listUserOrgs: 0,
     profileIds: [] as string[],
@@ -222,10 +221,6 @@ export function createMockClient(
       providers: [],
     }),
     health: async () => ({ ok: true, providerConfigured: false }),
-    listProfileArtifacts: async () => {
-      calls.listProfileArtifacts += 1;
-      return { artifacts: [] };
-    },
     listProfiles: async () => {
       calls.listProfiles += 1;
       return parseListProfilesResponse({

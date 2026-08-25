@@ -17,6 +17,10 @@ export interface SendWhatsAppArtifactDocumentResult {
   ok: boolean;
 }
 
+export function formatWhatsAppArtifactOversizeError(bytes: number): string {
+  return `File is too large for WhatsApp attach (${formatMegabytes(bytes)}; max ${formatMegabytes(WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES)}). Use the share link instead.`;
+}
+
 export async function sendWhatsAppArtifactDocument(
   socket: WASocket,
   jid: string,
@@ -24,7 +28,7 @@ export async function sendWhatsAppArtifactDocument(
 ): Promise<SendWhatsAppArtifactDocumentResult> {
   if (input.bytes.byteLength > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES) {
     return {
-      error: `File is too large for WhatsApp attach (${formatMegabytes(input.bytes.byteLength)}; max ${formatMegabytes(WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES)}). Use the share link instead.`,
+      error: formatWhatsAppArtifactOversizeError(input.bytes.byteLength),
       ok: false,
     };
   }

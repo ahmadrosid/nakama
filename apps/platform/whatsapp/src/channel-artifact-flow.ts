@@ -5,13 +5,12 @@ import {
   formatMissingAttachArtifactMessage,
   getMostRecentDeliverableArtifact,
   isAttachIntent,
-  isAttachOnlyCommand,
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
-  resolveArtifactForAttach,
 } from "@nakama/core";
 import type { WASocket } from "@whiskeysockets/baileys";
 import {
+  formatWhatsAppArtifactOversizeError,
   sendWhatsAppArtifactDocument,
   WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
 } from "./send-artifact-document";
@@ -48,59 +47,22 @@ export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
   });
 }
 
-/**
- * `/attach` shortcut: registry first, then newest listed profile artifact.
- * Always replies when nothing is available (unlike NL attach intent).
- */
+/** `/attach` shortcut: most recent registry artifact, or a missing-artifact message. */
 export async function maybeSendWhatsAppAttachOnlyCommand(input: {
   client: NakamaClient;
   conversationKey: string;
   profileId: string;
-  attachUserText: string;
   sessionStore: SessionStore;
   socket: WASocket;
   jid: string;
   sendPlain: (text: string) => Promise<void>;
-}): Promise<boolean> {
-  if (!isAttachOnlyCommand(input.attachUserText)) {
-    return false;
-  }
-
-  const registry = input.sessionStore.getDeliverableArtifacts(
-    input.conversationKey
+}): Promise<void> {
+  const artifact = getMostRecentDeliverableArtifact(
+    input.sessionStore.getDeliverableArtifacts(input.conversationKey)
   );
-  let listed: Awaited<
-    ReturnType<NakamaClient["listProfileArtifacts"]>
-  >["artifacts"] = [];
-
-  if (registry.length === 0) {
-    try {
-      const response = await input.client.listProfileArtifacts(input.profileId);
-      listed = response.artifacts;
-    } catch (error) {
-      console.warn(
-        "WhatsApp artifact list failed during /attach; cannot fall back to profile artifacts.",
-        error instanceof Error ? error.message : error
-      );
-    }
-  }
-
-  const artifact = resolveArtifactForAttach({
-    listed,
-    registry,
-  });
-
   if (!artifact) {
     await input.sendPlain(formatMissingAttachArtifactMessage());
-    return true;
-  }
-
-  if (!registry.some((entry) => entry.path === artifact.path)) {
-    const nextRegistry = pushDeliverableArtifact(registry, artifact);
-    input.sessionStore.updateArtifactState(input.conversationKey, {
-      deliverableArtifacts: nextRegistry,
-    });
-    await input.sessionStore.save();
+    return;
   }
 
   await sendArtifactDocumentForPath({
@@ -110,7 +72,6 @@ export async function maybeSendWhatsAppAttachOnlyCommand(input: {
     path: artifact.path,
     sizeBytes: artifact.sizeBytes,
   });
-  return true;
 }
 
 export async function deliverWhatsAppTurnArtifactShares(input: {
@@ -186,9 +147,7 @@ async function sendArtifactDocumentForPath(input: {
     typeof input.sizeBytes === "number" &&
     input.sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
   ) {
-    await input.sendPlain(
-      `File is too large for WhatsApp attach (${formatMegabytes(input.sizeBytes)}; max ${formatMegabytes(WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES)}). Use the share link instead.`
-    );
+    await input.sendPlain(formatWhatsAppArtifactOversizeError(input.sizeBytes));
     return;
   }
 
@@ -214,8 +173,4 @@ async function sendArtifactDocumentForPath(input: {
         : "Failed to read the artifact for attachment."
     );
   }
-}
-
-function formatMegabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
