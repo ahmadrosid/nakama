@@ -1,10 +1,10 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type {
   ToolContext,
   ToolDefinition,
   ToolSourceResponse,
 } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
-import { setTimeout as delay } from "node:timers/promises";
 import {
   loadJavascriptTool,
   resolveJavascriptModulePath,
@@ -58,13 +58,7 @@ export const TOOL_RETRY_LIMIT = 2;
  */
 const TOOL_RETRY_BASE_DELAY_MS = 500;
 
-function abortReason(signal: AbortSignal): unknown {
-  return signal.reason instanceof Error
-    ? signal.reason
-    : new Error("Tool execution aborted");
-}
-
-function abortReason(signal: AbortSignal): unknown {
+function abortReason(signal: AbortSignal): Error {
   return signal.reason instanceof Error
     ? signal.reason
     : new Error("Tool execution aborted");
@@ -96,11 +90,9 @@ export function withToolRetries(
         }
         // Rejects immediately if the signal aborts mid-backoff (including an
         // already-aborted signal), so a cancelled turn never waits out the delay.
-        await delay(
-          TOOL_RETRY_BASE_DELAY_MS * 2 ** (attempts - 1),
-          undefined,
-          { signal: context.signal }
-        );
+        await delay(TOOL_RETRY_BASE_DELAY_MS * 2 ** (attempts - 1), undefined, {
+          signal: context.signal,
+        });
       }
     }
   };
