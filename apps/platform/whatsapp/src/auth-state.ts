@@ -1,21 +1,11 @@
 import { chmod, mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE } from "@nakama/core/fs";
-import {
-  type AuthenticationState,
-  useMultiFileAuthState,
-} from "@whiskeysockets/baileys";
+import { useMultiFileAuthState } from "@whiskeysockets/baileys";
 
 const PRIVATE_UMASK = 0o077;
 
-interface PrivateMultiFileAuthState {
-  saveCreds: () => Promise<void>;
-  state: AuthenticationState;
-}
-
-export async function usePrivateMultiFileAuthState(
-  directory: string
-): Promise<PrivateMultiFileAuthState> {
+export async function usePrivateMultiFileAuthState(directory: string) {
   if (process.platform !== "win32") {
     // The bridge is a dedicated process whose only child starts before auth setup.
     // Keep this mask in place for every later Baileys credential and key creation.
