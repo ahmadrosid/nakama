@@ -27,6 +27,7 @@ import {
   requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
   requireOrgAdmin,
+  requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { getRequestAuth, json, readJson } from "../shared";
@@ -896,7 +897,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     return json<ProfileResponse>(await agent.getProfile(orgId, profileId));

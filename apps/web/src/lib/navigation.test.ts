@@ -26,14 +26,14 @@ describe("visibleNavGroups", () => {
     ]);
   });
 
-  test("an org admin gets System but not the platform-admin pages", () => {
+  test("an org admin gets System and Profiles but not platform-admin pages", () => {
     // `soul` is in PLATFORM_ADMIN_PAGE_IDS yet reachable by an org admin: the
     // canAccessSystemPage branch runs before the platform-admin check.
     const ids = pageIdsFor(false, "admin");
     expect(ids).toContain("soul");
+    expect(ids).toContain("profiles");
     expect(ids).toContain("integrations");
     expect(ids).not.toContain("files");
-    expect(ids).not.toContain("profiles");
   });
 
   test("a member loses System, a viewer also loses Integrations", () => {

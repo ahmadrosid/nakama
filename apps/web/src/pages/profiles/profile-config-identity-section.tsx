@@ -23,6 +23,7 @@ type IdentityState = Pick<
   ProfilesPageState,
   | "detail"
   | "busy"
+  | "canManageProfile"
   | "avatarInputRef"
   | "uploadAvatarMutation"
   | "deleteAvatarMutation"
@@ -50,6 +51,7 @@ export function ProfileConfigIdentitySection({
   const {
     detail,
     busy,
+    canManageProfile,
     avatarInputRef,
     uploadAvatarMutation,
     deleteAvatarMutation,
@@ -73,12 +75,14 @@ export function ProfileConfigIdentitySection({
     return null;
   }
 
+  const identityDisabled = busy || !canManageProfile;
+
   return (
     <div className="mb-3 rounded-2xl border border-border p-3 sm:p-4">
       <input
         accept="image/jpeg,image/png,image/gif,image/webp"
         className="hidden"
-        disabled={busy}
+        disabled={identityDisabled}
         onChange={(event) => void handleAvatarSelected(event)}
         ref={avatarInputRef}
         type="file"
@@ -88,7 +92,7 @@ export function ProfileConfigIdentitySection({
         <div className="flex min-w-0 flex-wrap items-end gap-3 sm:flex-nowrap">
           <EditableProfileAvatar
             disabled={
-              busy ||
+              identityDisabled ||
               uploadAvatarMutation.isPending ||
               deleteAvatarMutation.isPending
             }
@@ -104,10 +108,11 @@ export function ProfileConfigIdentitySection({
           <Field className="min-w-0 flex-1" htmlFor="profile-name" label="Name">
             <Input
               className="h-8 min-w-0 font-semibold"
-              disabled={busy}
+              disabled={identityDisabled}
               id="profile-name"
               onBlur={() => void flushSave()}
               onChange={(event) => handleEditNameChange(event.target.value)}
+              readOnly={!canManageProfile}
               value={editName}
             />
           </Field>
@@ -118,7 +123,7 @@ export function ProfileConfigIdentitySection({
             label="Model"
           >
             <Select
-              disabled={busy || providerModelGroups.length === 0}
+              disabled={identityDisabled || providerModelGroups.length === 0}
               onValueChange={(value) => {
                 if (!value) {
                   return;
@@ -182,7 +187,7 @@ export function ProfileConfigIdentitySection({
 
         <ExpandableTextarea
           dialogDescription="Instructions sent to the model at the start of each chat."
-          disabled={busy}
+          disabled={identityDisabled}
           htmlFor="profile-prompt"
           label="System prompt"
           onChange={(event) => handleEditPromptChange(event.target.value)}

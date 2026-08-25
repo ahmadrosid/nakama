@@ -3,6 +3,7 @@ import {
   Add01Icon,
   Camera01Icon,
   Delete02Icon,
+  Upload04Icon,
   UserGroup02Icon,
 } from "hugeicons-react";
 import type { ReactNode } from "react";
@@ -211,14 +212,20 @@ const profileEmptySteps = [
 export function ProfilesEmptyState({
   disabled,
   canCreate = true,
+  canImport = false,
   onCreate,
+  onImport,
   onAskSuperBot,
 }: {
   disabled?: boolean;
   canCreate?: boolean;
+  canImport?: boolean;
   onCreate: () => void;
+  onImport?: () => void;
   onAskSuperBot?: () => void;
 }) {
+  const importIsPrimary = canImport && !canCreate;
+
   return (
     <div
       aria-labelledby="profiles-empty-title"
@@ -234,7 +241,7 @@ export function ProfilesEmptyState({
           className="type-section-title font-medium text-foreground"
           id="profiles-empty-title"
         >
-          Create your first profile
+          {importIsPrimary ? "Import a profile" : "Create your first profile"}
         </p>
         <p className="type-body text-muted-foreground text-sm">
           {profilesTagline}
@@ -246,6 +253,17 @@ export function ProfilesEmptyState({
           <Button disabled={disabled} onClick={onCreate} type="button">
             <Add01Icon aria-hidden className="size-4" />
             New profile
+          </Button>
+        ) : null}
+        {canImport && onImport ? (
+          <Button
+            disabled={disabled}
+            onClick={onImport}
+            type="button"
+            variant={importIsPrimary ? "default" : "outline"}
+          >
+            <Upload04Icon aria-hidden className="size-4" />
+            Import profile
           </Button>
         ) : null}
         {onAskSuperBot ? (

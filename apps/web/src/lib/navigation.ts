@@ -139,7 +139,6 @@ export const SETUP_PATH = "/setup";
 
 export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
-  "profiles",
   "soul",
 ]);
 
@@ -171,7 +170,7 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
-      if (item.id === "soul") {
+      if (item.id === "soul" || item.id === "profiles") {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
       }
 

@@ -1,5 +1,7 @@
-import { Copy01Icon, Delete02Icon } from "hugeicons-react";
+import { Copy01Icon, Delete02Icon, Upload04Icon } from "hugeicons-react";
 import { createPortal } from "react-dom";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { Button } from "@/components/ui/button";
@@ -30,12 +32,17 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     detailTab,
     setDetailTab,
     setCreateOpen,
+    setImportOpen,
     handleCloneProfile,
     openDeleteDialog,
   } = state;
   const { user, activeOrg } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const canCreateProfile = user?.isPlatformAdmin === true;
+  const canPack = isOrgAdmin || canCreateProfile;
+  const selectedProfileSummary = selectedId
+    ? (profiles.find((profile) => profile.id === selectedId) ?? null)
+    : null;
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
   const { data: skillProposalsData } = useSkillProposals(
@@ -72,14 +79,16 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               >
                 Config
               </ProfileDetailTabButton>
-              <ProfileDetailTabButton
-                active={detailTab === "prompt"}
-                controls="profile-detail-panel-prompt"
-                id="profile-detail-tab-prompt"
-                onSelect={() => setDetailTab("prompt")}
-              >
-                Prompt
-              </ProfileDetailTabButton>
+              {canCreateProfile ? (
+                <ProfileDetailTabButton
+                  active={detailTab === "prompt"}
+                  controls="profile-detail-panel-prompt"
+                  id="profile-detail-tab-prompt"
+                  onSelect={() => setDetailTab("prompt")}
+                >
+                  Prompt
+                </ProfileDetailTabButton>
+              ) : null}
               {isOrgAdmin ? (
                 <ProfileDetailTabButton
                   active={detailTab === "proposals"}
@@ -103,33 +112,55 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
             pageHeaderActions
           )
         : null}
-      {pageHeaderActions && selectedId && detail && !detail.isSuper
+      {pageHeaderActions && canPack
         ? createPortal(
             <>
               <Button
-                aria-label="Clone profile"
+                aria-label="Import profile"
                 className="self-center"
                 disabled={busy}
-                onClick={() => handleCloneProfile(selectedId)}
+                onClick={() => setImportOpen(true)}
                 size="sm"
                 type="button"
                 variant="outline"
               >
-                <Copy01Icon aria-hidden className="size-3.5" />
-                <span>Clone</span>
+                <Upload04Icon aria-hidden className="size-3.5" />
+                <span>Import</span>
               </Button>
-              <Button
-                aria-label="Delete profile"
-                className="self-center text-destructive hover:text-destructive"
-                disabled={busy}
-                onClick={() => openDeleteDialog(selectedId)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <Delete02Icon aria-hidden className="size-3.5" />
-                <span>Delete</span>
-              </Button>
+              {selectedProfileSummary && !selectedProfileSummary.isSuper ? (
+                <ExportProfileButton
+                  disabled={busy}
+                  profileId={selectedProfileSummary.id}
+                />
+              ) : null}
+              {canCreateProfile && selectedId && detail && !detail.isSuper ? (
+                <>
+                  <Button
+                    aria-label="Clone profile"
+                    className="self-center"
+                    disabled={busy}
+                    onClick={() => handleCloneProfile(selectedId)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Copy01Icon aria-hidden className="size-3.5" />
+                    <span>Clone</span>
+                  </Button>
+                  <Button
+                    aria-label="Delete profile"
+                    className="self-center text-destructive hover:text-destructive"
+                    disabled={busy}
+                    onClick={() => openDeleteDialog(selectedId)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Delete02Icon aria-hidden className="size-3.5" />
+                    <span>Delete</span>
+                  </Button>
+                </>
+              ) : null}
             </>,
             pageHeaderActions
           )
@@ -162,9 +193,11 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
           <div className="p-4 sm:p-5">
             <ProfilesEmptyState
               canCreate={canCreateProfile}
+              canImport={canPack}
               disabled={busy}
               onAskSuperBot={onAskSuperBot}
               onCreate={() => setCreateOpen(true)}
+              onImport={() => setImportOpen(true)}
             />
           </div>
         ) : detailLoading && !detail ? (
@@ -191,7 +224,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 profileId={selectedId}
               />
             </div>
-          ) : detailTab === "prompt" ? (
+          ) : detailTab === "prompt" && canCreateProfile ? (
             <div
               aria-labelledby="profile-detail-tab-prompt"
               className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
@@ -201,9 +234,25 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               <SoulTab profileId={selectedId} />
             </div>
           ) : null
+        ) : selectedProfileSummary ? (
+          <div className="flex min-h-48 flex-col items-center justify-center gap-3 p-4 text-center sm:p-5">
+            <ProfileAvatar profile={selectedProfileSummary} size="lg" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground text-sm">
+                {selectedProfileSummary.name}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                {selectedProfileSummary.isSuper
+                  ? "Super Bot can't be exported."
+                  : "Use Export above to download this profile as a pack."}
+              </p>
+            </div>
+          </div>
         ) : (
-          <div className="flex min-h-48 items-center justify-center p-4 text-muted-foreground text-sm sm:p-5">
-            Select a profile to edit.
+          <div className="flex min-h-48 items-center justify-center p-4 text-center text-muted-foreground text-sm sm:p-5">
+            {canCreateProfile
+              ? "Select a profile to edit."
+              : "Select a profile in the sidebar to export it, or use Import above to add one."}
           </div>
         )}
       </section>

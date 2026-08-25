@@ -1,4 +1,5 @@
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
+import { ProfileImportDialog } from "@/components/profiles/ProfileImportDialog";
 import { SkillCreateDialog } from "@/components/SkillCreateDialog";
 import { SkillInstallDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
@@ -22,6 +23,9 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     createOpen,
     handleCreateOpenChange,
     setSelectedId,
+    importOpen,
+    setImportOpen,
+    handleProfileImported,
     skillCreateOpen,
     setSkillCreateOpen,
     skillInstallOpen,
@@ -68,6 +72,12 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         onOpenChange={handleCreateOpenChange}
         open={createOpen}
         tools={allTools}
+      />
+
+      <ProfileImportDialog
+        onImported={handleProfileImported}
+        onOpenChange={setImportOpen}
+        open={importOpen}
       />
 
       <SkillCreateDialog
