@@ -1564,6 +1564,60 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 
+  test("rejects oversize attach before reading content", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        deliverableArtifacts: [
+          {
+            filename: "huge.bin",
+            mimeType: "application/octet-stream",
+            path: "huge.bin",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sharePath: "/s/tok_test",
+            shareUrl: "https://app.example/s/tok_test",
+            sizeBytes: 17 * 1024 * 1024,
+          },
+        ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { sent, socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "/attach" });
+
+      expect(calls.readProfileArtifactContent).toBe(0);
+      expect(documentSendCount(sent)).toBe(0);
+      expect(sent.some((message) => message.text.includes("too large"))).toBe(
+        true
+      );
+      expect(calls.sendStream).toBe(0);
+    });
+  });
+
   test("clears deliverable artifacts on /clear", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {

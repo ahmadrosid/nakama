@@ -11,7 +11,10 @@ import {
   resolveArtifactForAttach,
 } from "@nakama/core";
 import type { WASocket } from "@whiskeysockets/baileys";
-import { sendWhatsAppArtifactDocument } from "./send-artifact-document";
+import {
+  sendWhatsAppArtifactDocument,
+  WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
+} from "./send-artifact-document";
 import type { SessionStore } from "./session-store";
 
 export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
@@ -41,6 +44,7 @@ export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
     filename: artifact.filename,
     mimeType: artifact.mimeType,
     path: artifact.path,
+    sizeBytes: artifact.sizeBytes,
   });
 }
 
@@ -104,6 +108,7 @@ export async function maybeSendWhatsAppAttachOnlyCommand(input: {
     filename: artifact.filename,
     mimeType: artifact.mimeType,
     path: artifact.path,
+    sizeBytes: artifact.sizeBytes,
   });
   return true;
 }
@@ -172,10 +177,21 @@ async function sendArtifactDocumentForPath(input: {
   path: string;
   filename: string;
   mimeType: string;
+  sizeBytes?: number;
   socket: WASocket;
   jid: string;
   sendPlain: (text: string) => Promise<void>;
 }): Promise<void> {
+  if (
+    typeof input.sizeBytes === "number" &&
+    input.sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
+  ) {
+    await input.sendPlain(
+      `File is too large for WhatsApp attach (${formatMegabytes(input.sizeBytes)}; max ${formatMegabytes(WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES)}). Use the share link instead.`
+    );
+    return;
+  }
+
   try {
     const { contentType, data } = await input.client.readProfileArtifactContent(
       input.profileId,
@@ -198,4 +214,8 @@ async function sendArtifactDocumentForPath(input: {
         : "Failed to read the artifact for attachment."
     );
   }
+}
+
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
