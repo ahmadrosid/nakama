@@ -24,6 +24,7 @@ import { registerOrgCuratorRoutes } from "./routes/org-curator";
 import { registerOrgMemberRoutes } from "./routes/org-members";
 import { registerOrgMemoryRoutes } from "./routes/org-memory";
 import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
+import { registerProfilePortabilityRoutes } from "./routes/profile-portability";
 import { registerProfileRoutes } from "./routes/profiles";
 import { registerSessionRoutes } from "./routes/sessions";
 import { registerSetupImportRoutes } from "./routes/setup-import";
@@ -114,6 +115,7 @@ export function createHonoApp(options: ServerOptions) {
   registerUserContextRoutes(app, options);
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
+  registerProfilePortabilityRoutes(app, options);
   registerArtifactShareRoutes(app, options);
   registerMcpRoutes(app, options);
   registerSkillRoutes(app, options);
