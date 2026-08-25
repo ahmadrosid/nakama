@@ -380,6 +380,70 @@ describe("profile portability", () => {
     ).toBe(true);
   });
 
+  test("failed import deletes skills created during that attempt", async () => {
+    const { db, service } = await setup();
+    const created = await service.createProfile(ORG_ID, {
+      name: "Rollback Bot",
+    });
+    const profileId = created.profile.id;
+    const skillDir = path.join(
+      soulDirOf(ORG_ID, profileId),
+      "skills",
+      "rollback-skill"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: rollback-skill\ndescription: Temporary.\n---\n\nBody.\n",
+      "utf8"
+    );
+    await db.upsertSkill({
+      createdAt: new Date().toISOString(),
+      createdBy: "human",
+      description: "Temporary.",
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: false,
+      id: "skill_rollback",
+      name: "rollback-skill",
+      orgId: ORG_ID,
+      sourcePath: skillDir,
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignSkillToProfile(profileId, "skill_rollback");
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Boom",
+      enabled: true,
+      id: "tool_boom",
+      name: "boom-tool",
+      orgId: null,
+      parameters: { properties: {}, type: "object" },
+      source: "builtin",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile(profileId, "tool_boom");
+
+    const exported = await createProfilePackExport(db, ORG_ID, profileId);
+    const assignTool = db.assignToolToProfile.bind(db);
+    db.assignToolToProfile = async () => {
+      throw new Error("forced assignment failure");
+    };
+
+    await expect(
+      importProfilePack(db, DEST_ORG_ID, exported.data, { confirm: true })
+    ).rejects.toThrow("forced assignment failure");
+
+    db.assignToolToProfile = assignTool;
+
+    expect(await db.getSkillByName("rollback-skill", DEST_ORG_ID)).toBeNull();
+    expect(
+      (await db.listProfilesForOrg(DEST_ORG_ID)).some((profile) =>
+        profile.name.includes("Rollback")
+      )
+    ).toBe(false);
+  });
+
   test("excludes archived skills from the export", async () => {
     const { db, service } = await setup();
     const created = await service.createProfile(ORG_ID, { name: "Bot" });

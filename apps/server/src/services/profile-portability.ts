@@ -262,12 +262,14 @@ export async function importProfilePack(
 
   await db.upsertProfile(profile);
 
+  let createdSkillIds: string[] = [];
+
   try {
     const skippedAssignments: ProfilePackSkippedItem[] = [];
     const soulDir = getProfileSoulDir(orgId, profileId);
     await initSoulDirectory(soulDir);
     await writePackedWorkspaceFiles(soulDir, entries, skippedAssignments);
-    await recreatePackedSkills(
+    createdSkillIds = await recreatePackedSkills(
       db,
       orgId,
       profileId,
@@ -305,7 +307,7 @@ export async function importProfilePack(
 
     return { manifest, profileId, skippedAssignments };
   } catch (error) {
-    await rollbackFailedImport(db, orgId, profileId);
+    await rollbackFailedImport(db, orgId, profileId, createdSkillIds);
     throw error;
   }
 }
@@ -522,11 +524,12 @@ async function recreatePackedSkills(
   profileId: string,
   soulDir: string,
   skipped: ProfilePackSkippedItem[]
-): Promise<void> {
+): Promise<string[]> {
   const skillsDir = getProfileSkillsDir(orgId, profileId);
+  const createdSkillIds: string[] = [];
 
   if (!(await pathExists(skillsDir))) {
-    return;
+    return createdSkillIds;
   }
 
   const folders = (await readdir(skillsDir, { withFileTypes: true })).filter(
@@ -555,6 +558,11 @@ async function recreatePackedSkills(
       continue;
     }
 
+    if (existing) {
+      await db.assignSkillToProfile(profileId, existing.id);
+      continue;
+    }
+
     const now = new Date().toISOString();
     const record: StoredSkillRecord = {
       createdAt: now,
@@ -572,7 +580,10 @@ async function recreatePackedSkills(
 
     await db.upsertSkill(record);
     await db.assignSkillToProfile(profileId, record.id);
+    createdSkillIds.push(record.id);
   }
+
+  return createdSkillIds;
 }
 
 async function assignByNameOrSkip<T extends { id: string }>(
@@ -682,8 +693,17 @@ function readSkillNamesFromZip(
 async function rollbackFailedImport(
   db: DatabaseAdapter,
   orgId: string,
-  profileId: string
+  profileId: string,
+  createdSkillIds: string[]
 ): Promise<void> {
+  for (const skillId of createdSkillIds) {
+    try {
+      await db.deleteSkill(skillId);
+    } catch {
+      // Best-effort cleanup only; the original error is what matters.
+    }
+  }
+
   try {
     await db.deleteProfile(profileId);
   } catch {
