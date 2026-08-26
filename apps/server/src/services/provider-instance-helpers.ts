@@ -55,10 +55,7 @@ export function toProviderInstanceSummary(
     id: instance.id,
     label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
     type: instance.type,
-    wireApi:
-      instance.type === "openai_compatible"
-        ? (instance.wireApi ?? "chat")
-        : null,
+    wireApi: instance.wireApi ?? null,
     ...(instance.customModels?.length
       ? { customModels: instance.customModels }
       : {}),
@@ -361,9 +358,7 @@ function buildProviderFieldsFromRequest(
       baseUrl,
       customModels,
       label,
-      ...(parseWireApi(request.wireApi)
-        ? { wireApi: "responses" as const }
-        : {}),
+      wireApi: parseWireApi(request.wireApi),
     };
   }
 
