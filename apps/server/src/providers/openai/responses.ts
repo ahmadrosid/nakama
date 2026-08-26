@@ -24,7 +24,7 @@ import { openAIModelSupportsThinking } from "./thinking";
 
 type ResponseItem = Record<string, unknown>;
 
-export const DEFAULT_OPENAI_RESPONSES_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_OPENAI_RESPONSES_BASE_URL = "https://api.openai.com/v1";
 
 export async function generateOpenAIResponsesChat(options: {
   apiKey: string;
