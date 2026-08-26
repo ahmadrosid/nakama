@@ -1,5 +1,5 @@
 import type { ProfilePackPreviewResponse } from "@nakama/core/contract";
-import { Alert02Icon, Archive01Icon } from "hugeicons-react";
+import { Alert02Icon, Archive01Icon, CloudUploadIcon } from "hugeicons-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +51,7 @@ function ProfileImportDialogContent({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState<ProfilePackPreviewResponse | null>(
     null
   );
@@ -96,22 +97,47 @@ function ProfileImportDialogContent({
 
   return (
     <DialogContent className="flex max-h-[min(90dvh,42rem)] flex-col gap-6 overflow-hidden p-6 sm:max-w-lg">
-      <DialogHeader className="gap-2">
-        <DialogTitle>Import profile</DialogTitle>
-        <DialogDescription>
+      <DialogHeader className="gap-2 pr-8 text-left">
+        <DialogTitle className="text-balance">Import profile</DialogTitle>
+        <DialogDescription className="text-pretty">
           Upload a profile pack (.zip) exported from Nakama.
         </DialogDescription>
       </DialogHeader>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        <Button
+        <button
+          aria-label="Choose a profile pack file"
+          className={cn(
+            "flex min-h-40 w-full shrink-0 flex-col items-center justify-center rounded-xl border border-dashed px-6 py-8 text-center outline-none transition-[background-color,border-color,color] disabled:pointer-events-none disabled:opacity-50",
+            "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+            dragActive
+              ? "border-primary bg-primary/5"
+              : "border-border bg-background hover:border-primary/60 hover:bg-muted/30"
+          )}
           disabled={busy}
           onClick={() => inputRef.current?.click()}
+          onDragEnter={() => setDragActive(true)}
+          onDragLeave={() => setDragActive(false)}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragActive(false);
+            void handleFileSelected(event.dataTransfer.files[0] ?? null);
+          }}
           type="button"
-          variant={selectedFile ? "outline" : "default"}
         >
-          {selectedFile ? "Choose a different file" : "Choose profile pack"}
-        </Button>
+          <CloudUploadIcon
+            aria-hidden
+            className="mb-4 size-9 text-primary"
+            strokeWidth={1.5}
+          />
+          <span className="font-medium text-foreground">
+            Drag and drop your .zip file here
+          </span>
+          <span className="mt-1 text-muted-foreground text-sm">
+            or click to browse
+          </span>
+        </button>
         <input
           accept=".zip,application/zip"
           aria-label="Choose a profile pack file"

@@ -37,7 +37,11 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             <CloudDownloadIcon aria-hidden className="size-3.5" />
             <span>Import</span>
           </Button>
-          <ExportProfileButton disabled={busy} profileId={detail.id} />
+          <ExportProfileButton
+            disabled={busy}
+            profileId={detail.id}
+            profileName={detail.name}
+          />
           {canCreateProfile && selectedId ? (
             <>
               <Button
