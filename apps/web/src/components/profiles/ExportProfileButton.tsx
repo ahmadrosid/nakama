@@ -1,4 +1,4 @@
-import { Download04Icon } from "hugeicons-react";
+import { CloudUploadIcon } from "hugeicons-react";
 import { PendingIcon } from "@/components/data-portability/DataImportPreview";
 import { Button } from "@/components/ui/button";
 import { useExportProfilePackMutation } from "@/hooks/use-profile-pack";
@@ -35,7 +35,7 @@ export function ExportProfileButton({
       type="button"
       variant="outline"
     >
-      <PendingIcon idle={Download04Icon} pending={exportMutation.isPending} />
+      <PendingIcon idle={CloudUploadIcon} pending={exportMutation.isPending} />
       <span>Export</span>
     </Button>
   );

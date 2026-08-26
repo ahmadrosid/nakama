@@ -105,6 +105,7 @@ export function useProfilesPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [cloneTargetId, setCloneTargetId] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [removeConfirm, setRemoveConfirm] =
@@ -160,6 +161,7 @@ export function useProfilesPage() {
 
   const busy =
     updateMutation.isPending ||
+    cloneProfileMutation.isPending ||
     deleteMutation.isPending ||
     assignMutation.isPending ||
     unassignMutation.isPending ||
@@ -650,6 +652,16 @@ export function useProfilesPage() {
     setDeleteOpen(true);
   }
 
+  function openCloneDialog(profileId: string) {
+    setCloneTargetId(profileId);
+  }
+
+  function handleCloneOpenChange(open: boolean) {
+    if (!(open || busy)) {
+      setCloneTargetId(null);
+    }
+  }
+
   function handleDeleteOpenChange(open: boolean) {
     if (busy) {
       return;
@@ -662,11 +674,18 @@ export function useProfilesPage() {
     }
   }
 
-  async function handleCloneProfile(profileId: string) {
+  async function handleCloneConfirm() {
+    const profileId = cloneTargetId;
+
+    if (!profileId) {
+      return;
+    }
+
     setError(null);
 
     try {
       const response = await cloneProfileMutation.mutateAsync(profileId);
+      setCloneTargetId(null);
       setSelectedId(response.profile.id);
     } catch (err) {
       setError(formatError(err));
@@ -956,6 +975,9 @@ export function useProfilesPage() {
   const deleteTarget = deleteTargetId
     ? profiles.find((entry) => entry.id === deleteTargetId)
     : null;
+  const cloneTarget = cloneTargetId
+    ? profiles.find((entry) => entry.id === cloneTargetId)
+    : null;
 
   return {
     allMcpServers,
@@ -972,6 +994,8 @@ export function useProfilesPage() {
     busy,
     canManageProfile,
     cloneProfileMutation,
+    cloneTarget,
+    cloneTargetId,
     composioToolkitsData,
     createMcpMutation,
     createOpen,
@@ -996,7 +1020,8 @@ export function useProfilesPage() {
     handleAssignTool,
     handleAvatarRemove,
     handleAvatarSelected,
-    handleCloneProfile,
+    handleCloneConfirm,
+    handleCloneOpenChange,
     handleCreateMcpServer,
     handleCreateOpenChange,
     handleCreateSkill,
@@ -1016,6 +1041,7 @@ export function useProfilesPage() {
     modelInCatalog,
     modelSelectionValue,
     modelsResponse,
+    openCloneDialog,
     openDeleteDialog,
     profileComposioData,
     profiles,

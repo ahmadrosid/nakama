@@ -35,6 +35,9 @@ export function ProfileRail() {
   const location = useLocation();
 
   const logoSrc = ditherLogoSrc(resolvedTheme);
+  const orderedProfiles = profiles.toSorted(
+    (left, right) => Number(right.isSuper) - Number(left.isSuper)
+  );
 
   const onProfilesPage = isProfilesPath(location.pathname);
   const activeProfileId = resolveActiveProfileIdFromLocation({
@@ -110,7 +113,7 @@ export function ProfileRail() {
       </a>
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
-        {profiles.map((profile) => {
+        {orderedProfiles.map((profile) => {
           const active = profile.id === activeProfileId;
           const trigger = (
             <button

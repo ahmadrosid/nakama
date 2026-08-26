@@ -1,9 +1,6 @@
-import { Copy01Icon, Delete02Icon, Upload04Icon } from "hugeicons-react";
 import { createPortal } from "react-dom";
-import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
@@ -32,16 +29,11 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     setDetailTab,
     setCreateOpen,
     setImportOpen,
-    handleCloneProfile,
-    openDeleteDialog,
   } = state;
   const { user, activeOrg } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const canCreateProfile = user?.isPlatformAdmin === true;
   const canPack = isOrgAdmin || canCreateProfile;
-  const selectedProfileSummary = selectedId
-    ? (profiles.find((profile) => profile.id === selectedId) ?? null)
-    : null;
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
   const { data: skillProposalsData } = useSkillProposals(
@@ -108,59 +100,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 </ProfileDetailTabButton>
               ) : null}
             </div>,
-            pageHeaderActions
-          )
-        : null}
-      {pageHeaderActions && canPack
-        ? createPortal(
-            <>
-              <Button
-                aria-label="Import profile"
-                className="self-center"
-                disabled={busy}
-                onClick={() => setImportOpen(true)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <Upload04Icon aria-hidden className="size-3.5" />
-                <span>Import</span>
-              </Button>
-              {selectedProfileSummary && !selectedProfileSummary.isSuper ? (
-                <ExportProfileButton
-                  disabled={busy}
-                  profileId={selectedProfileSummary.id}
-                />
-              ) : null}
-              {canCreateProfile && selectedId && detail && !detail.isSuper ? (
-                <>
-                  <Button
-                    aria-label="Clone profile"
-                    className="self-center"
-                    disabled={busy}
-                    onClick={() => handleCloneProfile(selectedId)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Copy01Icon aria-hidden className="size-3.5" />
-                    <span>Clone</span>
-                  </Button>
-                  <Button
-                    aria-label="Delete profile"
-                    className="self-center text-destructive hover:text-destructive"
-                    disabled={busy}
-                    onClick={() => openDeleteDialog(selectedId)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Delete02Icon aria-hidden className="size-3.5" />
-                    <span>Delete</span>
-                  </Button>
-                </>
-              ) : null}
-            </>,
             pageHeaderActions
           )
         : null}
