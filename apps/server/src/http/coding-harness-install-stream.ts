@@ -61,11 +61,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
           clearTimers();
           return;
         }
-        try {
-          controller.enqueue(encoder.encode(": ping\n\n"));
-        } catch {
-          clearTimers();
-        }
+        controller.enqueue(encoder.encode(": ping\n\n"));
       }, keepaliveIntervalMs);
 
       timeoutId = setTimeout(() => {

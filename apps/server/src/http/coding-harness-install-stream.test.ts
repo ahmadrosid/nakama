@@ -6,17 +6,6 @@ type TestEvent = { type: string; message?: string; error?: string };
 const TIMEOUT_MS = 10;
 const OUTLIVES_TIMEOUT_MS = 30;
 
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-} {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
-}
-
 async function readEvents(response: Response): Promise<TestEvent[]> {
   const body = await response.text();
   return body
@@ -27,8 +16,8 @@ async function readEvents(response: Response): Promise<TestEvent[]> {
 
 describe("streamInstallEvents", () => {
   test("send after the client disconnects does not throw at the executor", async () => {
-    const clientGone = deferred<void>();
-    const executorDone = deferred<void>();
+    const clientGone = Promise.withResolvers<void>();
+    const executorDone = Promise.withResolvers<void>();
     const thrown: unknown[] = [];
 
     const response = streamInstallEvents<TestEvent>(async (send) => {
@@ -88,7 +77,7 @@ describe("streamInstallEvents", () => {
   });
 
   test("send after the timeout does not throw at the executor", async () => {
-    const executorDone = deferred<void>();
+    const executorDone = Promise.withResolvers<void>();
     const thrown: unknown[] = [];
 
     const response = streamInstallEvents<TestEvent>(

@@ -157,17 +157,6 @@ export async function runTimedInstallCommand(
     let stdoutBuffer = "";
     let stderrBuffer = "";
     let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
-    let settled = false;
-
-    const settle = (value: {
-      exitCode: number | null;
-      stdout: string;
-      stderr: string;
-      timedOut: boolean;
-    }) => {
-      settled = true;
-      resolve(value);
-    };
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
@@ -176,7 +165,7 @@ export async function runTimedInstallCommand(
         () => child.kill("SIGKILL"),
         CLI_SIGTERM_GRACE_MS
       );
-      settle({
+      resolve({
         exitCode: null,
         stderr: stderr.trim(),
         stdout: stdout.trim(),
@@ -185,7 +174,7 @@ export async function runTimedInstallCommand(
     }, timeoutMs);
 
     const emitLine = (prefix: "stdout" | "stderr", line: string) => {
-      if (settled) {
+      if (timedOut) {
         return;
       }
 
@@ -238,7 +227,7 @@ export async function runTimedInstallCommand(
         emitLine("stderr", stderrBuffer.trim());
       }
 
-      settle({
+      resolve({
         exitCode: null,
         stderr: `${stderr}\n${String(error)}`.trim(),
         stdout,
@@ -257,7 +246,7 @@ export async function runTimedInstallCommand(
         emitLine("stderr", stderrBuffer.trim());
       }
 
-      settle({
+      resolve({
         exitCode,
         stderr: stderr.trim(),
         stdout: stdout.trim(),
