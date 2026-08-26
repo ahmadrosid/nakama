@@ -17,7 +17,7 @@ import {
 } from "./inbound-message";
 
 export const WHATSAPP_RECONNECT_BASE_MS = 1000;
-export const WHATSAPP_RECONNECT_MAX_MS = 30_000;
+const WHATSAPP_RECONNECT_MAX_MS = 30_000;
 
 export function whatsappReconnectDelayMs(attempt: number): number {
   const exp = Math.min(Math.max(attempt, 0), 5);
