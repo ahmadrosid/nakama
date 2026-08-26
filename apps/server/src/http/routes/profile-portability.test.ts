@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { getCustomToolsDir } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { unzipSync } from "fflate";
 import type { AuthService } from "../../services/auth-service";
 import { PROFILE_PACK_KIND } from "../../services/profile-portability";
 import { ProfileService } from "../../services/profile-service";
@@ -110,6 +114,19 @@ describe("profile pack routes", () => {
       name: "Packable Bot",
       systemPrompt: "help",
     });
+    await databaseAdapter.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Private custom tool",
+      handlerConfig: { modulePath: "private.js" },
+      handlerType: "javascript",
+      id: "tool_private",
+      name: "private_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await databaseAdapter.assignToolToProfile(
+      created.profile.id,
+      "tool_private"
+    );
 
     const exportResponse = await app.fetch(
       new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
@@ -119,6 +136,13 @@ describe("profile pack routes", () => {
     expect(exportResponse.status).toBe(200);
     expect(exportResponse.headers.get("content-type")).toBe("application/zip");
     const archive = Buffer.from(await exportResponse.arrayBuffer());
+    const archiveEntries = unzipSync(new Uint8Array(archive));
+    const manifest = JSON.parse(
+      Buffer.from(archiveEntries["nakama-profile-export.json"] ?? []).toString(
+        "utf8"
+      )
+    ) as { meta: { customTools?: unknown[] } };
+    expect(manifest.meta.customTools).toBeUndefined();
     const data = archive.toString("base64");
 
     const previewResponse = await app.fetch(
@@ -218,14 +242,35 @@ describe("profile pack routes", () => {
       role: "member",
       userId: platformUser!.id,
     });
-    expect(
-      (
-        await app.fetch(
-          new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
-            headers: platformSession.headers({}, orgId),
-          })
-        )
-      ).status
-    ).toBe(200);
+    const toolsDir = getCustomToolsDir();
+    await mkdir(toolsDir, { recursive: true });
+    await writeFile(
+      path.join(toolsDir, "platform-portable.js"),
+      "export async function run() {}\n",
+      "utf8"
+    );
+    await databaseAdapter.upsertTool({
+      createdAt: now,
+      description: "Platform portable tool",
+      handlerConfig: { modulePath: "platform-portable.js" },
+      handlerType: "javascript",
+      id: "tool_platform_portable",
+      name: "platform_portable",
+      updatedAt: now,
+    });
+    await databaseAdapter.assignToolToProfile(
+      created.profile.id,
+      "tool_platform_portable"
+    );
+    const platformExport = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
+        headers: platformSession.headers({}, orgId),
+      })
+    );
+    expect(platformExport.status).toBe(200);
+    const platformArchive = unzipSync(
+      new Uint8Array(await platformExport.arrayBuffer())
+    );
+    expect(platformArchive["custom-tools/platform-portable.js"]).toBeDefined();
   }, 30_000);
 });

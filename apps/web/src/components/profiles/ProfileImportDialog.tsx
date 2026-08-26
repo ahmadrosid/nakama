@@ -195,6 +195,19 @@ function ProfileImportDialogContent({
 
             {preview ? (
               <div className="space-y-3 border-border border-t p-3">
+                {preview.manifest.meta.customTools?.length ? (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-700 text-xs dark:text-amber-400">
+                    <Alert02Icon
+                      aria-hidden
+                      className="mt-0.5 size-4 shrink-0"
+                    />
+                    <span className="text-pretty">
+                      Includes executable custom tool code. Import only packs
+                      you trust.
+                    </span>
+                  </div>
+                ) : null}
+
                 {preview.topLevelPaths.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="font-medium text-muted-foreground text-xs">

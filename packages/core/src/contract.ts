@@ -360,9 +360,17 @@ export interface ProfilePackSkippedItem {
   reason: string;
 }
 
+export interface ProfilePackCustomTool {
+  description: string;
+  handlerConfig: unknown;
+  handlerType: "javascript" | "python";
+  name: string;
+}
+
 export interface ProfilePackMeta {
   bundledSkillNames: string[];
   composioToolkitSlugs: string[];
+  customTools?: ProfilePackCustomTool[];
   mcpServerNames: string[];
   model: string | null;
   name: string;

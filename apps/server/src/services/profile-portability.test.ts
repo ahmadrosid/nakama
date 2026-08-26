@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { getCustomToolsDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   createNakamaDataExport,
@@ -196,6 +197,187 @@ describe("profile portability", () => {
     expect(
       (await db.listToolsForProfile(imported.profileId)).map((t) => t.id)
     ).toContain("tool_dest");
+  });
+
+  test("export packs assigned custom tool source and import restores it", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Tool Bot",
+    });
+    const toolsDir = getCustomToolsDir();
+    const modulePath = "portable-echo.js";
+    const source = "export async function run(input) { return input; }\n";
+    await mkdir(toolsDir, { recursive: true });
+    await writeFile(path.join(toolsDir, modulePath), source, "utf8");
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Echo input",
+      handlerConfig: { modulePath },
+      handlerType: "javascript",
+      id: "tool_portable",
+      name: "portable_echo",
+      updatedAt: now(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_portable");
+
+    const exported = await createProfilePackExport(db, ORG, profile.id, {
+      includeCustomTools: true,
+    });
+    expect(exported.manifest.meta.customTools).toEqual([
+      expect.objectContaining({
+        handlerType: "javascript",
+        name: "portable_echo",
+      }),
+    ]);
+
+    const { unzipSync } = await import("fflate");
+    expect(Object.keys(unzipSync(new Uint8Array(exported.data)))).toContain(
+      "custom-tools/portable-echo.js"
+    );
+
+    await rm(path.join(toolsDir, modulePath));
+    const unprivilegedDb = createInMemoryDatabaseAdapter();
+    const unprivilegedPreview = await previewProfilePackImport(
+      unprivilegedDb,
+      DEST,
+      exported.data
+    );
+    expect(
+      unprivilegedPreview.skippedAssignments.some((item) =>
+        item.reason.includes("platform admin")
+      )
+    ).toBe(true);
+    const unprivilegedImport = await importProfilePack(
+      unprivilegedDb,
+      DEST,
+      exported.data,
+      { confirm: true }
+    );
+    expect(await unprivilegedDb.getToolByName("portable_echo")).toBeNull();
+    expect(
+      await unprivilegedDb.listToolsForProfile(unprivilegedImport.profileId)
+    ).toEqual([]);
+
+    const conflictingDb = createInMemoryDatabaseAdapter();
+    await conflictingDb.upsertTool({
+      createdAt: now(),
+      description: "Built-in collision",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_conflict",
+      name: "portable_echo",
+      updatedAt: now(),
+    });
+    const conflictingPreview = await previewProfilePackImport(
+      conflictingDb,
+      DEST,
+      exported.data,
+      { restoreCustomTools: true }
+    );
+    expect(
+      conflictingPreview.skippedAssignments.some((item) =>
+        item.reason.includes("conflicts")
+      )
+    ).toBe(true);
+
+    const destinationDb = createInMemoryDatabaseAdapter();
+    const preview = await previewProfilePackImport(
+      destinationDb,
+      DEST,
+      exported.data,
+      { restoreCustomTools: true }
+    );
+    expect(
+      preview.skippedAssignments.some((item) =>
+        item.path.includes("portable_echo")
+      )
+    ).toBe(false);
+
+    const imported = await importProfilePack(
+      destinationDb,
+      DEST,
+      exported.data,
+      { confirm: true, restoreCustomTools: true }
+    );
+    const restored = await destinationDb.getToolByName("portable_echo");
+    if (!restored) {
+      throw new Error("Expected imported custom tool");
+    }
+    expect(restored).toMatchObject({
+      description: "Echo input",
+      handlerConfig: { modulePath },
+      handlerType: "javascript",
+    });
+    expect(
+      (await destinationDb.listToolsForProfile(imported.profileId)).map(
+        (tool) => tool.id
+      )
+    ).toContain(restored.id);
+    await expect(
+      readFile(path.join(toolsDir, modulePath), "utf8")
+    ).resolves.toBe(source);
+
+    const reused = await importProfilePack(destinationDb, DEST, exported.data, {
+      confirm: true,
+      restoreCustomTools: true,
+    });
+    expect(
+      (await destinationDb.listToolsForProfile(reused.profileId)).map(
+        (tool) => tool.id
+      )
+    ).toContain(restored.id);
+
+    await writeFile(
+      path.join(toolsDir, modulePath),
+      "export async function run() { return 'changed'; }\n",
+      "utf8"
+    );
+    const changedPreview = await previewProfilePackImport(
+      destinationDb,
+      DEST,
+      exported.data,
+      { restoreCustomTools: true }
+    );
+    expect(
+      changedPreview.skippedAssignments.some((item) =>
+        item.reason.includes("conflicts")
+      )
+    ).toBe(true);
+  });
+
+  test("custom tool source is omitted when export is not privileged", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Restricted Tool Bot",
+    });
+    const toolsDir = getCustomToolsDir();
+    await mkdir(toolsDir, { recursive: true });
+    await writeFile(
+      path.join(toolsDir, "restricted.js"),
+      "export async function run() {}\n",
+      "utf8"
+    );
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Restricted",
+      handlerConfig: { modulePath: "restricted.js" },
+      handlerType: "javascript",
+      id: "tool_restricted",
+      name: "restricted_tool",
+      updatedAt: now(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_restricted");
+
+    const exported = await createProfilePackExport(db, ORG, profile.id, {
+      includeCustomTools: false,
+    });
+    expect(exported.manifest.meta.customTools).toBeUndefined();
+    const { unzipSync } = await import("fflate");
+    expect(
+      Object.keys(unzipSync(new Uint8Array(exported.data))).some((name) =>
+        name.startsWith("custom-tools/")
+      )
+    ).toBe(false);
   });
 
   test("missing destination MCP is skipped; packed skills assign or collide", async () => {

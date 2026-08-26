@@ -1,7 +1,17 @@
 import { readdir, readFile, rm } from "node:fs/promises";
-import { basename, isAbsolute, join, normalize, sep } from "node:path";
 import {
+  basename,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  sep,
+} from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import {
+  createId,
   discoverSkillDirectory,
+  getCustomToolsDir,
   getProfileAvatarPath,
   getProfileSkillsDir,
   getProfileSoulDir,
@@ -10,6 +20,7 @@ import {
   isGlobalSkillSourcePath,
   NAKAMA_API_VERSION,
   NakamaApiError,
+  type ProfilePackCustomTool,
   type ProfilePackManifest,
   type ProfilePackMeta,
   type ProfilePackPreviewResponse,
@@ -27,12 +38,16 @@ import type {
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
   StoredSkillRecord,
+  StoredToolRecord,
 } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
+import { readHandlerModulePath } from "./custom-tool-shared";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
 const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
 const PROFILE_PACK_FORMAT_VERSION = 1;
+const CUSTOM_TOOLS_ARCHIVE_DIR = "custom-tools";
 
 /** Only these workspace paths ever leave (export) or enter (import) a pack. */
 const ROOT_ALLOWED_FILES = new Set([
@@ -64,8 +79,29 @@ interface ProfilePackZipEntry {
   name: string;
 }
 
+interface CreatedCustomTool {
+  absolutePath: string;
+  id: string;
+}
+
+interface ValidPackedCustomTool {
+  absolutePath: string;
+  definition: ProfilePackCustomTool;
+  handlerConfig: Record<string, unknown>;
+  sourcePath: string;
+}
+
+type ToolAssignmentResolution =
+  | { kind: "create"; packed: ValidPackedCustomTool; source: Buffer }
+  | { kind: "existing"; tool: StoredToolRecord };
+
 export interface CreateProfilePackOptions {
+  includeCustomTools?: boolean;
   now?: Date;
+}
+
+export interface PreviewProfilePackImportOptions {
+  restoreCustomTools?: boolean;
 }
 
 export interface CreateProfilePackResult {
@@ -78,6 +114,7 @@ export interface ImportProfilePackOptions {
   confirm: boolean;
   name?: string;
   now?: Date;
+  restoreCustomTools?: boolean;
 }
 
 export interface ImportProfilePackResult {
@@ -111,6 +148,13 @@ export async function createProfilePackExport(
 
   for (const file of files) {
     entries[file.relativePath] = await readFile(file.absolutePath);
+  }
+
+  if (options.includeCustomTools ?? true) {
+    const packedTools = await collectPackedCustomTools(db, profileId);
+    meta.customTools = packedTools.tools;
+    skipped.push(...packedTools.skipped);
+    Object.assign(entries, packedTools.entries);
   }
 
   if (await hasProfileAvatar(orgId, profileId)) {
@@ -156,20 +200,19 @@ export async function createProfilePackExport(
 export async function previewProfilePackImport(
   db: DatabaseAdapter,
   orgId: string,
-  archive: Buffer | Uint8Array | ArrayBuffer
+  archive: Buffer | Uint8Array | ArrayBuffer,
+  options: PreviewProfilePackImportOptions = {}
 ): Promise<ProfilePackPreviewResponse> {
   const entries = readProfilePackZip(archive);
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
-  await eachNamedOrSkip(
-    manifest.meta.toolNames,
-    (name) => db.getToolByName(name),
-    skippedAssignments,
-    (name) => ({
-      path: `tool:${name}`,
-      reason: `Tool "${name}" was not found in the destination and will be skipped.`,
-    })
+  await previewToolAssignments(
+    db,
+    manifest,
+    entries,
+    options.restoreCustomTools === true,
+    skippedAssignments
   );
   await eachNamedOrSkip(
     manifest.meta.mcpServerNames,
@@ -262,6 +305,7 @@ export async function importProfilePack(
   await db.upsertProfile(profile);
 
   let createdSkillIds: string[] = [];
+  const createdCustomTools: CreatedCustomTool[] = [];
 
   try {
     const skippedAssignments: ProfilePackSkippedItem[] = [];
@@ -279,17 +323,14 @@ export async function importProfilePack(
       profileId,
       skippedAssignments
     );
-    await eachNamedOrSkip(
-      manifest.meta.toolNames,
-      (toolName) => db.getToolByName(toolName),
+    await restoreToolAssignments(
+      db,
+      profileId,
+      manifest,
+      entries,
+      options.restoreCustomTools === true,
       skippedAssignments,
-      (name) => ({
-        path: `tool:${name}`,
-        reason: `Tool "${name}" was not found in the destination and was skipped.`,
-      }),
-      async (tool) => {
-        await db.assignToolToProfile(profileId, tool.id);
-      }
+      createdCustomTools
     );
     await eachNamedOrSkip(
       manifest.meta.mcpServerNames,
@@ -325,7 +366,13 @@ export async function importProfilePack(
 
     return { manifest, profileId, skippedAssignments };
   } catch (error) {
-    await rollbackFailedImport(db, orgId, profileId, createdSkillIds);
+    await rollbackFailedImport(
+      db,
+      orgId,
+      profileId,
+      createdSkillIds,
+      createdCustomTools
+    );
     throw error;
   }
 }
@@ -483,6 +530,393 @@ async function buildProfilePackMeta(
   };
 }
 
+async function collectPackedCustomTools(
+  db: DatabaseAdapter,
+  profileId: string
+): Promise<{
+  entries: Record<string, Uint8Array>;
+  skipped: ProfilePackSkippedItem[];
+  tools: ProfilePackCustomTool[];
+}> {
+  const entries: Record<string, Uint8Array> = {};
+  const skipped: ProfilePackSkippedItem[] = [];
+  const packedTools: ProfilePackCustomTool[] = [];
+  const tools = await db.listToolsForProfile(profileId);
+
+  for (const tool of tools) {
+    const handler = getCustomToolHandler(tool.handlerType);
+
+    if (!handler) {
+      continue;
+    }
+
+    const storedModulePath = readHandlerModulePath(tool.handlerConfig);
+
+    if (!storedModulePath) {
+      skipped.push(customToolSkip(tool.name, "has no module path"));
+      continue;
+    }
+
+    let absolutePath: string;
+
+    try {
+      absolutePath = handler.resolveModulePath(storedModulePath);
+    } catch {
+      skipped.push(customToolSkip(tool.name, "has an invalid module path"));
+      continue;
+    }
+
+    const modulePath = portableCustomToolModulePath(absolutePath);
+
+    if (!(modulePath && modulePath.endsWith(handler.extension))) {
+      skipped.push(customToolSkip(tool.name, "has an invalid module path"));
+      continue;
+    }
+
+    const sourcePath = `${CUSTOM_TOOLS_ARCHIVE_DIR}/${modulePath}`;
+
+    if (entries[sourcePath]) {
+      skipped.push(
+        customToolSkip(tool.name, `shares the module path "${modulePath}"`)
+      );
+      continue;
+    }
+
+    let source: Buffer;
+
+    try {
+      source = await readFile(absolutePath);
+    } catch {
+      skipped.push(customToolSkip(tool.name, "has no readable source file"));
+      continue;
+    }
+
+    const handlerConfig = isPlainRecord(tool.handlerConfig)
+      ? { ...tool.handlerConfig, modulePath }
+      : { modulePath };
+
+    entries[sourcePath] = source;
+    packedTools.push({
+      description: tool.description,
+      handlerConfig,
+      handlerType: tool.handlerType as ProfilePackCustomTool["handlerType"],
+      name: tool.name,
+    });
+  }
+
+  return {
+    entries,
+    skipped,
+    tools: packedTools.sort((left, right) =>
+      left.name.localeCompare(right.name)
+    ),
+  };
+}
+
+async function previewToolAssignments(
+  db: DatabaseAdapter,
+  manifest: ProfilePackManifest,
+  entries: ProfilePackZipEntry[],
+  restoreCustomTools: boolean,
+  skipped: ProfilePackSkippedItem[]
+): Promise<void> {
+  for (const name of manifest.meta.toolNames) {
+    await resolveToolAssignment(
+      db,
+      manifest,
+      entries,
+      name,
+      restoreCustomTools,
+      skipped
+    );
+  }
+}
+
+async function restoreToolAssignments(
+  db: DatabaseAdapter,
+  profileId: string,
+  manifest: ProfilePackManifest,
+  entries: ProfilePackZipEntry[],
+  restoreCustomTools: boolean,
+  skipped: ProfilePackSkippedItem[],
+  createdTools: CreatedCustomTool[]
+): Promise<void> {
+  for (const name of manifest.meta.toolNames) {
+    const resolution = await resolveToolAssignment(
+      db,
+      manifest,
+      entries,
+      name,
+      restoreCustomTools,
+      skipped
+    );
+
+    if (!resolution) {
+      continue;
+    }
+
+    if (resolution.kind === "existing") {
+      await db.assignToolToProfile(profileId, resolution.tool.id);
+      continue;
+    }
+
+    const { packed, source } = resolution;
+    const now = new Date().toISOString();
+    const record: StoredToolRecord = {
+      createdAt: now,
+      description: packed.definition.description,
+      handlerConfig: packed.handlerConfig,
+      handlerType: packed.definition.handlerType,
+      id: createId("tool"),
+      name,
+      updatedAt: now,
+    };
+
+    await writePrivateBytesFile(packed.absolutePath, source);
+
+    const handler = getCustomToolHandler(packed.definition.handlerType);
+    const modulePath = readHandlerModulePath(packed.handlerConfig);
+
+    if (!(handler && modulePath)) {
+      await rm(packed.absolutePath, { force: true });
+      skipped.push(customToolSkip(name, "has invalid handler metadata"));
+      continue;
+    }
+
+    try {
+      await handler.validateModule(modulePath);
+    } catch (error) {
+      await rm(packed.absolutePath, { force: true });
+      skipped.push(
+        customToolSkip(
+          name,
+          `failed validation: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      );
+      continue;
+    }
+
+    try {
+      await db.upsertTool(record);
+      await db.assignToolToProfile(profileId, record.id);
+      createdTools.push({ absolutePath: packed.absolutePath, id: record.id });
+    } catch (error) {
+      await db.deleteTool(record.id);
+      await rm(packed.absolutePath, { force: true });
+      throw error;
+    }
+  }
+}
+
+async function resolveToolAssignment(
+  db: DatabaseAdapter,
+  manifest: ProfilePackManifest,
+  entries: ProfilePackZipEntry[],
+  name: string,
+  restoreCustomTools: boolean,
+  skipped: ProfilePackSkippedItem[]
+): Promise<ToolAssignmentResolution | null> {
+  const existing = await db.getToolByName(name);
+  const packed = findPackedCustomTool(manifest, name);
+
+  if (!packed) {
+    if (hasPackedCustomToolNamed(manifest, name)) {
+      skipped.push(customToolSkip(name, "has invalid metadata"));
+      return null;
+    }
+
+    if (existing) {
+      return { kind: "existing", tool: existing };
+    }
+
+    skipped.push(missingToolSkip(name));
+    return null;
+  }
+
+  const sourceEntry = entries.find((entry) => entry.name === packed.sourcePath);
+
+  if (!sourceEntry) {
+    skipped.push(customToolSkip(name, "is missing its packed source file"));
+    return null;
+  }
+
+  if (existing) {
+    if (await existingToolMatchesPack(existing, packed, sourceEntry.data)) {
+      return { kind: "existing", tool: existing };
+    }
+
+    skipped.push(
+      customToolSkip(name, "conflicts with an existing tool or module")
+    );
+    return null;
+  }
+
+  if (!restoreCustomTools) {
+    skipped.push(
+      customToolSkip(name, "requires a platform admin to restore its source")
+    );
+    return null;
+  }
+
+  if (await pathExists(packed.absolutePath)) {
+    skipped.push(customToolSkip(name, "cannot replace an existing module"));
+    return null;
+  }
+
+  return { kind: "create", packed, source: sourceEntry.data };
+}
+
+async function existingToolMatchesPack(
+  existing: StoredToolRecord,
+  packed: ValidPackedCustomTool,
+  packedSource: Buffer
+): Promise<boolean> {
+  if (
+    existing.handlerType !== packed.definition.handlerType ||
+    !isPlainRecord(existing.handlerConfig)
+  ) {
+    return false;
+  }
+
+  const handler = getCustomToolHandler(existing.handlerType);
+  const modulePath = readHandlerModulePath(existing.handlerConfig);
+
+  if (!(handler && modulePath)) {
+    return false;
+  }
+
+  let absolutePath: string;
+
+  try {
+    absolutePath = handler.resolveModulePath(modulePath);
+  } catch {
+    return false;
+  }
+
+  const normalizedConfig = {
+    ...existing.handlerConfig,
+    modulePath: portableCustomToolModulePath(absolutePath),
+  };
+
+  if (
+    absolutePath !== packed.absolutePath ||
+    !isDeepStrictEqual(normalizedConfig, packed.handlerConfig)
+  ) {
+    return false;
+  }
+
+  try {
+    return (await readFile(absolutePath)).equals(packedSource);
+  } catch {
+    return false;
+  }
+}
+
+function hasPackedCustomToolNamed(
+  manifest: ProfilePackManifest,
+  name: string
+): boolean {
+  const definitions: unknown = manifest.meta.customTools;
+  return (
+    Array.isArray(definitions) &&
+    definitions.some((entry) => isPlainRecord(entry) && entry.name === name)
+  );
+}
+
+function findPackedCustomTool(
+  manifest: ProfilePackManifest,
+  name: string
+): ValidPackedCustomTool | null {
+  const definitions: unknown = manifest.meta.customTools;
+
+  if (!Array.isArray(definitions)) {
+    return null;
+  }
+
+  const value = definitions.find(
+    (entry) => isPlainRecord(entry) && entry.name === name
+  );
+
+  if (
+    !isPlainRecord(value) ||
+    typeof value.description !== "string" ||
+    typeof value.handlerType !== "string" ||
+    !isCustomToolType(value.handlerType) ||
+    !isPlainRecord(value.handlerConfig)
+  ) {
+    return null;
+  }
+
+  const modulePath = readHandlerModulePath(value.handlerConfig);
+  const handler = getCustomToolHandler(value.handlerType);
+
+  if (!(modulePath && handler && modulePath.endsWith(handler.extension))) {
+    return null;
+  }
+
+  let absolutePath: string;
+
+  try {
+    absolutePath = handler.resolveModulePath(modulePath);
+  } catch {
+    return null;
+  }
+
+  const portableModulePath = portableCustomToolModulePath(absolutePath);
+  const sourcePath = `${CUSTOM_TOOLS_ARCHIVE_DIR}/${portableModulePath}`;
+
+  if (!portableModulePath) {
+    return null;
+  }
+
+  return {
+    absolutePath,
+    definition: {
+      description: value.description,
+      handlerConfig: value.handlerConfig,
+      handlerType: value.handlerType,
+      name,
+    },
+    handlerConfig: { ...value.handlerConfig, modulePath: portableModulePath },
+    sourcePath,
+  };
+}
+
+function portableCustomToolModulePath(absolutePath: string): string | null {
+  const modulePath = toZipPath(relative(getCustomToolsDir(), absolutePath));
+
+  if (
+    !modulePath ||
+    modulePath === ".." ||
+    modulePath.startsWith("../") ||
+    isAbsolute(modulePath)
+  ) {
+    return null;
+  }
+
+  return modulePath;
+}
+
+function customToolSkip(name: string, detail: string): ProfilePackSkippedItem {
+  return {
+    path: `custom tool:${name}`,
+    reason: `Custom tool "${name}" ${detail}.`,
+  };
+}
+
+function missingToolSkip(name: string): ProfilePackSkippedItem {
+  return {
+    path: `tool:${name}`,
+    reason: `Tool "${name}" was not found in the destination and will be skipped.`,
+  };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function writePackedWorkspaceFiles(
   orgId: string,
   profileId: string,
@@ -493,6 +927,10 @@ async function writePackedWorkspaceFiles(
 
   for (const entry of entries) {
     if (entry.name === PROFILE_PACK_MANIFEST_FILENAME) {
+      continue;
+    }
+
+    if (entry.name.startsWith(`${CUSTOM_TOOLS_ARCHIVE_DIR}/`)) {
       continue;
     }
 
@@ -684,8 +1122,18 @@ async function rollbackFailedImport(
   db: DatabaseAdapter,
   orgId: string,
   profileId: string,
-  createdSkillIds: string[]
+  createdSkillIds: string[],
+  createdCustomTools: CreatedCustomTool[]
 ): Promise<void> {
+  for (const tool of createdCustomTools) {
+    try {
+      await db.deleteTool(tool.id);
+      await rm(tool.absolutePath, { force: true });
+    } catch {
+      // Best-effort cleanup only; the original error is what matters.
+    }
+  }
+
   for (const skillId of createdSkillIds) {
     try {
       await db.deleteSkill(skillId);

@@ -222,6 +222,9 @@ Import always creates a **new** profile in the active org. It never overwrites a
 | Soul files (including `MEMORY.md`), knowledge base, avatar | API keys, auth tokens, provider config |
 | Profile skills on that profile | Saved artifacts, chat history, attachments |
 | Tool / MCP / Composio toolkit **names** (matched on the destination) | Other profiles, org-wide config, Super Bot |
+| Assigned custom JavaScript and Python tool source for platform-admin exports | Custom tool source in org-admin exports |
+
+Platform admins can move an assigned custom tool with the profile. Import creates the tool only when its name and module path are free; existing tools are reused and existing module files are never overwritten. Org-admin packs keep name-only assignment references.
 
 Missing tool or MCP names on the destination are listed in the preview and skipped — reconnect or assign them after import. Destination providers and keys stay local.
 

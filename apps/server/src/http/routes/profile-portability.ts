@@ -158,13 +158,15 @@ export function registerProfilePortabilityRoutes(
   );
 
   app.get("/v1/profiles/:profileId/pack/export", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const db = requireDatabase(options);
 
     try {
-      const result = await createProfilePackExport(db, orgId, profileId);
+      const result = await createProfilePackExport(db, orgId, profileId, {
+        includeCustomTools: auth.isPlatformAdmin,
+      });
       return new Response(result.data, {
         headers: {
           "Content-Disposition": `attachment; filename="${result.filename}"`,
@@ -177,7 +179,7 @@ export function registerProfilePortabilityRoutes(
   });
 
   app.post("/v1/profiles/pack/import/preview", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
     const body = await readJson<{ data: string; name?: string }>(c.req.raw);
@@ -186,7 +188,8 @@ export function registerProfilePortabilityRoutes(
       const preview = await previewProfilePackImport(
         db,
         orgId,
-        decodeArchiveRequestData(body.data)
+        decodeArchiveRequestData(body.data),
+        { restoreCustomTools: auth.isPlatformAdmin }
       );
       return json<ProfilePackPreviewResponse>(
         body.name?.trim()
@@ -199,7 +202,7 @@ export function registerProfilePortabilityRoutes(
   });
 
   app.post("/v1/profiles/pack/import", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
     const body = await readJson<ProfilePackImportRequest>(c.req.raw);
@@ -212,6 +215,7 @@ export function registerProfilePortabilityRoutes(
         {
           confirm: body.confirm,
           name: body.name,
+          restoreCustomTools: auth.isPlatformAdmin,
         }
       );
       return json<ProfilePackImportResponse>(imported);
