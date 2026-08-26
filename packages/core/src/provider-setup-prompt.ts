@@ -2,6 +2,7 @@ import { resolveCloudflareAccountInput } from "./cloudflare-provider-config";
 import {
   isValidBaseUrl,
   normalizeBaseUrl,
+  parseWireApi,
   validateCustomModels,
   validateDisplayName,
 } from "./compatible-provider-config";
@@ -319,6 +320,9 @@ async function promptForCompatibleProviderInstance(
 
     const baseUrl = normalizeBaseUrl(baseUrlInput);
     const apiKey = (await question("API key (optional): ")).trim();
+    const wireApi = parseWireApi(
+      await question("API, chat or responses (default chat): ")
+    );
     const modelIds = (await question("Model IDs (comma-separated): "))
       .split(",")
       .map((value) => value.trim())
@@ -344,6 +348,7 @@ async function promptForCompatibleProviderInstance(
       id: createProviderInstanceId(),
       label: displayName,
       type: "openai_compatible",
+      ...(wireApi ? { wireApi } : {}),
     };
   }
 }

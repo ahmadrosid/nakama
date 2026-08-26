@@ -27,6 +27,26 @@ describe("promptForProviderConfig", () => {
     );
   });
 
+  test("stores wireApi when the custom endpoint answers responses", async () => {
+    const answers = [
+      "openai_compatible",
+      "Responses Only",
+      "https://endpoint.test/v1",
+      "",
+      "responses",
+      "demo-thinker",
+    ];
+    const config = await promptForProviderConfig(scriptedPrompt(answers));
+
+    expect(config.providers[0]?.wireApi).toBe("responses");
+
+    const chat = await promptForProviderConfig(
+      scriptedPrompt(answers.map((a) => (a === "responses" ? "" : a)))
+    );
+
+    expect(chat.providers[0]?.wireApi).toBeUndefined();
+  });
+
   test("accepts a pasted Workers AI URL for Cloudflare", async () => {
     const config = await promptForProviderConfig(
       scriptedPrompt([
