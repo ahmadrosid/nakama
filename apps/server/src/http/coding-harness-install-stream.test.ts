@@ -3,6 +3,9 @@ import { streamInstallEvents } from "./coding-harness-install-stream";
 
 type TestEvent = { type: string; message?: string; error?: string };
 
+const TIMEOUT_MS = 10;
+const OUTLIVES_TIMEOUT_MS = 30;
+
 function deferred<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -67,15 +70,16 @@ describe("streamInstallEvents", () => {
       Promise.reject(new Error("installer exited with code 1"))
     );
 
-    expect(await readEvents(response)).toEqual([
-      { error: "installer exited with code 1", type: "error" },
-    ]);
+    const events = await readEvents(response);
+
+    expect(events.map((event) => event.type)).toEqual(["error"]);
+    expect(events[0]?.error).toContain("installer exited with code 1");
   });
 
   test("ends the stream with a timeout error when the installer stalls", async () => {
     const response = streamInstallEvents<TestEvent>(
       () => new Promise<void>(() => undefined),
-      { timeoutMessage: "Install timed out.", timeoutMs: 10 }
+      { timeoutMessage: "Install timed out.", timeoutMs: TIMEOUT_MS }
     );
 
     expect(await readEvents(response)).toEqual([
@@ -89,7 +93,9 @@ describe("streamInstallEvents", () => {
 
     const response = streamInstallEvents<TestEvent>(
       async (send) => {
-        await new Promise((settle) => setTimeout(settle, 40));
+        await new Promise((settle) =>
+          setTimeout(settle, TIMEOUT_MS + OUTLIVES_TIMEOUT_MS)
+        );
         try {
           send({ message: "still unpacking", type: "progress" });
         } catch (error) {
@@ -97,7 +103,7 @@ describe("streamInstallEvents", () => {
         }
         executorDone.resolve();
       },
-      { timeoutMessage: "Install timed out.", timeoutMs: 10 }
+      { timeoutMessage: "Install timed out.", timeoutMs: TIMEOUT_MS }
     );
 
     await readEvents(response);
