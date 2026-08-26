@@ -14,6 +14,9 @@ import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
 const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS);
+const SUPER_BOT_BUILTIN_TOOL_IDS = DEFAULT_BUILTIN_TOOL_IDS.filter(
+  (toolId) => toolId !== BUILTIN_TOOL_IDS.delete_file
+);
 
 export async function ensureProfileDefaultBuiltinTools(
   db: DatabaseAdapter,
@@ -22,6 +25,17 @@ export async function ensureProfileDefaultBuiltinTools(
   for (const toolId of DEFAULT_BUILTIN_TOOL_IDS) {
     await db.assignToolToProfile(profileId, toolId);
   }
+}
+
+export async function ensureProfileSuperBotBuiltinTools(
+  db: DatabaseAdapter,
+  profileId: string
+): Promise<void> {
+  for (const toolId of SUPER_BOT_BUILTIN_TOOL_IDS) {
+    await db.assignToolToProfile(profileId, toolId);
+  }
+
+  await db.unassignToolFromProfile(profileId, BUILTIN_TOOL_IDS.delete_file);
 }
 
 export async function ensureProfileDefaultBundledSkills(
@@ -105,7 +119,7 @@ export async function seedOrgSuperBotProfile(
   );
 
   if (existing) {
-    await ensureProfileDefaultBuiltinTools(db, existing.id);
+    await ensureProfileSuperBotBuiltinTools(db, existing.id);
     await ensureProfileDefaultBundledSkills(db, existing.id);
     await ensureProfileSuperBotBundledSkills(db, existing.id);
     await ensureSuperBotBashTool(db, existing.id);
@@ -128,10 +142,7 @@ export async function seedOrgSuperBotProfile(
 
   await db.upsertProfile(profile);
 
-  for (const toolId of DEFAULT_BUILTIN_TOOL_IDS) {
-    await db.assignToolToProfile(profile.id, toolId);
-  }
-
+  await ensureProfileSuperBotBuiltinTools(db, profile.id);
   await ensureSuperBotBashTool(db, profile.id);
   await ensureSuperBotSessionTools(db, profile.id);
   await ensureProfileDefaultBundledSkills(db, profile.id);

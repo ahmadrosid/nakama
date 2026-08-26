@@ -120,11 +120,33 @@ describe("seedOrgSuperBotProfile", () => {
     );
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
+      if (toolId === BUILTIN_TOOL_IDS.delete_file) {
+        continue;
+      }
+
       expect(toolIds).toContain(toolId);
     }
 
     expect(toolIds).toContain(BASH_TOOL_ID);
+    expect(toolIds).not.toContain(BUILTIN_TOOL_IDS.delete_file);
     expect(toolIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
+  });
+
+  test("unassigns delete_file from an existing super bot", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const profile = await seedOrgSuperBotProfile(db, "org_a");
+
+    await db.assignToolToProfile(profile.id, BUILTIN_TOOL_IDS.delete_file);
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).toContain(BUILTIN_TOOL_IDS.delete_file);
+
+    await seedOrgSuperBotProfile(db, "org_a");
+
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).not.toContain(BUILTIN_TOOL_IDS.delete_file);
   });
 
   test("assigns super bot bundled skills", async () => {
