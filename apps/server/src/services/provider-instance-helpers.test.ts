@@ -208,6 +208,33 @@ describe("resolveProfileProviderSelection", () => {
 });
 
 describe("applyProviderInstanceUpdate", () => {
+  test("stores wireApi only for a recognised value on a compatible instance", () => {
+    const instance = createProviderInstance({
+      baseUrl: "https://endpoint.test/v1",
+      id: "compat-1",
+      label: "Endpoint",
+      type: "openai_compatible",
+      wireApi: "responses",
+    });
+
+    // The request body is passthrough JSON, so anything can arrive here. An
+    // unrecognised value falls back to chat rather than being persisted.
+    expect(
+      applyProviderInstanceUpdate(instance, {
+        wireApi: "nonsense" as never,
+      }).wireApi
+    ).toBeUndefined();
+    expect(
+      applyProviderInstanceUpdate(instance, { wireApi: "responses" }).wireApi
+    ).toBe("responses");
+    expect(
+      applyProviderInstanceUpdate(
+        createProviderInstance({ id: "o-1", label: "OpenAI", type: "openai" }),
+        { wireApi: "responses" }
+      ).wireApi
+    ).toBeUndefined();
+  });
+
   test("preserves supportsThinking on compatible custom models", () => {
     const instance = createProviderInstance({
       apiKey: "",

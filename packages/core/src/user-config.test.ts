@@ -105,6 +105,7 @@ describe("user config multi-provider", () => {
           id: compatibleId,
           label: "Ollama",
           type: "openai_compatible",
+          wireApi: "responses",
         },
       ],
       thinkingEffort: "medium",
@@ -125,6 +126,7 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers[1]?.customModels?.[0]?.supportsThinking).toBe(
       true
     );
+    expect(loaded?.providers[1]?.wireApi).toBe("responses");
   });
 
   test("round-trips cerebras models_json with capability flags", async () => {

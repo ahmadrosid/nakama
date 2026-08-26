@@ -12,6 +12,7 @@ import {
   type OllamaHostMode,
   ollamaRequiresApiKey,
   type ProviderInstance,
+  parseWireApi,
   resolveOllamaHostMode,
   type UserConfig,
   validateCustomModels,
@@ -54,6 +55,10 @@ export function toProviderInstanceSummary(
     id: instance.id,
     label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
     type: instance.type,
+    wireApi:
+      instance.type === "openai_compatible"
+        ? (instance.wireApi ?? "chat")
+        : null,
     ...(instance.customModels?.length
       ? { customModels: instance.customModels }
       : {}),
@@ -234,6 +239,10 @@ export function applyProviderInstanceUpdate(
     next.hostMode = request.hostMode;
   }
 
+  if (request.wireApi !== undefined && instance.type === "openai_compatible") {
+    next.wireApi = parseWireApi(request.wireApi);
+  }
+
   if (request.customModels !== undefined) {
     if (instance.type === "openai_compatible") {
       next.customModels = validateCustomModels(request.customModels);
@@ -275,7 +284,10 @@ export function applyProviderInstanceUpdate(
 
 function buildProviderFieldsFromRequest(
   request: CreateProviderRequest
-): Pick<ProviderInstance, "baseUrl" | "customModels" | "label" | "hostMode"> {
+): Pick<
+  ProviderInstance,
+  "baseUrl" | "customModels" | "label" | "hostMode" | "wireApi"
+> {
   const type = request.type;
 
   if (type === "ollama") {
@@ -345,7 +357,14 @@ function buildProviderFieldsFromRequest(
       throw new Error("At least one model is required.");
     }
 
-    return { baseUrl, customModels, label };
+    return {
+      baseUrl,
+      customModels,
+      label,
+      ...(parseWireApi(request.wireApi)
+        ? { wireApi: "responses" as const }
+        : {}),
+    };
   }
 
   if (type === "openrouter") {

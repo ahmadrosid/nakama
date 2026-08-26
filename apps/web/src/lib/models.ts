@@ -3,6 +3,7 @@ import type {
   CreateProviderRequest,
   OllamaHostMode,
   ProviderModelOption,
+  WireApi,
 } from "@nakama/core/contract";
 import {
   OLLAMA_CLOUD_DEFAULT_BASE_URL,
@@ -576,6 +577,7 @@ export function buildCreateProviderRequest(options: {
   baseUrl?: string;
   hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
+  wireApi?: WireApi;
 }): CreateProviderRequest {
   const request = buildConfigureProviderRequest(options);
 
@@ -589,6 +591,7 @@ export function buildCreateProviderRequest(options: {
     ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
     ...(options.hostMode ? { hostMode: options.hostMode } : {}),
     ...(request.customModels ? { customModels: request.customModels } : {}),
+    ...(options.wireApi === "responses" ? { wireApi: options.wireApi } : {}),
   };
 }
 

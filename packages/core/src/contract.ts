@@ -1513,6 +1513,7 @@ export interface ProviderInstanceSummary {
   label: string;
   modelCount: number;
   type: ProviderName;
+  wireApi?: WireApi | null;
 }
 
 export interface ListProvidersResponse {
@@ -1528,6 +1529,7 @@ export interface CreateProviderRequest {
   label?: string;
   model?: string;
   type: ProviderName;
+  wireApi?: WireApi;
 }
 
 export interface CreateProviderResponse {
@@ -1542,6 +1544,7 @@ export interface UpdateProviderRequest {
   customModels?: CustomModelEntry[];
   hostMode?: OllamaHostMode;
   label?: string;
+  wireApi?: WireApi;
 }
 
 export interface UpdateProviderResponse {
@@ -2039,6 +2042,12 @@ export type ProviderName =
   | "xai";
 
 export type OllamaHostMode = "local" | "cloud";
+
+/**
+ * Which OpenAI API an endpoint speaks. Some hosts serve `/responses` only, so
+ * this is a property of the endpoint and cannot be inferred from the model id.
+ */
+export type WireApi = "chat" | "responses";
 
 export type GenerateTextFormat = "json" | "text";
 

@@ -6,6 +6,7 @@ import {
   isValidBaseUrl,
   normalizeBaseUrl,
   parseCustomModelsJson,
+  parseWireApi,
   serializeCustomModels,
   validateDisplayName,
 } from "./compatible-provider-config";
@@ -48,6 +49,7 @@ export interface ProviderInstance {
   id: string;
   label: string;
   type: UserProviderName;
+  wireApi?: import("./contract").WireApi;
 }
 
 export interface UserConfig {
@@ -632,6 +634,8 @@ function loadProvidersFromSections(
       type === "ollama"
         ? (parseOllamaHostMode(values.host_mode) ?? undefined)
         : undefined;
+    const wireApi =
+      type === "openai_compatible" ? parseWireApi(values.wire_api) : undefined;
     const createdAt = values.created_at?.trim() || new Date(0).toISOString();
 
     providers.push({
@@ -641,6 +645,7 @@ function loadProvidersFromSections(
       type,
       ...(baseUrl ? { baseUrl } : {}),
       ...(hostMode ? { hostMode } : {}),
+      ...(wireApi ? { wireApi } : {}),
       ...(customModels ? { customModels } : {}),
       createdAt,
     });
@@ -667,6 +672,10 @@ function buildProviderSectionValues(
 
   if (provider.type === "ollama" && provider.hostMode) {
     values.host_mode = provider.hostMode;
+  }
+
+  if (provider.type === "openai_compatible" && provider.wireApi) {
+    values.wire_api = provider.wireApi;
   }
 
   if (provider.customModels?.length) {

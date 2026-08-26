@@ -142,6 +142,9 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
           model,
           options.instance?.customModels
         ),
+        ...(options.instance?.wireApi
+          ? { wireApi: options.instance.wireApi }
+          : {}),
       });
     }
   }

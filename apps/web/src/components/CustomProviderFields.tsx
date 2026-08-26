@@ -1,9 +1,17 @@
+import type { WireApi } from "@nakama/core/contract";
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { FormField } from "@/components/ui/form-field";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CustomProviderFieldsProps {
   apiKey: string;
@@ -26,9 +34,12 @@ interface CustomProviderFieldsProps {
   onBaseUrlChange: (value: string) => void;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   onDisplayNameChange: (value: string) => void;
+  /** Omitted for endpoints that are known to speak chat/completions, like Ollama. */
+  onWireApiChange?: (value: WireApi) => void;
   providerInstanceId?: string;
   remoteProvider?: "ollama" | "openai_compatible";
   showModelsEditor?: boolean;
+  wireApi?: WireApi;
 }
 
 export function CustomProviderFields({
@@ -48,9 +59,11 @@ export function CustomProviderFields({
   providerInstanceId,
   hostMode,
   browseLabel,
+  wireApi = "chat",
   onDisplayNameChange,
   onBaseUrlChange,
   onCustomModelsChange,
+  onWireApiChange,
 }: CustomProviderFieldsProps) {
   const identityDisabled = disabled || identityReadOnly;
   const resolvedBrowseLabel =
@@ -107,6 +120,38 @@ export function CustomProviderFields({
           />
         </InputGroup>
       </FormField>
+
+      {onWireApiChange ? (
+        <FormField
+          density={density}
+          footer={
+            <p className="text-muted-foreground text-xs">
+              Pick Responses only when the endpoint serves{" "}
+              <span className="font-mono">/responses</span>. Reasoning survives
+              alongside tools there, which chat/completions rejects on newer
+              models.
+            </p>
+          }
+          id="provider-wire-api"
+          label="API"
+        >
+          <Select
+            disabled={disabled}
+            onValueChange={(value) =>
+              onWireApiChange(value === "responses" ? "responses" : "chat")
+            }
+            value={wireApi}
+          >
+            <SelectTrigger className="w-full" id="provider-wire-api">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="chat">Chat completions</SelectItem>
+              <SelectItem value="responses">Responses</SelectItem>
+            </SelectContent>
+          </Select>
+        </FormField>
+      ) : null}
 
       {showModelsEditor ? (
         <BrowsableModelFields

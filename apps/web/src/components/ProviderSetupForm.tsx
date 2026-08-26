@@ -205,7 +205,9 @@ export function ProviderSetupForm({
               onBaseUrlChange={form.setBaseUrl}
               onCustomModelsChange={form.setCustomModels}
               onDisplayNameChange={form.setDisplayName}
+              onWireApiChange={form.setWireApi}
               showModelsEditor={canPickModels}
+              wireApi={form.wireApi}
             />
           ) : null}
 

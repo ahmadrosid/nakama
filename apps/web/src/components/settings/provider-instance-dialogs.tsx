@@ -1,4 +1,4 @@
-import type { ProviderInstanceSummary } from "@nakama/core/contract";
+import type { ProviderInstanceSummary, WireApi } from "@nakama/core/contract";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
@@ -171,7 +171,9 @@ export function ProviderCompatibleEditDialog({
   onDisplayNameChange,
   onBaseUrlChange,
   onCustomModelsChange,
+  onWireApiChange,
   onSave,
+  wireApi,
 }: {
   open: boolean;
   busy: boolean;
@@ -189,7 +191,9 @@ export function ProviderCompatibleEditDialog({
   onDisplayNameChange: (value: string) => void;
   onBaseUrlChange: (value: string) => void;
   onCustomModelsChange: (rows: ModelListRow[]) => void;
+  onWireApiChange?: (value: WireApi) => void;
   onSave: () => void;
+  wireApi?: WireApi;
 }) {
   return (
     <ProviderModelsDialogShell
@@ -215,8 +219,10 @@ export function ProviderCompatibleEditDialog({
         onBaseUrlChange={onBaseUrlChange}
         onCustomModelsChange={onCustomModelsChange}
         onDisplayNameChange={onDisplayNameChange}
+        onWireApiChange={onWireApiChange}
         providerInstanceId={providerInstanceId}
         remoteProvider={remoteProvider}
+        wireApi={wireApi}
       />
     </ProviderModelsDialogShell>
   );

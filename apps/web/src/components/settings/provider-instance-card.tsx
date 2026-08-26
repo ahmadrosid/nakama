@@ -186,9 +186,11 @@ export function ProviderInstanceCard({
           onDisplayNameChange={card.setEditLabel}
           onOpenChange={card.setEditOpen}
           onSave={() => void card.saveCompatible()}
+          onWireApiChange={card.isOllama ? undefined : card.setEditWireApi}
           open={card.editOpen}
           providerInstanceId={instance.id}
           remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          wireApi={card.editWireApi}
         />
       ) : null}
 

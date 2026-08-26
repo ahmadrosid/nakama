@@ -2,6 +2,7 @@ import type {
   ProviderInstanceSummary,
   ProviderModelOption,
   UpdateProviderRequest,
+  WireApi,
 } from "@nakama/core/contract";
 import {
   defaultDiscoveryBaseUrl,
@@ -54,6 +55,7 @@ export function useProviderInstanceCard({
   const [showApiKey, setShowApiKey] = useState(false);
   const [editLabel, setEditLabel] = useState("");
   const [editBaseUrl, setEditBaseUrl] = useState("");
+  const [editWireApi, setEditWireApi] = useState<WireApi>("chat");
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
 
   const providerType = instance.type as SelectedProvider;
@@ -115,6 +117,7 @@ export function useProviderInstanceCard({
             ? (defaultDiscoveryBaseUrl(providerType) ?? "")
             : "")
     );
+    setEditWireApi(instance.wireApi ?? "chat");
     setManageModels(seedManageModelRows(instance.customModels, instanceModels));
     setEditOpen(true);
   };
@@ -191,6 +194,7 @@ export function useProviderInstanceCard({
             }
           : {}),
         customModels: normalizeModelListRows(manageModels),
+        ...(isOllama ? {} : { wireApi: editWireApi }),
       },
       () => setEditOpen(false)
     );
@@ -236,6 +240,7 @@ export function useProviderInstanceCard({
     editLabel,
     editManageModels,
     editOpen,
+    editWireApi,
     handleDelete,
     handleManageModelsChange,
     handleReplaceKey,
@@ -256,6 +261,7 @@ export function useProviderInstanceCard({
     setEditBaseUrl,
     setEditLabel,
     setEditOpen,
+    setEditWireApi,
     setManageModels,
     setManageOpen,
     setReplaceKeyOpen,

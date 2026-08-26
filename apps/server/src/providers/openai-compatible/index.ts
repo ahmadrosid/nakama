@@ -9,6 +9,7 @@ import type {
   ProviderClient,
   StreamChatHandlers,
   ToolCall,
+  WireApi,
 } from "@nakama/core";
 import { fetchWithoutIdleTimeout, normalizeBaseUrl } from "@nakama/core";
 import OpenAI from "openai";
@@ -17,6 +18,7 @@ import {
   toOpenAIMessages,
   toOpenAITools,
 } from "../openai";
+import { generateOpenAIResponsesChat } from "../openai/responses";
 import { openAIModelRejectsChatToolsWithReasoning } from "../openai/thinking";
 import {
   buildChatCompletionResult,
@@ -35,6 +37,8 @@ export interface OpenAICompatibleProviderOptions {
   model: string;
   providerName?: ProviderClient["name"];
   supportsThinking: boolean;
+  /** `responses` targets `/responses`; anything else stays on `/chat/completions`. */
+  wireApi?: WireApi;
 }
 
 interface PendingToolCall {
@@ -57,9 +61,22 @@ export function createOpenAICompatibleProvider(
     maxRetries: 0,
     timeout: 600_000,
   });
+  const useResponsesApi = options.wireApi === "responses";
 
   return {
     generateChat(input: GenerateChatInput) {
+      if (useResponsesApi) {
+        return generateOpenAIResponsesChat({
+          apiKey,
+          baseUrl,
+          input,
+          label,
+          model,
+          stream: false,
+          supportsThinking: options.supportsThinking,
+        });
+      }
+
       return requestChatCompletion(client, label, {
         messages: input.messages,
         model,
@@ -77,6 +94,18 @@ export function createOpenAICompatibleProvider(
         ? input.system
         : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
 
+      if (useResponsesApi) {
+        return generateResponsesText({
+          apiKey,
+          baseUrl,
+          json: useJson,
+          label,
+          model,
+          prompt: input.prompt,
+          system,
+        });
+      }
+
       return requestCompletion(client, label, {
         messages: [
           { content: system, role: "system" },
@@ -88,6 +117,19 @@ export function createOpenAICompatibleProvider(
     },
     name: options.providerName ?? "openai_compatible",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
+      if (useResponsesApi) {
+        return generateOpenAIResponsesChat({
+          apiKey,
+          baseUrl,
+          handlers,
+          input,
+          label,
+          model,
+          stream: true,
+          supportsThinking: options.supportsThinking,
+        });
+      }
+
       return streamChatCompletion({
         apiKey,
         baseUrl,
@@ -368,6 +410,39 @@ async function streamChatCompletion(options: {
   }
 
   return buildChatCompletionResult({ content, thinking, toolCalls, usage });
+}
+
+async function generateResponsesText(options: {
+  apiKey: string;
+  baseUrl: string;
+  json: boolean;
+  label: string;
+  model: string;
+  prompt: string;
+  system: string;
+}): Promise<GenerateTextResult> {
+  const result = await generateOpenAIResponsesChat({
+    apiKey: options.apiKey,
+    baseUrl: options.baseUrl,
+    input: {
+      messages: [{ content: options.prompt, role: "user" }],
+      system: options.system,
+    },
+    jsonOutput: options.json,
+    label: options.label,
+    model: options.model,
+    stream: false,
+  });
+  const content = result.content.trim();
+
+  if (!content) {
+    throw new Error(`${options.label} returned an empty response.`);
+  }
+
+  return {
+    content,
+    ...(result.usage ? { usage: result.usage } : {}),
+  };
 }
 
 async function requestCompletion(

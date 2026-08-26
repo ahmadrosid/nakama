@@ -3,6 +3,7 @@ import type {
   CreateProviderResponse,
   OllamaHostMode,
   ProviderModelOption,
+  WireApi,
 } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
@@ -87,6 +88,7 @@ export function useProviderSetupForm(
   const [ollamaHostMode, setOllamaHostMode] = useState<OllamaHostMode>("local");
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [wireApi, setWireApi] = useState<WireApi>("chat");
   const [customModels, setCustomModels] = useState<ModelListRow[]>([]);
   const [extraModels, setExtraModels] = useState<ProviderModelOption[]>([]);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
@@ -488,6 +490,8 @@ export function useProviderSetupForm(
               selectedProvider === "ollama" ? ollamaHostMode : undefined,
             model: modelToSave || undefined,
             provider: selectedProvider,
+            wireApi:
+              selectedProvider === "openai_compatible" ? wireApi : undefined,
           })
         );
         setApiKey("");
@@ -519,6 +523,7 @@ export function useProviderSetupForm(
       createProvider,
       onSuccess,
       filteredModels,
+      wireApi,
     ]
   );
 
@@ -557,8 +562,10 @@ export function useProviderSetupForm(
     setDisplayName,
     setSelectedModel,
     setShowApiKey,
+    setWireApi,
     shortlistModels,
     shortlistModelsError,
     showApiKey,
+    wireApi,
   };
 }

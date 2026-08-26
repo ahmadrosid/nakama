@@ -24,42 +24,56 @@ import { openAIModelSupportsThinking } from "./thinking";
 
 type ResponseItem = Record<string, unknown>;
 
+export const DEFAULT_OPENAI_RESPONSES_BASE_URL = "https://api.openai.com/v1";
+
 export async function generateOpenAIResponsesChat(options: {
   apiKey: string;
+  /** Endpoint root, without `/responses`. Defaults to the OpenAI API. */
+  baseUrl?: string;
   model: string;
   input: GenerateChatInput;
+  /** Prefixes request errors. Defaults to the OpenAI provider label. */
+  label?: string;
   stream: boolean;
   handlers?: StreamChatHandlers;
   customModels?: CustomModelEntry[];
+  /** Asks the model for a JSON object, mirroring chat `response_format`. */
+  jsonOutput?: boolean;
+  /**
+   * Overrides the OpenAI model-id heuristic. Compatible endpoints serve model
+   * ids the heuristic has never seen, and it answers false for those.
+   */
+  supportsThinking?: boolean;
 }): Promise<ChatCompletionResult> {
+  const label = options.label ?? "OpenAI";
+  const baseUrl = options.baseUrl ?? DEFAULT_OPENAI_RESPONSES_BASE_URL;
   const body = await buildResponsesRequestBody(
     options.model,
     options.input,
     options.stream,
-    options.customModels
+    options.customModels,
+    options.supportsThinking,
+    options.jsonOutput
   );
-  const response = await fetchWithoutIdleTimeout(
-    "https://api.openai.com/v1/responses",
-    {
-      body: JSON.stringify(body),
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      signal: options.input.signal,
-    }
-  );
+  const response = await fetchWithoutIdleTimeout(`${baseUrl}/responses`, {
+    body: JSON.stringify(body),
+    headers: {
+      Authorization: `Bearer ${options.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal: options.input.signal,
+  });
 
   if (!response.ok) {
     throw new Error(
-      `OpenAI request failed (${response.status}): ${await response.text()}`
+      `${label} request failed (${response.status}): ${await response.text()}`
     );
   }
 
   if (options.stream) {
     if (!response.body) {
-      throw new Error("OpenAI returned an empty stream.");
+      throw new Error(`${label} returned an empty stream.`);
     }
 
     return readOpenAIResponsesStream(response.body, options.handlers);
@@ -84,7 +98,9 @@ async function buildResponsesRequestBody(
   model: string,
   input: GenerateChatInput,
   stream: boolean,
-  customModels?: CustomModelEntry[]
+  customModels?: CustomModelEntry[],
+  supportsThinking?: boolean,
+  jsonOutput?: boolean
 ) {
   const tools = buildResponsesTools(
     input.tools,
@@ -96,7 +112,13 @@ async function buildResponsesRequestBody(
     instructions: input.system,
     model,
     ...(tools.length > 0 ? { tools } : {}),
-    ...buildOpenAIReasoningRequest(model, input, customModels),
+    ...buildOpenAIReasoningRequest(
+      model,
+      input,
+      customModels,
+      supportsThinking
+    ),
+    ...(jsonOutput ? { text: { format: { type: "json_object" } } } : {}),
     ...(stream ? { stream: true } : {}),
   };
 }
@@ -104,14 +126,13 @@ async function buildResponsesRequestBody(
 function buildOpenAIReasoningRequest(
   model: string,
   input: GenerateChatInput,
-  customModels?: CustomModelEntry[]
+  customModels?: CustomModelEntry[],
+  supportsThinking?: boolean
 ): Record<string, unknown> {
-  if (
-    !(
-      input.providerOptions?.thinking?.enabled &&
-      openAIModelSupportsThinking(model, customModels)
-    )
-  ) {
+  const modelSupportsThinking =
+    supportsThinking ?? openAIModelSupportsThinking(model, customModels);
+
+  if (!(input.providerOptions?.thinking?.enabled && modelSupportsThinking)) {
     return {};
   }
 
