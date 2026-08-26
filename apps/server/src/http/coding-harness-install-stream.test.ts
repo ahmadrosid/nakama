@@ -38,7 +38,11 @@ describe("streamInstallEvents", () => {
       executorDone.resolve();
     });
 
-    await response.body?.getReader().cancel();
+    const body = response.body;
+    if (!body) {
+      throw new Error("the install stream response has no body");
+    }
+    await body.getReader().cancel();
     clientGone.resolve();
     await executorDone.promise;
 

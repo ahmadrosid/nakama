@@ -1,15 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { runTimedInstallCommand } from "./cli-package-install";
 
-const SLOW_PLAN = {
+const STALLING_PLAN = {
   args: ["-c", "printf partial; exec sleep 5"],
   command: "sh",
   displayCommand: "sh -c 'printf partial; exec sleep 5'",
 };
 
+/**
+ * Exits on its own inside the window the late-progress test waits out, so that
+ * test still sees the late flush if SIGTERM is ever lost or slow.
+ */
+const SELF_EXITING_PLAN = {
+  args: ["-c", "printf partial; exec sleep 1"],
+  command: "sh",
+  displayCommand: "sh -c 'printf partial; exec sleep 1'",
+};
+
 describe("runTimedInstallCommand", () => {
   test("gives up on an installer that outlives the timeout", async () => {
-    const result = await runTimedInstallCommand(SLOW_PLAN, undefined, {
+    const result = await runTimedInstallCommand(STALLING_PLAN, undefined, {
       timeoutMs: 50,
     });
 
@@ -21,7 +31,7 @@ describe("runTimedInstallCommand", () => {
     let settled = false;
 
     await runTimedInstallCommand(
-      SLOW_PLAN,
+      SELF_EXITING_PLAN,
       (message) => {
         if (settled) {
           late.push(message);
@@ -31,7 +41,7 @@ describe("runTimedInstallCommand", () => {
     );
     settled = true;
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
     expect(late).toEqual([]);
   });
