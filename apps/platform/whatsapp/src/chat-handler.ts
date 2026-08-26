@@ -37,6 +37,7 @@ import {
   stripWhatsAppBotMention,
 } from "./group-message";
 import type { WhatsAppInboundChat } from "./inbound-message";
+import { maskWhatsAppJid, utf8ByteLength } from "./log-metadata";
 import type { SessionStore } from "./session-store";
 import { WhatsAppTodoStatusMessage } from "./todo-status-message";
 import { createTypingLoop } from "./typing-indicator";
@@ -97,9 +98,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         [
           "Ignored WhatsApp group message",
           `reason=${groupDecision.reason}`,
-          `jid=${jid}`,
-          `sender=${inbound.senderJid || "-"}`,
-          `text=${JSON.stringify(trimmed)}`,
+          `jid=${maskWhatsAppJid(jid)}`,
+          `sender=${maskWhatsAppJid(inbound.senderJid)}`,
+          `textBytes=${utf8ByteLength(trimmed)}`,
         ].join(" ")
       );
       return;

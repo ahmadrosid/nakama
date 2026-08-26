@@ -127,7 +127,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           `reason=${groupDecision.reason}`,
           `bot=@${botInfo?.username ?? "unknown"}`,
           `botId=${botInfo?.id ?? "unknown"}`,
-          `text=${JSON.stringify(text ?? "")}`,
+          `chatId=${chatId}`,
+          `messageId=${ctx.message?.message_id ?? "unknown"}`,
+          `userId=${userId}`,
+          `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
         ].join(" ")
       );
       return;

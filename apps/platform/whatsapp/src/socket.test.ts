@@ -43,7 +43,9 @@ mock.module("@whiskeysockets/baileys", () => ({
   makeWASocket: createSocket,
 }));
 
-const { createWhatsAppSocket } = await import("./socket");
+const { createWhatsAppSocket, summarizeMissingTextPayload } = await import(
+  "./socket"
+);
 
 const TIMEOUT_CLOSE = {
   connection: "close" as const,
@@ -146,3 +148,31 @@ async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
 }
+
+describe("summarizeMissingTextPayload", () => {
+  test("keeps structural metadata without raw payload content or JIDs", () => {
+    const privateMessage = "private contact card";
+    const remoteJid = "6281379292556@s.whatsapp.net";
+    const participant = "6281111111111@s.whatsapp.net";
+    const summary = summarizeMissingTextPayload({
+      key: {
+        fromMe: false,
+        id: "message-123",
+        participant,
+        remoteJid,
+      },
+      message: {
+        conversation: privateMessage,
+      },
+      messageStubType: 1,
+    });
+
+    expect(summary).toContain('"id":"message-123"');
+    expect(summary).toContain('"messageBytes":');
+    expect(summary).toContain("***2556@s.whatsapp.net");
+    expect(summary).toContain("***1111@s.whatsapp.net");
+    expect(summary).not.toContain(privateMessage);
+    expect(summary).not.toContain(remoteJid);
+    expect(summary).not.toContain(participant);
+  });
+});

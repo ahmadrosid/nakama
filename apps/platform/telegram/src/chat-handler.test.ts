@@ -54,40 +54,55 @@ async function waitForCondition(
 describe("createChatHandler group chats", () => {
   test("ignores plain group messages without mention", async () => {
     await withTempHome(async (homeDir) => {
-      await writeTelegramConfigIni(homeDir, {
-        botToken: "1234567890:TEST",
-        pairedUserIds: [42],
-      });
+      const privateMessage = "private 🔒 message";
+      const log = spyOn(console, "log").mockImplementation(() => {});
 
-      const authStore = new TelegramAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
+      try {
+        await writeTelegramConfigIni(homeDir, {
+          botToken: "1234567890:TEST",
+          pairedUserIds: [42],
+        });
 
-      const { ctx, replies } = createMessageContext({
-        chatId: -100_123,
-        chatType: "supergroup",
-        text: "hello",
-        userId: 42,
-      });
+        const authStore = new TelegramAuthStore();
+        await authStore.reload();
+        const { client, calls } = createMockClient();
+        const sessionStore = new SessionStore(
+          path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+        );
+        const orgStore = createTestOrgStore(homeDir);
+        await orgStore.load();
+        const handleMessage = createChatHandler({
+          authStore,
+          client,
+          config: { botToken: "1234567890:TEST", profileId: "default" },
+          getBotInfo: () => TEST_BOT_INFO,
+          orgStore,
+          sessionStore,
+        });
 
-      await handleMessage(ctx);
+        const { ctx, replies } = createMessageContext({
+          chatId: -100_123,
+          chatType: "supergroup",
+          text: privateMessage,
+          userId: 42,
+        });
 
-      expect(replies).toEqual([]);
-      expect(calls.createSession).toBe(0);
-      expect(calls.sendStream).toBe(0);
+        await handleMessage(ctx);
+
+        const output = log.mock.calls
+          .map((args) => args.map(String).join(" "))
+          .join("\n");
+
+        expect(replies).toEqual([]);
+        expect(calls.createSession).toBe(0);
+        expect(calls.sendStream).toBe(0);
+        expect(output).toContain(
+          `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
+        );
+        expect(output).not.toContain(privateMessage);
+      } finally {
+        log.mockRestore();
+      }
     });
   });
 

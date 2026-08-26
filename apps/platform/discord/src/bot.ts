@@ -13,6 +13,21 @@ import {
 } from "./interaction-errors";
 import { registerSlashCommands } from "./slash-commands";
 
+export function formatDiscordInboundMessageLog(input: {
+  authorId: string;
+  channelId: string;
+  messageId: string;
+  text: string;
+}): string {
+  return [
+    "[discord] message",
+    `messageId=${input.messageId}`,
+    `authorId=${input.authorId}`,
+    `channelId=${input.channelId}`,
+    `textBytes=${Buffer.byteLength(input.text, "utf8")}`,
+  ].join(" ");
+}
+
 export async function createBot(
   config: DiscordBridgeConfig,
   deps: Omit<ChatHandlerDeps, "config" | "getBotInfo">
@@ -46,10 +61,12 @@ export async function createBot(
 
   client.on(Events.MessageCreate, async (message: Message) => {
     console.log(
-      "[discord] message",
-      message.author.id,
-      message.channelId,
-      message.content?.slice(0, 80)
+      formatDiscordInboundMessageLog({
+        authorId: message.author.id,
+        channelId: message.channelId,
+        messageId: message.id,
+        text: message.content ?? "",
+      })
     );
     try {
       await handler.handleMessage(message);

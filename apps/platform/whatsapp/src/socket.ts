@@ -15,6 +15,7 @@ import {
   parseInboundWhatsAppMessage,
   type WhatsAppInboundChat,
 } from "./inbound-message";
+import { maskWhatsAppJid, utf8ByteLength } from "./log-metadata";
 
 export interface WhatsAppSocketDeps {
   onConnected?: (me: { id: string; lid?: string | null }) => void;
@@ -151,7 +152,7 @@ export async function createWhatsAppSocket(
 
           if (remoteJid) {
             console.log(
-              `WhatsApp upsert item jid=${remoteJid} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${msg.key.participant ?? "-"} text=${text ? "yes" : "no"} handle=${inbound ? "yes" : "no"}`
+              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} textBytes=${utf8ByteLength(text)} handle=${inbound ? "yes" : "no"}`
             );
           }
 
@@ -172,12 +173,8 @@ export async function createWhatsAppSocket(
             continue;
           }
 
-          const preview =
-            inbound.text.length > 120
-              ? `${inbound.text.slice(0, 120)}…`
-              : inbound.text;
           console.log(
-            `WhatsApp message received from ${inbound.jid}: ${preview}`
+            `WhatsApp message received id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(inbound.jid)} textBytes=${utf8ByteLength(inbound.text)}`
           );
 
           try {
@@ -185,7 +182,8 @@ export async function createWhatsAppSocket(
           } catch (error) {
             console.error("WhatsApp inbound message handling failed.", {
               error: error instanceof Error ? error.message : String(error),
-              jid: inbound.jid,
+              jid: maskWhatsAppJid(inbound.jid),
+              messageId: msg.key.id ?? null,
             });
           }
         }
@@ -208,7 +206,7 @@ function isSupportedUpsertType(type: string): boolean {
   return type === "notify" || type === "append";
 }
 
-function summarizeMissingTextPayload(msg: {
+export function summarizeMissingTextPayload(msg: {
   key: {
     remoteJid?: string | null;
     fromMe?: boolean | null;
@@ -219,17 +217,19 @@ function summarizeMissingTextPayload(msg: {
   messageStubType?: unknown;
 }): string {
   const extracted = extractMessageContent(msg.message as any);
+  const serializedMessage = JSON.stringify(msg.message ?? null);
   const summary = {
     extractedKeys: extracted ? Object.keys(extracted).slice(0, 10) : [],
     extractedType: getContentType(extracted as any) ?? null,
     key: {
       fromMe: msg.key.fromMe ?? null,
       id: msg.key.id ?? null,
-      participant: msg.key.participant ?? null,
-      remoteJid: msg.key.remoteJid ?? null,
+      participant: maskWhatsAppJid(msg.key.participant),
+      remoteJid: maskWhatsAppJid(msg.key.remoteJid),
     },
-    message: msg.message ?? null,
-    messageStubType: msg.messageStubType ?? null,
+    messageBytes: utf8ByteLength(serializedMessage),
+    messageStubType:
+      typeof msg.messageStubType === "number" ? msg.messageStubType : null,
     topLevelKeys: msg.message ? Object.keys(msg.message).slice(0, 10) : [],
     topLevelType: getContentType(msg.message as any) ?? null,
   };

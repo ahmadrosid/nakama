@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
 import { resetActiveStreamsForTests } from "@nakama/core/channel-active-stream";
 import { WhatsAppAuthStore } from "./auth-store";
@@ -845,34 +845,54 @@ function groupInbound(options: {
 describe("createChatHandler group chats", () => {
   test("ignores plain group messages without mention", async () => {
     await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-      });
+      const privateMessage = "private 🔒 message";
+      const senderJid = "6281379292556@s.whatsapp.net";
+      const log = spyOn(console, "log").mockImplementation(() => {});
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      try {
+        await writeWhatsAppConfigIni(homeDir, {
+          pairedJid: PAIRED_JID,
+          phoneNumber: "1234567890",
+        });
 
-      await handleMessage(groupInbound({ text: "hello everyone" }));
+        const authStore = new WhatsAppAuthStore();
+        await authStore.reload();
+        const { client, calls } = createMockClient();
+        const sessionStore = new SessionStore(
+          path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+        );
+        const orgStore = createTestOrgStore(homeDir);
+        await orgStore.load();
+        const { socket, sent } = createMockSocket();
+        const handleMessage = createChatHandler({
+          authStore,
+          client,
+          config: { phoneNumber: "1234567890", profileId: "default" },
+          getSocket: () => socket as any,
+          orgStore,
+          sessionStore,
+        });
 
-      expect(sent).toEqual([]);
-      expect(calls.createSession).toBe(0);
-      expect(calls.sendStream).toBe(0);
+        await handleMessage(groupInbound({ senderJid, text: privateMessage }));
+
+        const output = log.mock.calls
+          .map((args) => args.map(String).join(" "))
+          .join("\n");
+
+        expect(sent).toEqual([]);
+        expect(calls.createSession).toBe(0);
+        expect(calls.sendStream).toBe(0);
+        expect(output).toContain("jid=***0000@g.us");
+        expect(output).toContain("sender=***2556@s.whatsapp.net");
+        expect(output).toContain(
+          `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
+        );
+        expect(output).not.toContain(privateMessage);
+        expect(output).not.toContain(GROUP_JID);
+        expect(output).not.toContain(senderJid);
+      } finally {
+        log.mockRestore();
+      }
     });
   });
 

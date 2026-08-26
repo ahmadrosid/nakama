@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
 import type { ChatMessage } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
@@ -111,6 +111,32 @@ async function createPairedHandler(
     threadStore,
   };
 }
+
+describe("createChatHandler logging", () => {
+  test("logs message metadata without private content", async () => {
+    await withTempHome(async (homeDir) => {
+      const privateMessage = "private 🔒 message";
+      const log = spyOn(console, "log").mockImplementation(() => {});
+
+      try {
+        const { handleMessage } = await createPairedHandler(homeDir);
+        const dm = createDmMessage({ content: privateMessage });
+
+        await handleMessage(dm.message);
+
+        const output = log.mock.calls
+          .map((args) => args.map(String).join(" "))
+          .join("\n");
+        expect(output).toContain(
+          `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
+        );
+        expect(output).not.toContain(privateMessage);
+      } finally {
+        log.mockRestore();
+      }
+    });
+  });
+});
 
 describe("createChatHandler artifact delivery", () => {
   const metaJson = JSON.stringify({
