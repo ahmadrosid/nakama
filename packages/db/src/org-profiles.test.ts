@@ -120,11 +120,9 @@ describe("seedOrgSuperBotProfile", () => {
     );
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
-      if (toolId === BUILTIN_TOOL_IDS.delete_file) {
-        continue;
+      if (toolId !== BUILTIN_TOOL_IDS.delete_file) {
+        expect(toolIds).toContain(toolId);
       }
-
-      expect(toolIds).toContain(toolId);
     }
 
     expect(toolIds).toContain(BASH_TOOL_ID);
