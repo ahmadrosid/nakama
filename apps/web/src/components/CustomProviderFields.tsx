@@ -143,7 +143,9 @@ export function CustomProviderFields({
             value={wireApi}
           >
             <SelectTrigger className="w-full" id="provider-wire-api">
-              <SelectValue />
+              <SelectValue>
+                {wireApi === "responses" ? "Responses" : "Chat completions"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="chat">Chat completions</SelectItem>
