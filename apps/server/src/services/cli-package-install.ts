@@ -2,6 +2,8 @@ import { getToolExecutionEnv } from "../lib/ensure-process-path";
 
 export const CLI_SIGTERM_GRACE_MS = 2000;
 
+const CLI_INSTALL_TIMEOUT_MS = 120_000;
+
 export interface GlobalPackageInstallPlan {
   args: string[];
   command: string;
@@ -133,7 +135,8 @@ export async function probeCliVersion(command: string): Promise<{
 
 export async function runTimedInstallCommand(
   plan: GlobalPackageInstallPlan,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  options: { timeoutMs?: number } = {}
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -141,7 +144,7 @@ export async function runTimedInstallCommand(
   timedOut: boolean;
 }> {
   const { spawn } = await import("node:child_process");
-  const timeoutMs = 120_000;
+  const timeoutMs = options.timeoutMs ?? CLI_INSTALL_TIMEOUT_MS;
 
   return new Promise((resolve) => {
     const child = spawn(plan.command, plan.args, {
@@ -154,6 +157,17 @@ export async function runTimedInstallCommand(
     let stdoutBuffer = "";
     let stderrBuffer = "";
     let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+
+    const settle = (value: {
+      exitCode: number | null;
+      stdout: string;
+      stderr: string;
+      timedOut: boolean;
+    }) => {
+      settled = true;
+      resolve(value);
+    };
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
@@ -162,7 +176,7 @@ export async function runTimedInstallCommand(
         () => child.kill("SIGKILL"),
         CLI_SIGTERM_GRACE_MS
       );
-      resolve({
+      settle({
         exitCode: null,
         stderr: stderr.trim(),
         stdout: stdout.trim(),
@@ -171,6 +185,10 @@ export async function runTimedInstallCommand(
     }, timeoutMs);
 
     const emitLine = (prefix: "stdout" | "stderr", line: string) => {
+      if (settled) {
+        return;
+      }
+
       onProgress?.(`${prefix}: ${line}`);
     };
 
@@ -220,7 +238,7 @@ export async function runTimedInstallCommand(
         emitLine("stderr", stderrBuffer.trim());
       }
 
-      resolve({
+      settle({
         exitCode: null,
         stderr: `${stderr}\n${String(error)}`.trim(),
         stdout,
@@ -239,7 +257,7 @@ export async function runTimedInstallCommand(
         emitLine("stderr", stderrBuffer.trim());
       }
 
-      resolve({
+      settle({
         exitCode,
         stderr: stderr.trim(),
         stdout: stdout.trim(),
