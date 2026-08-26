@@ -88,22 +88,35 @@ export function createOpenAICompatibleProvider(
         tools: input.tools,
       });
     },
-    generateText(input: GenerateTextInput) {
+    async generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
         ? input.system
         : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
 
       if (useResponsesApi) {
-        return generateResponsesText({
+        const result = await generateOpenAIResponsesChat({
           apiKey,
           baseUrl,
-          json: useJson,
+          input: {
+            messages: [{ content: input.prompt, role: "user" }],
+            system,
+          },
+          jsonOutput: useJson,
           label,
           model,
-          prompt: input.prompt,
-          system,
+          stream: false,
         });
+        const content = result.content.trim();
+
+        if (!content) {
+          throw new Error(`${label} returned an empty response.`);
+        }
+
+        return {
+          content,
+          ...(result.usage ? { usage: result.usage } : {}),
+        };
       }
 
       return requestCompletion(client, label, {
@@ -410,39 +423,6 @@ async function streamChatCompletion(options: {
   }
 
   return buildChatCompletionResult({ content, thinking, toolCalls, usage });
-}
-
-async function generateResponsesText(options: {
-  apiKey: string;
-  baseUrl: string;
-  json: boolean;
-  label: string;
-  model: string;
-  prompt: string;
-  system: string;
-}): Promise<GenerateTextResult> {
-  const result = await generateOpenAIResponsesChat({
-    apiKey: options.apiKey,
-    baseUrl: options.baseUrl,
-    input: {
-      messages: [{ content: options.prompt, role: "user" }],
-      system: options.system,
-    },
-    jsonOutput: options.json,
-    label: options.label,
-    model: options.model,
-    stream: false,
-  });
-  const content = result.content.trim();
-
-  if (!content) {
-    throw new Error(`${options.label} returned an empty response.`);
-  }
-
-  return {
-    content,
-    ...(result.usage ? { usage: result.usage } : {}),
-  };
 }
 
 async function requestCompletion(

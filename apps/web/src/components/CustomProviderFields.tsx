@@ -122,19 +122,7 @@ export function CustomProviderFields({
       </FormField>
 
       {onWireApiChange ? (
-        <FormField
-          density={density}
-          footer={
-            <p className="text-muted-foreground text-xs">
-              Pick Responses only when the endpoint serves{" "}
-              <span className="font-mono">/responses</span>. Reasoning survives
-              alongside tools there, which chat/completions rejects on newer
-              models.
-            </p>
-          }
-          id="provider-wire-api"
-          label="API"
-        >
+        <FormField density={density} id="provider-wire-api" label="API">
           <Select
             disabled={disabled}
             onValueChange={(value) =>
