@@ -59,7 +59,7 @@ function automationServiceStatus(
     return { status: "Running jobs", tone: "ok" };
   }
 
-  return { status: "Healthy", tone: "ok" };
+  return { status: "Online", tone: "ok" };
 }
 
 function telegramServiceStatus(
@@ -77,7 +77,7 @@ function telegramServiceStatus(
     return { status: "Awaiting pairing", tone: "warn" };
   }
 
-  return { status: "Healthy", tone: "ok" };
+  return { status: "Online", tone: "ok" };
 }
 
 function whatsappServiceStatus(
@@ -95,7 +95,7 @@ function whatsappServiceStatus(
     return { status: "Awaiting pairing", tone: "warn" };
   }
 
-  return { status: "Healthy", tone: "ok" };
+  return { status: "Online", tone: "ok" };
 }
 
 function discordServiceStatus(
@@ -113,7 +113,7 @@ function discordServiceStatus(
     return { status: "Awaiting pairing", tone: "warn" };
   }
 
-  return { status: "Healthy", tone: "ok" };
+  return { status: "Online", tone: "ok" };
 }
 
 export type StatusSummaryAction = {
