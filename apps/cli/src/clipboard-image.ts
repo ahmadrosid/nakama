@@ -1,5 +1,24 @@
 import { getImageBinary, hasImage } from "@crosscopy/clipboard";
-import { type ImageAttachment, validateImageAttachments } from "@nakama/core";
+import {
+  type ImageAttachment,
+  MAX_IMAGE_BYTES,
+  validateImageAttachments,
+} from "@nakama/core";
+
+export function attachmentFromClipboardBytes(
+  bytes: Uint8Array | Buffer
+): ImageAttachment {
+  if (bytes.length > MAX_IMAGE_BYTES) {
+    throw new Error(
+      `Clipboard image is too large (${bytes.length} bytes). Maximum is ${MAX_IMAGE_BYTES / (1024 * 1024)} MB.`
+    );
+  }
+
+  return {
+    data: Buffer.from(bytes).toString("base64"),
+    mediaType: "image/png",
+  };
+}
 
 export async function readClipboardImage(): Promise<ImageAttachment | null> {
   if (!hasImage()) {
@@ -12,11 +31,7 @@ export async function readClipboardImage(): Promise<ImageAttachment | null> {
     return null;
   }
 
-  const attachment: ImageAttachment = {
-    data: Buffer.from(bytes).toString("base64"),
-    mediaType: "image/png",
-  };
-
+  const attachment = attachmentFromClipboardBytes(bytes);
   validateImageAttachments([attachment]);
   return attachment;
 }
