@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -8,7 +8,9 @@ import {
   getOrgMemoryHistoryEntry,
   listOrgMemoryHistory,
   ORG_MEMORY_HISTORY_MAX_ENTRIES,
+  pruneOrgMemoryHistory,
 } from "./org-memory-history";
+import { getOrgMemoryHistoryDir } from "./resolve";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -33,6 +35,30 @@ describe("org memory history", () => {
     );
     process.env.NAKAMA_CONFIG_DIR = tempDir;
     return orgId;
+  }
+
+  async function writeHistoryRevision(
+    orgId: string,
+    id: string,
+    createdAt: string,
+    content: string,
+    metadata?: string
+  ): Promise<void> {
+    const historyDir = getOrgMemoryHistoryDir(orgId, tempDir);
+    await mkdir(historyDir, { recursive: true });
+    await writeFile(
+      path.join(historyDir, `${id}.json`),
+      metadata ??
+        JSON.stringify({
+          action: "edit",
+          actorUserId: "user_a",
+          createdAt,
+          id,
+          label: id,
+          orgId,
+        })
+    );
+    await writeFile(path.join(historyDir, `${id}.md`), content);
   }
 
   test("appends and lists history entries newest first", async () => {
@@ -103,5 +129,126 @@ describe("org memory history", () => {
     expect(changes[0]?.label).toBe(
       `Edit ${ORG_MEMORY_HISTORY_MAX_ENTRIES + 2}`
     );
+  });
+
+  test("skips malformed metadata without leaking its contents", async () => {
+    const orgId = await setupOrg();
+    const malformedId = "omh_99999999_malformed";
+    const validId = "omh_00000001_valid";
+    const secret = "private-memory-content";
+    await writeHistoryRevision(
+      orgId,
+      validId,
+      "2026-07-31T08:00:00.000Z",
+      "valid content"
+    );
+    await writeHistoryRevision(
+      orgId,
+      malformedId,
+      "2026-07-31T09:00:00.000Z",
+      "malformed content",
+      `{${secret}`
+    );
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (message?: unknown) => warnings.push(String(message));
+    try {
+      await expect(listOrgMemoryHistory(orgId, 1, tempDir)).resolves.toEqual([
+        expect.objectContaining({ id: validId }),
+      ]);
+      await expect(
+        getOrgMemoryHistoryEntry(orgId, malformedId, tempDir)
+      ).resolves.toBeNull();
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toHaveLength(2);
+    expect(warnings.every((warning) => warning.includes(malformedId))).toBe(
+      true
+    );
+    expect(warnings.join(" ")).not.toContain(secret);
+  });
+
+  test("sorts by creation time before applying a finite limit", async () => {
+    const orgId = await setupOrg();
+    const olderHighSequenceId = "omh_99999999_before_restart";
+    const newerLowSequenceId = "omh_00000001_after_restart";
+    await writeHistoryRevision(
+      orgId,
+      olderHighSequenceId,
+      "2026-07-31T08:00:00.000Z",
+      "older"
+    );
+    await writeHistoryRevision(
+      orgId,
+      newerLowSequenceId,
+      "2026-07-31T09:00:00.000Z",
+      "newer"
+    );
+
+    const changes = await listOrgMemoryHistory(orgId, 1, tempDir);
+    expect(changes.map((entry) => entry.id)).toEqual([newerLowSequenceId]);
+  });
+
+  test("does not hide non-parse filesystem errors", async () => {
+    const orgId = await setupOrg();
+    const id = "omh_00000001_unreadable_content";
+    await writeHistoryRevision(
+      orgId,
+      id,
+      "2026-07-31T08:00:00.000Z",
+      "content"
+    );
+    const contentPath = path.join(
+      getOrgMemoryHistoryDir(orgId, tempDir),
+      `${id}.md`
+    );
+    await rm(contentPath);
+    await mkdir(contentPath);
+
+    await expect(
+      getOrgMemoryHistoryEntry(orgId, id, tempDir)
+    ).rejects.toThrow();
+  });
+
+  test("prunes readable entries without deleting malformed files", async () => {
+    const orgId = await setupOrg();
+    const malformedId = "omh_99999999_malformed";
+    await writeHistoryRevision(
+      orgId,
+      malformedId,
+      "2026-07-31T11:00:00.000Z",
+      "malformed content",
+      "{"
+    );
+    for (let index = 0; index < 3; index += 1) {
+      await writeHistoryRevision(
+        orgId,
+        `omh_0000000${index + 1}_valid`,
+        `2026-07-31T${String(index + 8).padStart(2, "0")}:00:00.000Z`,
+        `content-${index}`
+      );
+    }
+
+    const originalWarn = console.warn;
+    console.warn = () => undefined;
+    try {
+      await pruneOrgMemoryHistory(orgId, 2, tempDir);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    const historyDir = getOrgMemoryHistoryDir(orgId, tempDir);
+    await expect(
+      access(path.join(historyDir, `${malformedId}.json`))
+    ).resolves.toBeNull();
+    await expect(
+      access(path.join(historyDir, `${malformedId}.md`))
+    ).resolves.toBeNull();
+    await expect(
+      access(path.join(historyDir, "omh_00000001_valid.json"))
+    ).rejects.toThrow();
   });
 });

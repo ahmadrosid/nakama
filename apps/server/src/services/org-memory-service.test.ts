@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ORG_MEMORY_PREAMBLE, parseOrgMemoryContent } from "@nakama/core";
+import {
+  getOrgMemoryFilePath,
+  getOrgMemoryHistoryDir,
+  ORG_MEMORY_PREAMBLE,
+  parseOrgMemoryContent,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { OrgMemoryService } from "./org-memory-service";
 
@@ -215,5 +220,60 @@ describe("OrgMemoryService", () => {
     const revision = await service.getHistoryRevision("org_a", latest.id);
     expect(revision.content).toContain("- first fact");
     expect(revision.change.id).toBe(latest.id);
+  });
+
+  test("undo skips a malformed latest revision", async () => {
+    const service = await setup();
+    await service.setMemory("org_a", "first");
+    await service.setMemory("org_a", "second");
+    const latest = (await service.listHistory("org_a"))[0]!;
+    await writeFile(
+      path.join(getOrgMemoryHistoryDir("org_a", tempDir), `${latest.id}.json`),
+      "{"
+    );
+
+    const originalWarn = console.warn;
+    console.warn = () => undefined;
+    try {
+      await expect(
+        service.undoLastChange("org_a", "admin_user")
+      ).resolves.toContain("first");
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(await service.getMemory("org_a")).toContain("first");
+  });
+
+  test("undo skips duplicate snapshots of the current content", async () => {
+    const service = await setup();
+    await service.setMemory("org_a", "first");
+    await service.setMemory("org_a", "second");
+    await service.setMemory("org_a", "second");
+
+    await expect(
+      service.undoLastChange("org_a", "admin_user")
+    ).resolves.toContain("first");
+    expect(await service.getMemory("org_a")).toContain("first");
+  });
+
+  test("undo returns not found when every readable snapshot is current", async () => {
+    const service = await setup();
+    await service.setMemory("org_a", "same");
+    await service.setMemory("org_a", "same");
+
+    await expect(
+      service.undoLastChange("org_a", "admin_user")
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("undo restores a single snapshot when live memory diverged", async () => {
+    const service = await setup();
+    await service.setMemory("org_a", "snapshot");
+    await writeFile(getOrgMemoryFilePath("org_a", tempDir), "diverged\n");
+
+    await expect(
+      service.undoLastChange("org_a", "admin_user")
+    ).resolves.toContain("snapshot");
+    expect(await service.getMemory("org_a")).toContain("snapshot");
   });
 });

@@ -178,20 +178,27 @@ export class OrgMemoryService {
   }
 
   async undoLastChange(orgId: string, actorUserId: string): Promise<string> {
+    const currentContent = (await this.getMemory(orgId)).trim();
     const history = await listOrgMemoryHistory(
       orgId,
-      2,
+      undefined,
       this.options.configDir
     );
-    const previous = history[1];
-    if (!previous) {
-      throw new NakamaApiError(
-        "No previous org memory revision to restore.",
-        404
+    for (const change of history) {
+      const record = await getOrgMemoryHistoryEntry(
+        orgId,
+        change.id,
+        this.options.configDir
       );
+      if (record && record.content.trim() !== currentContent) {
+        return this.restoreHistoryRevision(orgId, change.id, actorUserId);
+      }
     }
 
-    return this.restoreHistoryRevision(orgId, previous.id, actorUserId);
+    throw new NakamaApiError(
+      "No previous org memory revision to restore.",
+      404
+    );
   }
 
   /**
