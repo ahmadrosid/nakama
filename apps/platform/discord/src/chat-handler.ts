@@ -54,7 +54,7 @@ import {
   resolveOrgChannelId,
   stripBotMention,
 } from "./guild-message";
-import { buildDiscordImageInput } from "./images";
+import { buildDiscordImageInput, UNSUPPORTED_ATTACHMENT_REPLY } from "./images";
 import { isIgnorableInteractionError } from "./interaction-errors";
 import {
   createDiscordMessenger,
@@ -241,16 +241,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
     }
 
-    let imageInput: Awaited<ReturnType<typeof buildDiscordImageInput>> = null;
-    try {
-      imageInput = await buildDiscordImageInput(message);
-    } catch (error) {
-      await messenger.send(formatError(error));
+    const imageBuild = await buildDiscordImageInput(message);
+
+    if (imageBuild?.kind === "reject") {
+      await messenger.send(imageBuild.message);
       return;
     }
 
+    const imageInput = imageBuild?.kind === "input" ? imageBuild.input : null;
+
     if (!(text || imageInput)) {
-      await messenger.send("Text messages only.");
+      const hasStickers = (message.stickers?.size ?? 0) > 0;
+      await messenger.send(
+        hasStickers ? UNSUPPORTED_ATTACHMENT_REPLY : "Text messages only."
+      );
       return;
     }
 

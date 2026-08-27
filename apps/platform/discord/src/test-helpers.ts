@@ -207,6 +207,7 @@ export function createDmMessage(options: {
   content?: string;
   attachments?: Array<{
     contentType?: string | null;
+    name?: string;
     size?: number;
     url?: string;
   }>;
@@ -242,6 +243,7 @@ export function createDmMessage(options: {
     string,
     {
       contentType: string | null;
+      name: string;
       size: number;
       url: string;
     }
@@ -250,6 +252,7 @@ export function createDmMessage(options: {
   for (const [index, attachment] of (options.attachments ?? []).entries()) {
     attachments.set(String(index + 1), {
       contentType: attachment.contentType ?? "image/png",
+      name: attachment.name ?? `image-${index + 1}.png`,
       size: attachment.size ?? 32,
       url: attachment.url ?? `https://cdn.example/image-${index + 1}.png`,
     });
@@ -261,6 +264,7 @@ export function createDmMessage(options: {
     channel,
     client: { user: { id: "bot_id", username: "nakamabot" } },
     content: options.content ?? "",
+    stickers: { size: 0 },
   } as unknown as Message;
 
   return {
@@ -292,6 +296,12 @@ export function createGuildChatMessage(options: {
   /** Parent id returned by channel.fetch() when initial parentId is null. */
   fetchParentId?: string;
   content?: string;
+  attachments?: Array<{
+    contentType?: string | null;
+    name?: string;
+    size?: number;
+    url?: string;
+  }>;
   mentionsBot?: boolean;
   mentionedRoleIds?: string[];
   botHeldRoleIds?: string[];
@@ -418,8 +428,27 @@ export function createGuildChatMessage(options: {
     },
   };
 
+  const attachments = new Map<
+    string,
+    {
+      contentType: string | null;
+      name: string;
+      size: number;
+      url: string;
+    }
+  >();
+
+  for (const [index, attachment] of (options.attachments ?? []).entries()) {
+    attachments.set(String(index + 1), {
+      contentType: attachment.contentType ?? "image/png",
+      name: attachment.name ?? `image-${index + 1}.png`,
+      size: attachment.size ?? 32,
+      url: attachment.url ?? `https://cdn.example/image-${index + 1}.png`,
+    });
+  }
+
   const message = {
-    attachments: new Map(),
+    attachments,
     author: { bot: false, id: userId },
     channel,
     client: {
@@ -464,6 +493,7 @@ export function createGuildChatMessage(options: {
       });
       return thread;
     },
+    stickers: { size: 0 },
   } as unknown as Message;
 
   return {
