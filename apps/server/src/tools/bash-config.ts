@@ -43,5 +43,3 @@ export function resolveBashSandboxImage(
   const raw = env.NAKAMA_BASH_SANDBOX_IMAGE?.trim();
   return raw || DEFAULT_SANDBOX_IMAGE;
 }
-
-export { DEFAULT_SANDBOX_IMAGE };

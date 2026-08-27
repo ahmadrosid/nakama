@@ -39,7 +39,7 @@ async function connectSandbox(name: string): Promise<Sandbox> {
   }
 }
 
-export class MicrosandboxBashRuntime implements BashSandboxRuntime {
+class MicrosandboxBashRuntime implements BashSandboxRuntime {
   async probe(): Promise<void> {
     let installed = false;
     try {
