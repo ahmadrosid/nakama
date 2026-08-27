@@ -1130,6 +1130,24 @@ function migrateSessionsTable(db: Database): void {
       ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users (id) ON DELETE SET NULL;
     `);
   }
+
+  if (!columnNames.has("updated_at")) {
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN updated_at TEXT;
+    `);
+    db.exec(`
+      UPDATE sessions
+      SET updated_at = COALESCE(
+        (
+          SELECT MAX(created_at)
+          FROM session_messages
+          WHERE session_id = sessions.id
+        ),
+        created_at
+      )
+      WHERE updated_at IS NULL;
+    `);
+  }
 }
 
 function migrateWorkspaceSettingsTable(db: Database): void {
