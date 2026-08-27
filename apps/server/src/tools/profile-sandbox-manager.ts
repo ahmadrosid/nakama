@@ -66,7 +66,7 @@ export function toGuestCwd(args: {
 }
 
 export class ProfileSandboxManager {
-  private readonly ensured = new Set<string>();
+  private readonly ensured = new Map<string, string>();
 
   constructor(private readonly runtime: BashSandboxRuntime) {}
 
@@ -89,8 +89,9 @@ export class ProfileSandboxManager {
   }): Promise<BashSandboxExecResult> {
     const name = profileSandboxName(args.orgId, args.profileId);
     const guestWorkspace = args.guestWorkspace ?? BASH_SANDBOX_GUEST_WORKSPACE;
+    const fingerprint = `${args.hostWorkspace}|${args.network}|${args.image}|${guestWorkspace}`;
 
-    if (!this.ensured.has(name)) {
+    if (this.ensured.get(name) !== fingerprint) {
       await this.runtime.ensure({
         guestWorkspace,
         hostWorkspace: args.hostWorkspace,
@@ -98,7 +99,7 @@ export class ProfileSandboxManager {
         name,
         network: args.network,
       });
-      this.ensured.add(name);
+      this.ensured.set(name, fingerprint);
     }
 
     const guestCwd = toGuestCwd({
@@ -123,6 +124,6 @@ export class ProfileSandboxManager {
   }
 
   ensuredNamesForTests(): string[] {
-    return [...this.ensured];
+    return [...this.ensured.keys()];
   }
 }

@@ -63,18 +63,23 @@ describe("bash sandbox env", () => {
         PATH: "/bin",
       },
       overrides: {
+        AWS_ACCESS_KEY_ID: "AKIA",
+        DATABASE_URL: "postgres://x",
         FOO: "bar",
         MY_TOKEN: "nope",
         OPENAI_API_KEY: "override-secret",
       },
-      workspaceRoot: "/tmp/ws",
+      workspaceRoot: "/workspace",
     });
 
     expect(env.PATH).toBe("/bin");
     expect(env.FOO).toBe("bar");
-    expect(env.NAKAMA_WORKSPACE_ROOT).toBe("/tmp/ws");
+    expect(env.NAKAMA_WORKSPACE_ROOT).toBe("/workspace");
+    expect(env.HOME).toBe("/workspace");
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.MY_TOKEN).toBeUndefined();
+    expect(env.DATABASE_URL).toBeUndefined();
+    expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
     expect(isSecretEnvKey("ANTHROPIC_API_KEY")).toBe(true);
   });
 });
@@ -278,6 +283,38 @@ describe("bash microsandbox path with fake runtime", () => {
     expect(fake.ensures).toHaveLength(0);
   });
 
+  test("recreates sandbox when network fingerprint changes", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-msb-"));
+    const fake = createFakeRuntime();
+    const manager = new ProfileSandboxManager(fake);
+    const prev = process.env.NAKAMA_BASH_SANDBOX_NETWORK;
+
+    try {
+      process.env.NAKAMA_BASH_SANDBOX_NETWORK = "public";
+      await runBash(
+        { command: "echo 1" },
+        { orgId: "org_test", profileId: "profile_a" },
+        { backend: "microsandbox", sandboxManager: manager, workspaceRoot }
+      );
+      process.env.NAKAMA_BASH_SANDBOX_NETWORK = "off";
+      await runBash(
+        { command: "echo 2" },
+        { orgId: "org_test", profileId: "profile_a" },
+        { backend: "microsandbox", sandboxManager: manager, workspaceRoot }
+      );
+    } finally {
+      if (prev === undefined) {
+        delete process.env.NAKAMA_BASH_SANDBOX_NETWORK;
+      } else {
+        process.env.NAKAMA_BASH_SANDBOX_NETWORK = prev;
+      }
+    }
+
+    expect(fake.ensures).toHaveLength(2);
+    expect(fake.ensures[0]?.network).toBe("public");
+    expect(fake.ensures[1]?.network).toBe("off");
+  });
+
   test("strips secret env overrides on microsandbox path", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-msb-"));
     const fake = createFakeRuntime();
@@ -294,6 +331,7 @@ describe("bash microsandbox path with fake runtime", () => {
 
     expect(fake.execs[0]?.env.FOO).toBe("bar");
     expect(fake.execs[0]?.env.OPENAI_API_KEY).toBeUndefined();
+    expect(fake.execs[0]?.env.NAKAMA_WORKSPACE_ROOT).toBe("/workspace");
   });
 
   test("nested cwd maps to guest path", async () => {
