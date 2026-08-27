@@ -4,11 +4,16 @@ import { ArrowDown01Icon, ListViewIcon } from "hugeicons-react";
 import { useState } from "react";
 import { Matrix } from "@/components/ui/matrix";
 import { type Frame, snake3x2 } from "@/components/ui/matrix-frames";
+import {
+  type ComposerStackEdge,
+  composerShelfPanelClass,
+} from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 interface AgentTodoPanelProps {
   embedded?: boolean;
   stack?: boolean;
+  stackEdge?: ComposerStackEdge;
   todos: AgentTodo[];
 }
 
@@ -47,6 +52,7 @@ export function AgentTodoPanel({
   todos,
   embedded = false,
   stack = false,
+  stackEdge = "start",
 }: AgentTodoPanelProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -118,7 +124,7 @@ export function AgentTodoPanel({
       <div className="px-3">
         <aside
           aria-label="Agent task plan"
-          className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-border border-b-0 bg-card shadow-xs"
+          className={composerShelfPanelClass(stackEdge)}
         >
           {header}
           {expandableList}

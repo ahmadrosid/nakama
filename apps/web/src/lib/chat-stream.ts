@@ -756,9 +756,35 @@ export const composerInputGroupClass =
 export const composerDockClass =
   "flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs transition-[box-shadow,border-color]";
 
+/** First shelf panel rounds its top; later panels stay flush. */
+export type ComposerStackEdge = "start" | "continue";
+
+export function composerShelfPanelClass(
+  edge: ComposerStackEdge = "start"
+): string {
+  return cn(
+    "relative z-0 w-full shrink-0 overflow-hidden border border-border border-b-0 bg-card shadow-xs",
+    edge === "start" ? "rounded-t-xl rounded-b-none" : "rounded-none"
+  );
+}
+
 export const composerShellClass = cn(
   composerInputGroupBase,
   "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
+);
+
+/** Soft top + full bottom so inset shelf ears do not fight a hard rounded-xl top. */
+export const composerRimRecessedClass = "rounded-t-md rounded-b-xl";
+
+export const composerShellRecessedClass = cn(
+  composerInputGroupBase,
+  "[&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
+);
+
+/** Face radius for recessed stack; merge onto InputGroup so it replaces the uniform calc radius. */
+export const composerInputGroupRecessedClass = cn(
+  composerInputGroupClass,
+  "rounded-t-[calc(0.375rem-1px)] rounded-b-[calc(0.75rem-1px)]"
 );
 
 export const composerShellStackedClass = cn(

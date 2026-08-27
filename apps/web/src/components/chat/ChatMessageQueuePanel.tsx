@@ -1,5 +1,9 @@
 import { ArrowDown01Icon, Clock01Icon } from "hugeicons-react";
 import { useState } from "react";
+import {
+  type ComposerStackEdge,
+  composerShelfPanelClass,
+} from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 export interface QueuedComposerMessage {
@@ -11,11 +15,13 @@ export interface QueuedComposerMessage {
 interface ChatMessageQueuePanelProps {
   messages: QueuedComposerMessage[];
   stack?: boolean;
+  stackEdge?: ComposerStackEdge;
 }
 
 export function ChatMessageQueuePanel({
   messages,
   stack = false,
+  stackEdge = "start",
 }: ChatMessageQueuePanelProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -81,7 +87,7 @@ export function ChatMessageQueuePanel({
       <div className="px-3">
         <aside
           aria-label="Queued messages"
-          className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-border border-b-0 bg-card shadow-xs"
+          className={composerShelfPanelClass(stackEdge)}
         >
           {header}
           {expandableList}

@@ -203,6 +203,8 @@ export type PromptInputProps = Omit<
   inputGroupClassName?: string;
   /** Rainbow rim glow while the agent is streaming. */
   rimActive?: boolean;
+  /** Overrides default rim radius (e.g. recessed composer stack). */
+  rimClassName?: string;
   onError?: (err: {
     code: "max_files" | "max_file_size" | "accept";
     message: string;
@@ -224,6 +226,7 @@ export const PromptInput = ({
   prepareFiles,
   inputGroupClassName,
   rimActive,
+  rimClassName,
   onError,
   onSubmit,
   children,
@@ -348,6 +351,7 @@ export const PromptInput = ({
           onFileChange={handleChange}
           onSubmit={handleSubmit}
           rimActive={rimActive}
+          rimClassName={rimClassName}
           {...props}
         >
           {children}

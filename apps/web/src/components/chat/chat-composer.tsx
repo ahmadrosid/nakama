@@ -75,11 +75,15 @@ import {
   isImageFilePart,
 } from "@/lib/chat-images";
 import {
+  type ComposerStackEdge,
   composerIconButtonClass,
   composerInputGroupClass,
+  composerInputGroupRecessedClass,
+  composerRimRecessedClass,
   composerSelectTriggerClass,
   composerShellClass,
   composerShellCompactClass,
+  composerShellRecessedClass,
   composerToolbarClass,
 } from "@/lib/chat-stream";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
@@ -170,6 +174,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
   const showTodos = hasTodos && !hasQuestionnaire && !displayError;
   const hasQueuedMessages = queuedMessages.length > 0;
+  const queueStackEdge: ComposerStackEdge =
+    hasQuestionnaire || showTodos ? "continue" : "start";
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
     : (props.availableSkills ?? EMPTY_SKILLS);
@@ -180,6 +186,7 @@ export function ChatComposer(props: ChatComposerProps) {
     <ChatTips />
   ) : null;
   const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
+  const stackedShellClass = composerShellRecessedClass;
 
   return (
     <div className={cn("w-full shrink-0", className)}>
@@ -208,18 +215,25 @@ export function ChatComposer(props: ChatComposerProps) {
               disabled={disabled || busy}
               onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
               questionnaire={questionnaire}
+              stackEdge="start"
             />
           ) : null}
-          {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
+          {showTodos ? (
+            <AgentTodoPanel stack stackEdge="start" todos={todos} />
+          ) : null}
           {hasQueuedMessages ? (
-            <ChatMessageQueuePanel messages={queuedMessages} stack />
+            <ChatMessageQueuePanel
+              messages={queuedMessages}
+              stack
+              stackEdge={queueStackEdge}
+            />
           ) : null}
           <div className="relative z-10 -mt-2 w-full">
             {composerNotice}
             <PromptInput
               accept={ALL_ATTACHMENT_ACCEPT}
-              className={shellClass}
-              inputGroupClassName={composerInputGroupClass}
+              className={stackedShellClass}
+              inputGroupClassName={composerInputGroupRecessedClass}
               maxFileSize={MAX_IMAGE_BYTES}
               maxFiles={5}
               multiple
@@ -232,6 +246,7 @@ export function ChatComposer(props: ChatComposerProps) {
               }}
               prepareFiles={prepareChatUploadFiles}
               rimActive={busy}
+              rimClassName={composerRimRecessedClass}
             >
               <ChatAttachmentHeader
                 primarySupportsVision={props.primarySupportsVision}
