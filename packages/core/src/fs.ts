@@ -71,7 +71,7 @@ export async function writeTextFile(
   await ensureDir(directory, options.ensureDirMode ?? PRIVATE_DIR_MODE);
   await writeFile(path, content, { encoding: "utf8", mode });
 
-  if (options.chmod ?? mode === PRIVATE_FILE_MODE) {
+  if (options.chmod ?? true) {
     await chmod(path, mode);
   }
 }
