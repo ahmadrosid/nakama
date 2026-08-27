@@ -201,16 +201,49 @@ export interface MockDmMessage {
   sentMessages: string[];
 }
 
+type MockAttachmentInput = {
+  contentType?: string | null;
+  name?: string;
+  size?: number;
+  url?: string;
+};
+
+function buildMockAttachments(inputs: MockAttachmentInput[] | undefined): Map<
+  string,
+  {
+    contentType: string | null;
+    name: string;
+    size: number;
+    url: string;
+  }
+> {
+  const attachments = new Map<
+    string,
+    {
+      contentType: string | null;
+      name: string;
+      size: number;
+      url: string;
+    }
+  >();
+
+  for (const [index, attachment] of (inputs ?? []).entries()) {
+    attachments.set(String(index + 1), {
+      contentType: attachment.contentType ?? "image/png",
+      name: attachment.name ?? `image-${index + 1}.png`,
+      size: attachment.size ?? 32,
+      url: attachment.url ?? `https://cdn.example/image-${index + 1}.png`,
+    });
+  }
+
+  return attachments;
+}
+
 export function createDmMessage(options: {
   userId?: string;
   channelId?: string;
   content?: string;
-  attachments?: Array<{
-    contentType?: string | null;
-    name?: string;
-    size?: number;
-    url?: string;
-  }>;
+  attachments?: MockAttachmentInput[];
 }): MockDmMessage {
   const sentMessages: string[] = [];
   let fileSendCalls = 0;
@@ -239,27 +272,8 @@ export function createDmMessage(options: {
     sendTyping: async () => {},
   };
 
-  const attachments = new Map<
-    string,
-    {
-      contentType: string | null;
-      name: string;
-      size: number;
-      url: string;
-    }
-  >();
-
-  for (const [index, attachment] of (options.attachments ?? []).entries()) {
-    attachments.set(String(index + 1), {
-      contentType: attachment.contentType ?? "image/png",
-      name: attachment.name ?? `image-${index + 1}.png`,
-      size: attachment.size ?? 32,
-      url: attachment.url ?? `https://cdn.example/image-${index + 1}.png`,
-    });
-  }
-
   const message = {
-    attachments,
+    attachments: buildMockAttachments(options.attachments),
     author: { bot: false, id: options.userId ?? "424242424242424242" },
     channel,
     client: { user: { id: "bot_id", username: "nakamabot" } },
@@ -296,12 +310,7 @@ export function createGuildChatMessage(options: {
   /** Parent id returned by channel.fetch() when initial parentId is null. */
   fetchParentId?: string;
   content?: string;
-  attachments?: Array<{
-    contentType?: string | null;
-    name?: string;
-    size?: number;
-    url?: string;
-  }>;
+  attachments?: MockAttachmentInput[];
   mentionsBot?: boolean;
   mentionedRoleIds?: string[];
   botHeldRoleIds?: string[];
@@ -428,27 +437,8 @@ export function createGuildChatMessage(options: {
     },
   };
 
-  const attachments = new Map<
-    string,
-    {
-      contentType: string | null;
-      name: string;
-      size: number;
-      url: string;
-    }
-  >();
-
-  for (const [index, attachment] of (options.attachments ?? []).entries()) {
-    attachments.set(String(index + 1), {
-      contentType: attachment.contentType ?? "image/png",
-      name: attachment.name ?? `image-${index + 1}.png`,
-      size: attachment.size ?? 32,
-      url: attachment.url ?? `https://cdn.example/image-${index + 1}.png`,
-    });
-  }
-
   const message = {
-    attachments,
+    attachments: buildMockAttachments(options.attachments),
     author: { bot: false, id: userId },
     channel,
     client: {

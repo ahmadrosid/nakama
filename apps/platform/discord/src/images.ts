@@ -1,4 +1,7 @@
-import { normalizeMimeType } from "@nakama/core/artifact-mime";
+import {
+  inferArtifactMimeType,
+  normalizeMimeType,
+} from "@nakama/core/artifact-mime";
 import type { ImageAttachment } from "@nakama/core/contract";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -44,7 +47,7 @@ export async function buildDiscordImageInput(
     return null;
   }
 
-  const valid: Attachment[] = [];
+  const valid: Array<{ attachment: Attachment; mediaType: string }> = [];
   let sawOversizedImage = false;
 
   for (const attachment of attachments) {
@@ -59,7 +62,7 @@ export async function buildDiscordImageInput(
       continue;
     }
 
-    valid.push(attachment);
+    valid.push({ attachment, mediaType });
   }
 
   if (valid.length > MAX_ATTACHMENTS_PER_MESSAGE) {
@@ -82,8 +85,8 @@ export async function buildDiscordImageInput(
   try {
     const images: ImageAttachment[] = [];
 
-    for (const attachment of valid) {
-      images.push(await downloadDiscordImage(attachment));
+    for (const { attachment, mediaType } of valid) {
+      images.push(await downloadDiscordImage(attachment, mediaType));
     }
 
     validateImageAttachments(images);
@@ -96,7 +99,7 @@ export async function buildDiscordImageInput(
       kind: "input",
     };
   } catch (error) {
-    if (error instanceof Error && /too large/i.test(error.message)) {
+    if (error instanceof Error && error.message === OVERSIZED_IMAGE_REPLY) {
       return { kind: "reject", message: OVERSIZED_IMAGE_REPLY };
     }
 
@@ -105,49 +108,20 @@ export async function buildDiscordImageInput(
 }
 
 function resolveAttachmentMediaType(attachment: Attachment): string {
-  const rawContentType = attachment.contentType?.trim() ?? "";
+  const declared = normalizeMimeType(attachment.contentType ?? "");
 
-  if (rawContentType) {
-    const fromHeader = normalizeMimeType(rawContentType);
-
-    if (ALLOWED_IMAGE_MEDIA_TYPES.has(fromHeader)) {
-      return fromHeader;
-    }
-
-    // Explicit non-image content type — do not override from filename.
-    return "";
+  if (declared) {
+    return ALLOWED_IMAGE_MEDIA_TYPES.has(declared) ? declared : "";
   }
 
-  return inferMediaTypeFromName(attachment.name ?? "");
-}
-
-function inferMediaTypeFromName(name: string): string {
-  const extension = name.slice(name.lastIndexOf(".")).toLowerCase();
-
-  switch (extension) {
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".png":
-      return "image/png";
-    case ".gif":
-      return "image/gif";
-    case ".webp":
-      return "image/webp";
-    default:
-      return "";
-  }
+  const inferred = inferArtifactMimeType(attachment.name ?? "");
+  return ALLOWED_IMAGE_MEDIA_TYPES.has(inferred) ? inferred : "";
 }
 
 async function downloadDiscordImage(
-  attachment: Attachment
+  attachment: Attachment,
+  mediaType: string
 ): Promise<ImageAttachment> {
-  const mediaType = resolveAttachmentMediaType(attachment);
-
-  if (attachment.size > MAX_IMAGE_BYTES) {
-    throw new Error(OVERSIZED_IMAGE_REPLY);
-  }
-
   const response = await fetch(attachment.url);
 
   if (!response.ok) {
