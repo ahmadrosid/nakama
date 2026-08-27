@@ -61,20 +61,12 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
   async ensure(args: BashSandboxEnsureArgs): Promise<void> {
     await this.probe();
 
-    try {
-      await connectSandbox(args.name);
-      return;
-    } catch (error) {
-      if (!(error instanceof SandboxNotFoundError)) {
-        // Missing sandbox → create below; other errors still try create with replace.
-      }
-    }
-
     let builder = Sandbox.builder(args.name)
       .image(args.image)
       .detached(true)
       .workdir(args.guestWorkspace)
       .shell("/bin/sh")
+      .replace()
       .volume(args.guestWorkspace, (mount) => mount.bind(args.hostWorkspace));
 
     if (args.network === "off") {

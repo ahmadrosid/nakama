@@ -27,6 +27,7 @@ import {
   formatCodingAgentBashStdout,
 } from "./cursor-agent-output";
 import {
+  BASH_SANDBOX_GUEST_WORKSPACE,
   type BashSandboxRuntime,
   ProfileSandboxManager,
 } from "./profile-sandbox-manager";
@@ -205,7 +206,7 @@ export async function runBash(
       command,
       env: buildBashSandboxEnv({
         overrides: env,
-        workspaceRoot,
+        workspaceRoot: BASH_SANDBOX_GUEST_WORKSPACE,
       }),
       hostCwd: cwd,
       hostWorkspace: workspaceRoot,

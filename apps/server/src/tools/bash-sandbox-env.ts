@@ -1,4 +1,5 @@
-const SECRET_ENV_KEY = /(?:^|_)(KEY|TOKEN|SECRET|PASSWORD|API[_-]?KEY)$/i;
+const SECRET_ENV_KEY =
+  /(?:^|_)(KEY|TOKEN|SECRET|PASSWORD|API[_-]?KEY|ACCESS[_-]?KEY[_-]?ID|CREDENTIALS?)$/i;
 
 const PROVIDER_SECRET_KEYS = new Set(
   [
@@ -8,19 +9,37 @@ const PROVIDER_SECRET_KEYS = new Set(
     "GEMINI_API_KEY",
     "OPENROUTER_API_KEY",
     "AZURE_OPENAI_API_KEY",
+    "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
     "AWS_SESSION_TOKEN",
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "MYSQL_URL",
+    "REDIS_URL",
+    "MYSQL_PWD",
+    "PGPASSWORD",
+    "GOOGLE_APPLICATION_CREDENTIALS",
   ].map((key) => key.toUpperCase())
 );
 
 export function isSecretEnvKey(key: string): boolean {
   const upper = key.toUpperCase();
-  return PROVIDER_SECRET_KEYS.has(upper) || SECRET_ENV_KEY.test(key);
+  if (PROVIDER_SECRET_KEYS.has(upper)) {
+    return true;
+  }
+  if (SECRET_ENV_KEY.test(key)) {
+    return true;
+  }
+  // Connection-string style vars often embed credentials.
+  return /_URL$/i.test(key);
 }
 
 /**
  * Env for microsandbox bash runs: small allowlist base ∪ tool overrides,
  * then strip secret-shaped keys (including overrides).
+ *
+ * `workspaceRoot` must be the **guest** workspace path (e.g. `/workspace`),
+ * not the host soul directory.
  */
 export function buildBashSandboxEnv(args: {
   hostEnv?: NodeJS.ProcessEnv;
@@ -33,17 +52,12 @@ export function buildBashSandboxEnv(args: {
   if (host.PATH) {
     env.PATH = host.PATH;
   }
-  if (host.HOME) {
-    env.HOME = host.HOME;
-  }
   if (host.LANG) {
     env.LANG = host.LANG;
   }
-  if (host.NAKAMA_CONFIG_DIR) {
-    env.NAKAMA_CONFIG_DIR = host.NAKAMA_CONFIG_DIR;
-  }
   if (args.workspaceRoot) {
     env.NAKAMA_WORKSPACE_ROOT = args.workspaceRoot;
+    env.HOME = args.workspaceRoot;
   }
 
   for (const [key, value] of Object.entries(args.overrides ?? {})) {
