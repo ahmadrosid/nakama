@@ -306,6 +306,8 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 **Returns:** `{ exitCode, stdout, stderr, timedOut }`
 
+**Execution backend:** By default bash runs on the Nakama **host** (`NAKAMA_BASH_BACKEND=host`). Set `NAKAMA_BASH_BACKEND=microsandbox` to run each profile in its own warm MicroSandbox microVM (1 profile → 1 sandbox) with the profile workspace bind-mounted. Defaults: public network **off** (`NAKAMA_BASH_SANDBOX_NETWORK=off|public`), image `alpine` (`NAKAMA_BASH_SANDBOX_IMAGE`). If MicroSandbox is selected but unavailable, the tool **fails closed** — it does not fall back to host. `codingAgent: true` / harness CLI runs are **unsupported** under `microsandbox` (use `host` for coding-agent). Stock Docker without `/dev/kvm` cannot enable MicroSandbox — see [Docker](/docker).
+
 **Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, `pi`, or `agent`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
