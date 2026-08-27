@@ -112,11 +112,6 @@ export class ProfileSandboxManager {
     });
   }
 
-  /** Test helper — does not destroy sandboxes, only clears create-once cache. */
-  resetEnsuredForTests(): void {
-    this.ensured.clear();
-  }
-
   ensuredNamesForTests(): string[] {
     return [...this.ensured.keys()];
   }

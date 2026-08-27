@@ -75,11 +75,11 @@ async function getSandboxManager(): Promise<ProfileSandboxManager> {
     return sharedSandboxManager;
   }
 
-  const { createDefaultMicrosandboxRuntime } = await import(
+  const { MicrosandboxBashRuntime } = await import(
     "./bash-microsandbox-runtime"
   );
   sharedSandboxManager = new ProfileSandboxManager(
-    createDefaultMicrosandboxRuntime()
+    new MicrosandboxBashRuntime()
   );
   return sharedSandboxManager;
 }
