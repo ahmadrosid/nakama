@@ -25,7 +25,7 @@ export const UNSUPPORTED_ATTACHMENT_REPLY =
 export const DOWNLOAD_FAILED_REPLY =
   "Could not download that image. Try again.";
 
-export interface DiscordImageInput {
+interface DiscordImageInput {
   images: ImageAttachment[];
   message: string;
 }
