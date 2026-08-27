@@ -23,7 +23,7 @@ async function connectSandbox(name: string): Promise<Sandbox> {
   return handle.startDetached();
 }
 
-class MicrosandboxBashRuntime implements BashSandboxRuntime {
+export class MicrosandboxBashRuntime implements BashSandboxRuntime {
   async ensure(args: BashSandboxEnsureArgs): Promise<void> {
     let installed = false;
     try {
@@ -118,8 +118,4 @@ class MicrosandboxBashRuntime implements BashSandboxRuntime {
       args.signal?.removeEventListener("abort", onAbort);
     }
   }
-}
-
-export function createDefaultMicrosandboxRuntime(): BashSandboxRuntime {
-  return new MicrosandboxBashRuntime();
 }
