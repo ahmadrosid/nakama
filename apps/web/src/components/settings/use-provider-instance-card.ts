@@ -36,8 +36,7 @@ export function useProviderInstanceCard({
   onUpdate,
   onDelete,
   onError,
-  isDefaultProvider = false,
-  isLastProvider = false,
+  isSole = false,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -47,8 +46,7 @@ export function useProviderInstanceCard({
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
-  isDefaultProvider?: boolean;
-  isLastProvider?: boolean;
+  isSole?: boolean;
 }) {
   const [replaceKeyOpen, setReplaceKeyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -164,15 +162,11 @@ export function useProviderInstanceCard({
   };
 
   const handleDelete = async () => {
-    const soleWarning =
-      isLastProvider || isDefaultProvider
-        ? "This is your only/default LLM provider. "
-        : "";
-    const confirmed = window.confirm(
-      `${soleWarning}Remove ${instance.label} (${instance.type})? Models using this provider will stop working. This cannot be undone.`
-    );
-
-    if (!confirmed) {
+    if (
+      !window.confirm(
+        `${isSole ? "This is your only/default LLM provider. " : ""}Remove ${instance.label} (${instance.type})? Models using this provider will stop working. This cannot be undone.`
+      )
+    ) {
       return;
     }
 
