@@ -87,4 +87,45 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
     expect(summaries[0]!.updatedAt > stale).toBe(true);
     expect(summaries[0]!.updatedAt >= beforeReplace).toBe(true);
   });
+
+  test("sqlite: append after replace does not regress summary updatedAt", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    try {
+      await seedSession(database.adapter);
+      const stale = "2020-06-01T00:00:00.000Z";
+
+      await database.adapter.replaceMessagesForSession("session_test", [
+        {
+          createdAt: stale,
+          id: "msg_1",
+          payload: { content: "hello", role: "user" },
+          seq: 0,
+          sessionId: "session_test",
+        },
+      ]);
+
+      const afterReplace = (
+        await database.adapter.listSessionSummaries("profile_test", "web")
+      )[0]!.updatedAt;
+
+      await database.adapter.appendMessagesForSession("session_test", [
+        {
+          createdAt: stale,
+          id: "msg_2",
+          payload: { content: "again", role: "user" },
+          seq: 1,
+          sessionId: "session_test",
+        },
+      ]);
+
+      const afterAppend = (
+        await database.adapter.listSessionSummaries("profile_test", "web")
+      )[0]!.updatedAt;
+
+      expect(afterAppend).toBe(afterReplace);
+      expect(afterAppend > stale).toBe(true);
+    } finally {
+      database.close();
+    }
+  });
 });

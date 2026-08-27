@@ -1588,14 +1588,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           message.createdAt
         );
       }
-      if (messages.length > 0) {
-        const updatedAt = messages.reduce(
-          (latest, message) =>
-            message.createdAt > latest ? message.createdAt : latest,
-          messages[0]!.createdAt
-        );
-        updateSessionUpdatedAtStmt.run(updatedAt, sessionId);
-      }
     },
 
     async assignMcpServerToProfile(profileId, serverId) {

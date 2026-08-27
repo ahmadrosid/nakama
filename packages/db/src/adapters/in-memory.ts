@@ -106,14 +106,6 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
     async appendMessagesForSession(sessionId, messages) {
       const existing = sessionMessages.get(sessionId) ?? [];
       sessionMessages.set(sessionId, [...existing, ...messages]);
-      if (messages.length > 0) {
-        const updatedAt = messages.reduce(
-          (latest, message) =>
-            message.createdAt > latest ? message.createdAt : latest,
-          messages[0]!.createdAt
-        );
-        sessionUpdatedAt.set(sessionId, updatedAt);
-      }
     },
 
     async assignMcpServerToProfile(profileId, serverId) {
