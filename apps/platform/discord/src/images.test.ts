@@ -59,7 +59,7 @@ describe("buildDiscordImageInput", () => {
     const result = await buildDiscordImageInput(
       createMessage({
         attachments: [{ contentType: "application/pdf", name: "doc.pdf" }],
-        content: "see pdf",
+        content: "",
       })
     );
 
@@ -67,6 +67,42 @@ describe("buildDiscordImageInput", () => {
       kind: "reject",
       message: UNSUPPORTED_ATTACHMENT_REPLY,
     });
+  });
+
+  test("ignores non-image attachments when caption text is present", async () => {
+    const result = await buildDiscordImageInput(
+      createMessage({
+        attachments: [{ contentType: "application/pdf", name: "doc.pdf" }],
+        content: "see pdf",
+      })
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("does not treat pdf as image when filename looks like png", async () => {
+    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array(8), { status: 200 })
+    );
+
+    const result = await buildDiscordImageInput(
+      createMessage({
+        attachments: [
+          {
+            contentType: "application/pdf",
+            name: "shot.png",
+            size: 8,
+          },
+        ],
+        content: "",
+      })
+    );
+
+    expect(result).toEqual({
+      kind: "reject",
+      message: UNSUPPORTED_ATTACHMENT_REPLY,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   test("downloads allowed images and uses content as caption", async () => {

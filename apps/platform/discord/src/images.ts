@@ -71,6 +71,11 @@ export async function buildDiscordImageInput(
       return { kind: "reject", message: OVERSIZED_IMAGE_REPLY };
     }
 
+    // Non-image attachments with caption/text: ignore files and let the text path run.
+    if (message.content?.trim()) {
+      return null;
+    }
+
     return { kind: "reject", message: UNSUPPORTED_ATTACHMENT_REPLY };
   }
 
@@ -100,10 +105,17 @@ export async function buildDiscordImageInput(
 }
 
 function resolveAttachmentMediaType(attachment: Attachment): string {
-  const fromHeader = normalizeMimeType(attachment.contentType ?? "");
+  const rawContentType = attachment.contentType?.trim() ?? "";
 
-  if (ALLOWED_IMAGE_MEDIA_TYPES.has(fromHeader)) {
-    return fromHeader;
+  if (rawContentType) {
+    const fromHeader = normalizeMimeType(rawContentType);
+
+    if (ALLOWED_IMAGE_MEDIA_TYPES.has(fromHeader)) {
+      return fromHeader;
+    }
+
+    // Explicit non-image content type — do not override from filename.
+    return "";
   }
 
   return inferMediaTypeFromName(attachment.name ?? "");
