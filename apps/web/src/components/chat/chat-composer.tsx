@@ -76,6 +76,7 @@ import {
 } from "@/lib/chat-images";
 import {
   type ComposerStackEdge,
+  composerHitTargetClass,
   composerIconButtonClass,
   composerInputGroupClass,
   composerInputGroupRecessedClass,
@@ -186,7 +187,6 @@ export function ChatComposer(props: ChatComposerProps) {
     <ChatTips />
   ) : null;
   const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
-  const stackedShellClass = composerShellRecessedClass;
 
   return (
     <div className={cn("w-full shrink-0", className)}>
@@ -215,12 +215,9 @@ export function ChatComposer(props: ChatComposerProps) {
               disabled={disabled || busy}
               onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
               questionnaire={questionnaire}
-              stackEdge="start"
             />
           ) : null}
-          {showTodos ? (
-            <AgentTodoPanel stack stackEdge="start" todos={todos} />
-          ) : null}
+          {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
           {hasQueuedMessages ? (
             <ChatMessageQueuePanel
               messages={queuedMessages}
@@ -232,7 +229,7 @@ export function ChatComposer(props: ChatComposerProps) {
             {composerNotice}
             <PromptInput
               accept={ALL_ATTACHMENT_ACCEPT}
-              className={stackedShellClass}
+              className={composerShellRecessedClass}
               inputGroupClassName={composerInputGroupRecessedClass}
               maxFileSize={MAX_IMAGE_BYTES}
               maxFiles={5}
@@ -648,9 +645,15 @@ function ChatComposerFullFooter({
 }
 
 /** Visible 28px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
-const composerSubmitButtonClassName =
-  "relative size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 disabled:opacity-50 after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2";
+const composerSubmitButtonClassName = cn(
+  composerHitTargetClass,
+  "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 disabled:opacity-50"
+);
 
+const composerAttachmentRemoveClassName = cn(
+  composerHitTargetClass,
+  "absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] hover:bg-background active:scale-[0.96]"
+);
 function ChatComposerSubmitButton({
   chatStatus,
   busy,
@@ -759,7 +762,7 @@ function ChatAttachmentHeader({
                 />
                 <button
                   aria-label={`Remove ${filename}`}
-                  className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:bg-background active:scale-[0.96]"
+                  className={composerAttachmentRemoveClassName}
                   onClick={() => attachments.remove(file.id)}
                   type="button"
                 >
@@ -793,7 +796,7 @@ function ChatAttachmentHeader({
               </span>
               <button
                 aria-label={`Remove ${filename}`}
-                className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:bg-background active:scale-[0.96]"
+                className={composerAttachmentRemoveClassName}
                 onClick={() => attachments.remove(file.id)}
                 type="button"
               >

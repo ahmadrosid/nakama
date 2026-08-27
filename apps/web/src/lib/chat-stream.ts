@@ -735,9 +735,15 @@ export function appendOutgoingMessages(
   ]);
 }
 
+/** Visible 28px face; ≥40px hit via pseudo. */
+export const composerHitTargetClass =
+  "relative after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2";
+
 /** Composer icon control: visible 28px face, ≥40px hit via pseudo. */
-export const composerIconButtonClass =
-  "relative size-7 shrink-0 rounded-full bg-muted text-muted-foreground transition-[color,background-color,transform,opacity] hover:bg-muted/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] disabled:pointer-events-none disabled:opacity-40 after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2";
+export const composerIconButtonClass = cn(
+  composerHitTargetClass,
+  "size-7 shrink-0 rounded-full bg-muted text-muted-foreground transition-[color,background-color,transform,opacity] hover:bg-muted/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] disabled:pointer-events-none disabled:opacity-40"
+);
 
 export const composerToolbarClass =
   "flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden @[22rem]/composer:gap-1.5";
@@ -752,9 +758,6 @@ const composerInputGroupBase =
 /** Chat composer InputGroup: solid face, no focus ring (streaming rim is the active cue). */
 export const composerInputGroupClass =
   "chat-composer-input @container/composer overflow-visible has-[[data-slot=input-group-control]:focus-visible]:border-border has-[[data-slot=input-group-control]:focus-visible]:ring-0";
-
-export const composerDockClass =
-  "flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs transition-[box-shadow,border-color]";
 
 /** First shelf panel rounds its top; later panels stay flush. */
 export type ComposerStackEdge = "start" | "continue";
@@ -785,12 +788,6 @@ export const composerShellRecessedClass = cn(
 export const composerInputGroupRecessedClass = cn(
   composerInputGroupClass,
   "rounded-t-[calc(0.375rem-1px)] rounded-b-[calc(0.75rem-1px)]"
-);
-
-export const composerShellStackedClass = cn(
-  composerInputGroupBase,
-  "w-full [&_form]:w-full",
-  "[&_[data-slot=input-group]]:w-full [&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
 );
 
 export const composerShellCompactClass =
