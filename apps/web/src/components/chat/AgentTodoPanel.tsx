@@ -107,7 +107,9 @@ export function AgentTodoPanel({
 
   const expandableList = (
     <div className="todo-panel-expand" data-expanded={expanded}>
-      <div className="overflow-hidden pb-1.5">{list}</div>
+      <div className="todo-panel-expand-inner overflow-hidden pb-1.5">
+        {list}
+      </div>
     </div>
   );
 
@@ -144,7 +146,7 @@ function TodoRow({ todo, index }: { todo: AgentTodo; index: number }) {
   return (
     <li
       className="todo-item-enter flex min-w-0 items-center gap-2 pl-1 text-xs leading-none"
-      style={{ animationDelay: `${index * 60}ms` }}
+      style={{ animationDelay: `${index * 100}ms` }}
     >
       <TodoStatusIcon key={todo.status} status={todo.status} />
       <span

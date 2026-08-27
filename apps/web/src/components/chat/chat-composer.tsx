@@ -632,8 +632,9 @@ function ChatComposerFullFooter({
   );
 }
 
+/** Visible 28px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
 const composerSubmitButtonClassName =
-  "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50";
+  "relative size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 disabled:opacity-50 after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2";
 
 function ChatComposerSubmitButton({
   chatStatus,
@@ -733,7 +734,7 @@ function ChatAttachmentHeader({
 
             return (
               <div
-                className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-muted outline outline-1 outline-black/10 dark:outline-white/10"
                 key={file.id}
               >
                 <img
@@ -743,7 +744,7 @@ function ChatAttachmentHeader({
                 />
                 <button
                   aria-label={`Remove ${filename}`}
-                  className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+                  className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:bg-background active:scale-[0.96]"
                   onClick={() => attachments.remove(file.id)}
                   type="button"
                 >
@@ -777,7 +778,7 @@ function ChatAttachmentHeader({
               </span>
               <button
                 aria-label={`Remove ${filename}`}
-                className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+                className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:bg-background active:scale-[0.96]"
                 onClick={() => attachments.remove(file.id)}
                 type="button"
               >
