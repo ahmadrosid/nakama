@@ -148,7 +148,7 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 | Chat | `agent-service` → `buildChatSession()` → `buildToolExecutionContext(...)` |
 | Tool loop | `packages/agent/src/tool-loop.ts` → `executeToolCall()`; parallel batching in `packages/agent/src/chat.ts` when every call in the turn is `parallelSafe` |
 
-**Parallel tool calls:** Built-in read/search/fetch tools (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`) set `parallelSafe: true` on `ToolDefinition`. Mutating, shell, delegation, and session-state tools stay sequential. Custom JS tools default to sequential; export `parallelSafe: true` from the module to opt in. Custom Python tools cannot opt in — each call spawns a subprocess and stays sequential. When a turn mixes parallel-safe and sequential tools, the whole turn runs sequentially.
+**Parallel tool calls:** Built-in read/search/fetch tools (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`) set `parallelSafe: true` on `ToolDefinition`. Mutating, shell, delegation, and session-state tools stay sequential. Custom JS tools default to sequential; set `handlerConfig.parallelSafe: true` to opt in. Custom Python tools cannot opt in — each call spawns a subprocess and stays sequential. When a turn mixes parallel-safe and sequential tools, the whole turn runs sequentially.
 
 | Flow | Entry |
 |---|---|

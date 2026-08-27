@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { visibleLength } from "./text-measure";
 
 export type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
@@ -48,7 +49,6 @@ export async function detectTheme(): Promise<Theme | null> {
   // macOS system appearance — most reliable for Apple terminals
   if (process.platform === "darwin") {
     try {
-      const { execSync } = require("node:child_process");
       execSync("defaults read -g AppleInterfaceStyle 2>/dev/null", {
         encoding: "utf8",
         timeout: 500,

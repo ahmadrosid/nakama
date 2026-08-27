@@ -36,7 +36,7 @@ When the model requests multiple tool calls in one turn, Nakama can run them con
 
 If a turn mixes parallel-safe and sequential tools — for example `read_file` and `bash` together — the whole turn runs sequentially.
 
-Custom JavaScript tools under `~/.nakama/tools/` default to sequential. Export `parallelSafe = true` from the module to opt in.
+Custom JavaScript tools under `~/.nakama/tools/` default to sequential. Set `"parallelSafe": true` in the tool's `handlerConfig` to opt in.
 
 Parallel execution speeds up multi-file research and lets a parent agent delegate several independent `sub_agent` tasks at once. See [`sub_agent`](#sub_agent) below.
 
@@ -433,12 +433,35 @@ Confirmed restore replaces the current local data root; selective merge, schedul
 
 Custom tools live in `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set) and are registered by a platform admin from **System → Tools**. Each tool points at a module file and can then be assigned to profiles like any builtin.
 
-Two handler types are supported:
+Two handler types are supported, and both run as a subprocess per call rather than inside the Nakama server process:
 
 | Type | File | Runs on |
 |---|---|---|
-| `javascript` | `*.js` | The Nakama process (module import) |
+| `javascript` | `*.js` | A `bun` subprocess per call |
 | `python` | `*.py` | A `python3` subprocess per call |
+
+Neither handler inherits the server's full environment. The child process only gets `PATH` (to resolve the interpreter), `NAKAMA_CONFIG_DIR`, and `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) — provider API keys and anything else in the server's environment are not visible to a tool. The child's working directory is the tool's own file, not the server's checkout, so relative file access stays scoped to `~/.nakama/tools/`.
+
+### Authoring a JavaScript tool
+
+A JavaScript tool is a `.js` file that exports a `run(input, context)` function. Nakama loads it through a small runner subprocess — you do not write a stdin/stdout harness yourself:
+
+```javascript
+// ~/.nakama/tools/word_count.js
+export async function run(input, context) {
+  const text = String(input.text ?? "");
+  return { words: text.split(/\s+/).filter(Boolean).length };
+}
+```
+
+The contract:
+
+- Nakama invokes `bun` with a built-in runner that imports your module, calls `run`, and prints one JSON value to stdout.
+- A non-zero exit code or non-JSON stdout is returned to the agent as an error message (stderr is included).
+- Calls time out after 30 seconds.
+- Set `NAKAMA_BUN_BIN` before starting Nakama if `bun` is not the right interpreter to invoke on `PATH`.
+
+Parameters and `parallelSafe` are declared in the tool's `handlerConfig` (`handlerConfig.parameters` as a JSON Schema, `handlerConfig.parallelSafe` as a boolean) — not read from the module, since each call is a fresh process. When `parameters` is omitted, the model sees a permissive open object and can pass any arguments.
 
 ### Authoring a Python tool
 
@@ -464,7 +487,6 @@ The contract:
 - Whatever the script prints to stdout must be one JSON value — that becomes the tool result the agent sees.
 - A non-zero exit code or non-JSON stdout is returned to the agent as an error message (stderr is included).
 - Calls time out after 30 seconds.
-- The child process inherits your environment plus two extras: `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) and `NAKAMA_CONFIG_DIR`.
 - Set `NAKAMA_PYTHON_BIN` before starting Nakama if your interpreter is not on `PATH` as `python3`.
 
 Parameters are declared as an optional JSON Schema in the tool's `handlerConfig.parameters`. When omitted, the model sees a permissive open object and can pass any arguments.

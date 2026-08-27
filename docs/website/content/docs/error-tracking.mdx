@@ -1,0 +1,108 @@
+---
+title: "Error tracking"
+description: "Send this instance's own errors to the Sentry, GlitchTip, Bugsink, or self-hosted Sentry project you already run."
+---
+
+When a self-hosted Nakama crashes, the evidence is one line of stderr on whatever machine it ran on. Nobody reads that until somebody complains.
+
+Point Nakama at the error tracker you already run and the crash lands in your project instead, grouped, with a stack trace, ready to alert on.
+
+Nakama only sends. It stores no errors, and there is no error page inside Nakama to check. Your tracker already has one.
+
+## What you need first
+
+- A project on **Sentry**, **GlitchTip**, **Bugsink**, or a **self-hosted Sentry**. They all speak the same protocol, so one field covers all four.
+- The **DSN** for that project. It looks like `https://<key>@sentry.example.com/42`.
+- The **org admin** role in Nakama.
+- Nothing at all if you would rather not do this. Error tracking is off until you paste a DSN, and off means nothing is sent and nothing is written to disk.
+
+## Setup
+
+**1. Copy the DSN from your tracker.** In Sentry and GlitchTip it is under **Project Settings**, then **Client Keys**. Take the value labelled DSN.
+
+GlitchTip also shows a second address under the same page, ending in `/security/?glitchtip_key=...`. That one is the browser CSP report endpoint and it will not accept error events. The DSN is the one you want.
+
+**2. Paste it into Nakama.** Open **Integrations**, then **Error tracking**, paste the DSN, and press **Save**.
+
+![The Error tracking page in Nakama before a DSN is saved, showing the badge reading Off](/screenshots/error-tracking-empty.png)
+
+Nakama checks the shape of what you pasted and refuses anything that is not a DSN, so a typo fails on the spot rather than going quiet for a week. It takes effect immediately: there is nothing to restart.
+
+**3. Press Send test event.** The badge turns to **Sending** once a DSN is saved, and the button tells you whether the event actually arrived.
+
+![The Error tracking page with a saved DSN, the badge reading Sending, and the message confirming the test event was delivered](/screenshots/error-tracking-test-event.png)
+
+Open your tracker and you should see one event within a few seconds, at info level, so it does not sit in your triage queue looking like a real crash. If the button says the ingest could not be reached, the DSN or the network is wrong, and nothing has been lost.
+
+## What gets sent
+
+Uncaught exceptions and unhandled rejections, from four processes: the server and the Telegram, WhatsApp, and Discord workers. Plus the test event, when you press the button.
+
+Each report carries the error name and message, the stack trace, which process it came from, and the Bun version, platform, and architecture.
+
+**Not sent:** HTTP 4xx or 5xx responses, tool failures, failed agent turns, and anything a user typed. A rejected request is not a defect, and reporting every bad password would bury the real crashes.
+
+## What is stripped before it leaves
+
+Stack traces from your machine quote your machine. Every report is scrubbed first:
+
+| Stripped | Replaced with |
+| --- | --- |
+| Home directory paths, on Unix and Windows | `~` |
+| Bearer tokens | `Bearer <redacted>` |
+| API keys shaped like `sk-`, `ghp_`, `xox...`, and AWS access keys | `<redacted-key>` |
+| Anything after a variable whose name contains `TOKEN`, `KEY`, `API_KEY`, `APIKEY`, `SECRET`, `PASSWORD`, `PASSWD`, `AUTHORIZATION`, or `CREDENTIAL` | `<redacted>` |
+| Email addresses | `<email>` |
+| Any remaining run of 32 or more letters, digits, `_` or `-`, the catch-all for opaque credentials the rows above do not name | `<redacted-token>` |
+| Quoted payloads inside an error message, which is where a `JSON.parse` failure prints your data | `<redacted>` |
+
+Long messages are cut at 4000 characters. The host name is deliberately left out, because on a self-hosted install it is often your own machine or cluster name.
+
+The local log is not scrubbed, on purpose. It never leaves the machine, and a redacted log is useless to the person debugging their own install.
+
+## Turning it off
+
+Clear the DSN box and press **Save**. Nothing is sent from that moment on.
+
+To force it off for a whole deployment regardless of what is saved, set `DO_NOT_TRACK=1` in the environment. It beats a saved DSN and needs no dashboard access.
+
+## When something does not look right
+
+| What you see | What it means | What to do |
+| --- | --- | --- |
+| Save is refused with a message about the DSN | What you pasted is not a Sentry-compatible DSN | Recheck you copied the DSN and not the CSP report address |
+| Send test event says the ingest could not be reached | The DSN is well formed but nothing answered | Check the server has network access to your tracker, and that the project still exists |
+| The test event arrives but real crashes never do | Nothing has crashed yet, which is the good outcome | Leave it. Nothing is queued because nothing failed |
+| A crash happened but nothing arrived until later | Expected. A crash kills the process before the send finishes, so the report is written to disk and sent by the next process to start | Nothing. Restart the server if it is not already back up |
+| The button is greyed out | No DSN is saved yet | Save one first |
+
+## Who can do what
+
+| Action | Who |
+| --- | --- |
+| See whether error tracking is on | Any member |
+| See the DSN in full | Nobody. The dashboard and the API only ever show it masked |
+| Save or clear the DSN | Org admin, or platform admin |
+| Send a test event | Org admin, or platform admin |
+
+The DSN applies to the whole installation, not to one organisation. There is no per-org error tracking, because a crashed process does not belong to an organisation.
+
+## How it works underneath
+
+For anyone who wants the mechanics rather than the steps.
+
+- The DSN is stored as `dsn` in `~/.nakama/error-tracking/config.ini` on the server. The API never returns the raw value, only a masked one.
+- Reports are posted to the DSN's store endpoint with the `X-Sentry-Auth` header, which is what makes Sentry, GlitchTip, and Bugsink interchangeable here. There is no SDK and no extra dependency.
+- Grouping uses a fingerprint Nakama computes from the error name, message, and stack, with uuids and line numbers normalised out. That way one bug stays one issue even when the stack differs between installs.
+- The DSN is read per send, not at startup. That is why saving one takes effect without restarting four processes.
+- **The queue is the interesting part.** Handlers use `uncaughtExceptionMonitor`, which leaves Bun's own crash and exit behaviour intact, so the process dies before an asynchronous send can finish. Measured on Bun 1.3.14: not even an `exit` handler runs. So a report is written to `~/.nakama/error-tracking/pending.json` synchronously before the send, and removed only once the ingest confirms it. The next process to start drains what is left, which also covers a send that simply failed.
+- Only the server drains. The four processes share one config directory and the queue is a read-modify-write on a single file, so draining from all of them would race.
+- The queue holds at most 5 reports and keeps the newest. A send is given 3 seconds.
+- A report id doubles as the Sentry event id, so a queued copy and a live send collapse into one event rather than appearing twice.
+- Delivery failure is swallowed. A crash reporter that turns one crash into two is worse than no crash reporter, so exit codes are never changed by it.
+- `NAKAMA_ERROR_TRACKING_DSN` overrides the file, and an empty value means off rather than falling back to the file.
+
+## Related docs
+
+- [Integrations](/integrations), for the other things configured on the same page
+- [Backup and restore](/backup-restore), for what else lives in `~/.nakama`

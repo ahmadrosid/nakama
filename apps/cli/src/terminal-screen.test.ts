@@ -3,6 +3,7 @@ import {
   consumeTerminalInput,
   isMouseEventReport,
   isTerminalResponse,
+  stripCursorPositionReports,
 } from "./terminal-input";
 
 describe("isTerminalResponse", () => {
@@ -13,6 +14,22 @@ describe("isTerminalResponse", () => {
 
   test("detects mouse tracking reports", () => {
     expect(isMouseEventReport("\x1b[<64;12;8M")).toBe(true);
+  });
+});
+
+describe("stripCursorPositionReports", () => {
+  test("strips multiple reports in one pass and keeps the first row", () => {
+    const result = stripCursorPositionReports("a\x1b[12;1R\x1b[99;2Rb");
+
+    expect(result.row).toBe(12);
+    expect(result.pending).toBe("ab");
+  });
+
+  test("returns null row when no report is present", () => {
+    expect(stripCursorPositionReports("hello")).toEqual({
+      pending: "hello",
+      row: null,
+    });
   });
 });
 

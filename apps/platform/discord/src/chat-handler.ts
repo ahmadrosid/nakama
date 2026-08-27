@@ -14,7 +14,7 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
-import type { SendMessageInput } from "@nakama/core/contract";
+import type { ImageAttachment, SendMessageInput } from "@nakama/core/contract";
 import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
 import {
   filterProfilesForChatAccess,
@@ -54,6 +54,7 @@ import {
   resolveOrgChannelId,
   stripBotMention,
 } from "./guild-message";
+import { buildDiscordImageInput } from "./images";
 import { isIgnorableInteractionError } from "./interaction-errors";
 import {
   createDiscordMessenger,
@@ -240,12 +241,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
     }
 
-    if (!text) {
+    let imageInput: Awaited<ReturnType<typeof buildDiscordImageInput>> = null;
+    try {
+      imageInput = await buildDiscordImageInput(message);
+    } catch (error) {
+      await messenger.send(formatError(error));
+      return;
+    }
+
+    if (!(text || imageInput)) {
       await messenger.send("Text messages only.");
       return;
     }
 
-    if (command === "/org" || command === "/profile") {
+    if (text && (command === "/org" || command === "/profile")) {
       await withChatLock(conversationKey, async () => {
         await handleTextCommand(
           text,
@@ -259,7 +268,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    if (text.startsWith("/") && !isAttachOnlyCommand(text)) {
+    if (text?.startsWith("/") && !isAttachOnlyCommand(text)) {
       await messenger.send(
         "Use slash commands from Discord's command menu for session control."
       );
@@ -267,11 +276,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     const messageText =
-      isGuild && botInfo
+      text && isGuild && botInfo
         ? stripBotMention(text, botInfo, mentionedBotRoleIds)
-        : text;
+        : (text ?? "");
 
-    if (!messageText) {
+    if (!(messageText || imageInput)) {
       return;
     }
 
@@ -314,7 +323,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         replyMessenger,
         messageText,
         isGuild,
-        replyIsThread
+        replyIsThread,
+        imageInput?.images
       );
     });
 
@@ -647,7 +657,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     messenger: DiscordMessenger,
     attachUserText: string,
     isGuild: boolean,
-    isThread: boolean
+    isThread: boolean,
+    images?: ImageAttachment[]
   ): Promise<void> {
     const session = await resolveSession(conversationKey);
     const profileId = sessionStore.get(conversationKey)?.profileId;
@@ -669,7 +680,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     // Forward free text to the agent — do not gate Discord replies on questionnaire parsing.
     const streamInput = withGroupContext(
-      { message: attachUserText },
+      {
+        images,
+        message: attachUserText,
+      },
       isGuild,
       isThread
     );

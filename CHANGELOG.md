@@ -9,6 +9,22 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-08-26
+
+### Added
+
+- OpenAI-compatible providers can use the Responses API ([#638])
+
+### Changed
+
+- Super Bot deletes files with `bash`; `delete_file` is no longer assigned ([#650])
+- Dashboard uses Inter Variable
+
+### Fixed
+
+- Agent-browser install stream stays closed after it ends ([#637])
+- WhatsApp reconnects once after a 408 instead of stacking sockets ([#636])
+
 ## [0.4.4] - 2026-08-26
 
 ### Added
@@ -568,7 +584,8 @@ First tagged release. The baseline it established:
 - Export and import for data portability
 - Docker image published from GitHub Actions, and a VitePress documentation site
 
-[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.4...main
+[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.5...main
+[0.4.5]: https://github.com/ahmadrosid/nakama/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/ahmadrosid/nakama/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/ahmadrosid/nakama/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/ahmadrosid/nakama/compare/v0.4.1...v0.4.2
@@ -746,3 +763,7 @@ First tagged release. The baseline it established:
 [#475]: https://github.com/ahmadrosid/nakama/pull/475
 [#476]: https://github.com/ahmadrosid/nakama/pull/476
 [#633]: https://github.com/ahmadrosid/nakama/pull/633
+[#636]: https://github.com/ahmadrosid/nakama/pull/636
+[#637]: https://github.com/ahmadrosid/nakama/pull/637
+[#638]: https://github.com/ahmadrosid/nakama/pull/638
+[#650]: https://github.com/ahmadrosid/nakama/pull/650

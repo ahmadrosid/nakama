@@ -17,6 +17,7 @@ import {
   ensureUserConfiguredViaCli,
 } from "./setup";
 import { detectTheme, setTheme, type Theme } from "./styled-text";
+import { InvalidThemeArgError, parseThemeArg } from "./theme-arg";
 
 if (isRotateTokenCommand()) {
   try {
@@ -28,34 +29,18 @@ if (isRotateTokenCommand()) {
   }
 }
 
-function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-
-    if (arg === "--theme") {
-      const value = argv[index + 1]?.trim();
-      if (value === "light" || value === "dark") {
-        return value;
-      }
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--theme=light") {
-      return "light";
-    }
-    if (arg === "--theme=dark") {
-      return "dark";
-    }
-  }
-
-  return null;
-}
-
 async function resolveTheme(): Promise<Theme> {
-  const explicit = parseThemeArg();
-  if (explicit) {
-    return explicit;
+  try {
+    const explicit = parseThemeArg();
+    if (explicit) {
+      return explicit;
+    }
+  } catch (error) {
+    if (error instanceof InvalidThemeArgError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
   if (process.env.NAKAMA_THEME === "light") {
     return "light";

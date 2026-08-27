@@ -10,6 +10,7 @@
     "docker",
     "tailscale",
     "backup-restore",
+    "error-tracking",
     "---Channels---",
     "cli",
     "telegram",

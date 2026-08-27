@@ -1663,3 +1663,69 @@ describe("createChatHandler guild thread routing", () => {
     expect(order).toEqual(["first-start", "second", "first-end"]);
   });
 });
+
+describe("createChatHandler inbound images", () => {
+  test("image-only DM reaches the agent with images populated", async () => {
+    await withTempHome(async (homeDir) => {
+      const pngBytes = new Uint8Array([137, 80, 78, 71]);
+      const streamedInputs: unknown[] = [];
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(pngBytes, { status: 200 })
+      );
+
+      try {
+        const { handleMessage } = await createPairedHandler(homeDir, {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "Looks like a PNG.";
+          },
+        });
+
+        const dm = createDmMessage({
+          attachments: [
+            {
+              contentType: "image/png",
+              size: pngBytes.byteLength,
+              url: "https://cdn.example/shot.png",
+            },
+          ],
+          content: "",
+          userId: "424242424242424242",
+        });
+        await handleMessage(dm.message);
+
+        expect(streamedInputs).toEqual([
+          {
+            images: [
+              {
+                data: Buffer.from(pngBytes).toString("base64"),
+                mediaType: "image/png",
+              },
+            ],
+            message: "",
+          },
+        ]);
+        expect(dm.sentMessages).toContain("Looks like a PNG.");
+        expect(
+          dm.sentMessages.some((reply) => /text messages only/i.test(reply))
+        ).toBe(false);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+  });
+
+  test("empty non-image DM still gets Text messages only.", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, calls } = await createPairedHandler(homeDir);
+      const dm = createDmMessage({
+        content: "",
+        userId: "424242424242424242",
+      });
+      await handleMessage(dm.message);
+
+      expect(calls.sendStream).toBe(0);
+      expect(dm.sentMessages).toContain("Text messages only.");
+    });
+  });
+});

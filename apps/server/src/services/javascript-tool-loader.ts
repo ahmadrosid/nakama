@@ -1,72 +1,31 @@
-import { pathToFileURL } from "node:url";
-import type { JsonSchema, ToolContext, ToolDefinition } from "@nakama/core";
-import { pathExists, permissiveObjectSchema } from "@nakama/core";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import type { ToolContext, ToolDefinition } from "@nakama/core";
+import { pathExists } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import {
-  createErrorTool,
-  isJsonSchema,
-  readHandlerConfig,
+  loadCustomSubprocessTool,
+  readOptionalString,
   resolveCustomToolModulePath,
 } from "./custom-tool-shared";
+import { spawnJsonTool } from "./custom-tool-subprocess";
 
-const moduleCache = new Map<string, JavascriptToolModule>();
-
-interface JavascriptToolModule {
-  parallelSafe?: boolean;
-  parameters?: JsonSchema;
-  run: (input: unknown, context: ToolContext) => Promise<unknown>;
-}
+const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
+const RUNNER_PATH = fileURLToPath(
+  new URL("./javascript-tool-runner.js", import.meta.url)
+);
 
 export async function loadJavascriptTool(
   record: StoredToolRecord
 ): Promise<ToolDefinition | null> {
-  const config = readHandlerConfig(record.handlerConfig);
-
-  if (!config?.modulePath) {
-    return createErrorTool(
-      record,
-      `Tool "${record.name}" is missing handlerConfig.modulePath.`
-    );
-  }
-
-  let modulePath: string;
-
-  try {
-    modulePath = resolveJavascriptModulePath(config.modulePath);
-  } catch (error) {
-    return createErrorTool(
-      record,
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-
-  if (!(await pathExists(modulePath))) {
-    return createErrorTool(
-      record,
-      `Tool module not found: ${config.modulePath}`
-    );
-  }
-
-  try {
-    const module = await importJavascriptModule(modulePath);
-    const parameters =
-      module.parameters ?? config.parameters ?? permissiveObjectSchema();
-
-    return {
-      description: record.description,
-      name: record.name,
-      parameters,
-      ...(module.parallelSafe ? { parallelSafe: true } : {}),
-      async run(input, context) {
-        return module.run(input, context);
-      },
-    };
-  } catch (error) {
-    return createErrorTool(
-      record,
-      error instanceof Error ? error.message : String(error)
-    );
-  }
+  return loadCustomSubprocessTool({
+    allowParallelSafe: true,
+    record,
+    resolveModulePath: resolveJavascriptModulePath,
+    run: runJavascriptTool,
+    validateModule: validateJavascriptToolModule,
+  });
 }
 
 export async function validateJavascriptToolModule(
@@ -78,61 +37,38 @@ export async function validateJavascriptToolModule(
     throw new Error(`Tool module not found: ${modulePath}`);
   }
 
-  await importJavascriptModule(resolvedPath);
+  // Static checks catch the obvious authoring failures before registration.
+  // Syntax errors still surface at invocation.
+  const source = await readFile(resolvedPath, "utf8");
+
+  if (
+    !/\bexport\s+(?:async\s+)?function\s+run\s*\(|\bexport\s+(?:const|let|var)\s+run\s*=/.test(
+      source
+    )
+  ) {
+    throw new Error("Tool module must export a run(input, context) function.");
+  }
 }
 
 export function resolveJavascriptModulePath(modulePath: string): string {
   return resolveCustomToolModulePath(modulePath);
 }
 
-async function importJavascriptModule(
-  modulePath: string
-): Promise<JavascriptToolModule> {
-  const cached = moduleCache.get(modulePath);
-
-  if (cached) {
-    return cached;
-  }
-
-  const imported = await import(pathToFileURL(modulePath).href);
-  const module = normalizeJavascriptModule(imported);
-
-  moduleCache.set(modulePath, module);
-  return module;
-}
-
-export function invalidateJavascriptModuleCache(modulePath: string): void {
-  moduleCache.delete(modulePath);
-}
-
-function normalizeJavascriptModule(imported: unknown): JavascriptToolModule {
-  if (typeof imported !== "object" || imported === null) {
-    throw new Error("Tool module must export a run function.");
-  }
-
-  const record = imported as Record<string, unknown>;
-  const defaultExport =
-    typeof record.default === "object" && record.default !== null
-      ? (record.default as Record<string, unknown>)
-      : null;
-  const source = defaultExport ?? record;
-  const run = source.run;
-
-  if (typeof run !== "function") {
-    throw new Error("Tool module must export a run function.");
-  }
-
-  const parameters = isJsonSchema(source.parameters)
-    ? source.parameters
-    : isJsonSchema(record.parameters)
-      ? record.parameters
-      : undefined;
-  const parallelSafe =
-    source.parallelSafe === true || record.parallelSafe === true;
-
-  return {
-    parameters,
-    ...(parallelSafe ? { parallelSafe: true } : {}),
-    run: (input, context) => Promise.resolve(run(input, context)),
-  };
+async function runJavascriptTool(
+  modulePath: string,
+  input: unknown,
+  context: ToolContext
+): Promise<unknown> {
+  // No try/catch here on purpose: a failed spawn must reject so the retry
+  // policy in withToolRetries can retry transient failures. executeToolCall
+  // converts the throw into `{ error: message }`.
+  return spawnJsonTool({
+    args: [RUNNER_PATH, modulePath],
+    bin: BUN_BIN,
+    context,
+    cwd: path.dirname(modulePath),
+    input,
+    label: "JavaScript tool",
+    workspaceRoot: readOptionalString(context?.workspaceRoot),
+  });
 }

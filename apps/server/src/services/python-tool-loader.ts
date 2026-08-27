@@ -1,78 +1,26 @@
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { ToolContext, ToolDefinition } from "@nakama/core";
-import { pathExists, permissiveObjectSchema } from "@nakama/core";
+import { pathExists } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import {
-  createErrorTool,
-  readHandlerConfig,
+  loadCustomSubprocessTool,
+  readOptionalString,
   resolveCustomToolModulePath,
 } from "./custom-tool-shared";
+import { spawnJsonTool } from "./custom-tool-subprocess";
 
 const PYTHON_BIN = process.env.NAKAMA_PYTHON_BIN ?? "python3";
-const DEFAULT_TIMEOUT_MS = 30_000;
-const SIGKILL_GRACE_MS = 5000;
-const MAX_OUTPUT_CHARS = 1_000_000;
-
-// Call-time env override so tests can shrink the kill timer.
-function resolveTimeoutMs(): number {
-  const configured = Number(process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS);
-  return Number.isFinite(configured) && configured > 0
-    ? configured
-    : DEFAULT_TIMEOUT_MS;
-}
 
 export async function loadPythonTool(
   record: StoredToolRecord
 ): Promise<ToolDefinition | null> {
-  const config = readHandlerConfig(record.handlerConfig);
-
-  if (!config?.modulePath) {
-    return createErrorTool(
-      record,
-      `Tool "${record.name}" is missing handlerConfig.modulePath.`
-    );
-  }
-
-  let modulePath: string;
-
-  try {
-    modulePath = resolvePythonModulePath(config.modulePath);
-  } catch (error) {
-    return createErrorTool(
-      record,
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-
-  if (!(await pathExists(modulePath))) {
-    return createErrorTool(
-      record,
-      `Tool module not found: ${config.modulePath}`
-    );
-  }
-
-  // Surface the missing-`run` error at load time so the agent sees a clear
-  // message instead of a confusing JSON parse error from spawn.
-  try {
-    await validatePythonToolModule(config.modulePath);
-  } catch (error) {
-    return createErrorTool(
-      record,
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-
-  const parameters = config.parameters ?? permissiveObjectSchema();
-
-  return {
-    description: record.description,
-    name: record.name,
-    parameters,
-    async run(input, context) {
-      return runPythonTool(modulePath, input, context);
-    },
-  };
+  return loadCustomSubprocessTool({
+    record,
+    resolveModulePath: resolvePythonModulePath,
+    run: runPythonTool,
+    validateModule: validatePythonToolModule,
+  });
 }
 
 export async function validatePythonToolModule(
@@ -112,138 +60,16 @@ async function runPythonTool(
   input: unknown,
   context: ToolContext
 ): Promise<unknown> {
-  const workspaceRoot = readString(context?.workspaceRoot);
-  const env: NodeJS.ProcessEnv = { ...process.env };
-
-  if (workspaceRoot) {
-    env.NAKAMA_WORKSPACE_ROOT = workspaceRoot;
-  }
-
   // No try/catch here on purpose: a failed spawn must reject so the retry
   // policy in withToolRetries can retry transient failures. executeToolCall
-  // (packages/agent/src/tool-loop.ts) converts the throw into the same
-  // `{ error: message }` shape callers already expect.
-  return spawnAndParse(modulePath, input, context, env);
-}
-
-async function spawnAndParse(
-  modulePath: string,
-  input: unknown,
-  context: ToolContext,
-  env: NodeJS.ProcessEnv
-): Promise<unknown> {
-  const timeoutMs = resolveTimeoutMs();
-  const result = await new Promise<{ stdout: string; stderr: string }>(
-    (resolve, reject) => {
-      // Node SIGTERMs the child when the turn is cancelled, so a stopped chat
-      // does not leave a python process holding the session open.
-      const child = spawn(PYTHON_BIN, [modulePath], {
-        env,
-        signal: context.signal,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-
-      let stdout = "";
-      let stderr = "";
-      let timedOut = false;
-
-      const sigtermTimer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // already exited
-        }
-        timedOut = true;
-        setTimeout(() => {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            // already exited
-          }
-        }, SIGKILL_GRACE_MS).unref();
-      }, timeoutMs);
-
-      child.stdout?.on("data", (chunk: Buffer | string) => {
-        stdout = appendCapped(stdout, String(chunk));
-      });
-
-      child.stderr?.on("data", (chunk: Buffer | string) => {
-        stderr = appendCapped(stderr, String(chunk));
-      });
-
-      // A child that exits without reading stdin can surface EPIPE here;
-      // the close handler reports the real failure.
-      child.stdin?.on("error", () => {});
-
-      child.once("error", (error) => {
-        clearTimeout(sigtermTimer);
-        reject(error);
-      });
-
-      child.once("close", (exitCode) => {
-        clearTimeout(sigtermTimer);
-        const tail = stderr.trim() || "(no stderr)";
-
-        // A child that traps SIGTERM can still exit 0 after the deadline;
-        // the budget is spent either way, so report the timeout.
-        if (timedOut) {
-          reject(
-            new Error(
-              `Python tool timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
-            )
-          );
-          return;
-        }
-
-        if (exitCode === 0) {
-          resolve({ stderr, stdout });
-          return;
-        }
-
-        reject(
-          new Error(`Python tool exit code ${exitCode ?? "null"}: ${tail}`)
-        );
-      });
-
-      // Write the input payload and close stdin so the child can finish
-      // reading and proceed to run().
-      try {
-        child.stdin?.end(JSON.stringify(input ?? {}));
-      } catch (error) {
-        clearTimeout(sigtermTimer);
-        reject(error);
-      }
-    }
-  );
-
-  const trimmed = result.stdout.trim();
-
-  if (!trimmed) {
-    throw new Error(
-      `Python tool produced no output; it must print its JSON result to stdout. stderr: ${result.stderr.trim() || "(empty)"}`
-    );
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Python tool returned non-JSON output: ${message}; stderr: ${result.stderr.trim() || "(empty)"}`
-    );
-  }
-}
-
-function appendCapped(current: string, next: string): string {
-  const combined = current + next;
-
-  if (combined.length <= MAX_OUTPUT_CHARS) {
-    return combined;
-  }
-
-  return combined.slice(-MAX_OUTPUT_CHARS);
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value : "";
+  // converts the throw into `{ error: message }`.
+  return spawnJsonTool({
+    args: [modulePath],
+    bin: PYTHON_BIN,
+    context,
+    cwd: path.dirname(modulePath),
+    input,
+    label: "Python tool",
+    workspaceRoot: readOptionalString(context?.workspaceRoot),
+  });
 }

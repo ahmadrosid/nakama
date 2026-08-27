@@ -2368,7 +2368,9 @@ export class NakamaClient {
     retried = false
   ): Promise<T> {
     const method = (init?.method ?? "GET").toUpperCase();
-    const headers = this.buildHeaders(method, init?.headers);
+    const headers = this.buildHeaders(method, init?.headers, {
+      hasBody: init?.body != null,
+    });
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
@@ -2406,8 +2408,9 @@ export class NakamaClient {
     retried = false
   ): Promise<Response> {
     const method = (init?.method ?? "GET").toUpperCase();
-    const headers = this.buildHeaders(method, init?.headers);
-    delete headers["Content-Type"];
+    const headers = this.buildHeaders(method, init?.headers, {
+      hasBody: false,
+    });
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
@@ -2432,12 +2435,16 @@ export class NakamaClient {
 
   private buildHeaders(
     method: string,
-    headers?: HeadersInit
+    headers?: HeadersInit,
+    options: { hasBody?: boolean } = {}
   ): Record<string, string> {
     const merged: Record<string, string> = {
-      "Content-Type": "application/json",
       ...((headers as Record<string, string>) ?? {}),
     };
+
+    if (options.hasBody && merged["Content-Type"] == null) {
+      merged["Content-Type"] = "application/json";
+    }
 
     if (this.authToken) {
       merged["Authorization"] = `Bearer ${this.authToken}`;

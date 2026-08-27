@@ -248,10 +248,6 @@ import {
   resolveVisionProviderSelection,
   VISION_MODEL_REQUIRED_MESSAGE,
 } from "./image-vision-fallback";
-import {
-  invalidateJavascriptModuleCache,
-  resolveJavascriptModulePath,
-} from "./javascript-tool-loader";
 import type { LlmUsageTracker } from "./llm-usage-tracker";
 import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
@@ -2528,24 +2524,6 @@ export class AgentService {
       context.orgId,
       toolId
     );
-
-    if (tool.handlerType === "javascript") {
-      const handlerConfig =
-        typeof record.handlerConfig === "object" &&
-        record.handlerConfig !== null
-          ? (record.handlerConfig as { modulePath?: string })
-          : null;
-
-      if (handlerConfig?.modulePath) {
-        try {
-          invalidateJavascriptModuleCache(
-            resolveJavascriptModulePath(handlerConfig.modulePath)
-          );
-        } catch {
-          // Invalid module paths fail when loading the tool.
-        }
-      }
-    }
 
     const loaded = await handler.load(record);
 

@@ -36,6 +36,7 @@ export function useProviderInstanceCard({
   onUpdate,
   onDelete,
   onError,
+  isSole = false,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -45,6 +46,7 @@ export function useProviderInstanceCard({
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
+  isSole?: boolean;
 }) {
   const [replaceKeyOpen, setReplaceKeyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -160,6 +162,14 @@ export function useProviderInstanceCard({
   };
 
   const handleDelete = async () => {
+    if (
+      !window.confirm(
+        `${isSole ? "This is your only/default LLM provider. " : ""}Remove ${instance.label} (${instance.type})? Models using this provider will stop working. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
     setBusy(true);
     onError(null);
 

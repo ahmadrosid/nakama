@@ -75,6 +75,8 @@ import {
   isImageFilePart,
 } from "@/lib/chat-images";
 import {
+  type ComposerStackEdge,
+  composerHitTargetClass,
   composerIconButtonClass,
   composerInputGroupClass,
   composerSelectTriggerClass,
@@ -170,6 +172,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
   const showTodos = hasTodos && !hasQuestionnaire && !displayError;
   const hasQueuedMessages = queuedMessages.length > 0;
+  const queueStackEdge: ComposerStackEdge =
+    hasQuestionnaire || showTodos ? "continue" : "start";
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
     : (props.availableSkills ?? EMPTY_SKILLS);
@@ -212,7 +216,11 @@ export function ChatComposer(props: ChatComposerProps) {
           ) : null}
           {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
           {hasQueuedMessages ? (
-            <ChatMessageQueuePanel messages={queuedMessages} stack />
+            <ChatMessageQueuePanel
+              messages={queuedMessages}
+              stack
+              stackEdge={queueStackEdge}
+            />
           ) : null}
           <div className="relative z-10 -mt-2 w-full">
             {composerNotice}
@@ -632,9 +640,16 @@ function ChatComposerFullFooter({
   );
 }
 
-const composerSubmitButtonClassName =
-  "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50";
+/** Visible 28px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
+const composerSubmitButtonClassName = cn(
+  composerHitTargetClass,
+  "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 disabled:opacity-50"
+);
 
+const composerAttachmentRemoveClassName = cn(
+  composerHitTargetClass,
+  "absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] hover:bg-background active:scale-[0.96]"
+);
 function ChatComposerSubmitButton({
   chatStatus,
   busy,
@@ -733,7 +748,7 @@ function ChatAttachmentHeader({
 
             return (
               <div
-                className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-muted outline outline-1 outline-black/10 dark:outline-white/10"
                 key={file.id}
               >
                 <img
@@ -743,7 +758,7 @@ function ChatAttachmentHeader({
                 />
                 <button
                   aria-label={`Remove ${filename}`}
-                  className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+                  className={composerAttachmentRemoveClassName}
                   onClick={() => attachments.remove(file.id)}
                   type="button"
                 >
@@ -777,7 +792,7 @@ function ChatAttachmentHeader({
               </span>
               <button
                 aria-label={`Remove ${filename}`}
-                className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+                className={composerAttachmentRemoveClassName}
                 onClick={() => attachments.remove(file.id)}
                 type="button"
               >

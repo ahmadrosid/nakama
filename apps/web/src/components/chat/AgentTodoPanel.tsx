@@ -4,11 +4,16 @@ import { ArrowDown01Icon, ListViewIcon } from "hugeicons-react";
 import { useState } from "react";
 import { Matrix } from "@/components/ui/matrix";
 import { type Frame, snake3x2 } from "@/components/ui/matrix-frames";
+import {
+  type ComposerStackEdge,
+  composerShelfPanelClass,
+} from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 interface AgentTodoPanelProps {
   embedded?: boolean;
   stack?: boolean;
+  stackEdge?: ComposerStackEdge;
   todos: AgentTodo[];
 }
 
@@ -47,6 +52,7 @@ export function AgentTodoPanel({
   todos,
   embedded = false,
   stack = false,
+  stackEdge = "start",
 }: AgentTodoPanelProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -107,7 +113,9 @@ export function AgentTodoPanel({
 
   const expandableList = (
     <div className="todo-panel-expand" data-expanded={expanded}>
-      <div className="overflow-hidden pb-1.5">{list}</div>
+      <div className="todo-panel-expand-inner overflow-hidden pb-1.5">
+        {list}
+      </div>
     </div>
   );
 
@@ -116,7 +124,7 @@ export function AgentTodoPanel({
       <div className="px-3">
         <aside
           aria-label="Agent task plan"
-          className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-border border-b-0 bg-card shadow-xs"
+          className={composerShelfPanelClass(stackEdge)}
         >
           {header}
           {expandableList}
@@ -144,7 +152,7 @@ function TodoRow({ todo, index }: { todo: AgentTodo; index: number }) {
   return (
     <li
       className="todo-item-enter flex min-w-0 items-center gap-2 pl-1 text-xs leading-none"
-      style={{ animationDelay: `${index * 60}ms` }}
+      style={{ animationDelay: `${index * 100}ms` }}
     >
       <TodoStatusIcon key={todo.status} status={todo.status} />
       <span

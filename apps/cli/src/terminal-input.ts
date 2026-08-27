@@ -1,5 +1,53 @@
 const CURSOR_POSITION_REPORT = /^\x1b\[(\d+);(\d+)R$/;
+const CURSOR_POSITION_REPORT_GLOBAL = /\x1b\[(\d+);(\d+)R/g;
 const MOUSE_EVENT_REPORT = /^\x1b\[<\d+;\d+;\d+[mM]$/;
+
+type ReadableEncodingState = {
+  decoder?: unknown;
+  encoding?: string | null;
+};
+
+/**
+ * Restore a Readable stream's prior encoding.
+ * `setEncoding(null)` does not clear encoding in Node/Bun (nodejs/node#51083),
+ * so buffer mode is restored by clearing `_readableState` when needed.
+ */
+export function restoreReadableEncoding(
+  stream: NodeJS.ReadableStream,
+  previous: BufferEncoding | null | undefined
+): void {
+  if (previous) {
+    stream.setEncoding(previous);
+    return;
+  }
+
+  const state = (stream as { _readableState?: ReadableEncodingState })
+    ._readableState;
+  if (!state) {
+    return;
+  }
+
+  state.encoding = null;
+  state.decoder = null;
+}
+
+/** Strip all CPR sequences in one pass; return the first report's row. */
+export function stripCursorPositionReports(pending: string): {
+  pending: string;
+  row: number | null;
+} {
+  let row: number | null = null;
+  const cleaned = pending.replace(
+    CURSOR_POSITION_REPORT_GLOBAL,
+    (_match, rowText: string) => {
+      if (row === null) {
+        row = Number(rowText);
+      }
+      return "";
+    }
+  );
+  return { pending: cleaned, row };
+}
 
 export function isTerminalResponse(chunk: string): boolean {
   if (CURSOR_POSITION_REPORT.test(chunk)) {
@@ -75,6 +123,7 @@ export class TerminalInput {
   private pending = "";
   private listeners = new Set<(chunk: string) => void>();
   private cursorWaiters = new Set<(row: number) => void>();
+  private previousEncoding: BufferEncoding | null | undefined;
 
   start(): void {
     if (this.active) {
@@ -82,6 +131,7 @@ export class TerminalInput {
     }
 
     this.active = true;
+    this.previousEncoding = process.stdin.readableEncoding;
     process.stdin.setEncoding("utf8");
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -101,6 +151,8 @@ export class TerminalInput {
     this.active = false;
     process.stdin.off("data", this.handleData);
     process.stdin.setRawMode(false);
+    restoreReadableEncoding(process.stdin, this.previousEncoding);
+    this.previousEncoding = undefined;
 
     if (this.mouseTracking) {
       process.stdout.write("\x1b[?1000l\x1b[?1006l");
@@ -163,17 +215,14 @@ export class TerminalInput {
   private handleData = (chunk: Buffer | string): void => {
     this.pending += String(chunk);
 
-    const cursorMatch = this.pending.match(/\x1b\[(\d+);(\d+)R/);
+    const stripped = stripCursorPositionReports(this.pending);
+    this.pending = stripped.pending;
 
-    if (cursorMatch) {
-      const row = Number(cursorMatch[1]);
-
+    if (stripped.row !== null) {
       for (const waiter of this.cursorWaiters) {
-        waiter(row);
+        waiter(stripped.row);
       }
-
       this.cursorWaiters.clear();
-      this.pending = this.pending.replace(/\x1b\[\d+;\d+R/g, "");
     }
 
     const consumed = consumeTerminalInput(this.pending);

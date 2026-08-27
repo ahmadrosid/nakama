@@ -108,6 +108,7 @@ test("non-browser clients send local auth as a bearer token", async () => {
 
   const headers = new Headers(fetchCalls[0]!.init?.headers);
   expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
+  expect(headers.get("Content-Type")).toBeNull();
 });
 
 test("data export downloads zip bytes with filename metadata", async () => {

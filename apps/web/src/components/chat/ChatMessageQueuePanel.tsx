@@ -1,7 +1,9 @@
 import { ArrowDown01Icon, Clock01Icon } from "hugeicons-react";
 import { useState } from "react";
-import { Matrix } from "@/components/ui/matrix";
-import type { Frame } from "@/components/ui/matrix-frames";
+import {
+  type ComposerStackEdge,
+  composerShelfPanelClass,
+} from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 export interface QueuedComposerMessage {
@@ -13,41 +15,13 @@ export interface QueuedComposerMessage {
 interface ChatMessageQueuePanelProps {
   messages: QueuedComposerMessage[];
   stack?: boolean;
-}
-
-const QUEUED_MATRIX_ROWS = 3;
-const QUEUED_MATRIX_COLS = 2;
-const QUEUED_MATRIX_SIZE = 3;
-const QUEUED_MATRIX_GAP = 1;
-
-const queuedPendingPattern: Frame = [
-  [0, 0],
-  [0, 0],
-  [0, 0],
-];
-
-function QueuedStatusIcon() {
-  return (
-    <Matrix
-      ariaLabel="Queued"
-      brightness={0.55}
-      className="inline-flex h-4 w-auto shrink-0 items-center justify-center"
-      cols={QUEUED_MATRIX_COLS}
-      gap={QUEUED_MATRIX_GAP}
-      palette={{
-        off: "var(--muted-foreground)",
-        on: "var(--muted-foreground)",
-      }}
-      pattern={queuedPendingPattern}
-      rows={QUEUED_MATRIX_ROWS}
-      size={QUEUED_MATRIX_SIZE}
-    />
-  );
+  stackEdge?: ComposerStackEdge;
 }
 
 export function ChatMessageQueuePanel({
   messages,
   stack = false,
+  stackEdge = "start",
 }: ChatMessageQueuePanelProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -102,7 +76,9 @@ export function ChatMessageQueuePanel({
 
   const expandableList = (
     <div className="todo-panel-expand" data-expanded={expanded}>
-      <div className="overflow-hidden pb-1.5">{list}</div>
+      <div className="todo-panel-expand-inner overflow-hidden pb-1.5">
+        {list}
+      </div>
     </div>
   );
 
@@ -111,7 +87,7 @@ export function ChatMessageQueuePanel({
       <div className="px-3">
         <aside
           aria-label="Queued messages"
-          className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-border border-b-0 bg-card shadow-xs"
+          className={composerShelfPanelClass(stackEdge)}
         >
           {header}
           {expandableList}
@@ -154,10 +130,9 @@ function QueuedRow({
 
   return (
     <li
-      className="todo-item-enter flex min-w-0 items-center gap-2 pl-1 text-xs leading-none"
-      style={{ animationDelay: `${index * 60}ms` }}
+      className="todo-item-enter flex min-w-0 items-center pl-1 text-xs leading-none"
+      style={{ animationDelay: `${index * 100}ms` }}
     >
-      <QueuedStatusIcon />
       <span className="min-w-0 truncate text-muted-foreground">{label}</span>
     </li>
   );

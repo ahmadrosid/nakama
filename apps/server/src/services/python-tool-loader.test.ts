@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -224,6 +225,69 @@ if __name__ == "__main__":
     await expect(tool!.run({}, {})).rejects.toThrow(/no output/i);
   });
 
+  test("runs with cwd scoped to the tools directory, not the server checkout", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "cwd_probe.py"),
+      `import json, os, sys
+
+def run(input, context):
+    return {"cwd": os.getcwd()}
+
+if __name__ == "__main__":
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
+`,
+      "utf8"
+    );
+
+    const tool = await loadPythonTool(
+      makeRecord({
+        handlerConfig: { modulePath: "cwd_probe.py" },
+        name: "cwd_probe",
+      })
+    );
+
+    const result = (await tool!.run({}, {})) as { cwd: string };
+    expect(realpathSync(result.cwd)).toBe(realpathSync(toolsDir));
+  });
+
+  test("cannot read a secret-shaped env var from the parent process", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "env_probe.py"),
+      `import json, os, sys
+
+def run(input, context):
+    return {"secret": os.environ.get("NAKAMA_TEST_CANARY_SECRET")}
+
+if __name__ == "__main__":
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
+`,
+      "utf8"
+    );
+
+    const tool = await loadPythonTool(
+      makeRecord({
+        handlerConfig: { modulePath: "env_probe.py" },
+        name: "env_probe",
+      })
+    );
+
+    process.env.NAKAMA_TEST_CANARY_SECRET = "canary-not-a-real-secret";
+    try {
+      const result = (await tool!.run({}, {})) as { secret: string | null };
+      expect(result.secret).toBeNull();
+    } finally {
+      delete process.env.NAKAMA_TEST_CANARY_SECRET;
+    }
+  });
+
   test("rejects on timeout even when the module exits 0", async () => {
     const { configDir: dir, toolsDir } = await setupToolsDir();
     configDir = dir;
@@ -260,11 +324,11 @@ if __name__ == "__main__":
       })
     );
 
-    process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS = "200";
+    process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "200";
     try {
       await expect(tool!.run({}, {})).rejects.toThrow(/timed out/i);
     } finally {
-      delete process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS;
+      delete process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
     }
   });
 

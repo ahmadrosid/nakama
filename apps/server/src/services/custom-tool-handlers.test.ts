@@ -203,16 +203,30 @@ if __name__ == "__main__":
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const toolsDir = path.join(configDir, "tools");
+    const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
+    await mkdir(wsDir, { recursive: true });
 
-    // In-process module counter — JS retries share the cached module.
+    // Each retry is its own subprocess with no shared memory, so the counter
+    // persists in the workspace instead — mirrors the python "flaky" fixture
+    // above, and proves the retry policy reaches the js loader, not just a
+    // cached in-process module.
     await writeFile(
       path.join(toolsDir, "flaky.js"),
-      `let attempts = 0;
-export async function run() {
-  attempts += 1;
-  if (attempts < 3) throw new Error("flaky");
-  return { ok: true, attempts };
+      `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
+export async function run(input, context) {
+  const root = process.env.NAKAMA_WORKSPACE_ROOT ?? "/tmp";
+  const counter = path.join(root, "attempts.txt");
+  let n = existsSync(counter) ? Number(readFileSync(counter, "utf8").trim() || "0") : 0;
+  n += 1;
+  writeFileSync(counter, String(n));
+  if (n < 3) {
+    console.error("flaky");
+    process.exit(3);
+  }
+  return { ok: true, attempts: n };
 }
 `,
       "utf8"
@@ -229,11 +243,13 @@ export async function run() {
       );
       expect(tool).not.toBeNull();
 
-      const result = (await tool!.run({}, {})) as {
+      const result = (await tool!.run({}, { workspaceRoot: wsDir })) as {
         ok: boolean;
         attempts: number;
       };
 
+      // Succeeded on attempt 3 after two failed spawns — proves the retry
+      // policy reaches the javascript loader, not just the seam wrapper.
       expect(result.ok).toBe(true);
       expect(result.attempts).toBe(3);
     } finally {

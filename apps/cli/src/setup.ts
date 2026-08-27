@@ -19,30 +19,34 @@ function readPassword(prompt: string): Promise<string> {
 
     stdout.write(prompt);
 
+    const wasPaused = stdin.isPaused();
     stdin.setRawMode(true);
     stdin.resume();
     stdin.setEncoding("utf8");
 
     let password = "";
 
+    const restoreStdin = () => {
+      stdin.setRawMode(false);
+      if (wasPaused) {
+        stdin.pause();
+      }
+      stdin.removeListener("data", onData);
+      stdout.write("\n");
+    };
+
     const onData = (chunk: string) => {
       for (const char of chunk) {
         if (char === "\n" || char === "\r" || char === "\u0004") {
           // Enter or EOF
-          stdin.setRawMode(false);
-          stdin.pause();
-          stdin.removeListener("data", onData);
-          stdout.write("\n");
+          restoreStdin();
           resolve(password);
           return;
         }
 
         if (char === "\u0003") {
           // Ctrl+C
-          stdin.setRawMode(false);
-          stdin.pause();
-          stdin.removeListener("data", onData);
-          stdout.write("\n");
+          restoreStdin();
           process.exit(130);
         }
 

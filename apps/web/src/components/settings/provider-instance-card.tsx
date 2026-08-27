@@ -74,6 +74,7 @@ export function ProviderInstanceCard({
   onUpdate,
   onDelete,
   onError,
+  isSole = false,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -83,10 +84,12 @@ export function ProviderInstanceCard({
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
+  isSole?: boolean;
 }) {
   const card = useProviderInstanceCard({
     catalog,
     instance,
+    isSole,
     onDelete,
     onError,
     onUpdate,

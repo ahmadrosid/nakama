@@ -730,6 +730,13 @@ async function runStickyChat(
   }
 
   let exiting = false;
+  let resolveExit: (() => void) | null = null;
+
+  const requestExit = (): void => {
+    exiting = true;
+    resolveExit?.();
+    resolveExit = null;
+  };
 
   prompt = new PersistentPrompt({
     getSuggestions: (input) => {
@@ -755,7 +762,7 @@ async function runStickyChat(
         return;
       }
 
-      exiting = true;
+      requestExit();
     },
     onScrollHistory: (event) => {
       if (event === "line_up") {
@@ -797,7 +804,7 @@ async function runStickyChat(
         const outcome = await handleSlashCommand(line);
 
         if (outcome === "exit") {
-          exiting = true;
+          requestExit();
           return;
         }
 
@@ -822,18 +829,17 @@ async function runStickyChat(
   }
 
   function onAbortSignal(): void {
-    exiting = true;
+    requestExit();
   }
 
   options.signal?.addEventListener("abort", onAbortSignal);
 
   await new Promise<void>((resolve) => {
-    const check = setInterval(() => {
-      if (exiting) {
-        clearInterval(check);
-        resolve();
-      }
-    }, 50);
+    resolveExit = resolve;
+    if (exiting || options.signal?.aborted) {
+      resolveExit = null;
+      resolve();
+    }
   });
 
   options.signal?.removeEventListener("abort", onAbortSignal);
