@@ -2638,9 +2638,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async tryMarkOrganizationArchived(orgId, archivedAt) {
+      const now = new Date().toISOString();
       const result = tryMarkOrganizationArchivedStmt.run(
         archivedAt,
-        archivedAt,
+        now,
         orgId
       );
       return result.changes > 0;

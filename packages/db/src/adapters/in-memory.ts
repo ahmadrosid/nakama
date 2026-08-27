@@ -1220,10 +1220,11 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
         return false;
       }
 
+      const now = new Date().toISOString();
       const updated = {
         ...organization,
         archivedAt,
-        updatedAt: archivedAt,
+        updatedAt: now,
       };
       organizations.set(orgId, updated);
       organizationsBySlug.set(updated.slug, updated);
