@@ -9,7 +9,7 @@ import {
   resolveBashSandboxImage,
   resolveBashSandboxNetwork,
 } from "./bash-config";
-import { buildBashSandboxEnv, isSecretEnvKey } from "./bash-sandbox-env";
+import { buildBashSandboxEnv } from "./bash-sandbox-env";
 import {
   type BashSandboxEnsureArgs,
   type BashSandboxExecArgs,
@@ -80,7 +80,11 @@ describe("bash sandbox env", () => {
     expect(env.MY_TOKEN).toBeUndefined();
     expect(env.DATABASE_URL).toBeUndefined();
     expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
-    expect(isSecretEnvKey("ANTHROPIC_API_KEY")).toBe(true);
+    expect(
+      buildBashSandboxEnv({
+        overrides: { ANTHROPIC_API_KEY: "x" },
+      }).ANTHROPIC_API_KEY
+    ).toBeUndefined();
   });
 });
 
@@ -136,6 +140,11 @@ describe("bash microsandbox path with fake runtime", () => {
     const execs: BashSandboxExecArgs[] = [];
     return {
       async ensure(args) {
+        if (options?.failProbe) {
+          throw new Error(
+            "MicroSandbox backend unavailable: runtime is not installed. No host fallback."
+          );
+        }
         ensures.push(args);
       },
       ensures,
@@ -160,13 +169,6 @@ describe("bash microsandbox path with fake runtime", () => {
         };
       },
       execs,
-      async probe() {
-        if (options?.failProbe) {
-          throw new Error(
-            "MicroSandbox backend unavailable: runtime is not installed. No host fallback."
-          );
-        }
-      },
     };
   }
 

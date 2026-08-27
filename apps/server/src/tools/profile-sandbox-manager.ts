@@ -30,7 +30,6 @@ export interface BashSandboxExecArgs {
 export interface BashSandboxRuntime {
   ensure(args: BashSandboxEnsureArgs): Promise<void>;
   exec(args: BashSandboxExecArgs): Promise<BashSandboxExecResult>;
-  probe(): Promise<void>;
 }
 
 export function profileSandboxName(orgId: string, profileId: string): string {
@@ -55,7 +54,7 @@ export function toGuestCwd(args: {
   const prefix = hostWorkspace.endsWith("/")
     ? hostWorkspace
     : `${hostWorkspace}/`;
-  if (!hostCwd.startsWith(prefix) && hostCwd !== hostWorkspace) {
+  if (!hostCwd.startsWith(prefix)) {
     throw new Error("cwd must resolve under the profile workspace.");
   }
 
@@ -70,14 +69,9 @@ export class ProfileSandboxManager {
 
   constructor(private readonly runtime: BashSandboxRuntime) {}
 
-  async probe(): Promise<void> {
-    await this.runtime.probe();
-  }
-
   async run(args: {
     command: string;
     env: Record<string, string>;
-    guestWorkspace?: string;
     hostCwd: string;
     hostWorkspace: string;
     image: string;
@@ -88,7 +82,7 @@ export class ProfileSandboxManager {
     timeoutMs: number;
   }): Promise<BashSandboxExecResult> {
     const name = profileSandboxName(args.orgId, args.profileId);
-    const guestWorkspace = args.guestWorkspace ?? BASH_SANDBOX_GUEST_WORKSPACE;
+    const guestWorkspace = BASH_SANDBOX_GUEST_WORKSPACE;
     const fingerprint = `${args.hostWorkspace}|${args.network}|${args.image}|${guestWorkspace}`;
 
     if (this.ensured.get(name) !== fingerprint) {

@@ -28,7 +28,6 @@ import {
 } from "./cursor-agent-output";
 import {
   BASH_SANDBOX_GUEST_WORKSPACE,
-  type BashSandboxRuntime,
   ProfileSandboxManager,
 } from "./profile-sandbox-manager";
 
@@ -60,8 +59,6 @@ interface BashRunOptions {
   backend?: BashBackendKind;
   /** Reuse a manager across calls (tests). */
   sandboxManager?: ProfileSandboxManager;
-  /** Injected MicroSandbox runtime (tests). */
-  sandboxRuntime?: BashSandboxRuntime;
   workspaceRoot?: string;
 }
 
@@ -72,14 +69,8 @@ interface ShellRunOptions {
 }
 
 let sharedSandboxManager: ProfileSandboxManager | null = null;
-let sharedSandboxRuntime: BashSandboxRuntime | null = null;
 
-async function getSandboxManager(
-  runtime?: BashSandboxRuntime
-): Promise<ProfileSandboxManager> {
-  if (runtime) {
-    return new ProfileSandboxManager(runtime);
-  }
+async function getSandboxManager(): Promise<ProfileSandboxManager> {
   if (sharedSandboxManager) {
     return sharedSandboxManager;
   }
@@ -87,32 +78,29 @@ async function getSandboxManager(
   const { createDefaultMicrosandboxRuntime } = await import(
     "./bash-microsandbox-runtime"
   );
-  sharedSandboxRuntime =
-    sharedSandboxRuntime ?? createDefaultMicrosandboxRuntime();
-  sharedSandboxManager = new ProfileSandboxManager(sharedSandboxRuntime);
+  sharedSandboxManager = new ProfileSandboxManager(
+    createDefaultMicrosandboxRuntime()
+  );
   return sharedSandboxManager;
 }
 
 /** Test helper to clear the process-wide warm-sandbox manager. */
 export function resetBashSandboxManagerForTests(): void {
   sharedSandboxManager = null;
-  sharedSandboxRuntime = null;
 }
 
+const BASH_TOOL_DESCRIPTION_BASE =
+  "Run a one-off shell command in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
+
 function bashToolDescription(): string {
-  const backend = (() => {
-    try {
-      return resolveBashBackend();
-    } catch {
-      return "host";
+  try {
+    if (resolveBashBackend() === "microsandbox") {
+      return `${BASH_TOOL_DESCRIPTION_BASE} Public network is denied by default. codingAgent harness runs are unsupported on this backend.`;
     }
-  })();
-
-  if (backend === "microsandbox") {
-    return "Run a one-off shell command in the active profile's isolated MicroSandbox workspace and return stdout, stderr, and exit code. Public network is denied by default. codingAgent harness runs are unsupported on this backend. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
+  } catch {
+    // Invalid backend config — keep the host description.
   }
-
-  return "Run a one-off shell command in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
+  return BASH_TOOL_DESCRIPTION_BASE;
 }
 
 export const bashTool: ToolDefinition<BashInput, BashOutput> = {
@@ -198,10 +186,7 @@ export async function runBash(
   }
 
   if (backend === "microsandbox") {
-    const manager =
-      options.sandboxManager ??
-      (await getSandboxManager(options.sandboxRuntime));
-    await manager.probe();
+    const manager = options.sandboxManager ?? (await getSandboxManager());
     return manager.run({
       command,
       env: buildBashSandboxEnv({
