@@ -205,6 +205,11 @@ export function createDmMessage(options: {
   userId?: string;
   channelId?: string;
   content?: string;
+  attachments?: Array<{
+    contentType?: string | null;
+    size?: number;
+    url?: string;
+  }>;
 }): MockDmMessage {
   const sentMessages: string[] = [];
   let fileSendCalls = 0;
@@ -233,7 +238,25 @@ export function createDmMessage(options: {
     sendTyping: async () => {},
   };
 
+  const attachments = new Map<
+    string,
+    {
+      contentType: string | null;
+      size: number;
+      url: string;
+    }
+  >();
+
+  for (const [index, attachment] of (options.attachments ?? []).entries()) {
+    attachments.set(String(index + 1), {
+      contentType: attachment.contentType ?? "image/png",
+      size: attachment.size ?? 32,
+      url: attachment.url ?? `https://cdn.example/image-${index + 1}.png`,
+    });
+  }
+
   const message = {
+    attachments,
     author: { bot: false, id: options.userId ?? "424242424242424242" },
     channel,
     client: { user: { id: "bot_id", username: "nakamabot" } },
@@ -396,6 +419,7 @@ export function createGuildChatMessage(options: {
   };
 
   const message = {
+    attachments: new Map(),
     author: { bot: false, id: userId },
     channel,
     client: {
