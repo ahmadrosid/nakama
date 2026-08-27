@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { maskWhatsAppJid, utf8ByteLength } from "./log-metadata";
+import { maskWhatsAppJid } from "./log-metadata";
 
 describe("WhatsApp log metadata", () => {
   test("masks account identifiers while preserving routing metadata", () => {
@@ -12,9 +12,5 @@ describe("WhatsApp log metadata", () => {
     expect(maskWhatsAppJid("120363042000000000@g.us")).toBe("***0000@g.us");
     expect(maskWhatsAppJid("1234@lid")).toBe("***@lid");
     expect(maskWhatsAppJid(null)).toBe("-");
-  });
-
-  test("counts UTF-8 bytes instead of JavaScript code units", () => {
-    expect(utf8ByteLength("private 🔒 message")).toBe(20);
   });
 });

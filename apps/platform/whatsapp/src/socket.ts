@@ -15,7 +15,7 @@ import {
   parseInboundWhatsAppMessage,
   type WhatsAppInboundChat,
 } from "./inbound-message";
-import { maskWhatsAppJid, utf8ByteLength } from "./log-metadata";
+import { maskWhatsAppJid } from "./log-metadata";
 
 export interface WhatsAppSocketDeps {
   onConnected?: (me: { id: string; lid?: string | null }) => void;
@@ -152,7 +152,7 @@ export async function createWhatsAppSocket(
 
           if (remoteJid) {
             console.log(
-              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} textBytes=${utf8ByteLength(text)} handle=${inbound ? "yes" : "no"}`
+              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} textBytes=${Buffer.byteLength(text, "utf8")} handle=${inbound ? "yes" : "no"}`
             );
           }
 
@@ -174,7 +174,7 @@ export async function createWhatsAppSocket(
           }
 
           console.log(
-            `WhatsApp message received id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(inbound.jid)} textBytes=${utf8ByteLength(inbound.text)}`
+            `WhatsApp message received id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(inbound.jid)} textBytes=${Buffer.byteLength(inbound.text, "utf8")}`
           );
 
           try {
@@ -227,7 +227,7 @@ export function summarizeMissingTextPayload(msg: {
       participant: maskWhatsAppJid(msg.key.participant),
       remoteJid: maskWhatsAppJid(msg.key.remoteJid),
     },
-    messageBytes: utf8ByteLength(serializedMessage),
+    messageBytes: Buffer.byteLength(serializedMessage, "utf8"),
     messageStubType:
       typeof msg.messageStubType === "number" ? msg.messageStubType : null,
     topLevelKeys: msg.message ? Object.keys(msg.message).slice(0, 10) : [],
