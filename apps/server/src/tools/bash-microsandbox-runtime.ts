@@ -1,9 +1,4 @@
-import {
-  ExecTimeoutError,
-  isInstalled,
-  Sandbox,
-  SandboxNotFoundError,
-} from "microsandbox";
+import { ExecTimeoutError, isInstalled, Sandbox } from "microsandbox";
 import type {
   BashSandboxEnsureArgs,
   BashSandboxExecArgs,
@@ -21,26 +16,15 @@ function truncateOutput(value: string): string {
 }
 
 async function connectSandbox(name: string): Promise<Sandbox> {
-  try {
-    const handle = await Sandbox.get(name);
-    if (handle.status === "running") {
-      return handle.connect();
-    }
-    return handle.startDetached();
-  } catch (error) {
-    if (error instanceof SandboxNotFoundError) {
-      throw error;
-    }
-    try {
-      return await Sandbox.startDetached(name);
-    } catch {
-      throw error;
-    }
+  const handle = await Sandbox.get(name);
+  if (handle.status === "running") {
+    return handle.connect();
   }
+  return handle.startDetached();
 }
 
 class MicrosandboxBashRuntime implements BashSandboxRuntime {
-  async probe(): Promise<void> {
+  async ensure(args: BashSandboxEnsureArgs): Promise<void> {
     let installed = false;
     try {
       installed = isInstalled();
@@ -56,10 +40,6 @@ class MicrosandboxBashRuntime implements BashSandboxRuntime {
         "MicroSandbox backend unavailable: runtime is not installed. Set NAKAMA_BASH_BACKEND=host or install MicroSandbox. No host fallback."
       );
     }
-  }
-
-  async ensure(args: BashSandboxEnsureArgs): Promise<void> {
-    await this.probe();
 
     let builder = Sandbox.builder(args.name)
       .image(args.image)
