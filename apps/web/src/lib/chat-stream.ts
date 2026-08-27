@@ -776,19 +776,5 @@ export const composerShellClass = cn(
   "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
 );
 
-/** Soft top + full bottom so inset shelf ears do not fight a hard rounded-xl top. */
-export const composerRimRecessedClass = "rounded-t-md rounded-b-xl";
-
-export const composerShellRecessedClass = cn(
-  composerInputGroupBase,
-  "[&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
-);
-
-/** Face radius for recessed stack; merge onto InputGroup so it replaces the uniform calc radius. */
-export const composerInputGroupRecessedClass = cn(
-  composerInputGroupClass,
-  "rounded-t-[calc(0.375rem-1px)] rounded-b-[calc(0.75rem-1px)]"
-);
-
 export const composerShellCompactClass =
   "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:p-2.5 [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]";

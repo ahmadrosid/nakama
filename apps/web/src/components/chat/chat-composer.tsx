@@ -79,12 +79,9 @@ import {
   composerHitTargetClass,
   composerIconButtonClass,
   composerInputGroupClass,
-  composerInputGroupRecessedClass,
-  composerRimRecessedClass,
   composerSelectTriggerClass,
   composerShellClass,
   composerShellCompactClass,
-  composerShellRecessedClass,
   composerToolbarClass,
 } from "@/lib/chat-stream";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
@@ -229,8 +226,8 @@ export function ChatComposer(props: ChatComposerProps) {
             {composerNotice}
             <PromptInput
               accept={ALL_ATTACHMENT_ACCEPT}
-              className={composerShellRecessedClass}
-              inputGroupClassName={composerInputGroupRecessedClass}
+              className={shellClass}
+              inputGroupClassName={composerInputGroupClass}
               maxFileSize={MAX_IMAGE_BYTES}
               maxFiles={5}
               multiple
@@ -243,7 +240,6 @@ export function ChatComposer(props: ChatComposerProps) {
               }}
               prepareFiles={prepareChatUploadFiles}
               rimActive={busy}
-              rimClassName={composerRimRecessedClass}
             >
               <ChatAttachmentHeader
                 primarySupportsVision={props.primarySupportsVision}

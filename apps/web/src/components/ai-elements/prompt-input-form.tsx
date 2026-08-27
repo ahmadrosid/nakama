@@ -13,8 +13,6 @@ export type PromptInputFormProps = Omit<
   accept?: string;
   multiple?: boolean;
   inputGroupClassName?: string;
-  /** Overrides the default rounded-xl on the rim host (e.g. recessed stack). */
-  rimClassName?: string;
   /** Rainbow rim while the agent turn is streaming. */
   rimActive?: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -29,7 +27,6 @@ export function PromptInputForm({
   accept,
   multiple,
   inputGroupClassName,
-  rimClassName,
   rimActive = false,
   inputRef,
   formRef,
@@ -60,10 +57,7 @@ export function PromptInputForm({
       >
         {/* Glow under an opaque face; keep overflow visible so slash skill picker can escape upward. */}
         <div
-          className={cn(
-            "composer-rim relative overflow-visible rounded-xl p-px",
-            rimClassName
-          )}
+          className="composer-rim relative overflow-visible rounded-xl p-px"
           ref={hostRef}
         >
           <ComposerRimGlow active={rimActive} hostRef={hostRef} />
