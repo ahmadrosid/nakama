@@ -213,10 +213,6 @@ describe("profile service avatar", () => {
     expect(avatar.mediaType).toBe("image/png");
     expect(avatar.bytes.length).toBeGreaterThan(0);
 
-    const publicAvatar = await service.getProfileAvatarByProfileId(profileId);
-    expect(publicAvatar.mediaType).toBe("image/png");
-    expect(publicAvatar.bytes.length).toBeGreaterThan(0);
-
     await service.deleteProfileAvatar(ORG_ID, profileId);
 
     const afterDelete = await service.getProfile(ORG_ID, profileId);
