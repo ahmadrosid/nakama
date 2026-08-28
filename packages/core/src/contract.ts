@@ -1084,6 +1084,7 @@ export interface UpdateAutomationRequest {
   description?: string;
   enabled?: boolean;
   name?: string;
+  profileId?: string;
   prompt?: string;
   trigger?: AutomationTrigger;
 }
@@ -2199,6 +2200,8 @@ export interface ToolContext {
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;
+  /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
+  isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
   orgId?: string;

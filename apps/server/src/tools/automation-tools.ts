@@ -33,6 +33,11 @@ export function createAutomationTools(
             description: "Short title for the automation.",
             type: "string",
           },
+          profileId: {
+            description:
+              "Optional org profile id to run as. Omit to use the current chat profile. Super Bot requires org admin or platform admin.",
+            type: "string",
+          },
           prompt: {
             description:
               "The task prompt to execute when the automation runs. Describe the work only — do not include delivery instructions when delivery is set.",
@@ -55,6 +60,7 @@ export function createAutomationTools(
         const prompt = readString(input, "prompt");
         const trigger = readTrigger(input, "trigger");
         const delivery = readDelivery(input);
+        const requestedProfileId = readString(input, "profileId")?.trim();
 
         if (!(name && description && prompt && trigger)) {
           throw new Error(
@@ -62,7 +68,7 @@ export function createAutomationTools(
           );
         }
 
-        const profileId = context.profileId;
+        const profileId = requestedProfileId || context.profileId?.trim();
 
         if (!profileId) {
           throw new Error(
@@ -79,7 +85,11 @@ export function createAutomationTools(
             trigger,
             ...(delivery ? { delivery } : {}),
           },
-          profileId
+          profileId,
+          {
+            isPlatformAdmin: context.isPlatformAdmin,
+            orgRole: context.orgRole,
+          }
         );
 
         return {
@@ -89,6 +99,7 @@ export function createAutomationTools(
           id: automation.id,
           name: automation.name,
           nextRunAt: automation.nextRunAt ?? null,
+          profileId: automation.profileId,
           prompt: automation.prompt,
           trigger: automation.trigger,
         };
@@ -109,6 +120,7 @@ export function createAutomationTools(
           lastRunAt: automation.lastRunAt ?? null,
           name: automation.name,
           nextRunAt: automation.nextRunAt ?? null,
+          profileId: automation.profileId,
           prompt: automation.prompt,
           trigger: automation.trigger,
         }));

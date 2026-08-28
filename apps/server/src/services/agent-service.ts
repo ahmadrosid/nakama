@@ -446,6 +446,16 @@ export class AgentService {
     return member?.role ?? null;
   }
 
+  private async resolveIsPlatformAdmin(
+    userId: string | null | undefined
+  ): Promise<boolean> {
+    if (!userId) {
+      return false;
+    }
+    const user = await this.db.getUserById(userId);
+    return Boolean(user?.isPlatformAdmin);
+  }
+
   setAutomationTools(tools: ToolDefinition[]): void {
     this.automationTools = tools;
     this.sessions.clear();
@@ -1621,7 +1631,8 @@ export class AgentService {
       sessionId,
       modelOverride,
       userId ?? null,
-      options?.orgRole
+      options?.orgRole,
+      options?.isPlatformAdmin
     );
 
     this.sessions.set(sessionId, {
@@ -1790,6 +1801,9 @@ export class AgentService {
       profileOrgId,
       record.userId
     );
+    const branchIsPlatformAdmin = await this.resolveIsPlatformAdmin(
+      record.userId
+    );
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1797,7 +1811,8 @@ export class AgentService {
       nextSessionId,
       record.model,
       record.userId ?? null,
-      branchOrgRole
+      branchOrgRole,
+      branchIsPlatformAdmin
     );
     this.sessions.set(nextSessionId, {
       channel,
@@ -1888,6 +1903,9 @@ export class AgentService {
       profileOrgId,
       record.userId
     );
+    const resumeIsPlatformAdmin = await this.resolveIsPlatformAdmin(
+      record.userId
+    );
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1895,7 +1913,8 @@ export class AgentService {
       sessionId,
       record.model,
       record.userId ?? null,
-      resumeOrgRole
+      resumeOrgRole,
+      resumeIsPlatformAdmin
     );
 
     this.sessions.set(sessionId, {
@@ -3250,7 +3269,8 @@ export class AgentService {
     sessionId: string,
     modelOverride: string | null,
     userId?: string | null,
-    orgRole?: OrgRole | null
+    orgRole?: OrgRole | null,
+    isPlatformAdmin?: boolean
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
@@ -3430,6 +3450,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         channel,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
+        isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
         orgId,
         orgRole: orgRole ?? undefined,

@@ -3,6 +3,7 @@ import type {
   AutomationDeliveryChannel,
   AutomationRunRecord,
   AutomationRunStatus,
+  ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
 import {
@@ -20,6 +21,7 @@ import {
 } from "hugeicons-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -246,14 +248,23 @@ export function AutomationEditorForm({
   automation,
   busy,
   onChange,
+  profiles,
+  profilesLoading,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
+  profiles: ProfileSummary[];
+  profilesLoading: boolean;
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
   const isSchedule = scheduleTrigger !== null;
+  const selectedProfile =
+    profiles.find((profile) => profile.id === automation.profileId) ?? null;
+  const profileLabel = selectedProfile?.name ?? automation.profileId;
+  const profileSelectDisabled =
+    busy || profilesLoading || profiles.length === 0;
 
   return (
     <div className="grid gap-5">
@@ -263,6 +274,48 @@ export function AutomationEditorForm({
           onChange={(event) => onChange({ name: event.target.value })}
           value={automation.name}
         />
+      </Field>
+
+      <Field label="Profile">
+        {profilesLoading ? (
+          <p className="type-body text-muted-foreground text-sm">Loading…</p>
+        ) : profiles.length === 0 ? (
+          <p className="type-body text-muted-foreground text-sm">
+            No profiles in this org
+          </p>
+        ) : (
+          <Select
+            disabled={profileSelectDisabled}
+            onValueChange={(value) => {
+              const profileId = String(value);
+              if (profileId) {
+                onChange({ profileId });
+              }
+            }}
+            value={automation.profileId}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select profile">
+                <span className="flex items-center gap-2">
+                  {selectedProfile ? (
+                    <ProfileAvatar profile={selectedProfile} size="sm" />
+                  ) : null}
+                  <span>{profileLabel}</span>
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  <span className="flex items-center gap-2">
+                    <ProfileAvatar profile={profile} size="sm" />
+                    <span>{profile.name}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </Field>
 
       <Field label="Description">

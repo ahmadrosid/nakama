@@ -38,8 +38,13 @@ export function useAutomationsPage() {
   const automations = automationsData?.automations ?? EMPTY_AUTOMATIONS;
   const unreadByAutomationId =
     automationsData?.unread?.byAutomationId ?? EMPTY_UNREAD_BY_AUTOMATION_ID;
-  const { data: profiles = [] } = useProfilesQuery();
+  const { data: profiles = [], isLoading: profilesLoading } =
+    useProfilesQuery();
   const superBotProfile = findSuperBotProfile(profiles);
+  const profileById = useMemo(
+    () => new Map(profiles.map((profile) => [profile.id, profile])),
+    [profiles]
+  );
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const {
@@ -161,6 +166,7 @@ export function useAutomationsPage() {
           description: editDraft.description,
           enabled: editDraft.enabled,
           name: editDraft.name,
+          profileId: editDraft.profileId,
           prompt: editDraft.prompt,
           trigger: editDraft.trigger,
         },
@@ -262,7 +268,11 @@ export function useAutomationsPage() {
     : "";
 
   const selectedSubtitle = selected
-    ? [formatTrigger(selected.trigger), runScheduleHint]
+    ? [
+        profileById.get(selected.profileId)?.name ?? selected.profileId,
+        formatTrigger(selected.trigger),
+        runScheduleHint,
+      ]
         .filter(Boolean)
         .join(" · ")
     : "";
@@ -285,6 +295,9 @@ export function useAutomationsPage() {
     isSearching,
     loading,
     openEdit,
+    profileById,
+    profiles,
+    profilesLoading,
     refresh,
     refreshing,
     runningId,

@@ -136,6 +136,7 @@ test(
     const toolDefs = tools.map(toLlmToolDefinition);
     const toolContext = {
       orgId: ORG_ID,
+      orgRole: "admin" as const,
       profileId: SUPER_BOT_PROFILE_ID,
       sessionId: SESSION_ID,
     };
