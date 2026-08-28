@@ -18,7 +18,7 @@
     "@nakama/agent": "workspace:*",
     "@nakama/core": "workspace:*",
     "@nakama/db": "workspace:*",
-    "@openrouter/sdk": "^0.12.79",
+    "@openrouter/sdk": "^1.2.61",
     "fflate": "^0.8.3",
     "fix-path": "^5.0.0",
     "hono": "^4.13.5",

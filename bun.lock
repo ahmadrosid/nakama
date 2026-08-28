@@ -63,7 +63,7 @@
         "@nakama/agent": "workspace:*",
         "@nakama/core": "workspace:*",
         "@nakama/db": "workspace:*",
-        "@openrouter/sdk": "^0.12.79",
+        "@openrouter/sdk": "^1.2.61",
         "fflate": "^0.8.3",
         "fix-path": "^5.0.0",
         "hono": "^4.13.5",
@@ -537,7 +537,7 @@
 
     "@open-draft/until": ["@open-draft/until@2.1.0", "", {}, "sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg=="],
 
-    "@openrouter/sdk": ["@openrouter/sdk@0.12.79", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-0ZpwtnuHh3/B1piW9kHCUIQy6PAsaK/vjFdZuHxmCdAenCyUNsLA2mFpmfHNWRNb+bOO3yBc4IALa264UyzmBA=="],
+    "@openrouter/sdk": ["@openrouter/sdk@1.2.61", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-CcpiQnqNb5he3tK6Ohlyg4kYzSBdOX2FITPoV98p1d0wIGsii8zfbKdjlsd8grA/H7morb8m0awm4DmgbxdlBw=="],
 
     "@oxc-parser/binding-android-arm-eabi": ["@oxc-parser/binding-android-arm-eabi@0.143.0", "", { "os": "android", "cpu": "arm" }, "sha512-n9uozULWflPqBtdmI8lAabLqGKNgLVNN0ZH8HfgCwpKGNtzRzauB76jTiW/3YLkcA7N1zskpi9GdVnZuu1SAvg=="],
 
