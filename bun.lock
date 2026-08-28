@@ -139,7 +139,7 @@
         "imapflow": "^1.4.2",
         "mailparser": "^3.9.11",
         "marked": "^18.0.6",
-        "node-html-markdown": "^1.3.0",
+        "node-html-markdown": "^2.0.0",
         "nodemailer": "^9.0.1",
         "zod": "^4.4.3",
       },
@@ -1833,7 +1833,7 @@
 
     "node-fetch": ["node-fetch@2.7.0", "", { "dependencies": { "whatwg-url": "^5.0.0" }, "peerDependencies": { "encoding": "^0.1.0" }, "optionalPeers": ["encoding"] }, "sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A=="],
 
-    "node-html-markdown": ["node-html-markdown@1.3.0", "", { "dependencies": { "node-html-parser": "^6.1.1" } }, "sha512-OeFi3QwC/cPjvVKZ114tzzu+YoR+v9UXW5RwSXGUqGb0qCl0DvP406tzdL7SFn8pZrMyzXoisfG2zcuF9+zw4g=="],
+    "node-html-markdown": ["node-html-markdown@2.0.0", "", { "dependencies": { "node-html-parser": "^6.1.13" } }, "sha512-DqUC3GGP7pwSYxS93SwHoP+qCw78xcMP6C6H2DuC8rPD2AweJRjBzQb5SdXpKtDlqAQ7hVotJcfhgU7hU5Gthw=="],
 
     "node-html-parser": ["node-html-parser@6.1.13", "", { "dependencies": { "css-select": "^5.1.0", "he": "1.2.0" } }, "sha512-qIsTMOY4C/dAa5Q5vsobRpOOvPfC4pB61UVW2uSwZNUp0QU/jCekTal1vMmbO0DgdHeLUJpv/ARmDqErVxA3Sg=="],
 
