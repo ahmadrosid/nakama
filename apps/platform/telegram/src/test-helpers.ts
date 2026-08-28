@@ -161,6 +161,7 @@ export function createMockClient(
     transcribeAudio: 0,
   };
   const orgIds: string[] = [];
+  const listProfilesOrgIds: Array<string | null> = [];
   let lastCreateSessionProfileId: string | undefined;
   let lastStreamInput: unknown;
 
@@ -307,10 +308,12 @@ export function createMockClient(
       ok: true,
       providerConfigured: options.providerConfigured ?? false,
     }),
-    listProfiles: async () => {
+    listProfiles: async (orgId?: string) => {
       calls.listProfiles += 1;
+      listProfilesOrgIds.push(orgId ?? null);
+      const scopeOrgId = orgId ?? activeOrgId;
       const scopedProfiles =
-        (activeOrgId ? options.profilesByOrgId?.[activeOrgId] : undefined) ??
+        (scopeOrgId ? options.profilesByOrgId?.[scopeOrgId] : undefined) ??
         profiles;
 
       return parseListProfilesResponse({
@@ -365,6 +368,7 @@ export function createMockClient(
     getLastStreamInput: () => lastStreamInput,
     getStreamControl: () => streamControl,
     getStreamControls: () => streamControls,
+    listProfilesOrgIds,
     orgIds,
   };
 }

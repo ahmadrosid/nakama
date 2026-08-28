@@ -651,8 +651,11 @@ export class NakamaClient {
     );
   }
 
-  async listProfiles(): Promise<ListProfilesResponse> {
-    return this.request<ListProfilesResponse>("/v1/profiles");
+  async listProfiles(orgId?: string): Promise<ListProfilesResponse> {
+    return this.request<ListProfilesResponse>(
+      "/v1/profiles",
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
   }
 
   async getProfile(profileId: string): Promise<ProfileResponse> {
