@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   agentWorkTabFromSearchParams,
   agentWorkTabPath,
+  orgMemoryProposalsPath,
+  orgSkillProposalsPath,
   pageIdFromPath,
   visibleNavGroups,
 } from "./navigation";
@@ -20,30 +22,34 @@ describe("visibleNavGroups", () => {
       "files",
       "history",
       "integrations",
+      "organization",
       "profiles",
       "settings",
       "soul",
     ]);
   });
 
-  test("an org admin gets System and Profiles but not platform-admin pages", () => {
+  test("an org admin gets System, Organization, and Profiles but not platform-admin pages", () => {
     // `soul` is in PLATFORM_ADMIN_PAGE_IDS yet reachable by an org admin: the
     // canAccessSystemPage branch runs before the platform-admin check.
     const ids = pageIdsFor(false, "admin");
     expect(ids).toContain("soul");
+    expect(ids).toContain("organization");
     expect(ids).toContain("profiles");
     expect(ids).toContain("integrations");
     expect(ids).not.toContain("files");
   });
 
-  test("a member loses System, a viewer also loses Integrations", () => {
+  test("a member loses System and Organization, a viewer also loses Integrations", () => {
     const member = pageIdsFor(false, "member");
     expect(member).toContain("integrations");
     expect(member).not.toContain("soul");
+    expect(member).not.toContain("organization");
 
     const viewer = pageIdsFor(false, "viewer");
     expect(viewer).not.toContain("integrations");
     expect(viewer).not.toContain("soul");
+    expect(viewer).not.toContain("organization");
   });
 
   test("groups left with no reachable item are dropped", () => {
@@ -81,5 +87,18 @@ describe("agent work navigation", () => {
   test("maps the legacy tasks path to the unified page", () => {
     expect(pageIdFromPath("/tasks")).toBe("automations");
     expect(pageIdFromPath("/automations")).toBe("automations");
+  });
+});
+
+describe("organization navigation", () => {
+  test("maps the organization path", () => {
+    expect(pageIdFromPath("/organization")).toBe("organization");
+  });
+
+  test("builds proposal deep links on the organization page", () => {
+    expect(orgMemoryProposalsPath()).toBe("/organization?orgMemory=proposals");
+    expect(orgSkillProposalsPath("p1")).toBe(
+      "/organization?skillProposals=proposals&profileId=p1"
+    );
   });
 });

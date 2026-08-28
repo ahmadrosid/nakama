@@ -3,10 +3,9 @@ import { createPortal } from "react-dom";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { McpTab } from "@/components/soul-tools/McpTab";
 import { ToolsTab } from "@/components/soul-tools/ToolsTab";
-import { OrganizationPanel } from "@/components/system/OrganizationPanel";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
-import { canAccessSystemPage } from "@/lib/navigation";
+import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { StatusPage } from "@/pages/StatusPage";
 import {
@@ -21,8 +20,6 @@ export function SystemPage() {
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const canAccess = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = resolveSystemTab(searchParams.get("tab"), isPlatformAdmin);
-  const visibleTabs = visibleSystemTabs(isPlatformAdmin);
   const pageHeaderActions =
     typeof document === "undefined"
       ? null
@@ -58,6 +55,22 @@ export function SystemPage() {
     return <Navigate replace to="/chat" />;
   }
 
+  // Legacy deep links: /system?tab=organization → /organization
+  if (searchParams.get("tab") === "organization") {
+    const next = new URLSearchParams(searchParams);
+    next.delete("tab");
+    const qs = next.toString();
+    return (
+      <Navigate
+        replace
+        to={qs ? `${PAGE_PATHS.organization}?${qs}` : PAGE_PATHS.organization}
+      />
+    );
+  }
+
+  const tab = resolveSystemTab(searchParams.get("tab"), isPlatformAdmin);
+  const visibleTabs = visibleSystemTabs(isPlatformAdmin);
+
   return (
     <>
       {pageHeaderActions
@@ -90,8 +103,6 @@ export function SystemPage() {
         >
           {tab === "status" ? (
             <StatusPage embedded />
-          ) : tab === "organization" ? (
-            <OrganizationPanel />
           ) : tab === "tools" ? (
             <ToolsTab embedded />
           ) : (

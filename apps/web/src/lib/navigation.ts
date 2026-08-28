@@ -1,5 +1,6 @@
 import {
   Brain03Icon,
+  Building03Icon,
   Chat01Icon,
   Folder01Icon,
   Notification01Icon,
@@ -21,6 +22,7 @@ export type PageId =
   | "automations"
   | "tasks"
   | "integrations"
+  | "organization"
   | "settings"
   | "notifications";
 
@@ -85,6 +87,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: "system",
     items: [
+      navItem(
+        "organization",
+        "Organization",
+        "Members, memory, and org settings",
+        Building03Icon
+      ),
       navItem(
         "integrations",
         "Integrations",
@@ -170,7 +178,11 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
-      if (item.id === "soul" || item.id === "profiles") {
+      if (
+        item.id === "soul" ||
+        item.id === "profiles" ||
+        item.id === "organization"
+      ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
       }
 
@@ -256,12 +268,15 @@ export const toolPlaygroundBackTarget = (
 export function orgSkillProposalsPath(profileId?: string): string {
   const params = new URLSearchParams({
     skillProposals: "proposals",
-    tab: "organization",
   });
   if (profileId) {
     params.set("profileId", profileId);
   }
-  return `${PAGE_PATHS.soul}?${params.toString()}`;
+  return `${PAGE_PATHS.organization}?${params.toString()}`;
+}
+
+export function orgMemoryProposalsPath(): string {
+  return queryPath(PAGE_PATHS.organization, { orgMemory: "proposals" });
 }
 
 export const PAGE_PATHS: Record<PageId, string> = {
@@ -271,6 +286,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   history: "/history",
   integrations: "/integrations",
   notifications: "/notifications",
+  organization: "/organization",
   profiles: "/profiles",
   settings: "/settings",
   soul: "/system",

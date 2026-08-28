@@ -1,5 +1,4 @@
 import {
-  Building03Icon,
   DashboardSquare01Icon,
   LayoutGridIcon,
   Plug01Icon,
@@ -7,7 +6,6 @@ import {
 
 export const SYSTEM_TABS = [
   { icon: DashboardSquare01Icon, id: "status" as const, label: "Status" },
-  { icon: Building03Icon, id: "organization" as const, label: "Organization" },
   { icon: LayoutGridIcon, id: "tools" as const, label: "Tools" },
   { icon: Plug01Icon, id: "mcp" as const, label: "MCP" },
 ] as const;
@@ -20,10 +18,6 @@ export function resolveSystemTab(
 ): SystemTabId {
   if (value === "status") {
     return "status";
-  }
-
-  if (value === "organization") {
-    return "organization";
   }
 
   if (!isPlatformAdmin) {
@@ -43,7 +37,6 @@ export function visibleSystemTabs(isPlatformAdmin: boolean) {
   }
 
   return SYSTEM_TABS.filter(
-    (item) =>
-      item.id === "status" || item.id === "organization" || item.id === "tools"
+    (item) => item.id === "status" || item.id === "tools"
   );
 }

@@ -36,6 +36,10 @@ const NotificationsPage = lazyPage(
   () => import("@/pages/NotificationsPage"),
   "NotificationsPage"
 );
+const OrganizationPage = lazyPage(
+  () => import("@/pages/OrganizationPage"),
+  "OrganizationPage"
+);
 const ProfilesPage = lazyPage(
   () => import("@/pages/ProfilesPage"),
   "ProfilesPage"
@@ -139,6 +143,7 @@ function AppShell() {
                     path="/tasks"
                   />
                   <Route element={<IntegrationsPage />} path="/integrations" />
+                  <Route element={<OrganizationPage />} path="/organization" />
                   <Route
                     element={<NotificationsPage />}
                     path="/notifications"

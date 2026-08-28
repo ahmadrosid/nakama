@@ -107,7 +107,7 @@ scroll_to_skill_card() {
 
 open_org_page() {
   local query="$1"
-  $AB --session "$SESSION" open "${BASE_URL}/system?tab=organization${query}"
+  $AB --session "$SESSION" open "${BASE_URL}/organization${query}"
   $AB --session "$SESSION" wait 2500
   scroll_to_skill_card
 }
@@ -117,7 +117,7 @@ open_org_page ""
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/skill-write-approval-gate.png"
 
 # Proposals tab with pending deploy-checklist row
-open_org_page "&skillProposals=proposals"
+open_org_page "?skillProposals=proposals"
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/skill-write-approval-proposals.png"
 
 # Review dialog for the seeded proposal
