@@ -194,8 +194,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (!isAuthorized) {
       console.log("[discord] unauthorized", userId);
+      // Guild: stay quiet — pairing only happens in DMs. Nudging every @mention
+      // is noise for unlinked users in shared channels.
       if (isGuild) {
-        await messenger.send(LINK_IN_PRIVATE_REPLY);
         return;
       }
 
@@ -493,19 +494,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       if (!authStore.isAuthorized(userId)) {
-        if (
-          interaction.commandName === "start" ||
-          interaction.commandName === "help"
-        ) {
-          await handlePairingSlash(interaction.commandName, messenger);
+        if (interaction.channel?.isDMBased()) {
+          if (
+            interaction.commandName === "start" ||
+            interaction.commandName === "help"
+          ) {
+            await handlePairingSlash(interaction.commandName, messenger);
+            return;
+          }
+
+          await messenger.send(PAIRING_PROMPT);
           return;
         }
 
-        await messenger.send(
-          interaction.channel?.isDMBased()
-            ? PAIRING_PROMPT
-            : LINK_IN_PRIVATE_REPLY
-        );
+        // Guild slash was deferred in bot.ts — drop the thinking reply quietly.
+        await interaction.deleteReply().catch(() => {});
         return;
       }
 

@@ -246,13 +246,18 @@ Usually one of these is true:
 
 If Discord autocomplete offers both a **role** and the **bot user** with similar names, either works when the bot holds that role. Mentioning an unrelated role does not trigger a reply.
 
+### Mentions from unlinked users do nothing
+
+Server channels stay quiet until that Discord user pairs in a private DM. That is intentional — the bot does not publicly nag unlinked people to link.
+
+If *you* are linked and mentions still do nothing:
+
+1. Confirm your Discord user id is in the paired/allowed list under **Integrations → Discord**
+2. Generate a new pairing code and send it in a private DM if needed
+
 ### Discord says to link in a private DM
 
-This usually means:
-
-- the user never sent the pairing code
-- the pairing code expired or was replaced
-- the user tried to pair in a server channel instead of a DM
+Authorized users who paste a pairing code in a server channel still get a short DM redirect. Pairing itself only works in DMs.
 
 Generate a new pairing code from **Integrations → Discord** and send it to the bot in a private DM.
 

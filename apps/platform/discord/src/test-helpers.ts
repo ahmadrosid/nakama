@@ -554,6 +554,9 @@ export function createSlashInteraction(options: {
     channel,
     channelId: options.inThread ? threadId : channelId,
     commandName: options.commandName,
+    deleteReply: async () => {
+      replies.push("__deleted__");
+    },
     editReply: async ({ content }: { content: string }) => {
       replies.push(content);
     },

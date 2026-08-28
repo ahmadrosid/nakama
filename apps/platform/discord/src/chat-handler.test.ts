@@ -855,6 +855,44 @@ describe("createChatHandler questionnaire delivery", () => {
   });
 });
 
+describe("createChatHandler guild auth silence", () => {
+  test("unlinked guild mentions stay quiet", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, calls } = await createPairedHandler(homeDir, {
+        pairedUserIds: [],
+      });
+      const mention = createGuildChatMessage({
+        content: "<@bot_id> hello",
+        mentionsBot: true,
+        userId: "555555555555555555",
+      });
+
+      await handleMessage(mention.message);
+
+      expect(mention.channelSentMessages).toEqual([]);
+      expect(mention.threadSentMessages).toEqual([]);
+      expect(mention.startThreadCalls).toBe(0);
+      expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("unlinked guild slash deletes the deferred reply", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        pairedUserIds: [],
+      });
+      const statusCmd = createSlashInteraction({
+        commandName: "status",
+        userId: "555555555555555555",
+      });
+
+      await handleSlashCommand(statusCmd.interaction);
+
+      expect(statusCmd.replies).toEqual(["__deleted__"]);
+    });
+  });
+});
+
 describe("createChatHandler guild thread routing", () => {
   test("mention in a guild channel creates a thread and replies inside it", async () => {
     await withTempHome(async (homeDir) => {
