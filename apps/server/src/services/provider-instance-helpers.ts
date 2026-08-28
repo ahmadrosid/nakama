@@ -17,6 +17,7 @@ import {
   type UserConfig,
   validateCustomModels,
   validateDisplayName,
+  validateProviderApiKeyFormat,
   validateProviderInstanceLabel,
 } from "@nakama/core";
 import type {
@@ -178,6 +179,10 @@ export function buildProviderInstanceFromCreateRequest(
     throw new NakamaApiError("API key is required.", 400);
   }
 
+  if (apiKey) {
+    validateProviderApiKeyFormat(apiKey, type);
+  }
+
   if (type === "ollama") {
     const hostMode = resolveOllamaHostMode({
       baseUrl: request.baseUrl,
@@ -221,7 +226,7 @@ export function applyProviderInstanceUpdate(
   }
 
   if (request.apiKey !== undefined && request.apiKey.trim()) {
-    next.apiKey = request.apiKey.trim();
+    next.apiKey = validateProviderApiKeyFormat(request.apiKey, instance.type);
   }
 
   if (request.baseUrl !== undefined) {

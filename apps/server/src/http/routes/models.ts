@@ -1220,18 +1220,38 @@ export function registerModelRoutes(
   app.post("/v1/providers", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<CreateProviderRequest>(c.req.raw);
-    return json<CreateProviderResponse>(await agent.createProvider(body));
+
+    try {
+      return json<CreateProviderResponse>(await agent.createProvider(body));
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.patch("/v1/providers/:providerId", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateProviderRequest>(c.req.raw);
-    return json<UpdateProviderResponse>(
-      await agent.updateProvider(
-        decodeURIComponent(c.req.param("providerId")),
-        body
-      )
-    );
+
+    try {
+      return json<UpdateProviderResponse>(
+        await agent.updateProvider(
+          decodeURIComponent(c.req.param("providerId")),
+          body
+        )
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.delete("/v1/providers/:providerId", async (c) => {
