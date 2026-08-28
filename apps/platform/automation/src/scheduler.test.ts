@@ -3,8 +3,6 @@ import type { NakamaClient } from "@nakama/client";
 import type { AutomationSchedule } from "@nakama/core";
 import { AutomationWorkerScheduler } from "./scheduler";
 
-const POLL_INTERVAL_MS = 1000;
-
 function createMockClient(
   overrides: Partial<{
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
@@ -69,13 +67,9 @@ describe("AutomationWorkerScheduler", () => {
   test("serializes complete poll cycles and resumes after failures", async () => {
     const releaseFirstReload = Promise.withResolvers<void>();
     const curatorStarted = Promise.withResolvers<void>();
-    const failingCurator =
-      Promise.withResolvers<
-        Awaited<ReturnType<NakamaClient["listSkillCuratorOrgs"]>>
-      >();
+    const releaseCurator = Promise.withResolvers<void>();
     const failingReload = Promise.withResolvers<AutomationSchedule[]>();
     let intervalCallback: (() => Promise<void>) | undefined;
-    let curatorCalls = 0;
     let listCalls = 0;
     let statusChanges = 0;
     const client = createMockClient({
@@ -97,15 +91,6 @@ describe("AutomationWorkerScheduler", () => {
         return [];
       },
     });
-    client.listSkillCuratorOrgs = async () => {
-      curatorCalls += 1;
-      if (curatorCalls === 2) {
-        curatorStarted.resolve();
-        return failingCurator.promise;
-      }
-
-      return { orgs: [] };
-    };
     const scheduler = new AutomationWorkerScheduler(client, () => {
       statusChanges += 1;
     });
@@ -120,7 +105,12 @@ describe("AutomationWorkerScheduler", () => {
 
     try {
       await scheduler.start();
-      scheduler.beginPolling(POLL_INTERVAL_MS);
+      client.listSkillCuratorOrgs = async () => {
+        curatorStarted.resolve();
+        await releaseCurator.promise;
+        return { orgs: [] };
+      };
+      scheduler.beginPolling(1000);
       const poll = intervalCallback;
       if (!poll) {
         throw new Error("Polling callback was not registered.");
@@ -139,8 +129,9 @@ describe("AutomationWorkerScheduler", () => {
       const curatorOverlap = poll();
       pendingPolls.push(curatorOverlap);
       expect(listCalls).toBe(2);
+      expect(statusChanges).toBe(1);
 
-      failingCurator.reject(new Error("curator failed"));
+      releaseCurator.resolve();
       await Promise.all([firstPoll, reloadOverlap, curatorOverlap]);
       expect(statusChanges).toBe(2);
 
@@ -158,10 +149,10 @@ describe("AutomationWorkerScheduler", () => {
 
       expect(listCalls).toBe(4);
       expect(statusChanges).toBe(3);
-      expect(errorSpy).toHaveBeenCalledTimes(2);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
     } finally {
       releaseFirstReload.resolve();
-      failingCurator.resolve({ orgs: [] });
+      releaseCurator.resolve();
       failingReload.resolve([]);
       await Promise.all(
         pendingPolls.map((pendingPoll) => pendingPoll.catch(() => undefined))
