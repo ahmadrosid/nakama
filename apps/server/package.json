@@ -9,7 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
+    "@anthropic-ai/sdk": "^0.120.0",
     "@composio/core": "^0.17.0",
     "@countrystatecity/timezones": "^1.0.5",
     "@google/genai": "^2.7.0",
