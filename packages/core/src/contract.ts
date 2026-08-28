@@ -2259,11 +2259,6 @@ export type ComposioUserConnectionStatus =
   | "connected"
   | "error";
 
-/** @deprecated Org catalog uses ComposioOrgToolkitStatus; user rows use ComposioUserConnectionStatus. */
-export type ComposioToolkitStatus =
-  | ComposioOrgToolkitStatus
-  | ComposioUserConnectionStatus;
-
 export type ComposioToolErrorCode =
   | "COMPOSIO_NOT_CONNECTED"
   | "COMPOSIO_TRANSIENT"

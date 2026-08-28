@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { createFireworksProvider } from "./index";
+import { compatibleModelSupportsThinking } from "../compatible-models";
+import { createOpenAICompatibleProvider } from "../openai-compatible";
+import { FIREWORKS_INFERENCE_BASE_URL } from "./index";
 
 const originalFetch = globalThis.fetch;
 
@@ -22,6 +24,24 @@ function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 const FIREWORKS_TEST_MODEL = "accounts/fireworks/models/gpt-oss-120b";
+
+function createFireworksProvider(options: {
+  apiKey: string;
+  customModels?: { id: string; supportsThinking?: boolean }[];
+  model: string;
+}) {
+  return createOpenAICompatibleProvider({
+    apiKey: options.apiKey,
+    baseUrl: FIREWORKS_INFERENCE_BASE_URL,
+    displayName: "Fireworks",
+    model: options.model,
+    providerName: "fireworks",
+    supportsThinking: compatibleModelSupportsThinking(
+      options.model,
+      options.customModels
+    ),
+  });
+}
 
 describe("Fireworks provider", () => {
   test("sends reasoning_effort only when the model supports thinking", async () => {

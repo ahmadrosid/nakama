@@ -185,7 +185,6 @@ import {
   catalogCustomModelsToCatalog,
   createProviderForInstance,
   createProviderFromActiveConfig,
-  createProviderFromSources,
   fetchFireworksGatewayModels,
   fetchOllamaModels,
   fetchRemoteOpenAIModels,
@@ -609,7 +608,7 @@ export class AgentService {
         const active = getActiveProviderInstance(this.userConfig);
         return active ? resolveDefaultModelForInstance(active) : null;
       })(),
-      provider: createProviderFromSources(process.env, this.userConfig),
+      provider: createProviderFromActiveConfig(this.userConfig, process.env),
       providerInstance: getActiveProviderInstance(this.userConfig),
       thinking: this.resolveWorkspaceThinkingDefaults(),
     });
@@ -2001,7 +2000,10 @@ export class AgentService {
   }
 
   async draftTaskPrompt(title: string, description?: string): Promise<string> {
-    const provider = createProviderFromSources(process.env, this.userConfig);
+    const provider = createProviderFromActiveConfig(
+      this.userConfig,
+      process.env
+    );
 
     return draftTaskPromptFromFields(
       { description, title },
@@ -2628,7 +2630,10 @@ export class AgentService {
     }
 
     const loaded = await handler.load(record);
-    const provider = createProviderFromSources(process.env, this.userConfig);
+    const provider = createProviderFromActiveConfig(
+      this.userConfig,
+      process.env
+    );
     const parameters = await suggestToolParamsFromPrompt(
       {
         description: tool.description,

@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildLearnPrompt,
   expandLearnInLastUserMessage,
-  expandLearnUserContent,
-  expandLearnUserMessage,
   tryParseLearnCommand,
 } from "./learn-prompt";
 
@@ -56,37 +54,6 @@ describe("buildLearnPrompt", () => {
   test("defaults empty request to the current conversation workflow", () => {
     const prompt = buildLearnPrompt("");
     expect(prompt).toContain("workflow we just went through");
-  });
-});
-
-describe("expandLearnUserMessage", () => {
-  test("expands /learn commands and leaves other text alone", () => {
-    expect(expandLearnUserMessage("hello")).toBe("hello");
-    expect(expandLearnUserMessage("/learn expense filing")).toContain(
-      "[/learn]"
-    );
-    expect(expandLearnUserMessage("/learn expense filing")).toContain(
-      "expense filing"
-    );
-  });
-});
-
-describe("expandLearnUserContent", () => {
-  test("expands the first text part in multimodal content", () => {
-    const expanded = expandLearnUserContent([
-      { text: "/learn expense filing", type: "text" as const },
-      {
-        imageUrl: "data:image/png;base64,xx",
-        mimeType: "image/png",
-        type: "image" as const,
-      },
-    ]);
-
-    expect(expanded[0]).toMatchObject({ type: "text" });
-    if (expanded[0] && expanded[0].type === "text") {
-      expect(expanded[0].text).toContain("[/learn]");
-      expect(expanded[0].text).toContain("expense filing");
-    }
   });
 });
 

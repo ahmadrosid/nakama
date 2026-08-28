@@ -11,10 +11,10 @@ import {
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
-import { createCerebrasProvider } from "./cerebras";
+import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
 import { createCloudflareProvider } from "./cloudflare";
 import { compatibleModelSupportsThinking } from "./compatible-models";
-import { createFireworksProvider } from "./fireworks";
+import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
 import { createGeminiProvider } from "./gemini";
 import { resolveModel } from "./models";
 import { createOllamaProvider } from "./ollama";
@@ -100,16 +100,28 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         model,
       });
     case "cerebras":
-      return createCerebrasProvider({
+      return createOpenAICompatibleProvider({
         apiKey: options.apiKey,
-        customModels: options.instance?.customModels,
+        baseUrl: CEREBRAS_CHAT_BASE_URL,
+        displayName: "Cerebras",
         model,
+        providerName: "cerebras",
+        supportsThinking: compatibleModelSupportsThinking(
+          model,
+          options.instance?.customModels
+        ),
       });
     case "fireworks":
-      return createFireworksProvider({
+      return createOpenAICompatibleProvider({
         apiKey: options.apiKey,
-        customModels: options.instance?.customModels,
+        baseUrl: FIREWORKS_INFERENCE_BASE_URL,
+        displayName: "Fireworks",
         model,
+        providerName: "fireworks",
+        supportsThinking: compatibleModelSupportsThinking(
+          model,
+          options.instance?.customModels
+        ),
       });
     case "cloudflare":
       return createCloudflareProvider({
@@ -212,11 +224,4 @@ export function createProviderFromActiveConfig(
   }
 
   return createProviderForInstance(instance, model, env);
-}
-
-export function createProviderFromSources(
-  env: Record<string, string | undefined> = process.env,
-  userConfig?: UserConfig | null
-): ProviderClient | null {
-  return createProviderFromActiveConfig(userConfig, env);
 }

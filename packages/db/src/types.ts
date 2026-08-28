@@ -226,13 +226,6 @@ export interface StoredNotificationDestinationRecord {
 
 export type StoredOrgComposioToolkitStatus = "disabled" | "enabled";
 
-/** @deprecated Use StoredOrgComposioToolkitStatus for org catalog rows. */
-export type StoredComposioToolkitStatus =
-  | StoredOrgComposioToolkitStatus
-  | "oauth_in_progress"
-  | "connected"
-  | "error";
-
 export interface StoredComposioToolkitRecord {
   cachedTools: Array<{
     slug: string;

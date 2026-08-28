@@ -150,36 +150,6 @@ export function buildLearnPrompt(userRequest: string): string {
   ].join("\n");
 }
 
-/** Expand a bare `/learn …` user message into the full learn prompt; otherwise return the original text. */
-export function expandLearnUserMessage(text: string): string {
-  const parsed = tryParseLearnCommand(text);
-  if (!parsed) {
-    return text;
-  }
-
-  return buildLearnPrompt(parsed.source);
-}
-
-/**
- * Expand `/learn` in string or multimodal user content (first text part only).
- * Returns the original content when it is not a learn command.
- */
-export function expandLearnUserContent<T extends string | MessageContentPart[]>(
-  content: T
-): T {
-  const text = learnCommandText(content);
-  if (text === null) {
-    return content;
-  }
-
-  const expanded = expandLearnUserMessage(text);
-  if (expanded === text) {
-    return content;
-  }
-
-  return replaceLearnContentText(content, expanded);
-}
-
 type ProviderChatMessage = {
   content: string | MessageContentPart[];
   role: string;

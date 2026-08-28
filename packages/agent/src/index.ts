@@ -62,8 +62,6 @@ export { usableContextTokens } from "./history-compaction";
 export {
   buildLearnPrompt,
   expandLearnInLastUserMessage,
-  expandLearnUserContent,
-  expandLearnUserMessage,
   tryParseLearnCommand,
 } from "./learn-prompt";
 export {

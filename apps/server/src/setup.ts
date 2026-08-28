@@ -11,7 +11,7 @@ import {
   saveUserConfig,
   type UserConfig,
 } from "@nakama/core";
-import { createProviderFromSources } from "./providers";
+import { createProviderFromActiveConfig } from "./providers";
 
 export interface ProviderBootstrap {
   provider: ProviderClient | null;
@@ -59,6 +59,6 @@ export async function ensureProviderConfigured(): Promise<ProviderBootstrap> {
     userConfig = (await bootstrapProviderFromEnv(process.env)) ?? userConfig;
   }
 
-  const provider = createProviderFromSources(process.env, userConfig);
+  const provider = createProviderFromActiveConfig(userConfig, process.env);
   return { provider, userConfig };
 }

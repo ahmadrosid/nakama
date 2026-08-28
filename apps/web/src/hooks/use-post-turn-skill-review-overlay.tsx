@@ -1,5 +1,5 @@
 import type { AgentChannel, ProfileSummary } from "@nakama/core/contract";
-import { resolveSkillPostTurnReviewEnabled } from "@nakama/core/skills/post-turn-review";
+import { resolveSkillPostTurnReviewEnabled } from "@nakama/core/skills/profile-org-override";
 import { useEffect, useMemo, useState } from "react";
 import {
   SkillPostTurnReviewBanner,

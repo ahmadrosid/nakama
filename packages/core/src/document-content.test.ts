@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  clearDocumentTextParsers,
-  getDocumentTextParser,
   providerSupportsNativeDocument,
-  registerDocumentTextParser,
   resolveDocumentPartForProvider,
 } from "./document-content";
 
@@ -76,18 +73,6 @@ describe("providerSupportsNativeDocument", () => {
   });
 });
 
-describe("registerDocumentTextParser", () => {
-  test("registers and retrieves parser", () => {
-    clearDocumentTextParsers();
-    const parser = () => "parsed";
-
-    registerDocumentTextParser("application/octet-stream", parser);
-    expect(getDocumentTextParser("application/octet-stream")).toBe(parser);
-
-    clearDocumentTextParsers();
-  });
-});
-
 describe("resolveDocumentPartForProvider", () => {
   test("returns native document part when supported", async () => {
     const result = await resolveDocumentPartForProvider(
@@ -108,34 +93,7 @@ describe("resolveDocumentPartForProvider", () => {
     });
   });
 
-  test("uses registered parser when native support is unavailable", async () => {
-    clearDocumentTextParsers();
-    registerDocumentTextParser(
-      "application/octet-stream",
-      () => "parsed file text"
-    );
-
-    const result = await resolveDocumentPartForProvider(
-      {
-        data: "YWJj",
-        filename: "data.bin",
-        mediaType: "application/octet-stream",
-        type: "document",
-      },
-      "openai"
-    );
-
-    expect(result).toEqual({
-      text: "[File: data.bin]\nparsed file text",
-      type: "text",
-    });
-
-    clearDocumentTextParsers();
-  });
-
   test("throws when no native support and no parser", async () => {
-    clearDocumentTextParsers();
-
     await expect(
       resolveDocumentPartForProvider(
         {

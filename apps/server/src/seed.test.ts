@@ -10,7 +10,7 @@ import {
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "./http/test-app-helpers";
-import { createProviderFromSources } from "./providers";
+import { createProviderFromActiveConfig } from "./providers";
 import { runFirstBootSeed } from "./seed";
 import { AuthService } from "./services/auth-service";
 import { OrgService } from "./services/org-service";
@@ -204,7 +204,7 @@ describe("runFirstBootSeed", () => {
     expect(org?.name).toBe("Personal");
 
     const userConfig = await loadUserConfig();
-    const provider = createProviderFromSources(process.env, userConfig);
+    const provider = createProviderFromActiveConfig(userConfig, process.env);
     const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),

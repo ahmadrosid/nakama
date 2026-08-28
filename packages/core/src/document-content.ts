@@ -9,8 +9,6 @@ export type DocumentTextParser = (
   document: DocumentAttachment
 ) => string | Promise<string>;
 
-const textParsers = new Map<string, DocumentTextParser>();
-
 const DOCX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const XLSX_MEDIA_TYPE =
@@ -95,28 +93,11 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   zhipu_cn: new Set<string>(),
 };
 
-export function registerDocumentTextParser(
-  mediaType: string,
-  parser: DocumentTextParser
-): void {
-  textParsers.set(mediaType, parser);
-}
-
-export function clearDocumentTextParsers(): void {
-  textParsers.clear();
-}
-
 export function providerSupportsNativeDocument(
   provider: ProviderName,
   mediaType: string
 ): boolean {
   return NATIVE_DOCUMENT_MEDIA_TYPES[provider].has(mediaType);
-}
-
-export function getDocumentTextParser(
-  mediaType: string
-): DocumentTextParser | undefined {
-  return textParsers.get(mediaType);
 }
 
 export async function resolveDocumentPartForProvider(
@@ -127,9 +108,7 @@ export async function resolveDocumentPartForProvider(
     return part;
   }
 
-  const parser =
-    getDocumentTextParser(part.mediaType) ??
-    BUILTIN_DOCUMENT_TEXT_PARSERS[part.mediaType];
+  const parser = BUILTIN_DOCUMENT_TEXT_PARSERS[part.mediaType];
 
   if (parser) {
     const text = await parser({
@@ -145,7 +124,7 @@ export async function resolveDocumentPartForProvider(
   }
 
   throw new NakamaApiError(
-    `Provider "${provider}" does not support ${part.mediaType} documents natively. Register a text parser with registerDocumentTextParser().`,
+    `Provider "${provider}" does not support ${part.mediaType} documents natively.`,
     400
   );
 }

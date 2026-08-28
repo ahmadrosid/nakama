@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { createCerebrasProvider } from "./index";
+import { compatibleModelSupportsThinking } from "../compatible-models";
+import { createOpenAICompatibleProvider } from "../openai-compatible";
+import { CEREBRAS_CHAT_BASE_URL } from "./index";
 
 const originalFetch = globalThis.fetch;
 
@@ -18,6 +20,24 @@ function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
 
       controller.close();
     },
+  });
+}
+
+function createCerebrasProvider(options: {
+  apiKey: string;
+  customModels?: { id: string; supportsThinking?: boolean }[];
+  model: string;
+}) {
+  return createOpenAICompatibleProvider({
+    apiKey: options.apiKey,
+    baseUrl: CEREBRAS_CHAT_BASE_URL,
+    displayName: "Cerebras",
+    model: options.model,
+    providerName: "cerebras",
+    supportsThinking: compatibleModelSupportsThinking(
+      options.model,
+      options.customModels
+    ),
   });
 }
 
