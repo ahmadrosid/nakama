@@ -154,7 +154,7 @@ Memory writes and archives use bundled skills (`update-profile-memory`, `archive
 | `MEMORY.md` | Yes (via soul stack) | `update-profile-memory` skill + `read_file` / `edit_file` / `write_file` |
 | `memory-archive/` | No | `archive-profile-memory` skill + file tools |
 | `artifacts/` | No ([Files page](/artifacts), download API, web chat preview) | `save-artifact` skill + `write_file` or `write_docx` |
-| Knowledge base | Via `knowledge_base_search` when assigned | Upload via dashboard; search at runtime |
+| Knowledge base | Via `knowledge_base_search` when assigned | Upload via **Profiles → Knowledge**; search at runtime |
 | Profile skills | Via skill matcher when relevant | `manage-skills` skill or dashboard |
 
 Active `MEMORY.md` has a **4096-byte** soft limit. When it is full, the agent should archive old bullets before adding new ones.
@@ -163,7 +163,7 @@ Org memory has separate limits: **8192 bytes** for the live file and **2048 byte
 
 This data is isolated per org and per profile. Two orgs never read or write the same directory, even if profile ids happen to match.
 
-Each profile also sees the default Nakama documentation source in the Knowledge tab:
+Each profile also sees the default Nakama documentation source on **Profiles → Knowledge**:
 
 ```text
 https://ahmadrosid.github.io/nakama/llms.txt

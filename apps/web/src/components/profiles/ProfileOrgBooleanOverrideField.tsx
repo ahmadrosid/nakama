@@ -1,5 +1,6 @@
 import type {
   ProfileDetail,
+  ProfileSummary,
   UpdateProfileRequest,
 } from "@nakama/core/contract";
 import { useState } from "react";
@@ -76,6 +77,128 @@ export function ProfileOrgBooleanOverrideField({
       profile={profile}
       savedToast={savedToast}
     />
+  );
+}
+
+/** Org settings: pick a profile, then set inherit/on/off for one boolean field. */
+export function OrgSettingsProfileBooleanOverrideField({
+  profiles,
+  disabled = false,
+  field,
+  ariaLabel,
+  offLabel,
+  onLabel,
+  savedToast,
+}: {
+  ariaLabel: string;
+  disabled?: boolean;
+  field: OverrideField;
+  offLabel: string;
+  onLabel: string;
+  profiles: ProfileSummary[];
+  savedToast: string;
+}) {
+  const [profileId, setProfileId] = useState("");
+  const selected = profiles.find((profile) => profile.id === profileId) ?? null;
+
+  if (profiles.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
+      <Select
+        disabled={disabled}
+        onValueChange={(next) => setProfileId(next ? String(next) : "")}
+        value={profileId}
+      >
+        <SelectTrigger aria-label="Profile override" className="h-8 max-w-xs">
+          <SelectValue placeholder="Profile override" />
+        </SelectTrigger>
+        <SelectContent>
+          {profiles.map((profile) => (
+            <SelectItem key={profile.id} value={profile.id}>
+              {profile.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selected ? (
+        <OrgSettingsProfileOverrideSelect
+          ariaLabel={ariaLabel}
+          disabled={disabled}
+          field={field}
+          key={`${selected.id}:${field}:${String(selected[field])}`}
+          offLabel={offLabel}
+          onLabel={onLabel}
+          profile={selected}
+          savedToast={savedToast}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OrgSettingsProfileOverrideSelect({
+  profile,
+  disabled = false,
+  field,
+  ariaLabel,
+  offLabel,
+  onLabel,
+  savedToast,
+}: {
+  ariaLabel: string;
+  disabled?: boolean;
+  field: OverrideField;
+  offLabel: string;
+  onLabel: string;
+  profile: ProfileSummary;
+  savedToast: string;
+}) {
+  const updateMutation = useUpdateProfileMutation();
+  const [value, setValue] = useState<OverrideValue>(() =>
+    toOverrideValue(profile[field])
+  );
+  const busy = updateMutation.isPending;
+
+  async function handleOverrideChange(nextValue: OverrideValue) {
+    setValue(nextValue);
+    try {
+      await updateMutation.mutateAsync({
+        input: { [field]: fromOverrideValue(nextValue) },
+        profileId: profile.id,
+      });
+      toast(savedToast);
+    } catch (err) {
+      setValue(toOverrideValue(profile[field]));
+      toast(formatError(err));
+    }
+  }
+
+  return (
+    <>
+      <Select
+        disabled={disabled || busy}
+        onValueChange={(next) => {
+          if (!next) {
+            return;
+          }
+          void handleOverrideChange(next as OverrideValue);
+        }}
+        value={value}
+      >
+        <SelectTrigger aria-label={ariaLabel} className="h-8 max-w-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="inherit">Inherit org default</SelectItem>
+          <SelectItem value="on">{onLabel}</SelectItem>
+          <SelectItem value="off">{offLabel}</SelectItem>
+        </SelectContent>
+      </Select>
+      {busy ? <Spinner /> : null}
+    </>
   );
 }
 

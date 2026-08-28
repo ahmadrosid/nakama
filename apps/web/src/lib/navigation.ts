@@ -34,6 +34,8 @@ export interface NavItem {
 }
 
 export interface NavGroup {
+  /** When true, sidebar renders a collapsible tree under `label`. */
+  collapsible?: boolean;
   id: string;
   items: NavItem[];
   label: string;
@@ -85,7 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Agent",
   },
   {
-    id: "system",
+    id: "organization",
     items: [
       navItem(
         "organization",
@@ -93,6 +95,13 @@ export const NAV_GROUPS: NavGroup[] = [
         "Members, memory, and org settings",
         Building03Icon
       ),
+    ],
+    label: "Organization",
+  },
+  {
+    collapsible: true,
+    id: "system",
+    items: [
       navItem(
         "integrations",
         "Integrations",
