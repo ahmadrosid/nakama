@@ -92,6 +92,25 @@ test("clients send org context on authenticated requests", async () => {
   expect(headers.get("X-Org-Id")).toBe("org_test");
 });
 
+test("listProfiles takes an org id per call, overriding the client's", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return Response.json({ profiles: [] });
+    },
+    orgId: "org_test",
+  });
+
+  await client.listProfiles("org_other");
+
+  const headers = new Headers(fetchCalls[0]!.init?.headers);
+  expect(headers.get("X-Org-Id")).toBe("org_other");
+});
+
 test("non-browser clients send local auth as a bearer token", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];

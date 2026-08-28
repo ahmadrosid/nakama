@@ -309,6 +309,19 @@ export async function buildSpawnEnvForHarness(
   return buildOpenCodeSpawnEnv(routing, providerType);
 }
 
+/**
+ * Env keys that run code before the spawned command does, so a caller that can
+ * name one owns the process: `bash -lc` sources BASH_ENV, the loader reads
+ * the LD_ and DYLD_ preload keys, node reads NODE_OPTIONS (--require), python
+ * reads the PYTHON keys (sitecustomize), and BASH_FUNC_ smuggles in shell
+ * functions. The bash tool
+ * takes this map straight from the model, so the filter is always on rather
+ * than opt-in. Bare `ENV` is left alone: bash only sources it in posix mode,
+ * and it is a common application setting.
+ */
+const HIJACKING_ENV_KEY =
+  /^(BASH_ENV|IFS|PS4|SHELLOPTS|BASHOPTS|NODE_OPTIONS|BASH_FUNC_.*|LD_.*|DYLD_.*|PYTHON.*)$/;
+
 export function mergeCodingAgentSpawnEnv(
   baseEnv: NodeJS.ProcessEnv,
   spawnEnv: Record<string, string>,
@@ -318,9 +331,19 @@ export function mergeCodingAgentSpawnEnv(
   } = {}
 ): NodeJS.ProcessEnv {
   const callerEnv = options.callerEnv ?? {};
-  const merged: Record<string, string> = { ...spawnEnv };
+  const merged: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(spawnEnv)) {
+    if (!HIJACKING_ENV_KEY.test(key)) {
+      merged[key] = value;
+    }
+  }
 
   for (const [key, value] of Object.entries(callerEnv)) {
+    if (HIJACKING_ENV_KEY.test(key)) {
+      continue;
+    }
+
     if (
       options.protectCredentialKeys &&
       CODING_AGENT_CREDENTIAL_ENV_KEYS.includes(

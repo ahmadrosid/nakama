@@ -11,6 +11,6 @@
   "dependencies": {
     "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*",
-    "@whiskeysockets/baileys": "6.7.23"
+    "@whiskeysockets/baileys": "6.7.24"
   }
 }

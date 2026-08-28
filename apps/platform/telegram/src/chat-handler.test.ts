@@ -1765,6 +1765,52 @@ describe("bridge API integration", () => {
     });
   });
 
+  test("/profile scopes each org's listing to that org, not the client's", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [1001],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, listProfilesOrgIds } = createMockClient({
+        orgs: createMultiTestOrgs(),
+        profilesByOrgId: {
+          org_a: [{ id: "default", isDefault: true, name: "Default Bot" }],
+          org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
+        },
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      orgStore.set("u:1001", "org_a");
+      await orgStore.save();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        orgStore,
+        sessionStore,
+      });
+
+      const switchProfile = createMessageContext({
+        text: "/profile gary-vee",
+        userId: 1001,
+      });
+      await handleMessage(switchProfile.ctx);
+
+      // The cross-org scan names each org on its own request instead of
+      // repointing the shared client, which a concurrent chat would read.
+      expect(listProfilesOrgIds.filter((id) => id !== null)).toEqual([
+        "org_a",
+        "org_b",
+      ]);
+    });
+  });
+
   test("/profile accepts the visible list number in the current org", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

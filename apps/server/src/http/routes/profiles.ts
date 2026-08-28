@@ -30,7 +30,7 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { getRequestAuth, json, readJson } from "../shared";
+import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
@@ -959,9 +959,7 @@ export function registerProfileRoutes(
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
-    const body = await readJson<CloneProfileRequest>(c.req.raw).catch(
-      () => ({}) as CloneProfileRequest
-    );
+    const body = await readOptionalJson<CloneProfileRequest>(c.req.raw, {});
     return json<ProfileResponse>(
       await agent.cloneProfile(orgId, profileId, body),
       201

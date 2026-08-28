@@ -119,4 +119,59 @@ describe("POST /v1/profiles/:profileId/clone", () => {
       before.length + 1
     );
   }, 20_000);
+
+  test("malformed JSON returns 400 without cloning a profile", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "platform3@example.com"
+    );
+    const orgId = session.orgId!;
+    const before = await databaseAdapter.listProfilesForOrg(orgId);
+    const source = before.find((profile) => !profile.isSuper);
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${source!.id}/clone`, {
+        body: "{",
+        headers: session.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await databaseAdapter.listProfilesForOrg(orgId)).toHaveLength(
+      before.length
+    );
+  }, 20_000);
+
+  test("an empty body keeps the optional clone defaults", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "platform4@example.com"
+    );
+    const orgId = session.orgId!;
+    const before = await databaseAdapter.listProfilesForOrg(orgId);
+    const source = before.find((profile) => !profile.isSuper);
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${source!.id}/clone`, {
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }, orgId),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(await databaseAdapter.listProfilesForOrg(orgId)).toHaveLength(
+      before.length + 1
+    );
+  }, 20_000);
 });

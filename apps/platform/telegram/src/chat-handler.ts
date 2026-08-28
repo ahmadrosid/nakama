@@ -666,15 +666,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           }
         : isTopic
           ? null
-          : resolveProfileInScopes(
-              await listProfileScopes(orgs, currentOrgId),
-              arg
-            );
+          : resolveProfileInScopes(await listProfileScopes(orgs), arg);
 
     if (!resolved) {
       if (isTopic && currentOrgId) {
         const crossOrgMatch = resolveProfileInScopes(
-          await listProfileScopes(orgs, currentOrgId),
+          await listProfileScopes(orgs),
           arg
         );
 
@@ -719,30 +716,26 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     );
   }
 
+  // The org travels with the request. Borrowing client.setOrgId per iteration
+  // let a concurrent chat read another org's profiles between the awaits.
   async function listProfileScopes(
-    orgs: Array<{ id: string; name: string }>,
-    restoreOrgId?: string
+    orgs: Array<{ id: string; name: string }>
   ): Promise<ProfileScope[]> {
     const scopes: ProfileScope[] = [];
 
     for (const org of orgs) {
-      client.setOrgId(org.id);
-      const profiles = await listSelectableProfiles();
+      const profiles = await listSelectableProfiles(org.id);
 
       if (profiles.length > 0) {
         scopes.push({ orgId: org.id, orgName: org.name, profiles });
       }
     }
 
-    if (restoreOrgId) {
-      client.setOrgId(restoreOrgId);
-    }
-
     return scopes;
   }
 
-  async function listSelectableProfiles() {
-    const { profiles } = await client.listProfiles();
+  async function listSelectableProfiles(orgId?: string) {
+    const { profiles } = await client.listProfiles(orgId);
     return filterProfilesForChatAccess(profiles, { excludeSuperBot: true });
   }
 

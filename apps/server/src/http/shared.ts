@@ -364,6 +364,22 @@ export async function readJson<T>(request: Request): Promise<T> {
   }
 }
 
+export async function readOptionalJson<T>(
+  request: Request,
+  fallback: T
+): Promise<T> {
+  const body = await request.text();
+  if (!body.trim()) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new NakamaApiError("Invalid JSON in request body.", 400);
+  }
+}
+
 export function json<T>(body: T, status = 200, headers?: Headers): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Content-Type", "application/json; charset=utf-8");

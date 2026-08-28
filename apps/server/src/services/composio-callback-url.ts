@@ -55,33 +55,43 @@ export async function getWebPublicUrlSettings(): Promise<WebPublicUrlSettingsRes
   };
 }
 
-/** OAuth callback base URL — prefers the browser origin from the active request. */
+/**
+ * OAuth callback base URL. A configured public URL is the operator's answer and
+ * wins: clientOrigin, Origin, Referer and X-Forwarded-Host all come from the
+ * caller, and this base ends up in the redirect_uri an OAuth code is delivered
+ * to. They still decide when nothing is configured, which is how a dev install
+ * on localhost works, and they have to parse as an http(s) URL to be used.
+ */
 export function resolveComposioCallbackBaseUrl(
   options: { clientOrigin?: string; request?: Request } = {}
 ): string {
+  const configured = resolveWebPublicUrl();
+  if (configured) {
+    return configured;
+  }
+
   const fromBrowser = resolveRequestClientOrigin(
     options.request,
     options.clientOrigin
   );
-  if (fromBrowser) {
+  if (fromBrowser && isValidBaseUrl(fromBrowser)) {
     return fromBrowser;
   }
 
   if (options.request) {
     const forwardedHost = options.request.headers.get("x-forwarded-host");
-    if (forwardedHost) {
-      const forwardedProto =
-        options.request.headers.get("x-forwarded-proto") ?? "http";
-      return `${forwardedProto}://${forwardedHost}`;
+    const forwardedProto =
+      options.request.headers.get("x-forwarded-proto") ?? "http";
+    const forwarded = forwardedHost
+      ? `${forwardedProto}://${forwardedHost}`
+      : null;
+
+    if (forwarded && isValidBaseUrl(forwarded)) {
+      return forwarded;
     }
 
     const url = new URL(options.request.url);
     return `${url.protocol}//${url.host}`;
-  }
-
-  const configured = resolveWebPublicUrl();
-  if (configured) {
-    return configured;
   }
 
   const webPort = process.env.NAKAMA_WEB_PORT?.trim() || "3003";
