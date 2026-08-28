@@ -375,11 +375,8 @@ export async function readOptionalJson<T>(
 
   try {
     return JSON.parse(body) as T;
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      throw new NakamaApiError("Invalid JSON in request body.", 400);
-    }
-    throw err;
+  } catch {
+    throw new NakamaApiError("Invalid JSON in request body.", 400);
   }
 }
 
