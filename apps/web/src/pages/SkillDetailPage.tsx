@@ -20,6 +20,7 @@ import {
 import { formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { reportSkillSaveError } from "@/pages/skill-detail-page.shared";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
@@ -162,7 +163,7 @@ function SkillDetailPageContent({
       });
       setEditing(false);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : formatError(error));
+      setSaveError(reportSkillSaveError(error));
     }
   }
 
