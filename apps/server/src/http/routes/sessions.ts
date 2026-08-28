@@ -27,6 +27,7 @@ import {
   json,
   parseChannel,
   readJson,
+  readOptionalJson,
   streamMessage,
   streamTurnSubscribe,
 } from "../shared";
@@ -453,9 +454,7 @@ export function registerSessionRoutes(
     requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const sessionId = decodeURIComponent(c.req.param("sessionId"));
-    const body = await readJson<CompactSessionRequest>(c.req.raw).catch(
-      () => ({})
-    );
+    const body = await readOptionalJson<CompactSessionRequest>(c.req.raw, {});
     const result = await agent.compactSession(
       sessionId,
       {

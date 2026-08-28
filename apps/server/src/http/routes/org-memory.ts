@@ -16,7 +16,7 @@ import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
 } from "../org-guards";
-import { json, readJson } from "../shared";
+import { json, readJson, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerOrgMemoryRoutes(
@@ -758,9 +758,7 @@ export function registerOrgMemoryRoutes(
       const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
       const proposalId = decodeURIComponent(c.req.param("proposalId"));
       const service = requireService();
-      const body = await readJson<{ pin?: boolean }>(c.req.raw).catch(
-        () => ({})
-      );
+      const body = await readOptionalJson<{ pin?: boolean }>(c.req.raw, {});
       const proposal = await service.approveProposal(
         orgId,
         proposalId,

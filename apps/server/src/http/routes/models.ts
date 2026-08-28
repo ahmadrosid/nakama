@@ -54,7 +54,13 @@ import {
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
 } from "../org-guards";
-import { errorResponse, getRequestAuth, json, readJson } from "../shared";
+import {
+  errorResponse,
+  getRequestAuth,
+  json,
+  readJson,
+  readOptionalJson,
+} from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerModelRoutes(
@@ -1399,9 +1405,7 @@ export function registerModelRoutes(
 
   app.post("/v1/settings/email/test", async (c) => {
     const auth = requireOrgAdminFromContext(c);
-    const body = await readJson<SendEmailTestRequest>(c.req.raw).catch(
-      () => ({}) as SendEmailTestRequest
-    );
+    const body = await readOptionalJson<SendEmailTestRequest>(c.req.raw, {});
 
     try {
       return json<SendEmailTestResponse>(

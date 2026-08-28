@@ -7,7 +7,7 @@ import type {
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
-import { json, readJson } from "../shared";
+import { json, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerOrgCuratorRoutes(
@@ -96,11 +96,9 @@ export function registerOrgCuratorRoutes(
   app.post("/v1/orgs/:orgId/curator/run", async (c) => {
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
-    const body = await readJson<RunSkillCuratorRequest>(c.req.raw).catch(
-      () => ({
-        dryRun: false,
-      })
-    );
+    const body = await readOptionalJson<RunSkillCuratorRequest>(c.req.raw, {
+      dryRun: false,
+    });
     const result = await requireCurator().run(orgId, {
       dryRun: body.dryRun === true,
       trigger: "manual",
