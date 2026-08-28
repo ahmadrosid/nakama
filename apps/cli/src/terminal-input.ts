@@ -73,6 +73,7 @@ export class TerminalInput {
   private active = false;
   private mouseTracking = false;
   private pending = "";
+  private previousEncoding: BufferEncoding | null = null;
   private listeners = new Set<(chunk: string) => void>();
   private cursorWaiters = new Set<(row: number) => void>();
 
@@ -82,6 +83,7 @@ export class TerminalInput {
     }
 
     this.active = true;
+    this.previousEncoding = process.stdin.readableEncoding;
     process.stdin.setEncoding("utf8");
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -101,6 +103,9 @@ export class TerminalInput {
     this.active = false;
     process.stdin.off("data", this.handleData);
     process.stdin.setRawMode(false);
+    process.stdin.setEncoding(
+      this.previousEncoding as BufferEncoding | undefined
+    );
 
     if (this.mouseTracking) {
       process.stdout.write("\x1b[?1000l\x1b[?1006l");
