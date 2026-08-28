@@ -19,8 +19,8 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { reportSkillSaveError } from "@/pages/skill-detail-page.shared";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
@@ -163,7 +163,9 @@ function SkillDetailPageContent({
       });
       setEditing(false);
     } catch (error) {
-      setSaveError(reportSkillSaveError(error));
+      const message = formatError(error);
+      toast(message);
+      setSaveError(message);
     }
   }
 
