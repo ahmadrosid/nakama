@@ -18,20 +18,20 @@ export function ProfileSkillsSettingsSection({
   }
 
   return (
-    <div className="mb-3 grid grid-cols-1 divide-y divide-border rounded-md border border-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-      <div className="p-3 sm:p-4">
+    <div className="mb-3 divide-y divide-border rounded-md border border-border">
+      <div className="p-3 sm:px-4 sm:py-3">
         <ProfileSkillsWriteApprovalField
           disabled={disabled}
           profile={profile}
         />
       </div>
-      <div className="p-3 sm:p-4">
+      <div className="p-3 sm:px-4 sm:py-3">
         <ProfileSkillsPostTurnReviewField
           disabled={disabled}
           profile={profile}
         />
       </div>
-      <div className="border-border p-3 sm:col-span-2 sm:border-t sm:p-4">
+      <div className="p-3 sm:px-4 sm:py-3">
         <ProfileSkillsCuratorConsolidateField
           disabled={disabled}
           profile={profile}

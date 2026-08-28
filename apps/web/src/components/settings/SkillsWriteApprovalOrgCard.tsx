@@ -134,11 +134,8 @@ export function SkillsWriteApprovalOrgCard() {
         ) : null
       ) : (
         <OrgSettingsProfileBooleanOverrideField
-          ariaLabel="Skill write approval override"
           disabled={busy}
           field="skillsWriteApproval"
-          offLabel="Allow immediate writes"
-          onLabel="Require approval"
           profiles={profiles}
           savedToast="Profile skill write approval setting saved."
         />

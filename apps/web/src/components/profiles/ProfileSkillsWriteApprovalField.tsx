@@ -14,8 +14,6 @@ export function ProfileSkillsWriteApprovalField({
       field="skillsWriteApproval"
       id="profile-skills-write-approval"
       label="Skill write approval"
-      offLabel="Allow immediate writes"
-      onLabel="Require approval"
       profile={profile}
       savedToast="Skill write approval setting saved."
     />

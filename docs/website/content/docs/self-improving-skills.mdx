@@ -16,7 +16,7 @@ With self-improving skills:
 - **Less repeat explanation** — the agent captures a workflow once and reuses it when a similar request comes up.
 - **Cleaner profiles** — procedures live in skills instead of bloating the main prompt.
 - **Team safety** — org admins can require approval before a new or changed skill affects future behavior.
-- **Safety net after complex work** — optional post-turn review can catch missed saves without silently changing skills.
+- **Safety net after complex work** — optional Learn after a turn can catch missed saves without silently changing skills.
 
 Think of it as the agent learning *how to do the job*, while you decide whether that learning goes live immediately or waits for a quick review.
 
@@ -30,7 +30,7 @@ Complex task succeeds  →  Agent saves a skill (or review suggests one)  →  S
 
 1. **During chat** — after a hard problem, recovery, or correction, the agent may offer to save the approach as a skill (for example, a deploy checklist or support triage flow).
 2. **On demand with `/learn`** — when you already know the material (notes, a docs URL, a local folder, or “what we just did”), type `/learn …` in web or CLI chat to turn it into a skill now. See [Learn from sources](#learn-from-sources).
-3. **After complex turns (optional)** — when **post-turn skill review** is on, Nakama may review the finished turn in the background and either show an **Apply** suggestion in chat or stage a proposal for an org admin.
+3. **After complex turns (optional)** — when **Learn after a turn** is on, Nakama may review the finished turn in the background and either show an **Apply** suggestion in chat or stage a proposal for an org admin.
 4. **On later turns** — when someone asks for something similar, Nakama can load that skill and follow the saved steps.
 5. **Optional gate** — if write approval is on, skill changes wait in a proposal queue until an org admin approves or rejects them.
 
@@ -38,7 +38,7 @@ Skills hold **procedures** (how to do something). Profile memory holds **facts**
 
 ## Where it works
 
-| Channel | Agent can update skills? | Post-turn review? |
+| Channel | Agent can update skills? | Learn after a turn? |
 |---------|--------------------------|-------------------|
 | **Web chat** | Yes | Yes (when enabled) |
 | **CLI chat** | Yes | Yes (review may run; Apply is web-first) |
@@ -83,7 +83,7 @@ By default, skill changes apply immediately. Turn on **write approval** when you
 Org admins: **System → Organization → Skill write approval → Gate settings**.
 
 - Flip the toggle to require approval for skill writes org-wide.
-- Optionally pick a profile and override: inherit the org default, always require approval, or allow immediate writes for that bot only.
+- Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
 
 ![Enable the org-wide skill write approval gate and optional per-profile overrides](/screenshots/skill-write-approval-gate.png)
 
@@ -103,16 +103,16 @@ Nakama flags suspicious patterns in proposals the same way it does for org memor
 
 Platform admins managing a specific bot can also open **Agent → Profiles**, select the profile, and use the **Proposals** tab there.
 
-## Post-turn skill review (optional)
+## Learn after a turn (optional)
 
-In-session saves can still miss a good workflow: the agent finishes a long tool-heavy turn and never crystallizes a skill. **Post-turn skill review** is an opt-in safety net for that case.
+In-session saves can still miss a good workflow: the agent finishes a long tool-heavy turn and never crystallizes a skill. **Learn after a turn** is an opt-in safety net for that case.
 
 ### Turn it on
 
-Org admins: **System → Organization**, on the **Post-turn skill review** card (next to Skill write approval).
+Org admins: **System → Organization**, on the **Learn after a turn** card (next to Skill write approval).
 
 - Default is **off** (no extra review pass).
-- Optionally override per profile: inherit the org default, always review, or never review for that bot.
+- Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
 
 When enabled, after a **successful** web or CLI turn that looks complex (many tool calls, or a tool error recovery) — and only if the agent did **not** already save a skill that turn — Nakama runs a lightweight background review. Chat is not blocked while that runs. It uses an extra model call on eligible turns, so leave it off unless you want the safety net.
 
@@ -120,16 +120,16 @@ When enabled, after a **successful** web or CLI turn that looks complex (many to
 
 | | **Write approval off** | **Write approval on** |
 |---|---|---|
-| **Post-turn review off** | No background pass | No background pass |
-| **Post-turn review on** | Chat shows a suggestion with preview + **Apply** — nothing is written until you Apply | Review stages a proposal; chat shows a pending-admin notice; live skill waits for org-admin approve |
+| **Learn after a turn off** | No background pass | No background pass |
+| **Learn after a turn on** | Chat shows a suggestion with preview + **Apply** — nothing is written until you Apply | Review stages a proposal; chat shows a pending-admin notice; live skill waits for org-admin approve |
 
-Unlike some other agents that auto-write skills in the background when approval is off, Nakama **never silent-writes** from post-turn review. Gate off means you still choose **Apply**; gate on means an admin must approve.
+Unlike some other agents that auto-write skills in the background when approval is off, Nakama **never silent-writes** from Learn after a turn. Gate off means you still choose **Apply**; gate on means an admin must approve.
 
 Suggestions appear as a chat UI card (not as a message in the conversation history the model will see next turn). Ignore a suggestion by leaving it; there is no separate reject queue for suggestions.
 
 ## Who can do what
 
-| Role | Chat and trigger skill updates | Apply post-turn suggestions | Approve or reject proposals | Change gate / review settings |
+| Role | Chat and trigger skill updates | Apply after-turn suggestions | Approve or reject proposals | Change gate / review settings |
 |------|-------------------------------|----------------------------|----------------------------|------------------------------|
 | **Org admin** | Yes | Yes | Yes | Yes |
 | **Org member** | Yes | Yes | No | No |
