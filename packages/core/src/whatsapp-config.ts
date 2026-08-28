@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -24,6 +25,7 @@ export const DEFAULT_WHATSAPP_PROFILE_ID = "default";
 export interface WhatsAppConfigFile {
   allowedPhones: string[];
   outboundPort?: string | null;
+  outboundToken?: string | null;
   pairedJid: string | null;
   pairedLid: string | null;
   pairingCode: string | null;
@@ -209,16 +211,40 @@ export async function loadWhatsAppConfigFile(): Promise<WhatsAppConfigFile | nul
   const pairedJid = values.paired_jid?.trim() || null;
   const pairedLid = values.paired_lid?.trim() || null;
   const outboundPort = values.outbound_port?.trim() || null;
+  const outboundToken = values.outbound_token?.trim() || null;
 
   return {
     allowedPhones: parseAllowedWhatsAppPhones(values.allowed_phones ?? ""),
     outboundPort,
+    outboundToken,
     pairedJid,
     pairedLid,
     pairingCode,
     phoneNumber,
     profileId,
   };
+}
+
+/**
+ * Shared secret for the loopback outbound server, minted on first use and kept
+ * in the 0600 config file, so a process running as another user cannot post to
+ * 127.0.0.1/send and make the bot message the paired owner.
+ */
+export async function ensureWhatsAppOutboundToken(): Promise<string | null> {
+  const config = await loadWhatsAppConfigFile();
+
+  if (!config) {
+    return null;
+  }
+
+  if (config.outboundToken) {
+    return config.outboundToken;
+  }
+
+  const outboundToken = randomBytes(32).toString("hex");
+  await writeWhatsAppConfigFile({ ...config, outboundToken });
+
+  return outboundToken;
 }
 
 export function toWhatsAppSettingsPublic(
@@ -266,6 +292,8 @@ async function writeWhatsAppConfigFile(
     ...(config.allowedPhones.length > 0
       ? [`allowed_phones=${config.allowedPhones.join(",")}`]
       : []),
+    ...(config.outboundPort ? [`outbound_port=${config.outboundPort}`] : []),
+    ...(config.outboundToken ? [`outbound_token=${config.outboundToken}`] : []),
     "",
   ];
 

@@ -1,7 +1,21 @@
+import { timingSafeEqual } from "node:crypto";
 import {
+  ensureWhatsAppOutboundToken,
   loadWhatsAppConfigFile,
   resolveWhatsAppOutboundPort,
+  WHATSAPP_OUTBOUND_TOKEN_HEADER,
 } from "@nakama/core";
+
+function tokenMatches(provided: string | null, expected: string): boolean {
+  if (!provided) {
+    return false;
+  }
+
+  const actual = Buffer.from(provided.trim());
+  const wanted = Buffer.from(expected);
+
+  return actual.length === wanted.length && timingSafeEqual(actual, wanted);
+}
 
 export interface WhatsAppOutboundSendHandle {
   sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;
@@ -16,6 +30,8 @@ export async function startWhatsAppOutboundServer(
 ): Promise<{ port: number; stop: () => void }> {
   const config = await loadWhatsAppConfigFile();
   const port = resolveWhatsAppOutboundPort(config);
+  // Mint it before the port opens so the first send already has a token to send.
+  await ensureWhatsAppOutboundToken();
   let stopped = false;
 
   const server = Bun.serve({
@@ -28,6 +44,23 @@ export async function startWhatsAppOutboundServer(
 
       if (request.method === "POST" && url.pathname === "/send") {
         const latestConfig = await loadWhatsAppConfigFile();
+        // Re-read per request: pairing can create the config after startup.
+        const expectedToken =
+          latestConfig?.outboundToken?.trim() ||
+          (await ensureWhatsAppOutboundToken());
+
+        if (
+          !(
+            expectedToken &&
+            tokenMatches(
+              request.headers.get(WHATSAPP_OUTBOUND_TOKEN_HEADER),
+              expectedToken
+            )
+          )
+        ) {
+          return Response.json({ error: "Unauthorized." }, { status: 401 });
+        }
+
         const pairedJid = latestConfig?.pairedJid?.trim();
 
         if (!pairedJid) {
