@@ -63,6 +63,69 @@ describe("composio-callback-url", () => {
     }
   });
 
+  test("caller headers cannot move the callback off the configured URL", () => {
+    const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
+    process.env.NAKAMA_WEB_PUBLIC_URL = "https://deployed.example.com";
+    const request = new Request(
+      "http://127.0.0.1:4310/v1/composio/toolkits/gmail/connect",
+      {
+        headers: {
+          Origin: "https://evil.example.com",
+          "X-Forwarded-Host": "evil.example.com",
+          "X-Forwarded-Proto": "https",
+        },
+        method: "POST",
+      }
+    );
+
+    try {
+      expect(
+        resolveComposioCallbackBaseUrl({
+          clientOrigin: "https://evil.example.com",
+          request,
+        })
+      ).toBe("https://deployed.example.com");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_WEB_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_WEB_PUBLIC_URL = previous;
+      }
+    }
+  });
+
+  test("an unparseable clientOrigin does not become the callback base", () => {
+    const configDir = join(tmpdir(), `nakama-callback-url-unset-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    const previousPublicUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    delete process.env.NAKAMA_WEB_PUBLIC_URL;
+    const request = new Request(
+      "http://127.0.0.1:4310/v1/composio/toolkits/gmail/connect",
+      { method: "POST" }
+    );
+
+    try {
+      expect(
+        resolveComposioCallbackBaseUrl({
+          clientOrigin: "javascript:alert(1)",
+          request,
+        })
+      ).toBe("http://127.0.0.1:4310");
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+      if (previousPublicUrl !== undefined) {
+        process.env.NAKAMA_WEB_PUBLIC_URL = previousPublicUrl;
+      }
+      rmSync(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("persistWebPublicUrl preserves path segments", async () => {
     const configDir = join(tmpdir(), `nakama-callback-url-test-${Date.now()}`);
     mkdirSync(configDir, { recursive: true });
