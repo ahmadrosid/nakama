@@ -399,7 +399,7 @@ export function registerSessionRoutes(
   app.get("/v1/sessions", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = c.req.query("profileId")?.trim();
-    const channel = parseChannel(c.req.query("channel") ?? "web");
+    const channel = parseChannel(c.req.query("channel"));
 
     if (!profileId) {
       return errorResponse("profileId is required.", 400);

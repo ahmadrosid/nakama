@@ -25,6 +25,8 @@ type AutomationsDialogsProps = Pick<
   | "handleDeleteConfirm"
   | "handleDeleteRunConfirm"
   | "updateEditDraft"
+  | "profiles"
+  | "profilesLoading"
 >;
 
 export function AutomationsDialogs({
@@ -39,6 +41,8 @@ export function AutomationsDialogs({
   handleDeleteConfirm,
   handleDeleteRunConfirm,
   updateEditDraft,
+  profiles,
+  profilesLoading,
 }: AutomationsDialogsProps) {
   return (
     <>
@@ -63,6 +67,7 @@ export function AutomationsDialogs({
                   automation={editDraft}
                   busy={busy}
                   onChange={updateEditDraft}
+                  profiles={profiles}
                 />
               </div>
 
@@ -76,7 +81,7 @@ export function AutomationsDialogs({
                   Cancel
                 </Button>
                 <Button
-                  disabled={busy}
+                  disabled={busy || profilesLoading || profiles.length === 0}
                   onClick={() => void handleSaveEdit()}
                   type="button"
                 >

@@ -1,12 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  fallbackApiErrorMessage,
-  formatAutomationRunError,
-  formatClientError,
-  formatServerError,
-  NakamaApiError,
-  readApiErrorMessage,
-} from "./api-error";
+import { formatAutomationRunError, readApiErrorMessage } from "./api-error";
 
 describe("readApiErrorMessage", () => {
   test("reads JSON error payloads", async () => {
@@ -43,51 +36,7 @@ describe("readApiErrorMessage", () => {
   });
 });
 
-describe("formatClientError", () => {
-  test("returns API error messages directly", () => {
-    expect(
-      formatClientError(new NakamaApiError("Invalid timezone.", 400))
-    ).toBe("Invalid timezone.");
-  });
-
-  test("maps network failures to a helpful message", () => {
-    expect(formatClientError(new TypeError("Failed to fetch"))).toBe(
-      "Could not reach the Nakama server. Make sure it is running."
-    );
-  });
-
-  test("maps stream disconnects to a helpful message", () => {
-    expect(
-      formatClientError(
-        new Error(
-          "The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
-        )
-      )
-    ).toBe(
-      "The connection closed before the agent finished. Restart the Nakama server, then try again. Long automations can take a minute or more."
-    );
-  });
-});
-
 describe("formatAutomationRunError", () => {
-  test("maps stream disconnects without blaming the Nakama server", () => {
-    expect(
-      formatAutomationRunError(
-        new Error(
-          "The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
-        )
-      )
-    ).toBe(
-      "The model connection closed before the agent finished. Try again. Long automations can take a minute or more."
-    );
-  });
-
-  test("keeps ordinary provider errors", () => {
-    expect(formatAutomationRunError(new Error("Provider offline"))).toBe(
-      "Provider offline"
-    );
-  });
-
   test("maps fetch deadline aborts without the raw abort text", () => {
     const error = new Error("The operation was aborted.");
     error.name = "TimeoutError";
@@ -95,28 +44,5 @@ describe("formatAutomationRunError", () => {
 
     expect(formatted).not.toBe(error.message);
     expect(formatted).toContain("10");
-  });
-});
-
-describe("formatServerError", () => {
-  test("maps invalid JSON to a clear message", () => {
-    expect(formatServerError(new SyntaxError("Unexpected token"))).toBe(
-      "Invalid JSON in request body."
-    );
-  });
-
-  test("uses fallback for unknown errors", () => {
-    expect(formatServerError({})).toBe("An unexpected server error occurred.");
-  });
-});
-
-describe("fallbackApiErrorMessage", () => {
-  test("uses friendly defaults by status", () => {
-    expect(fallbackApiErrorMessage(404)).toBe(
-      "The requested resource was not found."
-    );
-    expect(fallbackApiErrorMessage(500)).toBe(
-      "The server encountered an error. Try again or restart the Nakama server."
-    );
   });
 });

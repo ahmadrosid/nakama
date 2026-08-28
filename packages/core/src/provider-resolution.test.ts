@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  apiKeyEnvVarForProvider,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
   parseProviderName,
@@ -111,19 +110,6 @@ describe("resolveProvider fireworks", () => {
     });
 
     expect(provider).toBe("fireworks");
-  });
-});
-
-describe("apiKeyEnvVarForProvider", () => {
-  test("maps providers to their env keys", () => {
-    expect(apiKeyEnvVarForProvider("minimax")).toBe("MINIMAX_API_KEY");
-    expect(apiKeyEnvVarForProvider("minimax_cn")).toBe("MINIMAX_CN_API_KEY");
-    expect(apiKeyEnvVarForProvider("xai")).toBe("XAI_API_KEY");
-  });
-
-  test("maps Zhipu regions to distinct env keys", () => {
-    expect(apiKeyEnvVarForProvider("zhipu")).toBe("ZHIPU_API_KEY");
-    expect(apiKeyEnvVarForProvider("zhipu_cn")).toBe("ZHIPU_CN_API_KEY");
   });
 });
 

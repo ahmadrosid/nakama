@@ -9,6 +9,37 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-08-28
+
+### Added
+
+- Discord accepts inbound image attachments for agent chat ([#659])
+- Error-tracking DSN can be set from Integrations ([#444])
+
+### Changed
+
+- Custom tool handlers run in an allowlisted subprocess ([#653])
+- Settings asks before removing an LLM provider ([#632])
+- Channel worker logs redact secrets ([#639])
+- Composer stack hit targets and motion tightened ([#654])
+- Ponytail audit: trim dead weight ([#709])
+- Low-value tests removed ([#715])
+
+### Fixed
+
+- Spawn env no longer forwards shell-hijacking keys ([#708])
+- OAuth callback base stays on the configured public URL ([#712])
+- WhatsApp outbound send requires a shared token ([#710])
+- Workers list profiles only inside the request org ([#711])
+- Malformed optional JSON is rejected ([#700])
+- Custom file writes keep the requested mode ([#668])
+- Reserved IPv6 addresses are blocked from web fetches ([#676])
+- Org archive stamps `updated_at` ([#674])
+- Org memory tolerates malformed history entries ([#677])
+- CLI clipboard images detect type, reject oversized pastes, and restore stdin ([#649], [#642])
+- CLI chat exit no longer hangs on abort polling ([#648])
+- Discord inbound images cap size and infer mime ([#661])
+
 ## [0.4.5] - 2026-08-26
 
 ### Added
@@ -584,7 +615,8 @@ First tagged release. The baseline it established:
 - Export and import for data portability
 - Docker image published from GitHub Actions, and a VitePress documentation site
 
-[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.5...main
+[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.6...main
+[0.4.6]: https://github.com/ahmadrosid/nakama/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/ahmadrosid/nakama/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/ahmadrosid/nakama/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/ahmadrosid/nakama/compare/v0.4.2...v0.4.3
@@ -766,4 +798,25 @@ First tagged release. The baseline it established:
 [#636]: https://github.com/ahmadrosid/nakama/pull/636
 [#637]: https://github.com/ahmadrosid/nakama/pull/637
 [#638]: https://github.com/ahmadrosid/nakama/pull/638
+[#444]: https://github.com/ahmadrosid/nakama/pull/444
+[#632]: https://github.com/ahmadrosid/nakama/pull/632
+[#639]: https://github.com/ahmadrosid/nakama/pull/639
+[#642]: https://github.com/ahmadrosid/nakama/pull/642
+[#648]: https://github.com/ahmadrosid/nakama/pull/648
+[#649]: https://github.com/ahmadrosid/nakama/pull/649
 [#650]: https://github.com/ahmadrosid/nakama/pull/650
+[#653]: https://github.com/ahmadrosid/nakama/pull/653
+[#654]: https://github.com/ahmadrosid/nakama/pull/654
+[#659]: https://github.com/ahmadrosid/nakama/pull/659
+[#661]: https://github.com/ahmadrosid/nakama/pull/661
+[#668]: https://github.com/ahmadrosid/nakama/pull/668
+[#674]: https://github.com/ahmadrosid/nakama/pull/674
+[#676]: https://github.com/ahmadrosid/nakama/pull/676
+[#677]: https://github.com/ahmadrosid/nakama/pull/677
+[#700]: https://github.com/ahmadrosid/nakama/pull/700
+[#708]: https://github.com/ahmadrosid/nakama/pull/708
+[#709]: https://github.com/ahmadrosid/nakama/pull/709
+[#710]: https://github.com/ahmadrosid/nakama/pull/710
+[#711]: https://github.com/ahmadrosid/nakama/pull/711
+[#712]: https://github.com/ahmadrosid/nakama/pull/712
+[#715]: https://github.com/ahmadrosid/nakama/pull/715

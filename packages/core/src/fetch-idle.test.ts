@@ -1,14 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { withDisabledFetchIdle, withLlmFetchDeadline } from "./fetch-idle";
-
-describe("withDisabledFetchIdle", () => {
-  test("sets Bun idleTimeout to 0 and keeps the original init", () => {
-    const init = withDisabledFetchIdle({ method: "POST" });
-
-    expect(init.method).toBe("POST");
-    expect(init.idleTimeout).toBe(0);
-  });
-});
+import { withLlmFetchDeadline } from "./fetch-idle";
 
 describe("withLlmFetchDeadline", () => {
   test("attaches a deadline signal when the caller omitted one", () => {

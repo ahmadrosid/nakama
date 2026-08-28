@@ -369,7 +369,7 @@ export function registerAutomationRoutes(
   });
 
   app.put("/v1/automations/:automationId", async (c) => {
-    requireNotViewerFromContext(c);
+    const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const body = await readJson<UpdateAutomationRequest>(c.req.raw);
@@ -378,12 +378,31 @@ export function registerAutomationRoutes(
       const automation = await automationService.update(
         automationId,
         orgId,
-        body
+        body,
+        {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          orgRole: auth.orgRole,
+        }
       );
       return json<AutomationResponse>({ automation });
     } catch (error) {
-      if (error instanceof Error && error.message === "Automation not found.") {
-        return errorResponse(error.message, 404);
+      if (error instanceof Error) {
+        if (error.message === "Automation not found.") {
+          return errorResponse(error.message, 404);
+        }
+
+        const badRequestMessages = new Set([
+          "Profile not found.",
+          "Profile id is required.",
+          "No default profile exists for this organization.",
+        ]);
+        if (
+          badRequestMessages.has(error.message) ||
+          /^(Telegram|WhatsApp|Discord|Email) is not/.test(error.message) ||
+          error.message.includes("delivery")
+        ) {
+          return errorResponse(error.message, 400);
+        }
       }
       throw error;
     }

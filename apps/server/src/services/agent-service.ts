@@ -435,15 +435,18 @@ export class AgentService {
     return this.orgMemoryService;
   }
 
-  private async resolveOrgRole(
+  private async resolveSessionAccess(
     orgId: string | null | undefined,
     userId: string | null | undefined
-  ): Promise<OrgRole | null> {
-    if (!(orgId && userId)) {
-      return null;
-    }
-    const member = await this.db.getOrgMember(orgId, userId);
-    return member?.role ?? null;
+  ): Promise<{ isPlatformAdmin: boolean; orgRole: OrgRole | null }> {
+    const orgRole =
+      orgId && userId
+        ? ((await this.db.getOrgMember(orgId, userId))?.role ?? null)
+        : null;
+    const isPlatformAdmin = userId
+      ? Boolean((await this.db.getUserById(userId))?.isPlatformAdmin)
+      : false;
+    return { isPlatformAdmin, orgRole };
   }
 
   setAutomationTools(tools: ToolDefinition[]): void {
@@ -1621,7 +1624,8 @@ export class AgentService {
       sessionId,
       modelOverride,
       userId ?? null,
-      options?.orgRole
+      options?.orgRole,
+      options?.isPlatformAdmin
     );
 
     this.sessions.set(sessionId, {
@@ -1786,10 +1790,8 @@ export class AgentService {
       record.profileId
     );
 
-    const branchOrgRole = await this.resolveOrgRole(
-      profileOrgId,
-      record.userId
-    );
+    const { isPlatformAdmin: branchIsPlatformAdmin, orgRole: branchOrgRole } =
+      await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1797,7 +1799,8 @@ export class AgentService {
       nextSessionId,
       record.model,
       record.userId ?? null,
-      branchOrgRole
+      branchOrgRole,
+      branchIsPlatformAdmin
     );
     this.sessions.set(nextSessionId, {
       channel,
@@ -1884,10 +1887,8 @@ export class AgentService {
       record.profileId
     );
 
-    const resumeOrgRole = await this.resolveOrgRole(
-      profileOrgId,
-      record.userId
-    );
+    const { isPlatformAdmin: resumeIsPlatformAdmin, orgRole: resumeOrgRole } =
+      await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1895,7 +1896,8 @@ export class AgentService {
       sessionId,
       record.model,
       record.userId ?? null,
-      resumeOrgRole
+      resumeOrgRole,
+      resumeIsPlatformAdmin
     );
 
     this.sessions.set(sessionId, {
@@ -3250,7 +3252,8 @@ export class AgentService {
     sessionId: string,
     modelOverride: string | null,
     userId?: string | null,
-    orgRole?: OrgRole | null
+    orgRole?: OrgRole | null,
+    isPlatformAdmin?: boolean
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
@@ -3430,6 +3433,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         channel,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
+        isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
         orgId,
         orgRole: orgRole ?? undefined,

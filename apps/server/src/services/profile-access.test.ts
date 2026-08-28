@@ -78,20 +78,65 @@ describe("profile access: binding an automation/task to Super Bot is admin-only"
     await expect(attempt).rejects.toMatchObject({ status: 403 });
   });
 
-  test("no access context (internal/agent-tool caller) is not gated", async () => {
+  test("omitted access fail-closes Super Bot bind on create", async () => {
     const { db, superId } = await seed();
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
 
-    // Agent-tool path passes the session's own (already access-checked) profile
-    // with no role context; enforcement is opt-in, so this must still succeed.
+    const attempt = service.create(ORG_ID, automationInput as any, superId);
+
+    await expect(attempt).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(attempt).rejects.toMatchObject({ status: 403 });
+  });
+
+  test("member cannot rebind an automation to Super Bot", async () => {
+    const { db, defaultId, superId } = await seed();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
     const automation = await service.create(
       ORG_ID,
       automationInput as any,
-      superId
+      defaultId,
+      { orgRole: "member" }
     );
 
-    expect(automation.profileId).toBe(superId);
+    const attempt = service.update(
+      automation.id,
+      ORG_ID,
+      { profileId: superId },
+      { orgRole: "member" }
+    );
+
+    await expect(attempt).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(attempt).rejects.toMatchObject({ status: 403 });
+    expect((await service.get(automation.id, ORG_ID))?.profileId).toBe(
+      defaultId
+    );
+  });
+
+  test("admin can rebind an automation to Super Bot", async () => {
+    const { db, defaultId, superId } = await seed();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      automationInput as any,
+      defaultId,
+      { orgRole: "admin" }
+    );
+
+    const updated = await service.update(
+      automation.id,
+      ORG_ID,
+      { profileId: superId },
+      { orgRole: "admin" }
+    );
+
+    expect(updated.profileId).toBe(superId);
   });
 });

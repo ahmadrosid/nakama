@@ -7,7 +7,6 @@ function createMockClient(
   overrides: Partial<{
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
     runAutomationInternal: (id: string) => Promise<void>;
-    getTimezone: () => Promise<string>;
   }> = {}
 ): NakamaClient {
   return {

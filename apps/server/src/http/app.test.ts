@@ -910,6 +910,46 @@ describe("createHonoApp", () => {
     });
   });
 
+  test("GET /v1/sessions rejects missing or invalid channel", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const listCalls: Array<{ channel: string; profileId: string }> = [];
+    const originalListSessions = options.agent.listSessions;
+    options.agent.listSessions = async (orgId, profileId, channel) => {
+      listCalls.push({ channel, profileId });
+      return originalListSessions(orgId, profileId, channel);
+    };
+
+    const missingChannel = await app.fetch(
+      new Request("http://localhost:4310/v1/sessions?profileId=default", {
+        headers: session.headers(),
+      })
+    );
+    expect(missingChannel.status).toBe(400);
+    await expect(missingChannel.json()).resolves.toMatchObject({
+      error: expect.any(String),
+    });
+
+    const invalidChannel = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/sessions?profileId=default&channel=not-a-channel",
+        {
+          headers: session.headers(),
+        }
+      )
+    );
+    expect(invalidChannel.status).toBe(400);
+    await expect(invalidChannel.json()).resolves.toMatchObject({
+      error: expect.any(String),
+    });
+
+    expect(listCalls).toEqual([]);
+  });
+
   const smokeRoutes = [
     {
       expected: { lines: ["last:50"], worker: "whatsapp" },
