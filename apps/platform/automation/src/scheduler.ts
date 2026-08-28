@@ -12,6 +12,7 @@ export interface AutomationWorkerSchedulerDelegate
 
 export class AutomationWorkerScheduler {
   private readonly scheduler: AutomationScheduler;
+  private pollInFlight = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -43,12 +44,19 @@ export class AutomationWorkerScheduler {
     this.stopPolling();
 
     this.pollTimer = setInterval(async () => {
+      if (this.pollInFlight) {
+        return;
+      }
+
+      this.pollInFlight = true;
       try {
         await this.scheduler.reload();
         await this.tickCurator();
         this.notifyStatus();
       } catch (error) {
         console.error("Failed to reload automation schedules:", error);
+      } finally {
+        this.pollInFlight = false;
       }
     }, intervalMs);
   }
