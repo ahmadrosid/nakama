@@ -55,7 +55,6 @@ export function SystemPage() {
     return <Navigate replace to="/chat" />;
   }
 
-  // Legacy deep links: /system?tab=organization → /organization
   if (searchParams.get("tab") === "organization") {
     const next = new URLSearchParams(searchParams);
     next.delete("tab");

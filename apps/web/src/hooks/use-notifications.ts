@@ -3,11 +3,7 @@ import { useAuth } from "@/context/use-auth";
 import { useAutomationsQuery } from "@/hooks/use-automations";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
-import {
-  orgMemoryProposalsPath,
-  orgSkillProposalsPath,
-  PAGE_PATHS,
-} from "@/lib/navigation";
+import { orgSkillProposalsPath, PAGE_PATHS } from "@/lib/navigation";
 
 export type NotificationKind =
   | "automation-run"
@@ -85,7 +81,7 @@ export function useNotifications(): {
           count: 1,
           createdAt: proposal.createdAt,
           description: proposal.bullet,
-          href: orgMemoryProposalsPath(),
+          href: `${PAGE_PATHS.organization}?orgMemory=proposals`,
           id: `org-memory-${proposal.id}`,
           kind: "org-memory-proposal",
           kindLabel: "Org memory",

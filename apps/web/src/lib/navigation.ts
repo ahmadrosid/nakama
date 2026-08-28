@@ -275,10 +275,6 @@ export function orgSkillProposalsPath(profileId?: string): string {
   return `${PAGE_PATHS.organization}?${params.toString()}`;
 }
 
-export function orgMemoryProposalsPath(): string {
-  return queryPath(PAGE_PATHS.organization, { orgMemory: "proposals" });
-}
-
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",

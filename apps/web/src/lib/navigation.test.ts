@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   agentWorkTabFromSearchParams,
   agentWorkTabPath,
-  orgMemoryProposalsPath,
   orgSkillProposalsPath,
   pageIdFromPath,
   visibleNavGroups,
@@ -95,8 +94,7 @@ describe("organization navigation", () => {
     expect(pageIdFromPath("/organization")).toBe("organization");
   });
 
-  test("builds proposal deep links on the organization page", () => {
-    expect(orgMemoryProposalsPath()).toBe("/organization?orgMemory=proposals");
+  test("builds skill proposal deep links on the organization page", () => {
     expect(orgSkillProposalsPath("p1")).toBe(
       "/organization?skillProposals=proposals&profileId=p1"
     );
