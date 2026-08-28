@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "agent:ui": "bash scripts/agent-ui-harness.sh start",
+    "agent:ui:stop": "bash scripts/agent-ui-harness.sh stop",
     "build": "bun run --workspaces --if-present build",
     "build:docs": "bun run --cwd docs/website build",
     "check": "ultracite check",
@@ -28,6 +30,7 @@
     "preview:docs": "bun run --cwd docs/website preview",
     "start": "bun run apps/server/dist/index.js",
     "test": "bun run --workspaces --if-present test",
+    "test:agent-ui": "bun test scripts/agent-ui-harness.test.ts",
     "view:cassettes": "bun run apps/server/src/testing/cassettes/serve.ts"
   },
   "overrides": {
