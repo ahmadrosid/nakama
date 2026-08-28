@@ -173,6 +173,28 @@ reuse_if_live() {
   return 1
 }
 
+port_owned_by_pgid() {
+  local port="$1"
+  local expected="$2"
+  local pids pid
+  [[ -n "$expected" && "$expected" != "0" && "$expected" != "1" ]] || return 1
+  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+  [[ -n "$pids" ]] || return 1
+  for pid in $pids; do
+    if [[ "$(pgid_of "$pid")" == "$expected" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+pm2_kill_home() {
+  local home="$1"
+  if [[ -n "$home" && -d "$home" ]]; then
+    PM2_HOME="$home" bun x pm2 kill >/dev/null 2>&1 || true
+  fi
+}
+
 reap_dead_latest() {
   [[ -e "$LATEST" ]] || return 0
   local target
@@ -182,6 +204,10 @@ reap_dead_latest() {
     if pid_alive "${API_PID:-}" || pid_alive "${WEB_PID:-}"; then
       die "a harness is already live at ${BASE_URL:-unknown}. Run: bun run agent:ui:stop"
     fi
+    if [[ "${STARTING:-}" == "1" && -z "${API_PID:-}" ]]; then
+      die "a harness is already starting at ${BASE_URL:-$target}. Wait or: bun run agent:ui:stop"
+    fi
+    pm2_kill_home "${PM2_HOME:-}"
   fi
   if allowed_run_dir "$target"; then
     rm -rf "$target"
@@ -218,7 +244,21 @@ cmd_start() {
   web_log="${run_dir}/logs/web.log"
   cookie_jar="${run_dir}/cookies.txt"
 
-  local api_pid web_pid
+  umask 077
+  cat >"${run_dir}/harness.env" <<EOF
+RUN_DIR=${run_dir}
+NAKAMA_CONFIG_DIR=${data_dir}
+BASE_URL=${base_url}
+API_URL=${api_url}
+API_PORT=${api_port}
+WEB_PORT=${web_port}
+STARTING=1
+PM2_HOME=${run_dir}/pm2
+EOF
+  chmod 600 "${run_dir}/harness.env"
+  ln -sfn "$run_dir" "$LATEST"
+
+  local api_pid web_pid api_pgid web_pgid
   api_pid="$(
     unset NAKAMA_PROVIDER OPENAI_API_KEY ANTHROPIC_API_KEY \
       NAKAMA_SEED_ADMIN_EMAIL NAKAMA_SEED_ADMIN_NAME \
@@ -228,24 +268,37 @@ cmd_start() {
     export NAKAMA_PORT="$api_port"
     export PM2_HOME="${run_dir}/pm2"
     spawn_detached "$ROOT" "$api_log" \
-      bun run "$ROOT/apps/server/src/index.ts"
+      bun --no-env-file run "$ROOT/apps/server/src/index.ts"
   )"
+  api_pgid="$(pgid_of "$api_pid")"
+  {
+    echo "API_PID=${api_pid}"
+    echo "API_PGID=${api_pgid}"
+  } >>"${run_dir}/harness.env"
 
   if ! wait_url "${api_url}/health" "$api_pid"; then
     echo "agent-ui: API failed to become healthy" >&2
     tail -n 40 "$api_log" >&2 || true
-    PM2_HOME="${run_dir}/pm2" fail_started "$run_dir" "$api_pid" "$(pgid_of "$api_pid")"
+    PM2_HOME="${run_dir}/pm2" fail_started "$run_dir" "$api_pid" "$api_pgid"
   fi
   if ! pid_alive "$api_pid"; then
     echo "agent-ui: API exited (port may already be a Nakama instance)" >&2
-    PM2_HOME="${run_dir}/pm2" fail_started "$run_dir" "$api_pid" "$(pgid_of "$api_pid")"
+    PM2_HOME="${run_dir}/pm2" fail_started "$run_dir" "$api_pid" "$api_pgid"
+  fi
+  if ! port_owned_by_pgid "$api_port" "$api_pgid"; then
+    echo "agent-ui: ${api_port} is not our API process" >&2
+    PM2_HOME="${run_dir}/pm2" fail_started "$run_dir" "$api_pid" "$api_pgid"
   fi
 
   web_pid="$(
     export nakama_SERVER_URL="$api_url"
     spawn_detached "$ROOT/apps/web" "$web_log" \
-      bun x vite --host 127.0.0.1 --port "$web_port" --strictPort
+      bun --no-env-file x vite --host 127.0.0.1 --port "$web_port" --strictPort
   )"
+  {
+    echo "WEB_PID=${web_pid}"
+    echo "WEB_PGID=$(pgid_of "$web_pid")"
+  } >>"${run_dir}/harness.env"
 
   if ! wait_url "${base_url}/" "$web_pid" 480; then
     echo "agent-ui: Vite failed to become ready" >&2
@@ -295,9 +348,8 @@ cmd_start() {
     PM2_HOME="${run_dir}/pm2" fail_started "$run_dir" "$api_pid" "$(pgid_of "$api_pid")" "$web_pid" "$(pgid_of "$web_pid")"
   fi
 
-  local api_pgid web_pgid
-  api_pgid="$(pgid_of "$api_pid")"
   web_pgid="$(pgid_of "$web_pid")"
+  api_pgid="$(pgid_of "$api_pid")"
 
   umask 077
   cat >"${run_dir}/harness.env" <<EOF
@@ -355,6 +407,11 @@ cmd_stop() {
   allowed_run_dir "$run_dir" || die "refusing to stop path outside ${PREFIX}-*"
 
   if [[ ! -f "${run_dir}/harness.env" ]]; then
+    if allowed_run_dir "$run_dir"; then
+      rm -rf "$run_dir"
+      rm -f "$LATEST"
+      return 0
+    fi
     die "no harness.env in ${run_dir}"
   fi
 
