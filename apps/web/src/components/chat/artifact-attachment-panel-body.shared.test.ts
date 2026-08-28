@@ -100,4 +100,15 @@ describe("artifact panel body class", () => {
       })
     ).toBe("flex flex-col overflow-hidden p-0");
   });
+
+  test("markdown preview uses the full panel width", () => {
+    expect(
+      artifactPanelBodyClassName({
+        isHtml: false,
+        isImage: false,
+        isMarkdown: true,
+        previewMode: "preview",
+      })
+    ).toBe("artifact-preview-panel");
+  });
 });

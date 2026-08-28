@@ -668,7 +668,8 @@
     letter-spacing: 0.01em;
   }
 
-  .artifact-share-page .chat-markdown {
+  .artifact-share-page .chat-markdown,
+  .artifact-preview-panel .chat-markdown {
     max-width: none;
   }
 
