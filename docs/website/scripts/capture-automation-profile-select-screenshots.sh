@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MAIN_ROOT="${NAKAMA_MAIN_ROOT:-/tmp/nakama-main-pr-shots}"
-SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
+SCREENSHOT_DIR="$ROOT/.github/pr-image"
 TEMP_AFTER="/tmp/nakama-pr-auto-profile-after-$$"
 TEMP_BEFORE="/tmp/nakama-pr-auto-profile-before-$$"
 COOKIE_AFTER="/tmp/nakama-pr-auto-profile-after-$$.txt"
