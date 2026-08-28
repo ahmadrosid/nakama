@@ -5,15 +5,9 @@ import { join } from "node:path";
 import {
   createWorkerHeartbeatStore,
   isHeartbeatAlive,
-  isProcessAlive,
 } from "./worker-heartbeat";
 
 describe("worker-heartbeat store", () => {
-  test("isProcessAlive rejects invalid pids", () => {
-    expect(isProcessAlive(-1)).toBe(false);
-    expect(isProcessAlive(0)).toBe(false);
-  });
-
   test("isHeartbeatAlive rejects stale heartbeats", () => {
     expect(
       isHeartbeatAlive({

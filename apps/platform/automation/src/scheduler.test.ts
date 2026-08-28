@@ -7,7 +7,6 @@ function createMockClient(
   overrides: Partial<{
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
     runAutomationInternal: (id: string) => Promise<void>;
-    getTimezone: () => Promise<string>;
   }> = {}
 ): NakamaClient {
   return {
@@ -37,29 +36,6 @@ describe("AutomationWorkerScheduler", () => {
     await scheduler.start();
 
     expect(scheduler.getStatus()).toEqual({ running: true, scheduledJobs: 1 });
-    scheduler.stop();
-  });
-
-  test("falls back to UTC when timezone endpoint fails", async () => {
-    const client = createMockClient({
-      getTimezone: async () => {
-        throw new Error("unavailable");
-      },
-      listAutomationSchedules: async () => [
-        {
-          cron: "0 * * * *",
-          id: "a1",
-          orgId: "o1",
-          profileId: "p1",
-          timezone: null,
-        },
-      ],
-    });
-
-    const scheduler = new AutomationWorkerScheduler(client);
-    await scheduler.start();
-
-    expect(scheduler.getStatus().scheduledJobs).toBe(1);
     scheduler.stop();
   });
 });

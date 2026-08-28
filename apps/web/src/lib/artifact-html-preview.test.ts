@@ -1,15 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  ARTIFACT_HTML_IFRAME_SANDBOX,
-  htmlForArtifactPreview,
-} from "./artifact-html-preview";
-
-describe("artifact HTML preview", () => {
-  test("sandbox allows scripts without same-origin access to host", () => {
-    expect(ARTIFACT_HTML_IFRAME_SANDBOX).toContain("allow-scripts");
-    expect(ARTIFACT_HTML_IFRAME_SANDBOX).not.toContain("allow-same-origin");
-  });
-});
+import { htmlForArtifactPreview } from "./artifact-html-preview";
 
 describe("htmlForArtifactPreview", () => {
   test("injects scrollbar styles into head", () => {

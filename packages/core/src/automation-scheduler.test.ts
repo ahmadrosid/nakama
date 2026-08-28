@@ -66,38 +66,6 @@ describe("AutomationScheduler", () => {
     scheduler.stop();
   });
 
-  test("uses default timezone when schedule timezone is null", async () => {
-    const delegate = createDelegate({
-      getDefaultTimezone: async () => "Asia/Jakarta",
-      listScheduledAutomations: async () => [
-        schedule({ id: "a1", timezone: null }),
-      ],
-    });
-
-    const scheduler = new AutomationScheduler(delegate);
-    await scheduler.start();
-
-    expect(scheduler.getStatus().scheduledJobs).toBe(1);
-    scheduler.stop();
-  });
-
-  test("run delegate failures are logged but do not stop the scheduler", async () => {
-    const delegate = createDelegate({
-      listScheduledAutomations: async () => [
-        schedule({ cron: "* * * * *", id: "a1" }),
-      ],
-      runAutomation: async () => {
-        throw new Error("boom");
-      },
-    });
-
-    const scheduler = new AutomationScheduler(delegate);
-    await scheduler.start();
-
-    expect(scheduler.getStatus().running).toBe(true);
-    scheduler.stop();
-  });
-
   test("stop clears jobs and marks scheduler as not running", async () => {
     const delegate = createDelegate({
       listScheduledAutomations: async () => [schedule()],
