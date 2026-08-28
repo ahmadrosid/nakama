@@ -1549,11 +1549,7 @@ function summarizeSession(
   const sorted = [...messages].sort((left, right) => left.seq - right.seq);
   const fromMessages =
     sorted.length > 0
-      ? sorted.reduce(
-          (latest, message) =>
-            message.createdAt > latest ? message.createdAt : latest,
-          sorted[0]!.createdAt
-        )
+      ? sorted[sorted.length - 1]!.createdAt
       : session.createdAt;
   const updatedAt =
     sessionUpdatedAt && sessionUpdatedAt > fromMessages

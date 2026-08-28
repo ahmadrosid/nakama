@@ -37,56 +37,38 @@ async function seedSession(adapter: DatabaseAdapter): Promise<void> {
 }
 
 describe("replaceMessagesForSession bumps session updatedAt", () => {
-  test("sqlite: summary updatedAt advances past stale message createdAt", async () => {
-    const database = await createSqliteDatabase(":memory:");
-    try {
-      await seedSession(database.adapter);
-      const stale = "2020-06-01T00:00:00.000Z";
-      const beforeReplace = new Date().toISOString();
+  for (const kind of ["sqlite", "in-memory"] as const) {
+    test(`${kind}: summary updatedAt advances past stale message createdAt`, async () => {
+      const database =
+        kind === "sqlite" ? await createSqliteDatabase(":memory:") : null;
+      const adapter = database?.adapter ?? createInMemoryDatabaseAdapter();
+      try {
+        await seedSession(adapter);
+        const stale = "2020-06-01T00:00:00.000Z";
+        const beforeReplace = new Date().toISOString();
 
-      await database.adapter.replaceMessagesForSession("session_test", [
-        {
-          createdAt: stale,
-          id: "msg_1",
-          payload: { content: "hello", role: "user" },
-          seq: 0,
-          sessionId: "session_test",
-        },
-      ]);
+        await adapter.replaceMessagesForSession("session_test", [
+          {
+            createdAt: stale,
+            id: "msg_1",
+            payload: { content: "hello", role: "user" },
+            seq: 0,
+            sessionId: "session_test",
+          },
+        ]);
 
-      const summaries = await database.adapter.listSessionSummaries(
-        "profile_test",
-        "web"
-      );
-      expect(summaries).toHaveLength(1);
-      expect(summaries[0]!.updatedAt > stale).toBe(true);
-      expect(summaries[0]!.updatedAt >= beforeReplace).toBe(true);
-    } finally {
-      database.close();
-    }
-  });
-
-  test("in-memory: summary updatedAt advances past stale message createdAt", async () => {
-    const adapter = createInMemoryDatabaseAdapter();
-    await seedSession(adapter);
-    const stale = "2020-06-01T00:00:00.000Z";
-    const beforeReplace = new Date().toISOString();
-
-    await adapter.replaceMessagesForSession("session_test", [
-      {
-        createdAt: stale,
-        id: "msg_1",
-        payload: { content: "hello", role: "user" },
-        seq: 0,
-        sessionId: "session_test",
-      },
-    ]);
-
-    const summaries = await adapter.listSessionSummaries("profile_test", "web");
-    expect(summaries).toHaveLength(1);
-    expect(summaries[0]!.updatedAt > stale).toBe(true);
-    expect(summaries[0]!.updatedAt >= beforeReplace).toBe(true);
-  });
+        const summaries = await adapter.listSessionSummaries(
+          "profile_test",
+          "web"
+        );
+        expect(summaries).toHaveLength(1);
+        expect(summaries[0]!.updatedAt > stale).toBe(true);
+        expect(summaries[0]!.updatedAt >= beforeReplace).toBe(true);
+      } finally {
+        database?.close();
+      }
+    });
+  }
 
   test("sqlite: append after replace does not regress summary updatedAt", async () => {
     const database = await createSqliteDatabase(":memory:");
