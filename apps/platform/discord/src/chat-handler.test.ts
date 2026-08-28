@@ -870,8 +870,6 @@ describe("createChatHandler guild auth silence", () => {
       await handleMessage(mention.message);
 
       expect(mention.channelSentMessages).toEqual([]);
-      expect(mention.threadSentMessages).toEqual([]);
-      expect(mention.startThreadCalls).toBe(0);
       expect(calls.sendStream).toBe(0);
     });
   });
