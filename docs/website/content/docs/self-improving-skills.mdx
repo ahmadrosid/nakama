@@ -109,10 +109,14 @@ In-session saves can still miss a good workflow: the agent finishes a long tool-
 
 ### Turn it on
 
-Org admins: **System → Organization**, on the **Learn after a turn** card (next to Skill write approval).
+Org admins: **System → Organization**, on the **Learn after a turn** card (next to Skill write approval). Platform admins can also flip it on **Agent → Profiles → Config**.
 
 - Default is **off** (no extra review pass).
 - Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
+
+![Learn after a turn switch on a profile Config tab](/screenshots/learn-after-a-turn-profile.png)
+
+![Learn after a turn org switch and per-profile overrides](/screenshots/learn-after-a-turn-org.png)
 
 When enabled, after a **successful** web or CLI turn that looks complex (many tool calls, or a tool error recovery) — and only if the agent did **not** already save a skill that turn — Nakama runs a lightweight background review. Chat is not blocked while that runs. It uses an extra model call on eligible turns, so leave it off unless you want the safety net.
 
