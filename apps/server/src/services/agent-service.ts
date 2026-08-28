@@ -435,25 +435,18 @@ export class AgentService {
     return this.orgMemoryService;
   }
 
-  private async resolveOrgRole(
+  private async resolveSessionAccess(
     orgId: string | null | undefined,
     userId: string | null | undefined
-  ): Promise<OrgRole | null> {
-    if (!(orgId && userId)) {
-      return null;
-    }
-    const member = await this.db.getOrgMember(orgId, userId);
-    return member?.role ?? null;
-  }
-
-  private async resolveIsPlatformAdmin(
-    userId: string | null | undefined
-  ): Promise<boolean> {
-    if (!userId) {
-      return false;
-    }
-    const user = await this.db.getUserById(userId);
-    return Boolean(user?.isPlatformAdmin);
+  ): Promise<{ isPlatformAdmin: boolean; orgRole: OrgRole | null }> {
+    const orgRole =
+      orgId && userId
+        ? ((await this.db.getOrgMember(orgId, userId))?.role ?? null)
+        : null;
+    const isPlatformAdmin = userId
+      ? Boolean((await this.db.getUserById(userId))?.isPlatformAdmin)
+      : false;
+    return { isPlatformAdmin, orgRole };
   }
 
   setAutomationTools(tools: ToolDefinition[]): void {
@@ -1797,13 +1790,8 @@ export class AgentService {
       record.profileId
     );
 
-    const branchOrgRole = await this.resolveOrgRole(
-      profileOrgId,
-      record.userId
-    );
-    const branchIsPlatformAdmin = await this.resolveIsPlatformAdmin(
-      record.userId
-    );
+    const { isPlatformAdmin: branchIsPlatformAdmin, orgRole: branchOrgRole } =
+      await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1899,13 +1887,8 @@ export class AgentService {
       record.profileId
     );
 
-    const resumeOrgRole = await this.resolveOrgRole(
-      profileOrgId,
-      record.userId
-    );
-    const resumeIsPlatformAdmin = await this.resolveIsPlatformAdmin(
-      record.userId
-    );
+    const { isPlatformAdmin: resumeIsPlatformAdmin, orgRole: resumeOrgRole } =
+      await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,

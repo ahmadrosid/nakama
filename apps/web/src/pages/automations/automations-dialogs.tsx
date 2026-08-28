@@ -68,7 +68,6 @@ export function AutomationsDialogs({
                   busy={busy}
                   onChange={updateEditDraft}
                   profiles={profiles}
-                  profilesLoading={profilesLoading}
                 />
               </div>
 

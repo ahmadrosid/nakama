@@ -57,6 +57,21 @@ function getRunAutomationTool(
   return tool;
 }
 
+function getCreateAutomationTool(
+  service: AutomationService,
+  runner: AutomationRunner
+) {
+  const tool = createAutomationTools(service, runner).find(
+    (entry) => entry.name === "create_automation"
+  );
+
+  if (!tool) {
+    throw new Error("create_automation tool not found");
+  }
+
+  return tool;
+}
+
 function getPreviousAutomationRunsTool(service: AutomationService) {
   const tool = createAutomationRunHistoryTools(service).find(
     (entry) => entry.name === "list_previous_automation_runs"
@@ -347,13 +362,7 @@ describe("create_automation tool", () => {
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
-    const tool = createAutomationTools(service, runner).find(
-      (entry) => entry.name === "create_automation"
-    );
-
-    if (!tool) {
-      throw new Error("create_automation tool not found");
-    }
+    const tool = getCreateAutomationTool(service, runner);
 
     const created = (await tool.run(
       {
@@ -377,13 +386,7 @@ describe("create_automation tool", () => {
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
-    const tool = createAutomationTools(service, runner).find(
-      (entry) => entry.name === "create_automation"
-    );
-
-    if (!tool) {
-      throw new Error("create_automation tool not found");
-    }
+    const tool = getCreateAutomationTool(service, runner);
 
     const created = (await tool.run(
       {
@@ -421,13 +424,7 @@ describe("create_automation tool", () => {
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
-    const tool = createAutomationTools(service, runner).find(
-      (entry) => entry.name === "create_automation"
-    );
-
-    if (!tool) {
-      throw new Error("create_automation tool not found");
-    }
+    const tool = getCreateAutomationTool(service, runner);
 
     const created = (await tool.run(
       {
@@ -465,13 +462,7 @@ describe("create_automation tool", () => {
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
-    const tool = createAutomationTools(service, runner).find(
-      (entry) => entry.name === "create_automation"
-    );
-
-    if (!tool) {
-      throw new Error("create_automation tool not found");
-    }
+    const tool = getCreateAutomationTool(service, runner);
 
     await expect(
       tool.run(
@@ -537,13 +528,7 @@ describe("create_automation tool", () => {
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
-    const tool = createAutomationTools(service, runner).find(
-      (entry) => entry.name === "create_automation"
-    );
-
-    if (!tool) {
-      throw new Error("create_automation tool not found");
-    }
+    const tool = getCreateAutomationTool(service, runner);
 
     const created = (await tool.run(
       {

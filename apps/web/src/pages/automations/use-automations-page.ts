@@ -41,10 +41,6 @@ export function useAutomationsPage() {
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
   const superBotProfile = findSuperBotProfile(profiles);
-  const profileById = useMemo(
-    () => new Map(profiles.map((profile) => [profile.id, profile])),
-    [profiles]
-  );
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const {
@@ -269,7 +265,8 @@ export function useAutomationsPage() {
 
   const selectedSubtitle = selected
     ? [
-        profileById.get(selected.profileId)?.name ?? selected.profileId,
+        profiles.find((p) => p.id === selected.profileId)?.name ??
+          selected.profileId,
         formatTrigger(selected.trigger),
         runScheduleHint,
       ]
@@ -295,7 +292,6 @@ export function useAutomationsPage() {
     isSearching,
     loading,
     openEdit,
-    profileById,
     profiles,
     profilesLoading,
     refresh,

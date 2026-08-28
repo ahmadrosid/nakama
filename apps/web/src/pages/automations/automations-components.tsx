@@ -249,22 +249,15 @@ export function AutomationEditorForm({
   busy,
   onChange,
   profiles,
-  profilesLoading,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
   profiles: ProfileSummary[];
-  profilesLoading: boolean;
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
   const isSchedule = scheduleTrigger !== null;
-  const selectedProfile =
-    profiles.find((profile) => profile.id === automation.profileId) ?? null;
-  const profileLabel = selectedProfile?.name ?? automation.profileId;
-  const profileSelectDisabled =
-    busy || profilesLoading || profiles.length === 0;
 
   return (
     <div className="grid gap-5">
@@ -277,45 +270,35 @@ export function AutomationEditorForm({
       </Field>
 
       <Field label="Profile">
-        {profilesLoading ? (
-          <p className="type-body text-muted-foreground text-sm">Loading…</p>
-        ) : profiles.length === 0 ? (
-          <p className="type-body text-muted-foreground text-sm">
-            No profiles in this org
-          </p>
-        ) : (
-          <Select
-            disabled={profileSelectDisabled}
-            onValueChange={(value) => {
-              const profileId = String(value);
-              if (profileId) {
-                onChange({ profileId });
+        <Select
+          disabled={busy}
+          onValueChange={(value) => {
+            const profileId = String(value);
+            if (profileId) {
+              onChange({ profileId });
+            }
+          }}
+          value={automation.profileId}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select profile">
+              {
+                profiles.find((profile) => profile.id === automation.profileId)
+                  ?.name
               }
-            }}
-            value={automation.profileId}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select profile">
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {profiles.map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
                 <span className="flex items-center gap-2">
-                  {selectedProfile ? (
-                    <ProfileAvatar profile={selectedProfile} size="sm" />
-                  ) : null}
-                  <span>{profileLabel}</span>
+                  <ProfileAvatar profile={profile} size="sm" />
+                  <span>{profile.name}</span>
                 </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  <span className="flex items-center gap-2">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span>{profile.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
 
       <Field label="Description">

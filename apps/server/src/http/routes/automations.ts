@@ -391,15 +391,14 @@ export function registerAutomationRoutes(
           return errorResponse(error.message, 404);
         }
 
+        const badRequestMessages = new Set([
+          "Profile not found.",
+          "Profile id is required.",
+          "No default profile exists for this organization.",
+        ]);
         if (
-          error.message === "Profile not found." ||
-          error.message === "Profile id is required." ||
-          error.message ===
-            "No default profile exists for this organization." ||
-          error.message.startsWith("Telegram is not") ||
-          error.message.startsWith("WhatsApp is not") ||
-          error.message.startsWith("Discord is not") ||
-          error.message.startsWith("Email is not") ||
+          badRequestMessages.has(error.message) ||
+          /^(Telegram|WhatsApp|Discord|Email) is not/.test(error.message) ||
           error.message.includes("delivery")
         ) {
           return errorResponse(error.message, 400);
