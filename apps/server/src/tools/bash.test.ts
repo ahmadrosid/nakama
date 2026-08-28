@@ -200,6 +200,32 @@ describe("bash tool", () => {
     expect(result.stdout).toContain("Full coding-agent log:");
   });
 
+  // `/bin/bash -lc` sources BASH_ENV before it runs the command, so an env key
+  // the model chose is arbitrary code execution unless it is stripped.
+  test("drops env keys that hijack the shell before the command runs", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const hijackPath = path.join(workspaceRoot, "hijack.sh");
+    await writeFile(hijackPath, "echo HIJACKED\n", "utf8");
+
+    const result = await runBash(
+      {
+        command: 'echo "keep=$KEEP_ME preload=$LD_PRELOAD node=$NODE_OPTIONS"',
+        env: {
+          BASH_ENV: hijackPath,
+          KEEP_ME: "kept",
+          LD_PRELOAD: "/tmp/evil.so",
+          NODE_OPTIONS: "--require=/tmp/evil.js",
+        },
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { workspaceRoot }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("HIJACKED");
+    expect(result.stdout.trim()).toBe("keep=kept preload= node=");
+  });
+
   test("prunes coding-agent logs to the newest 10 and leaves other artifacts", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const logDir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
