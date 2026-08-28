@@ -30,7 +30,6 @@ import {
 import { formatError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { resolveOrgMemoryHistoryState } from "./org-memory-history-panel.shared";
 
 function shortenId(value: string): string {
   return value.length > 16 ? `${value.slice(0, 12)}…` : value;
@@ -278,11 +277,16 @@ export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
     changes[0]?.id ?? null
   );
   const members = membersData?.members ?? [];
-  const { canUndo, latestRevisionIsCurrent } = resolveOrgMemoryHistoryState(
-    memoryData?.content,
-    latestRevision?.content,
-    changes.length
-  );
+  const liveContent = memoryData?.content;
+  const latestRevisionContent = latestRevision?.content;
+  const latestRevisionIsCurrent =
+    liveContent !== undefined &&
+    latestRevisionContent !== undefined &&
+    liveContent.trim() === latestRevisionContent.trim();
+  const canUndo =
+    liveContent !== undefined &&
+    latestRevisionContent !== undefined &&
+    changes.length >= (latestRevisionIsCurrent ? 2 : 1);
 
   async function handleUndo() {
     try {
