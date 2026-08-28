@@ -2775,12 +2775,6 @@ export class AgentService {
     return this.profileService.getProfileAvatar(orgId, profileId);
   }
 
-  async getProfileAvatarByProfileId(
-    profileId: string
-  ): Promise<{ mediaType: string; bytes: Buffer }> {
-    return this.profileService.getProfileAvatarByProfileId(profileId);
-  }
-
   async deleteProfileAvatar(orgId: string, profileId: string): Promise<void> {
     return this.profileService.deleteProfileAvatar(orgId, profileId);
   }
