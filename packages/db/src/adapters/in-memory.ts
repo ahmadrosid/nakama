@@ -64,6 +64,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const profileSkills = new Map<string, Set<string>>();
   const skillUsage = new Map<string, StoredSkillUsageRecord>();
   const sessions = new Map<string, StoredSessionRecord>();
+  const sessionUpdatedAt = new Map<string, string>();
   const sessionMessages = new Map<string, StoredSessionMessageRecord[]>();
   const attachments = new Map<string, StoredAttachmentRecord>();
   const usersById = new Map<string, StoredUserRecord>();
@@ -299,6 +300,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async deleteSession(id) {
       sessionMessages.delete(id);
+      sessionUpdatedAt.delete(id);
       return sessions.delete(id);
     },
 
@@ -965,7 +967,11 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
             session.profileId === profileId && session.channel === channel
         )
         .map((session) =>
-          summarizeSession(session, sessionMessages.get(session.id) ?? [])
+          summarizeSession(
+            session,
+            sessionMessages.get(session.id) ?? [],
+            sessionUpdatedAt.get(session.id)
+          )
         )
         .filter((summary) => summary.messageCount > 0)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -1143,6 +1149,12 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async replaceMessagesForSession(sessionId, messages) {
       sessionMessages.set(sessionId, [...messages]);
+      const updatedAt = messages.reduce(
+        (latest, message) =>
+          message.createdAt > latest ? message.createdAt : latest,
+        new Date().toISOString()
+      );
+      sessionUpdatedAt.set(sessionId, updatedAt);
     },
 
     async replaceProfileComposioToolkits(profileId, assignments) {
@@ -1483,6 +1495,9 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async upsertSession(record) {
       sessions.set(record.id, record);
+      if (!sessionUpdatedAt.has(record.id)) {
+        sessionUpdatedAt.set(record.id, record.createdAt);
+      }
     },
 
     async upsertSkill(record) {
@@ -1527,13 +1542,22 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
 function summarizeSession(
   session: StoredSessionRecord,
-  messages: StoredSessionMessageRecord[]
+  messages: StoredSessionMessageRecord[],
+  sessionUpdatedAt?: string
 ): StoredSessionSummaryRecord {
   const sorted = [...messages].sort((left, right) => left.seq - right.seq);
-  const updatedAt =
+  const fromMessages =
     sorted.length > 0
-      ? sorted[sorted.length - 1]!.createdAt
+      ? sorted.reduce(
+          (latest, message) =>
+            message.createdAt > latest ? message.createdAt : latest,
+          sorted[0]!.createdAt
+        )
       : session.createdAt;
+  const updatedAt =
+    sessionUpdatedAt && sessionUpdatedAt > fromMessages
+      ? sessionUpdatedAt
+      : fromMessages;
   const firstUser = sorted.find(
     (message) =>
       typeof message.payload === "object" &&

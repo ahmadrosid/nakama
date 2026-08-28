@@ -107,6 +107,7 @@ interface SessionRow {
   model: string | null;
   profile_id: string;
   title: string | null;
+  updated_at?: string | null;
   user_id?: string | null;
 }
 
@@ -612,14 +613,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listSessionsStmt = db.prepare("SELECT * FROM sessions");
   const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, user_id, model)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, user_id, model)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
       user_id = COALESCE(excluded.user_id, sessions.user_id),
       model = excluded.model
   `);
+  const updateSessionUpdatedAtStmt = db.prepare(
+    "UPDATE sessions SET updated_at = ? WHERE id = ?"
+  );
   const deleteSessionStmt = db.prepare("DELETE FROM sessions WHERE id = ?");
   const updateSessionModelStmt = db.prepare(
     "UPDATE sessions SET model = ? WHERE id = ?"
@@ -673,7 +677,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       s.created_at,
       s.title,
       COUNT(m.id) AS message_count,
-      COALESCE(MAX(m.created_at), s.created_at) AS updated_at,
+      max(
+        COALESCE(MAX(m.created_at), s.created_at),
+        COALESCE(s.updated_at, s.created_at)
+      ) AS updated_at,
       (
         SELECT payload
         FROM session_messages
@@ -2588,17 +2595,29 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async replaceMessagesForSession(sessionId, messages) {
-      deleteMessagesForSessionStmt.run(sessionId);
+      const updatedAt = messages.reduce(
+        (latest, message) =>
+          message.createdAt > latest ? message.createdAt : latest,
+        new Date().toISOString()
+      );
 
-      for (const message of messages) {
-        appendMessageStmt.run(
-          message.id,
-          sessionId,
-          message.seq,
-          JSON.stringify(message.payload),
-          message.createdAt
-        );
-      }
+      const replace = db.transaction(() => {
+        deleteMessagesForSessionStmt.run(sessionId);
+
+        for (const message of messages) {
+          appendMessageStmt.run(
+            message.id,
+            sessionId,
+            message.seq,
+            JSON.stringify(message.payload),
+            message.createdAt
+          );
+        }
+
+        updateSessionUpdatedAtStmt.run(updatedAt, sessionId);
+      });
+
+      replace();
     },
 
     async replaceProfileComposioToolkits(profileId, assignments) {
@@ -2916,6 +2935,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.id,
         record.profileId,
         record.channel,
+        record.createdAt,
         record.createdAt,
         record.userId ?? null,
         record.model

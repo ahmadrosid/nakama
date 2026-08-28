@@ -112,9 +112,9 @@ describe("legacy profile id migration", () => {
           ('profile_default', 'skill_test'),
           ('profile_super_bot', 'skill_test');
 
-        INSERT INTO sessions (id, profile_id, channel, created_at, title, agent_todos) VALUES
-          ('session_default', 'profile_default', 'cli', '2026-06-19T00:00:00.000Z', NULL, '[]'),
-          ('session_super', 'profile_super_bot', 'cli', '2026-06-19T00:00:00.000Z', NULL, '[]');
+        INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, title, agent_todos) VALUES
+          ('session_default', 'profile_default', 'cli', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z', NULL, '[]'),
+          ('session_super', 'profile_super_bot', 'cli', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z', NULL, '[]');
 
         INSERT INTO tasks (
           id,
@@ -491,6 +491,7 @@ describe("chat session schema", () => {
         name: string;
       }>;
       expect(columns.some((column) => column.name === "model")).toBe(true);
+      expect(columns.some((column) => column.name === "updated_at")).toBe(true);
     } finally {
       db.close();
     }
