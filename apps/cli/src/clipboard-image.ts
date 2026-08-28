@@ -1,5 +1,10 @@
 import { getImageBinary, hasImage } from "@crosscopy/clipboard";
-import { type ImageAttachment, validateImageAttachments } from "@nakama/core";
+import {
+  type ImageAttachment,
+  MAX_IMAGE_BYTES,
+  NakamaApiError,
+  validateImageAttachments,
+} from "@nakama/core";
 
 export async function readClipboardImage(): Promise<ImageAttachment | null> {
   if (!hasImage()) {
@@ -10,6 +15,13 @@ export async function readClipboardImage(): Promise<ImageAttachment | null> {
 
   if (!bytes?.length) {
     return null;
+  }
+
+  if (bytes.length > MAX_IMAGE_BYTES) {
+    throw new NakamaApiError(
+      `Each image must be at most ${MAX_IMAGE_BYTES / (1024 * 1024)} MB.`,
+      400
+    );
   }
 
   const attachment: ImageAttachment = {
