@@ -1887,3 +1887,27 @@ describe("createChatHandler inbound images", () => {
     });
   });
 });
+
+describe("createChatHandler session hot cache", () => {
+  test("reuses RemoteChatSession across messages without recreate", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, calls, sessionStore } =
+        await createPairedHandler(homeDir);
+      sessionStore.set("dm_channel_1", {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      await handleMessage(createDmMessage({ content: "one" }).message);
+      await handleMessage(createDmMessage({ content: "two" }).message);
+
+      expect(calls.createSession).toBe(0);
+      expect(calls.createChatSession).toBe(1);
+      // 1 resolve validation + 1 artifact read per turn (hot path skips resolve getMessages)
+      expect(calls.getMessages).toBe(3);
+      expect(calls.sendStream).toBe(2);
+    });
+  });
+});

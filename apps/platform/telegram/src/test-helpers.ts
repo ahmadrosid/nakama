@@ -151,7 +151,9 @@ export function createMockClient(
 ) {
   const calls = {
     compact: 0,
+    createChatSession: 0,
     createSession: 0,
+    getMessages: 0,
     listProfiles: 0,
     listUserOrgs: 0,
     publishProfileArtifactShare: 0,
@@ -279,7 +281,10 @@ export function createMockClient(
       };
     },
     createAutomation: async () => ({}),
-    getMessages: async () => options.messages ?? [],
+    getMessages: async () => {
+      calls.getMessages += 1;
+      return options.messages ?? [];
+    },
     id: "session_test",
     purge: async () => {},
     send: async () => "ok",
@@ -291,7 +296,10 @@ export function createMockClient(
   let activeOrgId: string | null = orgs[0]?.id ?? null;
 
   const client = {
-    createChatSession: () => session,
+    createChatSession: () => {
+      calls.createChatSession += 1;
+      return session;
+    },
     createSession: async (_channel: string, input?: { profileId?: string }) => {
       calls.createSession += 1;
       lastCreateSessionProfileId = input?.profileId;

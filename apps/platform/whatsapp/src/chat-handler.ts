@@ -521,10 +521,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const existing = sessionStore.get(jid);
 
     if (existing && existing.profileId === profileId) {
+      const hot = sessionStore.getHotSession<RemoteChatSession>(
+        jid,
+        existing.sessionId
+      );
+      if (hot) {
+        return hot;
+      }
+
       const session = client.createChatSession(existing.sessionId, "whatsapp");
 
       try {
         await session.getMessages();
+        sessionStore.setHotSession(jid, existing.sessionId, session);
         return session;
       } catch {
         // Session missing on server; create a new one below
@@ -548,6 +557,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       sessionId: session.id,
       updatedAt: new Date().toISOString(),
     });
+    sessionStore.setHotSession(jid, session.id, session);
     await sessionStore.save();
 
     return session;
