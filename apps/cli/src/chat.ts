@@ -23,6 +23,7 @@ import {
   resolveModelSwitchTarget,
   resolveSuggestions,
 } from "./commands";
+import { formatCliDisplayPath } from "./display-path";
 import { mergeSendInput, parseImageLine } from "./image-input";
 import type { PendingMessage } from "./message-queue";
 import { PersistentPrompt } from "./persistent-prompt";
@@ -50,6 +51,8 @@ interface RunChatOptions {
   offline?: boolean;
   profileId?: CliProfileOptions["profileId"];
   signal?: AbortSignal;
+  /** When true, /soul prints absolute filesystem paths. */
+  verbose?: boolean;
 }
 
 export function needsTrailingStreamNewline(lastChunk: string | null): boolean {
@@ -685,13 +688,16 @@ async function runStickyChat(
     try {
       if (subcommand === "init") {
         const result = await options.client.initProfileSoul(currentProfileId);
-        for (const outputLine of formatSoulInitLines(result)) {
+        for (const outputLine of formatSoulInitLines(result, options.verbose)) {
           writeOutput(outputLine);
         }
       } else {
         const status =
           await options.client.getProfileSoulStatus(currentProfileId);
-        for (const outputLine of formatSoulStatusLines(status)) {
+        for (const outputLine of formatSoulStatusLines(
+          status,
+          options.verbose
+        )) {
           writeOutput(outputLine);
         }
       }
@@ -1216,9 +1222,12 @@ function formatProfilesLines(
   return lines;
 }
 
-function formatSoulStatusLines(status: SoulStatusResponse): string[] {
+export function formatSoulStatusLines(
+  status: SoulStatusResponse,
+  verbose = false
+): string[] {
   const lines = [
-    `Soul directory: ${status.directory}`,
+    `Soul directory: ${formatCliDisplayPath(status.directory, { verbose })}`,
     `Active: ${status.active ? "yes" : "no"}`,
   ];
 
@@ -1248,8 +1257,13 @@ function formatSoulStatusLines(status: SoulStatusResponse): string[] {
   return lines;
 }
 
-function formatSoulInitLines(result: InitSoulResponse): string[] {
-  const lines = [`Soul directory: ${result.directory}`];
+export function formatSoulInitLines(
+  result: InitSoulResponse,
+  verbose = false
+): string[] {
+  const lines = [
+    `Soul directory: ${formatCliDisplayPath(result.directory, { verbose })}`,
+  ];
 
   if (result.created.length === 0) {
     lines.push("Templates already exist — nothing created.");
