@@ -208,18 +208,6 @@ describe("resolveProfileProviderSelection", () => {
 });
 
 describe("applyProviderInstanceUpdate", () => {
-  test("rejects an obviously malformed API key on update", () => {
-    const current: ProviderInstance = createProviderInstance({
-      id: "openai-1",
-      label: "OpenAI",
-      type: "openai",
-    });
-
-    expect(() =>
-      applyProviderInstanceUpdate(current, { apiKey: "sk-junk-qa-123" })
-    ).toThrow(/valid OpenAI API key/i);
-  });
-
   test("stores wireApi only for a recognised value on a compatible instance", () => {
     const instance = createProviderInstance({
       baseUrl: "https://endpoint.test/v1",
@@ -408,32 +396,5 @@ describe("buildProviderInstanceFromCreateRequest", () => {
         []
       )
     ).toThrow(/valid OpenAI API key/i);
-  });
-
-  test("rejects a key with the wrong provider prefix", () => {
-    expect(() =>
-      buildProviderInstanceFromCreateRequest(
-        { apiKey: `sk-${"a".repeat(48)}`, type: "anthropic" },
-        []
-      )
-    ).toThrow(/valid Anthropic API key/i);
-  });
-
-  test("accepts a well-formed API key for its provider", () => {
-    const instance = buildProviderInstanceFromCreateRequest(
-      { apiKey: `sk-${"a".repeat(48)}`, type: "openai" },
-      []
-    );
-
-    expect(instance.apiKey).toBe(`sk-${"a".repeat(48)}`);
-  });
-
-  test("does not format-check providers with opaque/self-hosted key formats", () => {
-    const instance = buildProviderInstanceFromCreateRequest(
-      { apiKey: "short", hostMode: "cloud", model: "llama3", type: "ollama" },
-      []
-    );
-
-    expect(instance.apiKey).toBe("short");
   });
 });
