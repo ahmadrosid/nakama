@@ -653,6 +653,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     INSERT INTO session_messages (id, session_id, seq, payload, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
+  const appendMessagesTransaction = db.transaction(
+    (sessionId: string, messages: StoredSessionMessageRecord[]) => {
+      for (const message of messages) {
+        appendMessageStmt.run(
+          message.id,
+          sessionId,
+          message.seq,
+          JSON.stringify(message.payload),
+          message.createdAt
+        );
+      }
+    }
+  );
   const deleteMessagesForSessionStmt = db.prepare(
     "DELETE FROM session_messages WHERE session_id = ?"
   );
@@ -1579,15 +1592,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   return {
     async appendMessagesForSession(sessionId, messages) {
-      for (const message of messages) {
-        appendMessageStmt.run(
-          message.id,
-          sessionId,
-          message.seq,
-          JSON.stringify(message.payload),
-          message.createdAt
-        );
-      }
+      appendMessagesTransaction(sessionId, messages);
     },
 
     async assignMcpServerToProfile(profileId, serverId) {

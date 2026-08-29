@@ -111,3 +111,49 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
     }
   });
 });
+
+describe("appendMessagesForSession", () => {
+  test("sqlite preserves prior state when a batch fails", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    try {
+      await seedSession(database.adapter);
+      const createdAt = "2020-06-01T00:00:00.000Z";
+      await database.adapter.appendMessagesForSession("session_test", [
+        {
+          createdAt,
+          id: "msg_existing",
+          payload: { content: "existing", role: "user" },
+          seq: 0,
+          sessionId: "session_test",
+        },
+      ]);
+
+      await expect(
+        database.adapter.appendMessagesForSession("session_test", [
+          {
+            createdAt,
+            id: "msg_new",
+            payload: { content: "new", role: "assistant" },
+            seq: 1,
+            sessionId: "session_test",
+          },
+          {
+            createdAt,
+            id: "msg_existing",
+            payload: { content: "duplicate", role: "user" },
+            seq: 2,
+            sessionId: "session_test",
+          },
+        ])
+      ).rejects.toThrow();
+
+      expect(
+        (await database.adapter.listMessagesForSession("session_test")).map(
+          (message) => message.id
+        )
+      ).toEqual(["msg_existing"]);
+    } finally {
+      database.close();
+    }
+  });
+});
