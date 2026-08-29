@@ -1,6 +1,8 @@
 import { RootProvider } from "fumadocs-ui/provider/next";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import type { Metadata } from "next";
-import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Instrument_Serif } from "next/font/google";
 import type { ReactNode } from "react";
 import { withBasePath } from "@/lib/base-path";
 import {
@@ -11,14 +13,10 @@ import {
 } from "@/lib/site-meta";
 import "./global.css";
 
-const jakarta = Plus_Jakarta_Sans({
+const instrument = Instrument_Serif({
   subsets: ["latin"],
-  variable: "--font-jakarta",
-});
-
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
+  variable: "--font-instrument",
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -49,7 +47,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
-      className={`${jakarta.variable} ${jetbrains.variable}`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${instrument.variable}`}
       lang="en"
       suppressHydrationWarning
     >

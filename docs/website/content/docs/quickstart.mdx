@@ -12,7 +12,20 @@ You need:
 
 ## Choose a deployment path
 
-### Option 1: Try the demo
+Self-hosting teams usually start with **Docker**. Use the demo to explore the UI first, or managed hosting if you do not want to run a server.
+
+### Option 1: Docker (self-host)
+
+Single container — API, web dashboard, and platform workers:
+
+```bash
+docker pull ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
+
+Open `http://localhost:4310`, then complete [First-time setup](/first-time-setup). See [Docker](/docker) for volumes, first-boot seed, and build-from-source.
+
+### Option 2: Try the demo
 
 Explore a live instance without installing anything. Open [https://demo.getnakama.cloud](https://demo.getnakama.cloud) and sign in with:
 
@@ -21,22 +34,11 @@ Explore a live instance without installing anything. Open [https://demo.getnakam
 
 The demo is shared and reset periodically — use it to click around the dashboard, not for real data or API keys.
 
-### Option 2: Managed hosting
+### Option 3: Managed hosting
 
 If you do not want to run your own server, use [Nakama Cloud](https://getnakama.cloud/). Sign up, create an instance, and open your dedicated URL (for example `acme.getnakama.cloud`). The first 24 hours are free with no credit card required.
 
 Complete the setup wizard in the browser and you are live. Skip to [First-time setup](/first-time-setup).
-
-### Option 3: Docker
-
-For a single-container deployment:
-
-```bash
-docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
-```
-
-Open `http://localhost:4310`. See [Docker](/docker) for build-from-source, volumes, and production notes.
 
 ### Option 4: Local development
 

@@ -1,7 +1,7 @@
 export const SITE_NAME = "Nakama";
 export const SITE_TAGLINE = "AI agents that work with your team.";
 export const SITE_DESCRIPTION =
-  "Nakama is AI agents that work with your team — self-hosted or on managed hosting at getnakama.cloud, multi-tenant, and open source.";
+  "Nakama is a multi-tenant AI agent platform for teams — self-host with Docker or Bun, or use managed hosting at getnakama.cloud. Open source under MIT.";
 export const SITE_URL =
   process.env.NAKAMA_DOCS_SITE_URL ?? "https://ahmadrosid.github.io/nakama";
 export const AUTHOR_NAME = "Ahmad Rosid";

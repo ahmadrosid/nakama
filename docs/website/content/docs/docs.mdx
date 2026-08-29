@@ -10,17 +10,17 @@ Nakama is a multi-tenant platform for teams of AI agents. Each profile is a bot 
 Pick the fastest path for you:
 
 ```bash
+# Docker — single container (self-host)
+docker pull ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+
 # Live demo — no install
 # Open https://demo.getnakama.cloud
 # Username: demo@getnakama.cloud
 # Password: demo1234
 
-# Managed hosting — your own instance (recommended)
+# Managed hosting — your own instance
 # Sign up at https://getnakama.cloud/ and open your instance URL
-
-# Docker — single container
-docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
 
 # Local development — from source
 git clone https://github.com/ahmadrosid/nakama.git && cd nakama

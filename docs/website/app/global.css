@@ -3,57 +3,63 @@
 @import "fumadocs-ui/css/preset.css";
 
 @theme {
-  --color-fd-primary: #d97706;
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --color-fd-primary: #a16207;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
 }
 
 .dark {
-  --color-fd-primary: #f59e0b;
+  --color-fd-primary: #eab308;
   --color-fd-background: #000000;
   --color-fd-card: #111113;
   --color-fd-muted: #18181b;
   --color-fd-border: #27272a;
 }
 
-/* Landing page — light default, dark / gold when .dark is set */
+/* Landing — flat stone surfaces, hairline borders, amber accent */
 .landing {
   --landing-brand: #a16207;
-  --landing-brand-strong: #ca8a04;
-  --landing-orange: #ea580c;
+  --landing-brand-strong: #854d0e;
   --landing-fg: #1c1917;
+  --landing-border: rgba(28, 25, 23, 0.12);
   color: var(--landing-fg);
   background: #fafaf9;
 }
 
 .dark .landing {
-  --landing-brand: #fff383;
-  --landing-brand-strong: #fbbf24;
-  --landing-orange: #fc7744;
-  --landing-fg: #e4e2d0;
+  --landing-brand: #eab308;
+  --landing-brand-strong: #facc15;
+  --landing-fg: #e7e5e4;
+  --landing-border: rgba(255, 255, 255, 0.12);
   background: #000;
 }
 
 .landing-header {
-  background: color-mix(in oklab, #fafaf9 82%, transparent);
-  border-color: rgba(28, 25, 23, 0.08);
+  background: #fafaf9;
+  border-color: var(--landing-border);
 }
 
 .dark .landing-header {
-  background: color-mix(in oklab, #000 72%, transparent);
-  border-color: rgba(255, 255, 255, 0.05);
+  background: #000;
+  border-color: var(--landing-border);
 }
 
 .landing-accent {
   color: var(--landing-brand);
 }
 
-.landing-section-title {
-  color: var(--landing-brand);
+.landing-display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
 }
 
-.landing-lede .landing-accent {
-  color: var(--landing-brand);
+.landing-section-title {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  color: var(--landing-fg);
+  letter-spacing: -0.02em;
 }
 
 .prose img {
@@ -72,20 +78,23 @@
 }
 
 .hero-frame {
-  background: transparent;
+  background: #f5f5f4;
+  border-color: var(--landing-border);
+}
+
+.dark .hero-frame {
+  background: #0a0a0a;
 }
 
 .hero-cta-primary {
-  padding: 0.75rem 1.35rem;
+  padding: 0.7rem 1.2rem;
   font-size: 0.875rem;
   font-weight: 600;
   color: #fff;
   letter-spacing: -0.01em;
   background: var(--landing-brand);
-  border-radius: 9999px;
-  transition:
-    transform 0.2s ease,
-    background-color 0.2s ease;
+  border: 1px solid var(--landing-brand);
+  border-radius: 0.375rem;
 }
 
 .dark .hero-cta-primary {
@@ -94,78 +103,39 @@
 
 .hero-cta-primary:hover {
   background: var(--landing-brand-strong);
-  transform: translateY(-1px);
-}
-
-.dark .hero-cta-primary:hover {
-  background: #fff7c8;
+  border-color: var(--landing-brand-strong);
 }
 
 .hero-cta-secondary {
   display: inline-flex;
   align-items: center;
-  padding: 0.75rem 1.35rem;
+  padding: 0.7rem 1.2rem;
   font-size: 0.875rem;
   font-weight: 500;
   color: #1c1917;
   letter-spacing: -0.01em;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(28, 25, 23, 0.12);
-  border-radius: 9999px;
-  backdrop-filter: blur(8px);
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease;
+  background: transparent;
+  border: 1px solid var(--landing-border);
+  border-radius: 0.375rem;
 }
 
 .dark .hero-cta-secondary {
   color: #fff;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .hero-cta-secondary:hover {
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in oklab, var(--landing-brand) 6%, transparent);
   border-color: color-mix(
     in oklab,
-    var(--landing-brand) 40%,
-    rgba(28, 25, 23, 0.12)
-  );
-  transform: translateY(-1px);
-}
-
-.dark .hero-cta-secondary:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: color-mix(
-    in oklab,
-    var(--landing-brand) 40%,
-    rgba(255, 255, 255, 0.2)
+    var(--landing-brand) 45%,
+    var(--landing-border)
   );
 }
 
-.feature-card {
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+.proof-row {
+  border-color: var(--landing-border);
 }
 
-.feature-card:hover {
-  border-color: color-mix(
-    in oklab,
-    var(--landing-brand) 28%,
-    rgba(28, 25, 23, 0.1)
-  );
-  box-shadow: 0 12px 40px -16px rgba(234, 88, 12, 0.18);
-  transform: translateY(-2px);
-}
-
-.dark .feature-card:hover {
-  border-color: color-mix(
-    in oklab,
-    var(--landing-brand) 28%,
-    rgba(255, 255, 255, 0.1)
-  );
-  box-shadow: 0 12px 40px -16px rgba(252, 119, 68, 0.25);
+.proof-row + .proof-row {
+  border-top-width: 1px;
 }

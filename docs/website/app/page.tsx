@@ -1,15 +1,7 @@
-import {
-  ArrowRight01Icon,
-  BotIcon,
-  Building01Icon,
-  CloudIcon,
-  MessageMultiple01Icon,
-  PackageIcon,
-  SparklesIcon,
-} from "hugeicons-react";
+import { ArrowRight01Icon } from "hugeicons-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { HeroPaperBackground } from "@/components/hero-paper-background";
+import { CopyCommand } from "@/components/copy-command";
 import { withBasePath } from "@/lib/base-path";
 import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site-meta";
 
@@ -19,6 +11,10 @@ export const metadata: Metadata = {
 };
 
 const GITHUB_REPO_URL = "https://github.com/ahmadrosid/nakama";
+const DEMO_URL = "https://demo.getnakama.cloud";
+const MANAGED_URL = "https://getnakama.cloud/";
+const DOCKER_COMMAND = `docker pull ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest`;
 
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -33,68 +29,60 @@ function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
-const features: Array<{
-  title: string;
-  details: string;
-  icon: typeof BotIcon;
-}> = [
+const proofPoints: Array<{ title: string; details: string }> = [
   {
-    details: "Identity, instructions, tools, and knowledge per profile.",
-    icon: BotIcon,
-    title: "Every agent has a role",
+    details:
+      "API, web dashboard, and Telegram / WhatsApp / Discord workers in one image.",
+    title: "Single Docker container",
   },
   {
-    details: "One server — shared orgs, channels, and ops.",
-    icon: PackageIcon,
-    title: "Your nakama, one deployment",
+    details:
+      "Organizations isolate profiles, sessions, tools, skills, and usage by org_id.",
+    title: "Multi-tenant orgs",
   },
   {
-    details: "Orgs, members, profiles, and tools — isolated by tenant.",
-    icon: Building01Icon,
-    title: "Multi-tenant by design",
+    details:
+      "Each profile has SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md, and tool access.",
+    title: "Profiles with a soul",
   },
   {
-    details: "Soul files, skills, knowledge bases, and MCP per agent.",
-    icon: SparklesIcon,
-    title: "Flexible agent behavior",
-  },
-  {
-    details: "Web, CLI, Telegram, WhatsApp, and Discord.",
-    icon: MessageMultiple01Icon,
-    title: "Works across channels",
-  },
-  {
-    details: "Docker, self-host, or getnakama.cloud — open source.",
-    icon: CloudIcon,
-    title: "Self-hosted or managed",
+    details:
+      "Web dashboard, CLI, Telegram, WhatsApp, and Discord on one backend.",
+    title: "Same agents, many channels",
   },
 ];
 
 export default function HomePage() {
   return (
     <div className="landing flex min-h-screen flex-col">
-      <header className="landing-header sticky top-0 z-40 border-b px-6 py-3.5 backdrop-blur-xl">
+      <header className="landing-header sticky top-0 z-40 border-b px-6 py-3.5">
         <nav className="mx-auto flex max-w-6xl items-center justify-between">
           <Link
-            className="font-semibold text-lg text-stone-900 tracking-tight dark:text-white"
+            className="landing-display text-2xl text-stone-900 dark:text-white"
             href="/"
           >
             Nakama
           </Link>
           <div className="flex items-center gap-5 text-sm text-stone-600 dark:text-white/55">
+            <a
+              className="transition-colors hover:text-stone-900 dark:hover:text-white"
+              href="#deploy"
+            >
+              Deploy
+            </a>
             <Link
               className="transition-colors hover:text-stone-900 dark:hover:text-white"
-              href="/docs"
+              href="/quickstart"
             >
               Docs
             </Link>
             <a
               className="hidden transition-colors hover:text-stone-900 sm:inline dark:hover:text-white"
-              href="https://getnakama.cloud/"
+              href={DEMO_URL}
               rel="noreferrer"
               target="_blank"
             >
-              Managed hosting
+              Demo
             </a>
             <a
               aria-label="GitHub repository"
@@ -111,51 +99,52 @@ export default function HomePage() {
 
       <main className="flex-1">
         <section className="hero-section px-4 pt-4 md:px-6 md:pt-6">
-          <div className="hero-frame relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-stone-300/70 dark:border-zinc-500/30">
-            <HeroPaperBackground />
-
+          <div className="hero-frame relative mx-auto w-full max-w-6xl overflow-hidden rounded-lg border">
             <div className="relative z-20 flex min-h-[28rem] flex-col px-6 pt-12 pb-36 md:min-h-[32rem] md:px-10 md:pt-14 md:pb-40 lg:min-h-[36rem] lg:px-12 lg:pt-16 lg:pb-44">
-              <div className="max-w-xl text-center md:text-left">
-                <h1 className="font-semibold text-4xl text-stone-900 leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl dark:text-white">
+              <div className="max-w-2xl text-center md:text-left">
+                <p className="mb-4 font-mono text-stone-500 text-xs uppercase tracking-wide dark:text-white/40">
+                  Open source · self-host or managed
+                </p>
+                <h1 className="landing-display text-4xl text-stone-900 leading-[1.08] sm:text-5xl lg:text-6xl dark:text-white">
                   AI agents that work with{" "}
                   <span className="landing-accent">your team.</span>
                 </h1>
+                <p className="mt-5 max-w-xl text-base text-stone-600 leading-relaxed md:text-lg dark:text-white/60">
+                  Multi-tenant agent platform for builders who want profiles,
+                  tools, and channels on infrastructure they control — one
+                  Docker container, or run from source with Bun.
+                </p>
 
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                  <Link
+                  <a
                     className="hero-cta-primary inline-flex items-center gap-2"
-                    href="/quickstart"
+                    href="#deploy"
                   >
-                    Get Started
+                    Self-host with Docker
                     <ArrowRight01Icon aria-hidden className="size-4" />
+                  </a>
+                  <a
+                    className="hero-cta-secondary"
+                    href={DEMO_URL}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Try the demo
+                  </a>
+                  <Link className="hero-cta-secondary" href="/quickstart">
+                    Quickstart
                   </Link>
-                  <a
-                    className="hero-cta-secondary"
-                    href="https://getnakama.cloud/"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Managed hosting
-                  </a>
-                  <a
-                    className="hero-cta-secondary"
-                    href="https://github.com/ahmadrosid/nakama"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    GitHub
-                  </a>
                 </div>
               </div>
             </div>
 
             <div className="hero-preview pointer-events-none absolute right-0 bottom-0 left-[12%] z-10 translate-y-[48%] sm:left-[18%] sm:translate-y-[50%] md:left-[22%] md:translate-y-[52%] lg:left-[26%]">
-              <div className="overflow-hidden rounded-t-xl border border-stone-200 border-b-0 bg-stone-50 shadow-[0_-20px_60px_-20px_rgba(28,25,23,0.18)] dark:border-white/12 dark:bg-[#0d0d0f] dark:shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.75)]">
+              <div className="overflow-hidden rounded-t-lg border border-stone-300 border-b-0 bg-stone-50 dark:border-white/12 dark:bg-[#0d0d0f]">
                 <div className="flex items-center gap-1.5 border-stone-200 border-b px-3 py-2.5 dark:border-white/8">
-                  <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
-                  <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
-                  <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
-                  <span className="ml-2 text-[11px] text-stone-500 dark:text-white/35">
+                  <span className="size-2.5 rounded-full border border-stone-300 dark:border-white/20" />
+                  <span className="size-2.5 rounded-full border border-stone-300 dark:border-white/20" />
+                  <span className="size-2.5 rounded-full border border-stone-300 dark:border-white/20" />
+                  <span className="ml-2 font-mono text-[11px] text-stone-500 dark:text-white/35">
                     nakama · dashboard
                   </span>
                 </div>
@@ -179,76 +168,105 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="px-6 py-24 md:py-32">
-          <p className="landing-lede mx-auto max-w-4xl text-center font-light text-2xl text-stone-600 leading-snug tracking-tight md:text-4xl md:leading-snug dark:text-white/70">
-            <span className="landing-accent font-medium">Nakama</span> gives
-            each agent a role, tools, and memory — then runs your whole{" "}
-            <span className="landing-accent font-medium">team</span> from one
-            deployment.
-          </p>
-        </section>
-
-        <section className="px-6 pb-16 md:pb-24">
+        <section className="px-6 pt-28 pb-16 md:pt-36 md:pb-24" id="deploy">
           <div className="mx-auto max-w-6xl">
-            <div className="mb-10 max-w-2xl">
-              <h2 className="landing-section-title font-medium text-3xl tracking-tight md:text-4xl">
-                Your whole nakama.
+            <div className="mb-8 max-w-2xl">
+              <h2 className="landing-section-title text-3xl md:text-4xl">
+                Deploy in two commands.
               </h2>
               <p className="mt-3 text-stone-600 dark:text-white/50">
-                Profiles, orgs, channels, and tools — focused agents, shared
-                ops.
+                Pull the prebuilt image, start the container, open{" "}
+                <code className="font-mono text-[13px]">
+                  http://localhost:4310
+                </code>
+                , then finish the setup wizard.
               </p>
             </div>
 
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => {
-                const Icon = feature.icon;
-                return (
-                  <li key={feature.title}>
-                    <article className="feature-card group flex h-full flex-col rounded-2xl border border-stone-200 bg-white p-6 dark:border-white/8 dark:bg-[#111113]">
-                      <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-[color-mix(in_oklab,var(--landing-brand)_12%,transparent)] text-[var(--landing-brand)] transition-colors group-hover:bg-[color-mix(in_oklab,var(--landing-brand)_18%,transparent)]">
-                        <Icon
-                          aria-hidden
-                          className="size-5"
-                          strokeWidth={1.75}
-                        />
-                      </div>
-                      <h3 className="mb-2 font-semibold text-base text-stone-900 tracking-tight dark:text-white">
-                        {feature.title}
-                      </h3>
-                      <p className="text-sm text-stone-600 leading-relaxed dark:text-white/50">
-                        {feature.details}
-                      </p>
-                    </article>
-                  </li>
-                );
-              })}
+            <CopyCommand command={DOCKER_COMMAND} />
+
+            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-stone-600 dark:text-white/50">
+              <Link
+                className="underline-offset-4 hover:text-stone-900 hover:underline dark:hover:text-white"
+                href="/docker"
+              >
+                Docker docs
+              </Link>
+              <Link
+                className="underline-offset-4 hover:text-stone-900 hover:underline dark:hover:text-white"
+                href="/first-time-setup"
+              >
+                First-time setup
+              </Link>
+              <Link
+                className="underline-offset-4 hover:text-stone-900 hover:underline dark:hover:text-white"
+                href="/quickstart"
+              >
+                Bun from source
+              </Link>
+              <a
+                className="underline-offset-4 hover:text-stone-900 hover:underline dark:hover:text-white"
+                href={MANAGED_URL}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Managed hosting
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-stone-200 border-t px-6 py-16 md:py-24 dark:border-white/10">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-10 max-w-2xl">
+              <h2 className="landing-section-title text-3xl md:text-4xl">
+                Built for teams that self-host.
+              </h2>
+              <p className="mt-3 text-stone-600 dark:text-white/50">
+                Facts from the product — not slogans.
+              </p>
+            </div>
+
+            <ul className="border border-stone-200 dark:border-white/10">
+              {proofPoints.map((point) => (
+                <li
+                  className="proof-row grid gap-2 px-5 py-5 sm:grid-cols-[14rem_1fr] sm:gap-8"
+                  key={point.title}
+                >
+                  <h3 className="font-medium text-stone-900 dark:text-white">
+                    {point.title}
+                  </h3>
+                  <p className="text-sm text-stone-600 leading-relaxed dark:text-white/50">
+                    {point.details}
+                  </p>
+                </li>
+              ))}
             </ul>
           </div>
         </section>
 
-        <section className="border-stone-200 border-t px-6 py-16 md:py-20 dark:border-white/5">
-          <div className="mx-auto flex max-w-6xl flex-col items-stretch justify-between gap-8 rounded-2xl border border-stone-200 bg-white p-8 sm:items-start lg:flex-row lg:items-center lg:p-10 dark:border-white/8 dark:bg-[#111113]">
+        <section className="border-stone-200 border-t px-6 py-16 md:py-20 dark:border-white/10">
+          <div className="mx-auto flex max-w-6xl flex-col items-stretch justify-between gap-8 border border-stone-200 bg-white p-8 sm:items-start lg:flex-row lg:items-center lg:p-10 dark:border-white/10 dark:bg-[#111113]">
             <div className="max-w-xl">
-              <h2 className="landing-section-title font-medium text-2xl tracking-tight md:text-3xl">
-                Open source forever.
+              <h2 className="landing-section-title text-2xl md:text-3xl">
+                Open source under MIT.
               </h2>
               <p className="mt-3 text-stone-600 dark:text-white/50">
-                Deploy once — or use managed hosting — create orgs and profiles,
-                and route each task to the right agent.
+                Clone the repo, run Docker or Bun, create orgs and profiles, and
+                route work to the right agent.
               </p>
             </div>
             <div className="flex w-full shrink-0 flex-col gap-3 sm:w-auto sm:flex-row">
-              <Link
+              <a
                 className="hero-cta-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto"
-                href="/quickstart"
+                href="#deploy"
               >
-                Read the docs
+                Copy Docker commands
                 <ArrowRight01Icon aria-hidden className="size-4" />
-              </Link>
+              </a>
               <a
                 className="hero-cta-secondary w-full justify-center sm:w-auto"
-                href="https://github.com/ahmadrosid/nakama"
+                href={GITHUB_REPO_URL}
                 rel="noreferrer"
                 target="_blank"
               >
@@ -259,7 +277,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      <footer className="border-stone-200 border-t px-6 py-6 text-center text-sm text-stone-500 dark:border-white/5 dark:text-white/40">
+      <footer className="border-stone-200 border-t px-6 py-6 text-center text-sm text-stone-500 dark:border-white/10 dark:text-white/40">
         <p>Released under the MIT License.</p>
         <p>Copyright © Nakama contributors</p>
       </footer>
