@@ -50,6 +50,11 @@ import type {
   StoredSkillRecord,
   StoredSkillUsageRecord,
 } from "@nakama/db";
+import {
+  assignmentIdsValue,
+  type ProfileChangeMeta,
+  recordProfileChangeEvent,
+} from "./profile-change-history";
 
 export interface SkillUsageRecordingContext {
   seenCatalogSkillIds: Set<string>;
@@ -299,10 +304,13 @@ export class SkillsService {
     orgId: string,
     profileId: string,
     content: string,
-    options?: { createdBy?: SkillCreatedBy }
+    options?: { createdBy?: SkillCreatedBy; changeMeta?: ProfileChangeMeta }
   ): Promise<SkillResponse & { created: boolean }> {
     const { name } = parseRawProfileSkillContent(content, orgId, profileId);
     const createdBy = options?.createdBy ?? "agent";
+    const beforeIds = (await this.db.listSkillsForProfile(profileId)).map(
+      (entry) => entry.id
+    );
 
     const existingByName = await this.db.getSkillByName(name, orgId);
     if (
@@ -351,6 +359,22 @@ export class SkillsService {
     );
 
     await this.db.assignSkillToProfile(profileId, record.id);
+    const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
+      (entry) => entry.id
+    );
+
+    if (options?.changeMeta) {
+      await recordProfileChangeEvent(this.db, {
+        actorUserId: options.changeMeta.actorUserId,
+        afterValue: assignmentIdsValue(afterIds),
+        beforeValue: assignmentIdsValue(beforeIds),
+        field: "skills",
+        orgId,
+        profileId,
+        source: options.changeMeta.source,
+      });
+    }
+
     const response = await this.getSkill(record.id);
     return { ...response, created: written.created };
   }
@@ -359,7 +383,8 @@ export class SkillsService {
     orgId: string,
     profileId: string,
     name: string,
-    content: string
+    content: string,
+    meta?: ProfileChangeMeta
   ): Promise<SkillResponse> {
     const skillName = assertValidSkillName(name);
     const { name: parsedName } = parseRawProfileSkillContent(
@@ -374,7 +399,15 @@ export class SkillsService {
       );
     }
 
-    await this.assertProfileOwnedSkill(orgId, profileId, skillName);
+    const recordBefore = await this.assertProfileOwnedSkill(
+      orgId,
+      profileId,
+      skillName
+    );
+    const beforeContent = await readFile(
+      path.join(recordBefore.sourcePath, SKILL_FILE_NAME),
+      "utf8"
+    );
 
     const written = await writeRawProfileSkillMarkdown({
       allowExisting: true,
@@ -396,6 +429,18 @@ export class SkillsService {
     );
 
     await this.recordPatch(orgId, profileId, record.id);
+
+    if (meta && beforeContent !== content) {
+      await recordProfileChangeEvent(this.db, {
+        actorUserId: meta.actorUserId,
+        afterValue: content,
+        beforeValue: beforeContent,
+        field: "skills",
+        orgId,
+        profileId,
+        source: meta.source,
+      });
+    }
 
     return this.getSkill(record.id);
   }
@@ -445,8 +490,19 @@ export class SkillsService {
     profileId: string,
     name: string,
     oldString: string,
-    newString: string
+    newString: string,
+    meta?: ProfileChangeMeta
   ): Promise<SkillResponse> {
+    const recordBefore = await this.assertProfileOwnedSkill(
+      orgId,
+      profileId,
+      assertValidSkillName(name)
+    );
+    const beforeContent = await readFile(
+      path.join(recordBefore.sourcePath, SKILL_FILE_NAME),
+      "utf8"
+    );
+
     const patched = await patchSkillFile({
       name,
       newString,
@@ -463,13 +519,30 @@ export class SkillsService {
 
     await this.recordPatch(orgId, profileId, record.id);
 
+    if (meta) {
+      const afterContent = await readFile(
+        path.join(record.sourcePath, SKILL_FILE_NAME),
+        "utf8"
+      );
+      await recordProfileChangeEvent(this.db, {
+        actorUserId: meta.actorUserId,
+        afterValue: afterContent,
+        beforeValue: beforeContent,
+        field: "skills",
+        orgId,
+        profileId,
+        source: meta.source,
+      });
+    }
+
     return this.getSkill(record.id);
   }
 
   async deleteAssignedProfileSkill(
     orgId: string,
     profileId: string,
-    name: string
+    name: string,
+    meta?: ProfileChangeMeta
   ): Promise<void> {
     const skillName = assertValidSkillName(name);
     assertNotBundledSkillName(skillName);
@@ -489,6 +562,10 @@ export class SkillsService {
       );
     }
 
+    const beforeIds = (await this.db.listSkillsForProfile(profileId)).map(
+      (entry) => entry.id
+    );
+
     await this.db.unassignSkillFromProfile(profileId, record.id);
     const deleted = await this.db.deleteSkill(record.id);
 
@@ -497,6 +574,21 @@ export class SkillsService {
     }
 
     await deleteSkillDirectory(record.sourcePath);
+
+    if (meta) {
+      const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+      await recordProfileChangeEvent(this.db, {
+        actorUserId: meta.actorUserId,
+        afterValue: assignmentIdsValue(afterIds),
+        beforeValue: assignmentIdsValue(beforeIds),
+        field: "skills",
+        orgId,
+        profileId,
+        source: meta.source,
+      });
+    }
   }
 
   async unassignArchivedProfileSkill(

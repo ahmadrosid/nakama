@@ -413,7 +413,13 @@ export function createSkillManageTools(
           const response = await service.createAndAssignRawSkillToProfile(
             orgId,
             profileId,
-            content
+            content,
+            {
+              changeMeta: {
+                actorUserId: context.userId ?? null,
+                source: "skill_manage",
+              },
+            }
           );
 
           return skillManageResult({
@@ -445,7 +451,11 @@ export function createSkillManageTools(
             profileId,
             name,
             oldString,
-            newString
+            newString,
+            {
+              actorUserId: context.userId ?? null,
+              source: "skill_manage",
+            }
           );
 
           return skillManageResult({
@@ -472,7 +482,11 @@ export function createSkillManageTools(
             orgId,
             profileId,
             name,
-            content
+            content,
+            {
+              actorUserId: context.userId ?? null,
+              source: "skill_manage",
+            }
           );
 
           return skillManageResult({
@@ -544,7 +558,10 @@ export function createSkillManageTools(
           throw new Error("name is required for delete.");
         }
 
-        await service.deleteAssignedProfileSkill(orgId, profileId, name);
+        await service.deleteAssignedProfileSkill(orgId, profileId, name, {
+          actorUserId: context.userId ?? null,
+          source: "skill_manage",
+        });
 
         return skillManageResult({
           action: "delete",

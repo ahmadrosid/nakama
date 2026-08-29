@@ -337,26 +337,28 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/profiles/:profileId/mcp-servers", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<AssignMcpServerRequest>(c.req.raw);
     return json<ProfileResponse>(
       await agent.assignMcpServer(
         orgId,
         decodeURIComponent(c.req.param("profileId")),
-        body
+        body,
+        { actorUserId: auth.user.id, source: "dashboard" }
       )
     );
   });
 
   app.delete("/v1/profiles/:profileId/mcp-servers/:serverId", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     return json<ProfileResponse>(
       await agent.unassignMcpServer(
         orgId,
         decodeURIComponent(c.req.param("profileId")),
-        decodeURIComponent(c.req.param("serverId"))
+        decodeURIComponent(c.req.param("serverId")),
+        { actorUserId: auth.user.id, source: "dashboard" }
       )
     );
   });

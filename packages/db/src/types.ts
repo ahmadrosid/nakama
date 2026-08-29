@@ -423,6 +423,35 @@ export interface StoredOrgInviteRecord {
 
 export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
+export type ProfileChangeSource =
+  | "dashboard"
+  | "super_bot"
+  | "skill_manage"
+  | "pack_import";
+
+export type ProfileChangeField =
+  | "system_prompt"
+  | "soul.soul"
+  | "soul.style"
+  | "soul.instructions"
+  | "soul.memory"
+  | "tools"
+  | "skills"
+  | "mcp"
+  | "pack_import";
+
+export interface StoredProfileChangeEvent {
+  actorUserId: string | null;
+  afterValue: string | null;
+  beforeValue: string | null;
+  createdAt: string;
+  field: ProfileChangeField;
+  id: string;
+  orgId: string;
+  profileId: string;
+  source: ProfileChangeSource;
+}
+
 export interface StoredOrgMemoryProposal {
   bullet: string;
   createdAt: string;
@@ -553,6 +582,9 @@ export interface DatabaseAdapter {
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
+
+  /** Append-only insert. Adapters must not expose update/delete for this table. */
+  createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
 
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
@@ -766,6 +798,12 @@ export interface DatabaseAdapter {
     orgId: string,
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
+
+  listProfileChangeEvents(
+    orgId: string,
+    profileId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<StoredProfileChangeEvent[]>;
 
   listProfileComposioToolkits(
     profileId: string

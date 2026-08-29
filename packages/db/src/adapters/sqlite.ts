@@ -24,6 +24,7 @@ import type {
   StoredOrgInviteRecord,
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
+  StoredProfileChangeEvent,
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
   StoredSessionMessageRecord,
@@ -350,6 +351,18 @@ interface OrgMemoryProposalRow {
   reviewer_user_id: string | null;
   session_id: string | null;
   status: string;
+}
+
+interface ProfileChangeEventRow {
+  actor_user_id: string | null;
+  after_value: string | null;
+  before_value: string | null;
+  created_at: string;
+  field: string;
+  id: string;
+  org_id: string;
+  profile_id: string;
+  source: string;
 }
 
 interface SkillProposalRow {
@@ -1339,6 +1352,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const createProfileChangeEventStmt = db.prepare(`
+    INSERT INTO profile_change_events (
+      id, org_id, profile_id, actor_user_id, source, field,
+      before_value, after_value, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const listProfileChangeEventsStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, actor_user_id, source, field,
+      before_value, after_value, created_at
+    FROM profile_change_events
+    WHERE org_id = ? AND profile_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `);
   const listOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
@@ -1707,6 +1735,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.pinned ? 1 : 0,
         record.reviewerUserId,
         record.reviewedAt,
+        record.createdAt
+      );
+    },
+
+    async createProfileChangeEvent(record) {
+      createProfileChangeEventStmt.run(
+        record.id,
+        record.orgId,
+        record.profileId,
+        record.actorUserId,
+        record.source,
+        record.field,
+        record.beforeValue,
+        record.afterValue,
         record.createdAt
       );
     },
@@ -2407,6 +2449,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : listAllOrgMemoryProposalsStmt.all(orgId)
       ) as OrgMemoryProposalRow[];
       return rows.map(toOrgMemoryProposalRecord);
+    },
+
+    async listProfileChangeEvents(orgId, profileId, options = {}) {
+      const limit = options.limit ?? 100;
+      const offset = options.offset ?? 0;
+      const rows = listProfileChangeEventsStmt.all(
+        orgId,
+        profileId,
+        limit,
+        offset
+      ) as ProfileChangeEventRow[];
+      return rows.map(toProfileChangeEventRecord);
     },
 
     async listProfileComposioToolkits(profileId) {
@@ -3621,6 +3675,22 @@ function toOrgMemoryProposalRecord(
     reviewerUserId: row.reviewer_user_id,
     sessionId: row.session_id,
     status: row.status as OrgMemoryProposalStatus,
+  };
+}
+
+function toProfileChangeEventRecord(
+  row: ProfileChangeEventRow
+): StoredProfileChangeEvent {
+  return {
+    actorUserId: row.actor_user_id,
+    afterValue: row.after_value,
+    beforeValue: row.before_value,
+    createdAt: row.created_at,
+    field: row.field as StoredProfileChangeEvent["field"],
+    id: row.id,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    source: row.source as StoredProfileChangeEvent["source"],
   };
 }
 

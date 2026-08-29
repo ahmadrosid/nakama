@@ -40,6 +40,7 @@ export function migrateDatabase(db: Database): void {
   migrateAutomationRunReadStateTable(db);
   migrateComposioTables(db);
   migrateComposioUserConnections(db);
+  migrateProfileChangeEventsTable(db);
 }
 
 export function resolveSchemaPath(
@@ -1402,6 +1403,30 @@ function migrateComposioUserConnections(db: Database): void {
 
     normalizeToolkitStmt.run(now, toolkit.id);
   }
+}
+
+function migrateProfileChangeEventsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS profile_change_events (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL,
+      actor_user_id TEXT,
+      source TEXT NOT NULL,
+      field TEXT NOT NULL,
+      before_value TEXT,
+      after_value TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
+      ON profile_change_events (profile_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS profile_change_events_org_profile
+      ON profile_change_events (org_id, profile_id, created_at DESC);
+  `);
 }
 
 function migrateComposioTables(db: Database): void {

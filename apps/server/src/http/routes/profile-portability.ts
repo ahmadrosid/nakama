@@ -213,6 +213,7 @@ export function registerProfilePortabilityRoutes(
         orgId,
         decodeArchiveRequestData(body.data),
         {
+          actorUserId: auth.user.id,
           confirm: body.confirm,
           name: body.name,
           restoreCustomTools: auth.isPlatformAdmin,

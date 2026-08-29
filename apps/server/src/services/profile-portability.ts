@@ -43,6 +43,7 @@ import type {
 import { unzipSync, zipSync } from "fflate";
 import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
+import { recordProfileChangeEvent } from "./profile-change-history";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
 const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
@@ -111,6 +112,7 @@ export interface CreateProfilePackResult {
 }
 
 export interface ImportProfilePackOptions {
+  actorUserId?: string | null;
   confirm: boolean;
   name?: string;
   now?: Date;
@@ -363,6 +365,17 @@ export async function importProfilePack(
       manifest.meta.composioToolkitSlugs,
       skippedAssignments
     );
+
+    await recordProfileChangeEvent(db, {
+      actorUserId: options.actorUserId,
+      afterValue: JSON.stringify({ name, profileId }),
+      beforeValue: null,
+      createdAt: now,
+      field: "pack_import",
+      orgId,
+      profileId,
+      source: "pack_import",
+    });
 
     return { manifest, profileId, skippedAssignments };
   } catch (error) {

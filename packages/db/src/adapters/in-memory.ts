@@ -20,6 +20,7 @@ import type {
   StoredOrgInviteRecord,
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
+  StoredProfileChangeEvent,
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
   StoredSessionMessageRecord,
@@ -76,6 +77,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const orgInvites = new Map<string, StoredOrgInviteRecord>();
   const orgInvitesByTokenHash = new Map<string, StoredOrgInviteRecord>();
   const orgMemoryProposals = new Map<string, StoredOrgMemoryProposal>();
+  const profileChangeEvents = new Map<string, StoredProfileChangeEvent>();
   const skillProposals = new Map<string, StoredSkillProposal>();
   const skillSuggestions = new Map<string, StoredSkillSuggestion>();
   const artifactShares = new Map<string, StoredArtifactShareRecord>();
@@ -220,6 +222,10 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async createOrgMemoryProposal(record) {
       orgMemoryProposals.set(record.id, record);
+    },
+
+    async createProfileChangeEvent(record) {
+      profileChangeEvents.set(record.id, record);
     },
 
     async createSkillProposal(record) {
@@ -920,6 +926,20 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
         ? proposals.filter((proposal) => proposal.status === status)
         : proposals;
       return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async listProfileChangeEvents(orgId, profileId, options = {}) {
+      const limit = options.limit ?? 100;
+      const offset = options.offset ?? 0;
+      return [...profileChangeEvents.values()]
+        .filter(
+          (event) => event.orgId === orgId && event.profileId === profileId
+        )
+        .sort((a, b) => {
+          const byTime = b.createdAt.localeCompare(a.createdAt);
+          return byTime === 0 ? b.id.localeCompare(a.id) : byTime;
+        })
+        .slice(offset, offset + limit);
     },
 
     async listProfileComposioToolkits(profileId) {

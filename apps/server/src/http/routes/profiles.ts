@@ -8,6 +8,7 @@ import type {
   InitSoulResponse,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
+  ListProfileChangeHistoryResponse,
   ListProfilesResponse,
   ProfileResponse,
   SoulStackResponse,
@@ -234,6 +235,54 @@ export function registerProfileRoutes(
         },
       },
       summary: "Update a bot profile",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listProfileChangeHistory",
+      path: "/v1/profiles/{profileId}/history",
+      request: {
+        params: profileIdParam,
+        query: z.object({
+          limit: z.coerce.number().int().min(1).max(200).optional(),
+          offset: z.coerce.number().int().min(0).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z.object({
+                events: z.array(
+                  z.object({
+                    actorUserId: z.string().nullable(),
+                    afterValue: z.string().nullable(),
+                    beforeValue: z.string().nullable(),
+                    createdAt: z.string(),
+                    field: z.string(),
+                    id: z.string(),
+                    orgId: z.string(),
+                    profileId: z.string(),
+                    source: z.string(),
+                  })
+                ),
+              }),
+            },
+          },
+          description: "Profile change history",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Forbidden",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Not found",
+        },
+      },
+      summary: "List append-only profile change history",
       tags: ["Profiles"],
     })
   );
@@ -682,7 +731,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/soul/files/:fileKey", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readJson<UpdateSoulFileRequest>(c.req.raw);
@@ -690,7 +739,8 @@ export function registerProfileRoutes(
       orgId,
       profileId,
       decodeURIComponent(c.req.param("fileKey")),
-      body
+      body,
+      { actorUserId: auth.user.id, source: "dashboard" }
     );
     return new Response(null, { status: 204 });
   });
@@ -904,6 +954,33 @@ export function registerProfileRoutes(
     return json<ProfileResponse>(await agent.getProfile(orgId, profileId));
   });
 
+  app.get("/v1/profiles/:profileId/history", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const limitRaw = c.req.query("limit");
+    const offsetRaw = c.req.query("offset");
+    const limit =
+      limitRaw === undefined ? undefined : Number.parseInt(limitRaw, 10);
+    const offset =
+      offsetRaw === undefined ? undefined : Number.parseInt(offsetRaw, 10);
+
+    if (
+      limit !== undefined &&
+      (!Number.isFinite(limit) || limit < 1 || limit > 200)
+    ) {
+      return json({ error: "limit must be an integer between 1 and 200" }, 400);
+    }
+
+    if (offset !== undefined && (!Number.isFinite(offset) || offset < 0)) {
+      return json({ error: "offset must be a non-negative integer" }, 400);
+    }
+
+    return json<ListProfileChangeHistoryResponse>(
+      await agent.listProfileChangeHistory(orgId, profileId, { limit, offset })
+    );
+  });
+
   app.put("/v1/profiles/:profileId", async (c) => {
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
@@ -918,7 +995,10 @@ export function registerProfileRoutes(
     }
 
     return json<ProfileResponse>(
-      await agent.updateProfile(orgId, profileId, body)
+      await agent.updateProfile(orgId, profileId, body, {
+        actorUserId: auth.user.id,
+        source: "dashboard",
+      })
     );
   });
 

@@ -383,26 +383,28 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/profiles/:profileId/tools", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<AssignToolRequest>(c.req.raw);
     return json<ProfileResponse>(
       await agent.assignTool(
         orgId,
         decodeURIComponent(c.req.param("profileId")),
-        body
+        body,
+        { actorUserId: auth.user.id, source: "dashboard" }
       )
     );
   });
 
   app.delete("/v1/profiles/:profileId/tools/:toolId", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     return json<ProfileResponse>(
       await agent.unassignTool(
         orgId,
         decodeURIComponent(c.req.param("profileId")),
-        decodeURIComponent(c.req.param("toolId"))
+        decodeURIComponent(c.req.param("toolId")),
+        { actorUserId: auth.user.id, source: "dashboard" }
       )
     );
   });

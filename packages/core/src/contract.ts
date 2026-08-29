@@ -1845,6 +1845,39 @@ export interface UpdateProfileRequest {
   systemPrompt?: string;
 }
 
+export type ProfileChangeSource =
+  | "dashboard"
+  | "super_bot"
+  | "skill_manage"
+  | "pack_import";
+
+export type ProfileChangeField =
+  | "system_prompt"
+  | "soul.soul"
+  | "soul.style"
+  | "soul.instructions"
+  | "soul.memory"
+  | "tools"
+  | "skills"
+  | "mcp"
+  | "pack_import";
+
+export interface ProfileChangeEvent {
+  actorUserId: string | null;
+  afterValue: string | null;
+  beforeValue: string | null;
+  createdAt: string;
+  field: ProfileChangeField;
+  id: string;
+  orgId: string;
+  profileId: string;
+  source: ProfileChangeSource;
+}
+
+export interface ListProfileChangeHistoryResponse {
+  events: ProfileChangeEvent[];
+}
+
 export interface CreateToolRequest {
   description: string;
   handlerConfig?: unknown;

@@ -11,12 +11,22 @@ export type ProfileSaveStatus =
   | "saved"
   | "error";
 
-export type ProfileDetailTab = "profile" | "prompt" | "knowledge" | "proposals";
+export type ProfileDetailTab =
+  | "profile"
+  | "prompt"
+  | "knowledge"
+  | "proposals"
+  | "history";
 
 export function resolveProfileDetailTab(
   value: string | null
 ): ProfileDetailTab {
-  if (value === "prompt" || value === "knowledge" || value === "proposals") {
+  if (
+    value === "prompt" ||
+    value === "knowledge" ||
+    value === "proposals" ||
+    value === "history"
+  ) {
     return value;
   }
 
