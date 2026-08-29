@@ -3,8 +3,11 @@ import {
   access,
   chmod,
   mkdir,
+  open,
   readdir,
   readFile,
+  rename,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -69,10 +72,32 @@ export async function writeTextFile(
   const mode = options.mode ?? PRIVATE_FILE_MODE;
   const directory = options.ensureDir ?? dirname(path);
   await ensureDir(directory, options.ensureDirMode ?? PRIVATE_DIR_MODE);
-  await writeFile(path, content, { encoding: "utf8", mode });
+
+  let preserveMode: number | undefined;
+  if (options.chmod === false && (await pathExists(path))) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: permission bits are stored in st_mode.
+    preserveMode = (await stat(path)).mode & 0o777;
+  }
+
+  const tempPath = `${path}.tmp`;
+  await writeFile(tempPath, content, {
+    encoding: "utf8",
+    mode: preserveMode ?? mode,
+  });
+
+  const handle = await open(tempPath, "r+");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+
+  await rename(tempPath, path);
 
   if (options.chmod ?? true) {
     await chmod(path, mode);
+  } else if (preserveMode !== undefined) {
+    await chmod(path, preserveMode);
   }
 }
 

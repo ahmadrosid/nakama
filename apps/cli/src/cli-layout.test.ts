@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
+  createSerializedQueue,
   formatPendingDisplayLines,
   formatPendingSummary,
+  runRejectionSafeDrain,
 } from "./message-queue";
 import { plainLine, styledLine, styledLineText } from "./styled-text";
 import { TerminalLayout } from "./terminal-layout";
@@ -19,6 +21,59 @@ describe("formatPendingSummary", () => {
         },
       })
     ).toBe("[image]");
+  });
+});
+
+describe("createSerializedQueue", () => {
+  test("runs tasks one after another", async () => {
+    const queue = createSerializedQueue();
+    const order: number[] = [];
+
+    const first = queue.enqueue(async () => {
+      await Bun.sleep(20);
+      order.push(1);
+    });
+    const second = queue.enqueue(async () => {
+      order.push(2);
+    });
+
+    await Promise.all([first, second]);
+    expect(order).toEqual([1, 2]);
+  });
+
+  test("continues after a rejected task", async () => {
+    const queue = createSerializedQueue();
+    const order: string[] = [];
+
+    const first = queue.enqueue(async () => {
+      order.push("a");
+      throw new Error("fail");
+    });
+    const second = queue.enqueue(async () => {
+      order.push("b");
+    });
+
+    await expect(first).rejects.toThrow("fail");
+    await second;
+    expect(order).toEqual(["a", "b"]);
+  });
+});
+
+describe("runRejectionSafeDrain", () => {
+  test("resets streaming when drain throws", async () => {
+    let streaming = true;
+
+    await runRejectionSafeDrain({
+      drain: async () => {
+        streaming = true;
+        throw new Error("drain failed");
+      },
+      setStreaming: (value) => {
+        streaming = value;
+      },
+    });
+
+    expect(streaming).toBe(false);
   });
 });
 
