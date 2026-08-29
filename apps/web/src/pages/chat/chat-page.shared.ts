@@ -36,7 +36,7 @@ export function findRetryCheckpoint(
   );
 }
 
-export function buildFailedAssistantMessage(error: string): ChatListItem {
+function buildFailedAssistantMessage(error: string): ChatListItem {
   return {
     content: error,
     failed: true,
