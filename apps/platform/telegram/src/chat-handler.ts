@@ -121,18 +121,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       : null;
 
     if (groupDecision && !groupDecision.shouldHandle) {
-      console.log(
-        [
-          "Ignored Telegram group message",
-          `reason=${groupDecision.reason}`,
-          `bot=@${botInfo?.username ?? "unknown"}`,
+      const parts = [
+        "Ignored Telegram group message",
+        `reason=${groupDecision.reason}`,
+        `bot=@${botInfo?.username ?? "unknown"}`,
+        `messageId=${ctx.message?.message_id ?? "unknown"}`,
+        `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
+      ];
+      if (process.env.NAKAMA_CH_DEBUG === "1") {
+        parts.splice(
+          3,
+          0,
           `botId=${botInfo?.id ?? "unknown"}`,
           `chatId=${chatId}`,
-          `messageId=${ctx.message?.message_id ?? "unknown"}`,
-          `userId=${userId}`,
-          `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
-        ].join(" ")
-      );
+          `userId=${userId}`
+        );
+      }
+      console.log(parts.join(" "));
       return;
     }
 

@@ -40,6 +40,8 @@ import { sendStreamCancellable } from "./stream-abort";
 import { styledLine } from "./styled-text";
 import { TerminalInput } from "./terminal-input";
 import { TerminalRenderer } from "./terminal-renderer";
+import { printLine } from "./terminal-safe";
+import { stripAnsi } from "./text-measure";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
@@ -73,7 +75,9 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   const renderer = new TerminalRenderer(terminalInput);
   const useStickyInput = renderer.apply();
 
-  console.log(`Profile: ${currentProfile.name} (${currentProfile.id})`);
+  console.log(
+    `Profile: ${stripAnsi(currentProfile.name)} (${stripAnsi(currentProfile.id)})`
+  );
   console.log("");
 
   if (options.offline) {
@@ -1060,8 +1064,8 @@ async function printCurrentModel(
     return;
   }
 
-  write(`Provider: ${models.provider}`);
-  write(`Model: ${active.modelId}`);
+  write(`Provider: ${stripAnsi(String(models.provider))}`);
+  write(`Model: ${stripAnsi(String(active.modelId))}`);
 }
 
 export function formatStatusLines(
@@ -1084,11 +1088,11 @@ export function formatStatusLines(
     : { modelId: null, providerId: models?.currentProviderId ?? null };
 
   if (profile) {
-    lines.push(`Profile: ${profile.name}`);
+    lines.push(`Profile: ${stripAnsi(profile.name)}`);
   }
 
-  lines.push(`Provider: ${models?.provider ?? "unknown"}`);
-  lines.push(`Model: ${active.modelId ?? "none"}`);
+  lines.push(`Provider: ${stripAnsi(models?.provider ?? "unknown")}`);
+  lines.push(`Model: ${stripAnsi(active.modelId ?? "none")}`);
 
   return lines;
 }
@@ -1150,7 +1154,12 @@ function formatError(error: unknown): string {
 }
 
 export function formatErrorLines(error: unknown): string[] {
-  return ["", ...formatError(error).split(/\r?\n/)];
+  return [
+    "",
+    ...formatError(error)
+      .split(/\r?\n/)
+      .map((line) => stripAnsi(line)),
+  ];
 }
 
 /** Disable raw mode only when stdin is a TTY currently in raw mode. */
@@ -1253,7 +1262,7 @@ function startEscAbortListener(onAbort: () => void): () => void {
 
 function printError(error: unknown): void {
   for (const line of formatErrorLines(error)) {
-    console.log(line);
+    printLine(line);
   }
 }
 
@@ -1272,7 +1281,7 @@ function formatProfilesLines(
       .join(", ");
 
     lines.push(
-      `  ${profile.id} — ${profile.name}${markers ? ` (${markers})` : ""}`
+      `  ${stripAnsi(profile.id)} — ${stripAnsi(profile.name)}${markers ? ` (${markers})` : ""}`
     );
   }
 

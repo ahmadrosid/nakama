@@ -11,6 +11,7 @@ import {
 import { type LinkSafetyModalProps, StreamdownContext } from "streamdown";
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
 import { YoutubeEmbed } from "@/components/ai-elements/youtube-embed";
+import { openMarkdownExternalLink } from "@/lib/markdown-external-link";
 import { cn } from "@/lib/utils";
 import { parseYoutubeVideoId } from "@/lib/youtube-url";
 
@@ -55,7 +56,7 @@ function SafeMarkdownLink({
       }
       event.preventDefault();
       if (linkSafety.onLinkCheck && (await linkSafety.onLinkCheck(href))) {
-        window.open(href, "_blank", "noreferrer");
+        openMarkdownExternalLink(href);
         return;
       }
       setOpen(true);
@@ -65,7 +66,7 @@ function SafeMarkdownLink({
 
   const onConfirm = useCallback(() => {
     if (href) {
-      window.open(href, "_blank", "noreferrer");
+      openMarkdownExternalLink(href);
     }
   }, [href]);
 
@@ -109,7 +110,7 @@ function SafeMarkdownLink({
       data-incomplete={incomplete || undefined}
       data-streamdown="link"
       href={href}
-      rel="noreferrer"
+      rel="noopener noreferrer"
       target="_blank"
       {...rest}
     >

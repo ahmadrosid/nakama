@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProfileSummary } from "@nakama/core";
 import {
+  formatProfileLine,
   parseCliProfileArgs,
   resolveProfileInput,
   sortProfilesForPicker,
@@ -67,5 +68,17 @@ describe("resolveProfileInput", () => {
 
   test("returns undefined for unknown input", () => {
     expect(resolveProfileInput(sampleProfiles, "missing")).toBeUndefined();
+  });
+});
+
+describe("formatProfileLine", () => {
+  test("strips ANSI from profile name and id", () => {
+    const formatted = formatProfileLine(
+      profile({ id: "id_\x1b[31mx", name: "Bot\x1b[2J" }),
+      0
+    );
+    expect(formatted).not.toContain("\x1b");
+    expect(formatted).toContain("Bot");
+    expect(formatted).toContain("id_x");
   });
 });

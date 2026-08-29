@@ -113,6 +113,8 @@ describe("createChatHandler group chats", () => {
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
+        expect(output).not.toContain("userId=42");
+        expect(output).not.toContain("chatId=-100123");
       } finally {
         log.mockRestore();
       }

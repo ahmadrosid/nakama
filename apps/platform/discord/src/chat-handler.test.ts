@@ -134,6 +134,9 @@ describe("createChatHandler logging", () => {
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
+        expect(output).not.toContain(dm.message.author.id);
+        expect(output).not.toContain("dm_channel_1");
+        expect(output).not.toContain("channelId=");
       } finally {
         log.mockRestore();
       }
