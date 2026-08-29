@@ -1,3 +1,4 @@
+import { NakamaApiError } from "@nakama/core/api-error";
 import type { KnowledgeBaseDocument } from "@nakama/core/contract";
 import { useEffect, useRef, useState } from "react";
 import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
@@ -23,6 +24,13 @@ import {
   isKnowledgeBaseFile,
 } from "@/lib/knowledge-base-files";
 
+type DuplicateDecision = "skip" | "replace" | "cancel";
+
+type DuplicatePrompt = {
+  filename: string;
+  resolve: (decision: DuplicateDecision) => void;
+};
+
 export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const { data: profiles = [], error: profilesError } = useProfilesQuery();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +44,8 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<KnowledgeBaseDocument | null>(null);
+  const [duplicatePrompt, setDuplicatePrompt] =
+    useState<DuplicatePrompt | null>(null);
 
   const selectedProfile =
     profiles.find((profile) => profile.id === profileId) ?? null;
@@ -45,7 +55,10 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     (document) => document.status === "ready"
   ).length;
   const loading = knowledgeLoading && !knowledgeBase;
-  const busy = uploadMutation.isPending || deleteMutation.isPending;
+  const busy =
+    uploadMutation.isPending ||
+    deleteMutation.isPending ||
+    duplicatePrompt !== null;
 
   useEffect(() => {
     const queryError = profilesError ?? knowledgeError;
@@ -54,6 +67,12 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     }
   }, [profilesError, knowledgeError]);
 
+  function askDuplicateDecision(filename: string): Promise<DuplicateDecision> {
+    return new Promise((resolve) => {
+      setDuplicatePrompt({ filename, resolve });
+    });
+  }
+
   async function handleUpload(files: FileList | null) {
     if (!(profileId && files?.length)) {
       return;
@@ -61,28 +80,44 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
 
     setError(null);
 
-    await Promise.all(
-      Array.from(files).map(async (file) => {
-        if (!isKnowledgeBaseFile(file)) {
-          setError(
-            `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
-          );
-          return;
+    for (const file of Array.from(files)) {
+      if (!isKnowledgeBaseFile(file)) {
+        setError(
+          `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
+        );
+        continue;
+      }
+
+      try {
+        const document = await fileToDocumentAttachment(file);
+        if (!document) {
+          setError(`Failed to read file: ${file.name}`);
+          continue;
         }
 
         try {
-          const document = await fileToDocumentAttachment(file);
-          if (!document) {
-            setError(`Failed to read file: ${file.name}`);
-            return;
-          }
-
           await uploadMutation.mutateAsync({ document, profileId });
         } catch (err) {
-          setError(formatError(err));
+          if (!(err instanceof NakamaApiError && err.status === 409)) {
+            throw err;
+          }
+
+          const decision = await askDuplicateDecision(file.name);
+          if (decision === "cancel" || decision === "skip") {
+            continue;
+          }
+
+          await uploadMutation.mutateAsync({
+            document,
+            onDuplicate: "replace",
+            profileId,
+          });
         }
-      })
-    );
+      } catch (err) {
+        setError(formatError(err));
+        break;
+      }
+    }
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -172,6 +207,56 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
             >
               {deleteMutation.isPending ? <Spinner className="size-4" /> : null}
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open && duplicatePrompt) {
+            duplicatePrompt.resolve("cancel");
+            setDuplicatePrompt(null);
+          }
+        }}
+        open={duplicatePrompt !== null}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Duplicate document</DialogTitle>
+            <DialogDescription>
+              {duplicatePrompt?.filename} is already in this knowledge base.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                duplicatePrompt?.resolve("cancel");
+                setDuplicatePrompt(null);
+              }}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                duplicatePrompt?.resolve("skip");
+                setDuplicatePrompt(null);
+              }}
+              type="button"
+              variant="outline"
+            >
+              Skip
+            </Button>
+            <Button
+              onClick={() => {
+                duplicatePrompt?.resolve("replace");
+                setDuplicatePrompt(null);
+              }}
+              type="button"
+            >
+              Replace
             </Button>
           </DialogFooter>
         </DialogContent>
