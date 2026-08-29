@@ -145,6 +145,12 @@ describe("buildTelegramDocumentInput", () => {
 });
 
 describe("downloadTelegramFile", () => {
+  let fetchSpy: ReturnType<typeof spyOn> | undefined;
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
   test("surfaces download failures to caller", async () => {
     const ctx = {
       api: {
@@ -158,5 +164,67 @@ describe("downloadTelegramFile", () => {
     await expect(
       downloadTelegramFile(ctx, "file-1", MAX_DOCUMENT_BYTES)
     ).rejects.toThrow("network down");
+  });
+
+  test("aborts while streaming once the body exceeds the cap", async () => {
+    const maxBytes = 8;
+    let pulls = 0;
+
+    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls === 1) {
+              controller.enqueue(new Uint8Array(4).fill(65));
+            } else if (pulls === 2) {
+              controller.enqueue(new Uint8Array(8).fill(66));
+            }
+            // Cap exceeded should cancel before we keep producing forever.
+          },
+        }),
+        {
+          headers: { "content-type": "application/pdf" },
+          status: 200,
+        }
+      )
+    );
+
+    const ctx = {
+      api: {
+        getFile: async () => ({
+          file_path: "documents/big.pdf",
+        }),
+        token: "test-token",
+      },
+    } as unknown as Context;
+
+    await expect(downloadTelegramFile(ctx, "file-1", maxBytes)).rejects.toThrow(
+      "File is too large."
+    );
+    expect(pulls).toBeLessThanOrEqual(3);
+  });
+
+  test("rejects oversized body when file_size is omitted", async () => {
+    const maxBytes = 8;
+    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array(maxBytes + 1).fill(66), {
+        headers: { "content-type": "application/pdf" },
+        status: 200,
+      })
+    );
+
+    const ctx = {
+      api: {
+        getFile: async () => ({
+          file_path: "documents/liar.pdf",
+        }),
+        token: "test-token",
+      },
+    } as unknown as Context;
+
+    await expect(downloadTelegramFile(ctx, "file-1", maxBytes)).rejects.toThrow(
+      "File is too large."
+    );
   });
 });

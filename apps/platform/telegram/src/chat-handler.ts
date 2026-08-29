@@ -453,59 +453,61 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const typingLoop = createTypingLoop(ctx);
     const todoStatus = new TelegramTodoStatusMessage(telegram);
-    const signal = registerActiveStream(conversationKey);
     let reply = "";
-
-    typingLoop.start();
+    const signal = registerActiveStream(conversationKey);
 
     try {
-      reply = await session.sendStream(
-        input,
-        {
-          onChunk: (delta) => {
-            reply += delta;
-          },
-          onThinking: () => {
-            typingLoop.ping();
-          },
-          onTodosUpdated: (todos) => {
-            typingLoop.ping();
-            void todoStatus.update(todos);
-          },
-          onToolEnd: () => {
-            typingLoop.ping();
-          },
-          onToolStart: () => {
-            typingLoop.ping();
-          },
-        },
-        { signal }
-      );
+      typingLoop.start();
 
-      await todoStatus.complete();
+      try {
+        reply = await session.sendStream(
+          input,
+          {
+            onChunk: (delta) => {
+              reply += delta;
+            },
+            onThinking: () => {
+              typingLoop.ping();
+            },
+            onTodosUpdated: (todos) => {
+              typingLoop.ping();
+              void todoStatus.update(todos);
+            },
+            onToolEnd: () => {
+              typingLoop.ping();
+            },
+            onToolStart: () => {
+              typingLoop.ping();
+            },
+          },
+          { signal }
+        );
 
-      if (signal.aborted) {
-        if (reply.trim()) {
-          await replyAsChat(telegram, reply);
+        await todoStatus.complete();
+
+        if (signal.aborted) {
+          if (reply.trim()) {
+            await replyAsChat(telegram, reply);
+          }
+
+          await telegram.send("Stopped.");
+          return;
+        }
+      } catch (error) {
+        if (isAbortError(error)) {
+          await todoStatus.stop();
+          if (reply.trim()) {
+            await replyAsChat(telegram, reply);
+          }
+
+          await telegram.send("Stopped.");
+          return;
         }
 
-        await telegram.send("Stopped.");
+        await todoStatus.fail();
+        await telegram.send(formatError(error));
         return;
       }
-    } catch (error) {
-      if (isAbortError(error)) {
-        await todoStatus.stop();
-        if (reply.trim()) {
-          await replyAsChat(telegram, reply);
-        }
-
-        await telegram.send("Stopped.");
-        return;
-      }
-
-      await todoStatus.fail();
-      await telegram.send(formatError(error));
-      return;
     } finally {
       clearActiveStream(conversationKey);
       typingLoop.stop();
@@ -897,7 +899,12 @@ function isStopCommand(text: string): boolean {
   return parseTelegramCommand(text) === "/stop";
 }
 
-async function withChatLock(
+/** @internal Test helper — clears the in-process chat lock map. */
+export function resetChatLocksForTests(): void {
+  chatLocks.clear();
+}
+
+export async function withChatLock(
   chatId: string,
   fn: () => Promise<void>
 ): Promise<void> {
@@ -906,11 +913,16 @@ async function withChatLock(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const chain = previous.then(() => current);
+  // Keep the stored chain rejection-safe: a failed previous must not reject
+  // `chain` before `current` settles (unhandledRejection hazard).
+  const chain = previous.then(
+    () => current,
+    () => current
+  );
   chatLocks.set(chatId, chain);
 
   try {
-    await previous;
+    await previous.catch(() => undefined);
     await fn();
   } finally {
     release();

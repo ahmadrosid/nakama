@@ -59,17 +59,55 @@ export async function downloadTelegramFile(
     throw new Error(`Failed to download file (${response.status}).`);
   }
 
-  const bytes = await response.arrayBuffer();
-
-  if (bytes.byteLength > maxBytes) {
-    throw new OversizedTelegramFileError();
-  }
+  const bytes = await readResponseBodyCapped(response, maxBytes);
 
   return {
     bytes,
     contentType: response.headers.get("content-type"),
     filePath: file.file_path,
   };
+}
+
+async function readResponseBodyCapped(
+  response: Response,
+  maxBytes: number
+): Promise<ArrayBuffer> {
+  if (!response.body) {
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > maxBytes) {
+      throw new OversizedTelegramFileError();
+    }
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value || value.byteLength === 0) {
+      continue;
+    }
+
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new OversizedTelegramFileError();
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged.buffer;
 }
 
 export type TelegramDocumentBuildResult =
