@@ -102,6 +102,7 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
     const payload = (await response.json()) as {
       ok?: boolean;
       apiVersion?: number;
+      builtinTools?: string[];
     };
 
     if (payload.ok !== true || payload.apiVersion !== NAKAMA_API_VERSION) {
@@ -112,22 +113,7 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
       return false;
     }
 
-    const toolsResponse = await fetch(`${serverUrl}/v1/tools`, {
-      signal: controller.signal,
-    });
-
-    if (!toolsResponse.ok) {
-      return false;
-    }
-
-    const toolsPayload = (await toolsResponse.json()) as {
-      tools?: Array<{ name?: string }>;
-    };
-    const toolNames = new Set(
-      (toolsPayload.tools ?? [])
-        .map((tool) => tool.name)
-        .filter((name): name is string => typeof name === "string")
-    );
+    const toolNames = new Set(payload.builtinTools ?? []);
 
     return REQUIRED_BUILTIN_TOOLS.every((name) => toolNames.has(name));
   } catch {

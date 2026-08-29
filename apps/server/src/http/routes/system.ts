@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
 import type { UpdateWebPublicUrlRequest } from "@nakama/core/contract";
+import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import {
   getWebPublicUrlSettings,
   persistWebPublicUrl,
@@ -31,6 +32,8 @@ const DOCS_HTML = `<!doctype html>
 </html>
 `;
 
+const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_IDS);
+
 export function registerSystemRoutes(
   app: HonoApp,
   options: ServerOptions
@@ -39,6 +42,10 @@ export function registerSystemRoutes(
   const healthResponseSchema = z
     .object({
       apiVersion: z.number().int(),
+      builtinTools: z.array(z.string()).openapi({
+        description:
+          "Names of the built-in tools this build registers. The CLI reads it to tell a stale server from a current one before it has credentials.",
+      }),
       composioAvailable: z.boolean().openapi({
         description:
           "Whether Composio is reachable. Always false on /health (no live probe). Check GET /v1/system/status for the probed value.",
@@ -175,6 +182,7 @@ export function registerSystemRoutes(
     return c.json(
       {
         apiVersion: NAKAMA_API_VERSION,
+        builtinTools: BUILTIN_TOOL_NAMES,
         composioAvailable: false,
         composioConfigured,
         ok: true,
