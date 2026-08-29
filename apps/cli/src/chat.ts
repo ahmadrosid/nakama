@@ -56,6 +56,18 @@ export function needsTrailingStreamNewline(lastChunk: string | null): boolean {
   return lastChunk === null || !lastChunk.endsWith("\n");
 }
 
+/** Drop count at which busy feedback includes how many inputs were ignored. */
+export const BUSY_DROP_WARN_AT = 3;
+
+/** Plain-text busy feedback when input arrives while a reply is still processing. */
+export function formatBusyDropLine(dropCount: number): string {
+  if (dropCount >= BUSY_DROP_WARN_AT) {
+    return `[busy] ignored input (${dropCount} while processing)`;
+  }
+
+  return "[busy]";
+}
+
 export async function runChat(options: RunChatOptions): Promise<void> {
   const startup = await resolveStartupProfile(options.client, {
     profileId: options.profileId,
@@ -851,6 +863,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
   const session = context.session;
   const currentProfileId = context.currentProfileId;
   let processing = false;
+  let busyDrops = 0;
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
 
@@ -972,6 +985,10 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       }
 
       if (processing) {
+        busyDrops += 1;
+        process.stdout.write(
+          `\x1b[2m${formatBusyDropLine(busyDrops)}\x1b[0m\n`
+        );
         continue;
       }
 
@@ -994,6 +1011,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       }
 
       processing = true;
+      busyDrops = 0;
 
       let sendInput: SendMessageInput;
 
@@ -1016,6 +1034,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         printError(error);
       } finally {
         processing = false;
+        busyDrops = 0;
       }
     }
   } finally {
