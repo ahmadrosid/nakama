@@ -46,7 +46,7 @@ const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
 /** Path `userId` for org member routes — matches minted ids (`user_` + hex) and seeded ones. */
-export const ORG_MEMBER_USER_ID_PATTERN = /^user_[A-Za-z0-9_]{1,64}$/;
+const ORG_MEMBER_USER_ID_PATTERN = /^user_[A-Za-z0-9_]{1,64}$/;
 
 export function assertOrgMemberUserIdShape(userId: string): void {
   if (!ORG_MEMBER_USER_ID_PATTERN.test(userId)) {
