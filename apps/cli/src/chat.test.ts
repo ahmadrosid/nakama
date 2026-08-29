@@ -5,6 +5,7 @@ import type {
   ProfileSummary,
 } from "@nakama/core";
 import {
+  createChatExitController,
   disableRawModeIfActive,
   formatErrorLines,
   formatStatusLines,
@@ -24,6 +25,53 @@ describe("needsTrailingStreamNewline", () => {
   test("skips the newline when the stream already ended with one", () => {
     expect(needsTrailingStreamNewline("Hello.\n")).toBe(false);
     expect(needsTrailingStreamNewline("Hello.\r\n")).toBe(false);
+  });
+});
+
+describe("createChatExitController", () => {
+  test("requestExit resolves wait without scheduling an interval", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    let intervalCalls = 0;
+    globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+      intervalCalls += 1;
+      return originalSetInterval(...args);
+    }) as typeof setInterval;
+
+    try {
+      const exit = createChatExitController();
+      const waited = exit.wait();
+      expect(exit.exiting).toBe(false);
+      exit.requestExit();
+      await waited;
+      expect(exit.exiting).toBe(true);
+      expect(intervalCalls).toBe(0);
+    } finally {
+      globalThis.setInterval = originalSetInterval;
+    }
+  });
+
+  test("AbortSignal resolves wait immediately", async () => {
+    const controller = new AbortController();
+    const exit = createChatExitController(controller.signal);
+    const waited = exit.wait();
+    controller.abort();
+    await waited;
+    expect(exit.exiting).toBe(true);
+  });
+
+  test("already-aborted signal resolves wait without waiting", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const exit = createChatExitController(controller.signal);
+    await exit.wait();
+    expect(exit.exiting).toBe(true);
+  });
+
+  test("requestExit before wait still completes", async () => {
+    const exit = createChatExitController();
+    exit.requestExit();
+    await exit.wait();
+    expect(exit.exiting).toBe(true);
   });
 });
 
