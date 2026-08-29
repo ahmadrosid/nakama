@@ -243,4 +243,75 @@ describe("org member management (AE2)", () => {
       "admin-mgmt@acme.com",
     ]);
   });
+
+  test("remove member rejects invalid userId shape with 400", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: {
+            email: "admin-shape@acme.com",
+            name: "Acme Admin",
+            phone: "+628123456789",
+          },
+          name: "Acme Shape",
+          slug: "acme-shape-http",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      organization: { id: string };
+      adminMember: { temporaryPassword: string };
+    };
+    const orgId = created.organization.id;
+
+    const adminSession = await loginUserSession(
+      app,
+      "admin-shape@acme.com",
+      created.adminMember.temporaryPassword
+    );
+
+    const badShapeResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${orgId}/members/${encodeURIComponent("../nope")}`,
+        {
+          headers: adminSession.headers(
+            {
+              "X-CSRF-Token": adminSession.csrfToken,
+            },
+            orgId
+          ),
+          method: "DELETE",
+        }
+      )
+    );
+    expect(badShapeResponse.status).toBe(400);
+
+    const unknownMemberResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${orgId}/members/user_cccccccccccccccccccccccccccccccc`,
+        {
+          headers: adminSession.headers(
+            {
+              "X-CSRF-Token": adminSession.csrfToken,
+            },
+            orgId
+          ),
+          method: "DELETE",
+        }
+      )
+    );
+    expect(unknownMemberResponse.status).toBe(404);
+  });
 });
