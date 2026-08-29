@@ -234,6 +234,60 @@ describe("OrgService", () => {
     expect(added.temporaryPassword).toHaveLength(12);
   });
 
+  test("rejects member names with control characters", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-member-control-chars",
+    });
+
+    await expect(
+      orgService.addMember({
+        email: "control@acme.com",
+        name: "Bad\r\nName",
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rejects member names longer than 120 characters", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-member-name-too-long",
+    });
+
+    await expect(
+      orgService.addMember({
+        email: "long@acme.com",
+        name: "a".repeat(121),
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rejects empty member names", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-empty-member-name",
+    });
+
+    await expect(
+      orgService.addMember({
+        email: "empty@acme.com",
+        name: "   ",
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   test("allows changing password after provisioning", async () => {
     const { orgService } = createOrgService();
     const created = await orgService.createOrganization({

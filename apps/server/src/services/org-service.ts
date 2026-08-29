@@ -45,6 +45,8 @@ const LAST_ORGANIZATION_MESSAGE =
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
+const MAX_MEMBER_NAME_LENGTH = 120;
+const MEMBER_NAME_CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
 
 export class OrgService {
   constructor(
@@ -392,9 +394,7 @@ export class OrgService {
     const email = normalizeEmail(input.email);
     const phone = normalizeOptionalPhone(input.phone);
 
-    if (!name) {
-      throw new NakamaApiError("Member name is required.", 400);
-    }
+    assertMemberName(name);
 
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
@@ -869,6 +869,20 @@ export class OrgService {
       orgId
     );
     await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
+  }
+}
+
+function assertMemberName(name: string): void {
+  if (!name) {
+    throw new NakamaApiError("Member name is required.", 400);
+  }
+
+  if (name.length > MAX_MEMBER_NAME_LENGTH) {
+    throw new NakamaApiError("Member name is too long.", 400);
+  }
+
+  if (MEMBER_NAME_CONTROL_CHARS.test(name)) {
+    throw new NakamaApiError("Member name contains invalid characters.", 400);
   }
 }
 
