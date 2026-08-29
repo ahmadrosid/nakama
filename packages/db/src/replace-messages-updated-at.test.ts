@@ -157,3 +157,49 @@ describe("appendMessagesForSession", () => {
     }
   });
 });
+
+describe("replaceMessagesForSession atomicity", () => {
+  test("sqlite restores prior messages when a replacement batch fails", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    try {
+      await seedSession(database.adapter);
+      const createdAt = "2020-06-01T00:00:00.000Z";
+      await database.adapter.replaceMessagesForSession("session_test", [
+        {
+          createdAt,
+          id: "msg_keep",
+          payload: { content: "keep", role: "user" },
+          seq: 0,
+          sessionId: "session_test",
+        },
+      ]);
+
+      await expect(
+        database.adapter.replaceMessagesForSession("session_test", [
+          {
+            createdAt,
+            id: "msg_new",
+            payload: { content: "new", role: "assistant" },
+            seq: 0,
+            sessionId: "session_test",
+          },
+          {
+            createdAt,
+            id: "msg_new",
+            payload: { content: "duplicate id", role: "user" },
+            seq: 1,
+            sessionId: "session_test",
+          },
+        ])
+      ).rejects.toThrow();
+
+      expect(
+        (await database.adapter.listMessagesForSession("session_test")).map(
+          (message) => message.id
+        )
+      ).toEqual(["msg_keep"]);
+    } finally {
+      database.close();
+    }
+  });
+});
