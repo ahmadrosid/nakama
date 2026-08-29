@@ -1,7 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/nakama", "destination": "/index.html" },
-    { "source": "/nakama/", "destination": "/index.html" },
-    { "source": "/nakama/:path*", "destination": "/:path*" }
-  ]
-}

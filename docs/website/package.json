@@ -6,7 +6,7 @@
     "build": "bun run generate-mirrors && next build",
     "dev": "bun run generate-mirrors && next dev -p 3004",
     "generate-mirrors": "bun run scripts/postbuild.ts",
-    "preview": "bunx serve out -p 3004 -c serve.json",
+    "preview": "mkdir -p .preview && ln -sfn ../out .preview/nakama && bunx serve .preview -p 3004",
     "screenshots": "./scripts/capture-setup-screenshots.sh",
     "screenshots:chat": "./scripts/capture-chat-screenshots.sh",
     "screenshots:self-improving-skills": "./scripts/capture-self-improving-skills-screenshots.sh",
