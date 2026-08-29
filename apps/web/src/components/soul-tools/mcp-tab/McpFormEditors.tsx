@@ -9,13 +9,6 @@ import { Input } from "@/components/ui/input";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 import { cn } from "@/lib/utils";
 
-function mcpArgKey(arg: string, index: number, args: string[]): string {
-  const priorMatches = args
-    .slice(0, index)
-    .filter((value) => value === arg).length;
-  return priorMatches === 0 ? arg : `${arg}:${priorMatches + 1}`;
-}
-
 export function McpFormField({
   label,
   htmlFor,
@@ -66,6 +59,8 @@ export function McpArgsEditor({
   onChange: (args: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const argKeysRef = useRef<string[]>([]);
+  syncRowKeys(argKeysRef.current, args.length);
 
   function addArg(value: string) {
     const trimmed = value.trim();
@@ -79,6 +74,7 @@ export function McpArgsEditor({
   }
 
   function removeArg(index: number) {
+    argKeysRef.current.splice(index, 1);
     onChange(args.filter((_, argIndex) => argIndex !== index));
   }
 
@@ -130,7 +126,7 @@ export function McpArgsEditor({
       {args.map((arg, index) => (
         <span
           className="inline-flex h-5 max-w-full shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/50 pr-0.5 pl-1.5 text-foreground text-xs"
-          key={mcpArgKey(arg, index, args)}
+          key={argKeysRef.current[index]}
         >
           <span className="truncate">{arg}</span>
           <button

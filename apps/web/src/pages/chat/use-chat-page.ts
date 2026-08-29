@@ -563,13 +563,17 @@ export function useChatPage() {
 
   const handleProfileSwitch = useCallback(
     (nextProfileId: string) => {
-      if (!nextProfileId || nextProfileId === profileId || busy) {
+      if (
+        !nextProfileId ||
+        nextProfileId === profileIdRef.current ||
+        busyRef.current
+      ) {
         return;
       }
       setProfileId(nextProfileId);
       enterDraftChat(nextProfileId);
     },
-    [profileId, busy, enterDraftChat]
+    [enterDraftChat]
   );
 
   useEffect(
