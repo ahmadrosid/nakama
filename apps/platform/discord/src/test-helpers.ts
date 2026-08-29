@@ -588,6 +588,7 @@ export async function writeDiscordConfigIni(
     profileId?: string;
     pairedUserIds?: string[];
     allowedUserIds?: string[];
+    handshakeCode?: string | null;
   }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
@@ -605,6 +606,10 @@ export async function writeDiscordConfigIni(
 
   if (config.allowedUserIds?.length) {
     lines.push(`allowed_user_ids=${config.allowedUserIds.join(",")}`);
+  }
+
+  if (config.handshakeCode) {
+    lines.push(`handshake_code=${config.handshakeCode}`);
   }
 
   lines.push("");

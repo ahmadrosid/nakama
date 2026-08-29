@@ -906,11 +906,16 @@ async function withChatLock(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const chain = previous.then(() => current);
+  // Second handler keeps the chain alive if `previous` rejects, so the stored
+  // promise does not become an unhandled rejection when nobody awaits `chain`.
+  const chain = previous.then(
+    () => current,
+    () => current
+  );
   chatLocks.set(chatId, chain);
 
   try {
-    await previous;
+    await previous.catch(() => undefined);
     await fn();
   } finally {
     release();
@@ -918,4 +923,25 @@ async function withChatLock(
       chatLocks.delete(chatId);
     }
   }
+}
+
+/** @internal Test helper — clears the in-process chat lock map. */
+export function resetChatLocksForTests(): void {
+  chatLocks.clear();
+}
+
+/** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
+export function seedChatLockForTests(
+  chatId: string,
+  promise: Promise<void>
+): void {
+  chatLocks.set(chatId, promise);
+}
+
+/** @internal Test helper — serialize work for rejection-safety tests. */
+export async function withChatLockForTests(
+  chatId: string,
+  fn: () => Promise<void>
+): Promise<void> {
+  return withChatLock(chatId, fn);
 }
