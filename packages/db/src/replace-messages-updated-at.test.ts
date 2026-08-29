@@ -110,6 +110,50 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
       database.close();
     }
   });
+
+  test("sqlite: preserves prior messages when a replacement fails", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    try {
+      await seedSession(database.adapter);
+      const createdAt = "2020-06-01T00:00:00.000Z";
+      await database.adapter.appendMessagesForSession("session_test", [
+        {
+          createdAt,
+          id: "msg_existing",
+          payload: { content: "existing", role: "user" },
+          seq: 0,
+          sessionId: "session_test",
+        },
+      ]);
+
+      await expect(
+        database.adapter.replaceMessagesForSession("session_test", [
+          {
+            createdAt,
+            id: "msg_duplicate",
+            payload: { content: "first", role: "user" },
+            seq: 0,
+            sessionId: "session_test",
+          },
+          {
+            createdAt,
+            id: "msg_duplicate",
+            payload: { content: "second", role: "assistant" },
+            seq: 1,
+            sessionId: "session_test",
+          },
+        ])
+      ).rejects.toThrow();
+
+      expect(
+        (await database.adapter.listMessagesForSession("session_test")).map(
+          (message) => message.id
+        )
+      ).toEqual(["msg_existing"]);
+    } finally {
+      database.close();
+    }
+  });
 });
 
 describe("appendMessagesForSession", () => {
