@@ -8,7 +8,10 @@ import {
   ORG_MEMORY_PREAMBLE,
   parseOrgMemoryContent,
 } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+} from "@nakama/db";
 import { OrgMemoryService } from "./org-memory-service";
 
 describe("OrgMemoryService", () => {
@@ -17,16 +20,40 @@ describe("OrgMemoryService", () => {
   afterEach(async () => {
     if (tempDir) {
       await rm(tempDir, { force: true, recursive: true });
-      tempDir = "";
     }
+    tempDir = "";
   });
 
-  async function setup(withDb = false): Promise<OrgMemoryService> {
+  async function seedOrgs(
+    db: DatabaseAdapter,
+    orgIds: string[],
+    archivedOrgIds: string[] = []
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const archived = new Set(archivedOrgIds);
+    for (const id of orgIds) {
+      await db.upsertOrganization({
+        archivedAt: archived.has(id) ? now : null,
+        createdAt: now,
+        id,
+        name: id,
+        slug: id.replaceAll("_", "-"),
+        updatedAt: now,
+      });
+    }
+  }
+
+  async function setup(
+    options: { archivedOrgIds?: string[]; orgIds?: string[] } = {}
+  ): Promise<OrgMemoryService> {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-org-memory-"));
-    return new OrgMemoryService(
-      withDb ? createInMemoryDatabaseAdapter() : null,
-      { configDir: tempDir }
+    const db = createInMemoryDatabaseAdapter();
+    await seedOrgs(
+      db,
+      options.orgIds ?? ["org_a", "org_b"],
+      options.archivedOrgIds
     );
+    return new OrgMemoryService(db, { configDir: tempDir });
   }
 
   test("getMemory returns the canonical preamble when the file is missing", async () => {
@@ -115,7 +142,7 @@ describe("OrgMemoryService", () => {
   });
 
   test("propose creates pending row without writing MEMORY.md", async () => {
-    const service = await setup(true);
+    const service = await setup();
     const result = await service.propose("org_a", {
       bullet: "team standup is 10am UTC",
     });
@@ -129,7 +156,7 @@ describe("OrgMemoryService", () => {
   });
 
   test("propose returns already_pending for duplicate bullet", async () => {
-    const service = await setup(true);
+    const service = await setup();
     const first = await service.propose("org_a", {
       bullet: "shared deploy window",
     });
@@ -142,7 +169,7 @@ describe("OrgMemoryService", () => {
   });
 
   test("approve writes to recent-log section by default", async () => {
-    const service = await setup(true);
+    const service = await setup();
     const proposed = await service.propose("org_a", {
       bullet: "review PRs before lunch",
     });
@@ -157,7 +184,7 @@ describe("OrgMemoryService", () => {
   });
 
   test("approve with pin writes to pinned section and is idempotent", async () => {
-    const service = await setup(true);
+    const service = await setup();
     const proposed = await service.propose("org_a", {
       bullet: "always pin this",
     });
@@ -275,5 +302,35 @@ describe("OrgMemoryService", () => {
       service.undoLastChange("org_a", "admin_user")
     ).resolves.toContain("snapshot");
     expect(await service.getMemory("org_a")).toContain("snapshot");
+  });
+
+  test("rejects memory mutators on an archived org and allows them on an active org", async () => {
+    const service = await setup({ archivedOrgIds: ["org_a"] });
+
+    await expect(
+      service.setMemory("org_a", `${ORG_MEMORY_PREAMBLE}\n\n- blocked\n`)
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.addFact("org_a", "blocked fact", { pin: true })
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.archiveEntries("org_a", ["any"])
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.restoreHistoryRevision("org_a", "rev_missing", "admin_user")
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.undoLastChange("org_a", "admin_user")
+    ).rejects.toMatchObject({ status: 404 });
+
+    await service.addFact("org_b", "active fact", { pin: true });
+    await service.setMemory(
+      "org_b",
+      `${ORG_MEMORY_PREAMBLE}\n\n## Pinned\n\n- active fact\n- second fact\n`
+    );
+    const archived = await service.archiveEntries("org_b", ["second fact"]);
+    expect(archived.archived).toBe(1);
+    const parsed = parseOrgMemoryContent(await service.getMemory("org_b"));
+    expect(parsed.pinned).toEqual(["active fact"]);
   });
 });

@@ -383,10 +383,7 @@ export class OrgService {
     phone: string;
     role: OrgRole;
   }): Promise<AddOrgMemberResponse> {
-    const org = await this.databaseAdapter.getOrganizationById(input.orgId);
-    if (!org) {
-      throw new NakamaApiError("Not found", 404);
-    }
+    await this.requireActiveOrganization(input.orgId);
 
     const name = input.name.trim();
     const email = normalizeEmail(input.email);
@@ -532,6 +529,7 @@ export class OrgService {
   }
 
   async removeMember(orgId: string, userId: string): Promise<void> {
+    await this.requireActiveOrganization(orgId);
     await this.assertCanChangeAdminMembership(orgId, userId);
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
@@ -545,6 +543,8 @@ export class OrgService {
     userId: string,
     input: UpdateOrgMemberRequest
   ): Promise<OrgMemberResponse> {
+    await this.requireActiveOrganization(orgId);
+
     const nextRole = input.role;
     if (nextRole !== undefined && !ORG_ROLES.includes(nextRole)) {
       throw new NakamaApiError("Invalid org role.", 400);

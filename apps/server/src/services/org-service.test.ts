@@ -730,4 +730,74 @@ describe("OrgService", () => {
       orgService.acceptInvite({ password: "secret123", token: invite.token })
     ).rejects.toMatchObject({ status: 404 });
   });
+
+  test("rejects member mutators on an archived org and allows them on an active org", async () => {
+    const { orgService, authService } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-member-archive" },
+    });
+    const active = await orgService.createOrganization(
+      { name: "Beta", slug: "beta-member-archive" },
+      bootstrapped.user.id
+    );
+    const archivedMember = await orgService.addMember({
+      email: "keep@acme.com",
+      name: "Keep Member",
+      orgId: bootstrapped.organization.id,
+      phone: "",
+      role: "member",
+    });
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+
+    await expect(
+      orgService.addMember({
+        email: "new@acme.com",
+        name: "New Member",
+        orgId: bootstrapped.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      orgService.updateMember(
+        bootstrapped.organization.id,
+        archivedMember.member.userId,
+        { role: "viewer" }
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      orgService.removeMember(
+        bootstrapped.organization.id,
+        archivedMember.member.userId
+      )
+    ).rejects.toMatchObject({ status: 404 });
+
+    const added = await orgService.addMember({
+      email: "active@acme.com",
+      name: "Active Member",
+      orgId: active.organization.id,
+      phone: "",
+      role: "member",
+    });
+    const updated = await orgService.updateMember(
+      active.organization.id,
+      added.member.userId,
+      { role: "viewer" }
+    );
+    expect(updated.member.role).toBe("viewer");
+    await orgService.removeMember(active.organization.id, added.member.userId);
+    const listed = await orgService.listMembers(active.organization.id);
+    expect(
+      listed.members.some((member) => member.userId === added.member.userId)
+    ).toBe(false);
+  });
 });
