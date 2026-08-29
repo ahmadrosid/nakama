@@ -95,6 +95,20 @@ function AssistantTextContent({ message }: { message: ChatListItem }) {
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
 
+  if (message.failed) {
+    return (
+      <div
+        className="flex w-full min-w-0 flex-col gap-1 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2"
+        role="alert"
+      >
+        <span className="font-medium text-destructive text-xs">Failed</span>
+        <p className="text-destructive/90 text-sm leading-relaxed">
+          {content || "The model did not respond."}
+        </p>
+      </div>
+    );
+  }
+
   if (!streaming) {
     return <MessageResponse>{content || "…"}</MessageResponse>;
   }

@@ -305,6 +305,8 @@ export interface ChatListItem {
   content: string;
   createdAt?: string;
   documents?: Array<{ filename: string; mediaType: string }>;
+  /** Client-only: turn failed (e.g. upstream 429); not part of server history. */
+  failed?: boolean;
   historyIndex?: number;
   id: string;
   imageAttachments?: Array<{
@@ -326,6 +328,66 @@ export interface ChatListItem {
   toolInputAccumulatedJson?: string;
   toolResult?: unknown;
   toolStatus?: "running" | "done";
+}
+
+/** Survives reload so a failed web turn keeps a Retry affordance. */
+export interface FailedChatTurn {
+  error: string;
+  text: string;
+}
+
+export const FAILED_CHAT_TURN_STORAGE_PREFIX = "nakama:failed-chat-turn:";
+
+export function failedChatTurnStorageKey(sessionId: string): string {
+  return `${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`;
+}
+
+export function storeFailedChatTurn(
+  sessionId: string,
+  turn: FailedChatTurn
+): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(
+    failedChatTurnStorageKey(sessionId),
+    JSON.stringify(turn)
+  );
+}
+
+export function readFailedChatTurn(sessionId: string): FailedChatTurn | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+
+  const raw = localStorage.getItem(failedChatTurnStorageKey(sessionId));
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<FailedChatTurn>;
+    const text = typeof parsed.text === "string" ? parsed.text : "";
+    const error = typeof parsed.error === "string" ? parsed.error.trim() : "";
+
+    if (!(text.trim() && error)) {
+      return null;
+    }
+
+    return { error, text };
+  } catch {
+    return null;
+  }
+}
+
+export function clearFailedChatTurn(sessionId: string): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(failedChatTurnStorageKey(sessionId));
 }
 
 export function sessionStorageKey(profileId: string): string {
