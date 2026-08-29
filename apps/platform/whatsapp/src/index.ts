@@ -34,7 +34,7 @@ void installErrorTrackingSink();
 
 let spawnedChild: Bun.Subprocess | null = null;
 let socketHandle: {
-  stop: () => void;
+  stop: () => void | Promise<void>;
   socket: {
     sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;
   } | null;
@@ -52,14 +52,14 @@ function persistWorkerHeartbeat(): void {
 }
 
 registerProcessLifecycleLogging();
-registerCleanupHandlers(() => {
+registerCleanupHandlers(async () => {
   outboundServer?.stop();
-  socketHandle?.stop();
+  await socketHandle?.stop();
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
-  void clearWhatsAppWorkerHeartbeat();
-  void clearWhatsAppQrCode();
+  await clearWhatsAppWorkerHeartbeat();
+  await clearWhatsAppQrCode();
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -174,12 +174,17 @@ try {
   process.exit(1);
 }
 
-function registerCleanupHandlers(cleanup: () => void): void {
+function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
       console.log(`WhatsApp worker received ${signal}. Shutting down.`);
-      cleanup();
-      process.exit(0);
+      void (async () => {
+        try {
+          await cleanup();
+        } finally {
+          process.exit(0);
+        }
+      })();
     });
   }
 }
