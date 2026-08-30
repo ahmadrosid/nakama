@@ -1,5 +1,4 @@
 import type { McpServerSummary } from "@nakama/core/contract";
-import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import {
   Add01Icon,
   Delete02Icon,
@@ -10,6 +9,7 @@ import {
   RefreshIcon,
 } from "hugeicons-react";
 import { McpToolLabels } from "@/components/soul-tools/McpToolList";
+import { mcpServerDeleteBlockReason } from "@/components/soul-tools/mcp-tab/mcp-server-delete-block-reason";
 import { sectionClass } from "@/components/soul-tools/mcp-tab/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,24 +44,6 @@ export function McpPageState({
       {message}
     </div>
   );
-}
-
-function mcpServerDeleteBlockReason(server: McpServerSummary): string | null {
-  if (isPreinstalledMcpServerId(server.id)) {
-    return "Preinstalled MCP servers cannot be deleted.";
-  }
-
-  const assignedProfileCount = server.assignedProfileCount ?? 0;
-
-  if (assignedProfileCount === 1) {
-    return "Assigned to 1 profile. Unassign on the Profiles page before deleting.";
-  }
-
-  if (assignedProfileCount > 1) {
-    return `Assigned to ${assignedProfileCount} profiles. Unassign on the Profiles page before deleting.`;
-  }
-
-  return null;
 }
 
 function McpServerDeleteButton({
@@ -309,5 +291,3 @@ export function McpServersSection({
     </section>
   );
 }
-
-export { mcpServerDeleteBlockReason };
