@@ -26,7 +26,7 @@ A `runAt` automation whose timestamp has already passed is not scheduled. Disabl
 
 ### The worker
 
-Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Status** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
+Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Workers** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
 
 See [Docker](/docker) for how the worker is started in a container.
 

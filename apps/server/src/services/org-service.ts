@@ -47,6 +47,14 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
 const MAX_MEMBER_NAME_LENGTH = 120;
 const MEMBER_NAME_CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+/** Path `userId` for org member routes — matches minted ids (`user_` + hex) and seeded ones. */
+const ORG_MEMBER_USER_ID_PATTERN = /^user_[A-Za-z0-9_]{1,64}$/;
+
+function assertOrgMemberUserIdShape(userId: string): void {
+  if (!ORG_MEMBER_USER_ID_PATTERN.test(userId)) {
+    throw new NakamaApiError("Invalid user id.", 400);
+  }
+}
 
 export class OrgService {
   constructor(
@@ -529,6 +537,7 @@ export class OrgService {
   }
 
   async removeMember(orgId: string, userId: string): Promise<void> {
+    assertOrgMemberUserIdShape(userId);
     await this.requireActiveOrganization(orgId);
     await this.assertCanChangeAdminMembership(orgId, userId);
 

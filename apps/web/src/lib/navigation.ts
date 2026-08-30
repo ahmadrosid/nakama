@@ -2,6 +2,7 @@ import {
   Brain03Icon,
   Building03Icon,
   Chat01Icon,
+  DashboardSquare01Icon,
   Folder01Icon,
   Notification01Icon,
   PlusSignSquareIcon,
@@ -24,7 +25,8 @@ export type PageId =
   | "integrations"
   | "organization"
   | "settings"
-  | "notifications";
+  | "notifications"
+  | "workers";
 
 export interface NavItem {
   description: string;
@@ -102,6 +104,12 @@ export const NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     id: "system",
     items: [
+      navItem(
+        "workers",
+        "Workers",
+        "Automation and channel workers",
+        DashboardSquare01Icon
+      ),
       navItem(
         "integrations",
         "Integrations",
@@ -190,7 +198,8 @@ export function visibleNavGroups(access: {
       if (
         item.id === "soul" ||
         item.id === "profiles" ||
-        item.id === "organization"
+        item.id === "organization" ||
+        item.id === "workers"
       ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
       }
@@ -215,9 +224,6 @@ const queryPath = (path: string, params: Record<string, string>): string =>
 
 export const toolsTabPath = (): string =>
   queryPath(PAGE_PATHS.soul, { tab: "tools" });
-
-export const statusTabPath = (): string =>
-  queryPath(PAGE_PATHS.soul, { tab: "status" });
 
 export const profilePath = (profileId: string): string =>
   queryPath(PAGE_PATHS.profiles, { profile: profileId });
@@ -296,6 +302,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   settings: "/settings",
   soul: "/system",
   tasks: "/tasks",
+  workers: "/workers",
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [

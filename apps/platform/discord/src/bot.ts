@@ -5,9 +5,14 @@ import {
   type Message,
   Partials,
 } from "discord.js";
+import {
+  formatDiscordInboundMessageLog,
+  isChannelDebugEnabled,
+} from "./channel-log";
 import { type ChatHandlerDeps, createChatHandler } from "./chat-handler";
 import type { DiscordBridgeConfig } from "./config";
 import {
+  deferSlashInteraction,
   getDiscordErrorCode,
   isIgnorableInteractionError,
 } from "./interaction-errors";
@@ -45,15 +50,7 @@ export async function createBot(
   });
 
   client.on(Events.MessageCreate, async (message: Message) => {
-    console.log(
-      [
-        "[discord] message",
-        `messageId=${message.id}`,
-        `authorId=${message.author.id}`,
-        `channelId=${message.channelId}`,
-        `textBytes=${Buffer.byteLength(message.content ?? "", "utf8")}`,
-      ].join(" ")
-    );
+    console.log(formatDiscordInboundMessageLog(message));
     try {
       await handler.handleMessage(message);
     } catch (error) {
@@ -72,25 +69,19 @@ export async function createBot(
       return;
     }
 
-    console.log(
-      "[discord] slash",
-      interaction.commandName,
-      interaction.user.id
-    );
+    if (isChannelDebugEnabled()) {
+      console.log(
+        "[discord] slash",
+        interaction.commandName,
+        interaction.user.id
+      );
+    } else {
+      console.log("[discord] slash", interaction.commandName);
+    }
 
     // Acknowledge immediately — Discord expires interactions after ~3s.
     // Any work (locks, API calls) must happen after this.
-    try {
-      await interaction.deferReply();
-    } catch (error) {
-      if (isIgnorableInteractionError(error)) {
-        console.warn(
-          `Skipped stale /${interaction.commandName} interaction (${getDiscordErrorCode(error)}).`
-        );
-        return;
-      }
-
-      console.error("Failed to acknowledge slash command:", error);
+    if (!(await deferSlashInteraction(interaction))) {
       return;
     }
 

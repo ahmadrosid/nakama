@@ -155,8 +155,9 @@ export function registerWorkerRoutes(
     }
 
     const linesParam = c.req.query("lines");
+    const parsed = linesParam ? Number.parseInt(linesParam, 10) : 200;
     const lines = Math.min(
-      Math.max(1, linesParam ? Number.parseInt(linesParam, 10) : 200),
+      Math.max(1, Number.isFinite(parsed) ? parsed : 200),
       2000
     );
 

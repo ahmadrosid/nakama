@@ -45,6 +45,7 @@ import type {
   InitSoulResponse,
   InitUserContextResponse,
   InstallSkillRequest,
+  KnowledgeBaseDuplicateAction,
   ListArtifactsOptions,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
@@ -157,6 +158,7 @@ import {
   rehydrateMessagesForProvider as rehydrateAttachmentMessages,
   rehydrateAttachmentRefsInContent,
   replaceImagePartsWithDescriptions,
+  resolveDiscordApplicationId,
   resolveOllamaHostMode,
   resolveSoulStackForProfile,
   saveComposioConfig,
@@ -1064,6 +1066,29 @@ export class AgentService {
       throw new Error("Bot token is required.");
     }
 
+    if (botToken) {
+      try {
+        const path = [`bot${botToken}`, "getMe"]
+          .map(encodeURIComponent)
+          .join("/");
+        const response = await fetch(`https://api.telegram.org/${path}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        const payload = response.ok
+          ? ((await response.json()) as {
+              ok?: boolean;
+              result?: { is_bot?: boolean };
+            })
+          : null;
+
+        if (!(payload?.ok === true && payload.result?.is_bot === true)) {
+          throw new Error("Telegram rejected the bot token.");
+        }
+      } catch {
+        throw new Error("Telegram bot token could not be validated.");
+      }
+    }
+
     return saveTelegramConfig({
       ...(botToken ? { botToken } : {}),
       ...(input.allowedUserIds === undefined
@@ -1094,6 +1119,13 @@ export class AgentService {
 
     if (!(botToken || existing.configured)) {
       throw new Error("Bot token is required.");
+    }
+
+    if (
+      botToken &&
+      !(await resolveDiscordApplicationId(botToken, { forceRefresh: true }))
+    ) {
+      throw new Error("Discord bot token could not be validated.");
     }
 
     return saveDiscordConfig({
@@ -2810,12 +2842,14 @@ export class AgentService {
   async uploadKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
-    document: DocumentAttachment
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
   ): Promise<UploadKnowledgeBaseResponse> {
     return this.profileService.uploadKnowledgeBaseDocument(
       orgId,
       profileId,
-      document
+      document,
+      onDuplicate
     );
   }
 

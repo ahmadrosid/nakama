@@ -79,7 +79,7 @@ function compareTokenHash(token: string, expectedHashHex: string): boolean {
 }
 
 export async function resolveLocalAuthToken(): Promise<string> {
-  const envToken = process.env.nakama_LOCAL_AUTH_TOKEN?.trim();
+  const envToken = process.env.NAKAMA_LOCAL_AUTH_TOKEN?.trim();
   if (envToken) {
     return envToken;
   }
@@ -122,7 +122,7 @@ export async function loadLocalAuthToken(
 }
 
 export async function rotateLocalAuthToken(): Promise<string> {
-  if (process.env.nakama_LOCAL_AUTH_TOKEN?.trim()) {
+  if (process.env.NAKAMA_LOCAL_AUTH_TOKEN?.trim()) {
     throw new LocalAuthTokenManagedExternallyError();
   }
 
@@ -145,7 +145,7 @@ export async function verifyLocalAuthToken(
     return null;
   }
 
-  const envToken = process.env.nakama_LOCAL_AUTH_TOKEN?.trim();
+  const envToken = process.env.NAKAMA_LOCAL_AUTH_TOKEN?.trim();
   if (envToken) {
     return compareTokenHash(token, hashLocalAuthToken(envToken))
       ? { email: LOCAL_CLIENT_EMAIL }

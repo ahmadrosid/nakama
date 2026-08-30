@@ -50,7 +50,7 @@ export function resolveServerUrl(
   env: Record<string, string | undefined> = process.env
 ): string {
   return normalizeBaseUrl(
-    env.nakama_SERVER_URL?.trim() ||
+    env.NAKAMA_SERVER_URL?.trim() ||
       readRuntimeServerUrl() ||
       DEFAULT_SERVER_URL
   );

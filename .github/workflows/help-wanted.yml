@@ -1,0 +1,62 @@
+# Keeps the `help wanted` label honest. The label marks an issue as up for grabs,
+# so it has to come off the moment someone starts, or two people build the same fix.
+name: Help wanted
+
+# pull_request_target, because a fork PR gets a read-only token and this needs to
+# write labels. Safe here only because nothing checks out or runs the PR's code.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, closed]
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync the label on every issue this PR declares
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          set -euo pipefail
+
+          # GitHub's own issue linking, not a regex over the body, so the workflow
+          # agrees with the "Closes #N" GitHub already shows on the PR.
+          linked=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $pr: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                  closingIssuesReferences(first: 20) { nodes { number } }
+                }
+              }
+            }' \
+            -F owner="${REPO%/*}" -F repo="${REPO#*/}" -F pr="$PR" \
+            --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number')
+
+          for n in $linked; do
+            if [ "$ACTION" = closed ]; then
+              # A merged PR closes the issue, so there is nothing to hand back.
+              if [ "$MERGED" = true ]; then continue; fi
+
+              # Abandoned work frees the issue again, but only if it still meets the
+              # bar for the label: open, nobody assigned, and sized to one PR.
+              eligible=$(gh api "repos/$REPO/issues/$n" --jq '
+                select(.state == "open" and .assignee == null
+                       and ([.labels[].name] | index("stage: now"))) | .number')
+              if [ -z "$eligible" ]; then continue; fi
+
+              gh api -X POST "repos/$REPO/issues/$n/labels" \
+                -f 'labels[]=help wanted' >/dev/null
+              echo "restored help wanted on #$n"
+            else
+              # 404s when the label was never there, which is the common case.
+              gh api -X DELETE "repos/$REPO/issues/$n/labels/help%20wanted" \
+                >/dev/null 2>&1 || true
+              echo "cleared help wanted on #$n"
+            fi
+          done

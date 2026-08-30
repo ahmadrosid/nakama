@@ -602,6 +602,42 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
       updated_at = excluded.updated_at
   `);
+  const runUpsertProfileStmt = (record: StoredProfileRecord) => {
+    upsertProfileStmt.run(
+      record.id,
+      record.name,
+      record.systemPrompt,
+      record.model,
+      record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
+      record.thinkingEffort ?? null,
+      record.isSuper ? 1 : 0,
+      record.orgId ?? null,
+      record.isDefault ? 1 : 0,
+      record.skillsWriteApproval == null
+        ? null
+        : record.skillsWriteApproval
+          ? 1
+          : 0,
+      record.skillsPostTurnReview == null
+        ? null
+        : record.skillsPostTurnReview
+          ? 1
+          : 0,
+      record.skillsCuratorConsolidateEnabled == null
+        ? null
+        : record.skillsCuratorConsolidateEnabled
+          ? 1
+          : 0,
+      record.createdAt,
+      record.updatedAt ?? record.createdAt
+    );
+  };
+  const upsertDefaultProfileTransaction = db.transaction(
+    (record: StoredProfileRecord) => {
+      clearDefaultProfileForOrgStmt.run(record.orgId!, record.id);
+      runUpsertProfileStmt(record);
+    }
+  );
   const deleteProfileStmt = db.prepare("DELETE FROM profiles WHERE id = ?");
 
   const listToolsStmt = db.prepare("SELECT * FROM tools");
@@ -678,21 +714,36 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     INSERT INTO session_messages (id, session_id, seq, payload, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
-  const appendMessagesTransaction = db.transaction(
-    (sessionId: string, messages: StoredSessionMessageRecord[]) => {
-      for (const message of messages) {
-        appendMessageStmt.run(
-          message.id,
-          sessionId,
-          message.seq,
-          JSON.stringify(message.payload),
-          message.createdAt
-        );
-      }
+  const insertMessages = (
+    sessionId: string,
+    messages: StoredSessionMessageRecord[]
+  ): void => {
+    for (const message of messages) {
+      appendMessageStmt.run(
+        message.id,
+        sessionId,
+        message.seq,
+        JSON.stringify(message.payload),
+        message.createdAt
+      );
     }
-  );
+  };
+  const appendMessagesTransaction = db.transaction(insertMessages);
   const deleteMessagesForSessionStmt = db.prepare(
     "DELETE FROM session_messages WHERE session_id = ?"
+  );
+  const replaceMessagesForSessionTransaction = db.transaction(
+    (sessionId: string, messages: StoredSessionMessageRecord[]) => {
+      deleteMessagesForSessionStmt.run(sessionId);
+      insertMessages(sessionId, messages);
+
+      const updatedAt = messages.reduce(
+        (latest, message) =>
+          message.createdAt > latest ? message.createdAt : latest,
+        new Date().toISOString()
+      );
+      updateSessionUpdatedAtStmt.run(updatedAt, sessionId);
+    }
   );
   const insertAttachmentStmt = db.prepare(`
     INSERT INTO attachments (
@@ -1140,6 +1191,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     INSERT INTO profile_composio_toolkits (profile_id, toolkit_id, allowed_actions)
     VALUES (?, ?, ?)
   `);
+  const replaceProfileComposioToolkitsTransaction = db.transaction(
+    (profileId: string, assignments: StoredProfileComposioToolkitRecord[]) => {
+      deleteProfileComposioToolkitsStmt.run(profileId);
+
+      for (const assignment of assignments) {
+        insertProfileComposioToolkitStmt.run(
+          assignment.profileId,
+          assignment.toolkitId,
+          assignment.allowedActions
+            ? JSON.stringify(assignment.allowedActions)
+            : null
+        );
+      }
+    }
+  );
   const listComposioUserConnectionsForUserStmt = db.prepare(`
     SELECT
       id,
@@ -2666,38 +2732,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async replaceMessagesForSession(sessionId, messages) {
-      deleteMessagesForSessionStmt.run(sessionId);
-
-      for (const message of messages) {
-        appendMessageStmt.run(
-          message.id,
-          sessionId,
-          message.seq,
-          JSON.stringify(message.payload),
-          message.createdAt
-        );
-      }
-
-      const updatedAt = messages.reduce(
-        (latest, message) =>
-          message.createdAt > latest ? message.createdAt : latest,
-        new Date().toISOString()
-      );
-      updateSessionUpdatedAtStmt.run(updatedAt, sessionId);
+      replaceMessagesForSessionTransaction(sessionId, messages);
     },
 
     async replaceProfileComposioToolkits(profileId, assignments) {
-      deleteProfileComposioToolkitsStmt.run(profileId);
-
-      for (const assignment of assignments) {
-        insertProfileComposioToolkitStmt.run(
-          assignment.profileId,
-          assignment.toolkitId,
-          assignment.allowedActions
-            ? JSON.stringify(assignment.allowedActions)
-            : null
-        );
-      }
+      replaceProfileComposioToolkitsTransaction(profileId, assignments);
     },
 
     async revokeArtifactShare(id, revokedAt) {
@@ -2964,37 +3003,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async upsertProfile(record) {
       if (record.isDefault && record.orgId) {
-        clearDefaultProfileForOrgStmt.run(record.orgId, record.id);
+        upsertDefaultProfileTransaction.immediate(record);
+        return;
       }
 
-      upsertProfileStmt.run(
-        record.id,
-        record.name,
-        record.systemPrompt,
-        record.model,
-        record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
-        record.thinkingEffort ?? null,
-        record.isSuper ? 1 : 0,
-        record.orgId ?? null,
-        record.isDefault ? 1 : 0,
-        record.skillsWriteApproval == null
-          ? null
-          : record.skillsWriteApproval
-            ? 1
-            : 0,
-        record.skillsPostTurnReview == null
-          ? null
-          : record.skillsPostTurnReview
-            ? 1
-            : 0,
-        record.skillsCuratorConsolidateEnabled == null
-          ? null
-          : record.skillsCuratorConsolidateEnabled
-            ? 1
-            : 0,
-        record.createdAt,
-        record.updatedAt ?? record.createdAt
-      );
+      runUpsertProfileStmt(record);
     },
     async upsertSession(record) {
       upsertSessionStmt.run(

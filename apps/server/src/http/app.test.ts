@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
@@ -467,6 +467,70 @@ describe("createHonoApp", () => {
     const csp = response.headers.get("Content-Security-Policy") ?? "";
     expect(csp).toContain("img-src 'self' data: blob:");
     expect(csp).toContain("media-src 'self' blob:");
+  });
+
+  test("allows the theme bootstrap by hash instead of every inline script", async () => {
+    const indexHtml = await Bun.file(
+      resolve(import.meta.dir, "../../../web/index.html")
+    ).text();
+    const inlineScript = indexHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    if (!inlineScript) {
+      throw new Error("apps/web/index.html no longer inlines a script");
+    }
+    const hash = new Bun.CryptoHasher("sha256")
+      .update(inlineScript)
+      .digest("base64");
+
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: { Authorization: "Bearer invalid_token" },
+      })
+    );
+
+    const scriptSrc = (response.headers.get("Content-Security-Policy") ?? "")
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("script-src"));
+    expect(scriptSrc).toBe(`script-src 'self' 'sha256-${hash}'`);
+  });
+
+  test("logs in with a password that was set with surrounding whitespace", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-password-trim-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify(
+            buildSetupAuthBody("padded@example.com", {
+              admin: { password: "  secret123  " },
+            })
+          ),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      const loginResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/login", {
+          body: JSON.stringify({
+            email: "padded@example.com",
+            password: "  secret123  ",
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(loginResponse.status).toBe(200);
+    } finally {
+      delete process.env.NAKAMA_CONFIG_DIR;
+      await rm(configDir, { force: true, recursive: true });
+    }
   });
 
   test("rotates the local auth token from a browser session", async () => {

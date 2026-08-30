@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
-import { visibleLength } from "./text-measure";
+import { stripAnsi, visibleLength } from "./text-measure";
 
 export type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
 export type NamedBackgroundColor = "surface";
@@ -237,21 +237,21 @@ export function plainLine(text: string): StyledLine {
 }
 
 export function styledLine(text: string, style?: TextStyle): StyledLine {
-  return { segments: [{ style, text }] };
+  return { segments: [{ style, text: stripAnsi(text) }] };
 }
 
 export function cloneStyledLine(line: StyledLine): StyledLine {
   return {
     segments: line.segments.map((segment) => ({
       style: segment.style ? { ...segment.style } : undefined,
-      text: segment.text,
+      text: stripAnsi(segment.text),
     })),
   };
 }
 
 export function normalizeStyledLine(input: string | StyledLine): StyledLine {
   if (typeof input === "string") {
-    return plainLine(input);
+    return plainLine(stripAnsi(input));
   }
 
   return cloneStyledLine(input);

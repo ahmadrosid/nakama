@@ -133,7 +133,7 @@ start_seeded_stack() {
 
   (
     cd "$root/apps/web"
-    nakama_SERVER_URL="$api" bun x vite --host 127.0.0.1 --port "$web_port" --strictPort \
+    NAKAMA_SERVER_URL="$api" bun x vite --host 127.0.0.1 --port "$web_port" --strictPort \
       >"$web_log" 2>&1
   ) &
   if [[ "$prefix" == "AFTER" ]]; then

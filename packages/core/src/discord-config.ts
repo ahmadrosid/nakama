@@ -77,12 +77,17 @@ function clearDiscordApplicationIdCache(botToken: string): void {
 }
 
 export async function resolveDiscordApplicationId(
-  botToken: string
+  botToken: string,
+  options: { forceRefresh?: boolean } = {}
 ): Promise<string | null> {
   const token = botToken.trim();
 
   if (!token) {
     return null;
+  }
+
+  if (options.forceRefresh) {
+    clearDiscordApplicationIdCache(token);
   }
 
   const cached = discordApplicationIdCache.get(token);
@@ -375,7 +380,7 @@ export function resolveDiscordConfigFromSources(options: {
     handshakeCode: file?.handshakeCode ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
-      env.nakama_DISCORD_PROFILE_ID?.trim() ||
+      env.NAKAMA_DISCORD_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_DISCORD_PROFILE_ID,
   };

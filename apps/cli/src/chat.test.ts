@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   HealthResponse,
   ModelsResponse,
   ProfileSummary,
 } from "@nakama/core";
 import {
+  createChatExitController,
   createDebouncedEscAbortHandler,
   disableRawModeIfActive,
+  formatBusyDropLine,
   formatErrorLines,
+  formatSoulStatusLines,
   formatStatusLines,
   isEscInterruptKey,
   needsTrailingStreamNewline,
@@ -26,6 +31,62 @@ describe("needsTrailingStreamNewline", () => {
   test("skips the newline when the stream already ended with one", () => {
     expect(needsTrailingStreamNewline("Hello.\n")).toBe(false);
     expect(needsTrailingStreamNewline("Hello.\r\n")).toBe(false);
+  });
+});
+
+describe("createChatExitController", () => {
+  test("requestExit resolves wait without scheduling an interval", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    let intervalCalls = 0;
+    globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+      intervalCalls += 1;
+      return originalSetInterval(...args);
+    }) as typeof setInterval;
+
+    try {
+      const exit = createChatExitController();
+      const waited = exit.wait();
+      expect(exit.exiting).toBe(false);
+      exit.requestExit();
+      await waited;
+      expect(exit.exiting).toBe(true);
+      expect(intervalCalls).toBe(0);
+    } finally {
+      globalThis.setInterval = originalSetInterval;
+    }
+  });
+
+  test("AbortSignal resolves wait immediately", async () => {
+    const controller = new AbortController();
+    const exit = createChatExitController(controller.signal);
+    const waited = exit.wait();
+    controller.abort();
+    await waited;
+    expect(exit.exiting).toBe(true);
+  });
+
+  test("already-aborted signal resolves wait without waiting", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const exit = createChatExitController(controller.signal);
+    await exit.wait();
+    expect(exit.exiting).toBe(true);
+  });
+});
+
+describe("formatBusyDropLine", () => {
+  test("shows a short busy marker before the warn threshold", () => {
+    expect(formatBusyDropLine(1)).toBe("[busy]");
+    expect(formatBusyDropLine(2)).toBe("[busy]");
+  });
+
+  test("includes the drop count once the warn threshold is reached", () => {
+    expect(formatBusyDropLine(3)).toBe(
+      "[busy] ignored input (3 while processing)"
+    );
+    expect(formatBusyDropLine(5)).toBe(
+      "[busy] ignored input (5 while processing)"
+    );
   });
 });
 
@@ -88,6 +149,41 @@ describe("formatErrorLines", () => {
     expect(
       formatErrorLines(new Error("DeepSeek request failed\ninternal_error"))
     ).toEqual(["", "DeepSeek request failed", "internal_error"]);
+  });
+});
+
+describe("formatSoulStatusLines", () => {
+  const directory = join(
+    homedir(),
+    ".nakama",
+    "orgs",
+    "org_secret",
+    "profiles",
+    "agent-x"
+  );
+  const status = {
+    active: true,
+    directory,
+    files: {
+      examples: false,
+      instructions: true,
+      memory: true,
+      soul: true,
+      style: true,
+    },
+    profileId: "agent-x",
+  };
+
+  test("masks soul directory by default", () => {
+    expect(formatSoulStatusLines(status)[0]).toBe(
+      "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
+    );
+  });
+
+  test("shows absolute soul directory when verbose", () => {
+    expect(formatSoulStatusLines(status, true)[0]).toBe(
+      `Soul directory: ${directory}`
+    );
   });
 });
 

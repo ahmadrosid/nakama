@@ -121,18 +121,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       : null;
 
     if (groupDecision && !groupDecision.shouldHandle) {
-      console.log(
-        [
-          "Ignored Telegram group message",
-          `reason=${groupDecision.reason}`,
-          `bot=@${botInfo?.username ?? "unknown"}`,
+      const parts = [
+        "Ignored Telegram group message",
+        `reason=${groupDecision.reason}`,
+        `bot=@${botInfo?.username ?? "unknown"}`,
+        `messageId=${ctx.message?.message_id ?? "unknown"}`,
+        `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
+      ];
+      if (process.env.NAKAMA_CH_DEBUG === "1") {
+        parts.splice(
+          3,
+          0,
           `botId=${botInfo?.id ?? "unknown"}`,
           `chatId=${chatId}`,
-          `messageId=${ctx.message?.message_id ?? "unknown"}`,
-          `userId=${userId}`,
-          `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
-        ].join(" ")
-      );
+          `userId=${userId}`
+        );
+      }
+      console.log(parts.join(" "));
       return;
     }
 
@@ -775,10 +780,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const existing = sessionStore.get(chatId);
 
     if (existing) {
+      const hot = sessionStore.getHotSession<RemoteChatSession>(chatId);
+      if (hot) {
+        return hot;
+      }
+
       const session = client.createChatSession(existing.sessionId, "telegram");
 
       try {
         await session.getMessages();
+        sessionStore.setHotSession(chatId, session);
         return session;
       } catch {
         // Session missing on server; create a new one below
@@ -803,6 +814,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       sessionId: session.id,
       updatedAt: new Date().toISOString(),
     });
+    sessionStore.setHotSession(chatId, session);
     await sessionStore.save();
 
     return session;
@@ -897,11 +909,6 @@ function isStopCommand(text: string): boolean {
   return parseTelegramCommand(text) === "/stop";
 }
 
-/** @internal Test helper — clears the in-process chat lock map. */
-export function resetChatLocksForTests(): void {
-  chatLocks.clear();
-}
-
 export async function withChatLock(
   chatId: string,
   fn: () => Promise<void>
@@ -911,8 +918,8 @@ export async function withChatLock(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  // Keep the stored chain rejection-safe: a failed previous must not reject
-  // `chain` before `current` settles (unhandledRejection hazard).
+  // Second handler keeps the chain alive if `previous` rejects, so the stored
+  // promise does not become an unhandled rejection when nobody awaits `chain`.
   const chain = previous.then(
     () => current,
     () => current
@@ -928,4 +935,17 @@ export async function withChatLock(
       chatLocks.delete(chatId);
     }
   }
+}
+
+/** @internal Test helper — clears the in-process chat lock map. */
+export function resetChatLocksForTests(): void {
+  chatLocks.clear();
+}
+
+/** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
+export function seedChatLockForTests(
+  chatId: string,
+  promise: Promise<void>
+): void {
+  chatLocks.set(chatId, promise);
 }

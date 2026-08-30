@@ -2017,7 +2017,13 @@ export interface PublicArtifactShareResponse {
 
 export type KnowledgeBaseDocumentStatus = "ready" | "failed";
 
+export type KnowledgeBaseDuplicateAction = "error" | "skip" | "replace";
+
+export type KnowledgeBaseUploadOutcome = "created" | "skipped" | "replaced";
+
 export interface KnowledgeBaseDocument {
+  /** SHA-256 hex of the stored file bytes. Optional on legacy manifests. */
+  contentHash?: string;
   error?: string;
   filename: string;
   id: string;
@@ -2045,10 +2051,13 @@ export interface ListKnowledgeBaseResponse {
 
 export interface UploadKnowledgeBaseRequest {
   document: DocumentAttachment;
+  /** Default `error` — reject duplicates so clients can warn / choose skip or replace. */
+  onDuplicate?: KnowledgeBaseDuplicateAction;
 }
 
 export interface UploadKnowledgeBaseResponse {
   document: KnowledgeBaseDocument;
+  outcome: KnowledgeBaseUploadOutcome;
   profileId: string;
 }
 

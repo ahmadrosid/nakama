@@ -570,6 +570,74 @@ describe("OrgService", () => {
     });
   });
 
+  test("removeMember rejects bad userId shape before membership lookup", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        phone: "+628123456789",
+      },
+      name: "Acme",
+      slug: "acme-shape",
+    });
+
+    await expect(
+      orgService.removeMember(created.organization.id, "../etc/passwd")
+    ).rejects.toMatchObject({
+      message: "Invalid user id.",
+      status: 400,
+    });
+
+    await expect(
+      orgService.removeMember(created.organization.id, "not-a-user-id")
+    ).rejects.toMatchObject({
+      message: "Invalid user id.",
+      status: 400,
+    });
+  });
+
+  test("removeMember 404s the same for unknown userId and user not in org", async () => {
+    const { orgService, databaseAdapter, authService } = createOrgService();
+    const created = await orgService.createOrganization({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        phone: "+628123456789",
+      },
+      name: "Acme",
+      slug: "acme-remove-404",
+    });
+
+    const outsiderId = "user_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const now = new Date().toISOString();
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "outsider@example.com",
+      id: outsiderId,
+      name: "Outsider",
+      passwordHash: await authService.hashPassword("password123"),
+      phone: null,
+      updatedAt: now,
+    });
+
+    const unknownId = "user_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    await expect(
+      orgService.removeMember(created.organization.id, unknownId)
+    ).rejects.toMatchObject({
+      message: "Not found",
+      status: 404,
+    });
+
+    await expect(
+      orgService.removeMember(created.organization.id, outsiderId)
+    ).rejects.toMatchObject({
+      message: "Not found",
+      status: 404,
+    });
+  });
+
   test("archives an org and hides it from membership lists", async () => {
     const { orgService, authService, databaseAdapter } = createOrgService();
     const bootstrapped = await orgService.bootstrapInitialSetup({

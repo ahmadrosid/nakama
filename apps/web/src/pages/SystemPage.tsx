@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
-import { StatusPage } from "@/pages/StatusPage";
+import { LlmUsageTab } from "@/pages/StatusPage";
 import {
   resolveSystemTab,
   type SYSTEM_TABS,
@@ -55,6 +55,10 @@ export function SystemPage() {
     return <Navigate replace to="/chat" />;
   }
 
+  if (searchParams.get("tab") === "status") {
+    return <Navigate replace to={PAGE_PATHS.workers} />;
+  }
+
   if (searchParams.get("tab") === "organization") {
     const next = new URLSearchParams(searchParams);
     next.delete("tab");
@@ -100,10 +104,10 @@ export function SystemPage() {
           id={`system-panel-${tab}`}
           role="tabpanel"
         >
-          {tab === "status" ? (
-            <StatusPage embedded />
-          ) : tab === "tools" ? (
+          {tab === "tools" ? (
             <ToolsTab embedded />
+          ) : tab === "usage" ? (
+            <LlmUsageTab />
           ) : (
             <McpTab embedded />
           )}

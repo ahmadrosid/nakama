@@ -1685,3 +1685,49 @@ describe("withChatLock", () => {
     }
   });
 });
+
+describe("createChatHandler session hot cache", () => {
+  test("reuses RemoteChatSession across messages without recreate", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket } = createMockSocket();
+
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "one" });
+      await handleMessage({ jid: PAIRED_JID, text: "two" });
+
+      expect(calls.createSession).toBe(0);
+      expect(calls.createChatSession).toBe(1);
+      // 1 resolve validation + 1 artifact read per turn (hot path skips resolve getMessages)
+      expect(calls.getMessages).toBe(3);
+      expect(calls.sendStream).toBe(2);
+    });
+  });
+});

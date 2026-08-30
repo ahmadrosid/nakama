@@ -11,6 +11,7 @@ import type {
   DocumentAttachment,
   ImageAttachment,
   JsonSchema,
+  KnowledgeBaseDuplicateAction,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
   ListToolsResponse,
@@ -31,6 +32,7 @@ import {
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
+  KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
   listKnowledgeBaseSources,
   NakamaApiError,
@@ -808,7 +810,8 @@ export class ProfileService {
   async uploadKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
-    document: DocumentAttachment
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
   ): Promise<UploadKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -816,10 +819,19 @@ export class ProfileService {
       const uploaded = await persistKnowledgeBaseDocument(
         orgId,
         profileId,
-        document
+        document,
+        onDuplicate
       );
-      return { document: uploaded, profileId };
+      return {
+        document: uploaded.document,
+        outcome: uploaded.outcome,
+        profileId,
+      };
     } catch (error) {
+      if (error instanceof KnowledgeBaseDuplicateError) {
+        throw new NakamaApiError(error.message, 409);
+      }
+
       const message =
         error instanceof Error
           ? error.message

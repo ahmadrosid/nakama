@@ -36,7 +36,6 @@ export function useProviderInstanceCard({
   onUpdate,
   onDelete,
   onError,
-  isSole = false,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -46,11 +45,11 @@ export function useProviderInstanceCard({
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
-  isSole?: boolean;
 }) {
   const [replaceKeyOpen, setReplaceKeyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -162,19 +161,12 @@ export function useProviderInstanceCard({
   };
 
   const handleDelete = async () => {
-    if (
-      !window.confirm(
-        `${isSole ? "This is your only/default LLM provider. " : ""}Remove ${instance.label} (${instance.type})? Models using this provider will stop working. This cannot be undone.`
-      )
-    ) {
-      return;
-    }
-
     setBusy(true);
     onError(null);
 
     try {
       await onDelete(instance.id);
+      setDeleteOpen(false);
     } catch (error) {
       onError(formatError(error));
     } finally {
@@ -245,6 +237,7 @@ export function useProviderInstanceCard({
     apiKey,
     busy,
     catalogModelsForType,
+    deleteOpen,
     dialogError,
     editBaseUrl,
     editLabel,
@@ -268,6 +261,7 @@ export function useProviderInstanceCard({
     saveCompatible,
     saveManageModels,
     setApiKey,
+    setDeleteOpen,
     setEditBaseUrl,
     setEditLabel,
     setEditOpen,

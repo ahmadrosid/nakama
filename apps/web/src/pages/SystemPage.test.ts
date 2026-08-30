@@ -2,21 +2,21 @@ import { describe, expect, test } from "bun:test";
 import { resolveSystemTab, visibleSystemTabs } from "./system-page.shared";
 
 describe("SystemPage tab access", () => {
-  test("shows status to all system users and MCP only to platform admins", () => {
+  test("shows usage to system users and MCP only to platform admins", () => {
     expect(visibleSystemTabs(true).map((tab) => tab.id)).toEqual([
-      "status",
       "tools",
+      "usage",
       "mcp",
     ]);
     expect(visibleSystemTabs(false).map((tab) => tab.id)).toEqual([
-      "status",
       "tools",
+      "usage",
     ]);
   });
 
-  test("resolves status for all system users and forces non-platform users off admin tabs", () => {
-    expect(resolveSystemTab("status", true)).toBe("status");
-    expect(resolveSystemTab("status", false)).toBe("status");
+  test("resolves usage for all system users and forces non-platform users off admin tabs", () => {
+    expect(resolveSystemTab("usage", true)).toBe("usage");
+    expect(resolveSystemTab("usage", false)).toBe("usage");
     expect(resolveSystemTab("organization", true)).toBe("tools");
     expect(resolveSystemTab("organization", false)).toBe("tools");
     expect(resolveSystemTab("mcp", true)).toBe("mcp");

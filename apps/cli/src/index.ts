@@ -5,6 +5,7 @@ import {
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { runChat, runCleanupThenExit } from "./chat";
+import { isCliVerbose } from "./display-path";
 import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { parseCliProfileArgs } from "./profile";
 import {
@@ -101,6 +102,7 @@ try {
     offline: !health.providerConfigured,
     profileId: cliProfile.profileId,
     signal: abortController.signal,
+    verbose: isCliVerbose(),
   });
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

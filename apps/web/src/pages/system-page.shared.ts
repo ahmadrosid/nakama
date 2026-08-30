@@ -1,12 +1,8 @@
-import {
-  DashboardSquare01Icon,
-  LayoutGridIcon,
-  Plug01Icon,
-} from "hugeicons-react";
+import { Coins01Icon, LayoutGridIcon, Plug01Icon } from "hugeicons-react";
 
 export const SYSTEM_TABS = [
-  { icon: DashboardSquare01Icon, id: "status" as const, label: "Status" },
   { icon: LayoutGridIcon, id: "tools" as const, label: "Tools" },
+  { icon: Coins01Icon, id: "usage" as const, label: "Usage" },
   { icon: Plug01Icon, id: "mcp" as const, label: "MCP" },
 ] as const;
 
@@ -16,8 +12,8 @@ export function resolveSystemTab(
   value: string | null,
   isPlatformAdmin: boolean
 ): SystemTabId {
-  if (value === "status") {
-    return "status";
+  if (value === "usage") {
+    return "usage";
   }
 
   if (!isPlatformAdmin) {
@@ -36,7 +32,5 @@ export function visibleSystemTabs(isPlatformAdmin: boolean) {
     return SYSTEM_TABS;
   }
 
-  return SYSTEM_TABS.filter(
-    (item) => item.id === "status" || item.id === "tools"
-  );
+  return SYSTEM_TABS.filter((item) => item.id !== "mcp");
 }

@@ -99,6 +99,11 @@ function estimateMessageTokens(messages: readonly ChatMessage[]): number {
       } else {
         total += estimateTokens(message.content);
 
+        // The chat-completions mapper replays this trace as reasoning_content.
+        if (message.thinking) {
+          total += estimateTokens(message.thinking);
+        }
+
         if (message.toolCalls?.length) {
           total += estimateTokens(JSON.stringify(message.toolCalls));
         }

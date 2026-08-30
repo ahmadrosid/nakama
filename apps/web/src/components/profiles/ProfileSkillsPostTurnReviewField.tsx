@@ -13,11 +13,9 @@ export function ProfileSkillsPostTurnReviewField({
       disabled={disabled}
       field="skillsPostTurnReview"
       id="profile-skills-post-turn-review"
-      label="Post-turn skill review"
-      offLabel="Disable review"
-      onLabel="Enable review"
+      label="Learn after a turn"
       profile={profile}
-      savedToast="Post-turn skill review setting saved."
+      savedToast="Learn after a turn setting saved."
     />
   );
 }

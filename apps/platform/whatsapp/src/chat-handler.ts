@@ -521,10 +521,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const existing = sessionStore.get(jid);
 
     if (existing && existing.profileId === profileId) {
+      const hot = sessionStore.getHotSession<RemoteChatSession>(jid);
+      if (hot) {
+        return hot;
+      }
+
       const session = client.createChatSession(existing.sessionId, "whatsapp");
 
       try {
         await session.getMessages();
+        sessionStore.setHotSession(jid, session);
         return session;
       } catch {
         // Session missing on server; create a new one below
@@ -548,6 +554,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       sessionId: session.id,
       updatedAt: new Date().toISOString(),
     });
+    sessionStore.setHotSession(jid, session);
     await sessionStore.save();
 
     return session;
@@ -669,8 +676,8 @@ export async function withChatLock(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  // Keep the stored chain rejection-safe: a failed previous must not reject
-  // `chain` before `current` settles (unhandledRejection hazard).
+  // Second handler keeps the chain alive if `previous` rejects, so the stored
+  // promise does not become an unhandled rejection when nobody awaits `chain`.
   const chain = previous.then(
     () => current,
     () => current
@@ -686,4 +693,12 @@ export async function withChatLock(
       chatLocks.delete(jid);
     }
   }
+}
+
+/** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
+export function seedChatLockForTests(
+  jid: string,
+  promise: Promise<void>
+): void {
+  chatLocks.set(jid, promise);
 }

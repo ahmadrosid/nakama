@@ -35,11 +35,12 @@ import {
   type StatusTone,
 } from "@/pages/status-page.shared";
 
-const sectionClass = "rounded-md border border-border bg-card";
+const sectionClass =
+  "min-w-0 overflow-hidden rounded-md border border-border bg-card";
 const iconTileClass =
   "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40";
 
-export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function StatusPage() {
   const { data: status, error, isLoading } = useSystemStatusQuery();
   const { user } = useAuth();
   const refreshSystemStatus = useRefreshSystemStatus();
@@ -47,18 +48,10 @@ export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
   const canManageWorkers = user?.isPlatformAdmin === true;
 
   return (
-    <div
-      className={cn(
-        "min-w-0",
-        embedded ? "divide-y divide-border" : "space-y-6"
-      )}
-    >
+    <div className="min-w-0 space-y-6">
       {errorMessage ? (
         <div
-          className={cn(
-            "flex flex-wrap items-start justify-between gap-3 border-destructive/40 bg-destructive/10 px-4 py-3",
-            embedded ? "border-b" : "rounded-md border"
-          )}
+          className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3"
           role="alert"
         >
           <p className="min-w-0 flex-1 text-destructive text-sm">
@@ -77,16 +70,9 @@ export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
       ) : null}
 
       {isLoading && !status ? (
-        <StatusSkeleton embedded={embedded} />
+        <StatusSkeleton />
       ) : status ? (
-        <>
-          <StatusDashboard
-            canManageWorkers={canManageWorkers}
-            embedded={embedded}
-            status={status}
-          />
-          <LlmUsageSection embedded={embedded} usage={status.llmUsage} />
-        </>
+        <StatusDashboard canManageWorkers={canManageWorkers} status={status} />
       ) : null}
     </div>
   );
@@ -95,11 +81,9 @@ export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
 function StatusDashboard({
   status,
   canManageWorkers,
-  embedded = false,
 }: {
   status: SystemStatusResponse;
   canManageWorkers: boolean;
-  embedded?: boolean;
 }) {
   const summary = useMemo(() => deriveSummary(status), [status]);
   const services = useMemo(() => buildServiceColumns(status), [status]);
@@ -138,9 +122,7 @@ function StatusDashboard({
   }));
 
   return (
-    <section
-      className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}
-    >
+    <section className={sectionClass}>
       <SummaryStrip status={status} summary={summary} />
 
       <div className="grid grid-cols-1 divide-y divide-border border-border border-b sm:grid-cols-2 sm:divide-x sm:divide-y-0">
@@ -202,13 +184,47 @@ function StatusDashboard({
   );
 }
 
-function LlmUsageSection({
-  usage,
-  embedded = false,
-}: {
-  usage: LlmUsageStatus;
-  embedded?: boolean;
-}) {
+export function LlmUsageTab() {
+  const { data: status, error, isLoading } = useSystemStatusQuery();
+  const refreshSystemStatus = useRefreshSystemStatus();
+  const errorMessage = error ? formatError(error) : null;
+
+  return (
+    <div className="min-w-0">
+      {errorMessage ? (
+        <div
+          className="flex flex-wrap items-start justify-between gap-3 border-destructive/40 border-b bg-destructive/10 px-4 py-3"
+          role="alert"
+        >
+          <p className="min-w-0 flex-1 text-destructive text-sm">
+            Could not load usage: {errorMessage}
+          </p>
+          <Button
+            className="shrink-0 border-destructive/30 bg-background text-destructive hover:bg-destructive/10"
+            onClick={() => void refreshSystemStatus()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Try again
+          </Button>
+        </div>
+      ) : null}
+
+      {isLoading && !status ? (
+        <div
+          aria-busy="true"
+          aria-label="Loading LLM usage"
+          className="h-80 animate-pulse bg-muted/40"
+        />
+      ) : status ? (
+        <LlmUsageSection usage={status.llmUsage} />
+      ) : null}
+    </div>
+  );
+}
+
+function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   const modelLabel =
     usage.currentModel ??
     (usage.providerConfigured ? "Default model" : "Not configured");
@@ -217,9 +233,7 @@ function LlmUsageSection({
   const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
-    <section
-      className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}
-    >
+    <section className="min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-4 border-border border-b px-5 py-4">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
@@ -737,15 +751,12 @@ function ToneIcon({
   );
 }
 
-function StatusSkeleton({ embedded = false }: { embedded?: boolean } = {}) {
+function StatusSkeleton() {
   return (
     <div
       aria-busy="true"
       aria-label="Loading system status"
-      className={cn(
-        "h-80 animate-pulse bg-muted/40",
-        embedded ? "border-0" : "rounded-md border border-border"
-      )}
+      className="h-80 animate-pulse rounded-md border border-border bg-muted/40"
     />
   );
 }

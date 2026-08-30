@@ -315,6 +315,10 @@ export function registerOrgMemberRoutes(
       request: { params: orgMemberParams },
       responses: {
         204: { description: "Member removed" },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
         403: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",

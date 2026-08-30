@@ -324,6 +324,50 @@ describe("coding-delegation skill rename migration", () => {
       db.close();
     }
   });
+
+  test("rolls back the whole merge when one legacy row fails to delete", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
+        VALUES ('super_bot', 'Super Bot', '', NULL, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES
+          ('skill_legacy_a', 'coding-delegation', 'Legacy A', '/tmp/a/coding-delegation/SKILL.md', 0, 0, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('skill_legacy_b', 'coding-delegation', 'Legacy B', '/tmp/b/coding-delegation/SKILL.md', 0, 0, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('skill_canonical', 'coding-agent', 'Coding agent', '/tmp/c/coding-agent/SKILL.md', 0, 0, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        -- The merge deletes legacy rows one at a time, so aborting on the
+        -- second one leaves the first already gone unless the step is atomic.
+        CREATE TRIGGER fail_second_legacy_delete
+        BEFORE DELETE ON skills
+        WHEN OLD.id = 'skill_legacy_b'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced migration failure');
+        END;
+      `);
+
+      expect(() => migrateDatabase(db)).toThrow();
+
+      const remaining = db
+        .prepare(
+          "SELECT id FROM skills WHERE name = 'coding-delegation' ORDER BY id"
+        )
+        .all() as Array<{ id: string }>;
+      expect(remaining).toEqual([
+        { id: "skill_legacy_a" },
+        { id: "skill_legacy_b" },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("install-wide name uniqueness", () => {

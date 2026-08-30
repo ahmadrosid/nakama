@@ -113,6 +113,8 @@ describe("createChatHandler group chats", () => {
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
+        expect(output).not.toContain("userId=42");
+        expect(output).not.toContain("chatId=-100123");
       } finally {
         log.mockRestore();
       }
@@ -2383,5 +2385,52 @@ describe("withChatLock", () => {
     } finally {
       process.off("unhandledRejection", onUnhandled);
     }
+  });
+});
+
+describe("createChatHandler session hot cache", () => {
+  test("reuses RemoteChatSession across messages without recreate", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set("4242", {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(
+        createMessageContext({ text: "one", userId: 4242 }).ctx
+      );
+      await handleMessage(
+        createMessageContext({ text: "two", userId: 4242 }).ctx
+      );
+
+      expect(calls.createSession).toBe(0);
+      expect(calls.createChatSession).toBe(1);
+      // 1 resolve validation + 1 artifact read per turn (hot path skips resolve getMessages)
+      expect(calls.getMessages).toBe(3);
+      expect(calls.sendStream).toBe(2);
+    });
   });
 });

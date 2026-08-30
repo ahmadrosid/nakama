@@ -25,6 +25,7 @@ describe("visibleNavGroups", () => {
       "profiles",
       "settings",
       "soul",
+      "workers",
     ]);
   });
 
@@ -36,6 +37,7 @@ describe("visibleNavGroups", () => {
     expect(ids).toContain("organization");
     expect(ids).toContain("profiles");
     expect(ids).toContain("integrations");
+    expect(ids).toContain("workers");
     expect(ids).not.toContain("files");
   });
 
@@ -44,11 +46,13 @@ describe("visibleNavGroups", () => {
     expect(member).toContain("integrations");
     expect(member).not.toContain("soul");
     expect(member).not.toContain("organization");
+    expect(member).not.toContain("workers");
 
     const viewer = pageIdsFor(false, "viewer");
     expect(viewer).not.toContain("integrations");
     expect(viewer).not.toContain("soul");
     expect(viewer).not.toContain("organization");
+    expect(viewer).not.toContain("workers");
   });
 
   test("groups left with no reachable item are dropped", () => {
@@ -86,6 +90,12 @@ describe("agent work navigation", () => {
   test("maps the legacy tasks path to the unified page", () => {
     expect(pageIdFromPath("/tasks")).toBe("automations");
     expect(pageIdFromPath("/automations")).toBe("automations");
+  });
+});
+
+describe("workers navigation", () => {
+  test("maps the workers path", () => {
+    expect(pageIdFromPath("/workers")).toBe("workers");
   });
 });
 

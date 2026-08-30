@@ -240,7 +240,7 @@ export function resolveTelegramConfigFromSources(options: {
     handshakeCode: file?.handshakeCode ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
-      env.nakama_TELEGRAM_PROFILE_ID?.trim() ||
+      env.NAKAMA_TELEGRAM_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_TELEGRAM_PROFILE_ID,
   };
