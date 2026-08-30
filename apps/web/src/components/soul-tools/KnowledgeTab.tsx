@@ -80,44 +80,65 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
 
     setError(null);
 
-    for (const file of Array.from(files)) {
-      if (!isKnowledgeBaseFile(file)) {
-        setError(
-          `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
-        );
-        continue;
+    const candidates = Array.from(files).filter((file) => {
+      if (isKnowledgeBaseFile(file)) {
+        return true;
+      }
+      setError(
+        `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
+      );
+      return false;
+    });
+
+    const prepared = await Promise.all(
+      candidates.map(async (file) => ({
+        document: await fileToDocumentAttachment(file),
+        file,
+      }))
+    );
+
+    // Sequential: one duplicate dialog at a time; hard errors stop the batch.
+    const uploadNext = async (index: number): Promise<void> => {
+      const item = prepared[index];
+      if (!item) {
+        return;
+      }
+
+      const { document, file } = item;
+      if (!document) {
+        setError(`Failed to read file: ${file.name}`);
+        return uploadNext(index + 1);
       }
 
       try {
-        const document = await fileToDocumentAttachment(file);
-        if (!document) {
-          setError(`Failed to read file: ${file.name}`);
-          continue;
+        await uploadMutation.mutateAsync({ document, profileId });
+      } catch (err) {
+        if (!(err instanceof NakamaApiError && err.status === 409)) {
+          setError(formatError(err));
+          return;
+        }
+
+        const decision = await askDuplicateDecision(file.name);
+        if (decision === "skip") {
+          return uploadNext(index + 1);
         }
 
         try {
-          await uploadMutation.mutateAsync({ document, profileId });
-        } catch (err) {
-          if (!(err instanceof NakamaApiError && err.status === 409)) {
-            throw err;
-          }
-
-          const decision = await askDuplicateDecision(file.name);
-          if (decision === "skip") {
-            continue;
-          }
-
           await uploadMutation.mutateAsync({
             document,
             onDuplicate: "replace",
             profileId,
           });
+        } catch (replaceErr) {
+          setError(formatError(replaceErr));
+          return;
         }
-      } catch (err) {
-        setError(formatError(err));
-        break;
       }
-    }
+
+      return uploadNext(index + 1);
+    };
+
+    await uploadNext(0);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
