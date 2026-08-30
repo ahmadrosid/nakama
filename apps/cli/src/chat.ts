@@ -24,7 +24,7 @@ import {
   resolveSuggestions,
 } from "./commands";
 import { mergeSendInput, parseImageLine } from "./image-input";
-import type { PendingMessage } from "./message-queue";
+import { createSerializedQueue, type PendingMessage } from "./message-queue";
 import { PersistentPrompt } from "./persistent-prompt";
 import {
   type CliProfileOptions,
@@ -43,6 +43,9 @@ import { TerminalRenderer } from "./terminal-renderer";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
+
+/** Debounce bare ESC so alt-prefix / slow paste chunks do not abort. */
+const ESC_ABORT_DEBOUNCE_MS = 50;
 
 interface RunChatOptions {
   channel: AgentChannel;
@@ -148,6 +151,7 @@ async function runStickyChat(
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
   const queue: PendingMessage[] = [];
+  const sendQueue = createSerializedQueue();
   const thinkingIndicator = new ThinkingIndicator();
   let prompt: PersistentPrompt | null = null;
   thinkingIndicator.setRenderer(renderer);
@@ -234,45 +238,31 @@ async function runStickyChat(
     }
   }
 
-  async function drainQueue(): Promise<void> {
-    if (isStreaming || exiting) {
-      return;
-    }
-
-    const next = queue.shift();
-
-    if (!next) {
-      syncPendingMessages();
-      return;
-    }
-
-    syncPendingMessages();
-    await startSend(next);
-  }
-
-  async function startSend(message: PendingMessage): Promise<void> {
+  async function runOneSend(message: PendingMessage): Promise<void> {
     isStreaming = true;
     abortController = new AbortController();
-    renderer.beginStream();
-
-    if (!message.echoed) {
-      renderer.appendUserMessage(message.line, { placement: "scroll" });
-    }
 
     let aborted = false;
     let caught: unknown;
 
     try {
-      const result = await sendMessageStream(message.sendInput);
-      aborted = result.aborted;
-    } catch (error) {
-      caught = error;
+      renderer.beginStream();
+
+      if (!message.echoed) {
+        renderer.appendUserMessage(message.line, { placement: "scroll" });
+      }
+
+      try {
+        const result = await sendMessageStream(message.sendInput);
+        aborted = result.aborted;
+      } catch (error) {
+        caught = error;
+      }
     } finally {
       isStreaming = false;
       abortController = null;
       thinkingIndicator.stop();
       renderer.endStream();
-      await drainQueue();
     }
 
     // Post-stream output — the stream buffer is now flushed into the VirtualMessageList,
@@ -282,6 +272,29 @@ async function runStickyChat(
     } else if (aborted) {
       renderer.appendOutputLine(styledLine("[stopped]", { dim: true }));
     }
+  }
+
+  async function startSend(message: PendingMessage): Promise<void> {
+    await sendQueue.enqueue(async () => {
+      if (exiting) {
+        return;
+      }
+
+      let current: PendingMessage | undefined = message;
+
+      while (current && !exiting) {
+        try {
+          await runOneSend(current);
+        } catch (error) {
+          isStreaming = false;
+          abortController = null;
+          writeError(error);
+        }
+
+        current = queue.shift();
+        syncPendingMessages();
+      }
+    });
   }
 
   async function handleChatMessage(
@@ -1155,8 +1168,63 @@ export function disableRawModeIfActive(
   }
 }
 
+/** Await cleanup, then exit. Used by CLI signal handlers. */
+export async function runCleanupThenExit(
+  cleanup: () => void | Promise<void>,
+  exitProcess: (code: number) => void = (code) => {
+    process.exit(code);
+  }
+): Promise<void> {
+  try {
+    await cleanup();
+  } catch {
+    // Always exit after cleanup attempt.
+  } finally {
+    exitProcess(0);
+  }
+}
+
 export function isEscInterruptKey(key: string): boolean {
   return key === "\u001b";
+}
+
+/**
+ * Bare ESC only aborts after a quiet window. Extra bytes cancel the abort
+ * (alt-prefix, CSI, or slow paste fragments).
+ */
+export function createDebouncedEscAbortHandler(
+  onAbort: () => void,
+  debounceMs = ESC_ABORT_DEBOUNCE_MS
+): {
+  onData: (chunk: Buffer | string) => void;
+  dispose: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearPending = (): void => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  return {
+    dispose: clearPending,
+    onData(chunk: Buffer | string): void {
+      const key = String(chunk);
+
+      if (isEscInterruptKey(key)) {
+        clearPending();
+        timer = setTimeout(() => {
+          timer = null;
+          onAbort();
+        }, debounceMs);
+        return;
+      }
+
+      clearPending();
+    },
+  };
 }
 
 function startEscAbortListener(onAbort: () => void): () => void {
@@ -1166,20 +1234,16 @@ function startEscAbortListener(onAbort: () => void): () => void {
 
   const stdin = process.stdin;
   const wasRaw = stdin.isRaw;
-
-  function onData(chunk: Buffer | string): void {
-    if (isEscInterruptKey(String(chunk))) {
-      onAbort();
-    }
-  }
+  const handler = createDebouncedEscAbortHandler(onAbort);
 
   stdin.setEncoding("utf8");
   stdin.setRawMode(true);
   stdin.resume();
-  stdin.on("data", onData);
+  stdin.on("data", handler.onData);
 
   return () => {
-    stdin.off("data", onData);
+    handler.dispose();
+    stdin.off("data", handler.onData);
 
     if (!wasRaw) {
       disableRawModeIfActive(stdin);

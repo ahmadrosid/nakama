@@ -69,6 +69,27 @@ export function isMouseEventReport(chunk: string): boolean {
   return MOUSE_EVENT_REPORT.test(chunk);
 }
 
+/** True when more bytes may still complete a valid ESC sequence. */
+export function isIncompleteEscapeSequence(pending: string): boolean {
+  if (pending === "\x1b" || pending === "\x1b[" || pending === "\x1b(") {
+    return true;
+  }
+
+  if (/^\x1b\[[0-9;]*$/.test(pending)) {
+    return true;
+  }
+
+  if (/^\x1b\[<\d*(?:;\d*){0,2}$/.test(pending)) {
+    return true;
+  }
+
+  if (pending.startsWith("\x1b]") && !/(?:\x07|\x1b\\)$/.test(pending)) {
+    return true;
+  }
+
+  return false;
+}
+
 export function consumeTerminalInput(buffer: string): {
   events: string[];
   pending: string;
@@ -95,7 +116,14 @@ export function consumeTerminalInput(buffer: string): {
       );
 
       if (!match) {
-        break;
+        if (isIncompleteEscapeSequence(pending)) {
+          break;
+        }
+
+        // Malformed ESC: emit bare ESC so pending can drain.
+        events.push("\x1b");
+        pending = pending.slice(1);
+        continue;
       }
 
       const sequence = match[0];

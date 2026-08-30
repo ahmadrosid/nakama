@@ -7,13 +7,21 @@ import {
   test,
 } from "bun:test";
 import path from "node:path";
+import {
+  hasActiveStreams,
+  resetActiveStreamsForTests,
+} from "@nakama/core/channel-active-stream";
 import type { ChatMessage } from "@nakama/core/contract";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
   UNSUPPORTED_MEDIA_REPLY,
 } from "./attachments";
 import { TelegramAuthStore } from "./auth-store";
-import { createChatHandler } from "./chat-handler";
+import {
+  createChatHandler,
+  resetChatLocksForTests,
+  withChatLock,
+} from "./chat-handler";
 import { SessionStore } from "./session-store";
 import {
   createMessageContext,
@@ -28,6 +36,11 @@ import {
 // These handler tests run in ~0.2s locally but occasionally exceed the 5000ms
 // default under CI's concurrent all-workspace load. Give them more headroom.
 setDefaultTimeout(10_000);
+
+afterEach(() => {
+  resetActiveStreamsForTests();
+  resetChatLocksForTests();
+});
 
 async function waitForCondition(
   condition: () => boolean,
@@ -2291,5 +2304,84 @@ describe("createChatHandler artifact delivery", () => {
       expect(calls.readProfileArtifactContent).toBe(1);
       expect(sendDocumentCalls).toBe(1);
     });
+  });
+});
+
+describe("stream cleanup", () => {
+  test("clears active stream after sendStream fails", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, getStreamControl } = createMockClient({
+        autoComplete: false,
+        streaming: true,
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        orgStore,
+        sessionStore,
+      });
+
+      const { ctx, replies } = createMessageContext({
+        text: "hello agent",
+        userId: 4242,
+      });
+      const chatPromise = handleMessage(ctx);
+
+      await waitForCondition(
+        () => getStreamControl()?.signal != null,
+        "Expected in-flight stream before fail"
+      );
+      expect(hasActiveStreams()).toBe(true);
+
+      getStreamControl()?.fail(new Error("provider down"));
+      await chatPromise;
+
+      expect(hasActiveStreams()).toBe(false);
+      expect(replies.some((reply) => /provider down/i.test(reply))).toBe(true);
+    });
+  });
+});
+
+describe("withChatLock", () => {
+  test("keeps the lock chain rejection-safe across a failed prior run", async () => {
+    const rejections: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+
+    try {
+      await expect(
+        withChatLock("tg-lock-a", async () => {
+          throw new Error("first failed");
+        })
+      ).rejects.toThrow("first failed");
+
+      let ranSecond = false;
+      await withChatLock("tg-lock-a", async () => {
+        ranSecond = true;
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(ranSecond).toBe(true);
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 });

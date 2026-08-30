@@ -16,6 +16,7 @@ import {
   extractWebSearchBlocksFromProviderContent,
   WEB_SEARCH_TOOL_NAME,
 } from "@/lib/chat-stream-web-search";
+import { createClientId } from "@/lib/client-id";
 
 export interface RequestedChatSession {
   profileId: string;
@@ -33,7 +34,7 @@ export function buildChatBasePath(): string {
  * query string or the remounted page falls back to the default profile.
  */
 export function buildNewChatPath(profileId?: string | null): string {
-  const params = new URLSearchParams({ _: String(Date.now()), new: "1" });
+  const params = new URLSearchParams({ new: "1" });
   if (profileId) {
     params.set("profile", profileId);
   }
@@ -96,7 +97,7 @@ export function consumeStoredChatDraft(key: string): string | null {
 }
 
 export function storeChatDraft(draft: string): string {
-  const key = `d${Date.now()}`;
+  const key = createClientId();
   sessionStorage.setItem(`${CHAT_DRAFT_STORAGE_PREFIX}${key}`, draft);
   return key;
 }
