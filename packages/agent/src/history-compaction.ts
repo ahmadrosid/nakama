@@ -278,17 +278,14 @@ export function pruneToolOutputs(
     return { prunedTokens: 0 };
   }
 
-  // Copy-on-write (#589): replace slots with new tool messages so in-flight
-  // providers that already hold the old objects keep the original content.
-  const pruneSet = new Set(pruneIndexes);
-  const nextHistory = messages.map((message, index) => {
-    if (!pruneSet.has(index) || message.role !== "tool") {
-      return message;
+  // Copy-on-write (#589): replace slots so in-flight providers keep originals.
+  for (const index of pruneIndexes) {
+    const message = messages[index];
+    if (!message || message.role !== "tool") {
+      continue;
     }
-
-    return { ...message, content: PRUNE_TRUNCATION };
-  });
-  messages.splice(0, messages.length, ...nextHistory);
+    messages[index] = { ...message, content: PRUNE_TRUNCATION };
+  }
 
   return { prunedTokens: pruned };
 }
