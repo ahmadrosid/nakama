@@ -25,7 +25,7 @@ import {
 } from "./commands";
 import { formatCliDisplayPath } from "./display-path";
 import { mergeSendInput, parseImageLine } from "./image-input";
-import type { PendingMessage } from "./message-queue";
+import { createSerializedQueue, type PendingMessage } from "./message-queue";
 import { PersistentPrompt } from "./persistent-prompt";
 import {
   type CliProfileOptions,
@@ -41,9 +41,13 @@ import { sendStreamCancellable } from "./stream-abort";
 import { styledLine } from "./styled-text";
 import { TerminalInput } from "./terminal-input";
 import { TerminalRenderer } from "./terminal-renderer";
+import { printLine } from "./terminal-safe";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
+
+/** Debounce bare ESC so alt-prefix / slow paste chunks do not abort. */
+const ESC_ABORT_DEBOUNCE_MS = 50;
 
 interface RunChatOptions {
   channel: AgentChannel;
@@ -57,6 +61,14 @@ interface RunChatOptions {
 
 export function needsTrailingStreamNewline(lastChunk: string | null): boolean {
   return lastChunk === null || !lastChunk.endsWith("\n");
+}
+
+export function formatBusyDropLine(dropCount: number): string {
+  if (dropCount >= 3) {
+    return `[busy] ignored input (${dropCount} while processing)`;
+  }
+
+  return "[busy]";
 }
 
 export async function runChat(options: RunChatOptions): Promise<void> {
@@ -73,7 +85,7 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   const renderer = new TerminalRenderer(terminalInput);
   const useStickyInput = renderer.apply();
 
-  console.log(`Profile: ${currentProfile.name} (${currentProfile.id})`);
+  printLine(`Profile: ${currentProfile.name} (${currentProfile.id})`);
   console.log("");
 
   if (options.offline) {
@@ -151,6 +163,7 @@ async function runStickyChat(
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
   const queue: PendingMessage[] = [];
+  const sendQueue = createSerializedQueue();
   const thinkingIndicator = new ThinkingIndicator();
   let prompt: PersistentPrompt | null = null;
   thinkingIndicator.setRenderer(renderer);
@@ -237,45 +250,31 @@ async function runStickyChat(
     }
   }
 
-  async function drainQueue(): Promise<void> {
-    if (isStreaming || exiting) {
-      return;
-    }
-
-    const next = queue.shift();
-
-    if (!next) {
-      syncPendingMessages();
-      return;
-    }
-
-    syncPendingMessages();
-    await startSend(next);
-  }
-
-  async function startSend(message: PendingMessage): Promise<void> {
+  async function runOneSend(message: PendingMessage): Promise<void> {
     isStreaming = true;
     abortController = new AbortController();
-    renderer.beginStream();
-
-    if (!message.echoed) {
-      renderer.appendUserMessage(message.line, { placement: "scroll" });
-    }
 
     let aborted = false;
     let caught: unknown;
 
     try {
-      const result = await sendMessageStream(message.sendInput);
-      aborted = result.aborted;
-    } catch (error) {
-      caught = error;
+      renderer.beginStream();
+
+      if (!message.echoed) {
+        renderer.appendUserMessage(message.line, { placement: "scroll" });
+      }
+
+      try {
+        const result = await sendMessageStream(message.sendInput);
+        aborted = result.aborted;
+      } catch (error) {
+        caught = error;
+      }
     } finally {
       isStreaming = false;
       abortController = null;
       thinkingIndicator.stop();
       renderer.endStream();
-      await drainQueue();
     }
 
     // Post-stream output — the stream buffer is now flushed into the VirtualMessageList,
@@ -285,6 +284,29 @@ async function runStickyChat(
     } else if (aborted) {
       renderer.appendOutputLine(styledLine("[stopped]", { dim: true }));
     }
+  }
+
+  async function startSend(message: PendingMessage): Promise<void> {
+    await sendQueue.enqueue(async () => {
+      if (exiting) {
+        return;
+      }
+
+      let current: PendingMessage | undefined = message;
+
+      while (current && !exiting) {
+        try {
+          await runOneSend(current);
+        } catch (error) {
+          isStreaming = false;
+          abortController = null;
+          writeError(error);
+        }
+
+        current = queue.shift();
+        syncPendingMessages();
+      }
+    });
   }
 
   async function handleChatMessage(
@@ -857,6 +879,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
   const session = context.session;
   const currentProfileId = context.currentProfileId;
   let processing = false;
+  let busyDrops = 0;
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
 
@@ -978,6 +1001,10 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       }
 
       if (processing) {
+        busyDrops += 1;
+        process.stdout.write(
+          `\x1b[2m${formatBusyDropLine(busyDrops)}\x1b[0m\n`
+        );
         continue;
       }
 
@@ -988,7 +1015,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         try {
           await printStatus(
             options.client,
-            (text) => console.log(text),
+            printLine,
             currentProfile,
             modelsCache
           );
@@ -1022,6 +1049,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         printError(error);
       } finally {
         processing = false;
+        busyDrops = 0;
       }
     }
   } finally {
@@ -1039,7 +1067,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
 
 async function printCurrentModel(
   client: NakamaClient,
-  write: (text: string) => void = (text) => console.log(text),
+  write: (text: string) => void = printLine,
   profile: ProfileSummary | null = null,
   cachedModels: ModelsResponse | null = null
 ): Promise<void> {
@@ -1104,7 +1132,7 @@ async function printStatus(
 
 async function printModels(
   client: NakamaClient,
-  write: (text: string) => void = (text) => console.log(text),
+  write: (text: string) => void = printLine,
   profile: ProfileSummary | null = null,
   cachedModels: ModelsResponse | null = null
 ): Promise<void> {
@@ -1161,8 +1189,63 @@ export function disableRawModeIfActive(
   }
 }
 
+/** Await cleanup, then exit. Used by CLI signal handlers. */
+export async function runCleanupThenExit(
+  cleanup: () => void | Promise<void>,
+  exitProcess: (code: number) => void = (code) => {
+    process.exit(code);
+  }
+): Promise<void> {
+  try {
+    await cleanup();
+  } catch {
+    // Always exit after cleanup attempt.
+  } finally {
+    exitProcess(0);
+  }
+}
+
 export function isEscInterruptKey(key: string): boolean {
   return key === "\u001b";
+}
+
+/**
+ * Bare ESC only aborts after a quiet window. Extra bytes cancel the abort
+ * (alt-prefix, CSI, or slow paste fragments).
+ */
+export function createDebouncedEscAbortHandler(
+  onAbort: () => void,
+  debounceMs = ESC_ABORT_DEBOUNCE_MS
+): {
+  onData: (chunk: Buffer | string) => void;
+  dispose: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearPending = (): void => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  return {
+    dispose: clearPending,
+    onData(chunk: Buffer | string): void {
+      const key = String(chunk);
+
+      if (isEscInterruptKey(key)) {
+        clearPending();
+        timer = setTimeout(() => {
+          timer = null;
+          onAbort();
+        }, debounceMs);
+        return;
+      }
+
+      clearPending();
+    },
+  };
 }
 
 function startEscAbortListener(onAbort: () => void): () => void {
@@ -1172,20 +1255,16 @@ function startEscAbortListener(onAbort: () => void): () => void {
 
   const stdin = process.stdin;
   const wasRaw = stdin.isRaw;
-
-  function onData(chunk: Buffer | string): void {
-    if (isEscInterruptKey(String(chunk))) {
-      onAbort();
-    }
-  }
+  const handler = createDebouncedEscAbortHandler(onAbort);
 
   stdin.setEncoding("utf8");
   stdin.setRawMode(true);
   stdin.resume();
-  stdin.on("data", onData);
+  stdin.on("data", handler.onData);
 
   return () => {
-    stdin.off("data", onData);
+    handler.dispose();
+    stdin.off("data", handler.onData);
 
     if (!wasRaw) {
       disableRawModeIfActive(stdin);
@@ -1195,7 +1274,7 @@ function startEscAbortListener(onAbort: () => void): () => void {
 
 function printError(error: unknown): void {
   for (const line of formatErrorLines(error)) {
-    console.log(line);
+    printLine(line);
   }
 }
 

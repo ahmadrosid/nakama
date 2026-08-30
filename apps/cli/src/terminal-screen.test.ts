@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   consumeTerminalInput,
+  isIncompleteEscapeSequence,
   isMouseEventReport,
   isTerminalResponse,
   stripCursorPositionReports,
@@ -52,5 +53,28 @@ describe("consumeTerminalInput", () => {
 
     expect(consumed.events).toEqual(["a", "\x1b[<64;12;8M", "b"]);
     expect(consumed.pending).toBe("");
+  });
+
+  test("holds incomplete ESC sequences in pending", () => {
+    expect(consumeTerminalInput("\x1b").pending).toBe("\x1b");
+    expect(consumeTerminalInput("\x1b[").pending).toBe("\x1b[");
+    expect(consumeTerminalInput("\x1b[12").pending).toBe("\x1b[12");
+  });
+
+  test("recovers from malformed ESC instead of leaking pending", () => {
+    const consumed = consumeTerminalInput("\x1bxmore");
+
+    expect(consumed.events).toEqual(["\x1b", "x", "m", "o", "r", "e"]);
+    expect(consumed.pending).toBe("");
+  });
+});
+
+describe("isIncompleteEscapeSequence", () => {
+  test("treats CSI and OSC prefixes as incomplete", () => {
+    expect(isIncompleteEscapeSequence("\x1b")).toBe(true);
+    expect(isIncompleteEscapeSequence("\x1b[")).toBe(true);
+    expect(isIncompleteEscapeSequence("\x1b[1;2")).toBe(true);
+    expect(isIncompleteEscapeSequence("\x1b]0;title")).toBe(true);
+    expect(isIncompleteEscapeSequence("\x1bx")).toBe(false);
   });
 });

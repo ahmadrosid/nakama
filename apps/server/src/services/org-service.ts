@@ -45,6 +45,8 @@ const LAST_ORGANIZATION_MESSAGE =
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
+const MAX_MEMBER_NAME_LENGTH = 120;
+const MEMBER_NAME_CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
 
 export class OrgService {
   constructor(
@@ -383,18 +385,13 @@ export class OrgService {
     phone: string;
     role: OrgRole;
   }): Promise<AddOrgMemberResponse> {
-    const org = await this.databaseAdapter.getOrganizationById(input.orgId);
-    if (!org) {
-      throw new NakamaApiError("Not found", 404);
-    }
+    await this.requireActiveOrganization(input.orgId);
 
     const name = input.name.trim();
     const email = normalizeEmail(input.email);
     const phone = normalizeOptionalPhone(input.phone);
 
-    if (!name) {
-      throw new NakamaApiError("Member name is required.", 400);
-    }
+    assertMemberName(name);
 
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
@@ -532,6 +529,7 @@ export class OrgService {
   }
 
   async removeMember(orgId: string, userId: string): Promise<void> {
+    await this.requireActiveOrganization(orgId);
     await this.assertCanChangeAdminMembership(orgId, userId);
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
@@ -545,6 +543,8 @@ export class OrgService {
     userId: string,
     input: UpdateOrgMemberRequest
   ): Promise<OrgMemberResponse> {
+    await this.requireActiveOrganization(orgId);
+
     const nextRole = input.role;
     if (nextRole !== undefined && !ORG_ROLES.includes(nextRole)) {
       throw new NakamaApiError("Invalid org role.", 400);
@@ -869,6 +869,20 @@ export class OrgService {
       orgId
     );
     await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
+  }
+}
+
+function assertMemberName(name: string): void {
+  if (!name) {
+    throw new NakamaApiError("Member name is required.", 400);
+  }
+
+  if (name.length > MAX_MEMBER_NAME_LENGTH) {
+    throw new NakamaApiError("Member name is too long.", 400);
+  }
+
+  if (MEMBER_NAME_CONTROL_CHARS.test(name)) {
+    throw new NakamaApiError("Member name contains invalid characters.", 400);
   }
 }
 

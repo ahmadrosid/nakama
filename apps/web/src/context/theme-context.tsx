@@ -23,10 +23,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     resolveTheme(getInitialTheme())
   );
   const themeRef = useRef(theme);
-  themeRef.current = theme;
 
-  const syncTheme = useCallback(() => {
-    const currentTheme = themeRef.current;
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
+  const syncTheme = useCallback((currentTheme: Theme) => {
     applyTheme(currentTheme);
     setResolvedTheme(resolveTheme(currentTheme));
 
@@ -38,7 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    syncTheme();
+    syncTheme(theme);
   }, [theme, syncTheme]);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (themeRef.current !== "system") {
         return;
       }
-      syncTheme();
+      syncTheme("system");
     };
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);

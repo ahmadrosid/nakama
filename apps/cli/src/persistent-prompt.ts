@@ -11,6 +11,8 @@ const BRACKETED_PASTE_END = "\x1b[201~";
 
 const BLINK_INTERVAL_MS = 530;
 const MAX_VISIBLE_SUGGESTIONS = 8;
+/** Cap bracketed-paste accumulation so a missing end sequence cannot grow forever. */
+export const MAX_BRACKETED_PASTE_BYTES = 256 * 1024;
 
 export interface PersistentPromptOptions {
   getSuggestions?: (input: string) => PromptSuggestion[];
@@ -201,6 +203,31 @@ export class PersistentPrompt {
     this.queueClipboardAttach();
   }
 
+  private dropBracketedPasteOverflow(): void {
+    this.inBracketedPaste = false;
+    this.pasteBuffer = "";
+    this.startBlink();
+    this.notifyClipboard(
+      "Paste dropped: content exceeded the 256 KB bracketed-paste limit."
+    );
+  }
+
+  private appendBracketedPaste(chunk: string): void {
+    this.pasteBuffer += chunk;
+
+    const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END);
+
+    if (endIndex >= 0) {
+      const pasted = this.pasteBuffer.slice(0, endIndex);
+      this.finishBracketedPaste(pasted);
+      return;
+    }
+
+    if (this.pasteBuffer.length > MAX_BRACKETED_PASTE_BYTES) {
+      this.dropBracketedPasteOverflow();
+    }
+  }
+
   private applySuggestion(
     suggestion: PromptSuggestion,
     submitAfter = false
@@ -262,15 +289,7 @@ export class PersistentPrompt {
     }
 
     if (this.inBracketedPaste) {
-      this.pasteBuffer += key;
-
-      const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END);
-
-      if (endIndex >= 0) {
-        const pasted = this.pasteBuffer.slice(0, endIndex);
-        this.finishBracketedPaste(pasted);
-      }
-
+      this.appendBracketedPaste(key);
       return;
     }
 
@@ -284,15 +303,10 @@ export class PersistentPrompt {
       }
 
       this.inBracketedPaste = true;
-      this.pasteBuffer = key.slice(startIndex + BRACKETED_PASTE_START.length);
-
-      const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END);
-
-      if (endIndex >= 0) {
-        const pasted = this.pasteBuffer.slice(0, endIndex);
-        this.finishBracketedPaste(pasted);
-      }
-
+      this.pasteBuffer = "";
+      this.appendBracketedPaste(
+        key.slice(startIndex + BRACKETED_PASTE_START.length)
+      );
       return;
     }
 

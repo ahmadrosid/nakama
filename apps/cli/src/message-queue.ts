@@ -59,3 +59,24 @@ export function formatPendingDisplayLines(
 
   return lines;
 }
+
+/**
+ * Serialize async work so each task runs after the prior one settles.
+ * Prior rejection does not block the next task.
+ */
+export function createSerializedQueue(): {
+  enqueue(task: () => Promise<void>): Promise<void>;
+} {
+  let tail: Promise<void> = Promise.resolve();
+
+  return {
+    enqueue(task: () => Promise<void>): Promise<void> {
+      const run = tail.then(task, task);
+      tail = run.then(
+        () => undefined,
+        () => undefined
+      );
+      return run;
+    },
+  };
+}

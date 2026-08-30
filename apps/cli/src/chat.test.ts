@@ -7,12 +7,15 @@ import type {
   ProfileSummary,
 } from "@nakama/core";
 import {
+  createDebouncedEscAbortHandler,
   disableRawModeIfActive,
+  formatBusyDropLine,
   formatErrorLines,
   formatSoulStatusLines,
   formatStatusLines,
   isEscInterruptKey,
   needsTrailingStreamNewline,
+  runCleanupThenExit,
 } from "./chat";
 
 describe("needsTrailingStreamNewline", () => {
@@ -27,6 +30,22 @@ describe("needsTrailingStreamNewline", () => {
   test("skips the newline when the stream already ended with one", () => {
     expect(needsTrailingStreamNewline("Hello.\n")).toBe(false);
     expect(needsTrailingStreamNewline("Hello.\r\n")).toBe(false);
+  });
+});
+
+describe("formatBusyDropLine", () => {
+  test("shows a short busy marker before the warn threshold", () => {
+    expect(formatBusyDropLine(1)).toBe("[busy]");
+    expect(formatBusyDropLine(2)).toBe("[busy]");
+  });
+
+  test("includes the drop count once the warn threshold is reached", () => {
+    expect(formatBusyDropLine(3)).toBe(
+      "[busy] ignored input (3 while processing)"
+    );
+    expect(formatBusyDropLine(5)).toBe(
+      "[busy] ignored input (5 while processing)"
+    );
   });
 });
 
@@ -134,6 +153,68 @@ describe("isEscInterruptKey", () => {
   });
 });
 
+describe("createDebouncedEscAbortHandler", () => {
+  test("does not abort bare ESC when more input arrives in the window", async () => {
+    let aborted = 0;
+    const handler = createDebouncedEscAbortHandler(() => {
+      aborted += 1;
+    }, 30);
+
+    handler.onData("\u001b");
+    handler.onData("[A");
+    await Bun.sleep(50);
+
+    expect(aborted).toBe(0);
+    handler.dispose();
+  });
+
+  test("aborts after a quiet window on bare ESC", async () => {
+    let aborted = 0;
+    const handler = createDebouncedEscAbortHandler(() => {
+      aborted += 1;
+    }, 20);
+
+    handler.onData("\u001b");
+    await Bun.sleep(40);
+
+    expect(aborted).toBe(1);
+    handler.dispose();
+  });
+});
+
+describe("runCleanupThenExit", () => {
+  test("awaits cleanup before exit", async () => {
+    const order: string[] = [];
+
+    await runCleanupThenExit(
+      async () => {
+        await Bun.sleep(5);
+        order.push("cleanup");
+      },
+      () => {
+        order.push("exit");
+      }
+    );
+
+    expect(order).toEqual(["cleanup", "exit"]);
+  });
+
+  test("exits even when cleanup throws", async () => {
+    const order: string[] = [];
+
+    await runCleanupThenExit(
+      async () => {
+        order.push("cleanup");
+        throw new Error("cleanup failed");
+      },
+      () => {
+        order.push("exit");
+      }
+    );
+
+    expect(order).toEqual(["cleanup", "exit"]);
+  });
+});
 describe("disableRawModeIfActive", () => {
   test("skips setRawMode when stdin is not a TTY", () => {
     const calls: boolean[] = [];
