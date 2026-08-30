@@ -55,17 +55,9 @@ export class KnowledgeBaseDuplicateError extends Error {
   }
 }
 
-export interface UploadKnowledgeBaseDocumentOptions {
-  onDuplicate?: KnowledgeBaseDuplicateAction;
-}
-
 export interface UploadKnowledgeBaseDocumentResult {
   document: KnowledgeBaseDocument;
   outcome: KnowledgeBaseUploadOutcome;
-}
-
-function hashDocumentBytes(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function findDuplicateDocument(
@@ -76,9 +68,7 @@ function findDuplicateDocument(
   match: KnowledgeBaseDuplicateMatch;
 } | null {
   const byHash = documents.find(
-    (document) =>
-      typeof document.contentHash === "string" &&
-      document.contentHash === candidate.contentHash
+    (document) => document.contentHash === candidate.contentHash
   );
   if (byHash) {
     return { document: byHash, match: "content_hash" };
@@ -252,7 +242,7 @@ export async function uploadKnowledgeBaseDocument(
   orgId: string,
   profileId: string,
   attachment: DocumentAttachment,
-  options: UploadKnowledgeBaseDocumentOptions = {}
+  onDuplicate: KnowledgeBaseDuplicateAction = "error"
 ): Promise<UploadKnowledgeBaseDocumentResult> {
   const filename = attachment.filename.trim();
 
@@ -285,8 +275,7 @@ export async function uploadKnowledgeBaseDocument(
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
 
-  const contentHash = hashDocumentBytes(bytes);
-  const onDuplicate = options.onDuplicate ?? "error";
+  const contentHash = createHash("sha256").update(bytes).digest("hex");
   let outcome: KnowledgeBaseUploadOutcome = "created";
 
   const existingManifest = await readManifest(orgId, profileId);

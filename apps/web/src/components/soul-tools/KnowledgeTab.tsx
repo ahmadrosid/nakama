@@ -24,7 +24,7 @@ import {
   isKnowledgeBaseFile,
 } from "@/lib/knowledge-base-files";
 
-type DuplicateDecision = "skip" | "replace" | "cancel";
+type DuplicateDecision = "skip" | "replace";
 
 type DuplicatePrompt = {
   filename: string;
@@ -103,7 +103,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           }
 
           const decision = await askDuplicateDecision(file.name);
-          if (decision === "cancel" || decision === "skip") {
+          if (decision === "skip") {
             continue;
           }
 
@@ -215,7 +215,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
       <Dialog
         onOpenChange={(open) => {
           if (!open && duplicatePrompt) {
-            duplicatePrompt.resolve("cancel");
+            duplicatePrompt.resolve("skip");
             setDuplicatePrompt(null);
           }
         }}
@@ -229,16 +229,6 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              onClick={() => {
-                duplicatePrompt?.resolve("cancel");
-                setDuplicatePrompt(null);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
             <Button
               onClick={() => {
                 duplicatePrompt?.resolve("skip");

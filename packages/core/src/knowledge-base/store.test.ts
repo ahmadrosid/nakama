@@ -122,7 +122,7 @@ describe("knowledge base store", () => {
       ORG_ID,
       profileId,
       attachment,
-      { onDuplicate: "skip" }
+      "skip"
     );
     expect(skipped.outcome).toBe("skipped");
     expect(skipped.document.id).toBe(first.document.id);
@@ -141,7 +141,7 @@ describe("knowledge base store", () => {
       ORG_ID,
       profileId,
       attachment,
-      { onDuplicate: "replace" }
+      "replace"
     );
     expect(replaced.outcome).toBe("replaced");
     expect(replaced.document.id).not.toBe(first.document.id);

@@ -639,7 +639,7 @@ export class ProfileService {
         orgId,
         profileId,
         document,
-        { onDuplicate }
+        onDuplicate
       );
       return {
         document: uploaded.document,
