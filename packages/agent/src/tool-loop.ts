@@ -43,6 +43,7 @@ export async function executeToolCall(
     // is enabled, recognises the tool, and produces something strictly shorter.
     return await distillToolResult(call.name, result, context);
   } catch (error) {
+    context.signal?.throwIfAborted();
     return {
       error: error instanceof Error ? error.message : String(error),
     };
