@@ -15,6 +15,30 @@ import path from "node:path";
 import { PathGuardError } from "@nakama/core";
 import { runBash } from "./bash";
 
+async function waitForPositivePid(pidPath: string): Promise<number> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      const pid = Number((await readFile(pidPath, "utf8")).trim());
+      if (Number.isInteger(pid) && pid > 0) {
+        return pid;
+      }
+    } catch {
+      // The shell has not created the PID file yet.
+    }
+    await Bun.sleep(10);
+  }
+  return 0;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("bash tool", () => {
   let workspaceRoot = "";
 
@@ -44,9 +68,78 @@ describe("bash tool", () => {
 
     setTimeout(() => controller.abort(), 50);
 
-    await expect(pending).rejects.toThrow();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(Date.now() - startedAt).toBeLessThan(5000);
   });
+
+  test("force kills a shell that traps SIGTERM after cancellation", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const pidPath = path.join(workspaceRoot, "trapped.pid");
+    const controller = new AbortController();
+    const pending = runBash(
+      {
+        command:
+          "trap '' TERM; echo $$ > trapped.pid; while :; do sleep 1; done",
+      },
+      {
+        orgId: "org_test",
+        profileId: "profile_test",
+        signal: controller.signal,
+      },
+      { workspaceRoot }
+    );
+
+    const childPid = await waitForPositivePid(pidPath);
+
+    controller.abort();
+    await expect(pending).rejects.toThrow();
+    expect(childPid).toBeGreaterThan(0);
+
+    let survivedAbort = true;
+    const forceKillDeadline = Date.now() + 6500;
+    while (Date.now() < forceKillDeadline) {
+      if (!isProcessAlive(childPid)) {
+        survivedAbort = false;
+        break;
+      }
+      await Bun.sleep(25);
+    }
+
+    if (survivedAbort) {
+      process.kill(childPid, "SIGKILL");
+    }
+    expect(survivedAbort).toBe(false);
+  }, 10_000);
+
+  test("force kills a shell that traps SIGTERM after timeout", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const pidPath = path.join(workspaceRoot, "trapped.pid");
+    const pending = runBash(
+      {
+        command:
+          "trap '' TERM; echo $$ > trapped.pid; while :; do sleep 1; done",
+        timeoutMs: 1000,
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { workspaceRoot }
+    );
+
+    const childPid = await waitForPositivePid(pidPath);
+    const result = await Promise.race([
+      pending,
+      Bun.sleep(7500).then(() => null),
+    ]);
+
+    if (result === null && childPid > 0) {
+      process.kill(childPid, "SIGKILL");
+      await pending;
+    }
+
+    expect(childPid).toBeGreaterThan(0);
+    expect(result).not.toBeNull();
+    expect(result?.timedOut).toBe(true);
+    expect(isProcessAlive(childPid)).toBe(false);
+  }, 10_000);
 
   test("runs commands in the profile workspace by default", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
