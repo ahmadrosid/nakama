@@ -5,7 +5,6 @@ import type {
   ProfileSummary,
 } from "@nakama/core";
 import {
-  BUSY_DROP_WARN_AT,
   disableRawModeIfActive,
   formatBusyDropLine,
   formatErrorLines,
@@ -32,15 +31,15 @@ describe("needsTrailingStreamNewline", () => {
 describe("formatBusyDropLine", () => {
   test("shows a short busy marker before the warn threshold", () => {
     expect(formatBusyDropLine(1)).toBe("[busy]");
-    expect(formatBusyDropLine(BUSY_DROP_WARN_AT - 1)).toBe("[busy]");
+    expect(formatBusyDropLine(2)).toBe("[busy]");
   });
 
   test("includes the drop count once the warn threshold is reached", () => {
-    expect(formatBusyDropLine(BUSY_DROP_WARN_AT)).toBe(
-      `[busy] ignored input (${BUSY_DROP_WARN_AT} while processing)`
+    expect(formatBusyDropLine(3)).toBe(
+      "[busy] ignored input (3 while processing)"
     );
-    expect(formatBusyDropLine(BUSY_DROP_WARN_AT + 2)).toBe(
-      `[busy] ignored input (${BUSY_DROP_WARN_AT + 2} while processing)`
+    expect(formatBusyDropLine(5)).toBe(
+      "[busy] ignored input (5 while processing)"
     );
   });
 });
