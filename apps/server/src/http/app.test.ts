@@ -118,10 +118,6 @@ function createServerOptions() {
         bytes: new Uint8Array([1, 2, 3]),
         mediaType: "image/png",
       }),
-      getProfileAvatarByProfileId: async (_profileId: string) => ({
-        bytes: new Uint8Array([1, 2, 3]),
-        mediaType: "image/png",
-      }),
       getProfileSoulStack: async (_profileId: string) => ({
         stack: ["SOUL.md"],
       }),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 
 describe("composio user connections", () => {
   test("upsert and fetch user connection by toolkit", async () => {

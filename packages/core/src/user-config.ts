@@ -787,3 +787,52 @@ export function validateProviderInstanceLabel(
 
   return trimmed;
 }
+
+interface ApiKeyFormatRule {
+  minLength: number;
+  prefix?: string;
+}
+
+// Self-hosted/opaque-format providers (ollama, openai_compatible, cloudflare,
+// fireworks, opencode_go) are intentionally excluded: their key formats are
+// either undocumented or vary by deployment, so a prefix/length check would
+// just produce false rejections.
+const API_KEY_FORMAT_RULES: Partial<
+  Record<UserProviderName, ApiKeyFormatRule>
+> = {
+  anthropic: { minLength: 30, prefix: "sk-ant-" },
+  cerebras: { minLength: 20, prefix: "csk-" },
+  deepseek: { minLength: 30, prefix: "sk-" },
+  gemini: { minLength: 30, prefix: "AIza" },
+  openai: { minLength: 40, prefix: "sk-" },
+  openrouter: { minLength: 20, prefix: "sk-or-" },
+};
+
+export function validateProviderApiKeyFormat(
+  apiKey: string,
+  type: UserProviderName
+): string {
+  const trimmed = apiKey.trim();
+  const rule = API_KEY_FORMAT_RULES[type];
+
+  if (!(trimmed && rule)) {
+    return trimmed;
+  }
+
+  const hasWrongPrefix =
+    rule.prefix !== undefined && !trimmed.startsWith(rule.prefix);
+  const tooShort = trimmed.length < rule.minLength;
+
+  if (hasWrongPrefix || tooShort) {
+    const label = PROVIDER_TYPE_LABELS[type] ?? type;
+    const reason = hasWrongPrefix
+      ? ` (expected it to start with "${rule.prefix}")`
+      : ` (expected at least ${rule.minLength} characters)`;
+    throw new NakamaApiError(
+      `That doesn't look like a valid ${label} API key${reason}.`,
+      400
+    );
+  }
+
+  return trimmed;
+}

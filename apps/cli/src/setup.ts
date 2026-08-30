@@ -6,6 +6,7 @@ import {
   promptForProviderConfig,
   type UserProviderName,
 } from "@nakama/core";
+import { printLine } from "./terminal-safe";
 
 function readPassword(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -110,7 +111,7 @@ export async function ensureUserConfiguredViaCli(
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.log(`Failed to create admin user: ${message}`);
+    printLine(`Failed to create admin user: ${message}`);
     return false;
   }
 }
@@ -136,7 +137,7 @@ export async function ensureProviderConfiguredViaCli(
   try {
     const config = await promptForProviderConfig({
       question: (prompt) => rl.question(prompt),
-      writeLine: (line) => console.log(line),
+      writeLine: (line) => printLine(line),
       ...modelHelpers,
     });
 
@@ -157,7 +158,7 @@ export async function ensureProviderConfiguredViaCli(
       provider: instance.type,
     });
 
-    console.log(
+    printLine(
       `\nProvider configured (${result.provider}, ${result.currentModel}).`
     );
     console.log(`Saved to ${getUserConfigPath()}\n`);

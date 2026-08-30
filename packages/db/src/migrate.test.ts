@@ -583,6 +583,65 @@ describe("organization schema migration", () => {
     }
   });
 
+  test("rolls back profile org backfill when a related update fails", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES ('org_legacy', 'Legacy', 'legacy', '2026-01-01', '2026-01-01');
+
+        INSERT INTO profiles (
+          id, name, system_prompt, model, is_super, org_id, is_default,
+          created_at, updated_at
+        ) VALUES (
+          'default', 'Default', '', NULL, 0, NULL, 0,
+          '2026-01-01', '2026-01-01'
+        );
+
+        INSERT INTO automations (
+          id, name, version, definition, profile_id, org_id, enabled,
+          created_at, updated_at
+        ) VALUES (
+          'automation_legacy', 'Legacy', 1, '{}', 'default', NULL, 1,
+          '2026-01-01', '2026-01-01'
+        );
+
+        INSERT INTO tasks (
+          id, title, description, prompt, profile_id, org_id, status, position,
+          created_at, updated_at
+        ) VALUES (
+          'task_legacy', 'Legacy', '', 'prompt', 'default', NULL, 'backlog', 0,
+          '2026-01-01', '2026-01-01'
+        );
+
+        CREATE TRIGGER fail_task_org_backfill
+        BEFORE UPDATE OF org_id ON tasks
+        BEGIN
+          SELECT RAISE(ABORT, 'forced migration failure');
+        END;
+      `);
+
+      expect(() => migrateDatabase(db)).toThrow();
+      expect(
+        db
+          .prepare("SELECT org_id, is_default FROM profiles WHERE id = ?")
+          .get("default")
+      ).toEqual({ is_default: 0, org_id: null });
+      expect(
+        db
+          .prepare("SELECT org_id FROM automations WHERE id = ?")
+          .get("automation_legacy")
+      ).toEqual({ org_id: null });
+      expect(
+        db.prepare("SELECT org_id FROM tasks WHERE id = ?").get("task_legacy")
+      ).toEqual({ org_id: null });
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects duplicate organization slug", () => {
     const db = new Database(":memory:");
 

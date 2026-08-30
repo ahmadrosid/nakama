@@ -36,6 +36,13 @@ export interface DownloadedTelegramFile {
   filePath: string;
 }
 
+function buildTelegramFileDownloadUrl(token: string, filePath: string): URL {
+  const path = ["file", `bot${token}`, ...filePath.split("/").filter(Boolean)]
+    .map(encodeURIComponent)
+    .join("/");
+  return new URL(path, "https://api.telegram.org/");
+}
+
 export async function downloadTelegramFile(
   ctx: Context,
   fileId: string,
@@ -51,25 +58,58 @@ export async function downloadTelegramFile(
     throw new OversizedTelegramFileError();
   }
 
-  const token = ctx.api.token;
-  const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+  const url = buildTelegramFileDownloadUrl(ctx.api.token, file.file_path);
   const response = await fetch(url);
 
   if (!response.ok) {
     throw new Error(`Failed to download file (${response.status}).`);
   }
 
-  const bytes = await response.arrayBuffer();
-
-  if (bytes.byteLength > maxBytes) {
-    throw new OversizedTelegramFileError();
-  }
+  const bytes = await readResponseBodyCapped(response, maxBytes);
 
   return {
     bytes,
     contentType: response.headers.get("content-type"),
     filePath: file.file_path,
   };
+}
+
+async function readResponseBodyCapped(
+  response: Response,
+  maxBytes: number
+): Promise<ArrayBuffer> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return new ArrayBuffer(0);
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value || value.byteLength === 0) {
+      continue;
+    }
+
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new OversizedTelegramFileError();
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged.buffer;
 }
 
 export type TelegramDocumentBuildResult =

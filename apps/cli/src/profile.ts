@@ -3,6 +3,7 @@ import type { NakamaClient } from "@nakama/client";
 import type { ProfileSummary } from "@nakama/core";
 import { pickProfileForOrg } from "@nakama/core";
 import { loadSavedCliProfileId, saveCliProfileId } from "./cli-config";
+import { printLine } from "./terminal-safe";
 
 export interface CliProfileOptions {
   profileId?: string;
@@ -111,7 +112,7 @@ export function printProfiles(
   const sorted = sortProfilesForPicker(profiles);
 
   if (sorted.length === 0) {
-    console.log("No profiles available.\n");
+    printLine("No profiles available.\n");
     return;
   }
 
@@ -119,15 +120,15 @@ export function printProfiles(
     const current = sorted.find(
       (profile) => profile.id === options.currentProfileId
     );
-    console.log(`Current: ${current?.name ?? options.currentProfileId}\n`);
+    printLine(`Current: ${current?.name ?? options.currentProfileId}\n`);
   }
 
   for (const [index, profile] of sorted.entries()) {
     const marker = profile.id === options.currentProfileId ? "*" : " ";
-    console.log(`${marker}${formatProfileLine(profile, index).trimStart()}`);
+    printLine(`${marker}${formatProfileLine(profile, index).trimStart()}`);
   }
 
-  console.log("\nUse /profile <id or name> to switch.\n");
+  printLine("\nUse /profile <id or name> to switch.\n");
 }
 
 function findProfile(
@@ -190,7 +191,7 @@ async function promptForProfile(
   console.log("Select a bot profile:\n");
 
   for (const [index, profile] of sorted.entries()) {
-    console.log(formatProfileLine(profile, index));
+    printLine(formatProfileLine(profile, index));
   }
 
   const rl = readline.createInterface({
@@ -202,7 +203,7 @@ async function promptForProfile(
     const input = (await rl.question("\nProfile (optional): ")).trim();
     const selected = resolveProfileInput(sorted, input) ?? defaultProfile;
 
-    console.log(`Using ${selected.name}.\n`);
+    printLine(`Using ${selected.name}.\n`);
 
     return { profile: selected, profileId: selected.id };
   } finally {

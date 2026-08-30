@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SUB_AGENT_TOOL_ID } from "@nakama/core/tools/protected";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 import { ensureSubAgentToolDefinition } from "./seed";
 
 describe("ensureSubAgentToolDefinition", () => {

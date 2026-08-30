@@ -5,9 +5,14 @@ import {
   type Message,
   Partials,
 } from "discord.js";
+import {
+  formatDiscordInboundMessageLog,
+  isChannelDebugEnabled,
+} from "./channel-log";
 import { type ChatHandlerDeps, createChatHandler } from "./chat-handler";
 import type { DiscordBridgeConfig } from "./config";
 import {
+  deferSlashInteraction,
   getDiscordErrorCode,
   isIgnorableInteractionError,
 } from "./interaction-errors";
@@ -45,15 +50,7 @@ export async function createBot(
   });
 
   client.on(Events.MessageCreate, async (message: Message) => {
-    console.log(
-      [
-        "[discord] message",
-        `messageId=${message.id}`,
-        `authorId=${message.author.id}`,
-        `channelId=${message.channelId}`,
-        `textBytes=${Buffer.byteLength(message.content ?? "", "utf8")}`,
-      ].join(" ")
-    );
+    console.log(formatDiscordInboundMessageLog(message));
     try {
       await handler.handleMessage(message);
     } catch (error) {
@@ -61,30 +58,30 @@ export async function createBot(
     }
   });
 
+  // Integrity: interactions arrive over the gateway WebSocket (discord.js +
+  // intents above), authenticated by the bot token — not via Discord's HTTP
+  // Interactions Endpoint. Ed25519 signature verification (X-Signature-Ed25519 /
+  // X-Signature-Timestamp) does not apply on this path. If we ever expose an
+  // HTTP interaction endpoint, verify signatures with the app public key before
+  // handling the body; do not copy this gateway-only handler as-is.
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) {
       return;
     }
 
-    console.log(
-      "[discord] slash",
-      interaction.commandName,
-      interaction.user.id
-    );
+    if (isChannelDebugEnabled()) {
+      console.log(
+        "[discord] slash",
+        interaction.commandName,
+        interaction.user.id
+      );
+    } else {
+      console.log("[discord] slash", interaction.commandName);
+    }
 
     // Acknowledge immediately — Discord expires interactions after ~3s.
     // Any work (locks, API calls) must happen after this.
-    try {
-      await interaction.deferReply();
-    } catch (error) {
-      if (isIgnorableInteractionError(error)) {
-        console.warn(
-          `Skipped stale /${interaction.commandName} interaction (${getDiscordErrorCode(error)}).`
-        );
-        return;
-      }
-
-      console.error("Failed to acknowledge slash command:", error);
+    if (!(await deferSlashInteraction(interaction))) {
       return;
     }
 

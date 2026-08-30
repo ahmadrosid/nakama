@@ -388,4 +388,13 @@ describe("buildProviderInstanceFromCreateRequest", () => {
       }
     }
   });
+
+  test("rejects an obviously malformed OpenAI API key instead of persisting it", () => {
+    expect(() =>
+      buildProviderInstanceFromCreateRequest(
+        { apiKey: "sk-junk-qa-123", model: "gpt-junk", type: "openai" },
+        []
+      )
+    ).toThrow(/valid OpenAI API key/i);
+  });
 });

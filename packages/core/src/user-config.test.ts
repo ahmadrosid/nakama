@@ -14,6 +14,7 @@ import {
   saveUserConfig,
   saveUserTimezone,
   saveUserWebPublicUrl,
+  validateProviderApiKeyFormat,
 } from "./user-config";
 
 describe("saveUserTimezone", () => {
@@ -36,6 +37,34 @@ describe("saveUserTimezone", () => {
         expect((error as NakamaApiError).status).toBe(400);
       }
     }
+  });
+});
+
+describe("validateProviderApiKeyFormat", () => {
+  test("rejects a key that is far too short for its provider", () => {
+    expect(() =>
+      validateProviderApiKeyFormat("sk-junk-qa-123", "openai")
+    ).toThrow(/valid OpenAI API key/i);
+  });
+
+  test("rejects a key with a mismatched prefix", () => {
+    expect(() =>
+      validateProviderApiKeyFormat(`AIza${"a".repeat(40)}`, "openai")
+    ).toThrow(/valid OpenAI API key/i);
+  });
+
+  test("accepts a well-formed key", () => {
+    const key = `sk-${"a".repeat(48)}`;
+    expect(validateProviderApiKeyFormat(key, "openai")).toBe(key);
+  });
+
+  test("skips format checks for providers without a documented key format", () => {
+    expect(validateProviderApiKeyFormat("short", "fireworks")).toBe("short");
+    expect(validateProviderApiKeyFormat("short", "ollama")).toBe("short");
+  });
+
+  test("returns an empty string unchanged instead of throwing", () => {
+    expect(validateProviderApiKeyFormat("", "openai")).toBe("");
   });
 });
 

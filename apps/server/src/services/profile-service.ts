@@ -599,18 +599,6 @@ export class ProfileService {
     return avatar;
   }
 
-  async getProfileAvatarByProfileId(
-    profileId: string
-  ): Promise<{ mediaType: string; bytes: Buffer }> {
-    const profile = await this.db.getProfile(profileId);
-
-    if (!profile?.orgId) {
-      throw new NakamaApiError("Profile not found.", 404);
-    }
-
-    return this.getProfileAvatar(profile.orgId, profileId);
-  }
-
   async deleteProfileAvatar(orgId: string, profileId: string): Promise<void> {
     const profile = await this.requireProfile(orgId, profileId);
     const removed = await deleteProfileAvatar(orgId, profileId);

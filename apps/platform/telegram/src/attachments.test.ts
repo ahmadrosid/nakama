@@ -145,6 +145,12 @@ describe("buildTelegramDocumentInput", () => {
 });
 
 describe("downloadTelegramFile", () => {
+  let fetchSpy: ReturnType<typeof spyOn> | undefined;
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
   test("surfaces download failures to caller", async () => {
     const ctx = {
       api: {
@@ -158,5 +164,79 @@ describe("downloadTelegramFile", () => {
     await expect(
       downloadTelegramFile(ctx, "file-1", MAX_DOCUMENT_BYTES)
     ).rejects.toThrow("network down");
+  });
+
+  test("fetches via URL with token as encoded path segment", async () => {
+    const token = "123456:ABC-DEF/ghi_jkl";
+    const filePath = "photos/file_0.jpg";
+    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("pdf-bytes", {
+        headers: { "content-type": "application/pdf" },
+      })
+    );
+
+    const ctx = {
+      api: {
+        getFile: async () => ({
+          file_path: filePath,
+          file_size: 9,
+        }),
+        token,
+      },
+    } as unknown as Context;
+
+    const result = await downloadTelegramFile(
+      ctx,
+      "file-1",
+      MAX_DOCUMENT_BYTES
+    );
+
+    expect(result.filePath).toBe(filePath);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const fetched = fetchSpy.mock.calls[0]?.[0];
+    expect(fetched).toBeInstanceOf(URL);
+    expect((fetched as URL).pathname).toBe(
+      `/file/${encodeURIComponent(`bot${token}`)}/${filePath}`
+    );
+    expect((fetched as URL).href).not.toContain(token);
+  });
+
+  test("aborts while streaming once the body exceeds the cap", async () => {
+    const maxBytes = 8;
+    let pulls = 0;
+
+    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls === 1) {
+              controller.enqueue(new Uint8Array(4).fill(65));
+            } else if (pulls === 2) {
+              controller.enqueue(new Uint8Array(8).fill(66));
+            }
+            // Cap exceeded should cancel before we keep producing forever.
+          },
+        }),
+        {
+          headers: { "content-type": "application/pdf" },
+          status: 200,
+        }
+      )
+    );
+
+    const ctx = {
+      api: {
+        getFile: async () => ({
+          file_path: "documents/big.pdf",
+        }),
+        token: "test-token",
+      },
+    } as unknown as Context;
+
+    await expect(downloadTelegramFile(ctx, "file-1", maxBytes)).rejects.toThrow(
+      "File is too large."
+    );
+    expect(pulls).toBeLessThanOrEqual(3);
   });
 });

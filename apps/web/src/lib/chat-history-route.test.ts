@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   buildChatPath,
   buildNewChatPath,
+  CHAT_DRAFT_STORAGE_PREFIX,
   chatProfileIdFromPath,
+  consumeStoredChatDraft,
   isChatSessionPath,
   isProfilesPath,
   parseChatRouteParams,
@@ -15,6 +17,7 @@ import {
   resolveDefaultProfileId,
   resolveHistoryProfileId,
   resolveProfilesPageProfileId,
+  storeChatDraft,
   writeStoredActiveChatProfileId,
 } from "./chat-history";
 
@@ -41,7 +44,40 @@ describe("chat history route helpers", () => {
     expect(url.pathname).toBe("/chat");
     expect(url.searchParams.get("new")).toBe("1");
     expect(url.searchParams.get("profile")).toBe("gary-vee");
+    expect(url.searchParams.get("_")).toBeNull();
     expect(readRequestedProfileFromNewChatSearch(url.search)).toBe("gary-vee");
+  });
+
+  test("storeChatDraft uses unique keys for rapid calls", () => {
+    const store = new Map<string, string>();
+    const previousSessionStorage = globalThis.sessionStorage;
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+      },
+    });
+
+    try {
+      const keys = Array.from({ length: 20 }, (_, index) =>
+        storeChatDraft(`draft-${index}`)
+      );
+      expect(new Set(keys).size).toBe(keys.length);
+      expect(consumeStoredChatDraft(keys[0]!)).toBe("draft-0");
+      expect(consumeStoredChatDraft(keys[1]!)).toBe("draft-1");
+      expect(store.has(`${CHAT_DRAFT_STORAGE_PREFIX}${keys[0]}`)).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis, "sessionStorage", {
+        configurable: true,
+        value: previousSessionStorage,
+      });
+    }
   });
 
   test("reads the requested profile only for new chat links", () => {
