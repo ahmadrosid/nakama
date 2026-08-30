@@ -521,10 +521,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const existing = sessionStore.get(jid);
 
     if (existing && existing.profileId === profileId) {
-      const hot = sessionStore.getHotSession<RemoteChatSession>(
-        jid,
-        existing.sessionId
-      );
+      const hot = sessionStore.getHotSession<RemoteChatSession>(jid);
       if (hot) {
         return hot;
       }
@@ -533,7 +530,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       try {
         await session.getMessages();
-        sessionStore.setHotSession(jid, existing.sessionId, session);
+        sessionStore.setHotSession(jid, session);
         return session;
       } catch {
         // Session missing on server; create a new one below
@@ -557,7 +554,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       sessionId: session.id,
       updatedAt: new Date().toISOString(),
     });
-    sessionStore.setHotSession(jid, session.id, session);
+    sessionStore.setHotSession(jid, session);
     await sessionStore.save();
 
     return session;

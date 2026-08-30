@@ -12,16 +12,11 @@ export interface ChatSessionRecord {
 
 type ChatSessionMap = Record<string, ChatSessionRecord>;
 
-type HotSessionEntry = {
-  session: unknown;
-  sessionId: string;
-};
-
 /** JSON session map for channel bridges (Discord / Telegram / WhatsApp). */
 export class ChannelSessionStore {
   private map: ChatSessionMap = {};
   /** In-memory RemoteChatSession wrappers — not persisted. */
-  private readonly hotSessions = new Map<string, HotSessionEntry>();
+  private readonly hotSessions = new Map<string, unknown>();
 
   constructor(private readonly path: string) {}
 
@@ -65,16 +60,12 @@ export class ChannelSessionStore {
     this.hotSessions.delete(chatId);
   }
 
-  getHotSession<T>(chatId: string, sessionId: string): T | undefined {
-    const hot = this.hotSessions.get(chatId);
-    if (!hot || hot.sessionId !== sessionId) {
-      return;
-    }
-    return hot.session as T;
+  getHotSession<T>(chatId: string): T | undefined {
+    return this.hotSessions.get(chatId) as T | undefined;
   }
 
-  setHotSession(chatId: string, sessionId: string, session: unknown): void {
-    this.hotSessions.set(chatId, { session, sessionId });
+  setHotSession(chatId: string, session: unknown): void {
+    this.hotSessions.set(chatId, session);
   }
 
   getArtifactShareUrls(chatId: string): Record<string, string> {
