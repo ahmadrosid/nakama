@@ -453,12 +453,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const typingLoop = createTypingLoop(ctx);
     const todoStatus = new TelegramTodoStatusMessage(telegram);
-    const signal = registerActiveStream(conversationKey);
     let reply = "";
-
-    typingLoop.start();
+    const signal = registerActiveStream(conversationKey);
 
     try {
+      typingLoop.start();
+
       reply = await session.sendStream(
         input,
         {
@@ -897,7 +897,12 @@ function isStopCommand(text: string): boolean {
   return parseTelegramCommand(text) === "/stop";
 }
 
-async function withChatLock(
+/** @internal Test helper — clears the in-process chat lock map. */
+export function resetChatLocksForTests(): void {
+  chatLocks.clear();
+}
+
+export async function withChatLock(
   chatId: string,
   fn: () => Promise<void>
 ): Promise<void> {
@@ -906,11 +911,16 @@ async function withChatLock(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const chain = previous.then(() => current);
+  // Keep the stored chain rejection-safe: a failed previous must not reject
+  // `chain` before `current` settles (unhandledRejection hazard).
+  const chain = previous.then(
+    () => current,
+    () => current
+  );
   chatLocks.set(chatId, chain);
 
   try {
-    await previous;
+    await previous.catch(() => undefined);
     await fn();
   } finally {
     release();

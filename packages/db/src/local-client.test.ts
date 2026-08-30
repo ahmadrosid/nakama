@@ -3,7 +3,7 @@ import {
   LOCAL_CLIENT_EMAIL,
   LOCAL_CLIENT_USER_ID,
 } from "@nakama/core/local-auth";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 import { ensureLocalClientAccess } from "./local-client";
 
 describe("ensureLocalClientAccess", () => {

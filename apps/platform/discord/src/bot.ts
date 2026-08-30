@@ -61,6 +61,12 @@ export async function createBot(
     }
   });
 
+  // Integrity: interactions arrive over the gateway WebSocket (discord.js +
+  // intents above), authenticated by the bot token — not via Discord's HTTP
+  // Interactions Endpoint. Ed25519 signature verification (X-Signature-Ed25519 /
+  // X-Signature-Timestamp) does not apply on this path. If we ever expose an
+  // HTTP interaction endpoint, verify signatures with the app public key before
+  // handling the body; do not copy this gateway-only handler as-is.
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) {
       return;
