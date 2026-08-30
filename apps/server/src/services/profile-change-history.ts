@@ -11,6 +11,13 @@ export type ProfileChangeMeta = {
   source: ProfileChangeSource;
 };
 
+const SOUL_CHANGE_FIELDS = {
+  instructions: "soul.instructions",
+  memory: "soul.memory",
+  soul: "soul.soul",
+  style: "soul.style",
+} as const satisfies Record<string, ProfileChangeField>;
+
 export async function recordProfileChangeEvent(
   db: DatabaseAdapter,
   input: {
@@ -44,34 +51,48 @@ export function assignmentIdsValue(ids: string[]): string {
   return JSON.stringify([...ids].sort());
 }
 
-export function soulFieldFromFileName(
-  fileName: string
-): ProfileChangeField | null {
-  switch (fileName) {
-    case "SOUL.md":
-      return "soul.soul";
-    case "STYLE.md":
-      return "soul.style";
-    case "INSTRUCTIONS.md":
-      return "soul.instructions";
-    case "MEMORY.md":
-      return "soul.memory";
-    default:
-      return null;
+/** Skip when meta is omitted or the sorted id set did not change. */
+export async function recordAssignmentChange(
+  db: DatabaseAdapter,
+  input: {
+    afterIds: string[];
+    beforeIds: string[];
+    field: "tools" | "skills" | "mcp";
+    meta?: ProfileChangeMeta;
+    orgId: string;
+    profileId: string;
   }
+): Promise<void> {
+  if (!input.meta) {
+    return;
+  }
+  const beforeValue = assignmentIdsValue(input.beforeIds);
+  const afterValue = assignmentIdsValue(input.afterIds);
+  if (beforeValue === afterValue) {
+    return;
+  }
+  await recordProfileChangeEvent(db, {
+    actorUserId: input.meta.actorUserId,
+    afterValue,
+    beforeValue,
+    field: input.field,
+    orgId: input.orgId,
+    profileId: input.profileId,
+    source: input.meta.source,
+  });
 }
 
 export function soulFieldFromKey(key: string): ProfileChangeField | null {
-  switch (key) {
-    case "soul":
-      return "soul.soul";
-    case "style":
-      return "soul.style";
-    case "instructions":
-      return "soul.instructions";
-    case "memory":
-      return "soul.memory";
-    default:
-      return null;
+  return (
+    (SOUL_CHANGE_FIELDS as Record<string, ProfileChangeField>)[key] ?? null
+  );
+}
+
+export function soulFieldFromFileName(
+  fileName: string
+): ProfileChangeField | null {
+  if (!fileName.endsWith(".md")) {
+    return null;
   }
+  return soulFieldFromKey(fileName.slice(0, -3).toLowerCase());
 }

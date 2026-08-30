@@ -51,8 +51,8 @@ import type {
   StoredSkillUsageRecord,
 } from "@nakama/db";
 import {
-  assignmentIdsValue,
   type ProfileChangeMeta,
+  recordAssignmentChange,
   recordProfileChangeEvent,
 } from "./profile-change-history";
 
@@ -308,9 +308,10 @@ export class SkillsService {
   ): Promise<SkillResponse & { created: boolean }> {
     const { name } = parseRawProfileSkillContent(content, orgId, profileId);
     const createdBy = options?.createdBy ?? "agent";
-    const beforeIds = (await this.db.listSkillsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const changeMeta = options?.changeMeta;
+    const beforeIds = changeMeta
+      ? (await this.db.listSkillsForProfile(profileId)).map((entry) => entry.id)
+      : [];
 
     const existingByName = await this.db.getSkillByName(name, orgId);
     if (
@@ -359,19 +360,17 @@ export class SkillsService {
     );
 
     await this.db.assignSkillToProfile(profileId, record.id);
-    const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
-
-    if (options?.changeMeta) {
-      await recordProfileChangeEvent(this.db, {
-        actorUserId: options.changeMeta.actorUserId,
-        afterValue: assignmentIdsValue(afterIds),
-        beforeValue: assignmentIdsValue(beforeIds),
+    if (changeMeta) {
+      const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
         field: "skills",
+        meta: changeMeta,
         orgId,
         profileId,
-        source: options.changeMeta.source,
       });
     }
 
@@ -562,9 +561,9 @@ export class SkillsService {
       );
     }
 
-    const beforeIds = (await this.db.listSkillsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listSkillsForProfile(profileId)).map((entry) => entry.id)
+      : [];
 
     await this.db.unassignSkillFromProfile(profileId, record.id);
     const deleted = await this.db.deleteSkill(record.id);
@@ -579,14 +578,13 @@ export class SkillsService {
       const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
         (entry) => entry.id
       );
-      await recordProfileChangeEvent(this.db, {
-        actorUserId: meta.actorUserId,
-        afterValue: assignmentIdsValue(afterIds),
-        beforeValue: assignmentIdsValue(beforeIds),
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
         field: "skills",
+        meta,
         orgId,
         profileId,
-        source: meta.source,
       });
     }
   }

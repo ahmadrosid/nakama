@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { writeTextFile } from "../fs";
 import type { SoulStackFiles } from "./types";
 
-const WRITABLE_SOUL_FILES = {
+export const WRITABLE_SOUL_FILES = {
   instructions: "INSTRUCTIONS.md",
   memory: "MEMORY.md",
   soul: "SOUL.md",

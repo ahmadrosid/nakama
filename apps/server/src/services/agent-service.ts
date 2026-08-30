@@ -169,6 +169,7 @@ import {
   saveUserTimezone,
   saveWhatsAppConfig,
   USER_CONTEXT_TEMPLATE,
+  WRITABLE_SOUL_FILES,
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
@@ -2905,15 +2906,8 @@ export class AgentService {
 
     const field = soulFieldFromKey(key);
     const soulDir = getProfileSoulDir(orgId, profileId);
-    const fileName =
-      key === "soul"
-        ? "SOUL.md"
-        : key === "style"
-          ? "STYLE.md"
-          : key === "instructions"
-            ? "INSTRUCTIONS.md"
-            : "MEMORY.md";
-    const before = (await readTextIfExists(join(soulDir, fileName))) ?? null;
+    const before =
+      (await readTextIfExists(join(soulDir, WRITABLE_SOUL_FILES[key]))) ?? null;
 
     await writeSoulFile(soulDir, key, request.content);
 

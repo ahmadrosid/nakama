@@ -1423,9 +1423,6 @@ function migrateProfileChangeEventsTable(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
       ON profile_change_events (profile_id, created_at DESC);
-
-    CREATE INDEX IF NOT EXISTS profile_change_events_org_profile
-      ON profile_change_events (org_id, profile_id, created_at DESC);
   `);
 }
 

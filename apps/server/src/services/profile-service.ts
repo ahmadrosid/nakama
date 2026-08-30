@@ -66,8 +66,8 @@ import {
 } from "./custom-tool-handlers";
 import { toMcpServerSummaries } from "./mcp-service";
 import {
-  assignmentIdsValue,
   type ProfileChangeMeta,
+  recordAssignmentChange,
   recordProfileChangeEvent,
   soulFieldFromFileName,
 } from "./profile-change-history";
@@ -533,28 +533,22 @@ export class ProfileService {
       throw new Error("Tool not found.");
     }
 
-    const beforeIds = (await this.db.listToolsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listToolsForProfile(profileId)).map((entry) => entry.id)
+      : [];
     await this.db.assignToolToProfile(profileId, request.toolId);
-    const afterIds = (await this.db.listToolsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
-
     if (meta) {
-      const beforeValue = assignmentIdsValue(beforeIds);
-      const afterValue = assignmentIdsValue(afterIds);
-      if (beforeValue !== afterValue) {
-        await recordProfileChangeEvent(this.db, {
-          actorUserId: meta.actorUserId,
-          afterValue,
-          beforeValue,
-          field: "tools",
-          orgId,
-          profileId,
-          source: meta.source,
-        });
-      }
+      const afterIds = (await this.db.listToolsForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
+        field: "tools",
+        meta,
+        orgId,
+        profileId,
+      });
     }
 
     return this.getProfile(orgId, profileId);
@@ -568,9 +562,9 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const beforeIds = (await this.db.listToolsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listToolsForProfile(profileId)).map((entry) => entry.id)
+      : [];
     const removed = await this.db.unassignToolFromProfile(profileId, toolId);
 
     if (!removed) {
@@ -581,14 +575,13 @@ export class ProfileService {
       const afterIds = (await this.db.listToolsForProfile(profileId)).map(
         (entry) => entry.id
       );
-      await recordProfileChangeEvent(this.db, {
-        actorUserId: meta.actorUserId,
-        afterValue: assignmentIdsValue(afterIds),
-        beforeValue: assignmentIdsValue(beforeIds),
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
         field: "tools",
+        meta,
         orgId,
         profileId,
-        source: meta.source,
       });
     }
 
@@ -609,28 +602,24 @@ export class ProfileService {
       throw new Error("MCP server not found.");
     }
 
-    const beforeIds = (await this.db.listMcpServersForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listMcpServersForProfile(profileId)).map(
+          (entry) => entry.id
+        )
+      : [];
     await this.db.assignMcpServerToProfile(profileId, request.serverId);
-    const afterIds = (await this.db.listMcpServersForProfile(profileId)).map(
-      (entry) => entry.id
-    );
-
     if (meta) {
-      const beforeValue = assignmentIdsValue(beforeIds);
-      const afterValue = assignmentIdsValue(afterIds);
-      if (beforeValue !== afterValue) {
-        await recordProfileChangeEvent(this.db, {
-          actorUserId: meta.actorUserId,
-          afterValue,
-          beforeValue,
-          field: "mcp",
-          orgId,
-          profileId,
-          source: meta.source,
-        });
-      }
+      const afterIds = (await this.db.listMcpServersForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
+        field: "mcp",
+        meta,
+        orgId,
+        profileId,
+      });
     }
 
     return this.getProfile(orgId, profileId);
@@ -644,9 +633,11 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const beforeIds = (await this.db.listMcpServersForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listMcpServersForProfile(profileId)).map(
+          (entry) => entry.id
+        )
+      : [];
     const removed = await this.db.unassignMcpServerFromProfile(
       profileId,
       serverId
@@ -660,14 +651,13 @@ export class ProfileService {
       const afterIds = (await this.db.listMcpServersForProfile(profileId)).map(
         (entry) => entry.id
       );
-      await recordProfileChangeEvent(this.db, {
-        actorUserId: meta.actorUserId,
-        afterValue: assignmentIdsValue(afterIds),
-        beforeValue: assignmentIdsValue(beforeIds),
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
         field: "mcp",
+        meta,
         orgId,
         profileId,
-        source: meta.source,
       });
     }
 
@@ -688,28 +678,22 @@ export class ProfileService {
       throw new Error("Skill not found.");
     }
 
-    const beforeIds = (await this.db.listSkillsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listSkillsForProfile(profileId)).map((entry) => entry.id)
+      : [];
     await this.db.assignSkillToProfile(profileId, request.skillId);
-    const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
-
     if (meta) {
-      const beforeValue = assignmentIdsValue(beforeIds);
-      const afterValue = assignmentIdsValue(afterIds);
-      if (beforeValue !== afterValue) {
-        await recordProfileChangeEvent(this.db, {
-          actorUserId: meta.actorUserId,
-          afterValue,
-          beforeValue,
-          field: "skills",
-          orgId,
-          profileId,
-          source: meta.source,
-        });
-      }
+      const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
+        field: "skills",
+        meta,
+        orgId,
+        profileId,
+      });
     }
 
     return this.getProfile(orgId, profileId);
@@ -723,9 +707,9 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const beforeIds = (await this.db.listSkillsForProfile(profileId)).map(
-      (entry) => entry.id
-    );
+    const beforeIds = meta
+      ? (await this.db.listSkillsForProfile(profileId)).map((entry) => entry.id)
+      : [];
     const removed = await this.db.unassignSkillFromProfile(profileId, skillId);
 
     if (!removed) {
@@ -736,14 +720,13 @@ export class ProfileService {
       const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
         (entry) => entry.id
       );
-      await recordProfileChangeEvent(this.db, {
-        actorUserId: meta.actorUserId,
-        afterValue: assignmentIdsValue(afterIds),
-        beforeValue: assignmentIdsValue(beforeIds),
+      await recordAssignmentChange(this.db, {
+        afterIds,
+        beforeIds,
         field: "skills",
+        meta,
         orgId,
         profileId,
-        source: meta.source,
       });
     }
 
