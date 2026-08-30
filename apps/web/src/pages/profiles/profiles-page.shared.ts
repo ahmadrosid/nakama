@@ -11,26 +11,17 @@ export type ProfileSaveStatus =
   | "saved"
   | "error";
 
-export type ProfileDetailTab =
-  | "profile"
-  | "prompt"
-  | "knowledge"
-  | "proposals"
-  | "history";
+export type ProfileDetailTab = "profile" | "prompt" | "knowledge" | "proposals";
 
 export function resolveProfileDetailTab(
   value: string | null
 ): ProfileDetailTab {
-  if (
-    value === "prompt" ||
-    value === "knowledge" ||
-    value === "proposals" ||
-    value === "history"
-  ) {
+  if (value === "prompt" || value === "knowledge" || value === "proposals") {
     return value;
   }
 
-  if (value === "soul") {
+  // Legacy History tab URL → Prompt (history lives under Prompt now)
+  if (value === "soul" || value === "history") {
     return "prompt";
   }
 

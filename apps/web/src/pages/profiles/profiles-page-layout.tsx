@@ -73,7 +73,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               >
                 Config
               </ProfileDetailTabButton>
-              {canCreateProfile ? (
+              {canCreateProfile || canViewHistory ? (
                 <ProfileDetailTabButton
                   active={detailTab === "prompt"}
                   controls="profile-detail-panel-prompt"
@@ -108,16 +108,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                       )
                     </span>
                   ) : null}
-                </ProfileDetailTabButton>
-              ) : null}
-              {canViewHistory ? (
-                <ProfileDetailTabButton
-                  active={detailTab === "history"}
-                  controls="profile-detail-panel-history"
-                  id="profile-detail-tab-history"
-                  onSelect={() => setDetailTab("history")}
-                >
-                  History
                 </ProfileDetailTabButton>
               ) : null}
             </div>,
@@ -183,14 +173,17 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 profileId={selectedId}
               />
             </div>
-          ) : detailTab === "prompt" && canCreateProfile ? (
+          ) : detailTab === "prompt" && (canCreateProfile || canViewHistory) ? (
             <div
               aria-labelledby="profile-detail-tab-prompt"
-              className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+              className="no-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-5"
               id="profile-detail-panel-prompt"
               role="tabpanel"
             >
-              <SoulTab profileId={selectedId} />
+              {canCreateProfile ? <SoulTab profileId={selectedId} /> : null}
+              {canViewHistory ? (
+                <ProfileHistoryTab profileId={selectedId} />
+              ) : null}
             </div>
           ) : detailTab === "knowledge" ? (
             <div
@@ -200,15 +193,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               role="tabpanel"
             >
               <KnowledgeTab profileId={selectedId} />
-            </div>
-          ) : detailTab === "history" && canViewHistory ? (
-            <div
-              aria-labelledby="profile-detail-tab-history"
-              className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
-              id="profile-detail-panel-history"
-              role="tabpanel"
-            >
-              <ProfileHistoryTab profileId={selectedId} />
             </div>
           ) : null
         ) : (
