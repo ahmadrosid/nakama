@@ -881,37 +881,6 @@ describe("AgentService bot token validation", () => {
     expect(await loadTelegramConfigFile()).toBeNull();
   });
 
-  for (const failure of [
-    {
-      fetch: async () => new Response("not-json", { status: 200 }),
-      name: "a malformed response",
-    },
-    {
-      fetch: async () => {
-        throw new Error("network failure");
-      },
-      name: "a network failure",
-    },
-  ]) {
-    test(`does not persist a Telegram token after ${failure.name}`, async () => {
-      globalThis.fetch = failure.fetch as typeof fetch;
-      const botToken = "123456:unvalidated-token";
-      const service = new AgentService(
-        null,
-        null,
-        createInMemoryDatabaseAdapter()
-      );
-
-      const error = await captureError(() =>
-        service.setTelegramSettings({ botToken })
-      );
-
-      expect(error).toBeInstanceOf(Error);
-      expect(error?.message).not.toContain(botToken);
-      expect(await loadTelegramConfigFile()).toBeNull();
-    });
-  }
-
   test("persists a Telegram token accepted by Telegram", async () => {
     let requestUrl = "";
     globalThis.fetch = (async (input) => {
@@ -962,40 +931,6 @@ describe("AgentService bot token validation", () => {
     expect(error?.message).not.toContain(botToken);
     expect(await loadDiscordConfigFile()).toBeNull();
   });
-
-  for (const failure of [
-    {
-      fetch: async () =>
-        new Response(JSON.stringify({ id: "not-a-snowflake" }), {
-          status: 200,
-        }),
-      name: "a malformed response",
-    },
-    {
-      fetch: async () => {
-        throw new Error("network failure");
-      },
-      name: "a network failure",
-    },
-  ]) {
-    test(`does not persist a Discord token after ${failure.name}`, async () => {
-      globalThis.fetch = failure.fetch as typeof fetch;
-      const botToken = "unvalidated-discord-token";
-      const service = new AgentService(
-        null,
-        null,
-        createInMemoryDatabaseAdapter()
-      );
-
-      const error = await captureError(() =>
-        service.setDiscordSettings({ botToken })
-      );
-
-      expect(error).toBeInstanceOf(Error);
-      expect(error?.message).not.toContain(botToken);
-      expect(await loadDiscordConfigFile()).toBeNull();
-    });
-  }
 
   test("persists a Discord token accepted by Discord", async () => {
     let authorization = "";

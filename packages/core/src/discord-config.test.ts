@@ -63,6 +63,25 @@ describe("resolveDiscordApplicationId", () => {
     await expect(resolveDiscordApplicationId("bad-token")).resolves.toBeNull();
   });
 
+  test("returns null for invalid payloads and request failures", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ id: "not-a-snowflake" }), {
+        status: 200,
+      })) as typeof fetch;
+
+    await expect(
+      resolveDiscordApplicationId("invalid-id-token")
+    ).resolves.toBeNull();
+
+    globalThis.fetch = (async () => {
+      throw new Error("network failure");
+    }) as typeof fetch;
+
+    await expect(
+      resolveDiscordApplicationId("network-failure-token")
+    ).resolves.toBeNull();
+  });
+
   test("force refresh revalidates and evicts a cached application id", async () => {
     let requestCount = 0;
     globalThis.fetch = (async () => {
