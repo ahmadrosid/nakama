@@ -19,12 +19,12 @@ bun run dev:telegram
 
 The bridge auto-starts the server if it is not already running (same as the CLI).
 
-Optional env vars (case-sensitive; full contract in repo-root `AGENTS.md` → Platform worker env):
+Optional env vars (case-sensitive):
 
 - `TELEGRAM_BOT_TOKEN` — bot token (instead of the config file)
 - `TELEGRAM_ALLOWED_USER_IDS` — skip pairing for specific numeric user IDs
 - `nakama_TELEGRAM_PROFILE_ID` — bot profile (default `default`)
-- `nakama_SERVER_URL` — server base URL via `ensureServerRunning` (default `http://127.0.0.1:4310`)
+- `nakama_SERVER_URL` — server base URL (default `http://127.0.0.1:4310`)
 - `NAKAMA_WEB_PUBLIC_URL` — public web app URL for Composio OAuth links sent in chat (e.g. `https://nakama.example.com`)
 
 ### Commands
