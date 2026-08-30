@@ -550,7 +550,8 @@ export function formatSessionTimestamp(value: string): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    // Never echo unparsed input into the UI (session startedAt is API-controlled).
+    return "Unknown time";
   }
 
   return date.toLocaleString(undefined, {
@@ -573,7 +574,7 @@ function formatRelativeTime(value: string, tense: "past" | "future"): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return "Unknown time";
   }
 
   const deltaMs =
