@@ -1,5 +1,10 @@
 import type { ProfileChangeEvent } from "@nakama/core";
 import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import {
+  formatSessionRelativeTime,
+  formatSessionTimestamp,
+} from "@/lib/chat-history";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -43,6 +48,10 @@ function formatSourceLabel(source: ProfileChangeEvent["source"]): string {
   }
 }
 
+function formatActorLabel(actorUserId: string): string {
+  return actorUserId.length > 16 ? `${actorUserId.slice(0, 12)}…` : actorUserId;
+}
+
 function previewValue(value: string | null): string {
   if (value === null) {
     return "—";
@@ -61,20 +70,25 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
   });
 
   if (isLoading) {
-    return <p className="text-muted-foreground text-sm">Loading history…</p>;
+    return (
+      <p className="text-pretty text-muted-foreground text-sm">
+        Loading history…
+      </p>
+    );
   }
 
   if (error) {
     return (
-      <p className="text-destructive text-sm">
+      <p className="text-pretty text-destructive text-sm">
         {formatError(error)}{" "}
-        <button
-          className="underline underline-offset-2"
+        <Button
+          className="relative h-auto p-0 after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2"
           onClick={() => void refetch()}
           type="button"
+          variant="link"
         >
           Retry
-        </button>
+        </Button>
       </p>
     );
   }
@@ -83,48 +97,61 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   if (events.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">No profile changes yet.</p>
+      <p className="text-pretty text-muted-foreground text-sm">
+        No profile changes yet.
+      </p>
     );
   }
 
   return (
     <div className="space-y-3">
-      <h3 className="type-section-title">History</h3>
-      <ul className="divide-y divide-border rounded-md border border-border">
-        {events.map((event) => (
-          <li className="space-y-2 px-3 py-3" key={event.id}>
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-              <span className="font-medium">
-                {formatFieldLabel(event.field)}
-              </span>
-              <span className="text-muted-foreground">
-                {formatSourceLabel(event.source)}
-              </span>
-              <span className="text-muted-foreground text-xs tabular-nums">
-                {new Date(event.createdAt).toLocaleString()}
-              </span>
-              {event.actorUserId ? (
-                <span className="text-muted-foreground text-xs">
-                  {event.actorUserId}
-                </span>
-              ) : null}
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="rounded-md bg-muted/40 px-2 py-1.5">
-                <p className="mb-1 text-muted-foreground text-xs">Before</p>
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs">
-                  {previewValue(event.beforeValue)}
-                </pre>
+      <h3 className="type-section-title text-balance">History</h3>
+      <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+        {events.map((event) => {
+          const actor = event.actorUserId
+            ? formatActorLabel(event.actorUserId)
+            : null;
+
+          return (
+            <li className="space-y-2 px-4 py-3" key={event.id}>
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="min-w-0 truncate text-sm">
+                  <span className="font-medium">
+                    {formatFieldLabel(event.field)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {formatSourceLabel(event.source)}
+                  </span>
+                </p>
+                <p className="shrink-0 text-muted-foreground text-xs">
+                  <time
+                    className="tabular-nums"
+                    dateTime={event.createdAt}
+                    title={formatSessionTimestamp(event.createdAt)}
+                  >
+                    {formatSessionRelativeTime(event.createdAt)}
+                  </time>
+                  {actor ? <> · {actor}</> : null}
+                </p>
               </div>
-              <div className="rounded-md bg-muted/40 px-2 py-1.5">
-                <p className="mb-1 text-muted-foreground text-xs">After</p>
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs">
-                  {previewValue(event.afterValue)}
-                </pre>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-sm bg-muted/40 px-2 py-1.5">
+                  <p className="mb-1 text-muted-foreground text-xs">Before</p>
+                  <pre className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+                    {previewValue(event.beforeValue)}
+                  </pre>
+                </div>
+                <div className="rounded-sm bg-muted/40 px-2 py-1.5">
+                  <p className="mb-1 text-muted-foreground text-xs">After</p>
+                  <pre className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+                    {previewValue(event.afterValue)}
+                  </pre>
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
