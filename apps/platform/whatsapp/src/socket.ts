@@ -56,7 +56,7 @@ export async function createWhatsAppSocket(
       const myGen = ++generation;
       const previous = socket;
       socket = null;
-      retireSocket(previous);
+      void retireSocket(previous);
 
       const next = makeWASocket({
         auth: state,
@@ -73,7 +73,7 @@ export async function createWhatsAppSocket(
       });
 
       if (myGen !== generation || stopped) {
-        retireSocket(next);
+        void retireSocket(next);
         return;
       }
 
@@ -205,26 +205,21 @@ export async function createWhatsAppSocket(
       generation += 1;
       const current = socket;
       socket = null;
-      if (!current) {
-        return;
-      }
-
-      // Strip listeners first so end()'s close emit cannot re-enter reconnect.
-      current.ev.removeAllListeners();
-      await Promise.resolve(current.end(undefined));
+      await retireSocket(current);
     },
   };
 
   return handle;
 }
 
-function retireSocket(target: WASocket | null | undefined): void {
+function retireSocket(target: WASocket | null | undefined): Promise<void> {
   if (!target) {
-    return;
+    return Promise.resolve();
   }
 
+  // Strip listeners first so end()'s close emit cannot re-enter reconnect.
   target.ev.removeAllListeners();
-  target.end(undefined);
+  return Promise.resolve(target.end(undefined));
 }
 
 function isSupportedUpsertType(type: string): boolean {

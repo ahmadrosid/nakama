@@ -170,11 +170,15 @@ describe("WhatsApp socket reconnect", () => {
   });
 
   test("clears old-socket listeners on reconnect so upserts cannot leak", async () => {
-    const handle = await createWhatsAppSocket({ onMessage: async () => {} });
+    const received: string[] = [];
+    const handle = await createWhatsAppSocket({
+      onMessage: async (data) => {
+        received.push(data.text);
+      },
+    });
     await handle.start();
 
     const oldSocket = sockets[0];
-    expect(oldSocket).toBeDefined();
     expect(oldSocket?.ev.listenerCount("messages.upsert")).toBe(1);
 
     emit(0, TIMEOUT_CLOSE);
@@ -184,21 +188,6 @@ describe("WhatsApp socket reconnect", () => {
     expect(oldSocket?.ev.listenerCount("messages.upsert")).toBe(0);
     expect(oldSocket?.ev.listenerCount("connection.update")).toBe(0);
     expect(sockets[1]?.ev.listenerCount("messages.upsert")).toBe(1);
-  });
-
-  test("does not dispatch duplicate inbound messages from a retired socket", async () => {
-    const received: string[] = [];
-    const handle = await createWhatsAppSocket({
-      onMessage: async (data) => {
-        received.push(data.text);
-      },
-    });
-    await handle.start();
-
-    emit(0, TIMEOUT_CLOSE);
-    await flush();
-
-    expect(createSocket).toHaveBeenCalledTimes(2);
 
     sockets[0]?.ev.emit("messages.upsert", SAMPLE_UPSERT);
     await flush();
@@ -228,19 +217,10 @@ describe("WhatsApp socket reconnect", () => {
 
     endResolvers[0]?.();
     await stopPromise;
+    await flush();
 
     expect(stopDone).toBe(true);
     expect(endOrder).toEqual(["end:1", "stop-done"]);
-  });
-
-  test("stop does not start a reconnect after end emits close", async () => {
-    const handle = await createWhatsAppSocket({ onMessage: async () => {} });
-    await handle.start();
-
-    endResolvers[0]?.();
-    await handle.stop();
-    await flush();
-
     expect(createSocket).toHaveBeenCalledTimes(1);
     expect(delays).toEqual([]);
   });
