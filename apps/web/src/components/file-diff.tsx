@@ -21,10 +21,10 @@ export function FileDiff({
         <p className={styles.diffEmpty}>No line changes.</p>
       ) : (
         <div className={styles.diffLines}>
-          {rows.map((row, index) => (
+          {rows.map((row) => (
             <div
               className={cn(styles.diffRow, styles[row.type])}
-              key={`${row.type}-${row.old ?? "x"}-${row.cur ?? "x"}-${index}`}
+              key={`${row.type}-${row.old ?? "x"}-${row.cur ?? "x"}`}
             >
               <span className={cn(styles.ln, styles.old)}>{row.old ?? ""}</span>
               <span className={cn(styles.ln, styles.new)}>{row.cur ?? ""}</span>
