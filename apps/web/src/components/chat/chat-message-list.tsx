@@ -357,7 +357,13 @@ function AssistantTurn({
   const turnComplete = isAssistantTurnComplete(turnMessages);
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
   const showArtifacts = turnComplete && artifacts.length > 0;
-  const showActions = !streamActive && turnComplete && anchorMessage != null;
+  const showActions =
+    !streamActive &&
+    turnComplete &&
+    anchorMessage != null &&
+    !anchorMessage.failed;
+  const retryDisabled =
+    actionsDisabled || branchingMessageId === anchorMessage?.id;
 
   return (
     <div className="group mr-auto ml-0 flex w-full max-w-full flex-col items-start justify-start gap-3">
@@ -369,7 +375,9 @@ function AssistantTurn({
               : `text:${segment.message.id}`
           }
           modelLabel={modelLabel}
+          onRetryMessage={onRetryMessage}
           profileId={profileId}
+          retryDisabled={retryDisabled}
           segment={segment}
           showThinking={showThinking}
         />
@@ -533,54 +541,36 @@ function AssistantMessageActions({
   const branchCreatedAt = isBranchableAssistantMessage(message)
     ? message.createdAt
     : null;
-  const isFailed = Boolean(message.failed);
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1 pt-1 transition-opacity",
-        isFailed
-          ? "opacity-100"
-          : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
-      )}
-    >
-      {isFailed ? null : (
-        <button
-          aria-label={copied ? "Copied" : "Copy response"}
-          className={cn(
-            "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
-            copied && "text-emerald-600 dark:text-emerald-400"
-          )}
-          disabled={!copyContent.trim()}
-          onClick={() => void copyMessage()}
-          title={copied ? "Copied" : "Copy response"}
-          type="button"
-        >
-          {copied ? (
-            <CheckmarkCircle01Icon aria-hidden className="size-4" />
-          ) : (
-            <Copy01Icon aria-hidden className="size-4" />
-          )}
-        </button>
-      )}
+    <div className="flex items-center gap-1 pt-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      <button
+        aria-label={copied ? "Copied" : "Copy response"}
+        className={cn(
+          "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+          copied && "text-emerald-600 dark:text-emerald-400"
+        )}
+        disabled={!copyContent.trim()}
+        onClick={() => void copyMessage()}
+        title={copied ? "Copied" : "Copy response"}
+        type="button"
+      >
+        {copied ? (
+          <CheckmarkCircle01Icon aria-hidden className="size-4" />
+        ) : (
+          <Copy01Icon aria-hidden className="size-4" />
+        )}
+      </button>
       {onRetryMessage ? (
         <button
-          aria-label={isFailed ? undefined : "Try again"}
-          className={
-            isFailed
-              ? "inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
-              : "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
-          }
+          aria-label="Try again"
+          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
           disabled={busy || actionsDisabled}
           onClick={() => onRetryMessage(message)}
-          title={isFailed ? undefined : "Try again"}
+          title="Try again"
           type="button"
         >
-          <Rotate02Icon
-            aria-hidden
-            className={isFailed ? "size-3.5" : "size-4"}
-          />
-          {isFailed ? "Retry" : null}
+          <Rotate02Icon aria-hidden className="size-4" />
         </button>
       ) : null}
       {onBranchMessage && branchCreatedAt ? (
