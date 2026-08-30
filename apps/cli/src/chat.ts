@@ -71,17 +71,13 @@ export function createChatExitController(signal?: AbortSignal): {
     resolveWait = null;
   };
 
-  const onAbort = (): void => {
-    requestExit();
-  };
-
   return {
     get exiting() {
       return exiting;
     },
     requestExit,
     async wait(): Promise<void> {
-      signal?.addEventListener("abort", onAbort);
+      signal?.addEventListener("abort", requestExit);
       try {
         if (signal?.aborted) {
           requestExit();
@@ -94,7 +90,7 @@ export function createChatExitController(signal?: AbortSignal): {
           }
         });
       } finally {
-        signal?.removeEventListener("abort", onAbort);
+        signal?.removeEventListener("abort", requestExit);
       }
     },
   };

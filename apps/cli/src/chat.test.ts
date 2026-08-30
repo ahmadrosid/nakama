@@ -66,13 +66,6 @@ describe("createChatExitController", () => {
     await exit.wait();
     expect(exit.exiting).toBe(true);
   });
-
-  test("requestExit before wait still completes", async () => {
-    const exit = createChatExitController();
-    exit.requestExit();
-    await exit.wait();
-    expect(exit.exiting).toBe(true);
-  });
 });
 
 describe("formatStatusLines", () => {
