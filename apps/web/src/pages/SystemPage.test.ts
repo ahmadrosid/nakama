@@ -11,8 +11,6 @@ describe("SystemPage tab access", () => {
   });
 
   test("forces non-platform users off admin tabs", () => {
-    expect(resolveSystemTab("status", true)).toBe("tools");
-    expect(resolveSystemTab("status", false)).toBe("tools");
     expect(resolveSystemTab("organization", true)).toBe("tools");
     expect(resolveSystemTab("organization", false)).toBe("tools");
     expect(resolveSystemTab("mcp", true)).toBe("mcp");

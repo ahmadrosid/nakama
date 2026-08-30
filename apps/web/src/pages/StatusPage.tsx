@@ -35,7 +35,8 @@ import {
   type StatusTone,
 } from "@/pages/status-page.shared";
 
-const sectionClass = "rounded-md border border-border bg-card";
+const sectionClass =
+  "min-w-0 overflow-hidden rounded-md border border-border bg-card";
 const iconTileClass =
   "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40";
 
@@ -127,7 +128,7 @@ function StatusDashboard({
   }));
 
   return (
-    <section className={cn("min-w-0 overflow-hidden", sectionClass)}>
+    <section className={sectionClass}>
       <SummaryStrip status={status} summary={summary} />
 
       <div className="grid grid-cols-1 divide-y divide-border border-border border-b sm:grid-cols-2 sm:divide-x sm:divide-y-0">
@@ -198,7 +199,7 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
-    <section className={cn("min-w-0 overflow-hidden", sectionClass)}>
+    <section className={sectionClass}>
       <div className="flex flex-wrap items-start justify-between gap-4 border-border border-b px-5 py-4">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
