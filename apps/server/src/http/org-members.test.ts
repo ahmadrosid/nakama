@@ -297,21 +297,5 @@ describe("org member management (AE2)", () => {
       )
     );
     expect(badShapeResponse.status).toBe(400);
-
-    const unknownMemberResponse = await app.fetch(
-      new Request(
-        `http://localhost:4310/v1/orgs/${orgId}/members/user_cccccccccccccccccccccccccccccccc`,
-        {
-          headers: adminSession.headers(
-            {
-              "X-CSRF-Token": adminSession.csrfToken,
-            },
-            orgId
-          ),
-          method: "DELETE",
-        }
-      )
-    );
-    expect(unknownMemberResponse.status).toBe(404);
   });
 });

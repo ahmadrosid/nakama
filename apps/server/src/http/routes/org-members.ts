@@ -8,7 +8,6 @@ import type {
   OrgMemberResponse,
   UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
-import { assertOrgMemberUserIdShape } from "../../services/org-service";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
@@ -350,8 +349,6 @@ export function registerOrgMemberRoutes(
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
-
-    assertOrgMemberUserIdShape(userId);
 
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);

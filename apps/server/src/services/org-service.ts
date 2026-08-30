@@ -48,7 +48,7 @@ const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
 /** Path `userId` for org member routes — matches minted ids (`user_` + hex) and seeded ones. */
 const ORG_MEMBER_USER_ID_PATTERN = /^user_[A-Za-z0-9_]{1,64}$/;
 
-export function assertOrgMemberUserIdShape(userId: string): void {
+function assertOrgMemberUserIdShape(userId: string): void {
   if (!ORG_MEMBER_USER_ID_PATTERN.test(userId)) {
     throw new NakamaApiError("Invalid user id.", 400);
   }
@@ -541,9 +541,6 @@ export class OrgService {
 
   async removeMember(orgId: string, userId: string): Promise<void> {
     assertOrgMemberUserIdShape(userId);
-
-    // Membership via getOrgMember only — no getUserById, so missing-user and
-    // not-in-org share the same 404 path (timing/path) before delete.
     await this.assertCanChangeAdminMembership(orgId, userId);
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
