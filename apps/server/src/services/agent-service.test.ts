@@ -2,13 +2,19 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ensureBundledSkillFiles } from "@nakama/core";
+import {
+  ensureBundledSkillFiles,
+  loadDiscordConfigFile,
+  loadTelegramConfigFile,
+} from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
   WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
+import { createMinimalHonoApp } from "../http/test-app-helpers";
+import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { AgentService } from "./agent-service";
 import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillsService } from "./skills-service";
@@ -832,6 +838,319 @@ describe("AgentService skill_manage injection", () => {
     expect(userMessage?.content).toBe("/learn");
   });
 });
+
+describe("AgentService bot token validation", () => {
+  const originalFetch = globalThis.fetch;
+  let configDir = "";
+
+  beforeEach(async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-bot-token-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
+    delete process.env.NAKAMA_CONFIG_DIR;
+    await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("rejects and does not persist a Telegram token rejected by Telegram", async () => {
+    const botToken = "123456:QA-fake-token-xyz";
+    let requestCount = 0;
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+      return new Response(JSON.stringify({ ok: false }), { status: 401 });
+    }) as typeof fetch;
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const error = await captureError(() =>
+      service.setTelegramSettings({ botToken })
+    );
+    const configured = (await service.getTelegramSettings()).configured;
+
+    expect({ configured, rejected: error !== null, requestCount }).toEqual({
+      configured: false,
+      rejected: true,
+      requestCount: 1,
+    });
+    expect(error?.message).not.toContain(botToken);
+    expect(await loadTelegramConfigFile()).toBeNull();
+  });
+
+  for (const failure of [
+    {
+      fetch: async () => new Response("not-json", { status: 200 }),
+      name: "a malformed response",
+    },
+    {
+      fetch: async () => {
+        throw new Error("network failure");
+      },
+      name: "a network failure",
+    },
+  ]) {
+    test(`does not persist a Telegram token after ${failure.name}`, async () => {
+      globalThis.fetch = failure.fetch as typeof fetch;
+      const botToken = "123456:unvalidated-token";
+      const service = new AgentService(
+        null,
+        null,
+        createInMemoryDatabaseAdapter()
+      );
+
+      const error = await captureError(() =>
+        service.setTelegramSettings({ botToken })
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.message).not.toContain(botToken);
+      expect(await loadTelegramConfigFile()).toBeNull();
+    });
+  }
+
+  test("persists a Telegram token accepted by Telegram", async () => {
+    let requestUrl = "";
+    globalThis.fetch = (async (input) => {
+      requestUrl = String(input);
+      return new Response(
+        JSON.stringify({ ok: true, result: { id: 123_456, is_bot: true } }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      );
+    }) as typeof fetch;
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const saved = await service.setTelegramSettings({
+      botToken: "123456:valid-token",
+    });
+
+    expect(saved.configured).toBe(true);
+    expect(new URL(requestUrl).pathname).toBe("/bot123456%3Avalid-token/getMe");
+    expect((await service.getTelegramSettings()).configured).toBe(true);
+  });
+
+  test("rejects and does not persist a Discord token rejected by Discord", async () => {
+    const botToken = "123456:QA-fake-token-xyz";
+    let requestCount = 0;
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+      return new Response(null, { status: 401 });
+    }) as typeof fetch;
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const error = await captureError(() =>
+      service.setDiscordSettings({ botToken })
+    );
+    const configured = (await service.getDiscordSettings()).configured;
+
+    expect({ configured, rejected: error !== null, requestCount }).toEqual({
+      configured: false,
+      rejected: true,
+      requestCount: 1,
+    });
+    expect(error?.message).not.toContain(botToken);
+    expect(await loadDiscordConfigFile()).toBeNull();
+  });
+
+  for (const failure of [
+    {
+      fetch: async () =>
+        new Response(JSON.stringify({ id: "not-a-snowflake" }), {
+          status: 200,
+        }),
+      name: "a malformed response",
+    },
+    {
+      fetch: async () => {
+        throw new Error("network failure");
+      },
+      name: "a network failure",
+    },
+  ]) {
+    test(`does not persist a Discord token after ${failure.name}`, async () => {
+      globalThis.fetch = failure.fetch as typeof fetch;
+      const botToken = "unvalidated-discord-token";
+      const service = new AgentService(
+        null,
+        null,
+        createInMemoryDatabaseAdapter()
+      );
+
+      const error = await captureError(() =>
+        service.setDiscordSettings({ botToken })
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.message).not.toContain(botToken);
+      expect(await loadDiscordConfigFile()).toBeNull();
+    });
+  }
+
+  test("persists a Discord token accepted by Discord", async () => {
+    let authorization = "";
+    let requestCount = 0;
+    globalThis.fetch = (async (_input, init) => {
+      requestCount += 1;
+      authorization = new Headers(init?.headers).get("Authorization") ?? "";
+      return new Response(JSON.stringify({ id: "1525937133096013954" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }) as typeof fetch;
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const saved = await service.setDiscordSettings({
+      botToken: "valid-discord-token",
+    });
+
+    expect(saved.configured).toBe(true);
+    expect(authorization).toBe("Bot valid-discord-token");
+    expect((await service.getDiscordSettings()).configured).toBe(true);
+    expect(requestCount).toBe(1);
+  });
+
+  test("preserves Telegram config after a rejected replacement and on token-less edits", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ ok: true, result: { id: 123_456, is_bot: true } }),
+        { status: 200 }
+      )) as typeof fetch;
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+    await service.setTelegramSettings({
+      allowedUserIds: "42",
+      botToken: "123456:original-token",
+      profileId: "original",
+    });
+    const beforeReplacement = await loadTelegramConfigFile();
+
+    globalThis.fetch = (async () =>
+      new Response(null, { status: 401 })) as typeof fetch;
+    await expect(
+      service.setTelegramSettings({
+        allowedUserIds: "43",
+        botToken: "123456:rejected-token",
+        profileId: "replacement",
+      })
+    ).rejects.toBeInstanceOf(Error);
+    expect(await loadTelegramConfigFile()).toEqual(beforeReplacement);
+
+    globalThis.fetch = (async () => {
+      throw new Error("Token-less Telegram edits must not call the provider.");
+    }) as typeof fetch;
+    await service.setTelegramSettings({
+      allowedUserIds: "43",
+      profileId: "edited",
+    });
+    expect(await loadTelegramConfigFile()).toMatchObject({
+      allowedUserIds: [43],
+      botToken: "123456:original-token",
+      profileId: "edited",
+    });
+  });
+
+  test("revalidates a cached Discord token and preserves config when rejected", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ id: "1525937133096013954" }), {
+        status: 200,
+      })) as typeof fetch;
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+    await service.setDiscordSettings({
+      allowedUserIds: "123456789012345678",
+      botToken: "cached-discord-token",
+      profileId: "original",
+    });
+    const beforeReplacement = await loadDiscordConfigFile();
+    let rejectedRequestCount = 0;
+
+    globalThis.fetch = (async () => {
+      rejectedRequestCount += 1;
+      return new Response(null, { status: 401 });
+    }) as typeof fetch;
+    await expect(
+      service.setDiscordSettings({
+        allowedUserIds: "987654321098765432",
+        botToken: "cached-discord-token",
+        profileId: "replacement",
+      })
+    ).rejects.toBeInstanceOf(Error);
+    expect(rejectedRequestCount).toBe(1);
+    expect(await loadDiscordConfigFile()).toEqual(beforeReplacement);
+
+    await service.setDiscordSettings({
+      allowedUserIds: "987654321098765432",
+      profileId: "edited",
+    });
+    expect(await loadDiscordConfigFile()).toMatchObject({
+      allowedUserIds: ["987654321098765432"],
+      botToken: "cached-discord-token",
+      profileId: "edited",
+    });
+  });
+
+  test("returns credential-safe HTTP errors without creating channel configs", async () => {
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const service = new AgentService(null, null, databaseAdapter);
+    const { app } = createMinimalHonoApp({ agent: service, databaseAdapter });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    globalThis.fetch = (async () =>
+      new Response(null, { status: 401 })) as typeof fetch;
+
+    for (const channel of ["telegram", "discord"] as const) {
+      const botToken = `rejected-${channel}-token`;
+      const response = await app.fetch(
+        new Request(`http://localhost:4310/v1/settings/${channel}`, {
+          body: JSON.stringify({ botToken }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "PUT",
+        })
+      );
+      const body = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(400);
+      expect(body.error).not.toContain(botToken);
+    }
+
+    expect(await loadTelegramConfigFile()).toBeNull();
+    expect(await loadDiscordConfigFile()).toBeNull();
+  });
+});
+
+async function captureError(
+  run: () => Promise<unknown>
+): Promise<Error | null> {
+  try {
+    await run();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+}
 
 async function installFakeOpenCode(binDir: string): Promise<void> {
   const scriptPath = path.join(binDir, "opencode");

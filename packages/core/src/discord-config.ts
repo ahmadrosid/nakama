@@ -77,12 +77,17 @@ function clearDiscordApplicationIdCache(botToken: string): void {
 }
 
 export async function resolveDiscordApplicationId(
-  botToken: string
+  botToken: string,
+  options: { forceRefresh?: boolean } = {}
 ): Promise<string | null> {
   const token = botToken.trim();
 
   if (!token) {
     return null;
+  }
+
+  if (options.forceRefresh) {
+    clearDiscordApplicationIdCache(token);
   }
 
   const cached = discordApplicationIdCache.get(token);
