@@ -283,12 +283,6 @@ async function runStickyChat(
       let current: PendingMessage | undefined = message;
 
       while (current && !exiting) {
-        if (isStreaming) {
-          queue.push(current);
-          syncPendingMessages();
-          return;
-        }
-
         try {
           await runOneSend(current);
         } catch (error) {

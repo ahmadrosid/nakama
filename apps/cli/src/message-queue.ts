@@ -80,19 +80,3 @@ export function createSerializedQueue(): {
     },
   };
 }
-
-/**
- * Clear streaming state, then drain. If drain throws, force streaming off.
- */
-export async function runRejectionSafeDrain(options: {
-  setStreaming: (value: boolean) => void;
-  drain: () => Promise<void>;
-}): Promise<void> {
-  options.setStreaming(false);
-
-  try {
-    await options.drain();
-  } catch {
-    options.setStreaming(false);
-  }
-}

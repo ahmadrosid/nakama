@@ -3,7 +3,6 @@ import {
   createSerializedQueue,
   formatPendingDisplayLines,
   formatPendingSummary,
-  runRejectionSafeDrain,
 } from "./message-queue";
 import { plainLine, styledLine, styledLineText } from "./styled-text";
 import { TerminalLayout } from "./terminal-layout";
@@ -56,24 +55,6 @@ describe("createSerializedQueue", () => {
     await expect(first).rejects.toThrow("fail");
     await second;
     expect(order).toEqual(["a", "b"]);
-  });
-});
-
-describe("runRejectionSafeDrain", () => {
-  test("resets streaming when drain throws", async () => {
-    let streaming = true;
-
-    await runRejectionSafeDrain({
-      drain: async () => {
-        streaming = true;
-        throw new Error("drain failed");
-      },
-      setStreaming: (value) => {
-        streaming = value;
-      },
-    });
-
-    expect(streaming).toBe(false);
   });
 });
 
