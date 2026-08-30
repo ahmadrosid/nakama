@@ -10,8 +10,8 @@ describe("finalizeStreamingMessages", () => {
         content: "partial",
         id: "a1",
         role: "assistant",
-        streaming: false,
-        thinkingStreaming: false,
+        streaming: true,
+        thinkingStreaming: true,
       },
       {
         content: "search_files stopped",
@@ -42,14 +42,6 @@ describe("finalizeStreamingMessages", () => {
         thinkingStreaming: false,
       },
     ];
-
-    // Simulate abort after an earlier assistant was finalized by tool end,
-    // leaving a prior assistant still marked streaming while a later one exists.
-    messages[1] = {
-      ...messages[1]!,
-      streaming: true,
-      thinkingStreaming: true,
-    };
 
     const next = finalizeStreamingMessages(messages);
 

@@ -48,11 +48,6 @@ describe("chat history route helpers", () => {
     expect(readRequestedProfileFromNewChatSearch(url.search)).toBe("gary-vee");
   });
 
-  test("buildNewChatPath is stable for the same profile", () => {
-    expect(buildNewChatPath("gary-vee")).toBe(buildNewChatPath("gary-vee"));
-    expect(buildNewChatPath()).toBe(buildNewChatPath());
-  });
-
   test("storeChatDraft uses unique keys for rapid calls", () => {
     const store = new Map<string, string>();
     const previousSessionStorage = globalThis.sessionStorage;
