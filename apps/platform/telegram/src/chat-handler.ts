@@ -897,7 +897,7 @@ function isStopCommand(text: string): boolean {
   return parseTelegramCommand(text) === "/stop";
 }
 
-async function withChatLock(
+export async function withChatLock(
   chatId: string,
   fn: () => Promise<void>
 ): Promise<void> {
@@ -936,12 +936,4 @@ export function seedChatLockForTests(
   promise: Promise<void>
 ): void {
   chatLocks.set(chatId, promise);
-}
-
-/** @internal Test helper — serialize work for rejection-safety tests. */
-export async function withChatLockForTests(
-  chatId: string,
-  fn: () => Promise<void>
-): Promise<void> {
-  return withChatLock(chatId, fn);
 }

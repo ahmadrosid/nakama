@@ -660,7 +660,7 @@ export function resetChatLocksForTests(): void {
   chatLocks.clear();
 }
 
-async function withChatLock(
+export async function withChatLock(
   jid: string,
   fn: () => Promise<void>
 ): Promise<void> {
@@ -694,12 +694,4 @@ export function seedChatLockForTests(
   promise: Promise<void>
 ): void {
   chatLocks.set(jid, promise);
-}
-
-/** @internal Test helper — serialize work for rejection-safety tests. */
-export async function withChatLockForTests(
-  jid: string,
-  fn: () => Promise<void>
-): Promise<void> {
-  return withChatLock(jid, fn);
 }

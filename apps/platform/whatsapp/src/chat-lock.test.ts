@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   resetChatLocksForTests,
   seedChatLockForTests,
-  withChatLockForTests,
+  withChatLock,
 } from "./chat-handler";
 
 afterEach(() => {
@@ -24,7 +24,7 @@ describe("withChatLock rejection safety", () => {
       seedChatLockForTests("jid:reject", stale);
 
       let ran = false;
-      await withChatLockForTests("jid:reject", async () => {
+      await withChatLock("jid:reject", async () => {
         ran = true;
       });
       await Bun.sleep(20);

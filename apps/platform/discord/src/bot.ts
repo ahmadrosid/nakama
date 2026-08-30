@@ -8,10 +8,10 @@ import {
 import { type ChatHandlerDeps, createChatHandler } from "./chat-handler";
 import type { DiscordBridgeConfig } from "./config";
 import {
+  deferSlashInteraction,
   getDiscordErrorCode,
   isIgnorableInteractionError,
 } from "./interaction-errors";
-import { deferSlashInteraction } from "./slash-ack";
 import { registerSlashCommands } from "./slash-commands";
 
 export async function createBot(
