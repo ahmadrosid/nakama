@@ -41,7 +41,6 @@ import { styledLine } from "./styled-text";
 import { TerminalInput } from "./terminal-input";
 import { TerminalRenderer } from "./terminal-renderer";
 import { printLine } from "./terminal-safe";
-import { stripAnsi } from "./text-measure";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
@@ -75,9 +74,7 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   const renderer = new TerminalRenderer(terminalInput);
   const useStickyInput = renderer.apply();
 
-  console.log(
-    `Profile: ${stripAnsi(currentProfile.name)} (${stripAnsi(currentProfile.id)})`
-  );
+  printLine(`Profile: ${currentProfile.name} (${currentProfile.id})`);
   console.log("");
 
   if (options.offline) {
@@ -999,7 +996,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         try {
           await printStatus(
             options.client,
-            (text) => console.log(text),
+            printLine,
             currentProfile,
             modelsCache
           );
@@ -1050,7 +1047,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
 
 async function printCurrentModel(
   client: NakamaClient,
-  write: (text: string) => void = (text) => console.log(text),
+  write: (text: string) => void = printLine,
   profile: ProfileSummary | null = null,
   cachedModels: ModelsResponse | null = null
 ): Promise<void> {
@@ -1064,8 +1061,8 @@ async function printCurrentModel(
     return;
   }
 
-  write(`Provider: ${stripAnsi(String(models.provider))}`);
-  write(`Model: ${stripAnsi(String(active.modelId))}`);
+  write(`Provider: ${models.provider}`);
+  write(`Model: ${active.modelId}`);
 }
 
 export function formatStatusLines(
@@ -1088,11 +1085,11 @@ export function formatStatusLines(
     : { modelId: null, providerId: models?.currentProviderId ?? null };
 
   if (profile) {
-    lines.push(`Profile: ${stripAnsi(profile.name)}`);
+    lines.push(`Profile: ${profile.name}`);
   }
 
-  lines.push(`Provider: ${stripAnsi(models?.provider ?? "unknown")}`);
-  lines.push(`Model: ${stripAnsi(active.modelId ?? "none")}`);
+  lines.push(`Provider: ${models?.provider ?? "unknown"}`);
+  lines.push(`Model: ${active.modelId ?? "none"}`);
 
   return lines;
 }
@@ -1115,7 +1112,7 @@ async function printStatus(
 
 async function printModels(
   client: NakamaClient,
-  write: (text: string) => void = (text) => console.log(text),
+  write: (text: string) => void = printLine,
   profile: ProfileSummary | null = null,
   cachedModels: ModelsResponse | null = null
 ): Promise<void> {
@@ -1154,12 +1151,7 @@ function formatError(error: unknown): string {
 }
 
 export function formatErrorLines(error: unknown): string[] {
-  return [
-    "",
-    ...formatError(error)
-      .split(/\r?\n/)
-      .map((line) => stripAnsi(line)),
-  ];
+  return ["", ...formatError(error).split(/\r?\n/)];
 }
 
 /** Disable raw mode only when stdin is a TTY currently in raw mode. */
@@ -1281,7 +1273,7 @@ function formatProfilesLines(
       .join(", ");
 
     lines.push(
-      `  ${stripAnsi(profile.id)} — ${stripAnsi(profile.name)}${markers ? ` (${markers})` : ""}`
+      `  ${profile.id} — ${profile.name}${markers ? ` (${markers})` : ""}`
     );
   }
 

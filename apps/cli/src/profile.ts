@@ -4,7 +4,6 @@ import type { ProfileSummary } from "@nakama/core";
 import { pickProfileForOrg } from "@nakama/core";
 import { loadSavedCliProfileId, saveCliProfileId } from "./cli-config";
 import { printLine } from "./terminal-safe";
-import { stripAnsi } from "./text-measure";
 
 export interface CliProfileOptions {
   profileId?: string;
@@ -98,12 +97,12 @@ export function formatProfileLine(
   const markers = [
     profile.isDefault ? "default" : null,
     profile.isSuper ? "orchestrator" : null,
-    stripAnsi(profile.id),
+    profile.id,
   ]
     .filter(Boolean)
     .join(", ");
 
-  return `  ${index + 1}) ${stripAnsi(profile.name)} (${markers})`;
+  return `  ${index + 1}) ${profile.name} (${markers})`;
 }
 
 export function printProfiles(
@@ -121,9 +120,7 @@ export function printProfiles(
     const current = sorted.find(
       (profile) => profile.id === options.currentProfileId
     );
-    printLine(
-      `Current: ${stripAnsi(current?.name ?? options.currentProfileId)}\n`
-    );
+    printLine(`Current: ${current?.name ?? options.currentProfileId}\n`);
   }
 
   for (const [index, profile] of sorted.entries()) {

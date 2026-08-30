@@ -452,7 +452,6 @@ describe("GET /v1/workers/{name}/logs", () => {
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.stdout).toBe("200");
-    expect(Number.isNaN(Number(body.stdout))).toBe(false);
   });
 
   test("returns 400 for unknown worker", async () => {
