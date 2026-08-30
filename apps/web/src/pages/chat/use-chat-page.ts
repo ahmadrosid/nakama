@@ -493,7 +493,7 @@ export function useChatPage() {
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
         setContextUsage(nextContextUsage ?? null);
-        setError(storedFailedTurn?.error ?? null);
+        setError(null);
         syncChatUrl(nextProfileId, sessionId);
 
         if (channel === "web") {
@@ -530,7 +530,6 @@ export function useChatPage() {
                 refreshedItems,
                 failedAfterReconnect
               );
-              setError(failedAfterReconnect.error);
             } else if (reconnected) {
               clearFailedChatTurn(sessionId);
               setError(null);
@@ -853,7 +852,9 @@ export function useChatPage() {
           }
         }
 
-        setError(message);
+        // Turn failures live in the Failed bubble; composer error stays for
+        // non-turn issues (attachments, session expired, validation, etc.).
+        setError(null);
         if (activeSession && text.trim()) {
           storeFailedChatTurn(activeSession.id, { error: message, text });
         }
