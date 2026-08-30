@@ -230,14 +230,14 @@ export function ProviderCompatibleEditDialog({
 
 export function ProviderRemoveDialog({
   open,
-  instance,
+  label,
   isSole,
   busy,
   onOpenChange,
   onConfirm,
 }: {
   open: boolean;
-  instance: ProviderInstanceSummary;
+  label: string;
   isSole: boolean;
   busy: boolean;
   onOpenChange: (open: boolean) => void;
@@ -252,19 +252,15 @@ export function ProviderRemoveDialog({
       }}
       open={open}
     >
-      <DialogContent className="gap-6 p-6 sm:max-w-md">
-        <DialogHeader className="gap-3">
-          <DialogTitle className="text-balance">Remove provider?</DialogTitle>
-          <DialogDescription className="text-pretty">
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove provider?</DialogTitle>
+          <DialogDescription>
             {isSole ? "This is your only LLM provider. " : null}
-            Models using{" "}
-            <span className="font-medium text-foreground">
-              {instance.label}
-            </span>{" "}
-            will stop working. This cannot be undone.
+            Models using {label} will stop working. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+        <DialogFooter>
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}

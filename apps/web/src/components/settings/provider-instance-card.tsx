@@ -163,8 +163,8 @@ export function ProviderInstanceCard({
 
       <ProviderRemoveDialog
         busy={card.busy}
-        instance={instance}
         isSole={isSole}
+        label={instance.label}
         onConfirm={() => void card.handleDelete()}
         onOpenChange={card.setDeleteOpen}
         open={card.deleteOpen}
