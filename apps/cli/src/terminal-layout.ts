@@ -13,7 +13,7 @@ import {
   serializeDiffOps,
 } from "./terminal-frame";
 import type { TerminalInput } from "./terminal-input";
-import { wrapText } from "./text-measure";
+import { stripAnsi, wrapText } from "./text-measure";
 import type { MessageKind } from "./virtual-message-list";
 import { VirtualMessageList } from "./virtual-message-list";
 
@@ -263,7 +263,7 @@ export class TerminalLayout {
   }
 
   writelnIntro(text: string): void {
-    process.stdout.write(`${text}\n`);
+    process.stdout.write(`${stripAnsi(text)}\n`);
   }
 
   scrollPage(deltaPages: number): void {

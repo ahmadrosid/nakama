@@ -27,7 +27,7 @@ export interface WhatsAppSocketDeps {
 export interface WhatsAppSocketHandle {
   socket: WASocket | null;
   start: () => Promise<void>;
-  stop: () => void;
+  stop: () => Promise<void>;
 }
 
 export async function createWhatsAppSocket(
@@ -56,7 +56,7 @@ export async function createWhatsAppSocket(
       const myGen = ++generation;
       const previous = socket;
       socket = null;
-      previous?.end(undefined);
+      void retireSocket(previous);
 
       const next = makeWASocket({
         auth: state,
@@ -73,7 +73,7 @@ export async function createWhatsAppSocket(
       });
 
       if (myGen !== generation || stopped) {
-        next.end(undefined);
+        void retireSocket(next);
         return;
       }
 
@@ -100,6 +100,9 @@ export async function createWhatsAppSocket(
 
         if (connection === "close") {
           generation += 1;
+          // Drop listeners before reconnect so buffered Baileys events on this
+          // socket cannot dispatch after the next generation is bound.
+          next.ev.removeAllListeners();
           deps.onDisconnected?.();
           const statusCode = lastDisconnect?.error?.message
             ? (lastDisconnect.error as { output?: { statusCode?: number } })
@@ -135,6 +138,10 @@ export async function createWhatsAppSocket(
       next.ev.on("creds.update", saveCreds);
 
       next.ev.on("messages.upsert", async (m) => {
+        if (myGen !== generation || stopped) {
+          return;
+        }
+
         console.log(
           `WhatsApp messages.upsert type=${m.type} count=${m.messages.length}`
         );
@@ -173,6 +180,10 @@ export async function createWhatsAppSocket(
             continue;
           }
 
+          if (myGen !== generation || stopped) {
+            return;
+          }
+
           console.log(
             `WhatsApp message received id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(inbound.jid)} textBytes=${Buffer.byteLength(inbound.text, "utf8")}`
           );
@@ -189,17 +200,26 @@ export async function createWhatsAppSocket(
         }
       });
     },
-    stop() {
+    async stop() {
       stopped = true;
       generation += 1;
-      if (socket) {
-        socket.end(undefined);
-        socket = null;
-      }
+      const current = socket;
+      socket = null;
+      await retireSocket(current);
     },
   };
 
   return handle;
+}
+
+function retireSocket(target: WASocket | null | undefined): Promise<void> {
+  if (!target) {
+    return Promise.resolve();
+  }
+
+  // Strip listeners first so end()'s close emit cannot re-enter reconnect.
+  target.ev.removeAllListeners();
+  return Promise.resolve(target.end(undefined));
 }
 
 function isSupportedUpsertType(type: string): boolean {

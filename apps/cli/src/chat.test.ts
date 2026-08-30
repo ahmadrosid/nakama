@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   HealthResponse,
   ModelsResponse,
@@ -6,11 +8,15 @@ import type {
 } from "@nakama/core";
 import {
   createChatExitController,
+  createDebouncedEscAbortHandler,
   disableRawModeIfActive,
+  formatBusyDropLine,
   formatErrorLines,
+  formatSoulStatusLines,
   formatStatusLines,
   isEscInterruptKey,
   needsTrailingStreamNewline,
+  runCleanupThenExit,
 } from "./chat";
 
 describe("needsTrailingStreamNewline", () => {
@@ -65,6 +71,22 @@ describe("createChatExitController", () => {
     const exit = createChatExitController(controller.signal);
     await exit.wait();
     expect(exit.exiting).toBe(true);
+  });
+});
+
+describe("formatBusyDropLine", () => {
+  test("shows a short busy marker before the warn threshold", () => {
+    expect(formatBusyDropLine(1)).toBe("[busy]");
+    expect(formatBusyDropLine(2)).toBe("[busy]");
+  });
+
+  test("includes the drop count once the warn threshold is reached", () => {
+    expect(formatBusyDropLine(3)).toBe(
+      "[busy] ignored input (3 while processing)"
+    );
+    expect(formatBusyDropLine(5)).toBe(
+      "[busy] ignored input (5 while processing)"
+    );
   });
 });
 
@@ -130,6 +152,41 @@ describe("formatErrorLines", () => {
   });
 });
 
+describe("formatSoulStatusLines", () => {
+  const directory = join(
+    homedir(),
+    ".nakama",
+    "orgs",
+    "org_secret",
+    "profiles",
+    "agent-x"
+  );
+  const status = {
+    active: true,
+    directory,
+    files: {
+      examples: false,
+      instructions: true,
+      memory: true,
+      soul: true,
+      style: true,
+    },
+    profileId: "agent-x",
+  };
+
+  test("masks soul directory by default", () => {
+    expect(formatSoulStatusLines(status)[0]).toBe(
+      "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
+    );
+  });
+
+  test("shows absolute soul directory when verbose", () => {
+    expect(formatSoulStatusLines(status, true)[0]).toBe(
+      `Soul directory: ${directory}`
+    );
+  });
+});
+
 describe("isEscInterruptKey", () => {
   test("matches only a standalone escape key", () => {
     expect(isEscInterruptKey("\u001b")).toBe(true);
@@ -137,6 +194,68 @@ describe("isEscInterruptKey", () => {
   });
 });
 
+describe("createDebouncedEscAbortHandler", () => {
+  test("does not abort bare ESC when more input arrives in the window", async () => {
+    let aborted = 0;
+    const handler = createDebouncedEscAbortHandler(() => {
+      aborted += 1;
+    }, 30);
+
+    handler.onData("\u001b");
+    handler.onData("[A");
+    await Bun.sleep(50);
+
+    expect(aborted).toBe(0);
+    handler.dispose();
+  });
+
+  test("aborts after a quiet window on bare ESC", async () => {
+    let aborted = 0;
+    const handler = createDebouncedEscAbortHandler(() => {
+      aborted += 1;
+    }, 20);
+
+    handler.onData("\u001b");
+    await Bun.sleep(40);
+
+    expect(aborted).toBe(1);
+    handler.dispose();
+  });
+});
+
+describe("runCleanupThenExit", () => {
+  test("awaits cleanup before exit", async () => {
+    const order: string[] = [];
+
+    await runCleanupThenExit(
+      async () => {
+        await Bun.sleep(5);
+        order.push("cleanup");
+      },
+      () => {
+        order.push("exit");
+      }
+    );
+
+    expect(order).toEqual(["cleanup", "exit"]);
+  });
+
+  test("exits even when cleanup throws", async () => {
+    const order: string[] = [];
+
+    await runCleanupThenExit(
+      async () => {
+        order.push("cleanup");
+        throw new Error("cleanup failed");
+      },
+      () => {
+        order.push("exit");
+      }
+    );
+
+    expect(order).toEqual(["cleanup", "exit"]);
+  });
+});
 describe("disableRawModeIfActive", () => {
   test("skips setRawMode when stdin is not a TTY", () => {
     const calls: boolean[] = [];

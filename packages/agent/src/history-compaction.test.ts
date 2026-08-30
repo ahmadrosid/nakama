@@ -180,6 +180,32 @@ describe("history compaction", () => {
     );
   });
 
+  test("does not mutate shared tool message objects in place (#589)", () => {
+    const original = createToolMessage(repeat("a", 200_000));
+    const messages: ChatMessage[] = [
+      { content: "turn 1", role: "user" },
+      original,
+      { content: "done 1", role: "assistant" },
+      { content: "turn 2", role: "user" },
+      createToolMessage(repeat("b", 10_000)),
+      { content: "done 2", role: "assistant" },
+      { content: "turn 3", role: "user" },
+      createToolMessage(repeat("c", 10_000)),
+      { content: "done 3", role: "assistant" },
+      { content: "turn 4", role: "user" },
+      { content: "done 4", role: "assistant" },
+    ];
+
+    const result = pruneToolOutputs(messages, compaction);
+
+    expect(result.prunedTokens).toBeGreaterThan(0);
+    expect(original.content).toBe(repeat("a", 200_000));
+    expect(messages[1]).not.toBe(original);
+    expect(messages[1]?.role === "tool" && messages[1].content).toContain(
+      "truncated"
+    );
+  });
+
   test("selects only the head for summarization", () => {
     const messages: ChatMessage[] = [
       { content: "one", role: "user" },
@@ -292,5 +318,58 @@ describe("history compaction", () => {
     const estimate = estimateHistoryTokens(messages, "system prompt");
 
     expect(estimate).toBeGreaterThan(100);
+  });
+
+  test("counts providerContent once and keeps thinking (#340)", () => {
+    const thinking = repeat("t", 800);
+    const text = "Let me look that up.";
+    const toolCalls = [
+      {
+        arguments: { query: "invoice" },
+        id: "call_1",
+        name: "search_invoices",
+      },
+    ];
+    const providerContent = [
+      { thinking, type: "thinking" },
+      { text, type: "text" },
+      {
+        id: "call_1",
+        input: { query: "invoice" },
+        name: "search_invoices",
+        type: "tool_use",
+      },
+    ];
+    const withProvider: ChatMessage[] = [
+      {
+        content: text,
+        providerContent,
+        role: "assistant",
+        toolCalls,
+      },
+    ];
+    const withoutProvider: ChatMessage[] = [
+      {
+        content: text,
+        role: "assistant",
+        toolCalls,
+      },
+    ];
+    const empty: ChatMessage[] = [];
+
+    const withEstimate =
+      estimateHistoryTokens(withProvider, "") -
+      estimateHistoryTokens(empty, "");
+    const withoutEstimate =
+      estimateHistoryTokens(withoutProvider, "") -
+      estimateHistoryTokens(empty, "");
+    const providerOnly = Math.ceil(JSON.stringify(providerContent).length / 4);
+    const contentAndTools =
+      Math.ceil(text.length / 4) +
+      Math.ceil(JSON.stringify(toolCalls).length / 4);
+
+    expect(withEstimate).toBe(providerOnly);
+    expect(withEstimate).toBeGreaterThan(withoutEstimate);
+    expect(withoutEstimate).toBe(contentAndTools);
   });
 });

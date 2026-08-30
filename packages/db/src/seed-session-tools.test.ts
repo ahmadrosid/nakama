@@ -3,7 +3,7 @@ import {
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
 } from "@nakama/core/tools/protected";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 import { ensureSessionToolDefinitions } from "./org-profiles";
 import { removeUnsupportedTools, seedDatabase } from "./seed";
 

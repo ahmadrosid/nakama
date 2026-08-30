@@ -234,6 +234,60 @@ describe("OrgService", () => {
     expect(added.temporaryPassword).toHaveLength(12);
   });
 
+  test("rejects member names with control characters", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-member-control-chars",
+    });
+
+    await expect(
+      orgService.addMember({
+        email: "control@acme.com",
+        name: "Bad\r\nName",
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rejects member names longer than 120 characters", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-member-name-too-long",
+    });
+
+    await expect(
+      orgService.addMember({
+        email: "long@acme.com",
+        name: "a".repeat(121),
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rejects empty member names", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-empty-member-name",
+    });
+
+    await expect(
+      orgService.addMember({
+        email: "empty@acme.com",
+        name: "   ",
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   test("allows changing password after provisioning", async () => {
     const { orgService } = createOrgService();
     const created = await orgService.createOrganization({
@@ -729,5 +783,55 @@ describe("OrgService", () => {
     await expect(
       orgService.acceptInvite({ password: "secret123", token: invite.token })
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("rejects member mutators on an archived org and allows them on an active org", async () => {
+    const { orgService, authService } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-member-archive" },
+    });
+    const active = await orgService.createOrganization(
+      { name: "Beta", slug: "beta-member-archive" },
+      bootstrapped.user.id
+    );
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+
+    await expect(
+      orgService.addMember({
+        email: "new@acme.com",
+        name: "New Member",
+        orgId: bootstrapped.organization.id,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+
+    const added = await orgService.addMember({
+      email: "active@acme.com",
+      name: "Active Member",
+      orgId: active.organization.id,
+      phone: "",
+      role: "member",
+    });
+    const updated = await orgService.updateMember(
+      active.organization.id,
+      added.member.userId,
+      { role: "viewer" }
+    );
+    expect(updated.member.role).toBe("viewer");
+    await orgService.removeMember(active.organization.id, added.member.userId);
+    const listed = await orgService.listMembers(active.organization.id);
+    expect(
+      listed.members.some((member) => member.userId === added.member.userId)
+    ).toBe(false);
   });
 });
