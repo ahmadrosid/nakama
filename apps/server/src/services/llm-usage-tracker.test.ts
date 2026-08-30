@@ -62,19 +62,13 @@ describe("LlmUsageTracker", () => {
   test("waits for an in-flight record before reloading", async () => {
     const db = createInMemoryDatabaseAdapter();
     const incrementStats = db.incrementLlmUsageStats.bind(db);
-    const incrementStatsByModel = db.incrementLlmUsageStatsByModel.bind(db);
     const persistGate = Promise.withResolvers<void>();
     const persistStarted = Promise.withResolvers<void>();
-    const persistFinished = Promise.withResolvers<void>();
 
     db.incrementLlmUsageStats = async (delta, trackedSince) => {
       persistStarted.resolve();
       await persistGate.promise;
       await incrementStats(delta, trackedSince);
-    };
-    db.incrementLlmUsageStatsByModel = async (modelId, delta, trackedSince) => {
-      await incrementStatsByModel(modelId, delta, trackedSince);
-      persistFinished.resolve();
     };
 
     const tracker = await LlmUsageTracker.create(db);
@@ -82,9 +76,8 @@ describe("LlmUsageTracker", () => {
     await persistStarted.promise;
 
     const reload = tracker.reloadFromDatabase();
-    await Promise.resolve();
     persistGate.resolve();
-    await Promise.all([reload, persistFinished.promise]);
+    await reload;
 
     expect(tracker.getStats().requestCount).toBe(1);
     expect(tracker.getStatsByModel()).toHaveLength(1);
