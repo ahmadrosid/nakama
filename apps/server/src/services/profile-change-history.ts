@@ -47,7 +47,7 @@ export async function recordProfileChangeEvent(
   return record;
 }
 
-export function assignmentIdsValue(ids: string[]): string {
+function assignmentIdsValue(ids: string[]): string {
   return JSON.stringify([...ids].sort());
 }
 
