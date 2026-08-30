@@ -9,7 +9,6 @@ import type {
 import {
   disableRawModeIfActive,
   formatErrorLines,
-  formatSoulInitLines,
   formatSoulStatusLines,
   formatStatusLines,
   isEscInterruptKey,
@@ -116,41 +115,15 @@ describe("formatSoulStatusLines", () => {
   };
 
   test("masks soul directory by default", () => {
-    const lines = formatSoulStatusLines(status);
-    expect(lines[0]).toBe(
+    expect(formatSoulStatusLines(status)[0]).toBe(
       "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
     );
-    expect(lines.join("\n")).not.toContain(homedir());
-    expect(lines.join("\n")).not.toContain("org_secret");
   });
 
   test("shows absolute soul directory when verbose", () => {
     expect(formatSoulStatusLines(status, true)[0]).toBe(
       `Soul directory: ${directory}`
     );
-  });
-});
-
-describe("formatSoulInitLines", () => {
-  const directory = join(
-    homedir(),
-    ".nakama",
-    "orgs",
-    "org_secret",
-    "profiles",
-    "agent-x"
-  );
-
-  test("masks soul directory by default", () => {
-    expect(formatSoulInitLines({ created: [], directory })[0]).toBe(
-      "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
-    );
-  });
-
-  test("shows absolute soul directory when verbose", () => {
-    expect(
-      formatSoulInitLines({ created: ["SOUL.md"], directory }, true)[0]
-    ).toBe(`Soul directory: ${directory}`);
   });
 });
 

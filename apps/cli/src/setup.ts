@@ -162,7 +162,7 @@ export async function ensureProviderConfiguredViaCli(
       `\nProvider configured (${result.provider}, ${result.currentModel}).`
     );
     console.log(
-      `Saved to ${formatCliDisplayPath(getUserConfigPath(), { verbose: isCliVerbose() })}\n`
+      `Saved to ${formatCliDisplayPath(getUserConfigPath(), isCliVerbose())}\n`
     );
 
     return true;

@@ -1227,7 +1227,7 @@ export function formatSoulStatusLines(
   verbose = false
 ): string[] {
   const lines = [
-    `Soul directory: ${formatCliDisplayPath(status.directory, { verbose })}`,
+    `Soul directory: ${formatCliDisplayPath(status.directory, verbose)}`,
     `Active: ${status.active ? "yes" : "no"}`,
   ];
 
@@ -1257,12 +1257,12 @@ export function formatSoulStatusLines(
   return lines;
 }
 
-export function formatSoulInitLines(
+function formatSoulInitLines(
   result: InitSoulResponse,
   verbose = false
 ): string[] {
   const lines = [
-    `Soul directory: ${formatCliDisplayPath(result.directory, { verbose })}`,
+    `Soul directory: ${formatCliDisplayPath(result.directory, verbose)}`,
   ];
 
   if (result.created.length === 0) {

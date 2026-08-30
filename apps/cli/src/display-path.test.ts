@@ -26,11 +26,6 @@ describe("formatCliDisplayPath", () => {
     expect(formatCliDisplayPath(soulDir)).toBe(
       "~/.nakama/orgs/<org>/profiles/<profile>"
     );
-    expect(formatCliDisplayPath(soulDir)).not.toContain(home);
-    expect(formatCliDisplayPath(soulDir)).not.toContain(
-      "org_052abc599f8446afb7fde999214c776c"
-    );
-    expect(formatCliDisplayPath(soulDir)).not.toContain("linus-torvalds");
   });
 
   test("masks config path home without inventing org segments", () => {
@@ -38,10 +33,8 @@ describe("formatCliDisplayPath", () => {
   });
 
   test("returns the absolute path when verbose", () => {
-    expect(formatCliDisplayPath(soulDir, { verbose: true })).toBe(soulDir);
-    expect(formatCliDisplayPath(configPath, { verbose: true })).toBe(
-      configPath
-    );
+    expect(formatCliDisplayPath(soulDir, true)).toBe(soulDir);
+    expect(formatCliDisplayPath(configPath, true)).toBe(configPath);
   });
 
   test("masks foreign home prefixes", () => {

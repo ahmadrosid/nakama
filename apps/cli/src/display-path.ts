@@ -7,14 +7,14 @@ export function isCliVerbose(argv = process.argv.slice(2)): boolean {
 
 /**
  * Paths shown in CLI output. Default masks home + org/profile ids so shared
- * terminals / stream recordings do not leak identifiers. Pass `verbose: true`
+ * terminals / stream recordings do not leak identifiers. Pass `verbose`
  * (CLI `--verbose`) for the absolute path.
  */
 export function formatCliDisplayPath(
   absolutePath: string,
-  options: { verbose?: boolean } = {}
+  verbose = false
 ): string {
-  if (options.verbose) {
+  if (verbose) {
     return absolutePath;
   }
 
