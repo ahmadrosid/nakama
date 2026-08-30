@@ -336,11 +336,7 @@ export interface FailedChatTurn {
   text: string;
 }
 
-export const FAILED_CHAT_TURN_STORAGE_PREFIX = "nakama:failed-chat-turn:";
-
-export function failedChatTurnStorageKey(sessionId: string): string {
-  return `${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`;
-}
+const FAILED_CHAT_TURN_STORAGE_PREFIX = "nakama:failed-chat-turn:";
 
 export function storeFailedChatTurn(
   sessionId: string,
@@ -351,7 +347,7 @@ export function storeFailedChatTurn(
   }
 
   localStorage.setItem(
-    failedChatTurnStorageKey(sessionId),
+    `${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`,
     JSON.stringify(turn)
   );
 }
@@ -361,7 +357,9 @@ export function readFailedChatTurn(sessionId: string): FailedChatTurn | null {
     return null;
   }
 
-  const raw = localStorage.getItem(failedChatTurnStorageKey(sessionId));
+  const raw = localStorage.getItem(
+    `${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`
+  );
 
   if (!raw) {
     return null;
@@ -387,7 +385,7 @@ export function clearFailedChatTurn(sessionId: string): void {
     return;
   }
 
-  localStorage.removeItem(failedChatTurnStorageKey(sessionId));
+  localStorage.removeItem(`${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`);
 }
 
 export function sessionStorageKey(profileId: string): string {

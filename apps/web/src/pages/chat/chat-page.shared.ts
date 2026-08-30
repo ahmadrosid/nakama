@@ -80,11 +80,6 @@ export function markStreamingTurnFailed(
 
   const last = next.at(-1);
 
-  if (last?.role === "assistant" && last.failed) {
-    next[next.length - 1] = { ...last, content: error, failed: true };
-    return next;
-  }
-
   if (last?.role === "user") {
     return [...next, buildFailedAssistantMessage(error)];
   }
@@ -99,16 +94,6 @@ export function appendFailedTurnIfNeeded(
 ): ChatListItem[] {
   if (messages.some((message) => message.failed)) {
     return messages;
-  }
-
-  const last = messages.at(-1);
-
-  if (
-    last?.role === "user" &&
-    last.content === failed.text &&
-    typeof last.historyIndex !== "number"
-  ) {
-    return [...messages, buildFailedAssistantMessage(failed.error)];
   }
 
   return [
@@ -134,15 +119,11 @@ export function findFailedRetryPrompt(
     return null;
   }
 
-  for (let index = failedIndex - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-
-    if (message?.role === "user") {
-      return message;
-    }
-  }
-
-  return null;
+  return (
+    messages
+      .slice(0, failedIndex)
+      .findLast((message) => message.role === "user") ?? null
+  );
 }
 
 /** Drop the failed assistant + its optimistic user prompt before re-sending. */

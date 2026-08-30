@@ -358,7 +358,6 @@ function AssistantTurn({
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
   const showArtifacts = turnComplete && artifacts.length > 0;
   const showActions = !streamActive && turnComplete && anchorMessage != null;
-  const failedAnchor = Boolean(anchorMessage?.failed);
 
   return (
     <div className="group mr-auto ml-0 flex w-full max-w-full flex-col items-start justify-start gap-3">
@@ -395,7 +394,6 @@ function AssistantTurn({
       {showActions && anchorMessage ? (
         <AssistantMessageActions
           actionsDisabled={actionsDisabled}
-          alwaysVisible={failedAnchor}
           busy={branchingMessageId === anchorMessage.id}
           copyContent={assistantTurnContent(turnMessages)}
           message={anchorMessage}
@@ -488,7 +486,6 @@ function AssistantMessageActions({
   copyContent,
   busy,
   actionsDisabled = false,
-  alwaysVisible = false,
   onBranchMessage,
   onRetryMessage,
 }: {
@@ -496,7 +493,6 @@ function AssistantMessageActions({
   copyContent: string;
   busy: boolean;
   actionsDisabled?: boolean;
-  alwaysVisible?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
@@ -538,13 +534,12 @@ function AssistantMessageActions({
     ? message.createdAt
     : null;
   const isFailed = Boolean(message.failed);
-  const retryLabel = isFailed ? "Retry" : "Try again";
 
   return (
     <div
       className={cn(
         "flex items-center gap-1 pt-1 transition-opacity",
-        alwaysVisible
+        isFailed
           ? "opacity-100"
           : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
       )}
@@ -569,30 +564,26 @@ function AssistantMessageActions({
         </button>
       )}
       {onRetryMessage ? (
-        isFailed ? (
-          <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
-            disabled={busy || actionsDisabled}
-            onClick={() => onRetryMessage(message)}
-            type="button"
-          >
-            <Rotate02Icon aria-hidden className="size-3.5" />
-            Retry
-          </button>
-        ) : (
-          <button
-            aria-label={retryLabel}
-            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
-            disabled={busy || actionsDisabled}
-            onClick={() => onRetryMessage(message)}
-            title={retryLabel}
-            type="button"
-          >
-            <Rotate02Icon aria-hidden className="size-4" />
-          </button>
-        )
+        <button
+          aria-label={isFailed ? undefined : "Try again"}
+          className={
+            isFailed
+              ? "inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+              : "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+          }
+          disabled={busy || actionsDisabled}
+          onClick={() => onRetryMessage(message)}
+          title={isFailed ? undefined : "Try again"}
+          type="button"
+        >
+          <Rotate02Icon
+            aria-hidden
+            className={isFailed ? "size-3.5" : "size-4"}
+          />
+          {isFailed ? "Retry" : null}
+        </button>
       ) : null}
-      {onBranchMessage && branchCreatedAt && !isFailed ? (
+      {onBranchMessage && branchCreatedAt ? (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
