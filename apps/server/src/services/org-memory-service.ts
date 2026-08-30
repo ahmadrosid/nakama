@@ -112,6 +112,7 @@ export class OrgMemoryService {
     content: string,
     change?: OrgMemoryChangeContext
   ): Promise<void> {
+    await this.requireActiveOrganization(orgId);
     const trimmed = content.trim();
     if (Buffer.byteLength(trimmed, "utf8") > SUMMARY_BYTE_CAP * 4) {
       throw new NakamaApiError(
@@ -159,6 +160,7 @@ export class OrgMemoryService {
     revisionId: string,
     actorUserId: string
   ): Promise<string> {
+    await this.requireActiveOrganization(orgId);
     const record = await getOrgMemoryHistoryEntry(
       orgId,
       revisionId,
@@ -178,6 +180,7 @@ export class OrgMemoryService {
   }
 
   async undoLastChange(orgId: string, actorUserId: string): Promise<string> {
+    await this.requireActiveOrganization(orgId);
     const currentContent = (await this.getMemory(orgId)).trim();
     const history = await listOrgMemoryHistory(
       orgId,
@@ -211,6 +214,7 @@ export class OrgMemoryService {
     bullet: string,
     options: { pin?: boolean; change?: OrgMemoryChangeContext } = {}
   ): Promise<void> {
+    await this.requireActiveOrganization(orgId);
     const text = this.normalizeBullet(bullet);
     const content = await this.getMemory(orgId);
     const parsed = parseOrgMemoryContent(content);
@@ -326,6 +330,7 @@ export class OrgMemoryService {
       change?: OrgMemoryChangeContext;
     } = {}
   ) {
+    await this.requireActiveOrganization(orgId);
     const targets = new Set(
       entries.map((e) => e.trim().replace(/^-\s+/, "").trim()).filter(Boolean)
     );
@@ -703,6 +708,13 @@ export class OrgMemoryService {
       throw new NakamaApiError("Org memory proposals are not configured.", 500);
     }
     return this.database;
+  }
+
+  private async requireActiveOrganization(orgId: string): Promise<void> {
+    const org = await this.requireDatabase().getOrganizationById(orgId);
+    if (!org || org.archivedAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
   }
 
   private async commitMemory(

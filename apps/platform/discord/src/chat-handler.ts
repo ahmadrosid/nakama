@@ -187,27 +187,32 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       parentResolution
     );
 
-    // Auth/org/thread-create run without the agent-stream lock so parallel parent mentions
-    // can each open a thread. Agent work locks per conversation/thread key below.
-    await authStore.reload();
-    const isAuthorized = authStore.isAuthorized(userId);
+    // Auth reload + pairing under the conversation lock so concurrent DMs cannot
+    // race reload against a just-written pairing. Agent work still locks later so
+    // parallel parent mentions can each open a thread.
+    let isAuthorized = false;
+    await withChatLock(conversationKey, async () => {
+      await authStore.reload();
+      isAuthorized = authStore.isAuthorized(userId);
+
+      if (!isAuthorized) {
+        console.log("[discord] unauthorized", userId);
+        if (isGuild) {
+          return;
+        }
+
+        if (!text) {
+          await messenger.send(
+            "Send your pairing code as text to link this chat."
+          );
+          return;
+        }
+
+        await handlePairing(text, userId, messenger);
+      }
+    });
 
     if (!isAuthorized) {
-      console.log("[discord] unauthorized", userId);
-      if (isGuild) {
-        return;
-      }
-
-      if (!text) {
-        await messenger.send(
-          "Send your pairing code as text to link this chat."
-        );
-        return;
-      }
-
-      await withChatLock(conversationKey, async () => {
-        await handlePairing(text, userId, messenger);
-      });
       return;
     }
 
@@ -1269,10 +1274,26 @@ export async function withChatLock(
     await fn();
   } finally {
     release();
+    if (chatLocks.get(chatId) === gate) {
+      chatLocks.delete(chatId);
+    }
   }
 }
 
 /** @internal Test helper — clears the in-process chat lock map. */
 export function resetChatLocksForTests(): void {
   chatLocks.clear();
+}
+
+/** @internal Test helper — map size for leak checks. */
+export function getChatLockCountForTests(): number {
+  return chatLocks.size;
+}
+
+/** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
+export function seedChatLockForTests(
+  chatId: string,
+  promise: Promise<void>
+): void {
+  chatLocks.set(chatId, promise);
 }
