@@ -36,11 +36,7 @@ export interface DownloadedTelegramFile {
   filePath: string;
 }
 
-/** Build Telegram file download URL with token as an encoded path segment. */
-export function buildTelegramFileDownloadUrl(
-  token: string,
-  filePath: string
-): URL {
+function buildTelegramFileDownloadUrl(token: string, filePath: string): URL {
   const path = ["file", `bot${token}`, ...filePath.split("/").filter(Boolean)]
     .map(encodeURIComponent)
     .join("/");
