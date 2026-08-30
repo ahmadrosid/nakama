@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 
 describe("composio org isolation", () => {
   test("listComposioToolkitsForOrg returns only matching org rows", async () => {

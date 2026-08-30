@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { USER_CONTEXT_TEMPLATE } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 
 describe("user context storage", () => {
   test("init creates context and second init is a no-op", async () => {

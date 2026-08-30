@@ -420,6 +420,18 @@ export function openPrivateDatabase(databasePath: string): Database {
   return db;
 }
 
+/**
+ * Sync sqlite `:memory:` adapter for tests. Prefer `createSqliteDatabase` when you need `close()`.
+ * Foreign keys stay off so existing tests that omit parent rows (org/user/tool) keep working —
+ * same permissiveness as the deleted Map adapter. Production/`createSqliteDatabase` keep FKs on.
+ */
+export function createSqliteMemoryAdapter(): DatabaseAdapter {
+  const db = openPrivateDatabase(":memory:");
+  migrateDatabase(db);
+  db.exec("PRAGMA foreign_keys = OFF");
+  return createSqliteDatabaseAdapter(db);
+}
+
 export async function createSqliteDatabase(
   databaseUrl: string
 ): Promise<SqliteDatabase> {
@@ -2927,10 +2939,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
             ? 1
             : 0,
         record.createdAt,
-        record.updatedAt
+        record.updatedAt ?? record.createdAt
       );
     },
-
     async upsertSession(record) {
       upsertSessionStmt.run(
         record.id,
@@ -2991,7 +3002,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async upsertWorkspaceSettings(record) {
       upsertWorkspaceSettingsStmt.run(
-        record.id,
+        WORKSPACE_SETTINGS_ID,
         record.visionModel,
         record.transcriptionModel,
         record.imageModel,
