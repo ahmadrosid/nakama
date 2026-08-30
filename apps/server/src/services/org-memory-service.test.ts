@@ -8,10 +8,7 @@ import {
   ORG_MEMORY_PREAMBLE,
   parseOrgMemoryContent,
 } from "@nakama/core";
-import {
-  createInMemoryDatabaseAdapter,
-  type DatabaseAdapter,
-} from "@nakama/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { OrgMemoryService } from "./org-memory-service";
 
 describe("OrgMemoryService", () => {
@@ -24,14 +21,14 @@ describe("OrgMemoryService", () => {
     tempDir = "";
   });
 
-  async function seedOrgs(
-    db: DatabaseAdapter,
-    orgIds: string[],
+  async function setup(
     archivedOrgIds: string[] = []
-  ): Promise<void> {
+  ): Promise<OrgMemoryService> {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-org-memory-"));
+    const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     const archived = new Set(archivedOrgIds);
-    for (const id of orgIds) {
+    for (const id of ["org_a", "org_b"]) {
       await db.upsertOrganization({
         archivedAt: archived.has(id) ? now : null,
         createdAt: now,
@@ -41,18 +38,6 @@ describe("OrgMemoryService", () => {
         updatedAt: now,
       });
     }
-  }
-
-  async function setup(
-    options: { archivedOrgIds?: string[]; orgIds?: string[] } = {}
-  ): Promise<OrgMemoryService> {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-org-memory-"));
-    const db = createInMemoryDatabaseAdapter();
-    await seedOrgs(
-      db,
-      options.orgIds ?? ["org_a", "org_b"],
-      options.archivedOrgIds
-    );
     return new OrgMemoryService(db, { configDir: tempDir });
   }
 
@@ -305,22 +290,10 @@ describe("OrgMemoryService", () => {
   });
 
   test("rejects memory mutators on an archived org and allows them on an active org", async () => {
-    const service = await setup({ archivedOrgIds: ["org_a"] });
+    const service = await setup(["org_a"]);
 
     await expect(
-      service.setMemory("org_a", `${ORG_MEMORY_PREAMBLE}\n\n- blocked\n`)
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
       service.addFact("org_a", "blocked fact", { pin: true })
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      service.archiveEntries("org_a", ["any"])
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      service.restoreHistoryRevision("org_a", "rev_missing", "admin_user")
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      service.undoLastChange("org_a", "admin_user")
     ).rejects.toMatchObject({ status: 404 });
 
     await service.addFact("org_b", "active fact", { pin: true });

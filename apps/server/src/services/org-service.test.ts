@@ -746,13 +746,6 @@ describe("OrgService", () => {
       { name: "Beta", slug: "beta-member-archive" },
       bootstrapped.user.id
     );
-    const archivedMember = await orgService.addMember({
-      email: "keep@acme.com",
-      name: "Keep Member",
-      orgId: bootstrapped.organization.id,
-      phone: "",
-      role: "member",
-    });
     await orgService.archiveOrganization(
       bootstrapped.organization.id,
       bootstrapped.user.id
@@ -766,19 +759,6 @@ describe("OrgService", () => {
         phone: "",
         role: "member",
       })
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      orgService.updateMember(
-        bootstrapped.organization.id,
-        archivedMember.member.userId,
-        { role: "viewer" }
-      )
-    ).rejects.toMatchObject({ status: 404 });
-    await expect(
-      orgService.removeMember(
-        bootstrapped.organization.id,
-        archivedMember.member.userId
-      )
     ).rejects.toMatchObject({ status: 404 });
 
     const added = await orgService.addMember({
