@@ -5,7 +5,6 @@ import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import {
   getWebPublicUrlSettings,
   persistWebPublicUrl,
-  resolveRequestClientOrigin,
 } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
@@ -207,10 +206,10 @@ export function registerSystemRoutes(
   app.put("/v1/system/web-public-url", async (c) => {
     requireOrgAdminFromContext(c);
     const body = await readJson<UpdateWebPublicUrlRequest>(c.req.raw);
-    const webPublicUrl = resolveRequestClientOrigin(
-      c.req.raw,
-      body.webPublicUrl
-    );
+    // Only the body sets this. Falling back to Origin/Referer would let a header
+    // pin the base an OAuth code is delivered to, which is what #712 took away
+    // from the read path.
+    const webPublicUrl = body.webPublicUrl?.trim();
 
     if (!webPublicUrl) {
       return errorResponse("webPublicUrl is required.", 400);
