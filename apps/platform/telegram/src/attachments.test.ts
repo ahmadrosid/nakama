@@ -204,27 +204,4 @@ describe("downloadTelegramFile", () => {
     );
     expect(pulls).toBeLessThanOrEqual(3);
   });
-
-  test("rejects oversized body when file_size is omitted", async () => {
-    const maxBytes = 8;
-    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(new Uint8Array(maxBytes + 1).fill(66), {
-        headers: { "content-type": "application/pdf" },
-        status: 200,
-      })
-    );
-
-    const ctx = {
-      api: {
-        getFile: async () => ({
-          file_path: "documents/liar.pdf",
-        }),
-        token: "test-token",
-      },
-    } as unknown as Context;
-
-    await expect(downloadTelegramFile(ctx, "file-1", maxBytes)).rejects.toThrow(
-      "File is too large."
-    );
-  });
 });

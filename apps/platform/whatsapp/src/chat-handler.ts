@@ -392,55 +392,53 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     try {
       typingLoop.start();
 
-      try {
-        reply = await session.sendStream(
-          input,
-          {
-            onChunk: (delta) => {
-              reply += delta;
-            },
-            onThinking: () => {
-              typingLoop.ping();
-            },
-            onTodosUpdated: (todos) => {
-              typingLoop.ping();
-              void todoStatus.update(todos);
-            },
-            onToolEnd: () => {
-              typingLoop.ping();
-            },
-            onToolStart: () => {
-              typingLoop.ping();
-            },
+      reply = await session.sendStream(
+        input,
+        {
+          onChunk: (delta) => {
+            reply += delta;
           },
-          { signal }
-        );
+          onThinking: () => {
+            typingLoop.ping();
+          },
+          onTodosUpdated: (todos) => {
+            typingLoop.ping();
+            void todoStatus.update(todos);
+          },
+          onToolEnd: () => {
+            typingLoop.ping();
+          },
+          onToolStart: () => {
+            typingLoop.ping();
+          },
+        },
+        { signal }
+      );
 
-        await todoStatus.complete();
+      await todoStatus.complete();
 
-        if (signal.aborted) {
-          if (reply.trim()) {
-            await sendText(jid, reply.trim());
-          }
-
-          await sendText(jid, "Stopped.");
-          return;
+      if (signal.aborted) {
+        if (reply.trim()) {
+          await sendText(jid, reply.trim());
         }
-      } catch (error) {
-        if (isAbortError(error)) {
-          await todoStatus.stop();
-          if (reply.trim()) {
-            await sendText(jid, reply.trim());
-          }
 
-          await sendText(jid, "Stopped.");
-          return;
-        }
-
-        await todoStatus.fail();
-        await sendText(jid, formatError(error));
+        await sendText(jid, "Stopped.");
         return;
       }
+    } catch (error) {
+      if (isAbortError(error)) {
+        await todoStatus.stop();
+        if (reply.trim()) {
+          await sendText(jid, reply.trim());
+        }
+
+        await sendText(jid, "Stopped.");
+        return;
+      }
+
+      await todoStatus.fail();
+      await sendText(jid, formatError(error));
+      return;
     } finally {
       clearActiveStream(conversationKey);
       typingLoop.stop();

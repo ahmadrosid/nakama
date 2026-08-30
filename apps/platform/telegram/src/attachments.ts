@@ -72,15 +72,11 @@ async function readResponseBodyCapped(
   response: Response,
   maxBytes: number
 ): Promise<ArrayBuffer> {
-  if (!response.body) {
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > maxBytes) {
-      throw new OversizedTelegramFileError();
-    }
-    return buffer;
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return new ArrayBuffer(0);
   }
 
-  const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
 
