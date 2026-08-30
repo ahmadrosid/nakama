@@ -39,7 +39,7 @@ const sectionClass = "rounded-md border border-border bg-card";
 const iconTileClass =
   "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40";
 
-export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function StatusPage() {
   const { data: status, error, isLoading } = useSystemStatusQuery();
   const { user } = useAuth();
   const refreshSystemStatus = useRefreshSystemStatus();
@@ -47,18 +47,10 @@ export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
   const canManageWorkers = user?.isPlatformAdmin === true;
 
   return (
-    <div
-      className={cn(
-        "min-w-0",
-        embedded ? "divide-y divide-border" : "space-y-6"
-      )}
-    >
+    <div className="min-w-0 space-y-6">
       {errorMessage ? (
         <div
-          className={cn(
-            "flex flex-wrap items-start justify-between gap-3 border-destructive/40 bg-destructive/10 px-4 py-3",
-            embedded ? "border-b" : "rounded-md border"
-          )}
+          className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3"
           role="alert"
         >
           <p className="min-w-0 flex-1 text-destructive text-sm">
@@ -77,15 +69,14 @@ export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
       ) : null}
 
       {isLoading && !status ? (
-        <StatusSkeleton embedded={embedded} />
+        <StatusSkeleton />
       ) : status ? (
         <>
           <StatusDashboard
             canManageWorkers={canManageWorkers}
-            embedded={embedded}
             status={status}
           />
-          <LlmUsageSection embedded={embedded} usage={status.llmUsage} />
+          <LlmUsageSection usage={status.llmUsage} />
         </>
       ) : null}
     </div>
@@ -95,11 +86,9 @@ export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
 function StatusDashboard({
   status,
   canManageWorkers,
-  embedded = false,
 }: {
   status: SystemStatusResponse;
   canManageWorkers: boolean;
-  embedded?: boolean;
 }) {
   const summary = useMemo(() => deriveSummary(status), [status]);
   const services = useMemo(() => buildServiceColumns(status), [status]);
@@ -138,9 +127,7 @@ function StatusDashboard({
   }));
 
   return (
-    <section
-      className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}
-    >
+    <section className={cn("min-w-0 overflow-hidden", sectionClass)}>
       <SummaryStrip status={status} summary={summary} />
 
       <div className="grid grid-cols-1 divide-y divide-border border-border border-b sm:grid-cols-2 sm:divide-x sm:divide-y-0">
@@ -202,13 +189,7 @@ function StatusDashboard({
   );
 }
 
-function LlmUsageSection({
-  usage,
-  embedded = false,
-}: {
-  usage: LlmUsageStatus;
-  embedded?: boolean;
-}) {
+function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   const modelLabel =
     usage.currentModel ??
     (usage.providerConfigured ? "Default model" : "Not configured");
@@ -217,9 +198,7 @@ function LlmUsageSection({
   const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
-    <section
-      className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}
-    >
+    <section className={cn("min-w-0 overflow-hidden", sectionClass)}>
       <div className="flex flex-wrap items-start justify-between gap-4 border-border border-b px-5 py-4">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
@@ -737,15 +716,12 @@ function ToneIcon({
   );
 }
 
-function StatusSkeleton({ embedded = false }: { embedded?: boolean } = {}) {
+function StatusSkeleton() {
   return (
     <div
       aria-busy="true"
       aria-label="Loading system status"
-      className={cn(
-        "h-80 animate-pulse bg-muted/40",
-        embedded ? "border-0" : "rounded-md border border-border"
-      )}
+      className="h-80 animate-pulse rounded-md border border-border bg-muted/40"
     />
   );
 }
