@@ -1,0 +1,130 @@
+/* Adapted from AIcss File Diff (https://www.aicss.dev/components/file-diff).
+ * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
+ */
+
+.diff {
+  --diff-add: #15a06a;
+  --diff-add-bg: rgb(26 127 55 / 9%);
+  --diff-border: var(--border);
+  --diff-del: #dc2626;
+  --diff-del-bg: rgb(207 34 46 / 9%);
+  --diff-muted: var(--muted-foreground);
+  --diff-text: var(--foreground);
+  min-width: 0;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+}
+
+:global(.dark) .diff {
+  --diff-add: #34d399;
+  --diff-add-bg: rgb(63 185 80 / 15%);
+  --diff-del: #f87171;
+  --diff-del-bg: rgb(248 81 73 / 15%);
+}
+
+.diffLines {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+
+.diffLines::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 64px;
+  z-index: 1;
+  width: 0.5px;
+  pointer-events: none;
+  content: "";
+  background: var(--diff-border);
+}
+
+.diffRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px 32px 18px 1fr;
+  align-items: stretch;
+}
+
+.diffRow .ln,
+.diffRow .sign {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--diff-muted);
+  user-select: none;
+}
+
+.diffRow .ln {
+  padding: 0 7px;
+  text-align: right;
+}
+
+.diffRow .sign {
+  text-align: center;
+}
+
+.diffRow code {
+  padding: 0 12px 0 8px;
+  color: var(--diff-muted);
+  white-space: pre;
+}
+
+.diffRow.add::before,
+.diffRow.del::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  content: "";
+}
+
+.diffRow.add::before {
+  background: var(--diff-add);
+}
+
+.diffRow.del::before {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--diff-del) 0,
+    var(--diff-del) 1.5px,
+    transparent 1.5px,
+    transparent 3px
+  );
+}
+
+.diffRow.add {
+  background: var(--diff-add-bg);
+}
+
+.diffRow.add .sign,
+.diffRow.add .new {
+  color: var(--diff-add);
+}
+
+.diffRow.add code {
+  color: var(--diff-text);
+}
+
+.diffRow.del {
+  background: var(--diff-del-bg);
+}
+
+.diffRow.del .sign,
+.diffRow.del .old {
+  color: var(--diff-del);
+}
+
+.diffRow.del code {
+  color: var(--diff-text);
+}
+
+.diffEmpty {
+  padding: 12px 16px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--diff-muted);
+}

@@ -1,6 +1,15 @@
 import type { ProfileChangeEvent } from "@nakama/core";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   formatSessionRelativeTime,
   formatSessionTimestamp,
@@ -52,18 +61,63 @@ function formatActorLabel(actorUserId: string): string {
   return actorUserId.length > 16 ? `${actorUserId.slice(0, 12)}…` : actorUserId;
 }
 
-function previewValue(value: string | null): string {
-  if (value === null) {
-    return "—";
+function HistoryChangeDialog({
+  event,
+  onOpenChange,
+  open,
+}: {
+  event: ProfileChangeEvent | null;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
+  if (!event) {
+    return null;
   }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "(empty)";
-  }
-  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}…` : trimmed;
+
+  const file = formatFieldLabel(event.field);
+  const actor = event.actorUserId ? formatActorLabel(event.actorUserId) : null;
+  const rows = buildFileDiffRows(event.beforeValue, event.afterValue);
+  const added = rows.filter((row) => row.type === "add").length;
+  const removed = rows.filter((row) => row.type === "del").length;
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="gap-2 p-4 pr-12 sm:p-5 sm:pr-12">
+          <div className="flex items-baseline justify-between gap-3">
+            <DialogTitle className="text-balance">{file}</DialogTitle>
+            <p className="shrink-0 font-mono text-xs tabular-nums">
+              <span className="text-emerald-600 dark:text-emerald-400">
+                +{added}
+              </span>
+              <span className="ml-2 text-red-600 dark:text-red-400">
+                -{removed}
+              </span>
+            </p>
+          </div>
+          <DialogDescription className="text-pretty">
+            <time
+              dateTime={event.createdAt}
+              title={formatSessionTimestamp(event.createdAt)}
+            >
+              {formatSessionRelativeTime(event.createdAt)}
+            </time>
+            {" · "}
+            {formatSourceLabel(event.source)}
+            {actor ? <> · {actor}</> : null}
+          </DialogDescription>
+        </DialogHeader>
+        <FileDiff
+          className="min-h-0 flex-1 border-border border-t"
+          rows={rows}
+        />
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export function ProfileHistoryTab({ profileId }: { profileId: string }) {
+  const [openEventId, setOpenEventId] = useState<string | null>(null);
   const { data, error, isLoading, refetch } = useQuery({
     queryFn: () => client.listProfileChangeHistory(profileId, { limit: 100 }),
     queryKey: queryKeys.profiles.history(profileId),
@@ -103,6 +157,8 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
     );
   }
 
+  const openEvent = events.find((event) => event.id === openEventId) ?? null;
+
   return (
     <div className="space-y-3">
       <h3 className="type-section-title text-balance">History</h3>
@@ -111,48 +167,57 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
           const actor = event.actorUserId
             ? formatActorLabel(event.actorUserId)
             : null;
+          const rows = buildFileDiffRows(event.beforeValue, event.afterValue);
+          const added = rows.filter((row) => row.type === "add").length;
+          const removed = rows.filter((row) => row.type === "del").length;
 
           return (
-            <li className="space-y-2 px-4 py-3" key={event.id}>
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 truncate text-sm">
-                  <span className="font-medium">
+            <li key={event.id}>
+              <button
+                aria-haspopup="dialog"
+                className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+                onClick={() => setOpenEventId(event.id)}
+                type="button"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-sm">
                     {formatFieldLabel(event.field)}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {" · "}
+                  </p>
+                  <p className="mt-0.5 text-pretty text-muted-foreground text-xs">
                     {formatSourceLabel(event.source)}
+                    {" · "}
+                    <time
+                      className="tabular-nums"
+                      dateTime={event.createdAt}
+                      title={formatSessionTimestamp(event.createdAt)}
+                    >
+                      {formatSessionRelativeTime(event.createdAt)}
+                    </time>
+                    {actor ? <> · {actor}</> : null}
+                  </p>
+                </div>
+                <p className="shrink-0 font-mono text-xs tabular-nums">
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{added}
+                  </span>
+                  <span className="ml-1.5 text-red-600 dark:text-red-400">
+                    -{removed}
                   </span>
                 </p>
-                <p className="shrink-0 text-muted-foreground text-xs">
-                  <time
-                    className="tabular-nums"
-                    dateTime={event.createdAt}
-                    title={formatSessionTimestamp(event.createdAt)}
-                  >
-                    {formatSessionRelativeTime(event.createdAt)}
-                  </time>
-                  {actor ? <> · {actor}</> : null}
-                </p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="rounded-sm bg-muted/40 px-2 py-1.5">
-                  <p className="mb-1 text-muted-foreground text-xs">Before</p>
-                  <pre className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
-                    {previewValue(event.beforeValue)}
-                  </pre>
-                </div>
-                <div className="rounded-sm bg-muted/40 px-2 py-1.5">
-                  <p className="mb-1 text-muted-foreground text-xs">After</p>
-                  <pre className="line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
-                    {previewValue(event.afterValue)}
-                  </pre>
-                </div>
-              </div>
+              </button>
             </li>
           );
         })}
       </ul>
+      <HistoryChangeDialog
+        event={openEvent}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOpenEventId(null);
+          }
+        }}
+        open={openEvent !== null}
+      />
     </div>
   );
 }
