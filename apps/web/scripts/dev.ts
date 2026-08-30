@@ -23,7 +23,7 @@ try {
     cwd: webRoot,
     env: {
       ...process.env,
-      nakama_SERVER_URL: serverUrl,
+      NAKAMA_SERVER_URL: serverUrl,
     },
     stderr: "inherit",
     stdin: "inherit",

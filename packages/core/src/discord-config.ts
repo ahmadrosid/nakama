@@ -375,7 +375,7 @@ export function resolveDiscordConfigFromSources(options: {
     handshakeCode: file?.handshakeCode ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
-      env.nakama_DISCORD_PROFILE_ID?.trim() ||
+      env.NAKAMA_DISCORD_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_DISCORD_PROFILE_ID,
   };

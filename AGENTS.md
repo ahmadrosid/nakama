@@ -18,7 +18,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 - React UI: one self-explanatory heading/label; no subtitles or helper copy unless the user asks or misunderstanding would cause errors
 - Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
 
-- Platform env (case-sensitive): shared `nakama_SERVER_URL`; automation `NAKAMA_AUTOMATION_HEARTBEAT_INTERVAL_MS`; telegram `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALLOWED_USER_IDS` / `nakama_TELEGRAM_PROFILE_ID`; whatsapp `WHATSAPP_PHONE_NUMBER` / `nakama_WHATSAPP_PROFILE_ID`; discord `DISCORD_BOT_TOKEN` / `DISCORD_ALLOWED_USER_IDS` / `nakama_DISCORD_PROFILE_ID`
+- Platform env: `NAKAMA_SERVER_URL`; automation `NAKAMA_AUTOMATION_HEARTBEAT_INTERVAL_MS`; telegram `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALLOWED_USER_IDS` / `NAKAMA_TELEGRAM_PROFILE_ID`; whatsapp `WHATSAPP_PHONE_NUMBER` / `NAKAMA_WHATSAPP_PROFILE_ID`; discord `DISCORD_BOT_TOKEN` / `DISCORD_ALLOWED_USER_IDS` / `NAKAMA_DISCORD_PROFILE_ID`
 
 ## LLM cassette tests (MSW)
 
