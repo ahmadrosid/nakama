@@ -169,6 +169,7 @@ describe("profile portability", () => {
     await db.assignToolToProfile(profile.id, "tool_src");
     const exported = await createProfilePackExport(db, ORG, profile.id);
 
+    await db.deleteTool("tool_src");
     await db.upsertTool({
       createdAt: now(),
       description: "Custom",

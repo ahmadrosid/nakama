@@ -1,5 +1,4 @@
 import type { McpServerSummary } from "@nakama/core/contract";
-import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import {
   Add01Icon,
   Delete02Icon,
@@ -10,6 +9,7 @@ import {
   RefreshIcon,
 } from "hugeicons-react";
 import { McpToolLabels } from "@/components/soul-tools/McpToolList";
+import { mcpServerDeleteBlockReason } from "@/components/soul-tools/mcp-tab/mcp-server-delete-block-reason";
 import { sectionClass } from "@/components/soul-tools/mcp-tab/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,53 @@ export function McpPageState({
   );
 }
 
+function McpServerDeleteButton({
+  server,
+  busy,
+  onDelete,
+}: {
+  server: McpServerSummary;
+  busy: boolean;
+  onDelete: () => void;
+}) {
+  const deleteBlockReason = mcpServerDeleteBlockReason(server);
+  const label = `Delete ${server.name}`;
+
+  if (deleteBlockReason) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              aria-label={label}
+              disabled
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            />
+          }
+        >
+          <Delete02Icon aria-hidden className="size-4" />
+        </TooltipTrigger>
+        <TooltipContent side="left">{deleteBlockReason}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Button
+      aria-label={label}
+      disabled={busy}
+      onClick={onDelete}
+      size="icon-sm"
+      type="button"
+      variant="ghost"
+    >
+      <Delete02Icon aria-hidden className="size-4" />
+    </Button>
+  );
+}
+
 function McpServerActions({
   server,
   busy,
@@ -63,14 +110,7 @@ function McpServerActions({
   onSync: () => void;
   onDelete: () => void;
 }) {
-  const assignedProfileCount = server.assignedProfileCount ?? 0;
-  const preinstalled = isPreinstalledMcpServerId(server.id);
-  const deleteBlocked = preinstalled || assignedProfileCount > 0;
-  const deleteTooltip = preinstalled
-    ? "Preinstalled MCP servers cannot be deleted."
-    : assignedProfileCount === 1
-      ? "Assigned to 1 profile. Unassign on the Profiles page before deleting."
-      : `Assigned to ${assignedProfileCount} profiles. Unassign on the Profiles page before deleting.`;
+  const deleteBlockReason = mcpServerDeleteBlockReason(server);
 
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -83,6 +123,8 @@ function McpServerActions({
       >
         <EyeIcon aria-hidden className="size-4" />
       </Button>
+
+      <McpServerDeleteButton busy={busy} onDelete={onDelete} server={server} />
 
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -113,7 +155,7 @@ function McpServerActions({
             <RefreshIcon aria-hidden />
             Sync tools
           </DropdownMenuItem>
-          {deleteBlocked ? (
+          {deleteBlockReason ? (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -123,7 +165,7 @@ function McpServerActions({
                   </DropdownMenuItem>
                 }
               />
-              <TooltipContent side="left">{deleteTooltip}</TooltipContent>
+              <TooltipContent side="left">{deleteBlockReason}</TooltipContent>
             </Tooltip>
           ) : (
             <DropdownMenuItem

@@ -291,7 +291,7 @@ EOF
   fi
 
   web_pid="$(
-    export nakama_SERVER_URL="$api_url"
+    export NAKAMA_SERVER_URL="$api_url"
     spawn_detached "$ROOT/apps/web" "$web_log" \
       bun --no-env-file x vite --host 127.0.0.1 --port "$web_port" --strictPort
   )"

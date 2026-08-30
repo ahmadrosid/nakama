@@ -535,7 +535,7 @@ export function resolveWhatsAppConfigFromSources(options: {
     phoneNumber:
       env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
     profileId:
-      env.nakama_WHATSAPP_PROFILE_ID?.trim() ||
+      env.NAKAMA_WHATSAPP_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_WHATSAPP_PROFILE_ID,
   };

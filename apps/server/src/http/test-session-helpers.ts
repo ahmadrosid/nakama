@@ -178,7 +178,7 @@ export async function seedOrgAdmin(
     createdAt: now,
     id: orgId,
     name: "Test Org",
-    slug: "test-org",
+    slug: orgId,
     updatedAt: now,
   });
   await databaseAdapter.upsertOrgMember({

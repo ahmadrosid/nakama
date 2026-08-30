@@ -4,7 +4,8 @@ import {
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
-import { runChat } from "./chat";
+import { runChat, runCleanupThenExit } from "./chat";
+import { isCliVerbose } from "./display-path";
 import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { parseCliProfileArgs } from "./profile";
 import {
@@ -55,7 +56,7 @@ async function resolveTheme(): Promise<Theme> {
 let spawnedChild: Bun.Subprocess | null = null;
 const abortController = new AbortController();
 
-registerCleanupHandlers(() => {
+registerCleanupHandlers(async () => {
   abortController.abort();
   stopSpawnedServer(spawnedChild);
 });
@@ -101,6 +102,7 @@ try {
     offline: !health.providerConfigured,
     profileId: cliProfile.profileId,
     signal: abortController.signal,
+    verbose: isCliVerbose(),
   });
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -119,11 +121,17 @@ try {
 
 process.exit(0);
 
-function registerCleanupHandlers(cleanup: () => void): void {
+function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
+  let exiting = false;
+
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
-      cleanup();
-      process.exit(0);
+      if (exiting) {
+        return;
+      }
+
+      exiting = true;
+      void runCleanupThenExit(cleanup);
     });
   }
 }

@@ -4,7 +4,7 @@ import {
   BUILTIN_TOOL_IDS,
   GENERATE_IMAGE_TOOL_ID,
 } from "@nakama/core/tools/protected";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { createInMemoryDatabaseAdapter } from "./index";
 import {
   ensureBundledSkillsAssigned,
   ensureOrgSuperBotProfiles,

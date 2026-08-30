@@ -25,7 +25,7 @@ describe("loadLocalAuthToken", () => {
     }
 
     delete process.env.NAKAMA_CONFIG_DIR;
-    delete process.env.nakama_LOCAL_AUTH_TOKEN;
+    delete process.env.NAKAMA_LOCAL_AUTH_TOKEN;
   });
 
   test("generates a token when none is configured", async () => {
@@ -85,7 +85,7 @@ describe("loadLocalAuthToken", () => {
   });
 
   test("prefers env token for production-style setup", async () => {
-    process.env.nakama_LOCAL_AUTH_TOKEN = "tc_local_from_env";
+    process.env.NAKAMA_LOCAL_AUTH_TOKEN = "tc_local_from_env";
     await expect(loadLocalAuthToken()).resolves.toBe("tc_local_from_env");
     await expect(verifyLocalAuthToken("tc_local_from_env")).resolves.toEqual({
       email: "local-client@nakama.internal",
@@ -109,7 +109,7 @@ describe("loadLocalAuthToken", () => {
   });
 
   test("rotateLocalAuthToken refuses when the token comes from env", async () => {
-    process.env.nakama_LOCAL_AUTH_TOKEN = "tc_local_from_env";
+    process.env.NAKAMA_LOCAL_AUTH_TOKEN = "tc_local_from_env";
     await expect(rotateLocalAuthToken()).rejects.toBeInstanceOf(
       LocalAuthTokenManagedExternallyError
     );

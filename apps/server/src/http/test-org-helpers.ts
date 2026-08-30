@@ -54,21 +54,29 @@ export async function seedOrgForUser(
   }
 
   const now = new Date().toISOString();
-  await adapter.upsertOrganization({
-    createdAt: now,
-    id: orgId,
-    name: "Test Org",
-    slug: "test-org",
-    updatedAt: now,
-  });
+  const existing =
+    (await adapter.getOrganizationById(orgId)) ??
+    (await adapter.getOrganizationBySlug("test-org"));
+  const resolvedOrgId = existing?.id ?? orgId;
+
+  if (!existing) {
+    await adapter.upsertOrganization({
+      createdAt: now,
+      id: resolvedOrgId,
+      name: "Test Org",
+      slug: "test-org",
+      updatedAt: now,
+    });
+  }
+
   await adapter.upsertOrgMember({
     createdAt: now,
-    orgId,
+    orgId: resolvedOrgId,
     role,
     userId: user.id,
   });
 
-  return orgId;
+  return resolvedOrgId;
 }
 
 export function withOrgId(

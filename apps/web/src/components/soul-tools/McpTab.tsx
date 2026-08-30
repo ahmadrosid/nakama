@@ -1,4 +1,5 @@
 import type { McpServerSummary } from "@nakama/core/contract";
+import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import { useState } from "react";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import {
@@ -6,6 +7,16 @@ import {
   McpServersSection,
 } from "@/components/soul-tools/mcp-tab/McpServersSection";
 import { McpServerToolsDialog } from "@/components/soul-tools/mcp-tab/McpServerToolsDialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { useMcpServersQuery } from "@/hooks/use-app-queries";
 import {
   useConnectMcpServerMutation,
@@ -27,6 +38,9 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editServerId, setEditServerId] = useState<string | null>(null);
   const [detailServerId, setDetailServerId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
+    null
+  );
   const editServer =
     servers.find((server) => server.id === editServerId) ?? null;
   const detailServer =
@@ -41,24 +55,30 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     syncMutation.isPending;
   const errorMessage = actionError ?? (error ? formatError(error) : null);
 
-  async function handleDelete(server: McpServerSummary) {
-    if ((server.assignedProfileCount ?? 0) > 0) {
+  function requestDelete(server: McpServerSummary) {
+    if (
+      isPreinstalledMcpServerId(server.id) ||
+      (server.assignedProfileCount ?? 0) > 0
+    ) {
       return;
     }
 
-    if (
-      !window.confirm(
-        `Delete MCP server "${server.name}"? This cannot be undone.`
-      )
-    ) {
+    setDeleteTarget(server);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) {
       return;
     }
 
     setActionError(null);
 
     try {
-      await deleteMutation.mutateAsync(server.id);
-      setDetailServerId((current) => (current === server.id ? null : current));
+      await deleteMutation.mutateAsync(deleteTarget.id);
+      setDetailServerId((current) =>
+        current === deleteTarget.id ? null : current
+      );
+      setDeleteTarget(null);
     } catch (err) {
       setActionError(formatError(err));
     }
@@ -103,7 +123,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         embedded={embedded}
         onAddServer={() => setCreateOpen(true)}
         onConnect={(serverId) => void handleConnect(serverId)}
-        onDelete={(server) => void handleDelete(server)}
+        onDelete={requestDelete}
         onEdit={setEditServerId}
         onSync={(serverId) => void handleSync(serverId)}
         onViewTools={setDetailServerId}
@@ -183,6 +203,51 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         open={editServerId !== null}
         server={editServer}
       />
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || deleteMutation.isPending)) {
+            setDeleteTarget(null);
+          }
+        }}
+        open={deleteTarget !== null}
+      >
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>Delete MCP server?</DialogTitle>
+            <DialogDescription>
+              Remove{" "}
+              {deleteTarget?.name
+                ? `"${deleteTarget.name}"`
+                : "this MCP server"}
+              . This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              disabled={deleteMutation.isPending}
+              onClick={() => setDeleteTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={deleteMutation.isPending}
+              onClick={() => void confirmDelete()}
+              type="button"
+              variant="destructive"
+            >
+              {deleteMutation.isPending ? (
+                <Spinner className="size-4" />
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
