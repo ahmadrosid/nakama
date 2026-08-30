@@ -228,6 +228,65 @@ export function ProviderCompatibleEditDialog({
   );
 }
 
+export function ProviderRemoveDialog({
+  open,
+  instance,
+  isSole,
+  busy,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  instance: ProviderInstanceSummary;
+  isSole: boolean;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!(nextOpen || busy)) {
+          onOpenChange(false);
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-3">
+          <DialogTitle className="text-balance">Remove provider?</DialogTitle>
+          <DialogDescription className="text-pretty">
+            {isSole ? "This is your only LLM provider. " : null}
+            Models using{" "}
+            <span className="font-medium text-foreground">
+              {instance.label}
+            </span>{" "}
+            will stop working. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {busy ? <Spinner className="size-4" /> : "Remove"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProviderManageModelsDialog({
   open,
   busy,

@@ -18,6 +18,7 @@ import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowse
 import {
   ProviderCompatibleEditDialog,
   ProviderManageModelsDialog,
+  ProviderRemoveDialog,
   ProviderReplaceKeyDialog,
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
@@ -89,7 +90,6 @@ export function ProviderInstanceCard({
   const card = useProviderInstanceCard({
     catalog,
     instance,
-    isSole,
     onDelete,
     onError,
     onUpdate,
@@ -153,13 +153,22 @@ export function ProviderInstanceCard({
               destructive
               disabled={card.busy}
               label="Remove"
-              onClick={() => void card.handleDelete()}
+              onClick={() => card.setDeleteOpen(true)}
             >
               <Delete02Icon className="size-3.5" />
             </ProviderActionButton>
           </div>
         </td>
       </tr>
+
+      <ProviderRemoveDialog
+        busy={card.busy}
+        instance={instance}
+        isSole={isSole}
+        onConfirm={() => void card.handleDelete()}
+        onOpenChange={card.setDeleteOpen}
+        open={card.deleteOpen}
+      />
 
       <ProviderReplaceKeyDialog
         apiKey={card.apiKey}
