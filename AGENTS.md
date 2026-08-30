@@ -22,17 +22,15 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 No `.env` is shipped. Keys are case-sensitive. Prefer Integrations UI + `~/.nakama/{telegram,whatsapp,discord}/config.ini` when possible; env overrides below.
 
-| Worker | How config loads | Env keys |
-|---|---|---|
-| Shared (all four) | `ensureServerRunning` → `resolveServerUrl` | `nakama_SERVER_URL` (fallback: `~/.nakama/runtime/server-url.txt`, else `http://127.0.0.1:4310`) |
-| automation | `loadConfig()` reads `process.env` directly | `NAKAMA_AUTOMATION_HEARTBEAT_INTERVAL_MS` (default `15000`); also reads `NAKAMA_SERVER_URL` into `config.serverUrl` but entry uses `ensureServerRunning()` (`nakama_SERVER_URL`) for the client |
-| telegram | `loadConfig(env)` → `resolveTelegramConfigFromSources` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `nakama_TELEGRAM_PROFILE_ID` |
-| whatsapp | `loadConfig(env)` → `resolveWhatsAppConfigFromSources` | `WHATSAPP_PHONE_NUMBER`, `nakama_WHATSAPP_PROFILE_ID` |
-| discord | `loadConfig(env)` → `resolveDiscordConfigFromSources` | `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USER_IDS`, `nakama_DISCORD_PROFILE_ID` |
+| Worker | Env keys |
+|---|---|
+| Shared (all four) | `nakama_SERVER_URL` via `ensureServerRunning` / `resolveServerUrl` (fallback: `~/.nakama/runtime/server-url.txt`, else `http://127.0.0.1:4310`) |
+| automation | `NAKAMA_AUTOMATION_HEARTBEAT_INTERVAL_MS` (default `15000`) |
+| telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `nakama_TELEGRAM_PROFILE_ID` |
+| whatsapp | `WHATSAPP_PHONE_NUMBER`, `nakama_WHATSAPP_PROFILE_ID` |
+| discord | `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USER_IDS`, `nakama_DISCORD_PROFILE_ID` |
 
-Related (not worker `config.ts`, but bridges/server use them): `NAKAMA_CONFIG_DIR`, `NAKAMA_WEB_PUBLIC_URL` / `NAKAMA_PUBLIC_URL` (`resolveWebPublicUrl`).
-
-Sources: `apps/platform/*/src/config.ts`, `packages/core/src/{telegram,whatsapp,discord}-config.ts`, `packages/core/src/runtime.ts`.
+Related: `NAKAMA_WEB_PUBLIC_URL` / `NAKAMA_PUBLIC_URL` (`resolveWebPublicUrl`). Sources: `apps/platform/*/src/config.ts`, `packages/core/src/{telegram,whatsapp,discord}-config.ts`, `packages/core/src/runtime.ts`.
 
 ## LLM cassette tests (MSW)
 
