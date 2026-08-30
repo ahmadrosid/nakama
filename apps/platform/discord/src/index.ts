@@ -149,7 +149,13 @@ try {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
-  void clearDiscordWorkerHeartbeat();
+  try {
+    await clientStop?.();
+  } catch {
+    // Destroy best-effort on fatal path.
+  }
+  // Await before exit — void + process.exit can leave a stale heartbeat file.
+  await clearDiscordWorkerHeartbeat();
   stopSpawnedServer(spawnedChild);
   process.exit(1);
 }

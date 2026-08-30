@@ -140,7 +140,9 @@ try {
     heartbeatTimer = null;
   }
   botStop?.();
-  void clearTelegramWorkerHeartbeat();
+  // Await before exit — void + process.exit can leave a stale heartbeat file.
+  await clearTelegramWorkerHeartbeat();
+  stopSpawnedServer(spawnedChild);
   process.exit(1);
 } finally {
   stopSpawnedServer(spawnedChild);

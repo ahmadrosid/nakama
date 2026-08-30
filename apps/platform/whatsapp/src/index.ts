@@ -175,8 +175,14 @@ try {
     heartbeatTimer = null;
   }
   outboundServer?.stop();
-  void clearWhatsAppWorkerHeartbeat();
-  void clearWhatsAppQrCode();
+  try {
+    await socketHandle?.stop();
+  } catch {
+    // Socket stop best-effort on fatal path.
+  }
+  // Await before exit — void + process.exit can leave a stale heartbeat/QR file.
+  await clearWhatsAppWorkerHeartbeat();
+  await clearWhatsAppQrCode();
   stopSpawnedServer(spawnedChild);
   process.exit(1);
 }
