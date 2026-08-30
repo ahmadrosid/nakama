@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-import { createSqliteDatabase } from "./adapters/sqlite";
+import {
+  createSqliteDatabase,
+  createSqliteMemoryAdapter,
+} from "./adapters/sqlite";
 import type { DatabaseAdapter } from "./types";
 
 async function seedTwoActiveOrgs(db: DatabaseAdapter, createdAt: string) {
@@ -22,7 +24,7 @@ async function seedTwoActiveOrgs(db: DatabaseAdapter, createdAt: string) {
 
 describe("organization archive persistence", () => {
   test("upsert and get round-trip archivedAt", async () => {
-    const db = createInMemoryDatabaseAdapter();
+    const db = createSqliteMemoryAdapter();
     const archivedAt = "2026-08-21T00:00:00.000Z";
 
     await db.upsertOrganization({
@@ -42,7 +44,7 @@ describe("organization archive persistence", () => {
   });
 
   test("listUserOrganizations omits archived orgs and keeps active ones", async () => {
-    const db = createInMemoryDatabaseAdapter();
+    const db = createSqliteMemoryAdapter();
     const now = "2026-08-21T00:00:00.000Z";
 
     await db.upsertOrganization({
@@ -80,7 +82,7 @@ describe("organization archive persistence", () => {
   });
 
   test("tryMarkOrganizationArchived refuses the last active org", async () => {
-    const db = createInMemoryDatabaseAdapter();
+    const db = createSqliteMemoryAdapter();
     const now = "2026-08-21T00:00:00.000Z";
     await db.upsertOrganization({
       createdAt: now,
@@ -95,7 +97,7 @@ describe("organization archive persistence", () => {
   });
 
   test("tryMarkOrganizationArchived archives when another org remains", async () => {
-    const db = createInMemoryDatabaseAdapter();
+    const db = createSqliteMemoryAdapter();
     const now = "2026-08-21T00:00:00.000Z";
     await seedTwoActiveOrgs(db, now);
 
@@ -103,27 +105,7 @@ describe("organization archive persistence", () => {
     expect((await db.getOrganizationById("org_a"))?.archivedAt).toBe(now);
   });
 
-  test("tryMarkOrganizationArchived stamps updated_at separately from archived_at (in-memory)", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const createdAt = "2026-01-01T00:00:00.000Z";
-    const archivedAt = "2026-06-15T12:00:00.000Z";
-    await seedTwoActiveOrgs(db, createdAt);
-
-    const before = new Date().toISOString();
-    expect(await db.tryMarkOrganizationArchived("org_a", archivedAt)).toBe(
-      true
-    );
-    const after = new Date().toISOString();
-
-    const org = await db.getOrganizationById("org_a");
-    expect(org?.archivedAt).toBe(archivedAt);
-    expect(org?.updatedAt).toBeDefined();
-    expect(org?.updatedAt).not.toBe(archivedAt);
-    expect(org!.updatedAt >= before).toBe(true);
-    expect(org!.updatedAt <= after).toBe(true);
-  });
-
-  test("tryMarkOrganizationArchived stamps updated_at separately from archived_at (sqlite)", async () => {
+  test("tryMarkOrganizationArchived stamps updated_at separately from archived_at", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
     const createdAt = "2026-01-01T00:00:00.000Z";
