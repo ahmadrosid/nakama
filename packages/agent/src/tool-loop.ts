@@ -1,9 +1,5 @@
-import {
-  distillToolResult,
-  type ToolCall,
-  type ToolContext,
-  type ToolDefinition,
-} from "@nakama/core";
+import type { ToolCall, ToolContext, ToolDefinition } from "@nakama/core";
+import * as core from "@nakama/core";
 
 export function findTool(
   tools: ToolDefinition[],
@@ -41,7 +37,17 @@ export async function executeToolCall(
     // The single place every tool result passes through, so the optimiser is
     // wired once rather than per tool. It returns `result` untouched unless it
     // is enabled, recognises the tool, and produces something strictly shorter.
-    return await distillToolResult(call.name, result, context);
+    try {
+      return await core.distillToolResult(call.name, result, context);
+    } catch (error) {
+      // Distillation is best-effort: never replace a successful tool result with
+      // an optimiser failure (same shape as a tool-runtime error).
+      console.warn(
+        `distillToolResult failed for ${call.name}; returning raw result:`,
+        error instanceof Error ? error.message : error
+      );
+      return result;
+    }
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),
