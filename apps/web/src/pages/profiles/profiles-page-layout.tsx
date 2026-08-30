@@ -36,7 +36,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
   const isOrgAdmin = activeOrg?.role === "admin";
   const canCreateProfile = user?.isPlatformAdmin === true;
   const canPack = isOrgAdmin || canCreateProfile;
-  const canViewHistory = isOrgAdmin || canCreateProfile;
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
   const { data: skillProposalsData } = useSkillProposals(
@@ -73,7 +72,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               >
                 Config
               </ProfileDetailTabButton>
-              {canCreateProfile || canViewHistory ? (
+              {canPack ? (
                 <ProfileDetailTabButton
                   active={detailTab === "prompt"}
                   controls="profile-detail-panel-prompt"
@@ -173,7 +172,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 profileId={selectedId}
               />
             </div>
-          ) : detailTab === "prompt" && (canCreateProfile || canViewHistory) ? (
+          ) : detailTab === "prompt" && canPack ? (
             <div
               aria-labelledby="profile-detail-tab-prompt"
               className="no-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-5"
@@ -181,9 +180,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               role="tabpanel"
             >
               {canCreateProfile ? <SoulTab profileId={selectedId} /> : null}
-              {canViewHistory ? (
-                <ProfileHistoryTab profileId={selectedId} />
-              ) : null}
+              <ProfileHistoryTab profileId={selectedId} />
             </div>
           ) : detailTab === "knowledge" ? (
             <div

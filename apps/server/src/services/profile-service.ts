@@ -69,9 +69,9 @@ import {
 import { toMcpServerSummaries } from "./mcp-service";
 import {
   type ProfileChangeMeta,
-  recordAssignmentChange,
   recordProfileChangeEvent,
   soulFieldFromFileName,
+  withAssignmentChange,
 } from "./profile-change-history";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
@@ -535,23 +535,11 @@ export class ProfileService {
       throw new Error("Tool not found.");
     }
 
-    const beforeIds = meta
-      ? (await this.db.listToolsForProfile(profileId)).map((entry) => entry.id)
-      : [];
-    await this.db.assignToolToProfile(profileId, request.toolId);
-    if (meta) {
-      const afterIds = (await this.db.listToolsForProfile(profileId)).map(
-        (entry) => entry.id
-      );
-      await recordAssignmentChange(this.db, {
-        afterIds,
-        beforeIds,
-        field: "tools",
-        meta,
-        orgId,
-        profileId,
-      });
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "tools", meta, orgId, profileId },
+      () => this.db.assignToolToProfile(profileId, request.toolId)
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -564,28 +552,19 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const beforeIds = meta
-      ? (await this.db.listToolsForProfile(profileId)).map((entry) => entry.id)
-      : [];
-    const removed = await this.db.unassignToolFromProfile(profileId, toolId);
-
-    if (!removed) {
-      throw new Error("Tool is not assigned to this profile.");
-    }
-
-    if (meta) {
-      const afterIds = (await this.db.listToolsForProfile(profileId)).map(
-        (entry) => entry.id
-      );
-      await recordAssignmentChange(this.db, {
-        afterIds,
-        beforeIds,
-        field: "tools",
-        meta,
-        orgId,
-        profileId,
-      });
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "tools", meta, orgId, profileId },
+      async () => {
+        const removed = await this.db.unassignToolFromProfile(
+          profileId,
+          toolId
+        );
+        if (!removed) {
+          throw new Error("Tool is not assigned to this profile.");
+        }
+      }
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -604,25 +583,11 @@ export class ProfileService {
       throw new Error("MCP server not found.");
     }
 
-    const beforeIds = meta
-      ? (await this.db.listMcpServersForProfile(profileId)).map(
-          (entry) => entry.id
-        )
-      : [];
-    await this.db.assignMcpServerToProfile(profileId, request.serverId);
-    if (meta) {
-      const afterIds = (await this.db.listMcpServersForProfile(profileId)).map(
-        (entry) => entry.id
-      );
-      await recordAssignmentChange(this.db, {
-        afterIds,
-        beforeIds,
-        field: "mcp",
-        meta,
-        orgId,
-        profileId,
-      });
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "mcp", meta, orgId, profileId },
+      () => this.db.assignMcpServerToProfile(profileId, request.serverId)
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -635,33 +600,19 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const beforeIds = meta
-      ? (await this.db.listMcpServersForProfile(profileId)).map(
-          (entry) => entry.id
-        )
-      : [];
-    const removed = await this.db.unassignMcpServerFromProfile(
-      profileId,
-      serverId
+    await withAssignmentChange(
+      this.db,
+      { field: "mcp", meta, orgId, profileId },
+      async () => {
+        const removed = await this.db.unassignMcpServerFromProfile(
+          profileId,
+          serverId
+        );
+        if (!removed) {
+          throw new Error("MCP server is not assigned to this profile.");
+        }
+      }
     );
-
-    if (!removed) {
-      throw new Error("MCP server is not assigned to this profile.");
-    }
-
-    if (meta) {
-      const afterIds = (await this.db.listMcpServersForProfile(profileId)).map(
-        (entry) => entry.id
-      );
-      await recordAssignmentChange(this.db, {
-        afterIds,
-        beforeIds,
-        field: "mcp",
-        meta,
-        orgId,
-        profileId,
-      });
-    }
 
     return this.getProfile(orgId, profileId);
   }
@@ -680,23 +631,11 @@ export class ProfileService {
       throw new Error("Skill not found.");
     }
 
-    const beforeIds = meta
-      ? (await this.db.listSkillsForProfile(profileId)).map((entry) => entry.id)
-      : [];
-    await this.db.assignSkillToProfile(profileId, request.skillId);
-    if (meta) {
-      const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
-        (entry) => entry.id
-      );
-      await recordAssignmentChange(this.db, {
-        afterIds,
-        beforeIds,
-        field: "skills",
-        meta,
-        orgId,
-        profileId,
-      });
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "skills", meta, orgId, profileId },
+      () => this.db.assignSkillToProfile(profileId, request.skillId)
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -709,28 +648,19 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const beforeIds = meta
-      ? (await this.db.listSkillsForProfile(profileId)).map((entry) => entry.id)
-      : [];
-    const removed = await this.db.unassignSkillFromProfile(profileId, skillId);
-
-    if (!removed) {
-      throw new Error("Skill is not assigned to this profile.");
-    }
-
-    if (meta) {
-      const afterIds = (await this.db.listSkillsForProfile(profileId)).map(
-        (entry) => entry.id
-      );
-      await recordAssignmentChange(this.db, {
-        afterIds,
-        beforeIds,
-        field: "skills",
-        meta,
-        orgId,
-        profileId,
-      });
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "skills", meta, orgId, profileId },
+      async () => {
+        const removed = await this.db.unassignSkillFromProfile(
+          profileId,
+          skillId
+        );
+        if (!removed) {
+          throw new Error("Skill is not assigned to this profile.");
+        }
+      }
+    );
 
     return this.getProfile(orgId, profileId);
   }

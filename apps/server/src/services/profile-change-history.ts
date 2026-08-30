@@ -1,4 +1,4 @@
-import { createId } from "@nakama/core";
+import { createId, isWritableSoulFileKey } from "@nakama/core";
 import type {
   DatabaseAdapter,
   ProfileChangeField,
@@ -10,13 +10,6 @@ export type ProfileChangeMeta = {
   actorUserId?: string | null;
   source: ProfileChangeSource;
 };
-
-const SOUL_CHANGE_FIELDS = {
-  instructions: "soul.instructions",
-  memory: "soul.memory",
-  soul: "soul.soul",
-  style: "soul.style",
-} as const satisfies Record<string, ProfileChangeField>;
 
 export async function recordProfileChangeEvent(
   db: DatabaseAdapter,
@@ -30,7 +23,7 @@ export async function recordProfileChangeEvent(
     source: ProfileChangeSource;
     createdAt?: string;
   }
-): Promise<StoredProfileChangeEvent> {
+): Promise<void> {
   const record: StoredProfileChangeEvent = {
     actorUserId: input.actorUserId?.trim() || null,
     afterValue: input.afterValue,
@@ -44,30 +37,48 @@ export async function recordProfileChangeEvent(
   };
 
   await db.createProfileChangeEvent(record);
-  return record;
 }
 
-function assignmentIdsValue(ids: string[]): string {
-  return JSON.stringify([...ids].sort());
+async function listAssignmentIds(
+  db: DatabaseAdapter,
+  profileId: string,
+  field: "tools" | "skills" | "mcp"
+): Promise<string[]> {
+  switch (field) {
+    case "tools":
+      return (await db.listToolsForProfile(profileId)).map((entry) => entry.id);
+    case "skills":
+      return (await db.listSkillsForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+    case "mcp":
+      return (await db.listMcpServersForProfile(profileId)).map(
+        (entry) => entry.id
+      );
+  }
 }
 
-/** Skip when meta is omitted or the sorted id set did not change. */
-export async function recordAssignmentChange(
+/** List ids before/after `mutate` when meta is present; skip when unchanged. */
+export async function withAssignmentChange(
   db: DatabaseAdapter,
   input: {
-    afterIds: string[];
-    beforeIds: string[];
     field: "tools" | "skills" | "mcp";
     meta?: ProfileChangeMeta;
     orgId: string;
     profileId: string;
-  }
+  },
+  mutate: () => Promise<void>
 ): Promise<void> {
+  const beforeIds = input.meta
+    ? await listAssignmentIds(db, input.profileId, input.field)
+    : [];
+  await mutate();
   if (!input.meta) {
     return;
   }
-  const beforeValue = assignmentIdsValue(input.beforeIds);
-  const afterValue = assignmentIdsValue(input.afterIds);
+  const afterIds = await listAssignmentIds(db, input.profileId, input.field);
+  const beforeValue = JSON.stringify([...beforeIds].sort());
+  const afterValue = JSON.stringify([...afterIds].sort());
   if (beforeValue === afterValue) {
     return;
   }
@@ -83,9 +94,10 @@ export async function recordAssignmentChange(
 }
 
 export function soulFieldFromKey(key: string): ProfileChangeField | null {
-  return (
-    (SOUL_CHANGE_FIELDS as Record<string, ProfileChangeField>)[key] ?? null
-  );
+  if (!isWritableSoulFileKey(key)) {
+    return null;
+  }
+  return `soul.${key}` as ProfileChangeField;
 }
 
 export function soulFieldFromFileName(
