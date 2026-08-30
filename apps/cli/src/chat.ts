@@ -45,7 +45,7 @@ import { ThinkingIndicator } from "./thinking-indicator";
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
 
 /** Debounce bare ESC so alt-prefix / slow paste chunks do not abort. */
-export const ESC_ABORT_DEBOUNCE_MS = 50;
+const ESC_ABORT_DEBOUNCE_MS = 50;
 
 interface RunChatOptions {
   channel: AgentChannel;
