@@ -125,6 +125,7 @@ try {
   );
   console.log(`Bot: ${discord.user.tag}`);
 
+  // Assign before heartbeat so failure paths can always destroy the client.
   clientStop = async () => {
     await discord.destroy();
   };
@@ -144,6 +145,11 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+  void clearDiscordWorkerHeartbeat();
   stopSpawnedServer(spawnedChild);
   process.exit(1);
 }

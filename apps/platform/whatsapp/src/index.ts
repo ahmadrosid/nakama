@@ -170,6 +170,13 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+  outboundServer?.stop();
+  void clearWhatsAppWorkerHeartbeat();
+  void clearWhatsAppQrCode();
   stopSpawnedServer(spawnedChild);
   process.exit(1);
 }
