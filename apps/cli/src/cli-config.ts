@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
 
+const CLI_CONFIG_KEYS = new Set(["org_id", "profile_id"]);
+
 export function getCliConfigPath(): string {
   return join(getUserConfigDir(), "cli.ini");
 }
@@ -84,6 +86,11 @@ function parseIni(raw: string): Record<string, string> {
     }
 
     const key = trimmed.slice(0, separator).trim();
+
+    if (!CLI_CONFIG_KEYS.has(key)) {
+      continue;
+    }
+
     const value = trimmed.slice(separator + 1).trim();
     values[key] = value;
   }

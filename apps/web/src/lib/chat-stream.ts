@@ -403,31 +403,29 @@ export function isAbortError(error: unknown): boolean {
 export function finalizeStreamingMessages(
   messages: ChatListItem[]
 ): ChatListItem[] {
-  const next = messages.map((message) =>
-    message.role === "tool" && message.toolStatus === "running"
-      ? {
-          ...message,
-          artifactStreaming: false,
-          content: `${message.tool} stopped`,
-          toolStatus: "done" as const,
-        }
-      : message
-  );
+  return messages.map((message) => {
+    if (message.role === "tool" && message.toolStatus === "running") {
+      return {
+        ...message,
+        artifactStreaming: false,
+        content: `${message.tool} stopped`,
+        toolStatus: "done" as const,
+      };
+    }
 
-  for (let index = next.length - 1; index >= 0; index -= 1) {
-    const message = next[index];
-
-    if (message?.role === "assistant") {
-      next[index] = {
+    if (
+      message.role === "assistant" &&
+      (message.streaming || message.thinkingStreaming)
+    ) {
+      return {
         ...message,
         streaming: false,
         thinkingStreaming: false,
       };
-      break;
     }
-  }
 
-  return next;
+    return message;
+  });
 }
 
 export function deriveChatStatus(

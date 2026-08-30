@@ -386,12 +386,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const typingLoop = createTypingLoop(getSocket(), jid);
     const todoStatus = new WhatsAppTodoStatusMessage(getSocket(), jid);
-    const signal = registerActiveStream(conversationKey);
     let reply = "";
-
-    typingLoop.start();
+    const signal = registerActiveStream(conversationKey);
 
     try {
+      typingLoop.start();
+
       reply = await session.sendStream(
         input,
         {

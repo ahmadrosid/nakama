@@ -453,12 +453,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const typingLoop = createTypingLoop(ctx);
     const todoStatus = new TelegramTodoStatusMessage(telegram);
-    const signal = registerActiveStream(conversationKey);
     let reply = "";
-
-    typingLoop.start();
+    const signal = registerActiveStream(conversationKey);
 
     try {
+      typingLoop.start();
+
       reply = await session.sendStream(
         input,
         {
