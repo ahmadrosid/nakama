@@ -7,6 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { LlmUsageTab } from "@/pages/StatusPage";
 import {
   resolveSystemTab,
   type SYSTEM_TABS,
@@ -103,7 +104,13 @@ export function SystemPage() {
           id={`system-panel-${tab}`}
           role="tabpanel"
         >
-          {tab === "tools" ? <ToolsTab embedded /> : <McpTab embedded />}
+          {tab === "tools" ? (
+            <ToolsTab embedded />
+          ) : tab === "usage" ? (
+            <LlmUsageTab />
+          ) : (
+            <McpTab embedded />
+          )}
         </div>
       </section>
     </>

@@ -72,13 +72,7 @@ export function StatusPage() {
       {isLoading && !status ? (
         <StatusSkeleton />
       ) : status ? (
-        <>
-          <StatusDashboard
-            canManageWorkers={canManageWorkers}
-            status={status}
-          />
-          <LlmUsageSection usage={status.llmUsage} />
-        </>
+        <StatusDashboard canManageWorkers={canManageWorkers} status={status} />
       ) : null}
     </div>
   );
@@ -190,6 +184,46 @@ function StatusDashboard({
   );
 }
 
+export function LlmUsageTab() {
+  const { data: status, error, isLoading } = useSystemStatusQuery();
+  const refreshSystemStatus = useRefreshSystemStatus();
+  const errorMessage = error ? formatError(error) : null;
+
+  return (
+    <div className="min-w-0">
+      {errorMessage ? (
+        <div
+          className="flex flex-wrap items-start justify-between gap-3 border-destructive/40 border-b bg-destructive/10 px-4 py-3"
+          role="alert"
+        >
+          <p className="min-w-0 flex-1 text-destructive text-sm">
+            Could not load usage: {errorMessage}
+          </p>
+          <Button
+            className="shrink-0 border-destructive/30 bg-background text-destructive hover:bg-destructive/10"
+            onClick={() => void refreshSystemStatus()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Try again
+          </Button>
+        </div>
+      ) : null}
+
+      {isLoading && !status ? (
+        <div
+          aria-busy="true"
+          aria-label="Loading LLM usage"
+          className="h-80 animate-pulse bg-muted/40"
+        />
+      ) : status ? (
+        <LlmUsageSection usage={status.llmUsage} />
+      ) : null}
+    </div>
+  );
+}
+
 function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   const modelLabel =
     usage.currentModel ??
@@ -199,7 +233,7 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
-    <section className={sectionClass}>
+    <section className="min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-4 border-border border-b px-5 py-4">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
