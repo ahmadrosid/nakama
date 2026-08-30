@@ -4,6 +4,13 @@ export const CLI_SIGTERM_GRACE_MS = 2000;
 
 const CLI_INSTALL_TIMEOUT_MS = 120_000;
 
+/**
+ * Upper bound on waiting for a timed-out child to actually exit. The escalation
+ * normally lands long before this; the bound only keeps a caller from waiting
+ * forever on a process no signal can reach.
+ */
+const CLI_SETTLE_TIMEOUT_MS = 5000;
+
 export interface GlobalPackageInstallPlan {
   args: string[];
   command: string;
@@ -136,7 +143,11 @@ export async function probeCliVersion(command: string): Promise<{
 export async function runTimedInstallCommand(
   plan: GlobalPackageInstallPlan,
   onProgress?: (message: string) => void,
-  options: { timeoutMs?: number } = {}
+  options: {
+    settleTimeoutMs?: number;
+    sigtermGraceMs?: number;
+    timeoutMs?: number;
+  } = {}
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -145,6 +156,8 @@ export async function runTimedInstallCommand(
 }> {
   const { spawn } = await import("node:child_process");
   const timeoutMs = options.timeoutMs ?? CLI_INSTALL_TIMEOUT_MS;
+  const sigtermGraceMs = options.sigtermGraceMs ?? CLI_SIGTERM_GRACE_MS;
+  const settleTimeoutMs = options.settleTimeoutMs ?? CLI_SETTLE_TIMEOUT_MS;
 
   return new Promise((resolve) => {
     const child = spawn(plan.command, plan.args, {
@@ -154,23 +167,47 @@ export async function runTimedInstallCommand(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let exited = false;
     let stdoutBuffer = "";
     let stderrBuffer = "";
     let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let settleTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-      killTimeoutId = setTimeout(
-        () => child.kill("SIGKILL"),
-        CLI_SIGTERM_GRACE_MS
-      );
+    const clearTimers = () => {
+      clearTimeout(timeoutId);
+      clearTimeout(killTimeoutId);
+      clearTimeout(settleTimeoutId);
+    };
+
+    /**
+     * Resolving here means the deadline passed, so the exit code is not the
+     * installer's own. Waiting for the child's `exit` first is what makes the
+     * result honest: it is reported once the process is gone, not once the
+     * signal was sent.
+     */
+    const settleAsTimedOut = () => {
+      clearTimers();
       resolve({
         exitCode: null,
         stderr: stderr.trim(),
         stdout: stdout.trim(),
         timedOut,
       });
+    };
+
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+
+      // The process can already be gone with `close` still outstanding, held by
+      // whatever the installer left running. There is nothing left to wait for.
+      if (exited) {
+        settleAsTimedOut();
+        return;
+      }
+
+      child.kill("SIGTERM");
+      killTimeoutId = setTimeout(() => child.kill("SIGKILL"), sigtermGraceMs);
+      settleTimeoutId = setTimeout(settleAsTimedOut, settleTimeoutMs);
     }, timeoutMs);
 
     const emitLine = (prefix: "stdout" | "stderr", line: string) => {
@@ -216,9 +253,22 @@ export async function runTimedInstallCommand(
       stderrBuffer = flushBuffer(stderrBuffer, "stderr");
     });
 
+    /**
+     * `close` waits for the stdio pipes, which anything the installer left
+     * running can hold open indefinitely, so it is not a usable signal for a
+     * run that has already timed out. `exit` fires when the process itself is
+     * gone, which is the question the timeout path is asking.
+     */
+    child.once("exit", () => {
+      exited = true;
+
+      if (timedOut) {
+        settleAsTimedOut();
+      }
+    });
+
     child.once("error", (error) => {
-      clearTimeout(timeoutId);
-      clearTimeout(killTimeoutId);
+      clearTimers();
 
       if (stdoutBuffer.trim()) {
         emitLine("stdout", stdoutBuffer.trim());
@@ -236,8 +286,7 @@ export async function runTimedInstallCommand(
     });
 
     child.once("close", (exitCode) => {
-      clearTimeout(timeoutId);
-      clearTimeout(killTimeoutId);
+      clearTimers();
 
       if (stdoutBuffer.trim()) {
         emitLine("stdout", stdoutBuffer.trim());
