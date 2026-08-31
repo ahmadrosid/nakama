@@ -802,6 +802,30 @@ describe("createHonoApp", () => {
     });
   }
 
+  test("a rejected setup leaves no organization behind", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const setup = (email: string) =>
+      app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify(
+            buildSetupAuthBody(email, {
+              organization: { name: "Acme", slug: "acme" },
+            })
+          ),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+    expect((await setup("not-an-email")).status).toBe(400);
+    expect(await options.databaseAdapter.listOrganizations()).toHaveLength(0);
+
+    // The org used to be committed before the admin was validated, so the
+    // retry lost the slug it had just taken.
+    expect((await setup("admin@example.com")).status).toBe(201);
+  });
+
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
