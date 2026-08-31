@@ -2246,6 +2246,8 @@ export interface ToolContext {
   isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
+  /** Invalidates the cached skills catalog after a live skill mutation. */
+  onSkillCatalogChange?: () => void;
   orgId?: string;
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;

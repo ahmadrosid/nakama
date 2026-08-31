@@ -112,7 +112,7 @@ function skillManageResult(options: {
       ? "The skill was removed from this profile (disk, assignment, and DB row). Keyword match and /skill will no longer find it."
       : options.action === "write_file" || options.action === "remove_file"
         ? "Supporting file change applied under the profile skill directory."
-        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the baked session skills catalog list may refresh on a new session.";
+        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the session skills catalog refreshes before the next turn.";
 
   return {
     action: options.action,
@@ -125,6 +125,10 @@ function skillManageResult(options: {
     ...(options.path === undefined ? {} : { path: options.path }),
     matchHint,
   };
+}
+
+function refreshSessionSkillCatalog(context: ToolContext): void {
+  context.onSkillCatalogChange?.();
 }
 
 function stagedSkillManageResult(options: {
@@ -422,6 +426,8 @@ export function createSkillManageTools(
             }
           );
 
+          refreshSessionSkillCatalog(context);
+
           return skillManageResult({
             action: "create",
             assigned: true,
@@ -458,6 +464,8 @@ export function createSkillManageTools(
             }
           );
 
+          refreshSessionSkillCatalog(context);
+
           return skillManageResult({
             action: "patch",
             assigned: true,
@@ -489,6 +497,8 @@ export function createSkillManageTools(
             }
           );
 
+          refreshSessionSkillCatalog(context);
+
           return skillManageResult({
             action: "edit",
             assigned: true,
@@ -519,6 +529,8 @@ export function createSkillManageTools(
             content
           );
 
+          refreshSessionSkillCatalog(context);
+
           return skillManageResult({
             action: "write_file",
             assigned: true,
@@ -545,6 +557,8 @@ export function createSkillManageTools(
               relativePath
             );
 
+          refreshSessionSkillCatalog(context);
+
           return skillManageResult({
             action: "remove_file",
             assigned: true,
@@ -562,6 +576,8 @@ export function createSkillManageTools(
           actorUserId: context.userId ?? null,
           source: "skill_manage",
         });
+
+        refreshSessionSkillCatalog(context);
 
         return skillManageResult({
           action: "delete",
