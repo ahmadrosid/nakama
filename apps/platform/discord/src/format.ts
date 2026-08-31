@@ -1,4 +1,3 @@
-import { formatClientError } from "@nakama/core/api-error";
 import type { AgentTodo } from "@nakama/core/contract";
 
 const DISCORD_MAX_MESSAGE_LENGTH = 2000;
@@ -8,10 +7,6 @@ export type DiscordTodoRunState =
   | "completed"
   | "stopped"
   | "failed";
-
-export function formatError(error: unknown): string {
-  return formatClientError(error);
-}
 
 export function splitDiscordMessage(
   text: string,

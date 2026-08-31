@@ -151,7 +151,7 @@ export function artifactPanelBodyClassName({
   return "artifact-preview-panel";
 }
 
-export function artifactPanelSubtitle({
+function artifactPanelSubtitle({
   mimeType,
   sizeBytes = 0,
   streaming = false,
