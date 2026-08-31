@@ -471,11 +471,8 @@ export class OrgService {
       passwordHash: string;
     };
   }): Promise<{ user: StoredUserRecord; organization: OrganizationSummary }> {
-    const organization = await this.insertOrganization({
-      name: input.organization.name,
-      slug: input.organization.slug,
-    });
-
+    // Validate before the insert: a rejected admin used to leave the org behind,
+    // and the retry then failed on the slug it had just taken.
     const name = input.admin.name.trim();
     const email = normalizeEmail(input.admin.email);
     const phone = normalizeOptionalPhone(input.admin.phone);
@@ -487,6 +484,11 @@ export class OrgService {
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
+
+    const organization = await this.insertOrganization({
+      name: input.organization.name,
+      slug: input.organization.slug,
+    });
 
     const now = new Date().toISOString();
     const user: StoredUserRecord = {
