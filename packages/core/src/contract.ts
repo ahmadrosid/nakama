@@ -268,6 +268,14 @@ export interface CodingHarnessLoginCommand {
   name: string;
 }
 
+export interface AutomationWorkerSettingsResponse {
+  pollIntervalMinutes: number;
+}
+
+export interface UpdateAutomationWorkerSettingsRequest {
+  pollIntervalMinutes: number;
+}
+
 export interface CodingHarnessSettingsResponse {
   loginCommands: CodingHarnessLoginCommand[];
   providerPassthroughEnabled: boolean;
@@ -467,9 +475,11 @@ export interface OrganizationSummary {
   createdAt: string;
   id: string;
   name: string;
+  skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
   skillsCuratorLastRunAt?: string | null;
+  skillsCuratorStaleAfterDays?: number;
   skillsPostTurnReview?: boolean;
   skillsWriteApproval?: boolean;
   slug: string;
@@ -488,8 +498,10 @@ export interface CreateOrganizationRequest {
 
 export interface UpdateOrganizationRequest {
   name?: string;
+  skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
+  skillsCuratorStaleAfterDays?: number;
   skillsPostTurnReview?: boolean;
   skillsWriteApproval?: boolean;
 }

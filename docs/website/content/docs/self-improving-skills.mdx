@@ -153,7 +153,7 @@ Use org memory for facts everyone should know. Use skills for how a specific bot
 
 After your team has been chatting for a while, you may wonder which skills actually help and which just sit on the shelf. Nakama tracks that automatically for each **assigned** skill on a profile.
 
-Open **Agent → Profiles**, select a bot, and scroll to **Skills**. Each skill shows a short hint such as **Last matched 2 days ago · 5 uses**, or **Never matched** when it has not been selected for a turn yet. Skills with no match in the last 30 days get an **Unused** badge. **Bundled system skills** (shipped with Nakama, such as `manage-skills` and `save-artifact`) never get the Unused badge; they stay assigned by design.
+Open **Agent → Profiles**, select a bot, and scroll to **Skills**. Each skill shows a short hint such as **Last matched 2 days ago · 5 uses**, or **Never matched** when it has not been selected for a turn yet. Skills with no match for the configured stale interval (30 days by default) get an **Unused** badge. **Bundled system skills** (shipped with Nakama, such as `manage-skills` and `save-artifact`) never get the Unused badge; they stay assigned by design.
 
 Click a skill to open its detail dialog for the full breakdown:
 
@@ -170,9 +170,9 @@ When a profile collects unused playbooks, the catalog gets noisy and wastes toke
 
 ### What it does
 
-- **Stale (30 days unused):** listed in the last report. Files stay in place.
-- **Archive (90 days unused):** the skill folder is **moved**, never deleted, to `~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/.archive/` (or `$NAKAMA_CONFIG_DIR/orgs/...` if you set that). The skill is unassigned so it leaves the chat catalog. Restore UI is not in this release: move the folder back to `skills/`, then assign it on the profile again.
-- **Unused means match or patch, not a catalog view:** the 30/90-day clock uses last **match** or last **update**. Catalog views do not reset it. A skill the bot keeps seeing in the list but never selects still archives at 90 days.
+- **Stale (30 days by default):** listed in the last report. Files stay in place. Org admins can choose a different stale interval.
+- **Archive (90 days by default):** the skill folder is **moved**, never deleted, to `~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/.archive/` (or `$NAKAMA_CONFIG_DIR/orgs/...` if you set that). The skill is unassigned so it leaves the chat catalog. Org admins can choose a different archive interval. Restore UI is not in this release: move the folder back to `skills/`, then assign it on the profile again.
+- **Unused means match or patch, not a catalog view:** the configured stale/archive clock uses last **match** or last **update**. Catalog views do not reset it.
 - **Never-matched grace:** a skill with no matches is judged from when it was created, so a brand-new skill is not archived.
 - **Skipped:** bundled / library skills, and any skill on a profile that has an **enabled automation** (usage is not recorded on those runs yet).
 
@@ -182,6 +182,8 @@ Default is **off**. The first scheduled pass after you enable it only records a 
 
 Org admins: **System → Organization → Skill curator**.
 
+- Set **Freshness clocks**. Defaults are 30 days stale and 90 days archive; stale must be before archive.
+- Set **Automation worker poll interval** if this installation needs a different schedule reload cadence. It is workspace-global and defaults to 5 minutes.
 - Flip the toggle to enable the weekly pass.
 - **Dry run** writes a preview report without moving files.
 - **Run now** archives eligible skills immediately (not deferred to the next weekly window).

@@ -188,6 +188,7 @@ interface LlmUsageModelStatsRow {
 }
 
 interface WorkspaceSettingsRow {
+  automation_worker_poll_interval_ms: number;
   coding_agent_harnesses: string;
   coding_agent_provider_passthrough: number | null;
   id: string;
@@ -315,9 +316,11 @@ interface OrganizationRow {
   created_at: string;
   id: string;
   name: string;
+  skills_curator_archive_after_days: number;
   skills_curator_consolidate_enabled: number;
   skills_curator_enabled: number;
   skills_curator_last_run_at: string | null;
+  skills_curator_stale_after_days: number;
   skills_post_turn_review: number;
   skills_write_approval: number;
   slug: string;
@@ -951,9 +954,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       selected_coding_agent_harness,
       token_optimizer_enabled,
       coding_agent_provider_passthrough,
+      automation_worker_poll_interval_ms,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
@@ -962,6 +966,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
       token_optimizer_enabled = excluded.token_optimizer_enabled,
       coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
+      automation_worker_poll_interval_ms = excluded.automation_worker_poll_interval_ms,
       updated_at = excluded.updated_at
   `);
   const listNotificationDestinationsForOrgStmt = db.prepare(`
@@ -1256,14 +1261,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
   `);
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_enabled = excluded.skills_curator_enabled,
+      skills_curator_stale_after_days = excluded.skills_curator_stale_after_days,
+      skills_curator_archive_after_days = excluded.skills_curator_archive_after_days,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
       skills_curator_last_run_at = excluded.skills_curator_last_run_at,
       archived_at = excluded.archived_at,
@@ -2859,6 +2866,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.skillsWriteApproval ? 1 : 0,
         record.skillsPostTurnReview ? 1 : 0,
         record.skillsCuratorEnabled ? 1 : 0,
+        record.skillsCuratorStaleAfterDays ?? 30,
+        record.skillsCuratorArchiveAfterDays ?? 90,
         record.skillsCuratorConsolidateEnabled ? 1 : 0,
         record.skillsCuratorLastRunAt ?? null,
         record.archivedAt ?? null,
@@ -2982,6 +2991,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ? null
           : Number(record.tokenOptimizerEnabled),
         record.codingAgentProviderPassthrough === false ? 0 : 1,
+        record.automationWorkerPollIntervalMs,
         record.updatedAt
       );
     },
@@ -3343,6 +3353,7 @@ function toWorkspaceSettingsRecord(
   row: WorkspaceSettingsRow
 ): StoredWorkspaceSettingsRecord {
   return {
+    automationWorkerPollIntervalMs: row.automation_worker_poll_interval_ms,
     codingAgentHarnesses: parseCodingAgentHarnesses(row.coding_agent_harnesses),
     codingAgentProviderPassthrough: row.coding_agent_provider_passthrough !== 0,
     id: row.id,
@@ -3560,10 +3571,12 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     createdAt: row.created_at,
     id: row.id,
     name: row.name,
+    skillsCuratorArchiveAfterDays: row.skills_curator_archive_after_days,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled !== 0,
     skillsCuratorEnabled: row.skills_curator_enabled !== 0,
     skillsCuratorLastRunAt: row.skills_curator_last_run_at,
+    skillsCuratorStaleAfterDays: row.skills_curator_stale_after_days,
     skillsPostTurnReview: row.skills_post_turn_review !== 0,
     skillsWriteApproval: row.skills_write_approval !== 0,
     slug: row.slug,

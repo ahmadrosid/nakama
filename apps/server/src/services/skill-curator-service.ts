@@ -146,6 +146,9 @@ export class SkillCuratorService {
       ...emptyCounts,
       restoreMisses: [],
     };
+    const org = await this.db.getOrganizationById(orgId);
+    const staleAfterDays = org?.skillsCuratorStaleAfterDays ?? 30;
+    const archiveAfterDays = org?.skillsCuratorArchiveAfterDays ?? 90;
     const profiles = await this.db.listProfilesForOrg(orgId);
     for (const profile of profiles) {
       if (profile.orgId !== orgId) {
@@ -177,9 +180,11 @@ export class SkillCuratorService {
 
         const usage = usageBySkillId.get(skill.id);
         const freshness = classifySkillFreshness({
+          archiveAfterDays,
           createdAt: skill.createdAt,
           lastUsedAt: usage?.lastUsedAt,
           now,
+          staleAfterDays,
         });
 
         if (freshness === "active") {

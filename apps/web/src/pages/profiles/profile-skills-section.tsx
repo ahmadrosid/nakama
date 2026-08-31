@@ -4,16 +4,17 @@ import type {
   SkillUsageSummary,
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
-import { SKILL_STALE_AFTER_MS } from "@nakama/core/skills/freshness";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { Delete02Icon } from "hugeicons-react";
 import { useMemo } from "react";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/use-auth";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const EMPTY_SKILL_USAGE: SkillUsageSummary = {
   lastPatchedAt: null,
@@ -50,7 +51,7 @@ function formatSkillUsageHint(skill: SkillSummary): string | null {
   return `Last matched ${lastLabel} · ${usage.useCount} ${useLabel}`;
 }
 
-function isSkillUnused(skill: SkillSummary): boolean {
+function isSkillUnused(skill: SkillSummary, staleAfterDays: number): boolean {
   if (isBundledSkill(skill)) {
     return false;
   }
@@ -62,7 +63,7 @@ function isSkillUnused(skill: SkillSummary): boolean {
   }
 
   return (
-    Date.now() - new Date(usage.lastUsedAt).getTime() >= SKILL_STALE_AFTER_MS
+    Date.now() - new Date(usage.lastUsedAt).getTime() >= staleAfterDays * DAY_MS
   );
 }
 
@@ -76,8 +77,14 @@ function compareAssignedSkills(a: SkillSummary, b: SkillSummary): number {
   return a.name.localeCompare(b.name);
 }
 
-function SkillStatusBadge({ skill }: { skill: SkillSummary }) {
-  if (isBundledSkill(skill) || !isSkillUnused(skill)) {
+function SkillStatusBadge({
+  skill,
+  staleAfterDays,
+}: {
+  skill: SkillSummary;
+  staleAfterDays: number;
+}) {
+  if (isBundledSkill(skill) || !isSkillUnused(skill, staleAfterDays)) {
     return null;
   }
 
@@ -91,11 +98,13 @@ function SkillStatusBadge({ skill }: { skill: SkillSummary }) {
 function ProfileSkillRow({
   skill,
   busy,
+  staleAfterDays,
   onViewDetail,
   onRemove,
 }: {
   skill: SkillSummary;
   busy: boolean;
+  staleAfterDays: number;
   onViewDetail: (skillId: string) => void;
   onRemove: (target: RemoveAssignmentTarget) => void;
 }) {
@@ -114,7 +123,7 @@ function ProfileSkillRow({
           <p className="truncate font-medium text-foreground text-sm leading-tight">
             {skill.name}
           </p>
-          <SkillStatusBadge skill={skill} />
+          <SkillStatusBadge skill={skill} staleAfterDays={staleAfterDays} />
         </div>
         {usageHint ? (
           <p className="mt-0.5 truncate text-muted-foreground text-xs">
@@ -172,6 +181,8 @@ export function ProfileSkillsSection({
   onRemove: (target: RemoveAssignmentTarget) => void;
   onAssignBash: () => void | Promise<void>;
 }) {
+  const { activeOrg } = useAuth();
+  const staleAfterDays = activeOrg?.skillsCuratorStaleAfterDays ?? 30;
   const sortedSkills = useMemo(
     () => detail.skills.toSorted(compareAssignedSkills),
     [detail.skills]
@@ -249,6 +260,7 @@ export function ProfileSkillsSection({
                   onRemove={onRemove}
                   onViewDetail={onViewDetail}
                   skill={skill}
+                  staleAfterDays={staleAfterDays}
                 />
               ))}
             </ul>
@@ -271,6 +283,7 @@ export function ProfileSkillsSection({
                   onRemove={onRemove}
                   onViewDetail={onViewDetail}
                   skill={skill}
+                  staleAfterDays={staleAfterDays}
                 />
               ))}
             </ul>

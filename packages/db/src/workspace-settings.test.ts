@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createSqliteDatabase } from "./adapters/sqlite";
 import {
   isCodingAgentProviderPassthroughEnabled,
   mergeWorkspaceSettings,
@@ -22,6 +23,7 @@ describe("workspace settings merge", () => {
   test("merge keeps passthrough when another field is patched", () => {
     const merged = mergeWorkspaceSettings(
       {
+        automationWorkerPollIntervalMs: 5 * 60 * 1000,
         codingAgentHarnesses: [],
         codingAgentProviderPassthrough: false,
         id: "default",
@@ -44,6 +46,7 @@ describe("workspace settings merge", () => {
   test("merge keeps passthrough when token optimizer is patched", () => {
     const merged = mergeWorkspaceSettings(
       {
+        automationWorkerPollIntervalMs: 5 * 60 * 1000,
         codingAgentHarnesses: [],
         codingAgentProviderPassthrough: false,
         id: "default",
@@ -66,6 +69,7 @@ describe("workspace settings merge", () => {
   test("merge can clear nullable fields to null", () => {
     const merged = mergeWorkspaceSettings(
       {
+        automationWorkerPollIntervalMs: 5 * 60 * 1000,
         codingAgentHarnesses: [],
         codingAgentProviderPassthrough: true,
         id: "default",
@@ -87,5 +91,23 @@ describe("workspace settings merge", () => {
     expect(merged.selectedCodingAgentHarness).toBeNull();
     expect(merged.transcriptionModel).toBeNull();
     expect(merged.visionModel).toBeNull();
+  });
+
+  test("persists the automation polling interval in SQLite", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    try {
+      const initial = await database.adapter.getWorkspaceSettings();
+      await database.adapter.upsertWorkspaceSettings(
+        mergeWorkspaceSettings(initial, {
+          automationWorkerPollIntervalMs: 10 * 60 * 1000,
+        })
+      );
+      expect(
+        (await database.adapter.getWorkspaceSettings())
+          ?.automationWorkerPollIntervalMs
+      ).toBe(10 * 60 * 1000);
+    } finally {
+      database.close();
+    }
   });
 });

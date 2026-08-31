@@ -7,6 +7,7 @@ import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerAutomationWorkerSettingsRoutes } from "./routes/automation-worker-settings";
 import { registerAutomationRoutes } from "./routes/automations";
 import { registerCodingHarnessSettingsRoutes } from "./routes/coding-harnesses";
 import {
@@ -123,6 +124,7 @@ export function createHonoApp(options: ServerOptions) {
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
   registerTokenOptimizationRoutes(app, options);
+  registerAutomationWorkerSettingsRoutes(app, options);
   registerCodingHarnessSettingsRoutes(app, options);
   registerComposioRoutes(app, options);
   registerTaskRoutes(app, options);

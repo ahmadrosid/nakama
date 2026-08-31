@@ -8,7 +8,7 @@ import {
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
-import { loadConfig } from "./config";
+import { AUTOMATION_POLL_INTERVAL_MS, loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
 
 let spawnedChild: Bun.Subprocess | null = null;
@@ -46,7 +46,12 @@ try {
   });
 
   await scheduler.start();
-  scheduler.beginPolling(config.pollIntervalMs);
+  const workerSettings = await client
+    .getAutomationWorkerSettings()
+    .catch(() => ({
+      pollIntervalMinutes: AUTOMATION_POLL_INTERVAL_MS / (60 * 1000),
+    }));
+  scheduler.beginPolling(workerSettings.pollIntervalMinutes * 60 * 1000);
 
   heartbeatTimer = setInterval(() => {
     const status = scheduler?.getStatus?.() ?? {

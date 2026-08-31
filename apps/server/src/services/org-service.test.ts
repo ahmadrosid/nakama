@@ -127,6 +127,44 @@ describe("OrgService", () => {
     expect(updated.skillsCuratorConsolidateEnabled).toBe(true);
   });
 
+  test("persists validated skill curator freshness clocks", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme Corp",
+      slug: "acme-freshness-clocks",
+    });
+
+    expect(created.organization.skillsCuratorStaleAfterDays).toBe(30);
+    expect(created.organization.skillsCuratorArchiveAfterDays).toBe(90);
+
+    await expect(
+      orgService.updateOrganization(created.organization.id, {
+        skillsCuratorArchiveAfterDays: 7,
+        skillsCuratorStaleAfterDays: 7,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.updateOrganization(created.organization.id, {
+        skillsCuratorStaleAfterDays: 1.5,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.updateOrganization(created.organization.id, {
+        skillsCuratorArchiveAfterDays: 3651,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+
+    const updated = await orgService.updateOrganization(
+      created.organization.id,
+      {
+        skillsCuratorArchiveAfterDays: 21,
+        skillsCuratorStaleAfterDays: 7,
+      }
+    );
+    expect(updated.skillsCuratorStaleAfterDays).toBe(7);
+    expect(updated.skillsCuratorArchiveAfterDays).toBe(21);
+  });
+
   test("updates organization name", async () => {
     const { orgService } = createOrgService();
 

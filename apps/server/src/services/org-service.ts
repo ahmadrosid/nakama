@@ -120,9 +120,22 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
+    const skillsCuratorStaleAfterDays =
+      request.skillsCuratorStaleAfterDays === undefined
+        ? (org.skillsCuratorStaleAfterDays ?? 30)
+        : request.skillsCuratorStaleAfterDays;
+    const skillsCuratorArchiveAfterDays =
+      request.skillsCuratorArchiveAfterDays === undefined
+        ? (org.skillsCuratorArchiveAfterDays ?? 90)
+        : request.skillsCuratorArchiveAfterDays;
+    assertSkillCuratorFreshnessClocks(
+      skillsCuratorStaleAfterDays,
+      skillsCuratorArchiveAfterDays
+    );
     const updated: StoredOrganizationRecord = {
       ...org,
       name,
+      skillsCuratorArchiveAfterDays,
       skillsCuratorConsolidateEnabled:
         request.skillsCuratorConsolidateEnabled === undefined
           ? (org.skillsCuratorConsolidateEnabled ?? false)
@@ -132,6 +145,7 @@ export class OrgService {
           ? (org.skillsCuratorEnabled ?? false)
           : request.skillsCuratorEnabled,
       skillsCuratorLastRunAt: org.skillsCuratorLastRunAt ?? null,
+      skillsCuratorStaleAfterDays,
       skillsPostTurnReview:
         request.skillsPostTurnReview === undefined
           ? (org.skillsPostTurnReview ?? false)
@@ -847,6 +861,8 @@ export class OrgService {
       createdAt: now,
       id: `org_${crypto.randomUUID().replace(/-/g, "")}`,
       name,
+      skillsCuratorArchiveAfterDays: 90,
+      skillsCuratorStaleAfterDays: 30,
       slug,
       updatedAt: now,
     };
@@ -914,6 +930,24 @@ function assertInviteUsable(invite: StoredOrgInviteRecord): void {
   }
 }
 
+function assertSkillCuratorFreshnessClocks(
+  staleAfterDays: number,
+  archiveAfterDays: number
+): void {
+  if (
+    !(Number.isInteger(staleAfterDays) && Number.isInteger(archiveAfterDays)) ||
+    staleAfterDays <= 0 ||
+    archiveAfterDays <= 0 ||
+    staleAfterDays >= archiveAfterDays ||
+    archiveAfterDays > 3650
+  ) {
+    throw new NakamaApiError(
+      "Skill curator days must be positive integers with stale before archive and archive at most 3650 days.",
+      400
+    );
+  }
+}
+
 function assertNewPassword(password: string): void {
   if (password.length < 8) {
     throw new NakamaApiError("Password must be at least 8 characters.", 400);
@@ -928,10 +962,12 @@ function toOrganizationSummary(
     createdAt: record.createdAt,
     id: record.id,
     name: record.name,
+    skillsCuratorArchiveAfterDays: record.skillsCuratorArchiveAfterDays ?? 90,
     skillsCuratorConsolidateEnabled:
       record.skillsCuratorConsolidateEnabled ?? false,
     skillsCuratorEnabled: record.skillsCuratorEnabled ?? false,
     skillsCuratorLastRunAt: record.skillsCuratorLastRunAt ?? null,
+    skillsCuratorStaleAfterDays: record.skillsCuratorStaleAfterDays ?? 30,
     skillsPostTurnReview: record.skillsPostTurnReview ?? false,
     skillsWriteApproval: record.skillsWriteApproval ?? false,
     slug: record.slug,

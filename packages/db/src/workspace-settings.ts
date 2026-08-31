@@ -20,6 +20,10 @@ export function mergeWorkspaceSettings(
   patch: Partial<StoredWorkspaceSettingsRecord> = {}
 ): StoredWorkspaceSettingsRecord {
   return {
+    automationWorkerPollIntervalMs: pickDefined(
+      patch.automationWorkerPollIntervalMs,
+      existing?.automationWorkerPollIntervalMs ?? 5 * 60 * 1000
+    ),
     codingAgentHarnesses: pickDefined(
       patch.codingAgentHarnesses,
       existing?.codingAgentHarnesses ?? []
