@@ -1691,9 +1691,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND o.archived_at IS NULL
     ORDER BY o.name ASC
   `);
+  // The last-admin guard lives in the statement so two concurrent removals
+  // cannot both pass a read-then-write check and leave the org with no admin.
   const deleteOrgMemberStmt = db.prepare(`
     DELETE FROM org_members
     WHERE org_id = ? AND user_id = ?
+      AND (role != 'admin'
+        OR (SELECT COUNT(*) FROM org_members
+            WHERE org_id = ? AND role = 'admin') > 1)
+  `);
+  const updateOrgMemberRoleStmt = db.prepare(`
+    UPDATE org_members SET role = ?
+    WHERE org_id = ? AND user_id = ?
+      AND (? = 'admin' OR role != 'admin'
+        OR (SELECT COUNT(*) FROM org_members
+            WHERE org_id = ? AND role = 'admin') > 1)
   `);
 
   return {
@@ -1927,7 +1939,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteOrgMember(orgId, userId) {
-      const result = deleteOrgMemberStmt.run(orgId, userId);
+      const result = deleteOrgMemberStmt.run(orgId, userId, orgId);
       return result.changes > 0;
     },
 
@@ -2814,6 +2826,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async updateBrowserSessionLastUsedAt(id, lastUsedAt) {
       updateBrowserSessionLastUsedAtStmt.run(lastUsedAt, id);
+    },
+
+    async updateOrgMemberRole(orgId, userId, role) {
+      const result = updateOrgMemberRoleStmt.run(
+        role,
+        orgId,
+        userId,
+        role,
+        orgId
+      );
+      return result.changes > 0;
     },
 
     async updateOrgMemoryProposalStatus(orgId, id, update) {

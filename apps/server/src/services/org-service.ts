@@ -543,6 +543,9 @@ export class OrgService {
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
     if (!deleted) {
+      // The delete carries the last-admin guard, so a concurrent change between
+      // the check above and here lands here rather than emptying the org.
+      await this.assertCanChangeAdminMembership(orgId, userId);
       throw new NakamaApiError("Not found", 404);
     }
   }
@@ -589,12 +592,15 @@ export class OrgService {
     }
 
     if (member.role !== role) {
-      await this.databaseAdapter.upsertOrgMember({
-        createdAt: member.createdAt,
+      const updated = await this.databaseAdapter.updateOrgMemberRole(
         orgId,
-        role,
         userId,
-      });
+        role
+      );
+      if (!updated) {
+        await this.assertCanChangeAdminMembership(orgId, userId, role);
+        throw new NakamaApiError("Not found", 404);
+      }
     }
 
     return {

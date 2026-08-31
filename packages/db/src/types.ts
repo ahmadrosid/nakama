@@ -913,6 +913,12 @@ export interface DatabaseAdapter {
     activeOrgId: string | null
   ): Promise<void>;
   updateBrowserSessionLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
+  /** False when the change would leave the org without an admin. */
+  updateOrgMemberRole(
+    orgId: string,
+    userId: string,
+    role: OrgRole
+  ): Promise<boolean>;
   updateOrgMemoryProposalStatus(
     orgId: string,
     id: string,
