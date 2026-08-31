@@ -3,6 +3,7 @@ import type {
   CompactionResponse,
   LlmToolDefinition,
   ProviderClient,
+  ProviderName,
 } from "@nakama/core";
 import {
   estimateUserContentTokens,
@@ -78,7 +79,21 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / TOKEN_ESTIMATE_RATIO);
 }
 
-function estimateMessageTokens(messages: readonly ChatMessage[]): number {
+// Gemini is the only provider whose mapper never replays the reasoning trace:
+// toGeminiAssistantParts sends content and toolCalls only, because replaying a
+// thought needs the thoughtSignature the parser drops. See #768.
+const PROVIDERS_THAT_DROP_THINKING: ReadonlySet<ProviderName> = new Set([
+  "gemini",
+]);
+
+export function providerReplaysThinking(provider: ProviderName): boolean {
+  return !PROVIDERS_THAT_DROP_THINKING.has(provider);
+}
+
+function estimateMessageTokens(
+  messages: readonly ChatMessage[],
+  replaysThinking: boolean
+): number {
   let total = 0;
 
   for (const message of messages) {
@@ -100,7 +115,9 @@ function estimateMessageTokens(messages: readonly ChatMessage[]): number {
         total += estimateTokens(message.content);
 
         // The chat-completions mapper replays this trace as reasoning_content.
-        if (message.thinking) {
+        // Anthropic and Responses carry it inside providerContent, counted
+        // above, and their parsers set that whenever a trace is present.
+        if (replaysThinking && message.thinking) {
           total += estimateTokens(message.thinking);
         }
 
@@ -121,11 +138,12 @@ function estimateMessageTokens(messages: readonly ChatMessage[]): number {
 export function estimateHistoryTokens(
   messages: readonly ChatMessage[],
   systemPrompt: string,
-  tools?: LlmToolDefinition[]
+  tools?: LlmToolDefinition[],
+  replaysThinking = true
 ): number {
   return (
     estimateTokens(systemPrompt) +
-    estimateMessageTokens(messages) +
+    estimateMessageTokens(messages, replaysThinking) +
     estimateTokens(JSON.stringify(tools ?? []))
   );
 }
@@ -303,7 +321,8 @@ export async function compactHistory(
   const usedTokens = estimateHistoryTokens(
     input.history,
     input.systemPrompt,
-    input.tools
+    input.tools,
+    providerReplaysThinking(input.provider.name)
   );
   const overflow = isOverflow(usedTokens, input.compaction);
   const shouldSummarize = input.force === true || overflow;
