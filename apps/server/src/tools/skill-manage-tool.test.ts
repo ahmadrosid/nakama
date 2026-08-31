@@ -391,6 +391,44 @@ Profile body.
     ).rejects.toThrow(/interactive web or CLI/);
   });
 
+  // The whole of SKILL_MANAGE_CHANNELS, so flipping any one value fails here
+  // instead of only changing behaviour. The two allowed channels create; the
+  // six others are refused before anything touches disk.
+  test("lets the skill-management channels through the gate", async () => {
+    for (const channel of ["web", "cli"] as const) {
+      const { tool } = await setup();
+
+      const result = await tool.run(
+        { action: "create", content: researchSkillMarkdown },
+        memberContext({ channel })
+      );
+
+      expect(result).toMatchObject({ created: true, name: "research-paper" });
+      // Each pass needs its own config dir; afterEach only removes the last.
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("refuses every channel outside the skill-management table", async () => {
+    const { tool } = await setup();
+
+    for (const channel of [
+      "automation",
+      "discord",
+      "subagent",
+      "task",
+      "telegram",
+      "whatsapp",
+    ] as const) {
+      await expect(
+        tool.run(
+          { action: "create", content: researchSkillMarkdown },
+          memberContext({ channel })
+        )
+      ).rejects.toThrow(/interactive web or CLI/);
+    }
+  });
+
   test("gate off creates immediately (AE1 regression)", async () => {
     const { db, tool } = await setup();
     await seedOrgProfile(db, { orgSkillsWriteApproval: false });

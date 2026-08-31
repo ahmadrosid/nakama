@@ -87,6 +87,17 @@ export const AGENT_CHANNELS = [
 
 export type AgentChannel = (typeof AGENT_CHANNELS)[number];
 
+/**
+ * Narrow a stored channel string to `AgentChannel`. Session rows keep the
+ * column as `string`, so this is the one place that decides what an unknown
+ * value means: `null`, never a silent pass.
+ */
+export function parseAgentChannel(value: string): AgentChannel | null {
+  return AGENT_CHANNELS.includes(value as AgentChannel)
+    ? (value as AgentChannel)
+    : null;
+}
+
 export const NAKAMA_API_VERSION = 1;
 
 export interface HealthResponse {

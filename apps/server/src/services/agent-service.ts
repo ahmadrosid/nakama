@@ -101,7 +101,6 @@ import type {
   WhatsAppSettingsResponse,
 } from "@nakama/core";
 import {
-  AGENT_CHANNELS,
   apiKeyEnvVarForProvider,
   appendOrgMemorySection,
   buildErrorReport,
@@ -146,6 +145,7 @@ import {
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
+  parseAgentChannel,
   parseSentryDsn,
   persistInlineAttachmentsInContent,
   readArtifactFile,
@@ -203,7 +203,10 @@ import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createOrgMemoryTools } from "../tools/org-memory-tools";
 import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
-import { createSkillManageTools } from "../tools/skill-manage-tool";
+import {
+  createSkillManageTools,
+  SKILL_MANAGE_CHANNELS,
+} from "../tools/skill-manage-tool";
 import { formatToolActivityLabel } from "../tools/sub-agent-activity";
 import {
   buildSubAgentPrompt,
@@ -3332,7 +3335,7 @@ export class AgentService {
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const includeSkillManageTools = channel === "web" || channel === "cli";
+    const includeSkillManageTools = SKILL_MANAGE_CHANNELS[channel];
     let tools = await this.resolveProfileTools(profile, {
       includeSkillManageTools,
       userId,
@@ -3340,10 +3343,12 @@ export class AgentService {
     if (channel === "discord") {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
-    const skillUsageContext =
-      channel === "web" || channel === "cli"
-        ? { seenCatalogSkillIds: new Set<string>(), sessionId }
-        : undefined;
+    // Same table as the tools above on purpose: a channel that can manage
+    // skills is a channel that needs the catalog to track what it has seen.
+    // Splitting them later means splitting the table, which is a visible edit.
+    const skillUsageContext = SKILL_MANAGE_CHANNELS[channel]
+      ? { seenCatalogSkillIds: new Set<string>(), sessionId }
+      : undefined;
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
       profileId,
@@ -3823,12 +3828,6 @@ export class AgentService {
       enabled: this.userConfig?.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
     };
   }
-}
-
-function parseAgentChannel(value: string): AgentChannel | null {
-  return AGENT_CHANNELS.includes(value as AgentChannel)
-    ? (value as AgentChannel)
-    : null;
 }
 
 function clampSubAgentTimeout(timeoutMs: number | undefined): number {
