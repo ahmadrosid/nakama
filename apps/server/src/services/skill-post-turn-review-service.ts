@@ -16,9 +16,10 @@ import { resolveProfileProviderSelection } from "./provider-instance-helpers";
 
 /**
  * Which channels run the post-turn skill review. Total over `AgentChannel`, so
- * a new channel fails the typecheck here and has to be decided. #213 was this
- * gate: it shipped as `channel !== "web" && channel !== "cli"`, and Discord,
- * Telegram and WhatsApp skipped the review for six days without a signal.
+ * a new channel fails the typecheck here and has to be decided. This gate is
+ * where #213 happened: `ae27f7b2` shipped it as
+ * `channel !== "web" && channel !== "cli"`, and Discord, Telegram and WhatsApp
+ * skipped the review for five days and 23 hours until `e0026ea6` (#224).
  */
 const POST_TURN_REVIEW_CHANNELS = {
   automation: false,
