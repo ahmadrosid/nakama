@@ -1,15 +1,16 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type {
-  AssignToolRequest,
-  CreateToolRequest,
-  ListToolsResponse,
-  ProfileResponse,
-  RunToolRequest,
-  RunToolResponse,
-  SuggestToolParamsRequest,
-  SuggestToolParamsResponse,
-  ToolResponse,
-  ToolSourceResponse,
+import {
+  type AssignToolRequest,
+  type CreateToolRequest,
+  formatServerError,
+  type ListToolsResponse,
+  type ProfileResponse,
+  type RunToolRequest,
+  type RunToolResponse,
+  type SuggestToolParamsRequest,
+  type SuggestToolParamsResponse,
+  type ToolResponse,
+  type ToolSourceResponse,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
@@ -349,9 +350,9 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
         })
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const status = message.includes("not found") ? 404 : 400;
-      return json({ error: message }, status);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      const status = rawMessage.includes("not found") ? 404 : 400;
+      return json({ error: formatServerError(error) }, status);
     }
   });
 
@@ -365,9 +366,9 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
         await agent.suggestToolPlaygroundParams(toolId, body.prompt ?? "")
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const status = message.includes("not found") ? 404 : 400;
-      return json({ error: message }, status);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      const status = rawMessage.includes("not found") ? 404 : 400;
+      return json({ error: formatServerError(error) }, status);
     }
   });
 

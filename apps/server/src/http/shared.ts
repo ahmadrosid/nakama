@@ -6,7 +6,6 @@ import {
   type AgentQuestionnaire,
   type AgentTodo,
   type ApiErrorResponse,
-  formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
   resolveChatFirstTokenTimeoutMs,
@@ -666,7 +665,9 @@ export function streamMessage(
           error:
             turnSignal.aborted && !timedOut
               ? "Turn cancelled."
-              : formatServerError(error),
+              : error instanceof Error
+                ? error.message
+                : String(error),
           type: "error",
         });
       } finally {

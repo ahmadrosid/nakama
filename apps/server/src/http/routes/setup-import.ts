@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   type DataImportPreviewResponse,
+  formatServerError,
   NakamaApiError,
   type PreviewDataImportRequest,
   type RestoreDataImportRequest,
@@ -131,7 +132,7 @@ export function registerSetupImportRoutes(
       );
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
-      return errorResponse(formatImportError(error), 400);
+      return errorResponse(formatServerError(error), 400);
     }
   });
 
@@ -157,7 +158,7 @@ export function registerSetupImportRoutes(
         }
       );
     } catch (error) {
-      return errorResponse(formatImportError(error), 400);
+      return errorResponse(formatServerError(error), 400);
     }
 
     let requiresRestart = !options.onDataRestored;
@@ -190,13 +191,6 @@ async function assertSetupImportAllowed(
 }
 
 function setupImportErrorResponse(error: unknown): Response {
-  if (error instanceof NakamaApiError) {
-    return errorResponse(error.message, error.status);
-  }
-
-  return errorResponse(formatImportError(error), 500);
-}
-
-function formatImportError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const status = error instanceof NakamaApiError ? error.status : 500;
+  return errorResponse(formatServerError(error), status);
 }

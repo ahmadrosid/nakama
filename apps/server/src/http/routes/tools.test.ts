@@ -334,4 +334,74 @@ describe("tool playground routes", () => {
 
     expect(response.status).toBe(400);
   });
+
+  test("run does not leak an unexpected error's message", async () => {
+    const { app, authService, databaseAdapter } = createApp({
+      runToolPlayground: async () => {
+        throw new Error(
+          "SQLITE_CONSTRAINT: UNIQUE constraint failed at /home/nakama/.config/nakama/nakama.db"
+        );
+      },
+    });
+    const { orgId, adminSession } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "acme-run-leak",
+      "admin-run-leak@acme.com"
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/tools/tool_echo/run", {
+        body: JSON.stringify({ parameters: {} }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "An unexpected server error occurred.",
+    });
+  });
+
+  test("run still maps a not-found message to 404 without leaking it", async () => {
+    const { app, authService, databaseAdapter } = createApp({
+      runToolPlayground: async () => {
+        throw new Error("Tool tool_missing not found");
+      },
+    });
+    const { orgId, adminSession } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "acme-run-404",
+      "admin-run-404@acme.com"
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/tools/tool_missing/run", {
+        body: JSON.stringify({ parameters: {} }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: "An unexpected server error occurred.",
+    });
+  });
 });

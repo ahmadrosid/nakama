@@ -14,7 +14,7 @@ import type {
   SessionStatusResponse,
   UpdateSessionRequest,
 } from "@nakama/core";
-import { AGENT_CHANNELS } from "@nakama/core";
+import { AGENT_CHANNELS, formatServerError } from "@nakama/core";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
@@ -545,8 +545,7 @@ export function registerSessionRoutes(
 
       return json<BranchSessionResponse>(result, 201);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return errorResponse(message, 400);
+      return errorResponse(formatServerError(error), 400);
     }
   });
 
@@ -626,7 +625,7 @@ export function registerSessionRoutes(
         ...(contextUsage ? { contextUsage } : {}),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatServerError(error);
       sessionTurnRegistry.endTurn(sessionId, { error: message, type: "error" });
       return errorResponse(message, 500);
     }

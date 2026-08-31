@@ -10,6 +10,7 @@ import {
   type DiscordSettingsResponse,
   type DiscoverModelsRequest,
   type EmailSettingsResponse,
+  formatServerError,
   type GenerateImageRequest,
   type GenerateImageResponse,
   type ImageGenerationSettingsResponse,
@@ -1184,8 +1185,7 @@ export function registerModelRoutes(
     try {
       return json(await getExternalModelCatalog(catalogId));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return errorResponse(message, 502);
+      return errorResponse(formatServerError(error), 502);
     }
   });
 
@@ -1207,8 +1207,7 @@ export function registerModelRoutes(
       const result = await agent.discoverModels(body);
       return json<ModelsResponse>(result);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return errorResponse(message, 400);
+      return errorResponse(formatServerError(error), 400);
     }
   });
 
