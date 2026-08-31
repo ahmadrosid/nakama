@@ -110,4 +110,27 @@ describe("workspace settings merge", () => {
       database.close();
     }
   });
+
+  test("defaults the automation polling interval for legacy direct writes", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    try {
+      await database.adapter.upsertWorkspaceSettings({
+        codingAgentHarnesses: [],
+        codingAgentProviderPassthrough: true,
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: "2026-08-31T00:00:00.000Z",
+        visionModel: null,
+      } as never);
+
+      expect(
+        (await database.adapter.getWorkspaceSettings())
+          ?.automationWorkerPollIntervalMs
+      ).toBe(5 * 60 * 1000);
+    } finally {
+      database.close();
+    }
+  });
 });

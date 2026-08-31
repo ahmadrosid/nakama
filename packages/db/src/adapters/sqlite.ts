@@ -3089,7 +3089,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ? null
           : Number(record.tokenOptimizerEnabled),
         record.codingAgentProviderPassthrough === false ? 0 : 1,
-        record.automationWorkerPollIntervalMs,
+        record.automationWorkerPollIntervalMs ?? 5 * 60 * 1000,
         record.updatedAt
       );
     },
