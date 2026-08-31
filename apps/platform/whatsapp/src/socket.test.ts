@@ -18,16 +18,29 @@ const sockets: Array<{
   ev: EventEmitter;
 }> = [];
 const delays: number[] = [];
+const endOrder: string[] = [];
+let endResolvers: Array<() => void> = [];
+
 const createSocket = mock(() => {
   const ev = new EventEmitter();
+  let endResolve: (() => void) | null = null;
+  const endPromise = new Promise<void>((resolve) => {
+    endResolve = resolve;
+  });
+  endResolvers.push(() => {
+    endResolve?.();
+  });
+
   const socket = {
     end: mock(() => {
+      endOrder.push(`end:${sockets.length}`);
       ev.emit("connection.update", {
         connection: "close",
         lastDisconnect: {
           error: { message: "ended", output: { statusCode: 428 } },
         },
       });
+      return endPromise;
     }),
     ev,
   };
@@ -67,6 +80,22 @@ const LOGGED_OUT_CLOSE = {
   },
 };
 
+const SAMPLE_UPSERT = {
+  messages: [
+    {
+      key: {
+        fromMe: false,
+        id: "msg-1",
+        remoteJid: "6281379292556@s.whatsapp.net",
+      },
+      message: {
+        conversation: "hello from whatsapp",
+      },
+    },
+  ],
+  type: "notify" as const,
+};
+
 describe("WhatsApp socket reconnect", () => {
   let logSpy: ReturnType<typeof spyOn>;
   let timeoutSpy: ReturnType<typeof spyOn>;
@@ -76,6 +105,8 @@ describe("WhatsApp socket reconnect", () => {
   beforeEach(async () => {
     sockets.length = 0;
     delays.length = 0;
+    endOrder.length = 0;
+    endResolvers = [];
     createSocket.mockClear();
     previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
     tempConfigDir = await mkdtemp(join(tmpdir(), "nakama-wa-socket-"));
@@ -134,6 +165,62 @@ describe("WhatsApp socket reconnect", () => {
     emit(0, LOGGED_OUT_CLOSE);
     await flush();
 
+    expect(createSocket).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([]);
+  });
+
+  test("clears old-socket listeners on reconnect so upserts cannot leak", async () => {
+    const received: string[] = [];
+    const handle = await createWhatsAppSocket({
+      onMessage: async (data) => {
+        received.push(data.text);
+      },
+    });
+    await handle.start();
+
+    const oldSocket = sockets[0];
+    expect(oldSocket?.ev.listenerCount("messages.upsert")).toBe(1);
+
+    emit(0, TIMEOUT_CLOSE);
+    await flush();
+
+    expect(createSocket).toHaveBeenCalledTimes(2);
+    expect(oldSocket?.ev.listenerCount("messages.upsert")).toBe(0);
+    expect(oldSocket?.ev.listenerCount("connection.update")).toBe(0);
+    expect(sockets[1]?.ev.listenerCount("messages.upsert")).toBe(1);
+
+    sockets[0]?.ev.emit("messages.upsert", SAMPLE_UPSERT);
+    await flush();
+    expect(received).toEqual([]);
+
+    sockets[1]?.ev.emit("messages.upsert", SAMPLE_UPSERT);
+    await flush();
+    expect(received).toEqual(["hello from whatsapp"]);
+  });
+
+  test("awaits socket.end during stop before returning", async () => {
+    const handle = await createWhatsAppSocket({ onMessage: async () => {} });
+    await handle.start();
+
+    expect(endResolvers).toHaveLength(1);
+
+    let stopDone = false;
+    const stopPromise = handle.stop().then(() => {
+      stopDone = true;
+      endOrder.push("stop-done");
+    });
+
+    await flush();
+    expect(stopDone).toBe(false);
+    expect(sockets[0]?.end).toHaveBeenCalled();
+    expect(sockets[0]?.ev.listenerCount("messages.upsert")).toBe(0);
+
+    endResolvers[0]?.();
+    await stopPromise;
+    await flush();
+
+    expect(stopDone).toBe(true);
+    expect(endOrder).toEqual(["end:1", "stop-done"]);
     expect(createSocket).toHaveBeenCalledTimes(1);
     expect(delays).toEqual([]);
   });

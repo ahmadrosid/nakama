@@ -119,6 +119,7 @@ try {
     `Paired users: ${paired} · Pending handshake: ${pendingHandshake}`
   );
 
+  // Assign before start/heartbeat so failure paths can always stop the bot.
   botStop = () => bot.stop();
 
   await writeTelegramWorkerHeartbeat();
@@ -134,6 +135,14 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+  botStop?.();
+  // Await before exit — void + process.exit can leave a stale heartbeat file.
+  await clearTelegramWorkerHeartbeat();
+  stopSpawnedServer(spawnedChild);
   process.exit(1);
 } finally {
   stopSpawnedServer(spawnedChild);

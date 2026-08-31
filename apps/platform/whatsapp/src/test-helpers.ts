@@ -45,7 +45,9 @@ export function createMockClient(
 ) {
   const calls = {
     compact: 0,
+    createChatSession: 0,
     createSession: 0,
+    getMessages: 0,
     listProfiles: 0,
     listUserOrgs: 0,
     profileIds: [] as string[],
@@ -166,7 +168,10 @@ export function createMockClient(
       };
     },
     createAutomation: async () => ({}),
-    getMessages: async () => options.messages ?? [],
+    getMessages: async () => {
+      calls.getMessages += 1;
+      return options.messages ?? [];
+    },
     id: "session_test",
     purge: async () => {},
     send: async () => "ok",
@@ -176,7 +181,10 @@ export function createMockClient(
   const orgs = options.orgs ?? createDefaultTestOrgs();
 
   const client = {
-    createChatSession: () => session,
+    createChatSession: () => {
+      calls.createChatSession += 1;
+      return session;
+    },
     createSession: async (_channel, options = {}) => {
       calls.createSession += 1;
       calls.profileIds.push(options.profileId ?? "default");

@@ -1,7 +1,11 @@
-import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
+import {
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+} from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
-import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { CommandPalette } from "@/components/CommandPalette";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { ProfileRail } from "@/components/ProfileRail";
@@ -18,7 +22,10 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
-import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
+import {
+  useSidebarCollapsed,
+  useSystemNavCollapsed,
+} from "@/hooks/use-sidebar-collapsed";
 import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
   findNavItem,
@@ -30,7 +37,6 @@ import {
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
-import { ProfileDetailTabButton } from "@/pages/profiles/profiles-ui";
 
 export function Layout() {
   const location = useLocation();
@@ -41,6 +47,8 @@ export function Layout() {
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed, toggle } = useSidebarCollapsed();
+  const { collapsed: systemNavCollapsed, toggle: toggleSystemNav } =
+    useSystemNavCollapsed();
   const activeNav = findNavItem(page);
   const navGroups = useMemo(
     () =>
@@ -76,41 +84,81 @@ export function Layout() {
             </div>
 
             <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
-              {navGroups.map((group) => (
-                <div
-                  aria-label={group.label}
-                  className="sidebar-nav-group"
-                  key={group.id}
-                  role="group"
-                >
-                  <div className="sidebar-nav-group-items">
-                    {group.items.map((item) => (
-                      <SidebarNavButton
-                        active={item.id === page}
-                        badge={
-                          item.id === "automations"
-                            ? automationUnreadTotal
-                            : undefined
-                        }
-                        collapsed={collapsed}
-                        icon={item.icon}
-                        item={item}
-                        key={item.id}
-                        onPrefetch={
-                          item.id === "automations"
-                            ? prefetchAppData
-                            : undefined
-                        }
-                        to={
-                          item.id === "soul"
-                            ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
-                            : navHrefForPage(item.id, chatProfileId)
-                        }
-                      />
-                    ))}
+              {navGroups.map((group) => {
+                const containsActive =
+                  group.collapsible === true &&
+                  group.items.some((item) => item.id === page);
+                const groupExpanded = !systemNavCollapsed || containsActive;
+                // Icon rail always shows every destination; tree collapse only
+                // applies when labels are visible.
+                const itemsVisible =
+                  !group.collapsible || collapsed || groupExpanded;
+
+                return (
+                  <div
+                    aria-label={group.label}
+                    className="sidebar-nav-group"
+                    data-items-hidden={itemsVisible ? undefined : true}
+                    data-tree={group.collapsible || undefined}
+                    key={group.id}
+                    role="group"
+                  >
+                    {group.collapsible && !collapsed ? (
+                      <button
+                        aria-expanded={groupExpanded}
+                        className="sidebar-nav-group-label"
+                        onClick={() => {
+                          if (groupExpanded && containsActive) {
+                            return;
+                          }
+                          toggleSystemNav();
+                        }}
+                        type="button"
+                      >
+                        <ArrowDown01Icon
+                          aria-hidden="true"
+                          className={cn(
+                            "sidebar-nav-group-chevron",
+                            !groupExpanded && "-rotate-90"
+                          )}
+                          strokeWidth={1.75}
+                        />
+                        <span className="truncate">{group.label}</span>
+                      </button>
+                    ) : null}
+                    <div
+                      aria-hidden={!itemsVisible}
+                      className="sidebar-nav-group-items"
+                      inert={itemsVisible ? undefined : true}
+                    >
+                      {group.items.map((item) => (
+                        <SidebarNavButton
+                          active={item.id === page}
+                          badge={
+                            item.id === "automations"
+                              ? automationUnreadTotal
+                              : undefined
+                          }
+                          collapsed={collapsed}
+                          icon={item.icon}
+                          item={item}
+                          key={item.id}
+                          onPrefetch={
+                            item.id === "automations"
+                              ? prefetchAppData
+                              : undefined
+                          }
+                          to={
+                            item.id === "soul"
+                              ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
+                              : navHrefForPage(item.id, chatProfileId)
+                          }
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </nav>
           </aside>
 
@@ -119,8 +167,6 @@ export function Layout() {
               <header className="app-shell-header gap-4 bg-card px-6">
                 {page === "automations" ? (
                   <AgentWorkTabs />
-                ) : page === "files" ? (
-                  <FilesViewTabs />
                 ) : page === "soul" || page === "profiles" ? null : (
                   <h1 className="type-brand min-w-0 truncate">
                     {activeNav?.label}
@@ -199,46 +245,6 @@ function NarrowViewportNotice() {
         To chat with your agent from a phone, use the Telegram, WhatsApp or
         Discord bridge instead.
       </p>
-    </div>
-  );
-}
-
-function FilesViewTabs() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const view =
-    searchParams.get("tab") === "knowledge" ? "knowledge" : "artifacts";
-
-  function selectView(nextView: "artifacts" | "knowledge") {
-    if (nextView === "artifacts") {
-      searchParams.delete("tab");
-    } else {
-      searchParams.set("tab", nextView);
-    }
-    setSearchParams(searchParams);
-  }
-
-  return (
-    <div
-      aria-label="Files views"
-      className="flex h-full min-w-0 items-stretch"
-      role="tablist"
-    >
-      <ProfileDetailTabButton
-        active={view === "artifacts"}
-        controls="files-page-panel-artifacts"
-        id="files-page-tab-artifacts"
-        onSelect={() => selectView("artifacts")}
-      >
-        Artifacts
-      </ProfileDetailTabButton>
-      <ProfileDetailTabButton
-        active={view === "knowledge"}
-        controls="files-page-panel-knowledge"
-        id="files-page-tab-knowledge"
-        onSelect={() => selectView("knowledge")}
-      >
-        Knowledge base
-      </ProfileDetailTabButton>
     </div>
   );
 }

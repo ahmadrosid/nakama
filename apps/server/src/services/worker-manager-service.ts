@@ -294,10 +294,10 @@ export class WorkerManagerService {
     };
 
     const serverUrl =
-      process.env.nakama_SERVER_URL?.trim() || readRuntimeServerUrl() || "";
+      process.env.NAKAMA_SERVER_URL?.trim() || readRuntimeServerUrl() || "";
 
     if (serverUrl) {
-      env.nakama_SERVER_URL = serverUrl;
+      env.NAKAMA_SERVER_URL = serverUrl;
     }
 
     const configDir = process.env.NAKAMA_CONFIG_DIR?.trim();

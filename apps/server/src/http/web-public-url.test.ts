@@ -61,6 +61,33 @@ describe("web public url settings", () => {
         webPublicUrl: string | null;
       };
       expect(afterSave.webPublicUrl).toBe("https://app.example.com/setup");
+
+      // An Origin header must not be able to repoint the OAuth callback base.
+      const headerAttempt = await app.fetch(
+        new Request("http://localhost:4310/v1/system/web-public-url", {
+          body: JSON.stringify({}),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              Origin: "https://evil.example",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            session.orgId
+          ),
+          method: "PUT",
+        })
+      );
+      expect(headerAttempt.status).toBe(400);
+
+      const afterAttempt = await app.fetch(
+        new Request("http://localhost:4310/v1/system/web-public-url", {
+          headers: session.headers({}, session.orgId),
+        })
+      );
+      expect(
+        ((await afterAttempt.json()) as { webPublicUrl: string | null })
+          .webPublicUrl
+      ).toBe("https://app.example.com/setup");
     } finally {
       if (previousConfigDir === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;

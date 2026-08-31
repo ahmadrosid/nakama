@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getInitialSidebarCollapsed,
+  getInitialSystemNavCollapsed,
   SIDEBAR_COLLAPSED_KEY,
+  SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY,
 } from "@/lib/sidebar";
 
 export function useSidebarCollapsed() {
@@ -15,9 +17,25 @@ export function useSidebarCollapsed() {
     }
   }, [collapsed]);
 
-  const toggle = useCallback(() => {
-    setCollapsedState((current) => !current);
-  }, []);
+  return {
+    collapsed,
+    toggle: () => setCollapsedState((current) => !current),
+  };
+}
 
-  return { collapsed, toggle };
+export function useSystemNavCollapsed() {
+  const [collapsed, setCollapsed] = useState(getInitialSystemNavCollapsed);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY, String(collapsed));
+    } catch {
+      // Ignore storage failures (private browsing, etc.)
+    }
+  }, [collapsed]);
+
+  return {
+    collapsed,
+    toggle: () => setCollapsed((current) => !current),
+  };
 }

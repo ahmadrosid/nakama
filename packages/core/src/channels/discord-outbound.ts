@@ -87,7 +87,7 @@ async function openDmChannel(
   fetchImpl: typeof fetch,
   token: string,
   recipientId: string
-): Promise<{ ok: true; channelId: string } | ChannelSendResult> {
+): Promise<{ ok: true; channelId: string } | { error: string; ok: false }> {
   const response = await fetchImpl(
     `${DISCORD_API_BASE_URL}/users/@me/channels`,
     {

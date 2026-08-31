@@ -81,7 +81,7 @@ export function useNotifications(): {
           count: 1,
           createdAt: proposal.createdAt,
           description: proposal.bullet,
-          href: `${PAGE_PATHS.soul}?tab=organization&orgMemory=proposals`,
+          href: `${PAGE_PATHS.organization}?orgMemory=proposals`,
           id: `org-memory-${proposal.id}`,
           kind: "org-memory-proposal",
           kindLabel: "Org memory",

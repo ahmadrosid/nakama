@@ -68,7 +68,9 @@ export function createMockClient(
   } = {}
 ) {
   const calls = {
+    createChatSession: 0,
     createSession: 0,
+    getMessages: 0,
     getSessionMessages: 0,
     listProfileArtifacts: 0,
     publishProfileArtifactShare: 0,
@@ -93,7 +95,10 @@ export function createMockClient(
       messagesBefore: 10,
     }),
     createAutomation: async () => ({}),
-    getMessages: async () => options.messages ?? [],
+    getMessages: async () => {
+      calls.getMessages += 1;
+      return options.messages ?? [];
+    },
     id: "session_test",
     purge: async () => {},
     send: async () => "ok",
@@ -105,7 +110,10 @@ export function createMockClient(
   let activeOrgId: string | null = orgs[0]?.id ?? null;
 
   const client = {
-    createChatSession: () => session,
+    createChatSession: () => {
+      calls.createChatSession += 1;
+      return session;
+    },
     createSession: async (_channel: string, input?: { profileId?: string }) => {
       calls.createSession += 1;
       if (input?.profileId) {
@@ -554,6 +562,9 @@ export function createSlashInteraction(options: {
     channel,
     channelId: options.inThread ? threadId : channelId,
     commandName: options.commandName,
+    deleteReply: async () => {
+      replies.push("__deleted__");
+    },
     editReply: async ({ content }: { content: string }) => {
       replies.push(content);
     },
@@ -585,6 +596,7 @@ export async function writeDiscordConfigIni(
     profileId?: string;
     pairedUserIds?: string[];
     allowedUserIds?: string[];
+    handshakeCode?: string | null;
   }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
@@ -602,6 +614,10 @@ export async function writeDiscordConfigIni(
 
   if (config.allowedUserIds?.length) {
     lines.push(`allowed_user_ids=${config.allowedUserIds.join(",")}`);
+  }
+
+  if (config.handshakeCode) {
+    lines.push(`handshake_code=${config.handshakeCode}`);
   }
 
   lines.push("");

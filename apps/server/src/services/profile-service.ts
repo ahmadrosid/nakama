@@ -1,4 +1,5 @@
 import { cp } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   AssignMcpServerRequest,
   AssignSkillRequest,
@@ -10,6 +11,7 @@ import type {
   DocumentAttachment,
   ImageAttachment,
   JsonSchema,
+  KnowledgeBaseDuplicateAction,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
   ListToolsResponse,
@@ -30,6 +32,7 @@ import {
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
+  KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
   listKnowledgeBaseSources,
   NakamaApiError,
@@ -42,6 +45,7 @@ import {
   saveProfileAvatar,
   writeSoulFile,
 } from "@nakama/core";
+import { readTextIfExists } from "@nakama/core/fs";
 import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
@@ -63,6 +67,12 @@ import {
   isCustomToolType,
 } from "./custom-tool-handlers";
 import { toMcpServerSummaries } from "./mcp-service";
+import {
+  type ProfileChangeMeta,
+  recordProfileChangeEvent,
+  soulFieldFromFileName,
+  withAssignmentChange,
+} from "./profile-change-history";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
@@ -323,12 +333,18 @@ export class ProfileService {
   async updateProfile(
     orgId: string,
     profileId: string,
-    request: UpdateProfileRequest
+    request: UpdateProfileRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     const profile = await this.requireProfile(orgId, profileId);
     const now = new Date().toISOString();
 
     validateGeneratedSoulFiles(request.soulFiles);
+
+    const nextSystemPrompt =
+      request.systemPrompt === undefined
+        ? profile.systemPrompt
+        : request.systemPrompt.trim();
 
     await this.db.upsertProfile({
       ...profile,
@@ -346,9 +362,53 @@ export class ProfileService {
         request.skillsWriteApproval === undefined
           ? profile.skillsWriteApproval
           : request.skillsWriteApproval,
-      systemPrompt: request.systemPrompt?.trim() ?? profile.systemPrompt,
+      systemPrompt: nextSystemPrompt,
       updatedAt: now,
     });
+
+    if (meta && request.systemPrompt !== undefined) {
+      const before = profile.systemPrompt;
+      if (before !== nextSystemPrompt) {
+        await recordProfileChangeEvent(this.db, {
+          actorUserId: meta.actorUserId,
+          afterValue: nextSystemPrompt,
+          beforeValue: before,
+          createdAt: now,
+          field: "system_prompt",
+          orgId,
+          profileId,
+          source: meta.source,
+        });
+      }
+    }
+
+    if (meta && request.soulFiles) {
+      const soulDir = getProfileSoulDir(orgId, profileId);
+      for (const [fileName, content] of Object.entries(request.soulFiles)) {
+        if (content === undefined) {
+          continue;
+        }
+        const field = soulFieldFromFileName(fileName);
+        if (!field) {
+          continue;
+        }
+        const before =
+          (await readTextIfExists(join(soulDir, fileName))) ?? null;
+        if (before === content) {
+          continue;
+        }
+        await recordProfileChangeEvent(this.db, {
+          actorUserId: meta.actorUserId,
+          afterValue: content,
+          beforeValue: before,
+          createdAt: now,
+          field,
+          orgId,
+          profileId,
+          source: meta.source,
+        });
+      }
+    }
 
     await writeUpdatedSoulFiles(
       getProfileSoulDir(orgId, profileId),
@@ -464,7 +524,8 @@ export class ProfileService {
   async assignTool(
     orgId: string,
     profileId: string,
-    request: AssignToolRequest
+    request: AssignToolRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -474,7 +535,11 @@ export class ProfileService {
       throw new Error("Tool not found.");
     }
 
-    await this.db.assignToolToProfile(profileId, request.toolId);
+    await withAssignmentChange(
+      this.db,
+      { field: "tools", meta, orgId, profileId },
+      () => this.db.assignToolToProfile(profileId, request.toolId)
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -482,15 +547,24 @@ export class ProfileService {
   async unassignTool(
     orgId: string,
     profileId: string,
-    toolId: string
+    toolId: string,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const removed = await this.db.unassignToolFromProfile(profileId, toolId);
-
-    if (!removed) {
-      throw new Error("Tool is not assigned to this profile.");
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "tools", meta, orgId, profileId },
+      async () => {
+        const removed = await this.db.unassignToolFromProfile(
+          profileId,
+          toolId
+        );
+        if (!removed) {
+          throw new Error("Tool is not assigned to this profile.");
+        }
+      }
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -498,7 +572,8 @@ export class ProfileService {
   async assignMcpServer(
     orgId: string,
     profileId: string,
-    request: AssignMcpServerRequest
+    request: AssignMcpServerRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -508,7 +583,11 @@ export class ProfileService {
       throw new Error("MCP server not found.");
     }
 
-    await this.db.assignMcpServerToProfile(profileId, request.serverId);
+    await withAssignmentChange(
+      this.db,
+      { field: "mcp", meta, orgId, profileId },
+      () => this.db.assignMcpServerToProfile(profileId, request.serverId)
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -516,18 +595,24 @@ export class ProfileService {
   async unassignMcpServer(
     orgId: string,
     profileId: string,
-    serverId: string
+    serverId: string,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const removed = await this.db.unassignMcpServerFromProfile(
-      profileId,
-      serverId
+    await withAssignmentChange(
+      this.db,
+      { field: "mcp", meta, orgId, profileId },
+      async () => {
+        const removed = await this.db.unassignMcpServerFromProfile(
+          profileId,
+          serverId
+        );
+        if (!removed) {
+          throw new Error("MCP server is not assigned to this profile.");
+        }
+      }
     );
-
-    if (!removed) {
-      throw new Error("MCP server is not assigned to this profile.");
-    }
 
     return this.getProfile(orgId, profileId);
   }
@@ -535,7 +620,8 @@ export class ProfileService {
   async assignSkill(
     orgId: string,
     profileId: string,
-    request: AssignSkillRequest
+    request: AssignSkillRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -545,7 +631,11 @@ export class ProfileService {
       throw new Error("Skill not found.");
     }
 
-    await this.db.assignSkillToProfile(profileId, request.skillId);
+    await withAssignmentChange(
+      this.db,
+      { field: "skills", meta, orgId, profileId },
+      () => this.db.assignSkillToProfile(profileId, request.skillId)
+    );
 
     return this.getProfile(orgId, profileId);
   }
@@ -553,17 +643,40 @@ export class ProfileService {
   async unassignSkill(
     orgId: string,
     profileId: string,
-    skillId: string
+    skillId: string,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const removed = await this.db.unassignSkillFromProfile(profileId, skillId);
-
-    if (!removed) {
-      throw new Error("Skill is not assigned to this profile.");
-    }
+    await withAssignmentChange(
+      this.db,
+      { field: "skills", meta, orgId, profileId },
+      async () => {
+        const removed = await this.db.unassignSkillFromProfile(
+          profileId,
+          skillId
+        );
+        if (!removed) {
+          throw new Error("Skill is not assigned to this profile.");
+        }
+      }
+    );
 
     return this.getProfile(orgId, profileId);
+  }
+
+  async listProfileChangeHistory(
+    orgId: string,
+    profileId: string,
+    options: { limit?: number; offset?: number } = {}
+  ) {
+    await this.requireProfile(orgId, profileId);
+    const events = await this.db.listProfileChangeEvents(
+      orgId,
+      profileId,
+      options
+    );
+    return { events };
   }
 
   async uploadProfileAvatar(
@@ -599,18 +712,6 @@ export class ProfileService {
     return avatar;
   }
 
-  async getProfileAvatarByProfileId(
-    profileId: string
-  ): Promise<{ mediaType: string; bytes: Buffer }> {
-    const profile = await this.db.getProfile(profileId);
-
-    if (!profile?.orgId) {
-      throw new NakamaApiError("Profile not found.", 404);
-    }
-
-    return this.getProfileAvatar(profile.orgId, profileId);
-  }
-
   async deleteProfileAvatar(orgId: string, profileId: string): Promise<void> {
     const profile = await this.requireProfile(orgId, profileId);
     const removed = await deleteProfileAvatar(orgId, profileId);
@@ -639,7 +740,8 @@ export class ProfileService {
   async uploadKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
-    document: DocumentAttachment
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
   ): Promise<UploadKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -647,10 +749,19 @@ export class ProfileService {
       const uploaded = await persistKnowledgeBaseDocument(
         orgId,
         profileId,
-        document
+        document,
+        onDuplicate
       );
-      return { document: uploaded, profileId };
+      return {
+        document: uploaded.document,
+        outcome: uploaded.outcome,
+        profileId,
+      };
     } catch (error) {
+      if (error instanceof KnowledgeBaseDuplicateError) {
+        throw new NakamaApiError(error.message, 409);
+      }
+
       const message =
         error instanceof Error
           ? error.message

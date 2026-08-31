@@ -178,7 +178,9 @@ export async function rememberWhatsAppPairedIdentities(
   );
   const lidJid = jids.find((jid) => whatsAppJidServer(jid) === "lid");
   const nextPairedJid =
-    phoneJid && isSameWhatsAppUserJid(phoneJid, config.pairedJid)
+    phoneJid &&
+    config.pairedJid &&
+    isSameWhatsAppUserJid(phoneJid, config.pairedJid)
       ? phoneJid
       : config.pairedJid;
   const nextPairedLid = lidJid ?? config.pairedLid;
@@ -535,7 +537,7 @@ export function resolveWhatsAppConfigFromSources(options: {
     phoneNumber:
       env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
     profileId:
-      env.nakama_WHATSAPP_PROFILE_ID?.trim() ||
+      env.NAKAMA_WHATSAPP_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_WHATSAPP_PROFILE_ID,
   };

@@ -208,7 +208,11 @@ export function createSuperBotTools(
         return profileService.updateProfile(
           requireOrgId(context),
           profileId,
-          request
+          request,
+          {
+            actorUserId: context.userId ?? null,
+            source: "super_bot",
+          }
         );
       },
     },
@@ -242,6 +246,10 @@ export function createSuperBotTools(
           profileId,
           {
             toolId,
+          },
+          {
+            actorUserId: context.userId ?? null,
+            source: "super_bot",
           }
         );
         sessionState.markToolAssigned(context.sessionId, toolId);

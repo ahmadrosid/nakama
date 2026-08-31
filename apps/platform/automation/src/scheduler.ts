@@ -45,6 +45,11 @@ export class AutomationWorkerScheduler {
     this.pollIntervalMs = intervalMs;
 
     this.pollTimer = setInterval(async () => {
+      if (this.pollInFlight) {
+        return;
+      }
+
+      this.pollInFlight = true;
       try {
         const settings = await this.client
           .getAutomationWorkerSettings()
@@ -60,6 +65,8 @@ export class AutomationWorkerScheduler {
         this.notifyStatus();
       } catch (error) {
         console.error("Failed to reload automation schedules:", error);
+      } finally {
+        this.pollInFlight = false;
       }
     }, intervalMs);
   }

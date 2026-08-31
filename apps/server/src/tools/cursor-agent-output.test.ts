@@ -17,6 +17,77 @@ describe("cursor-agent-output", () => {
     expect(looksLikeCursorAgentStreamJson("plain text answer")).toBe(false);
   });
 
+  test("does not classify ordinary JSON with nested Cursor event names", () => {
+    const stdout = JSON.stringify({
+      metadata: { type: "assistant" },
+      name: "ordinary-command-output",
+      scripts: { type: "result" },
+      type: "module",
+    });
+
+    expect(looksLikeCursorAgentStreamJson(stdout)).toBe(false);
+    expect(formatCodingAgentBashStdout(stdout, { exitCode: 0 })).toBe(stdout);
+  });
+
+  test("does not classify ordinary NDJSON with a top-level result type", () => {
+    const stdout = [
+      JSON.stringify({ records: 37, status: "ok", type: "result" }),
+      JSON.stringify({ id: 123, type: "row", value: "preserve me" }),
+    ].join("\n");
+
+    expect(looksLikeCursorAgentStreamJson(stdout)).toBe(false);
+    expect(formatCodingAgentBashStdout(stdout, { exitCode: 0 })).toBe(stdout);
+  });
+
+  test("requires a complete init event before Cursor activity", () => {
+    const initEvent = {
+      cwd: "/tmp/repo",
+      model: "composer-2",
+      subtype: "init",
+      type: "system",
+    };
+    const activityEvent = { result: "done", type: "result" };
+
+    const invalidStreams = [
+      [activityEvent, initEvent],
+      [{ ...initEvent, model: undefined }, activityEvent],
+      [{ ...initEvent, cwd: undefined }, activityEvent],
+      [initEvent],
+    ];
+    for (const events of invalidStreams) {
+      const stdout = events.map((event) => JSON.stringify(event)).join("\n");
+      expect(looksLikeCursorAgentStreamJson(stdout)).toBe(false);
+    }
+  });
+
+  test("requires at least 80 percent parseable NDJSON lines", () => {
+    const initEvent = JSON.stringify({
+      cwd: "/tmp/repo",
+      model: "composer-2",
+      subtype: "init",
+      type: "system",
+    });
+    const resultEvent = JSON.stringify({
+      result: "done",
+      subtype: "success",
+      type: "result",
+    });
+    const validData = JSON.stringify({ status: "ordinary" });
+    const atThreshold = [
+      initEvent,
+      resultEvent,
+      validData,
+      validData,
+      "not-json",
+    ].join("\n");
+    const belowThreshold = [initEvent, resultEvent, validData, "not-json"].join(
+      "\n"
+    );
+
+    expect(looksLikeCursorAgentStreamJson(atThreshold)).toBe(true);
+    expect(looksLikeCursorAgentStreamJson(belowThreshold)).toBe(false);
+  });
+
   test("summarizes assistant text, tools, and result from the end of a long stream", () => {
     const noise = Array.from({ length: 200 }, (_, i) =>
       JSON.stringify({

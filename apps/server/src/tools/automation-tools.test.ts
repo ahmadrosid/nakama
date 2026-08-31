@@ -57,6 +57,21 @@ function getRunAutomationTool(
   return tool;
 }
 
+function getCreateAutomationTool(
+  service: AutomationService,
+  runner: AutomationRunner
+) {
+  const tool = createAutomationTools(service, runner).find(
+    (entry) => entry.name === "create_automation"
+  );
+
+  if (!tool) {
+    throw new Error("create_automation tool not found");
+  }
+
+  return tool;
+}
+
 function getPreviousAutomationRunsTool(service: AutomationService) {
   const tool = createAutomationRunHistoryTools(service).find(
     (entry) => entry.name === "list_previous_automation_runs"
@@ -339,6 +354,163 @@ describe("create_automation tool", () => {
     }
   });
 
+  test("defaults profileId to the chat session profile", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "unused",
+    } as never);
+    const tool = getCreateAutomationTool(service, runner);
+
+    const created = (await tool.run(
+      {
+        description: "Digest",
+        name: "Session digest",
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+      },
+      { ...TOOL_CONTEXT, orgRole: "member" } as never
+    )) as { id: string; profileId: string };
+
+    expect(created.profileId).toBe(PROFILE_ID);
+    expect((await service.get(created.id, ORG_ID))?.profileId).toBe(PROFILE_ID);
+  });
+
+  test("treats blank profileId as the session profile", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "unused",
+    } as never);
+    const tool = getCreateAutomationTool(service, runner);
+
+    const created = (await tool.run(
+      {
+        description: "Digest",
+        name: "Blank profile",
+        profileId: "   ",
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+      },
+      { ...TOOL_CONTEXT, orgRole: "member" } as never
+    )) as { profileId: string };
+
+    expect(created.profileId).toBe(PROFILE_ID);
+  });
+
+  test("binds an explicit non-super profileId", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+    const otherId = "profile_other";
+    await db.upsertProfile({
+      createdAt: now,
+      id: otherId,
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "unused",
+    } as never);
+    const tool = getCreateAutomationTool(service, runner);
+
+    const created = (await tool.run(
+      {
+        description: "Digest",
+        name: "Other digest",
+        profileId: otherId,
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+      },
+      { ...TOOL_CONTEXT, orgRole: "member" } as never
+    )) as { profileId: string };
+
+    expect(created.profileId).toBe(otherId);
+  });
+
+  test("denies Super Bot profileId for members", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+    const superId = "profile_super";
+    await db.upsertProfile({
+      createdAt: now,
+      id: superId,
+      isDefault: false,
+      isSuper: true,
+      model: null,
+      name: "Super Bot",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "unused",
+    } as never);
+    const tool = getCreateAutomationTool(service, runner);
+
+    await expect(
+      tool.run(
+        {
+          description: "Digest",
+          name: "Super digest",
+          profileId: superId,
+          prompt: "Summarize news",
+          trigger: { type: "manual" },
+        },
+        { ...TOOL_CONTEXT, orgRole: "member" } as never
+      )
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  test("list_automations includes profileId", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    await service.create(
+      ORG_ID,
+      {
+        description: "Digest",
+        name: "Digest",
+        prompt: "Summarize",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "unused",
+    } as never);
+    const tool = createAutomationTools(service, runner).find(
+      (entry) => entry.name === "list_automations"
+    );
+
+    if (!tool) {
+      throw new Error("list_automations tool not found");
+    }
+
+    const listed = (await tool.run({}, TOOL_CONTEXT as never)) as Array<{
+      profileId: string;
+    }>;
+    expect(listed[0]?.profileId).toBe(PROFILE_ID);
+  });
+
   test("persists discord delivery and optional channelId", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-tool-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -356,13 +528,7 @@ describe("create_automation tool", () => {
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
-    const tool = createAutomationTools(service, runner).find(
-      (entry) => entry.name === "create_automation"
-    );
-
-    if (!tool) {
-      throw new Error("create_automation tool not found");
-    }
+    const tool = getCreateAutomationTool(service, runner);
 
     const created = (await tool.run(
       {

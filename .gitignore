@@ -20,6 +20,10 @@ data/logs/*
 !.agents/skills/adhd-pr-description/**
 !.agents/skills/eli5/
 !.agents/skills/eli5/**
+!.agents/skills/lean-pr-review/
+!.agents/skills/lean-pr-review/**
+!.agents/skills/browser-video-proof/
+!.agents/skills/browser-video-proof/**
 apps/data/*
 .cursor/
 docs/plans/*

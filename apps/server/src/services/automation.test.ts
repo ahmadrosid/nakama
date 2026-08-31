@@ -127,6 +127,139 @@ describe("AutomationService", () => {
     expect(automation.description).toBe("run the tool");
   });
 
+  test("rebinds profileId on update and leaves binding when omitted", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+    const otherId = "profile_other";
+    await db.upsertProfile({
+      createdAt: now,
+      id: otherId,
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Digest",
+        name: "Digest",
+        prompt: "Summarize",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID,
+      { orgRole: "member" }
+    );
+
+    const rebound = await service.update(
+      automation.id,
+      ORG_ID,
+      { profileId: otherId },
+      { orgRole: "member" }
+    );
+    expect(rebound.profileId).toBe(otherId);
+
+    const unchanged = await service.update(
+      automation.id,
+      ORG_ID,
+      { name: "Digest 2" },
+      { orgRole: "member" }
+    );
+    expect(unchanged.profileId).toBe(otherId);
+    expect(unchanged.name).toBe("Digest 2");
+  });
+
+  test("rejects blank profileId on update", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Digest",
+        name: "Digest",
+        prompt: "Summarize",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    await expect(
+      service.update(automation.id, ORG_ID, { profileId: "   " })
+    ).rejects.toThrow("Profile id is required.");
+    expect((await service.get(automation.id, ORG_ID))?.profileId).toBe(
+      PROFILE_ID
+    );
+  });
+
+  test("rejects email delivery rebind when the new profile cannot send email", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+    const withEmail = "profile_email";
+    const withoutEmail = "profile_plain";
+
+    await db.upsertProfile({
+      createdAt: now,
+      id: withEmail,
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Mail Bot",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: withoutEmail,
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Plain Bot",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await assignComposeioGmailSender(db, withEmail);
+
+    const service = new AutomationService(db, {
+      canSendEmail: (profileId) =>
+        hasAutomationEmailDeliveryPath(db, profileId, {
+          loadConfig: async () => null,
+        }),
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        delivery: { channel: "email", to: "hey@ahmadrosid.com" },
+        description: "Digest",
+        name: "Digest",
+        prompt: "Summarize",
+        trigger: { type: "manual" },
+      },
+      withEmail
+    );
+
+    await expect(
+      service.update(automation.id, ORG_ID, { profileId: withoutEmail })
+    ).rejects.toThrow("Email is not configured");
+    expect((await service.get(automation.id, ORG_ID))?.profileId).toBe(
+      withEmail
+    );
+  });
+
   test("defaults schedule timezone from user config", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {

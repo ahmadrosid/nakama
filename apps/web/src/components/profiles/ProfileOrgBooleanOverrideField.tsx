@@ -1,22 +1,17 @@
 import type {
   ProfileDetail,
+  ProfileSummary,
   UpdateProfileRequest,
 } from "@nakama/core/contract";
+import { resolveProfileOrgBooleanOverride } from "@nakama/core/skills/profile-org-override";
 import { useState } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/use-auth";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { toast } from "@/lib/toast";
-
-type OverrideValue = "inherit" | "on" | "off";
 
 type OverrideField = keyof Pick<
   UpdateProfileRequest,
@@ -25,24 +20,66 @@ type OverrideField = keyof Pick<
   | "skillsCuratorConsolidateEnabled"
 >;
 
-function toOverrideValue(value: boolean | null | undefined): OverrideValue {
+function toStoredOverride(value: boolean | null | undefined): boolean | null {
   if (value === true) {
-    return "on";
-  }
-  if (value === false) {
-    return "off";
-  }
-  return "inherit";
-}
-
-function fromOverrideValue(value: OverrideValue): boolean | null {
-  if (value === "on") {
     return true;
   }
-  if (value === "off") {
+  if (value === false) {
     return false;
   }
   return null;
+}
+
+function BooleanOverrideSwitch({
+  busy,
+  checked,
+  disabled,
+  id,
+  label,
+  overridden,
+  onCheckedChange,
+  onReset,
+}: {
+  busy: boolean;
+  checked: boolean;
+  disabled: boolean;
+  id?: string;
+  label: string;
+  overridden: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <label
+        className="min-w-0 text-balance font-medium text-foreground text-sm"
+        htmlFor={id}
+      >
+        {label}
+      </label>
+      <div className="flex shrink-0 items-center gap-2">
+        {overridden ? (
+          <Button
+            disabled={disabled || busy}
+            onClick={onReset}
+            size="xs"
+            type="button"
+            variant="ghost"
+          >
+            Use org default
+          </Button>
+        ) : null}
+        {busy ? <Spinner /> : null}
+        <Switch
+          aria-label={label}
+          checked={checked}
+          disabled={disabled || busy}
+          id={id}
+          onCheckedChange={onCheckedChange}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function ProfileOrgBooleanOverrideField({
@@ -51,16 +88,12 @@ export function ProfileOrgBooleanOverrideField({
   field,
   id,
   label,
-  offLabel,
-  onLabel,
   savedToast,
 }: {
   disabled?: boolean;
   field: OverrideField;
   id: string;
   label: string;
-  offLabel: string;
-  onLabel: string;
   profile: ProfileDetail;
   savedToast: string;
 }) {
@@ -71,10 +104,110 @@ export function ProfileOrgBooleanOverrideField({
       id={id}
       key={`${profile.id}:${field}:${String(profile[field])}`}
       label={label}
-      offLabel={offLabel}
-      onLabel={onLabel}
       profile={profile}
       savedToast={savedToast}
+    />
+  );
+}
+
+/** Org settings: one switch per profile. */
+export function OrgSettingsProfileBooleanOverrideField({
+  profiles,
+  disabled = false,
+  field,
+  savedToast,
+}: {
+  disabled?: boolean;
+  field: OverrideField;
+  profiles: ProfileSummary[];
+  savedToast: string;
+}) {
+  if (profiles.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul className="divide-y divide-border">
+      {profiles.map((profile) => (
+        <li className="px-4 py-3" key={profile.id}>
+          <OrgSettingsProfileOverrideSwitch
+            disabled={disabled}
+            field={field}
+            key={`${profile.id}:${field}:${String(profile[field])}`}
+            profile={profile}
+            savedToast={savedToast}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function useProfileBooleanOverride(
+  profile: ProfileDetail | ProfileSummary,
+  field: OverrideField,
+  savedToast: string
+) {
+  const { activeOrg } = useAuth();
+  const updateMutation = useUpdateProfileMutation();
+  const [override, setOverride] = useState<boolean | null>(() =>
+    toStoredOverride(profile[field])
+  );
+  const busy = updateMutation.isPending;
+  const orgOn = activeOrg?.[field] === true;
+  const checked = resolveProfileOrgBooleanOverride(override, orgOn);
+  const overridden = override !== null;
+
+  async function persist(next: boolean | null) {
+    const previous = override;
+    setOverride(next);
+    try {
+      await updateMutation.mutateAsync({
+        input: { [field]: next },
+        profileId: profile.id,
+      });
+      toast(savedToast);
+    } catch (err) {
+      setOverride(previous);
+      toast(formatError(err));
+    }
+  }
+
+  return {
+    busy,
+    checked,
+    overridden,
+    persist,
+    role: activeOrg?.role,
+  };
+}
+
+function OrgSettingsProfileOverrideSwitch({
+  profile,
+  disabled = false,
+  field,
+  savedToast,
+}: {
+  disabled?: boolean;
+  field: OverrideField;
+  profile: ProfileSummary;
+  savedToast: string;
+}) {
+  const state = useProfileBooleanOverride(profile, field, savedToast);
+
+  return (
+    <BooleanOverrideSwitch
+      busy={state.busy}
+      checked={state.checked}
+      disabled={disabled}
+      label={profile.name}
+      onCheckedChange={(next) => {
+        void state.persist(next);
+      }}
+      onReset={() => {
+        void state.persist(null);
+      }}
+      overridden={state.overridden}
     />
   );
 }
@@ -85,74 +218,35 @@ function ProfileOrgBooleanOverrideFieldBody({
   field,
   id,
   label,
-  offLabel,
-  onLabel,
   savedToast,
 }: {
   disabled?: boolean;
   field: OverrideField;
   id: string;
   label: string;
-  offLabel: string;
-  onLabel: string;
   profile: ProfileDetail;
   savedToast: string;
 }) {
-  const { activeOrg } = useAuth();
-  const updateMutation = useUpdateProfileMutation();
-  const [value, setValue] = useState<OverrideValue>(() =>
-    toOverrideValue(profile[field])
-  );
-  const busy = updateMutation.isPending;
+  const state = useProfileBooleanOverride(profile, field, savedToast);
 
-  if (!activeOrg || activeOrg.role !== "admin") {
+  if (state.role !== "admin") {
     return null;
   }
 
-  async function handleChange(nextValue: OverrideValue) {
-    setValue(nextValue);
-    try {
-      await updateMutation.mutateAsync({
-        input: { [field]: fromOverrideValue(nextValue) },
-        profileId: profile.id,
-      });
-      toast(savedToast);
-    } catch (err) {
-      setValue(toOverrideValue(profile[field]));
-      toast(formatError(err));
-    }
-  }
-
   return (
-    <div>
-      <label
-        className="mb-1 block text-balance font-medium text-muted-foreground text-xs"
-        htmlFor={id}
-      >
-        {label}
-      </label>
-      <div className="flex items-center gap-2">
-        <Select
-          disabled={disabled || busy}
-          onValueChange={(next) => {
-            if (!next) {
-              return;
-            }
-            void handleChange(next as OverrideValue);
-          }}
-          value={value}
-        >
-          <SelectTrigger className="max-w-xs" id={id}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="inherit">Inherit org default</SelectItem>
-            <SelectItem value="on">{onLabel}</SelectItem>
-            <SelectItem value="off">{offLabel}</SelectItem>
-          </SelectContent>
-        </Select>
-        {busy ? <Spinner /> : null}
-      </div>
-    </div>
+    <BooleanOverrideSwitch
+      busy={state.busy}
+      checked={state.checked}
+      disabled={disabled}
+      id={id}
+      label={label}
+      onCheckedChange={(next) => {
+        void state.persist(next);
+      }}
+      onReset={() => {
+        void state.persist(null);
+      }}
+      overridden={state.overridden}
+    />
   );
 }

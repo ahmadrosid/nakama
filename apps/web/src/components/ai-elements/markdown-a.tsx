@@ -55,7 +55,7 @@ function SafeMarkdownLink({
       }
       event.preventDefault();
       if (linkSafety.onLinkCheck && (await linkSafety.onLinkCheck(href))) {
-        window.open(href, "_blank", "noreferrer");
+        window.open(href, "_blank", "noopener,noreferrer");
         return;
       }
       setOpen(true);
@@ -65,7 +65,7 @@ function SafeMarkdownLink({
 
   const onConfirm = useCallback(() => {
     if (href) {
-      window.open(href, "_blank", "noreferrer");
+      window.open(href, "_blank", "noopener,noreferrer");
     }
   }, [href]);
 
@@ -109,7 +109,7 @@ function SafeMarkdownLink({
       data-incomplete={incomplete || undefined}
       data-streamdown="link"
       href={href}
-      rel="noreferrer"
+      rel="noopener noreferrer"
       target="_blank"
       {...rest}
     >

@@ -18,13 +18,15 @@ An automation is a name, a prompt, a profile, and one trigger:
 | `schedule` | 5-field cron plus a timezone | Every time the cron matches |
 | `runAt` | an ISO timestamp plus a timezone | Once, at that instant |
 
+The **profile** is which agent soul, tools, and skills the run uses. Edit an automation to pick a different profile; the detail view shows the bound profile name. Creating from the API without a `profileId` uses the org default profile. Creating from chat without a `profileId` uses the chat profile. Members cannot bind Super Bot.
+
 Cron is validated on save, so a malformed expression is rejected rather than silently never firing. The timezone defaults to the one in your user config. `nextRunAt` is computed from the cron and shown in the list, which is the fastest way to check that a schedule means what you think it means.
 
 A `runAt` automation whose timestamp has already passed is not scheduled. Disabled automations are not scheduled either, whatever their trigger.
 
 ### The worker
 
-Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Status** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
+Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Workers** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
 
 See [Docker](/docker) for how the worker is started in a container.
 
@@ -64,7 +66,7 @@ A task is a title, a description, a prompt, and a status: `todo`, `in_progress`,
 
 ## Permissions
 
-Creating or changing an automation or a task requires a non-viewer role. A caller-supplied `profileId` is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Bot profile. See [Multi-tenancy](/multi-tenancy) for the role model.
+Creating or changing an automation or a task requires a non-viewer role. A caller-supplied `profileId` on create or update is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Bot profile. See [Multi-tenancy](/multi-tenancy) for the role model.
 
 ## API
 

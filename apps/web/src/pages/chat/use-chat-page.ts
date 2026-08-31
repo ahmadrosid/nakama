@@ -42,16 +42,19 @@ import {
   buildNewChatPath,
   type ChatListItem,
   chatMessagesToListItems,
+  clearFailedChatTurn,
   consumeStoredChatDraft,
   isReadOnlySessionChannel,
   parseChatRouteParams,
   pickKnownProfileId,
+  readFailedChatTurn,
   readInitialDraftChatProfileId,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
   readStoredActiveChatProfileId,
   resolveDefaultProfileId,
   sessionStorageKey,
+  storeFailedChatTurn,
 } from "@/lib/chat-history";
 import {
   filePartsToDisplayDocuments,
@@ -89,8 +92,12 @@ import {
   shouldShowThinkingEffort,
 } from "@/lib/thinking-settings";
 import {
+  appendFailedTurnIfNeeded,
+  findFailedRetryPrompt,
   findRetryCheckpoint,
   findRetryPrompt,
+  markStreamingTurnFailed,
+  messagesWithoutFailedTurn,
 } from "@/pages/chat/chat-page.shared";
 
 interface SendMessageOptions {
@@ -471,6 +478,13 @@ export function useChatPage() {
         } = await client.getSessionMessages(sessionId);
         const nextSession = client.createChatSession(sessionId, channel);
         let listItems = chatMessagesToListItems(storedMessages, messageMeta);
+        const storedFailedTurn =
+          channel === "web" ? readFailedChatTurn(sessionId) : null;
+
+        if (storedFailedTurn) {
+          listItems = appendFailedTurnIfNeeded(listItems, storedFailedTurn);
+        }
+
         setProfileId(nextProfileId);
         setSessionChannel(channel);
         setSession(nextSession);
@@ -479,6 +493,7 @@ export function useChatPage() {
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
         setContextUsage(nextContextUsage ?? null);
+        setError(null);
         syncChatUrl(nextProfileId, sessionId);
 
         if (channel === "web") {
@@ -504,9 +519,23 @@ export function useChatPage() {
             });
 
             const refreshed = await client.getSessionMessages(sessionId);
-            setMessages(
-              chatMessagesToListItems(refreshed.messages, refreshed.messageMeta)
+            let refreshedItems = chatMessagesToListItems(
+              refreshed.messages,
+              refreshed.messageMeta
             );
+            const failedAfterReconnect = readFailedChatTurn(sessionId);
+
+            if (failedAfterReconnect && !reconnected) {
+              refreshedItems = appendFailedTurnIfNeeded(
+                refreshedItems,
+                failedAfterReconnect
+              );
+            } else if (reconnected) {
+              clearFailedChatTurn(sessionId);
+              setError(null);
+            }
+
+            setMessages(refreshedItems);
             setAgentTodos(refreshed.todos);
             setAgentQuestionnaire(refreshed.questionnaire);
             setContextUsage(refreshed.contextUsage ?? null);
@@ -514,10 +543,6 @@ export function useChatPage() {
 
             if (reconnected) {
               setLastSuccessfulTurnAt(Date.now());
-            }
-
-            if (!(reconnected || status.active)) {
-              setError(null);
             }
           }
         }
@@ -563,13 +588,17 @@ export function useChatPage() {
 
   const handleProfileSwitch = useCallback(
     (nextProfileId: string) => {
-      if (!nextProfileId || nextProfileId === profileId || busy) {
+      if (
+        !nextProfileId ||
+        nextProfileId === profileIdRef.current ||
+        busyRef.current
+      ) {
         return;
       }
       setProfileId(nextProfileId);
       enterDraftChat(nextProfileId);
     },
-    [profileId, busy, enterDraftChat]
+    [enterDraftChat]
   );
 
   useEffect(
@@ -780,6 +809,7 @@ export function useChatPage() {
           contextUsage: nextContextUsage,
           model: nextSessionModel,
         } = await client.getSessionMessages(activeSession.id);
+        clearFailedChatTurn(activeSession.id);
         setMessages(chatMessagesToListItems(storedMessages, messageMeta));
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
@@ -826,10 +856,13 @@ export function useChatPage() {
           }
         }
 
-        setError(message);
-        setMessages((current) =>
-          current.filter((message) => !message.streaming)
-        );
+        // Turn failures live in the Failed bubble; composer error stays for
+        // non-turn issues (attachments, session expired, validation, etc.).
+        setError(null);
+        if (activeSession && text.trim()) {
+          storeFailedChatTurn(activeSession.id, { error: message, text });
+        }
+        setMessages((current) => markStreamingTurnFailed(current, message));
       } finally {
         streamAbortRef.current = null;
         setCanStop(false);
@@ -904,6 +937,40 @@ export function useChatPage() {
   const handleTryAgainMessage = useCallback(
     async (message: ChatListItem) => {
       if (busy || !profileId) {
+        return;
+      }
+
+      if (message.failed) {
+        const prompt = findFailedRetryPrompt(messages, message);
+
+        if (!prompt?.content.trim()) {
+          setError("Could not find a prompt to retry.");
+          return;
+        }
+
+        if (prompt.images?.length || prompt.documents?.length) {
+          setError("Retry is available for text-only prompts.");
+          return;
+        }
+
+        setBranchingMessageId(message.id);
+        setError(null);
+
+        try {
+          if (session) {
+            clearFailedChatTurn(session.id);
+          }
+
+          await sendMessage(prompt.content, [], {
+            initialMessages: messagesWithoutFailedTurn(messages, message),
+            sessionOverride: session ?? undefined,
+          });
+        } catch (err) {
+          setError(formatError(err));
+        } finally {
+          setBranchingMessageId(null);
+        }
+
         return;
       }
 

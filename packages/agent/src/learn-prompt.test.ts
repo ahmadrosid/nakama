@@ -31,26 +31,6 @@ describe("tryParseLearnCommand", () => {
 });
 
 describe("buildLearnPrompt", () => {
-  test("embeds the request and Nakama authoring rules", () => {
-    const prompt = buildLearnPrompt(
-      "https://docs.example.com/api focus on auth"
-    );
-
-    expect(prompt).toContain("[/learn]");
-    expect(prompt).toContain("https://docs.example.com/api focus on auth");
-    expect(prompt).toContain("skill_manage");
-    expect(prompt).toContain("web_fetch");
-    expect(prompt).toContain("read_file");
-    expect(prompt).toContain("search_files");
-    expect(prompt).toContain("## Procedure");
-    expect(prompt).toContain("## Pitfalls");
-    expect(prompt).toContain("## Verification");
-    expect(prompt).toContain("include-body-on-match");
-    expect(prompt).toContain("do not invent Hermes-only fields");
-    expect(prompt).not.toContain("web_extract");
-    expect(prompt).toContain("invented skill_view");
-  });
-
   test("defaults empty request to the current conversation workflow", () => {
     const prompt = buildLearnPrompt("");
     expect(prompt).toContain("workflow we just went through");

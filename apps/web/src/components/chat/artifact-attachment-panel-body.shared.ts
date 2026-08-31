@@ -147,6 +147,8 @@ export function artifactPanelBodyClassName({
   if (!isMarkdown || previewMode === "source") {
     return "flex flex-col overflow-hidden p-0";
   }
+
+  return "artifact-preview-panel";
 }
 
 export function artifactPanelSubtitle({

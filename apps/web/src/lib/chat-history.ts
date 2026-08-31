@@ -16,6 +16,7 @@ import {
   extractWebSearchBlocksFromProviderContent,
   WEB_SEARCH_TOOL_NAME,
 } from "@/lib/chat-stream-web-search";
+import { createClientId } from "@/lib/client-id";
 
 export interface RequestedChatSession {
   profileId: string;
@@ -33,7 +34,7 @@ export function buildChatBasePath(): string {
  * query string or the remounted page falls back to the default profile.
  */
 export function buildNewChatPath(profileId?: string | null): string {
-  const params = new URLSearchParams({ _: String(Date.now()), new: "1" });
+  const params = new URLSearchParams({ new: "1" });
   if (profileId) {
     params.set("profile", profileId);
   }
@@ -96,7 +97,7 @@ export function consumeStoredChatDraft(key: string): string | null {
 }
 
 export function storeChatDraft(draft: string): string {
-  const key = `d${Date.now()}`;
+  const key = createClientId();
   sessionStorage.setItem(`${CHAT_DRAFT_STORAGE_PREFIX}${key}`, draft);
   return key;
 }
@@ -305,6 +306,8 @@ export interface ChatListItem {
   content: string;
   createdAt?: string;
   documents?: Array<{ filename: string; mediaType: string }>;
+  /** Client-only: turn failed (e.g. upstream 429); not part of server history. */
+  failed?: boolean;
   historyIndex?: number;
   id: string;
   imageAttachments?: Array<{
@@ -326,6 +329,64 @@ export interface ChatListItem {
   toolInputAccumulatedJson?: string;
   toolResult?: unknown;
   toolStatus?: "running" | "done";
+}
+
+/** Survives reload so a failed web turn keeps a Retry affordance. */
+export interface FailedChatTurn {
+  error: string;
+  text: string;
+}
+
+const FAILED_CHAT_TURN_STORAGE_PREFIX = "nakama:failed-chat-turn:";
+
+export function storeFailedChatTurn(
+  sessionId: string,
+  turn: FailedChatTurn
+): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(
+    `${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`,
+    JSON.stringify(turn)
+  );
+}
+
+export function readFailedChatTurn(sessionId: string): FailedChatTurn | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+
+  const raw = localStorage.getItem(
+    `${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`
+  );
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<FailedChatTurn>;
+    const text = typeof parsed.text === "string" ? parsed.text : "";
+    const error = typeof parsed.error === "string" ? parsed.error.trim() : "";
+
+    if (!(text.trim() && error)) {
+      return null;
+    }
+
+    return { error, text };
+  } catch {
+    return null;
+  }
+}
+
+export function clearFailedChatTurn(sessionId: string): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(`${FAILED_CHAT_TURN_STORAGE_PREFIX}${sessionId}`);
 }
 
 export function sessionStorageKey(profileId: string): string {
@@ -489,7 +550,8 @@ export function formatSessionTimestamp(value: string): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    // Never echo unparsed input into the UI (session startedAt is API-controlled).
+    return "Unknown time";
   }
 
   return date.toLocaleString(undefined, {
@@ -512,7 +574,7 @@ function formatRelativeTime(value: string, tense: "past" | "future"): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return "Unknown time";
   }
 
   const deltaMs =

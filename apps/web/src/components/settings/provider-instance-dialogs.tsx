@@ -228,6 +228,61 @@ export function ProviderCompatibleEditDialog({
   );
 }
 
+export function ProviderRemoveDialog({
+  open,
+  label,
+  isSole,
+  busy,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  label: string;
+  isSole: boolean;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!(nextOpen || busy)) {
+          onOpenChange(false);
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove provider?</DialogTitle>
+          <DialogDescription>
+            {isSole ? "This is your only LLM provider. " : null}
+            Models using {label} will stop working. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {busy ? <Spinner className="size-4" /> : "Remove"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProviderManageModelsDialog({
   open,
   busy,

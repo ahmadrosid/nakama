@@ -8,22 +8,59 @@
 const MAX_SUMMARY_CHARS = 24_000;
 const MAX_ASSISTANT_CHARS = 12_000;
 const MAX_TOOL_LINES = 40;
+const MIN_CURSOR_AGENT_JSON_LINE_RATIO = 0.8;
+const CURSOR_AGENT_ACTIVITY_TYPES = new Set([
+  "assistant",
+  "tool_call",
+  "result",
+]);
 
 export function looksLikeCursorAgentStreamJson(stdout: string): boolean {
-  const sample = stdout.slice(0, 4000);
-  if (!sample.includes('"type"')) {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
     return false;
   }
 
+  let parsedLineCount = 0;
+  let firstParsedObject: Record<string, unknown> | null = null;
+  let hasActivityEvent = false;
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    parsedLineCount += 1;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      continue;
+    }
+
+    const event = parsed as Record<string, unknown>;
+    if (!firstParsedObject) {
+      firstParsedObject = event;
+      continue;
+    }
+
+    const type = event.type;
+    if (typeof type === "string" && CURSOR_AGENT_ACTIVITY_TYPES.has(type)) {
+      hasActivityEvent = true;
+    }
+  }
+
+  const hasInitEvent =
+    firstParsedObject?.type === "system" &&
+    firstParsedObject.subtype === "init" &&
+    typeof firstParsedObject.model === "string" &&
+    typeof firstParsedObject.cwd === "string";
   return (
-    sample.includes('"type":"system"') ||
-    sample.includes('"type": "system"') ||
-    sample.includes('"type":"assistant"') ||
-    sample.includes('"type": "assistant"') ||
-    sample.includes('"type":"tool_call"') ||
-    sample.includes('"type": "tool_call"') ||
-    sample.includes('"type":"result"') ||
-    sample.includes('"type": "result"')
+    hasInitEvent &&
+    hasActivityEvent &&
+    parsedLineCount / lines.length >= MIN_CURSOR_AGENT_JSON_LINE_RATIO
   );
 }
 

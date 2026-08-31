@@ -112,9 +112,9 @@ describe("legacy profile id migration", () => {
           ('profile_default', 'skill_test'),
           ('profile_super_bot', 'skill_test');
 
-        INSERT INTO sessions (id, profile_id, channel, created_at, title, agent_todos) VALUES
-          ('session_default', 'profile_default', 'cli', '2026-06-19T00:00:00.000Z', NULL, '[]'),
-          ('session_super', 'profile_super_bot', 'cli', '2026-06-19T00:00:00.000Z', NULL, '[]');
+        INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, title, agent_todos) VALUES
+          ('session_default', 'profile_default', 'cli', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z', NULL, '[]'),
+          ('session_super', 'profile_super_bot', 'cli', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z', NULL, '[]');
 
         INSERT INTO tasks (
           id,
@@ -324,6 +324,50 @@ describe("coding-delegation skill rename migration", () => {
       db.close();
     }
   });
+
+  test("rolls back the whole merge when one legacy row fails to delete", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
+        VALUES ('super_bot', 'Super Bot', '', NULL, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES
+          ('skill_legacy_a', 'coding-delegation', 'Legacy A', '/tmp/a/coding-delegation/SKILL.md', 0, 0, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('skill_legacy_b', 'coding-delegation', 'Legacy B', '/tmp/b/coding-delegation/SKILL.md', 0, 0, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('skill_canonical', 'coding-agent', 'Coding agent', '/tmp/c/coding-agent/SKILL.md', 0, 0, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        -- The merge deletes legacy rows one at a time, so aborting on the
+        -- second one leaves the first already gone unless the step is atomic.
+        CREATE TRIGGER fail_second_legacy_delete
+        BEFORE DELETE ON skills
+        WHEN OLD.id = 'skill_legacy_b'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced migration failure');
+        END;
+      `);
+
+      expect(() => migrateDatabase(db)).toThrow();
+
+      const remaining = db
+        .prepare(
+          "SELECT id FROM skills WHERE name = 'coding-delegation' ORDER BY id"
+        )
+        .all() as Array<{ id: string }>;
+      expect(remaining).toEqual([
+        { id: "skill_legacy_a" },
+        { id: "skill_legacy_b" },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("install-wide name uniqueness", () => {
@@ -491,6 +535,7 @@ describe("chat session schema", () => {
         name: string;
       }>;
       expect(columns.some((column) => column.name === "model")).toBe(true);
+      expect(columns.some((column) => column.name === "updated_at")).toBe(true);
     } finally {
       db.close();
     }
@@ -577,6 +622,65 @@ describe("organization schema migration", () => {
       };
       expect(member.role).toBe("admin");
       expect(member.user_context).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rolls back profile org backfill when a related update fails", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES ('org_legacy', 'Legacy', 'legacy', '2026-01-01', '2026-01-01');
+
+        INSERT INTO profiles (
+          id, name, system_prompt, model, is_super, org_id, is_default,
+          created_at, updated_at
+        ) VALUES (
+          'default', 'Default', '', NULL, 0, NULL, 0,
+          '2026-01-01', '2026-01-01'
+        );
+
+        INSERT INTO automations (
+          id, name, version, definition, profile_id, org_id, enabled,
+          created_at, updated_at
+        ) VALUES (
+          'automation_legacy', 'Legacy', 1, '{}', 'default', NULL, 1,
+          '2026-01-01', '2026-01-01'
+        );
+
+        INSERT INTO tasks (
+          id, title, description, prompt, profile_id, org_id, status, position,
+          created_at, updated_at
+        ) VALUES (
+          'task_legacy', 'Legacy', '', 'prompt', 'default', NULL, 'backlog', 0,
+          '2026-01-01', '2026-01-01'
+        );
+
+        CREATE TRIGGER fail_task_org_backfill
+        BEFORE UPDATE OF org_id ON tasks
+        BEGIN
+          SELECT RAISE(ABORT, 'forced migration failure');
+        END;
+      `);
+
+      expect(() => migrateDatabase(db)).toThrow();
+      expect(
+        db
+          .prepare("SELECT org_id, is_default FROM profiles WHERE id = ?")
+          .get("default")
+      ).toEqual({ is_default: 0, org_id: null });
+      expect(
+        db
+          .prepare("SELECT org_id FROM automations WHERE id = ?")
+          .get("automation_legacy")
+      ).toEqual({ org_id: null });
+      expect(
+        db.prepare("SELECT org_id FROM tasks WHERE id = ?").get("task_legacy")
+      ).toEqual({ org_id: null });
     } finally {
       db.close();
     }

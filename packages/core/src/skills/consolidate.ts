@@ -109,10 +109,7 @@ export function classifyConsolidateEligibility(input: {
     return "not_agent";
   }
   if (isExemptFromConsolidate(input.skill)) {
-    return bundledSkillNames.has(input.skill.name) ||
-      input.skill.createdBy === "bundled"
-      ? "bundled"
-      : "global";
+    return bundledSkillNames.has(input.skill.name) ? "bundled" : "global";
   }
   if (input.pendingSkillNames?.has(input.skill.name)) {
     return "pending_proposal";

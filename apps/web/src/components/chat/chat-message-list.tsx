@@ -357,7 +357,13 @@ function AssistantTurn({
   const turnComplete = isAssistantTurnComplete(turnMessages);
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
   const showArtifacts = turnComplete && artifacts.length > 0;
-  const showActions = !streamActive && turnComplete && anchorMessage != null;
+  const showActions =
+    !streamActive &&
+    turnComplete &&
+    anchorMessage != null &&
+    !anchorMessage.failed;
+  const retryDisabled =
+    actionsDisabled || branchingMessageId === anchorMessage?.id;
 
   return (
     <div className="group mr-auto ml-0 flex w-full max-w-full flex-col items-start justify-start gap-3">
@@ -369,7 +375,9 @@ function AssistantTurn({
               : `text:${segment.message.id}`
           }
           modelLabel={modelLabel}
+          onRetryMessage={onRetryMessage}
           profileId={profileId}
+          retryDisabled={retryDisabled}
           segment={segment}
           showThinking={showThinking}
         />
@@ -474,6 +482,7 @@ function assistantTurnContent(messages: ChatListItem[]): string {
 function isBranchableAssistantMessage(message: ChatListItem): boolean {
   return (
     message.role === "assistant" &&
+    !message.failed &&
     !message.streaming &&
     typeof message.historyIndex === "number" &&
     Boolean(message.createdAt)

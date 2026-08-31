@@ -11,7 +11,6 @@ import type {
   SetupWizardProps,
 } from "@/components/setup-wizard/setup-wizard.shared";
 import { useAppContext } from "@/context/use-app-context";
-import { client } from "@/lib/client";
 import { pathForPage } from "@/lib/navigation";
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
@@ -23,16 +22,6 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(
     null
   );
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.location?.origin) {
-      return;
-    }
-
-    void client.updateWebPublicUrl(window.location.origin).catch(() => {
-      // Fresh install persists during POST /v1/auth/setup instead.
-    });
-  }, []);
 
   useEffect(() => {
     if (!userAlreadyConfigured && currentStep === 2 && !accountDraft) {

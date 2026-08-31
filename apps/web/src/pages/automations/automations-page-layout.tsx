@@ -66,7 +66,7 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
                   setSelectedId(String(value));
                 }
               }}
-              value={selectedId ?? undefined}
+              value={selectedId}
             >
               <SelectTrigger
                 aria-label="Selected automation"

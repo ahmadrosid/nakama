@@ -53,6 +53,7 @@ export const queryKeys = {
   profiles: {
     all: ["profiles"] as const,
     detail: (profileId: string) => ["profiles", profileId] as const,
+    history: (profileId: string) => ["profiles", profileId, "history"] as const,
   },
   providerModelDiscovery: (providerId: string) =>
     ["providers", providerId, "modelDiscovery"] as const,

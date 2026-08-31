@@ -135,11 +135,9 @@ export function SkillsCuratorOrgCard() {
         </div>
       </div>
       <div className="border-border border-b px-4 py-3">
-        <div className="flex items-start justify-between gap-4">
-          <p className="font-medium text-foreground text-sm">
-            Consolidate overlapping skills (LLM)
-          </p>
-          <div className="flex shrink-0 items-center gap-2 pt-0.5">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-foreground text-sm">Consolidate</p>
+          <div className="flex shrink-0 items-center gap-2">
             {busy ? <Spinner /> : null}
             <Switch
               aria-label="Enable skill consolidate"
@@ -224,19 +222,22 @@ export function SkillsCuratorOrgCard() {
         </div>
       ) : null}
       <div className="flex flex-col gap-3 px-4 py-3">
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-xs tabular-nums">
+          {latest?.dryRun ? "Preview · " : null}
           Last run{" "}
           {formatRunTime(lastRunAt ?? activeOrg.skillsCuratorLastRunAt)}
         </p>
         {latest ? (
-          <p className="text-muted-foreground text-xs">
-            {latest.dryRun ? "Preview" : "Last report"} · stale {latest.stale} ·
-            archived {latest.archived} · skipped{" "}
+          <p className="text-muted-foreground text-xs tabular-nums">
+            Stale {latest.stale} · Archived {latest.archived} · Skipped{" "}
             {latest.skippedBundled +
               latest.skippedAutomation +
               latest.skippedTooNew +
-              latest.skippedError}
-            {` · consolidate merged ${latest.consolidateMerged ?? 0} · deslop ${latest.consolidateDeslopified ?? 0} · staged ${latest.consolidateStaged ?? 0} · applied ${latest.consolidateApplied ?? 0}`}
+              latest.skippedError}{" "}
+            · Merged {latest.consolidateMerged ?? 0} · Deslop{" "}
+            {latest.consolidateDeslopified ?? 0} · Staged{" "}
+            {latest.consolidateStaged ?? 0} · Applied{" "}
+            {latest.consolidateApplied ?? 0}
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">

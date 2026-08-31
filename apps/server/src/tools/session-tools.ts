@@ -6,7 +6,7 @@ import {
 } from "@nakama/core";
 import type { AgentService } from "../services/agent-service";
 
-/** Matches `GET /v1/sessions` — optional channel, default web. */
+/** Tool-side default when the model omits channel; HTTP list requires an explicit channel. */
 const DEFAULT_CHANNEL: AgentChannel = "web";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -75,7 +75,7 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
         properties: {
           channel: {
             description:
-              "Which channel's sessions to list. Defaults to web, the same default the sessions API uses.",
+              "Which channel's sessions to list. Defaults to web when omitted.",
             enum: [...AGENT_CHANNELS],
             type: "string",
           },

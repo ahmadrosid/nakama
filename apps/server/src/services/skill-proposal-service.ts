@@ -142,6 +142,11 @@ export class SkillProposalService {
       throw new NakamaApiError("Only pending proposals can be approved.", 400);
     }
 
+    const changeMeta = {
+      actorUserId: reviewerUserId,
+      source: "skill_manage" as const,
+    };
+
     if (proposal.action === "create") {
       const content = proposal.content;
       if (!content?.trim()) {
@@ -151,7 +156,8 @@ export class SkillProposalService {
       await skills.createAndAssignRawSkillToProfile(
         orgId,
         proposal.profileId,
-        content
+        content,
+        { changeMeta }
       );
     } else if (proposal.action === "patch") {
       const oldString = proposal.patchOldString;
@@ -167,7 +173,8 @@ export class SkillProposalService {
         proposal.profileId,
         proposal.skillName,
         oldString,
-        newString
+        newString,
+        changeMeta
       );
     } else if (proposal.action === "edit") {
       const content = proposal.content;
@@ -178,7 +185,8 @@ export class SkillProposalService {
         orgId,
         proposal.profileId,
         proposal.skillName,
-        content
+        content,
+        changeMeta
       );
       await this.archiveConsolidateLosers(orgId, proposal);
     } else if (proposal.action === "write_file") {
@@ -212,7 +220,8 @@ export class SkillProposalService {
       await skills.deleteAssignedProfileSkill(
         orgId,
         proposal.profileId,
-        proposal.skillName
+        proposal.skillName,
+        changeMeta
       );
     }
 

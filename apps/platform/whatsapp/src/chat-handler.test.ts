@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
-import { resetActiveStreamsForTests } from "@nakama/core/channel-active-stream";
+import {
+  hasActiveStreams,
+  resetActiveStreamsForTests,
+} from "@nakama/core/channel-active-stream";
 import { WhatsAppAuthStore } from "./auth-store";
-import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
+import {
+  createChatHandler,
+  resetChatLocksForTests,
+  withChatLock,
+} from "./chat-handler";
 import { SessionStore } from "./session-store";
 import {
   createMockClient,
@@ -1602,5 +1609,125 @@ describe("createChatHandler artifact delivery", () => {
         );
       }
     );
+  });
+});
+
+describe("stream cleanup", () => {
+  test("clears active stream after sendStream fails", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, getStreamControl } = createMockClient({
+        streaming: true,
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket, sent } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      const chatPromise = handleMessage({ jid: PAIRED_JID, text: "hello" });
+      const control = await waitForStreamControl(getStreamControl);
+      expect(hasActiveStreams()).toBe(true);
+
+      control.fail(new Error("provider down"));
+      await chatPromise;
+
+      expect(hasActiveStreams()).toBe(false);
+      expect(sent.some((message) => /provider down/i.test(message.text))).toBe(
+        true
+      );
+    });
+  });
+});
+
+describe("withChatLock", () => {
+  test("keeps the lock chain rejection-safe across a failed prior run", async () => {
+    const rejections: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+
+    try {
+      await expect(
+        withChatLock("wa-lock-a", async () => {
+          throw new Error("first failed");
+        })
+      ).rejects.toThrow("first failed");
+
+      let ranSecond = false;
+      await withChatLock("wa-lock-a", async () => {
+        ranSecond = true;
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(ranSecond).toBe(true);
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+});
+
+describe("createChatHandler session hot cache", () => {
+  test("reuses RemoteChatSession across messages without recreate", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      sessionStore.set(PAIRED_JID, {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket } = createMockSocket();
+
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as never,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage({ jid: PAIRED_JID, text: "one" });
+      await handleMessage({ jid: PAIRED_JID, text: "two" });
+
+      expect(calls.createSession).toBe(0);
+      expect(calls.createChatSession).toBe(1);
+      // 1 resolve validation + 1 artifact read per turn (hot path skips resolve getMessages)
+      expect(calls.getMessages).toBe(3);
+      expect(calls.sendStream).toBe(2);
+    });
   });
 });

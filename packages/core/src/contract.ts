@@ -1096,6 +1096,7 @@ export interface UpdateAutomationRequest {
   description?: string;
   enabled?: boolean;
   name?: string;
+  profileId?: string;
   prompt?: string;
   trigger?: AutomationTrigger;
 }
@@ -1856,6 +1857,39 @@ export interface UpdateProfileRequest {
   systemPrompt?: string;
 }
 
+export type ProfileChangeSource =
+  | "dashboard"
+  | "super_bot"
+  | "skill_manage"
+  | "pack_import";
+
+export type ProfileChangeField =
+  | "system_prompt"
+  | "soul.soul"
+  | "soul.style"
+  | "soul.instructions"
+  | "soul.memory"
+  | "tools"
+  | "skills"
+  | "mcp"
+  | "pack_import";
+
+export interface ProfileChangeEvent {
+  actorUserId: string | null;
+  afterValue: string | null;
+  beforeValue: string | null;
+  createdAt: string;
+  field: ProfileChangeField;
+  id: string;
+  orgId: string;
+  profileId: string;
+  source: ProfileChangeSource;
+}
+
+export interface ListProfileChangeHistoryResponse {
+  events: ProfileChangeEvent[];
+}
+
 export interface CreateToolRequest {
   description: string;
   handlerConfig?: unknown;
@@ -1995,7 +2029,13 @@ export interface PublicArtifactShareResponse {
 
 export type KnowledgeBaseDocumentStatus = "ready" | "failed";
 
+export type KnowledgeBaseDuplicateAction = "error" | "skip" | "replace";
+
+export type KnowledgeBaseUploadOutcome = "created" | "skipped" | "replaced";
+
 export interface KnowledgeBaseDocument {
+  /** SHA-256 hex of the stored file bytes. Optional on legacy manifests. */
+  contentHash?: string;
   error?: string;
   filename: string;
   id: string;
@@ -2023,10 +2063,13 @@ export interface ListKnowledgeBaseResponse {
 
 export interface UploadKnowledgeBaseRequest {
   document: DocumentAttachment;
+  /** Default `error` — reject duplicates so clients can warn / choose skip or replace. */
+  onDuplicate?: KnowledgeBaseDuplicateAction;
 }
 
 export interface UploadKnowledgeBaseResponse {
   document: KnowledgeBaseDocument;
+  outcome: KnowledgeBaseUploadOutcome;
   profileId: string;
 }
 
@@ -2211,6 +2254,8 @@ export interface ToolContext {
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;
+  /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
+  isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
   orgId?: string;

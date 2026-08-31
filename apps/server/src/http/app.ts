@@ -41,6 +41,15 @@ import { registerWorkerRoutes } from "./routes/workers";
 import { errorResponse } from "./shared";
 import type { HonoApp } from "./types";
 
+/**
+ * Hash of the theme bootstrap inlined in `apps/web/index.html`, which has to run
+ * before first paint and so cannot be an external file. Editing that script
+ * changes this value; `app.test.ts` recomputes it from the file and fails when
+ * the two drift, which is the only thing keeping this constant honest.
+ */
+const THEME_BOOTSTRAP_SCRIPT_HASH =
+  "sha256-rQ5OTxagyMHDDSQ6k5wlUK8gtuYxXBrpQGqjAcYBz2w=";
+
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
 
@@ -72,7 +81,7 @@ export function createHonoApp(options: ServerOptions) {
       }
       headers.set(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';"
+        `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
       );
       // Only enable HSTS if the request is secure (HTTPS)
       if (new URL(c.req.url).protocol === "https:") {

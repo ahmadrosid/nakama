@@ -1,10 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
 import type { UpdateWebPublicUrlRequest } from "@nakama/core/contract";
+import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import {
   getWebPublicUrlSettings,
   persistWebPublicUrl,
-  resolveRequestClientOrigin,
 } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
@@ -31,6 +31,8 @@ const DOCS_HTML = `<!doctype html>
 </html>
 `;
 
+const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_IDS);
+
 export function registerSystemRoutes(
   app: HonoApp,
   options: ServerOptions
@@ -39,6 +41,10 @@ export function registerSystemRoutes(
   const healthResponseSchema = z
     .object({
       apiVersion: z.number().int(),
+      builtinTools: z.array(z.string()).openapi({
+        description:
+          "Names of the built-in tools this build registers. The CLI reads it to tell a stale server from a current one before it has credentials.",
+      }),
       composioAvailable: z.boolean().openapi({
         description:
           "Whether Composio is reachable. Always false on /health (no live probe). Check GET /v1/system/status for the probed value.",
@@ -175,6 +181,7 @@ export function registerSystemRoutes(
     return c.json(
       {
         apiVersion: NAKAMA_API_VERSION,
+        builtinTools: BUILTIN_TOOL_NAMES,
         composioAvailable: false,
         composioConfigured,
         ok: true,
@@ -199,10 +206,10 @@ export function registerSystemRoutes(
   app.put("/v1/system/web-public-url", async (c) => {
     requireOrgAdminFromContext(c);
     const body = await readJson<UpdateWebPublicUrlRequest>(c.req.raw);
-    const webPublicUrl = resolveRequestClientOrigin(
-      c.req.raw,
-      body.webPublicUrl
-    );
+    // Only the body sets this. Falling back to Origin/Referer would let a header
+    // pin the base an OAuth code is delivered to, which is what #712 took away
+    // from the read path.
+    const webPublicUrl = body.webPublicUrl?.trim();
 
     if (!webPublicUrl) {
       return errorResponse("webPublicUrl is required.", 400);

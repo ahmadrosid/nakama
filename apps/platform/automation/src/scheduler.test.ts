@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { NakamaClient } from "@nakama/client";
 import type { AutomationSchedule } from "@nakama/core";
 import { AutomationWorkerScheduler } from "./scheduler";

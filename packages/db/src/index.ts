@@ -1,4 +1,3 @@
-import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import { createSqliteDatabase, type SqliteDatabase } from "./adapters/sqlite";
 import {
   type ResolveDatabasePathOptions,
@@ -6,8 +5,12 @@ import {
 } from "./database-url";
 import type { DatabaseAdapter } from "./types";
 
-export { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-export { createSqliteDatabase } from "./adapters/sqlite";
+/** Same as `createSqliteMemoryAdapter` — kept for existing test imports. */
+export {
+  createSqliteDatabase,
+  createSqliteMemoryAdapter,
+  createSqliteMemoryAdapter as createInMemoryDatabaseAdapter,
+} from "./adapters/sqlite";
 export * from "./automation-store";
 export * from "./constants";
 export type { ResolveDatabasePathOptions } from "./database-url";
@@ -31,11 +34,7 @@ export async function createDatabase(
   const databasePath = resolveDatabasePath(databaseUrl, options);
 
   if (databasePath === ":memory:") {
-    return {
-      adapter: createInMemoryDatabaseAdapter(),
-      close() {},
-      async reopen() {},
-    };
+    return createSqliteDatabase(":memory:");
   }
 
   return createSqliteDatabase(`file:${databasePath}`);

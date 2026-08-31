@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   channel TEXT NOT NULL,
   user_id TEXT,
   created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
   title TEXT,
   model TEXT,
   agent_todos TEXT DEFAULT '[]' NOT NULL,
@@ -496,3 +497,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_token_hash_unique ON artifact_
 CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_active_path_unique
   ON artifact_shares (org_id, profile_id, source_path)
   WHERE revoked_at IS NULL;
+
+-- Append-only profile change ledger (no UPDATE/DELETE API; cascade only with org/profile cleanup).
+CREATE TABLE IF NOT EXISTS profile_change_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  actor_user_id TEXT,
+  source TEXT NOT NULL,
+  field TEXT NOT NULL,
+  before_value TEXT,
+  after_value TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
+  ON profile_change_events (profile_id, created_at DESC);

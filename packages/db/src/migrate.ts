@@ -7,39 +7,50 @@ export function migrateDatabase(db: Database): void {
   const schemaPath = resolveSchemaPath();
   const sql = readFileSync(schemaPath, "utf8");
 
+  // Each step runs in its own transaction so a failure cannot leave one half
+  // applied. They deliberately do not share a single outer transaction: the
+  // schema sets `PRAGMA foreign_keys`, and migrateLegacyProfileIds toggles it
+  // and opens its own BEGIN, both of which SQLite ignores or rejects inside a
+  // transaction. Stopping between steps is safe because every step is
+  // idempotent and this runs on every open.
+  const atomic = (step: (database: Database) => void): void => {
+    db.transaction(() => step(db))();
+  };
+
   db.exec(sql);
-  migrateProfilesTable(db);
-  migrateAutomationsTable(db);
-  migrateTasksTable(db);
-  migrateSessionsTable(db);
-  migrateMcpTables(db);
-  migrateSkillsTables(db);
-  migrateUsersTable(db);
-  migrateOrgTables(db);
-  migrateOrgMemoryProposalsTable(db);
-  migrateSkillProposalsTable(db);
-  migrateSkillSuggestionsTable(db);
-  migrateSkillsWriteApprovalColumns(db);
-  migrateSkillsPostTurnReviewColumns(db);
-  migrateSkillsCuratorColumns(db);
-  migrateSkillsCuratorConsolidateColumns(db);
-  migrateOrganizationArchivedAt(db);
-  migrateSkillUsageTables(db);
-  migrateTenantOrgScope(db);
-  migrateSkillOrgIds(db);
-  migrateProfileOrgColumns(db);
-  migrateBrowserSessionsTable(db);
+  atomic(migrateProfilesTable);
+  atomic(migrateAutomationsTable);
+  atomic(migrateTasksTable);
+  atomic(migrateSessionsTable);
+  atomic(migrateMcpTables);
+  atomic(migrateSkillsTables);
+  atomic(migrateUsersTable);
+  atomic(migrateOrgTables);
+  atomic(migrateOrgMemoryProposalsTable);
+  atomic(migrateSkillProposalsTable);
+  atomic(migrateSkillSuggestionsTable);
+  atomic(migrateSkillsWriteApprovalColumns);
+  atomic(migrateSkillsPostTurnReviewColumns);
+  atomic(migrateSkillsCuratorColumns);
+  atomic(migrateSkillsCuratorConsolidateColumns);
+  atomic(migrateOrganizationArchivedAt);
+  atomic(migrateSkillUsageTables);
+  atomic(migrateTenantOrgScope);
+  atomic(migrateSkillOrgIds);
+  atomic(migrateProfileOrgColumns);
+  atomic(migrateBrowserSessionsTable);
   migrateLegacyProfileIds(db);
-  migrateCodingDelegationSkillName(db);
-  migrateWorkspaceSettingsTable(db);
-  migrateLlmUsageModelStatsTable(db);
-  migrateToolOutputSavingsTable(db);
-  migrateLlmTurnUsageTable(db);
-  migrateAttachmentsTable(db);
-  migrateAutomationRunsTable(db);
-  migrateAutomationRunReadStateTable(db);
-  migrateComposioTables(db);
-  migrateComposioUserConnections(db);
+  atomic(migrateCodingDelegationSkillName);
+  atomic(migrateWorkspaceSettingsTable);
+  atomic(migrateLlmUsageModelStatsTable);
+  atomic(migrateToolOutputSavingsTable);
+  atomic(migrateLlmTurnUsageTable);
+  atomic(migrateAttachmentsTable);
+  atomic(migrateAutomationRunsTable);
+  atomic(migrateAutomationRunReadStateTable);
+  atomic(migrateComposioTables);
+  atomic(migrateComposioUserConnections);
+  atomic(migrateProfileChangeEventsTable);
 }
 
 export function resolveSchemaPath(
@@ -796,55 +807,56 @@ function migrateSkillOrgIds(db: Database): void {
 }
 
 function migrateProfileOrgColumns(db: Database): void {
-  migrateProfilesTable(db);
+  db.transaction(() => {
+    migrateProfilesTable(db);
 
-  const firstOrg = db
-    .prepare("SELECT id FROM organizations ORDER BY id ASC LIMIT 1")
-    .get() as { id: string } | null;
+    const firstOrg = db
+      .prepare("SELECT id FROM organizations ORDER BY id ASC LIMIT 1")
+      .get() as { id: string } | null;
 
-  if (firstOrg) {
-    db.prepare(`
+    if (firstOrg) {
+      db.prepare(`
       UPDATE profiles
       SET org_id = ?
       WHERE org_id IS NULL
     `).run(firstOrg.id);
 
-    db.prepare(`
+      db.prepare(`
       UPDATE profiles
       SET is_default = 0
       WHERE org_id = ?
     `).run(firstOrg.id);
 
-    const defaultProfile = db
-      .prepare(`
+      const defaultProfile = db
+        .prepare(`
         SELECT id FROM profiles
         WHERE org_id = ? AND id = 'default'
         LIMIT 1
       `)
-      .get(firstOrg.id) as { id: string } | null;
-
-    if (defaultProfile) {
-      db.prepare(`
-        UPDATE profiles SET is_default = 1 WHERE id = ?
-      `).run(defaultProfile.id);
-    } else {
-      const anyProfile = db
-        .prepare(`
-          SELECT id FROM profiles WHERE org_id = ? ORDER BY created_at ASC LIMIT 1
-        `)
         .get(firstOrg.id) as { id: string } | null;
 
-      if (anyProfile) {
+      if (defaultProfile) {
         db.prepare(`
+        UPDATE profiles SET is_default = 1 WHERE id = ?
+      `).run(defaultProfile.id);
+      } else {
+        const anyProfile = db
+          .prepare(`
+          SELECT id FROM profiles WHERE org_id = ? ORDER BY created_at ASC LIMIT 1
+        `)
+          .get(firstOrg.id) as { id: string } | null;
+
+        if (anyProfile) {
+          db.prepare(`
           UPDATE profiles SET is_default = 1 WHERE id = ?
         `).run(anyProfile.id);
+        }
       }
+    } else {
+      db.prepare("DELETE FROM profiles WHERE org_id IS NULL").run();
     }
-  } else {
-    db.prepare("DELETE FROM profiles WHERE org_id IS NULL").run();
-  }
 
-  db.prepare(`
+    db.prepare(`
     UPDATE automations
     SET org_id = (
       SELECT org_id FROM profiles WHERE profiles.id = automations.profile_id
@@ -852,13 +864,14 @@ function migrateProfileOrgColumns(db: Database): void {
     WHERE org_id IS NULL
   `).run();
 
-  db.prepare(`
+    db.prepare(`
     UPDATE tasks
     SET org_id = (
       SELECT org_id FROM profiles WHERE profiles.id = tasks.profile_id
     )
     WHERE org_id IS NULL
   `).run();
+  })();
 }
 
 export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
@@ -1142,6 +1155,24 @@ function migrateSessionsTable(db: Database): void {
       ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users (id) ON DELETE SET NULL;
     `);
   }
+
+  if (!columnNames.has("updated_at")) {
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN updated_at TEXT;
+    `);
+    db.exec(`
+      UPDATE sessions
+      SET updated_at = COALESCE(
+        (
+          SELECT MAX(created_at)
+          FROM session_messages
+          WHERE session_id = sessions.id
+        ),
+        created_at
+      )
+      WHERE updated_at IS NULL;
+    `);
+  }
 }
 
 function migrateWorkspaceSettingsTable(db: Database): void {
@@ -1400,6 +1431,27 @@ function migrateComposioUserConnections(db: Database): void {
 
     normalizeToolkitStmt.run(now, toolkit.id);
   }
+}
+
+function migrateProfileChangeEventsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS profile_change_events (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL,
+      actor_user_id TEXT,
+      source TEXT NOT NULL,
+      field TEXT NOT NULL,
+      before_value TEXT,
+      after_value TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
+      ON profile_change_events (profile_id, created_at DESC);
+  `);
 }
 
 function migrateComposioTables(db: Database): void {

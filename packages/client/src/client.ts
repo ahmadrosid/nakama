@@ -65,6 +65,7 @@ import type {
   InitUserContextResponse,
   InstallSkillRequest,
   InviteOrgMemberRequest,
+  KnowledgeBaseDuplicateAction,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -76,6 +77,7 @@ import type {
   ListOrgMembersResponse,
   ListOrgMemoryHistoryResponse,
   ListOrgMemoryProposalsResponse,
+  ListProfileChangeHistoryResponse,
   ListProfileComposioToolkitsResponse,
   ListProfilesResponse,
   ListProvidersResponse,
@@ -686,6 +688,23 @@ export class NakamaClient {
     );
   }
 
+  async listProfileChangeHistory(
+    profileId: string,
+    options: { limit?: number; offset?: number } = {}
+  ): Promise<ListProfileChangeHistoryResponse> {
+    const query = new URLSearchParams();
+    if (options.limit !== undefined) {
+      query.set("limit", String(options.limit));
+    }
+    if (options.offset !== undefined) {
+      query.set("offset", String(options.offset));
+    }
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    return this.request<ListProfileChangeHistoryResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/history${suffix}`
+    );
+  }
+
   async createProfile(request: CreateProfileRequest): Promise<ProfileResponse> {
     return this.request<ProfileResponse>("/v1/profiles", {
       body: JSON.stringify(request),
@@ -1141,12 +1160,16 @@ export class NakamaClient {
 
   async uploadKnowledgeBaseDocument(
     profileId: string,
-    document: DocumentAttachment
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
   ): Promise<UploadKnowledgeBaseResponse> {
     return this.request<UploadKnowledgeBaseResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`,
       {
-        body: JSON.stringify({ document } satisfies UploadKnowledgeBaseRequest),
+        body: JSON.stringify({
+          document,
+          ...(onDuplicate ? { onDuplicate } : {}),
+        } satisfies UploadKnowledgeBaseRequest),
         method: "POST",
       }
     );

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   type AgentChatSession,
   type AgentHarness,
@@ -44,6 +45,7 @@ import type {
   InitSoulResponse,
   InitUserContextResponse,
   InstallSkillRequest,
+  KnowledgeBaseDuplicateAction,
   ListArtifactsOptions,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
@@ -156,6 +158,7 @@ import {
   rehydrateMessagesForProvider as rehydrateAttachmentMessages,
   rehydrateAttachmentRefsInContent,
   replaceImagePartsWithDescriptions,
+  resolveDiscordApplicationId,
   resolveOllamaHostMode,
   resolveSoulStackForProfile,
   saveComposioConfig,
@@ -168,9 +171,11 @@ import {
   saveUserTimezone,
   saveWhatsAppConfig,
   USER_CONTEXT_TEMPLATE,
+  WRITABLE_SOUL_FILES,
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
@@ -261,6 +266,11 @@ import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { OrgMemoryService } from "./org-memory-service";
+import type { ProfileChangeMeta } from "./profile-change-history";
+import {
+  recordProfileChangeEvent,
+  soulFieldFromKey,
+} from "./profile-change-history";
 import { ProfileService } from "./profile-service";
 import {
   applyProviderInstanceUpdate,
@@ -435,15 +445,18 @@ export class AgentService {
     return this.orgMemoryService;
   }
 
-  private async resolveOrgRole(
+  private async resolveSessionAccess(
     orgId: string | null | undefined,
     userId: string | null | undefined
-  ): Promise<OrgRole | null> {
-    if (!(orgId && userId)) {
-      return null;
-    }
-    const member = await this.db.getOrgMember(orgId, userId);
-    return member?.role ?? null;
+  ): Promise<{ isPlatformAdmin: boolean; orgRole: OrgRole | null }> {
+    const orgRole =
+      orgId && userId
+        ? ((await this.db.getOrgMember(orgId, userId))?.role ?? null)
+        : null;
+    const isPlatformAdmin = userId
+      ? Boolean((await this.db.getUserById(userId))?.isPlatformAdmin)
+      : false;
+    return { isPlatformAdmin, orgRole };
   }
 
   setAutomationTools(tools: ToolDefinition[]): void {
@@ -1053,6 +1066,29 @@ export class AgentService {
       throw new Error("Bot token is required.");
     }
 
+    if (botToken) {
+      try {
+        const path = [`bot${botToken}`, "getMe"]
+          .map(encodeURIComponent)
+          .join("/");
+        const response = await fetch(`https://api.telegram.org/${path}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        const payload = response.ok
+          ? ((await response.json()) as {
+              ok?: boolean;
+              result?: { is_bot?: boolean };
+            })
+          : null;
+
+        if (!(payload?.ok === true && payload.result?.is_bot === true)) {
+          throw new Error("Telegram rejected the bot token.");
+        }
+      } catch {
+        throw new Error("Telegram bot token could not be validated.");
+      }
+    }
+
     return saveTelegramConfig({
       ...(botToken ? { botToken } : {}),
       ...(input.allowedUserIds === undefined
@@ -1083,6 +1119,13 @@ export class AgentService {
 
     if (!(botToken || existing.configured)) {
       throw new Error("Bot token is required.");
+    }
+
+    if (
+      botToken &&
+      !(await resolveDiscordApplicationId(botToken, { forceRefresh: true }))
+    ) {
+      throw new Error("Discord bot token could not be validated.");
     }
 
     return saveDiscordConfig({
@@ -1621,7 +1664,8 @@ export class AgentService {
       sessionId,
       modelOverride,
       userId ?? null,
-      options?.orgRole
+      options?.orgRole,
+      options?.isPlatformAdmin
     );
 
     this.sessions.set(sessionId, {
@@ -1786,10 +1830,8 @@ export class AgentService {
       record.profileId
     );
 
-    const branchOrgRole = await this.resolveOrgRole(
-      profileOrgId,
-      record.userId
-    );
+    const { isPlatformAdmin: branchIsPlatformAdmin, orgRole: branchOrgRole } =
+      await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1797,7 +1839,8 @@ export class AgentService {
       nextSessionId,
       record.model,
       record.userId ?? null,
-      branchOrgRole
+      branchOrgRole,
+      branchIsPlatformAdmin
     );
     this.sessions.set(nextSessionId, {
       channel,
@@ -1884,10 +1927,8 @@ export class AgentService {
       record.profileId
     );
 
-    const resumeOrgRole = await this.resolveOrgRole(
-      profileOrgId,
-      record.userId
-    );
+    const { isPlatformAdmin: resumeIsPlatformAdmin, orgRole: resumeOrgRole } =
+      await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
@@ -1895,7 +1936,8 @@ export class AgentService {
       sessionId,
       record.model,
       record.userId ?? null,
-      resumeOrgRole
+      resumeOrgRole,
+      resumeIsPlatformAdmin
     );
 
     this.sessions.set(sessionId, {
@@ -2511,12 +2553,14 @@ export class AgentService {
   async updateProfile(
     orgId: string,
     profileId: string,
-    request: UpdateProfileRequest
+    request: UpdateProfileRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
     const response = await this.profileService.updateProfile(
       orgId,
       profileId,
-      request
+      request,
+      meta
     );
 
     if (request.model !== undefined) {
@@ -2657,33 +2701,42 @@ export class AgentService {
   async assignTool(
     orgId: string,
     profileId: string,
-    request: AssignToolRequest
+    request: AssignToolRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.assignTool(orgId, profileId, request);
+    return this.profileService.assignTool(orgId, profileId, request, meta);
   }
 
   async unassignTool(
     orgId: string,
     profileId: string,
-    toolId: string
+    toolId: string,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.unassignTool(orgId, profileId, toolId);
+    return this.profileService.unassignTool(orgId, profileId, toolId, meta);
   }
 
   async assignMcpServer(
     orgId: string,
     profileId: string,
-    request: { serverId: string }
+    request: { serverId: string },
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.assignMcpServer(orgId, profileId, request);
+    return this.profileService.assignMcpServer(orgId, profileId, request, meta);
   }
 
   async unassignMcpServer(
     orgId: string,
     profileId: string,
-    serverId: string
+    serverId: string,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.unassignMcpServer(orgId, profileId, serverId);
+    return this.profileService.unassignMcpServer(
+      orgId,
+      profileId,
+      serverId,
+      meta
+    );
   }
 
   async listSkills(): Promise<ListSkillsResponse> {
@@ -2741,17 +2794,19 @@ export class AgentService {
   async assignSkill(
     orgId: string,
     profileId: string,
-    request: AssignSkillRequest
+    request: AssignSkillRequest,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.assignSkill(orgId, profileId, request);
+    return this.profileService.assignSkill(orgId, profileId, request, meta);
   }
 
   async unassignSkill(
     orgId: string,
     profileId: string,
-    skillId: string
+    skillId: string,
+    meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.unassignSkill(orgId, profileId, skillId);
+    return this.profileService.unassignSkill(orgId, profileId, skillId, meta);
   }
 
   async uploadProfileAvatar(
@@ -2773,12 +2828,6 @@ export class AgentService {
     return this.profileService.getProfileAvatar(orgId, profileId);
   }
 
-  async getProfileAvatarByProfileId(
-    profileId: string
-  ): Promise<{ mediaType: string; bytes: Buffer }> {
-    return this.profileService.getProfileAvatarByProfileId(profileId);
-  }
-
   async deleteProfileAvatar(orgId: string, profileId: string): Promise<void> {
     return this.profileService.deleteProfileAvatar(orgId, profileId);
   }
@@ -2793,12 +2842,14 @@ export class AgentService {
   async uploadKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
-    document: DocumentAttachment
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
   ): Promise<UploadKnowledgeBaseResponse> {
     return this.profileService.uploadKnowledgeBaseDocument(
       orgId,
       profileId,
-      document
+      document,
+      onDuplicate
     );
   }
 
@@ -2878,7 +2929,8 @@ export class AgentService {
     orgId: string,
     profileId: string,
     key: string,
-    request: UpdateSoulFileRequest
+    request: UpdateSoulFileRequest,
+    meta?: ProfileChangeMeta
   ): Promise<void> {
     await this.requireProfile(orgId, profileId);
 
@@ -2886,10 +2938,35 @@ export class AgentService {
       throw new Error(`Invalid soul file key: ${key}`);
     }
 
-    await writeSoulFile(
-      getProfileSoulDir(orgId, profileId),
-      key,
-      request.content
+    const field = soulFieldFromKey(key);
+    const soulDir = getProfileSoulDir(orgId, profileId);
+    const before =
+      (await readTextIfExists(join(soulDir, WRITABLE_SOUL_FILES[key]))) ?? null;
+
+    await writeSoulFile(soulDir, key, request.content);
+
+    if (meta && field && before !== request.content) {
+      await recordProfileChangeEvent(this.db, {
+        actorUserId: meta.actorUserId,
+        afterValue: request.content,
+        beforeValue: before,
+        field,
+        orgId,
+        profileId,
+        source: meta.source,
+      });
+    }
+  }
+
+  async listProfileChangeHistory(
+    orgId: string,
+    profileId: string,
+    options: { limit?: number; offset?: number } = {}
+  ) {
+    return this.profileService.listProfileChangeHistory(
+      orgId,
+      profileId,
+      options
     );
   }
 
@@ -3250,7 +3327,8 @@ export class AgentService {
     sessionId: string,
     modelOverride: string | null,
     userId?: string | null,
-    orgRole?: OrgRole | null
+    orgRole?: OrgRole | null,
+    isPlatformAdmin?: boolean
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
@@ -3430,6 +3508,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         channel,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
+        isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
         orgId,
         orgRole: orgRole ?? undefined,

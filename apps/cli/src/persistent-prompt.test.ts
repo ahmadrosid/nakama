@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { PromptSuggestion } from "./commands";
-import { PersistentPrompt } from "./persistent-prompt";
+import {
+  MAX_BRACKETED_PASTE_BYTES,
+  PersistentPrompt,
+} from "./persistent-prompt";
 import type { PromptLineResult } from "./prompt";
 import type { TerminalInput } from "./terminal-input";
 import type { ComposerState, TerminalRenderer } from "./terminal-renderer";
@@ -14,8 +17,17 @@ class FakeRenderer implements Pick<TerminalRenderer, "setComposerState"> {
 }
 
 class FakeTerminalInput {
-  onInput(): () => void {
-    return () => {};
+  private listener: ((chunk: string) => void) | null = null;
+
+  onInput(listener: (chunk: string) => void): () => void {
+    this.listener = listener;
+    return () => {
+      this.listener = null;
+    };
+  }
+
+  emit(chunk: string): void {
+    this.listener?.(chunk);
   }
 }
 
@@ -23,6 +35,9 @@ describe("PersistentPrompt", () => {
   const prompts: PersistentPrompt[] = [];
   let stdoutWriteSpy: ReturnType<
     typeof spyOn<typeof process.stdout, "write">
+  > | null = null;
+  let stderrWriteSpy: ReturnType<
+    typeof spyOn<typeof process.stderr, "write">
   > | null = null;
 
   afterEach(() => {
@@ -33,6 +48,8 @@ describe("PersistentPrompt", () => {
     prompts.length = 0;
     stdoutWriteSpy?.mockRestore();
     stdoutWriteSpy = null;
+    stderrWriteSpy?.mockRestore();
+    stderrWriteSpy = null;
   });
 
   test("prefill renders suggestions for the inserted value", () => {
@@ -71,5 +88,39 @@ describe("PersistentPrompt", () => {
       ],
       value: "/model ",
     });
+  });
+
+  test("drops bracketed paste when the buffer exceeds the byte cap", () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const stderrChunks: string[] = [];
+    stderrWriteSpy = spyOn(process.stderr, "write").mockImplementation(((
+      chunk: string | Uint8Array
+    ) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+
+    const renderer = new FakeRenderer();
+    const terminalInput = new FakeTerminalInput();
+    const prompt = new PersistentPrompt({
+      onCancel: () => {},
+      onSubmit: () => {},
+      renderer,
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+
+    prompts.push(prompt);
+    prompt.start();
+    prompt.prefill("keep-me");
+
+    terminalInput.emit(`\x1b[200~${"a".repeat(MAX_BRACKETED_PASTE_BYTES + 1)}`);
+
+    expect(renderer.state?.value).toBe("keep-me");
+    expect(stderrChunks.join("")).toContain("256 KB");
+
+    terminalInput.emit("!");
+    expect(renderer.state?.value).toBe("keep-me!");
   });
 });

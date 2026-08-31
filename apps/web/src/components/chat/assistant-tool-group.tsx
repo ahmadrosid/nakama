@@ -1,4 +1,4 @@
-import { ArrowDown01Icon, Wrench01Icon } from "hugeicons-react";
+import { ArrowDown01Icon, Rotate02Icon, Wrench01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
+import { Button } from "@/components/ui/button";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
@@ -46,11 +47,15 @@ export function AssistantTurnSegmentView({
   showThinking = true,
   modelLabel,
   profileId,
+  onRetryMessage,
+  retryDisabled = false,
 }: {
   segment: AssistantTurnSegment;
   showThinking?: boolean;
   modelLabel?: string | null;
   profileId?: string | null;
+  onRetryMessage?: (message: ChatListItem) => void;
+  retryDisabled?: boolean;
 }) {
   if (segment.kind === "work") {
     return (
@@ -72,7 +77,15 @@ export function AssistantTurnSegmentView({
         {showThinking && segment.thinking ? (
           <ThinkingBlock message={segment.thinking} />
         ) : null}
-        <AssistantTextContent message={segment.message} />
+        <AssistantTextContent
+          message={segment.message}
+          onRetry={
+            segment.message.failed && onRetryMessage
+              ? () => onRetryMessage(segment.message)
+              : undefined
+          }
+          retryDisabled={retryDisabled}
+        />
       </MessageContent>
     </Message>
   );
@@ -91,9 +104,46 @@ function StreamingPlainTail({ text }: { text: string }) {
   );
 }
 
-function AssistantTextContent({ message }: { message: ChatListItem }) {
+function AssistantTextContent({
+  message,
+  onRetry,
+  retryDisabled = false,
+}: {
+  message: ChatListItem;
+  onRetry?: () => void;
+  retryDisabled?: boolean;
+}) {
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
+
+  if (message.failed) {
+    return (
+      <div
+        className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
+        role="alert"
+      >
+        <div className="flex flex-col gap-1">
+          <span className="font-medium text-destructive text-xs">Failed</span>
+          <p className="text-destructive/90 text-sm leading-relaxed">
+            {content || "The model did not respond."}
+          </p>
+        </div>
+        {onRetry ? (
+          <Button
+            className="w-fit border-destructive/30 bg-background text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={retryDisabled}
+            onClick={onRetry}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Rotate02Icon aria-hidden className="size-3.5" />
+            Retry
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
 
   if (!streaming) {
     return <MessageResponse>{content || "…"}</MessageResponse>;

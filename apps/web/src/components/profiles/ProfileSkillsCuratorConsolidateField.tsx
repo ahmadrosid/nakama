@@ -14,8 +14,6 @@ export function ProfileSkillsCuratorConsolidateField({
       field="skillsCuratorConsolidateEnabled"
       id="profile-skills-curator-consolidate"
       label="Skill consolidate"
-      offLabel="Disable consolidate"
-      onLabel="Enable consolidate"
       profile={profile}
       savedToast="Skill consolidate setting saved."
     />

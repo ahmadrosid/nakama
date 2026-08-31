@@ -199,7 +199,7 @@ Nakama also supports:
 
 ```text
 DISCORD_ALLOWED_USER_IDS
-nakama_DISCORD_PROFILE_ID
+NAKAMA_DISCORD_PROFILE_ID
 ```
 
 Override the config root with `NAKAMA_CONFIG_DIR` when needed.
@@ -246,15 +246,9 @@ Usually one of these is true:
 
 If Discord autocomplete offers both a **role** and the **bot user** with similar names, either works when the bot holds that role. Mentioning an unrelated role does not trigger a reply.
 
-### Discord says to link in a private DM
+### Unlinked users get no server reply
 
-This usually means:
-
-- the user never sent the pairing code
-- the pairing code expired or was replaced
-- the user tried to pair in a server channel instead of a DM
-
-Generate a new pairing code from **Integrations → Discord** and send it to the bot in a private DM.
+Server channels stay quiet until that Discord user pairs in a private DM. Pairing codes only work in DMs — paste one in a server and an authorized user still gets a short DM redirect.
 
 ## Next steps
 

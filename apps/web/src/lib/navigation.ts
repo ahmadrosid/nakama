@@ -1,6 +1,8 @@
 import {
   Brain03Icon,
+  Building03Icon,
   Chat01Icon,
+  DashboardSquare01Icon,
   Folder01Icon,
   Notification01Icon,
   PlusSignSquareIcon,
@@ -21,8 +23,10 @@ export type PageId =
   | "automations"
   | "tasks"
   | "integrations"
+  | "organization"
   | "settings"
-  | "notifications";
+  | "notifications"
+  | "workers";
 
 export interface NavItem {
   description: string;
@@ -32,6 +36,8 @@ export interface NavItem {
 }
 
 export interface NavGroup {
+  /** When true, sidebar renders a collapsible tree under `label`. */
+  collapsible?: boolean;
   id: string;
   items: NavItem[];
   label: string;
@@ -83,8 +89,27 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Agent",
   },
   {
+    id: "organization",
+    items: [
+      navItem(
+        "organization",
+        "Organization",
+        "Members, memory, and org settings",
+        Building03Icon
+      ),
+    ],
+    label: "Organization",
+  },
+  {
+    collapsible: true,
     id: "system",
     items: [
+      navItem(
+        "workers",
+        "Workers",
+        "Automation and channel workers",
+        DashboardSquare01Icon
+      ),
       navItem(
         "integrations",
         "Integrations",
@@ -170,7 +195,12 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
-      if (item.id === "soul" || item.id === "profiles") {
+      if (
+        item.id === "soul" ||
+        item.id === "profiles" ||
+        item.id === "organization" ||
+        item.id === "workers"
+      ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
       }
 
@@ -194,9 +224,6 @@ const queryPath = (path: string, params: Record<string, string>): string =>
 
 export const toolsTabPath = (): string =>
   queryPath(PAGE_PATHS.soul, { tab: "tools" });
-
-export const statusTabPath = (): string =>
-  queryPath(PAGE_PATHS.soul, { tab: "status" });
 
 export const profilePath = (profileId: string): string =>
   queryPath(PAGE_PATHS.profiles, { profile: profileId });
@@ -256,12 +283,11 @@ export const toolPlaygroundBackTarget = (
 export function orgSkillProposalsPath(profileId?: string): string {
   const params = new URLSearchParams({
     skillProposals: "proposals",
-    tab: "organization",
   });
   if (profileId) {
     params.set("profileId", profileId);
   }
-  return `${PAGE_PATHS.soul}?${params.toString()}`;
+  return `${PAGE_PATHS.organization}?${params.toString()}`;
 }
 
 export const PAGE_PATHS: Record<PageId, string> = {
@@ -271,10 +297,12 @@ export const PAGE_PATHS: Record<PageId, string> = {
   history: "/history",
   integrations: "/integrations",
   notifications: "/notifications",
+  organization: "/organization",
   profiles: "/profiles",
   settings: "/settings",
   soul: "/system",
   tasks: "/tasks",
+  workers: "/workers",
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [

@@ -6,7 +6,9 @@ import { DiscordAuthStore } from "./auth-store";
 import {
   chatLockOptions,
   createChatHandler,
+  getChatLockCountForTests,
   resetChatLocksForTests,
+  seedChatLockForTests,
   withChatLock,
 } from "./chat-handler";
 import { TOO_MANY_IMAGES_REPLY, UNSUPPORTED_ATTACHMENT_REPLY } from "./images";
@@ -132,6 +134,9 @@ describe("createChatHandler logging", () => {
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
+        expect(output).not.toContain(dm.message.author.id);
+        expect(output).not.toContain("dm_channel_1");
+        expect(output).not.toContain("channelId=");
       } finally {
         log.mockRestore();
       }
@@ -851,6 +856,42 @@ describe("createChatHandler questionnaire delivery", () => {
       expect(
         sentMessages.some((reply) => reply.includes("Couldn't parse that"))
       ).toBe(false);
+    });
+  });
+});
+
+describe("createChatHandler guild auth silence", () => {
+  test("unlinked guild mentions stay quiet", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, calls } = await createPairedHandler(homeDir, {
+        pairedUserIds: [],
+      });
+      const mention = createGuildChatMessage({
+        content: "<@bot_id> hello",
+        mentionsBot: true,
+        userId: "555555555555555555",
+      });
+
+      await handleMessage(mention.message);
+
+      expect(mention.channelSentMessages).toEqual([]);
+      expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("unlinked guild slash deletes the deferred reply", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        pairedUserIds: [],
+      });
+      const statusCmd = createSlashInteraction({
+        commandName: "status",
+        userId: "555555555555555555",
+      });
+
+      await handleSlashCommand(statusCmd.interaction);
+
+      expect(statusCmd.replies).toEqual(["__deleted__"]);
     });
   });
 });
@@ -1663,6 +1704,106 @@ describe("createChatHandler guild thread routing", () => {
     await first;
     expect(order).toEqual(["first-start", "second", "first-end"]);
   });
+
+  test("withChatLock removes map entries after the critical section", async () => {
+    expect(getChatLockCountForTests()).toBe(0);
+
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+
+    const first = withChatLock("dm:lock-leak", async () => {
+      expect(getChatLockCountForTests()).toBe(1);
+      await hold;
+    });
+
+    await Bun.sleep(5);
+    expect(getChatLockCountForTests()).toBe(1);
+
+    releaseHold();
+    await first;
+    expect(getChatLockCountForTests()).toBe(0);
+  });
+
+  test("withChatLock continues after a rejected predecessor and clears the map", async () => {
+    const stale = Promise.reject(new Error("stale predecessor"));
+    // Prevent the seed itself from firing unhandledRejection before adopt.
+    stale.catch(() => undefined);
+    seedChatLockForTests("dm:reject-pred", stale);
+    chatLockOptions.waitMs = 0;
+
+    let ran = false;
+    await withChatLock("dm:reject-pred", async () => {
+      ran = true;
+    });
+
+    expect(ran).toBe(true);
+    expect(getChatLockCountForTests()).toBe(0);
+  });
+
+  test("message handler reloads auth only after the conversation lock is free", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeDiscordConfigIni(homeDir, {
+        botToken: "discord-bot-token",
+        handshakeCode: "ABCD1234",
+        pairedUserIds: [],
+      });
+
+      const authStore = new DiscordAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
+      );
+      await sessionStore.load();
+      const threadStore = new ThreadStore(
+        path.join(homeDir, ".nakama", "discord", "chat-threads.json")
+      );
+      await threadStore.load();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { handleMessage } = createChatHandler({
+        authStore,
+        client,
+        config: { botToken: "discord-bot-token", profileId: "default" },
+        orgStore,
+        sessionStore,
+        threadStore,
+      });
+
+      const dm = createDmMessage({
+        channelId: "dm_auth_lock",
+        content: "ABCD1234",
+        userId: "999999999999999999",
+      });
+      const conversationKey = dm.message.channel.id;
+
+      let releaseHold!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        releaseHold = resolve;
+      });
+      const held = withChatLock(conversationKey, async () => {
+        await hold;
+      });
+
+      const reloadCalls: number[] = [];
+      const originalReload = authStore.reload.bind(authStore);
+      authStore.reload = async () => {
+        reloadCalls.push(Date.now());
+        return originalReload();
+      };
+
+      const pending = handleMessage(dm.message);
+      await Bun.sleep(30);
+      expect(reloadCalls).toEqual([]);
+
+      releaseHold();
+      await held;
+      await pending;
+      expect(reloadCalls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
 
 describe("createChatHandler inbound images", () => {
@@ -1848,6 +1989,30 @@ describe("createChatHandler inbound images", () => {
       } finally {
         fetchSpy.mockRestore();
       }
+    });
+  });
+});
+
+describe("createChatHandler session hot cache", () => {
+  test("reuses RemoteChatSession across messages without recreate", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, calls, sessionStore } =
+        await createPairedHandler(homeDir);
+      sessionStore.set("dm_channel_1", {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      await handleMessage(createDmMessage({ content: "one" }).message);
+      await handleMessage(createDmMessage({ content: "two" }).message);
+
+      expect(calls.createSession).toBe(0);
+      expect(calls.createChatSession).toBe(1);
+      // 1 resolve validation + 1 artifact read per turn (hot path skips resolve getMessages)
+      expect(calls.getMessages).toBe(3);
+      expect(calls.sendStream).toBe(2);
     });
   });
 });

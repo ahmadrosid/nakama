@@ -21,8 +21,8 @@ describe("isPublicRouteRequest", () => {
     ).toBe(true);
   });
 
-  test("allows GET /v1/tools without auth but not POST", () => {
-    expect(isPublicRouteRequest("GET", "/v1/tools")).toBe(true);
+  test("keeps the tool catalog behind auth", () => {
+    expect(isPublicRouteRequest("GET", "/v1/tools")).toBe(false);
     expect(isPublicRouteRequest("POST", "/v1/tools")).toBe(false);
     expect(isPublicRouteRequest("POST", "/v1/tools/tool_x/run")).toBe(false);
   });

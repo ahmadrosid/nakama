@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
+import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
@@ -7,6 +8,7 @@ import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
+import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
 import { sectionClass } from "@/pages/profiles/profiles-page.shared";
 import {
   PageState,
@@ -70,7 +72,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
               >
                 Config
               </ProfileDetailTabButton>
-              {canCreateProfile ? (
+              {canPack ? (
                 <ProfileDetailTabButton
                   active={detailTab === "prompt"}
                   controls="profile-detail-panel-prompt"
@@ -80,6 +82,14 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                   Prompt
                 </ProfileDetailTabButton>
               ) : null}
+              <ProfileDetailTabButton
+                active={detailTab === "knowledge"}
+                controls="profile-detail-panel-knowledge"
+                id="profile-detail-tab-knowledge"
+                onSelect={() => setDetailTab("knowledge")}
+              >
+                Knowledge
+              </ProfileDetailTabButton>
               {isOrgAdmin ? (
                 <ProfileDetailTabButton
                   active={detailTab === "proposals"}
@@ -162,14 +172,24 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 profileId={selectedId}
               />
             </div>
-          ) : detailTab === "prompt" && canCreateProfile ? (
+          ) : detailTab === "prompt" && canPack ? (
             <div
               aria-labelledby="profile-detail-tab-prompt"
-              className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+              className="no-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-5"
               id="profile-detail-panel-prompt"
               role="tabpanel"
             >
-              <SoulTab profileId={selectedId} />
+              {canCreateProfile ? <SoulTab profileId={selectedId} /> : null}
+              <ProfileHistoryTab profileId={selectedId} />
+            </div>
+          ) : detailTab === "knowledge" ? (
+            <div
+              aria-labelledby="profile-detail-tab-knowledge"
+              className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+              id="profile-detail-panel-knowledge"
+              role="tabpanel"
+            >
+              <KnowledgeTab profileId={selectedId} />
             </div>
           ) : null
         ) : (

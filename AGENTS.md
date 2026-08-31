@@ -2,12 +2,21 @@
 
 Agent platform built to work with your team — not replace them. Multi-tenant monorepo; orgs are flat tenants, each profile has a **soul** (identity, style, instructions, memory).
 
+**Constraints:**
+- Prefer edit over extract; no new package/file unless an existing module cannot hold the change
+- No new abstractions for a single call site
+- ADHD-shaped replies (lead with the action; numbered steps; no preamble/recap)
+- Human voice — short, concrete, no corporate filler
+- If ambiguous, give 3 options numbered — the user will reply with a number
+
 ## Dev
 
 - Bun 1.3+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `dev:cli`
 - Layout: `apps/{server,web,cli}`, channel workers in `apps/platform/{telegram,whatsapp,discord,automation}`
-- Writing Tests: assert behavior, not prompt/description/error copy.
+- Tests: assert behavior (status, data, side effects), not prompt/description/error copy
+- React UI: one self-explanatory heading/label; no subtitles or helper copy unless the user asks or misunderstanding would cause errors
+- Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
 
 ## LLM cassette tests (MSW)
 
@@ -28,22 +37,28 @@ Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always 
 
 ## Browser automation
 
-Use `agent-browser` cli to do browser automation, screenshot etc. Run the docker first when you need to debug with first installation, for just quick test or screenshot use local dev server that already running.
+Use `agent-browser` only for routine UI checks. Do not add Playwright for that path.
+
+```bash
+bun run agent:ui
+# source the printed harness.env, then:
+agent-browser open $BASE_URL/chat
+bun run agent:ui:stop
+```
+
+The harness boots an isolated API + Vite stack under `/tmp`, seeds setup over HTTP, and never writes `~/.nakama` or steals `4310`. Run it outside a sandbox that blocks bind or detach. `/chat` is the only seeded-ready page. Other `apps/web` routes are navigation hints, not harness success signals.
+
+Prefer role and text locators. Add `data-testid` only when labels collide.
+
+Operator Docker / `dev:web` on `4310` stays valid for humans. For PR motion video, use `.agents/skills/browser-video-proof/SKILL.md`.
 
 ## Documentation (`docs/website`)
 
-User-facing docs live in `docs/website/content/docs/` (MDX). **Audience is people who use Nakama** — org admins, operators, and chat users — not contributors implementing the product.
+User-facing docs: `docs/website/content/docs/` (MDX). Audience = org admins, operators, chat users — not contributors.
 
-When writing or updating docs, prioritize:
+When writing docs: **Why** → **Value** → **How** (UI paths, roles, screenshots). Prefer **System → Organization** over route paths. Keep schema, services, file paths, and HTTP API tables out of product docs (put them here or in code). Screenshots: `docs/website/public/screenshots/`; capture scripts: `docs/website/scripts/capture-*.sh`.
 
-1. **Why** — what problem the feature solves and when someone should care
-2. **Value** — what gets better (safety, consistency, less repeat work, team control)
-3. **How to use it** — UI paths, steps, roles, and screenshots for flows; plain language over jargon
-
-Keep contributor detail out of user docs unless it directly helps usage (e.g. env vars for self-hosting). Prefer dashboard navigation names (**System → Organization**) over route paths; put schema, service names, file paths, and HTTP API tables in `AGENTS.md` or code comments, not in product docs unless the page is explicitly for integrators.
-
-Match existing pages: task-oriented headings, tables for roles/options, screenshots under `docs/website/public/screenshots/` (`![alt](/screenshots/foo.png)`), capture scripts in `docs/website/scripts/capture-*.sh`. Cross-link related concepts (e.g. skills ↔ org memory) instead of duplicating internals.
-
+## Docker
 
 One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`). Dashboard: http://localhost:4310
 
@@ -67,7 +82,7 @@ Orgs isolate profiles, sessions, automations, tasks, tools, MCP, skills, usage (
 | Role | Can |
 |---|---|
 | Platform admin | Orgs (`/v1/platform/orgs`), profiles/tools/MCP/skills |
-| Org admin | Members/invites (`/v1/orgs/{orgId}/members`); profile pack export/import for the active org (not general create/clone) |
+| Org admin | Members/invites (`/v1/orgs/{orgId}/members`); profile pack export/import for the active org (create/clone profiles → platform admin or Super Bot `create-profile`) |
 | Org member | Chat, agents, automations/tasks |
 | Org viewer | Read chat only — no agent invoke / mutations |
 
@@ -99,7 +114,7 @@ Merged in `agent-service` `resolveProfileSystemPrompt` → `generateReply` (`pro
 
 ## Soul (`packages/core/src/soul/`)
 
-Path: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Load: `loadSoulStack()`; inject: `composeSoulSystemPrompt()`.
+Profile workspace / soul dir: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Override root: `NAKAMA_CONFIG_DIR`. Load: `loadSoulStack()`; inject: `composeSoulSystemPrompt()`.
 
 | File | Role |
 |---|---|
@@ -118,24 +133,24 @@ Path: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Load
 | `search_files` / `ripgrep` | File/content search |
 | `bash` | Profile workspace shell — assign per profile; Super Bot by default |
 | `sub_agent` | Opt-in same-profile delegate (not repo coding) |
-| `coding-agent` | Codex / Claude Code / OpenCode / pi / Cursor Agent (`agent`) via `bash` |
+| `coding-agent` | Repo coding via Codex / Claude Code / OpenCode / pi / Cursor Agent (`agent`) through `bash` — use instead of `sub_agent` for coding |
 | `agent-browser` | Opt-in browser CLI; needs host install — `docs/website/agent-browser.md` |
-| `create-profile` | Super Bot only, confirm-first — `apps/server/src/tools/super-bot-tools.ts` (`create_profile`, `update_profile` for stored `systemPrompt`) |
-| `skill_manage` | Interactive web/cli with `manage-skills` — create/patch/edit/delete profile skills + supporting-file write/remove + auto-assign (`apps/server/src/tools/skill-manage-tool.ts`). When org/profile **write approval** is enabled, mutations stage as proposals for org-admin review instead of writing immediately. When present, file tools refuse any path under `skills/*/` (`forbidProfileSkillMarkdownWrites`). Not injected for automations or Telegram/WhatsApp/Discord. Opt-in **post-turn skill review** (`skills_post_turn_review`) may suggest or stage create/patch after complex turns without writing into model history. Opt-in **skill curator** (`skills_curator_enabled`, default off) archives unused agent/human profile skills at 90 days (stale report at 30 days) via `SkillCuratorService` — rename to `skills/.archive/`, never delete; bundled skills and profiles with enabled automations are skipped. |
+| `create-profile` | Super Bot only, confirm-first — `apps/server/src/tools/super-bot-tools.ts` |
+| `skill_manage` | Web/cli skill CRUD + auto-assign — `apps/server/src/tools/skill-manage-tool.ts` (approval, curator, post-turn review live there) |
 | Composio | Org toolkits + per-user OAuth — `docs/website/composio.md` |
 
 **Channel artifacts (Telegram/Discord/WhatsApp):** `packages/core/src/channel-artifacts.ts`, `channel-artifact-delivery.ts`; handlers in `apps/platform/{telegram,discord,whatsapp}/src/channel-artifact-flow.ts`.
 
 ## Tool execution & workspace
 
-Path bugs (tool resolves under repo instead of `~/.nakama`) → start here. Override root: `NAKAMA_CONFIG_DIR`.
+Path bugs (tool resolves under repo instead of `~/.nakama`) → start here.
 
 | Path | Purpose |
 |---|---|
-| `~/.nakama/orgs/{orgId}/profiles/{profileId}/` | Profile workspace — `getProfileSoulDir()` |
+| `~/.nakama/orgs/{orgId}/profiles/{profileId}/` | Profile workspace / soul — `getProfileSoulDir()` |
 | `~/.nakama/tools/*.js`, `*.py` | Custom JS / Python tools — `getCustomToolsDir()` |
 
-Always build context with `buildToolExecutionContext()` (`packages/core/src/tools/context.ts`) so `workspaceRoot` = soul dir. Custom JS tools must use `context.workspaceRoot`, **not** `process.cwd()`; custom Python tools receive it as the `NAKAMA_WORKSPACE_ROOT` env var.
+Always build context with `buildToolExecutionContext()` (`packages/core/src/tools/context.ts`) so `workspaceRoot` = soul dir. Custom JS: `context.workspaceRoot`, **not** `process.cwd()`. Custom Python: `NAKAMA_WORKSPACE_ROOT` env.
 
 | | Built-in | Custom JS | Custom Python |
 |---|---|---|---|
@@ -146,16 +161,13 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 | Flow | Entry |
 |---|---|
 | Chat | `agent-service` → `buildChatSession()` → `buildToolExecutionContext(...)` |
-| Tool loop | `packages/agent/src/tool-loop.ts` → `executeToolCall()`; parallel batching in `packages/agent/src/chat.ts` when every call in the turn is `parallelSafe` |
-
-**Parallel tool calls:** Built-in read/search/fetch tools (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`) set `parallelSafe: true` on `ToolDefinition`. Mutating, shell, delegation, and session-state tools stay sequential. Custom JS tools default to sequential; set `handlerConfig.parallelSafe: true` to opt in. Custom Python tools cannot opt in — each call spawns a subprocess and stays sequential. When a turn mixes parallel-safe and sequential tools, the whole turn runs sequentially.
-
-| Flow | Entry |
-|---|---|
-| Playground | `POST /v1/tools/:toolId/run` → `runToolPlayground()` (`resolvePlaygroundProfileId`) |
+| Tool loop | `packages/agent/src/tool-loop.ts` → `executeToolCall()`; parallel batching in `packages/agent/src/chat.ts` when every call is `parallelSafe` |
+| Playground | `POST /v1/tools/:toolId/run` → `runToolPlayground()` |
 | Param suggest | `POST /v1/tools/:toolId/params/suggest` |
 
-**Debug:** (1) check path resolution in `~/.nakama/tools/`, (2) confirm `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) put test files in the assigned profile workspace. Super Bot authoring rules: `SUPER_BOT_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
+**Parallel tool calls:** `parallelSafe: true` on read/search/fetch builtins (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`). Mutating / shell / delegation stay sequential. Custom JS opts in via `handlerConfig.parallelSafe`; Python always sequential. Mixed turn → whole turn sequential.
+
+**Debug:** (1) path under `~/.nakama/tools/`, (2) `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) test files in the assigned profile workspace. Super Bot rules: `SUPER_BOT_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
 
 **Playground UI:** `/system/playground/:toolId` — `ToolPlaygroundPage.tsx`, `ToolPlaygroundPanel.tsx`; admin-only via `canUseToolPlayground()`.
 
@@ -166,136 +178,4 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 - `packages/db` — DB
 - `packages/client` — API client
 
-Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI from `openapi.ts` (`/openapi.json`). Platform-admin-only: profile/tool/MCP/skill mutations (org admins use provisioned profiles, Super Bot `create-profile`, or **profile pack import/export** on pack routes only). Org-admin: `/v1/orgs/{orgId}/…` members. Viewers blocked by `requireNotViewer` on worker control and agent invoke.
-
-## Developing 
-
-Remember this when working on react code:
-
-- UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it is necessary to prevent misunderstanding or error, and never use it to restate the heading.
-
-
-# Ultracite Code Standards
-
-This project uses **Ultracite**, a zero-config preset that enforces strict code quality standards through automated formatting and linting.
-
-## Quick Reference
-
-- **Format code**: `bun x ultracite fix`
-- **Check for issues**: `bun x ultracite check`
-- **Diagnose setup**: `bun x ultracite doctor`
-- **Unused files, dependencies, and exports**: `bun run knip` (CI fails on findings)
-
-Biome (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
-
----
-
-## Core Principles
-
-Write code that is **accessible, performant, type-safe, and maintainable**. Focus on clarity and explicit intent over brevity.
-
-### Type Safety & Explicitness
-
-- Use explicit types for function parameters and return values when they enhance clarity
-- Prefer `unknown` over `any` when the type is genuinely unknown
-- Use const assertions (`as const`) for immutable values and literal types
-- Leverage TypeScript's type narrowing instead of type assertions
-- Use meaningful variable names instead of magic numbers - extract constants with descriptive names
-
-### Modern JavaScript/TypeScript
-
-- Use arrow functions for callbacks and short functions
-- Prefer `for...of` loops over `.forEach()` and indexed `for` loops
-- Use optional chaining (`?.`) and nullish coalescing (`??`) for safer property access
-- Prefer template literals over string concatenation
-- Use destructuring for object and array assignments
-- Use `const` by default, `let` only when reassignment is needed, never `var`
-
-### Async & Promises
-
-- Always `await` promises in async functions - don't forget to use the return value
-- Use `async/await` syntax instead of promise chains for better readability
-- Handle errors appropriately in async code with try-catch blocks
-- Don't use async functions as Promise executors
-
-### React & JSX
-
-- Use function components over class components
-- Call hooks at the top level only, never conditionally
-- Specify all dependencies in hook dependency arrays correctly
-- Use the `key` prop for elements in iterables (prefer unique IDs over array indices)
-- Nest children between opening and closing tags instead of passing as props
-- Don't define components inside other components
-- Use semantic HTML and ARIA attributes for accessibility:
-  - Provide meaningful alt text for images
-  - Use proper heading hierarchy
-  - Add labels for form inputs
-  - Include keyboard event handlers alongside mouse events
-  - Use semantic elements (`<button>`, `<nav>`, etc.) instead of divs with roles
-
-### Error Handling & Debugging
-
-- Remove `console.log`, `debugger`, and `alert` statements from production code
-- Throw `Error` objects with descriptive messages, not strings or other values
-- Use `try-catch` blocks meaningfully - don't catch errors just to rethrow them
-- Prefer early returns over nested conditionals for error cases
-
-### Code Organization
-
-- Keep functions focused and under reasonable cognitive complexity limits
-- Extract complex conditions into well-named boolean variables
-- Use early returns to reduce nesting
-- Prefer simple conditionals over nested ternary operators
-- Group related code together and separate concerns
-
-### Security
-
-- Add `rel="noopener"` when using `target="_blank"` on links
-- Avoid `dangerouslySetInnerHTML` unless absolutely necessary
-- Don't use `eval()` or assign directly to `document.cookie`
-- Validate and sanitize user input
-
-### Performance
-
-- Avoid spread syntax in accumulators within loops
-- Use top-level regex literals instead of creating them in loops
-- Prefer specific imports over namespace imports
-- Avoid barrel files (index files that re-export everything)
-- Use proper image components (e.g., Next.js `<Image>`) over `<img>` tags
-
-### Framework-Specific Guidance
-
-**Next.js:**
-- Use Next.js `<Image>` component for images
-- Use `next/head` or App Router metadata API for head elements
-- Use Server Components for async data fetching instead of async Client Components
-
-**React 19+:**
-- Use ref as a prop instead of `React.forwardRef`
-
-**Solid/Svelte/Vue/Qwik:**
-- Use `class` and `for` attributes (not `className` or `htmlFor`)
-
----
-
-## Testing
-
-- Write assertions inside `it()` or `test()` blocks
-- Avoid done callbacks in async tests - use async/await instead
-- Don't use `.only` or `.skip` in committed code
-- Keep test suites reasonably flat - avoid excessive `describe` nesting
-
-## When Biome Can't Help
-
-Biome's linter will catch most issues automatically. Focus your attention on:
-
-1. **Business logic correctness** - Biome can't validate your algorithms
-2. **Meaningful naming** - Use descriptive names for functions, variables, and types
-3. **Architecture decisions** - Component structure, data flow, and API design
-4. **Edge cases** - Handle boundary conditions and error states
-5. **User experience** - Accessibility, performance, and usability considerations
-6. **Documentation** - Add comments for complex logic, but prefer self-documenting code
-
----
-
-Most formatting and common issues are automatically fixed by Biome. Run `bun x ultracite fix` before committing to ensure compliance.
+Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI: `openapi.ts` (`/openapi.json`). Mutation authority matches the Multi-tenancy role table; viewers blocked by `requireNotViewer` on worker control and agent invoke.

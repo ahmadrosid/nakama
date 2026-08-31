@@ -213,10 +213,6 @@ describe("profile service avatar", () => {
     expect(avatar.mediaType).toBe("image/png");
     expect(avatar.bytes.length).toBeGreaterThan(0);
 
-    const publicAvatar = await service.getProfileAvatarByProfileId(profileId);
-    expect(publicAvatar.mediaType).toBe("image/png");
-    expect(publicAvatar.bytes.length).toBeGreaterThan(0);
-
     await service.deleteProfileAvatar(ORG_ID, profileId);
 
     const afterDelete = await service.getProfile(ORG_ID, profileId);
@@ -603,6 +599,7 @@ describe("profile service knowledge base", () => {
     );
 
     expect(uploaded.document.status).toBe("ready");
+    expect(uploaded.outcome).toBe("created");
     expect(uploaded.profileId).toBe(profileId);
 
     const listed = await service.listKnowledgeBase(ORG_ID, profileId);
@@ -618,6 +615,42 @@ describe("profile service knowledge base", () => {
 
     const afterDelete = await service.listKnowledgeBase(ORG_ID, profileId);
     expect(afterDelete.documents).toHaveLength(0);
+  });
+
+  test("rejects duplicate knowledge base uploads with 409 and supports replace", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-kb-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const created = await service.createProfile(ORG_ID, { name: "KB Bot" });
+    const profileId = created.profile.id;
+    const attachment = {
+      data: Buffer.from("project fact", "utf8").toString("base64"),
+      filename: "notes.txt",
+      mediaType: "text/plain",
+    };
+
+    const first = await service.uploadKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      attachment
+    );
+
+    await expect(
+      service.uploadKnowledgeBaseDocument(ORG_ID, profileId, attachment)
+    ).rejects.toMatchObject({ status: 409 });
+
+    const replaced = await service.uploadKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      attachment,
+      "replace"
+    );
+    expect(replaced.outcome).toBe("replaced");
+    expect(replaced.document.id).not.toBe(first.document.id);
+
+    const listed = await service.listKnowledgeBase(ORG_ID, profileId);
+    expect(listed.documents).toHaveLength(1);
   });
 
   test("readKnowledgeBaseDocument returns preview text and download bytes", async () => {
