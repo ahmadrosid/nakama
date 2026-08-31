@@ -9,11 +9,11 @@ import {
   pushDeliverableArtifact,
   resolveArtifactForAttach,
 } from "@nakama/core";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES } from "@nakama/core/discord-attachment";
 import type { TextBasedChannel } from "discord.js";
 import type { DiscordMessenger } from "./messenger";
 import { sendDiscordArtifactAttachment } from "./send-artifact-attachment";
-import type { SessionStore } from "./session-store";
 
 async function uploadArtifactBytes(input: {
   channel: TextBasedChannel;
@@ -110,7 +110,7 @@ export async function maybeSendRequestedDiscordArtifactAttachment(input: {
   profileId: string;
   /** Raw user text before group-context prefixing. */
   attachUserText: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   messenger: DiscordMessenger;
 }): Promise<boolean> {
   if (!isAttachOnlyCommand(input.attachUserText)) {
@@ -171,7 +171,7 @@ export async function deliverDiscordTurnArtifactShares(input: {
   session: RemoteChatSession;
   conversationKey: string;
   profileId: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   messenger: DiscordMessenger;
 }): Promise<void> {
   const messages = await input.session.getMessages();

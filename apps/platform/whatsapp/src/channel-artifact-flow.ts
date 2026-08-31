@@ -8,13 +8,13 @@ import {
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
 } from "@nakama/core";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { WASocket } from "@whiskeysockets/baileys";
 import {
   formatWhatsAppArtifactOversizeError,
   sendWhatsAppArtifactDocument,
   WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
 } from "./send-artifact-document";
-import type { SessionStore } from "./session-store";
 
 /**
  * When the user asks to attach/send a file and a registry artifact exists,
@@ -27,7 +27,7 @@ export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
   profileId: string;
   /** Raw user text before group-context prefixing. */
   attachUserText: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   socket: WASocket;
   jid: string;
   sendPlain: (text: string) => Promise<void>;
@@ -58,7 +58,7 @@ export async function maybeSendWhatsAppAttachOnlyCommand(input: {
   client: NakamaClient;
   conversationKey: string;
   profileId: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   socket: WASocket;
   jid: string;
   sendPlain: (text: string) => Promise<void>;
@@ -85,7 +85,7 @@ export async function deliverWhatsAppTurnArtifactShares(input: {
   session: RemoteChatSession;
   conversationKey: string;
   profileId: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   sendRaw: (text: string) => Promise<void>;
 }): Promise<void> {
   const messages = await input.session.getMessages();

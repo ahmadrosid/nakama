@@ -1,21 +1,23 @@
-import type { WASocket } from "@whiskeysockets/baileys";
-
-const TYPING_REFRESH_MS = 4000;
-
 export interface TypingLoop {
   ping(): void;
   start(): void;
   stop(): void;
 }
 
+/**
+ * Refreshes a channel's typing indicator until `stop()`.
+ *
+ * Sends are serialized and `active` is re-checked before each one so a ping
+ * flood (e.g. onThinking) cannot keep refreshing the channel after stop().
+ * `refreshMs` is per channel: the platforms expire the indicator at different
+ * rates.
+ */
 export function createTypingLoop(
-  socket: WASocket | null,
-  jid: string
+  send: () => Promise<unknown>,
+  refreshMs: number
 ): TypingLoop {
   let interval: ReturnType<typeof setInterval> | null = null;
   let active = false;
-  // Serialize presence updates and re-check `active` before each one so a ping
-  // flood (e.g. onThinking) cannot keep refreshing WhatsApp after stop().
   let sendChain: Promise<void> = Promise.resolve();
 
   function clear() {
@@ -26,20 +28,21 @@ export function createTypingLoop(
   }
 
   function queueTyping() {
-    if (!(active && socket)) {
+    if (!active) {
       return;
     }
 
     sendChain = sendChain
       .then(async () => {
-        if (!(active && socket)) {
+        if (!active) {
           return;
         }
 
-        await socket.sendPresenceUpdate("composing", jid);
+        await send();
       })
       .catch(() => {
-        // Connection may be lost. Keep the chain healthy.
+        // Chat may be gone, the bot blocked, or the connection lost. Keep the
+        // chain healthy.
       });
   }
 
@@ -53,7 +56,7 @@ export function createTypingLoop(
       queueTyping();
       interval = setInterval(() => {
         queueTyping();
-      }, TYPING_REFRESH_MS);
+      }, refreshMs);
     },
     stop() {
       active = false;

@@ -14,6 +14,8 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { ImageAttachment, SendMessageInput } from "@nakama/core/contract";
 import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
 import {
@@ -64,10 +66,10 @@ import {
   getMessageChannel,
 } from "./messenger";
 import { DiscordQuestionnaireMessage } from "./questionnaire-message";
-import type { SessionStore } from "./session-store";
 import type { ThreadStore } from "./thread-store";
 import { DiscordTodoStatusMessage } from "./todo-status-message";
-import { createTypingLoop } from "./typing-indicator";
+
+const TYPING_REFRESH_MS = 8000;
 
 const chatLocks = new Map<string, Promise<void>>();
 const THREAD_OWNERSHIP_LOCK_KEY = "__discord_thread_ownership__";
@@ -108,7 +110,7 @@ export interface ChatHandlerDeps {
   config: DiscordBridgeConfig;
   getBotInfo?: () => DiscordBotInfo | undefined;
   orgStore: ChannelOrgStore;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   threadStore: ThreadStore;
 }
 
@@ -721,7 +723,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     );
 
     const signal = registerActiveStream(conversationKey);
-    const typingLoop = createTypingLoop(messenger);
+    const typingLoop = createTypingLoop(
+      () => messenger.sendTyping(),
+      TYPING_REFRESH_MS
+    );
     const todoStatus = new DiscordTodoStatusMessage(messenger);
     const questionnaireStatus = new DiscordQuestionnaireMessage(messenger);
     typingLoop.start();

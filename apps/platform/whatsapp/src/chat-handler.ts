@@ -13,6 +13,8 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { SendMessageInput } from "@nakama/core/contract";
 import { pickProfileForOrg } from "@nakama/core/profiles";
 import { normalizePairingCode } from "@nakama/core/whatsapp-config";
@@ -38,9 +40,9 @@ import {
 } from "./group-message";
 import type { WhatsAppInboundChat } from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
-import type { SessionStore } from "./session-store";
 import { WhatsAppTodoStatusMessage } from "./todo-status-message";
-import { createTypingLoop } from "./typing-indicator";
+
+const TYPING_REFRESH_MS = 4000;
 
 const chatLocks = new Map<string, Promise<void>>();
 
@@ -63,7 +65,7 @@ export interface ChatHandlerDeps {
   config: WhatsAppBridgeConfig;
   getSocket: () => WASocket | null;
   orgStore: ChannelOrgStore;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
@@ -384,7 +386,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
     }
 
-    const typingLoop = createTypingLoop(getSocket(), jid);
+    const typingSocket = getSocket();
+    const typingLoop = createTypingLoop(
+      () =>
+        typingSocket?.sendPresenceUpdate("composing", jid) ?? Promise.resolve(),
+      TYPING_REFRESH_MS
+    );
     const todoStatus = new WhatsAppTodoStatusMessage(getSocket(), jid);
     let reply = "";
     const signal = registerActiveStream(conversationKey);

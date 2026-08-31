@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Context } from "grammy";
-import { createTypingLoop } from "./typing-indicator";
+import { createTypingLoop } from "./channel-typing-loop";
 
 /** Drain the serialized typing promise chain. */
 async function flushTypingChain(): Promise<void> {
@@ -9,43 +8,40 @@ async function flushTypingChain(): Promise<void> {
   }
 }
 
-function createFakeContext() {
+function createRecordingSend() {
   const calls: string[] = [];
-  const ctx = {
-    async replyWithChatAction(action: string) {
-      calls.push(action);
+  return {
+    calls,
+    send: async () => {
+      calls.push("typing");
     },
-  } as unknown as Context;
-  return { calls, ctx };
+  };
 }
 
-function createBlockingContext() {
+function createBlockingSend() {
   const releases: Array<() => void> = [];
   let sendCount = 0;
-  const ctx = {
-    async replyWithChatAction() {
-      sendCount += 1;
-      await new Promise<void>((resolve) => {
-        releases.push(resolve);
-      });
-    },
-  } as unknown as Context;
 
   return {
-    ctx,
     getSendCount: () => sendCount,
     releaseAll: () => {
       for (const release of releases.splice(0)) {
         release();
       }
     },
+    send: async () => {
+      sendCount += 1;
+      await new Promise<void>((resolve) => {
+        releases.push(resolve);
+      });
+    },
   };
 }
 
 describe("createTypingLoop", () => {
-  test("stop prevents later ping from sending typing", async () => {
-    const { calls, ctx } = createFakeContext();
-    const loop = createTypingLoop(ctx);
+  test("stop prevents later ping from sending", async () => {
+    const { calls, send } = createRecordingSend();
+    const loop = createTypingLoop(send, 4000);
 
     loop.start();
     await flushTypingChain();
@@ -59,8 +55,8 @@ describe("createTypingLoop", () => {
   });
 
   test("start replaces a previous interval without leaking", async () => {
-    const { calls, ctx } = createFakeContext();
-    const loop = createTypingLoop(ctx);
+    const { calls, send } = createRecordingSend();
+    const loop = createTypingLoop(send, 4000);
 
     loop.start();
     await flushTypingChain();
@@ -74,9 +70,9 @@ describe("createTypingLoop", () => {
     expect(calls).toHaveLength(2);
   });
 
-  test("stop drops queued typing sends that have not started yet", async () => {
-    const { ctx, getSendCount, releaseAll } = createBlockingContext();
-    const loop = createTypingLoop(ctx);
+  test("stop drops queued sends that have not started yet", async () => {
+    const { getSendCount, releaseAll, send } = createBlockingSend();
+    const loop = createTypingLoop(send, 4000);
 
     loop.start();
     await flushTypingChain();
@@ -94,7 +90,20 @@ describe("createTypingLoop", () => {
     releaseAll();
     await flushTypingChain();
 
-    // Queued pings must not call Telegram after stop().
+    // Queued pings must not reach the channel after stop().
     expect(getSendCount()).toBe(1);
+  });
+
+  test("refreshes on the interval it was given", async () => {
+    const { calls, send } = createRecordingSend();
+    const loop = createTypingLoop(send, 5);
+
+    loop.start();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    loop.stop();
+
+    // The callers pass different values (4000 Telegram, 8000 Discord), so the
+    // interval has to stay a parameter rather than a constant in here.
+    expect(calls.length).toBeGreaterThan(1);
   });
 });

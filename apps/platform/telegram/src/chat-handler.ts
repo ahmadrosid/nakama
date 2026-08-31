@@ -12,6 +12,8 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { SendMessageInput } from "@nakama/core/contract";
 import {
   filterProfilesForChatAccess,
@@ -59,9 +61,9 @@ import {
   createTelegramRichMessenger,
   type TelegramRichMessenger,
 } from "./rich-message";
-import type { SessionStore } from "./session-store";
 import { TelegramTodoStatusMessage } from "./todo-status-message";
-import { createTypingLoop } from "./typing-indicator";
+
+const TYPING_REFRESH_MS = 4000;
 
 const chatLocks = new Map<string, Promise<void>>();
 
@@ -87,7 +89,7 @@ export interface ChatHandlerDeps {
   config: TelegramBridgeConfig;
   getBotInfo?: () => TelegramBotInfo | undefined;
   orgStore: ChannelOrgStore;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
@@ -456,7 +458,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       });
     }
 
-    const typingLoop = createTypingLoop(ctx);
+    const typingLoop = createTypingLoop(
+      () => ctx.replyWithChatAction("typing"),
+      TYPING_REFRESH_MS
+    );
     const todoStatus = new TelegramTodoStatusMessage(telegram);
     let reply = "";
     const signal = registerActiveStream(conversationKey);

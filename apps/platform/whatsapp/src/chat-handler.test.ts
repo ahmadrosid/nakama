@@ -4,13 +4,13 @@ import {
   hasActiveStreams,
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
+import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { WhatsAppAuthStore } from "./auth-store";
 import {
   createChatHandler,
   resetChatLocksForTests,
   withChatLock,
 } from "./chat-handler";
-import { SessionStore } from "./session-store";
 import {
   createMockClient,
   createMultiTestOrgs,
@@ -97,7 +97,7 @@ describe("createChatHandler", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -130,7 +130,7 @@ describe("createChatHandler", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -193,7 +193,7 @@ describe("createChatHandler", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -254,7 +254,7 @@ describe("createChatHandler", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -320,7 +320,7 @@ describe("createChatHandler", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -380,7 +380,7 @@ describe("createChatHandler", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -416,7 +416,7 @@ describe("createChatHandler", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -451,7 +451,7 @@ describe("createChatHandler", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -485,7 +485,7 @@ describe("createChatHandler", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -521,7 +521,7 @@ describe("createChatHandler", () => {
       const { client, calls, getStreamControl } = createMockClient({
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -563,7 +563,7 @@ describe("createChatHandler", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -596,7 +596,7 @@ describe("createChatHandler", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -646,7 +646,7 @@ describe("createChatHandler", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -682,7 +682,7 @@ describe("bridge API integration", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls, orgIds } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -718,7 +718,7 @@ describe("bridge API integration", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -754,7 +754,7 @@ describe("bridge API integration", () => {
       const { client, calls } = createMockClient({
         orgs: createMultiTestOrgs(),
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -791,7 +791,7 @@ describe("bridge API integration", () => {
       const { client, calls, orgIds } = createMockClient({
         orgs: createMultiTestOrgs(),
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -865,7 +865,7 @@ describe("createChatHandler group chats", () => {
         const authStore = new WhatsAppAuthStore();
         await authStore.reload();
         const { client, calls } = createMockClient();
-        const sessionStore = new SessionStore(
+        const sessionStore = new ChannelSessionStore(
           path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
         );
         const orgStore = createTestOrgStore(homeDir);
@@ -913,7 +913,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -956,7 +956,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -998,7 +998,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1039,7 +1039,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1078,7 +1078,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client } = createMockClient({ orgs: createMultiTestOrgs() });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1110,7 +1110,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1149,7 +1149,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1188,7 +1188,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1226,7 +1226,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1261,7 +1261,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1361,7 +1361,7 @@ describe("createChatHandler artifact delivery", () => {
       calls: ReturnType<typeof createMockClient>["calls"];
       handleMessage: ReturnType<typeof createChatHandler>;
       sent: ReturnType<typeof createMockSocket>["sent"];
-      sessionStore: SessionStore;
+      sessionStore: ChannelSessionStore;
     }) => Promise<void>
   ) {
     await withTempHome(async (homeDir) => {
@@ -1375,7 +1375,7 @@ describe("createChatHandler artifact delivery", () => {
       const { calls, client } = createMockClient({
         messages: options?.messages,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       await sessionStore.load();
@@ -1509,7 +1509,7 @@ describe("createChatHandler artifact delivery", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       await sessionStore.load();
@@ -1625,7 +1625,7 @@ describe("stream cleanup", () => {
       const { client, getStreamControl } = createMockClient({
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1697,7 +1697,7 @@ describe("createChatHandler session hot cache", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
       await sessionStore.load();

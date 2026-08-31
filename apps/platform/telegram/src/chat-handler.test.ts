@@ -11,6 +11,7 @@ import {
   hasActiveStreams,
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
+import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
@@ -22,7 +23,6 @@ import {
   resetChatLocksForTests,
   withChatLock,
 } from "./chat-handler";
-import { SessionStore } from "./session-store";
 import {
   createMessageContext,
   createMockClient,
@@ -79,7 +79,7 @@ describe("createChatHandler group chats", () => {
         const authStore = new TelegramAuthStore();
         await authStore.reload();
         const { client, calls } = createMockClient();
-        const sessionStore = new SessionStore(
+        const sessionStore = new ChannelSessionStore(
           path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
         );
         const orgStore = createTestOrgStore(homeDir);
@@ -131,7 +131,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -180,7 +180,7 @@ describe("createChatHandler group chats", () => {
           ],
         }
       );
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -237,7 +237,7 @@ describe("createChatHandler group chats", () => {
           { id: "research", name: "Research Bot" },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -295,7 +295,7 @@ describe("createChatHandler group chats", () => {
           { id: "research", name: "Research Bot" },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -352,7 +352,7 @@ describe("createChatHandler group chats", () => {
         ],
         providerConfigured: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -405,7 +405,7 @@ describe("createChatHandler group chats", () => {
           { id: "support", name: "Support Bot" },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -449,7 +449,7 @@ describe("createChatHandler group chats", () => {
           org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
         },
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -496,7 +496,7 @@ describe("createChatHandler group chats", () => {
         autoComplete: false,
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -571,7 +571,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -613,7 +613,7 @@ describe("createChatHandler group chats", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client } = createMockClient({ orgs: createMultiTestOrgs() });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -652,7 +652,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -685,7 +685,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -722,7 +722,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -760,7 +760,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -814,7 +814,7 @@ describe("createChatHandler security", () => {
           profiles: [{ id: "default", model: null }],
         }
       );
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -855,7 +855,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -896,7 +896,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -932,7 +932,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -971,7 +971,7 @@ describe("createChatHandler security", () => {
         autoComplete: false,
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1024,7 +1024,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1078,7 +1078,7 @@ describe("createChatHandler security", () => {
         ],
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1134,7 +1134,7 @@ describe("createChatHandler security", () => {
         ],
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1181,7 +1181,7 @@ describe("createChatHandler security", () => {
         ],
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1254,7 +1254,7 @@ describe("createChatHandler security", () => {
         ],
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1317,7 +1317,7 @@ describe("createChatHandler security", () => {
         ],
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1361,7 +1361,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1397,7 +1397,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1432,7 +1432,7 @@ describe("createChatHandler security", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1469,7 +1469,7 @@ describe("bridge API integration", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls, orgIds } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1504,7 +1504,7 @@ describe("bridge API integration", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1542,7 +1542,7 @@ describe("bridge API integration", () => {
       const { client, calls } = createMockClient({
         orgs: createMultiTestOrgs(),
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1579,7 +1579,7 @@ describe("bridge API integration", () => {
       const { client, calls, orgIds } = createMockClient({
         orgs: createMultiTestOrgs(),
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1621,7 +1621,7 @@ describe("bridge API integration", () => {
           { id: "research", name: "Research Bot" },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1661,7 +1661,7 @@ describe("bridge API integration", () => {
           { id: "super_bot", isSuper: true, name: "Super Bot" },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1703,7 +1703,7 @@ describe("bridge API integration", () => {
           ],
         }
       );
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1751,7 +1751,7 @@ describe("bridge API integration", () => {
           org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
         },
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1796,7 +1796,7 @@ describe("bridge API integration", () => {
           org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
         },
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1848,7 +1848,7 @@ describe("bridge API integration", () => {
           ],
         },
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1925,7 +1925,7 @@ describe("createChatHandler document attachments", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls, getLastStreamInput } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -1973,7 +1973,7 @@ describe("createChatHandler document attachments", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -2017,7 +2017,7 @@ describe("createChatHandler document attachments", () => {
         })
       );
       const { client, calls, getLastStreamInput } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -2062,7 +2062,7 @@ describe("createChatHandler document attachments", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -2149,7 +2149,7 @@ describe("createChatHandler artifact delivery", () => {
       const { client, calls } = createMockClient({
         messages: artifactMessages,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       await sessionStore.load();
@@ -2218,7 +2218,7 @@ describe("createChatHandler artifact delivery", () => {
           },
         ],
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       await sessionStore.load();
@@ -2259,7 +2259,7 @@ describe("createChatHandler artifact delivery", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       await sessionStore.load();
@@ -2323,7 +2323,7 @@ describe("stream cleanup", () => {
         autoComplete: false,
         streaming: true,
       });
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       const orgStore = createTestOrgStore(homeDir);
@@ -2399,7 +2399,7 @@ describe("createChatHandler session hot cache", () => {
       const authStore = new TelegramAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
       await sessionStore.load();

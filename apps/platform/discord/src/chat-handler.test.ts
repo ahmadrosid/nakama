@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
+import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
 import { DiscordAuthStore } from "./auth-store";
@@ -12,7 +13,6 @@ import {
   withChatLock,
 } from "./chat-handler";
 import { TOO_MANY_IMAGES_REPLY, UNSUPPORTED_ATTACHMENT_REPLY } from "./images";
-import { SessionStore } from "./session-store";
 import {
   createDmMessage,
   createGuildChatMessage,
@@ -82,7 +82,7 @@ async function createPairedHandler(
   const authStore = new DiscordAuthStore();
   await authStore.reload();
   const { client, calls, createdSessionProfileIds } = createMockClient(options);
-  const sessionStore = new SessionStore(
+  const sessionStore = new ChannelSessionStore(
     path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
   );
   await sessionStore.load();
@@ -677,7 +677,7 @@ describe("createChatHandler early ack", () => {
     const authStore = new DiscordAuthStore();
     await authStore.reload();
     const { client } = createMockClient({ onSendStream });
-    const sessionStore = new SessionStore(
+    const sessionStore = new ChannelSessionStore(
       path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
     );
     await sessionStore.load();
@@ -1753,7 +1753,7 @@ describe("createChatHandler guild thread routing", () => {
       const authStore = new DiscordAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
-      const sessionStore = new SessionStore(
+      const sessionStore = new ChannelSessionStore(
         path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
       );
       await sessionStore.load();

@@ -7,10 +7,10 @@ import {
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
 } from "@nakama/core";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { Context } from "grammy";
 import type { TelegramRichMessenger } from "./rich-message";
 import { sendTelegramArtifactDocument } from "./send-artifact-document";
-import type { SessionStore } from "./session-store";
 
 export async function maybeSendRequestedTelegramArtifactAttachment(input: {
   ctx: Context;
@@ -19,7 +19,7 @@ export async function maybeSendRequestedTelegramArtifactAttachment(input: {
   profileId: string;
   /** Raw user text before group-context prefixing. */
   attachUserText: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   messenger: TelegramRichMessenger;
 }): Promise<void> {
   if (!isAttachIntent(input.attachUserText)) {
@@ -52,7 +52,7 @@ export async function deliverTelegramTurnArtifactShares(input: {
   session: RemoteChatSession;
   conversationKey: string;
   profileId: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   messenger: TelegramRichMessenger;
 }): Promise<void> {
   const messages = await input.session.getMessages();

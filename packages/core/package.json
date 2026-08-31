@@ -54,7 +54,8 @@
     "./soul/org-memory": "./src/soul/org-memory.ts",
     "./tools/protected": "./src/tools/protected.ts",
     "./tools/email": "./src/tools/email.ts",
-    "./mcp/preinstalled": "./src/mcp/preinstalled.ts"
+    "./mcp/preinstalled": "./src/mcp/preinstalled.ts",
+    "./channel-typing-loop": "./src/channel-typing-loop.ts"
   },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir dist --target bun",
