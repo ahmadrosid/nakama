@@ -121,6 +121,7 @@ export async function loginPlatformAdminSession(
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({ email, password }),
+      headers: { "Content-Type": "application/json" },
       method: "POST",
     })
   );
@@ -138,6 +139,7 @@ export async function loginUserSession(
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({ email, password }),
+      headers: { "Content-Type": "application/json" },
       method: "POST",
     })
   );

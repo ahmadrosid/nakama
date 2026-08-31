@@ -61,6 +61,7 @@ describe("direct org member provisioning", () => {
           email: "admin@acme.com",
           password: created.adminMember.temporaryPassword,
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );
@@ -116,6 +117,7 @@ describe("direct org member provisioning", () => {
           email: "admin@acme.com",
           password: created.adminMember.temporaryPassword,
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );
@@ -156,6 +158,7 @@ describe("direct org member provisioning", () => {
           email: "member@acme.com",
           password: added.temporaryPassword,
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );
@@ -189,6 +192,7 @@ describe("direct org member provisioning", () => {
           email: "member@acme.com",
           password: "member-new-password",
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );
