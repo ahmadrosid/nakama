@@ -30,7 +30,6 @@ export function mergeWorkspaceSettings(
     ),
     id: pickDefined(patch.id, existing?.id ?? WORKSPACE_SETTINGS_ID),
     imageModel: pickDefined(patch.imageModel, existing?.imageModel ?? null),
-    orgId: "orgId" in patch ? patch.orgId : existing?.orgId,
     selectedCodingAgentHarness: pickDefined(
       patch.selectedCodingAgentHarness,
       existing?.selectedCodingAgentHarness ?? null

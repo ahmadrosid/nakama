@@ -176,7 +176,6 @@ export interface StoredWorkspaceSettingsRecord {
   codingAgentProviderPassthrough: boolean;
   id: string;
   imageModel: string | null;
-  orgId?: string | null;
   selectedCodingAgentHarness: string | null;
   /** null = inherit the NAKAMA_OMNI env var; true/false = set explicitly here. */
   tokenOptimizerEnabled?: boolean | null;
