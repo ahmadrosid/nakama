@@ -132,6 +132,7 @@ describe("platform org routes", () => {
           email: "admin@acme.com",
           password: created.adminMember.temporaryPassword,
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );
@@ -273,6 +274,7 @@ describe("platform org routes", () => {
           email: "admin@acme.com",
           password: created.adminMember.temporaryPassword,
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );

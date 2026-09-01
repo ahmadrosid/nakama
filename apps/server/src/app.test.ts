@@ -202,6 +202,7 @@ describe("browser session auth", () => {
           email: "admin@example.com",
           password: "password123",
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );
@@ -338,6 +339,7 @@ describe("browser session auth", () => {
           email: "member@example.com",
           password: "password123",
         }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       })
     );

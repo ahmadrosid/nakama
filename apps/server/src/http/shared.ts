@@ -108,7 +108,7 @@ function isMutatingMethod(method: string): boolean {
  * X-Forwarded-Proto can upgrade http backends behind TLS terminators, but must
  * never downgrade an https request URL (spoofed/forwarded "http").
  */
-function isSecureCookieRequest(request: Request): boolean {
+export function isSecureRequest(request: Request): boolean {
   const forwardedProto = request.headers
     .get("x-forwarded-proto")
     ?.split(",")[0]
@@ -262,7 +262,7 @@ function applyBrowserSessionCookies(
   const cookieBase = {
     path: "/",
     sameSite: "Lax" as const,
-    secure: isSecureCookieRequest(request),
+    secure: isSecureRequest(request),
   };
 
   appendSetCookie(
@@ -350,6 +350,23 @@ export function clearBrowserSessionCookies(headers: Headers): void {
         secure,
       })
     );
+  }
+}
+
+/**
+ * A cross-site form can POST text/plain without a CORS preflight, which is how a
+ * malicious page can log a victim into an attacker's account. Requiring JSON
+ * forces the preflight, and nothing here answers one.
+ */
+export function assertJsonRequest(request: Request): void {
+  const contentType = request.headers
+    .get("content-type")
+    ?.split(";")[0]
+    ?.trim()
+    .toLowerCase();
+
+  if (contentType !== "application/json") {
+    throw new NakamaApiError("Content-Type must be application/json.", 415);
   }
 }
 
