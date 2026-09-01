@@ -2486,7 +2486,12 @@ export class NakamaClient {
     });
 
     if (!response.ok) {
-      if (response.status === 401 && this.authToken && !retried) {
+      if (
+        response.status === 401 &&
+        this.authToken &&
+        !retried &&
+        path !== "/v1/auth/local-token/rotate"
+      ) {
         const freshToken = await loadLocalAuthToken();
         if (freshToken && freshToken !== this.authToken) {
           this.authToken = freshToken;
