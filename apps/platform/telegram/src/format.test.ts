@@ -46,6 +46,12 @@ describe("stripMarkdownForTelegram", () => {
     );
   });
 
+  test("preserves dollar replacement sequences in bare URLs", () => {
+    const url = "https://example.com/$&/path";
+
+    expect(stripMarkdownForTelegram(url)).toBe(url);
+  });
+
   test("still strips italic markers outside URLs", () => {
     expect(
       stripMarkdownForTelegram("see _share_ then https://example.com/a_b")
@@ -90,6 +96,12 @@ describe("renderTelegramRichText", () => {
     expect(
       renderTelegramRichText("Before <tag>\n```js\n  const x = 1 < 2;\n```")
     ).toBe("Before &lt;tag&gt;\n<pre><code>  const x = 1 &lt; 2;</code></pre>");
+  });
+
+  test("preserves dollar replacement sequences in fenced code blocks", () => {
+    expect(renderTelegramRichText("```text\n$& $` $'\n```")).toBe(
+      "<pre><code>$&amp; $` $'</code></pre>"
+    );
   });
 });
 
