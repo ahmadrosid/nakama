@@ -201,6 +201,59 @@ describe("SkillPostTurnReviewService", () => {
     expect(ran).toBe(0);
   });
 
+  // A different property from the table above: not which channels skip, but
+  // that the channel decides before anything later can claim the skip. This
+  // session would fail the manage-skills check too, so if the gate moved below
+  // it the reason would change to manage_skills_unassigned.
+  test("reports the channel before a later check can claim the skip", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_1",
+      name: "Org",
+      skillsPostTurnReview: true,
+      slug: "org",
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_1",
+      isSuper: false,
+      model: null,
+      name: "Bot",
+      orgId: "org_1",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "automation",
+      createdAt: now,
+      id: "session_1",
+      model: null,
+      orgId: "org_1",
+      profileId: "profile_1",
+      title: null,
+      userId: "user_1",
+    });
+
+    let ran = 0;
+    const service = new SkillPostTurnReviewService(
+      db,
+      () => null,
+      async () => {
+        ran += 1;
+      }
+    );
+
+    expect(await service.runPostTurnSkillReview("session_1")).toBe(
+      "channel_not_interactive"
+    );
+    expect(ran).toBe(0);
+  });
+
   test("skips when flag disabled", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
