@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import {
   canRestoreDataImport,
+  shouldClearInitialPreviewDedupe,
   shouldStartInitialFilePreview,
   usePreviewSetupDataImport,
   useRestoreSetupDataImport,
@@ -120,8 +121,16 @@ export function SetupStepBackupImport({
 
     return () => {
       cancelled = true;
-      // Allow Strict Mode remount to retry the same File after cleanup.
-      initialPreviewStartedForRef.current = null;
+      // Strict Mode remount may retry the same File only when this generation
+      // is still current — do not clear a newer in-flight preview's dedupe key.
+      if (
+        shouldClearInitialPreviewDedupe(
+          generation,
+          previewGenerationRef.current
+        )
+      ) {
+        initialPreviewStartedForRef.current = null;
+      }
     };
   }, [initialFile, previewImport]);
 
