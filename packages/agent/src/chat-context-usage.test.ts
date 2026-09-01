@@ -2,6 +2,65 @@ import { describe, expect, test } from "bun:test";
 import type { ChatCompletionResult, ProviderClient } from "@nakama/core";
 import { createAgentHarness } from "./index";
 
+const REASONING = "r".repeat(400);
+
+function providerReplayingThinking(
+  name: ProviderClient["name"]
+): ProviderClient {
+  const assistantMessage = {
+    content: "Hello",
+    role: "assistant" as const,
+    thinking: REASONING,
+  };
+
+  return {
+    async generateChat() {
+      return { assistantMessage, content: "Hello", toolCalls: [] };
+    },
+    async generateText() {
+      return { content: "unused" };
+    },
+    name,
+    async streamChat(_input, handlers) {
+      handlers.onChunk("Hello");
+      return { assistantMessage, content: "Hello", toolCalls: [] };
+    },
+  };
+}
+
+async function usedTokensFor(name: ProviderClient["name"]): Promise<number> {
+  const harness = createAgentHarness({
+    provider: providerReplayingThinking(name),
+  });
+  const session = harness.createChatSession({
+    compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
+    enableToolLoop: false,
+  });
+
+  // The estimate for a turn is taken before its own reply lands, so the trace
+  // only reaches the history the turn after it was produced.
+  await session.send("hi");
+  await session.send("again");
+
+  return session.getContextUsage()?.usedTokens ?? 0;
+}
+
+function usedTokensFromInitialHistory(name: ProviderClient["name"]): number {
+  const harness = createAgentHarness({
+    provider: providerReplayingThinking(name),
+  });
+  const session = harness.createChatSession({
+    compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
+    enableToolLoop: false,
+    initialHistory: [
+      { content: "hi", role: "user" },
+      { content: "Hello", role: "assistant", thinking: REASONING },
+    ],
+  });
+
+  return session.getContextUsage()?.usedTokens ?? 0;
+}
+
 function providerReturning(
   usage?: ChatCompletionResult["usage"]
 ): ProviderClient {
@@ -85,5 +144,29 @@ describe("chat context usage", () => {
     expect(usage?.source).toBe("estimate");
     expect(usage?.usableContextTokens).toBe(80_000);
     expect(usage?.usedTokens).toBeGreaterThan(100);
+  });
+
+  // toGeminiAssistantParts never sends the trace back, so counting it here
+  // would report context the model was never given.
+  test("leaves the reasoning trace out of a Gemini estimate", async () => {
+    const gemini = await usedTokensFor("gemini");
+    const replayer = await usedTokensFor("openai");
+
+    expect({
+      differenceIsTheTrace:
+        replayer - gemini === Math.ceil(REASONING.length / 4),
+      geminiIsSmaller: gemini < replayer,
+    }).toEqual({ differenceIsTheTrace: true, geminiIsSmaller: true });
+  });
+
+  test("leaves it out of a Gemini estimate taken before any turn", () => {
+    const gemini = usedTokensFromInitialHistory("gemini");
+    const replayer = usedTokensFromInitialHistory("openai");
+
+    expect({
+      differenceIsTheTrace:
+        replayer - gemini === Math.ceil(REASONING.length / 4),
+      geminiIsSmaller: gemini < replayer,
+    }).toEqual({ differenceIsTheTrace: true, geminiIsSmaller: true });
   });
 });
