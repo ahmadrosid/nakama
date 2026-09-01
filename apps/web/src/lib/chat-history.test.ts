@@ -459,12 +459,4 @@ describe("session channel tables", () => {
 
     expect(readOnly).toEqual(["telegram", "whatsapp", "discord"]);
   });
-
-  test("every listed channel except web is read only", () => {
-    const writable = HISTORY_SESSION_CHANNELS.filter(
-      (channel) => !isReadOnlySessionChannel(channel)
-    );
-
-    expect(writable).toEqual(["web"]);
-  });
 });

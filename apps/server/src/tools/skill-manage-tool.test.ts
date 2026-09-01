@@ -380,17 +380,6 @@ Profile body.
     ).rejects.toThrow("not available during automation runs");
   });
 
-  test("refuses non-interactive channel context", async () => {
-    const { tool } = await setup();
-
-    await expect(
-      tool.run(
-        { action: "create", content: researchSkillMarkdown },
-        memberContext({ channel: "telegram" })
-      )
-    ).rejects.toThrow(/interactive web or CLI/);
-  });
-
   // The whole of SKILL_MANAGE_CHANNELS, so flipping any one value fails here
   // instead of only changing behaviour. The two allowed channels create; the
   // six others are refused before anything touches disk.

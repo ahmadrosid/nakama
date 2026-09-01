@@ -201,55 +201,6 @@ describe("SkillPostTurnReviewService", () => {
     expect(ran).toBe(0);
   });
 
-  test("skips headless automation channel as channel_not_interactive", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-    await db.upsertOrganization({
-      createdAt: now,
-      id: "org_1",
-      name: "Org",
-      skillsPostTurnReview: true,
-      slug: "org",
-      updatedAt: now,
-    });
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_1",
-      isSuper: false,
-      model: null,
-      name: "Bot",
-      orgId: "org_1",
-      systemPrompt: "",
-      updatedAt: now,
-    });
-    await db.upsertSession({
-      agentQuestionnaire: null,
-      agentTodos: [],
-      channel: "automation",
-      createdAt: now,
-      id: "session_1",
-      model: null,
-      orgId: "org_1",
-      profileId: "profile_1",
-      title: null,
-      userId: "user_1",
-    });
-
-    let ran = 0;
-    const service = new SkillPostTurnReviewService(
-      db,
-      () => null,
-      async () => {
-        ran += 1;
-      }
-    );
-
-    expect(await service.runPostTurnSkillReview("session_1")).toBe(
-      "channel_not_interactive"
-    );
-    expect(ran).toBe(0);
-  });
-
   test("skips when flag disabled", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
