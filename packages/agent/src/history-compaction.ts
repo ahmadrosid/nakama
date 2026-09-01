@@ -82,12 +82,8 @@ function estimateTokens(text: string): number {
 // Gemini is the only provider whose mapper never replays the reasoning trace:
 // toGeminiAssistantParts sends content and toolCalls only, because replaying a
 // thought needs the thoughtSignature the parser drops. See #768.
-const PROVIDERS_THAT_DROP_THINKING: ReadonlySet<ProviderName> = new Set([
-  "gemini",
-]);
-
 export function providerReplaysThinking(provider: ProviderName): boolean {
-  return !PROVIDERS_THAT_DROP_THINKING.has(provider);
+  return provider !== "gemini";
 }
 
 function estimateMessageTokens(
