@@ -1,4 +1,8 @@
-import { NakamaApiError, readApiErrorMessage } from "@nakama/core/api-error";
+import {
+  NakamaApiError,
+  NakamaAuthExpiredError,
+  readApiErrorMessage,
+} from "@nakama/core/api-error";
 import type {
   AddOrgMemberRequest,
   AddOrgMemberResponse,
@@ -2441,6 +2445,11 @@ export class NakamaClient {
           this.authToken = freshToken;
           return this.request(path, init, true);
         }
+
+        throw new NakamaAuthExpiredError(
+          await readApiErrorMessage(response),
+          path
+        );
       }
 
       throw await createApiError(response, path);
@@ -2476,6 +2485,11 @@ export class NakamaClient {
           this.authToken = freshToken;
           return this.fetchRaw(path, init, true);
         }
+
+        throw new NakamaAuthExpiredError(
+          await readApiErrorMessage(response),
+          path
+        );
       }
 
       throw await createApiError(response, path);

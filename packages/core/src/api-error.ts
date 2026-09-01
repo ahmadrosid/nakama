@@ -20,6 +20,14 @@ export class NakamaApiError extends Error {
   }
 }
 
+/** 401 after local-token reload did not yield a different token (or file missing). */
+export class NakamaAuthExpiredError extends NakamaApiError {
+  constructor(message: string, path?: string) {
+    super(message, 401, path);
+    this.name = "NakamaAuthExpiredError";
+  }
+}
+
 export async function readApiErrorMessage(response: Response): Promise<string> {
   const status = response.status;
   let bodyText = "";
