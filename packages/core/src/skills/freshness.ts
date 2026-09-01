@@ -23,18 +23,15 @@ export function classifySkillFreshness(input: {
     ? toTimestamp(input.lastUsedAt)
     : toTimestamp(input.createdAt);
   const unusedForMs = now - clock;
+  const dayMs = 24 * 60 * 60 * 1000;
   const staleAfterMs =
-    (input.staleAfterDays ?? SKILL_STALE_AFTER_MS / (24 * 60 * 60 * 1000)) *
-    24 *
-    60 *
-    60 *
-    1000;
+    input.staleAfterDays === undefined
+      ? SKILL_STALE_AFTER_MS
+      : input.staleAfterDays * dayMs;
   const archiveAfterMs =
-    (input.archiveAfterDays ?? SKILL_ARCHIVE_AFTER_MS / (24 * 60 * 60 * 1000)) *
-    24 *
-    60 *
-    60 *
-    1000;
+    input.archiveAfterDays === undefined
+      ? SKILL_ARCHIVE_AFTER_MS
+      : input.archiveAfterDays * dayMs;
 
   if (unusedForMs >= archiveAfterMs) {
     return "archive_due";
