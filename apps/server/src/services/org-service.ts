@@ -550,6 +550,15 @@ export class OrgService {
       await this.assertCanChangeAdminMembership(orgId, userId);
       throw new NakamaApiError("Not found", 404);
     }
+
+    // The org middleware stops org routes for a non-member, but the cookie stays
+    // valid on /v1/auth/* until it expires. Revoke like changePassword does: all
+    // of the user's sessions, so a multi-org user re-authenticates rather than
+    // keeping a session whose active org they were just removed from.
+    await this.databaseAdapter.revokeBrowserSessionsForUser(
+      userId,
+      new Date().toISOString()
+    );
   }
 
   async updateMember(
