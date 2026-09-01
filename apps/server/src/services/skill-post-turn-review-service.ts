@@ -49,7 +49,7 @@ export type PostTurnReviewRunner = (
   context: PostTurnReviewRunnerContext
 ) => Promise<SkillPostTurnReviewOutcome | void>;
 
-export function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
+function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
   let count = 0;
   for (const message of turnMessages) {
     if (message.role === "assistant" && message.toolCalls) {
@@ -59,7 +59,7 @@ export function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
   return count;
 }
 
-export function turnHasToolError(turnMessages: ChatMessage[]): boolean {
+function turnHasToolError(turnMessages: ChatMessage[]): boolean {
   for (const message of turnMessages) {
     if (message.role !== "tool") {
       continue;
@@ -81,7 +81,7 @@ export function turnHasToolError(turnMessages: ChatMessage[]): boolean {
   return false;
 }
 
-export function turnUsedSkillManage(turnMessages: ChatMessage[]): boolean {
+function turnUsedSkillManage(turnMessages: ChatMessage[]): boolean {
   for (const message of turnMessages) {
     if (
       message.role === "assistant" &&

@@ -1,8 +1,6 @@
 import type { AgentTodo } from "@nakama/core/contract";
-import { renderTelegramTodoStatus } from "./format";
+import { renderTelegramTodoStatus, type TelegramTodoRunState } from "./format";
 import type { TelegramRichMessenger } from "./rich-message";
-
-type TelegramTodoRunState = "working" | "completed" | "stopped" | "failed";
 
 interface TelegramReplyMessage {
   message_id: number;

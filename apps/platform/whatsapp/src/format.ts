@@ -1,12 +1,7 @@
-import { formatClientError } from "@nakama/core/api-error";
 import type { AgentTodo } from "@nakama/core/contract";
 
 const WHATSAPP_MAX_MESSAGE_LENGTH = 65_536;
 const WHATSAPP_CHAT_BUBBLE_MAX_CHARS = 400;
-
-export function formatError(error: unknown): string {
-  return formatClientError(error);
-}
 
 export function stripMarkdownForWhatsApp(text: string): string {
   let result = text.trim();

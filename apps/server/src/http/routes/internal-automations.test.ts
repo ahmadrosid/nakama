@@ -6,6 +6,7 @@ import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
 import { createHonoApp } from "../app";
 import { seedLocalClientUser } from "../test-org-helpers";
+import { setupFreshInstallSession } from "../test-session-helpers";
 
 const PROFILE_ID = "profile_default";
 const ORG_ID = "org_default";
@@ -98,15 +99,33 @@ describe("internal automation routes", () => {
     });
   });
 
-  test("rejects schedule list without local-token auth", async () => {
+  // The auth middleware already 401s an unauthenticated caller, so the only thing
+  // the route's local-token check does is keep a signed-in browser session out.
+  test("keeps a browser session out of the internal automation endpoints", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/internal/automations/schedules")
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
     );
 
-    expect(response.status).toBe(401);
+    const schedules = await app.fetch(
+      new Request("http://localhost:4310/v1/internal/automations/schedules", {
+        headers: session.headers(),
+      })
+    );
+    expect(schedules.status).toBe(401);
+
+    const run = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/internal/automations/automation_1/run?orgId=${session.orgId}`,
+        {
+          headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+          method: "POST",
+        }
+      )
+    );
+    expect(run.status).toBe(401);
   });
 
   test("runs automation via internal endpoint for the owning org", async () => {

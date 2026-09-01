@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
+import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
 import { DiscordAuthStore } from "./auth-store";
@@ -12,7 +13,6 @@ import {
   withChatLock,
 } from "./chat-handler";
 import { TOO_MANY_IMAGES_REPLY, UNSUPPORTED_ATTACHMENT_REPLY } from "./images";
-import { SessionStore } from "./session-store";
 import {
   createDmMessage,
   createGuildChatMessage,

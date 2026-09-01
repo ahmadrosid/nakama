@@ -471,11 +471,8 @@ export class OrgService {
       passwordHash: string;
     };
   }): Promise<{ user: StoredUserRecord; organization: OrganizationSummary }> {
-    const organization = await this.insertOrganization({
-      name: input.organization.name,
-      slug: input.organization.slug,
-    });
-
+    // Validate before the insert: a rejected admin used to leave the org behind,
+    // and the retry then failed on the slug it had just taken.
     const name = input.admin.name.trim();
     const email = normalizeEmail(input.admin.email);
     const phone = normalizeOptionalPhone(input.admin.phone);
@@ -487,6 +484,11 @@ export class OrgService {
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
+
+    const organization = await this.insertOrganization({
+      name: input.organization.name,
+      slug: input.organization.slug,
+    });
 
     const now = new Date().toISOString();
     const user: StoredUserRecord = {
@@ -543,8 +545,20 @@ export class OrgService {
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
     if (!deleted) {
+      // The delete carries the last-admin guard, so a concurrent change between
+      // the check above and here lands here rather than emptying the org.
+      await this.assertCanChangeAdminMembership(orgId, userId);
       throw new NakamaApiError("Not found", 404);
     }
+
+    // The org middleware stops org routes for a non-member, but the cookie stays
+    // valid on /v1/auth/* until it expires. Revoke like changePassword does: all
+    // of the user's sessions, so a multi-org user re-authenticates rather than
+    // keeping a session whose active org they were just removed from.
+    await this.databaseAdapter.revokeBrowserSessionsForUser(
+      userId,
+      new Date().toISOString()
+    );
   }
 
   async updateMember(
@@ -589,12 +603,15 @@ export class OrgService {
     }
 
     if (member.role !== role) {
-      await this.databaseAdapter.upsertOrgMember({
-        createdAt: member.createdAt,
+      const updated = await this.databaseAdapter.updateOrgMemberRole(
         orgId,
-        role,
         userId,
-      });
+        role
+      );
+      if (!updated) {
+        await this.assertCanChangeAdminMembership(orgId, userId, role);
+        throw new NakamaApiError("Not found", 404);
+      }
     }
 
     return {

@@ -802,6 +802,65 @@ describe("createHonoApp", () => {
     });
   }
 
+  test("a rejected setup leaves no organization behind", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const setup = (email: string) =>
+      app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify(
+            buildSetupAuthBody(email, {
+              organization: { name: "Acme", slug: "acme" },
+            })
+          ),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+    expect((await setup("not-an-email")).status).toBe(400);
+    expect(await options.databaseAdapter.listOrganizations()).toHaveLength(0);
+
+    // The org used to be committed before the admin was validated, so the
+    // retry lost the slug it had just taken.
+    expect((await setup("admin@example.com")).status).toBe(201);
+  });
+
+  test("sends HSTS behind a TLS terminator", async () => {
+    const app = createHonoApp(createServerOptions());
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/health", {
+        headers: { "X-Forwarded-Proto": "https" },
+      })
+    );
+
+    expect(response.headers.get("Strict-Transport-Security")).toContain(
+      "max-age="
+    );
+  });
+
+  test("login rejects a body that is not application/json", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    await setupFreshInstallSession(app, options.databaseAdapter);
+
+    // A cross-site form can send text/plain without a CORS preflight, which is
+    // how a page logs a victim into an account it controls.
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: "admin@example.com",
+          password: "password123",
+        }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+  });
+
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
@@ -1161,6 +1220,7 @@ describe("createHonoApp", () => {
             email: "noorg@example.com",
             password: "password123",
           }),
+          headers: { "Content-Type": "application/json" },
           method: "POST",
         })
       );
@@ -1285,6 +1345,7 @@ describe("createHonoApp", () => {
             email: "platform@example.com",
             password: "password123",
           }),
+          headers: { "Content-Type": "application/json" },
           method: "POST",
         })
       );
@@ -1324,6 +1385,7 @@ describe("createHonoApp", () => {
             email: "admin@acme.com",
             password: created.adminMember.temporaryPassword,
           }),
+          headers: { "Content-Type": "application/json" },
           method: "POST",
         })
       );
