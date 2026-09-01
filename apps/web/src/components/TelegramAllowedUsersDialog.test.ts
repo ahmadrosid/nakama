@@ -23,13 +23,13 @@ describe("parseAllowedTelegramUsers", () => {
           },
         })
       )
-    ).toThrow(/valid Telegram JSON|numeric user ID/i);
+    ).toThrow(/numeric user ID/i);
   });
 
   test("rejects string ids in JSON payloads", () => {
     expect(() =>
       parseAllowedTelegramUsers(JSON.stringify({ from: { id: "12345" } }))
-    ).toThrow(/valid Telegram JSON|numeric user ID/i);
+    ).toThrow(/numeric user ID/i);
   });
 
   test("still accepts plain numeric ids", () => {
