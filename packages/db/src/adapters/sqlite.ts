@@ -670,6 +670,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     DELETE FROM profile_tools
     WHERE profile_id = ? AND tool_id = ?
   `);
+  const unassignToolFromAllProfilesStmt = db.prepare(`
+    DELETE FROM profile_tools
+    WHERE tool_id = ?
+  `);
+  const deleteToolEverywhereTransaction = db.transaction((toolId: string) => {
+    unassignToolFromAllProfilesStmt.run(toolId);
+    return deleteToolStmt.run(toolId);
+  });
 
   const listSessionsStmt = db.prepare("SELECT * FROM sessions");
   const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
@@ -1964,7 +1972,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteTool(id) {
-      const result = deleteToolStmt.run(id);
+      // FK cascade is off (PRAGMA foreign_keys = OFF), so unassign + delete
+      // must be one transaction or seed/admin delete can leave partial state.
+      const result = deleteToolEverywhereTransaction(id);
       return result.changes > 0;
     },
 
