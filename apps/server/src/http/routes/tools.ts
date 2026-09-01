@@ -4,6 +4,7 @@ import {
   type CreateToolRequest,
   formatServerError,
   type ListToolsResponse,
+  NakamaApiError,
   type ProfileResponse,
   type RunToolRequest,
   type RunToolResponse,
@@ -350,8 +351,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
         })
       );
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
-      const status = rawMessage.includes("not found") ? 404 : 400;
+      const status = error instanceof NakamaApiError ? error.status : 400;
       return json({ error: formatServerError(error) }, status);
     }
   });
@@ -366,8 +366,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
         await agent.suggestToolPlaygroundParams(toolId, body.prompt ?? "")
       );
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
-      const status = rawMessage.includes("not found") ? 404 : 400;
+      const status = error instanceof NakamaApiError ? error.status : 400;
       return json({ error: formatServerError(error) }, status);
     }
   });

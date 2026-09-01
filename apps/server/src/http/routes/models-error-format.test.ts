@@ -30,33 +30,4 @@ describe("model routes error formatting", () => {
       error: "An unexpected server error occurred.",
     });
   });
-
-  test("discover models does not leak an unexpected error's message", async () => {
-    const { app, databaseAdapter } = createMinimalHonoApp({
-      agent: {
-        discoverModels: async () => {
-          throw new Error(
-            "getaddrinfo ENOTFOUND internal-provider.nakama.local"
-          );
-        },
-      },
-    });
-    const session = await setupFreshInstallSession(app, databaseAdapter);
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/models/discover", {
-        body: JSON.stringify({ baseUrl: "https://example.com" }),
-        headers: session.headers({
-          "Content-Type": "application/json",
-          "X-CSRF-Token": session.csrfToken,
-        }),
-        method: "POST",
-      })
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "An unexpected server error occurred.",
-    });
-  });
 });

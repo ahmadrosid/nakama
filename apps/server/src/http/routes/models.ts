@@ -1202,13 +1202,8 @@ export function registerModelRoutes(
   app.post("/v1/models/discover", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<DiscoverModelsRequest>(c.req.raw);
-
-    try {
-      const result = await agent.discoverModels(body);
-      return json<ModelsResponse>(result);
-    } catch (error) {
-      return errorResponse(formatServerError(error), 400);
-    }
+    const result = await agent.discoverModels(body);
+    return json<ModelsResponse>(result);
   });
 
   app.get("/v1/providers", async (c) => {

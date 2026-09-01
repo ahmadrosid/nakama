@@ -136,7 +136,7 @@ describe("notification webhook routes", () => {
         })
       );
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
       await expect(response.json()).resolves.toEqual({
         error: "An unexpected server error occurred.",
       });

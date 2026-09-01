@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -374,7 +375,7 @@ describe("tool playground routes", () => {
   test("run still maps a not-found message to 404 without leaking it", async () => {
     const { app, authService, databaseAdapter } = createApp({
       runToolPlayground: async () => {
-        throw new Error("Tool tool_missing not found");
+        throw new NakamaApiError("Tool not found.", 404);
       },
     });
     const { orgId, adminSession } = await createOrgAdminSession(
@@ -401,7 +402,7 @@ describe("tool playground routes", () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({
-      error: "An unexpected server error occurred.",
+      error: "Tool not found.",
     });
   });
 });

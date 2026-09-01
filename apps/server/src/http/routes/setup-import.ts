@@ -118,11 +118,7 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    try {
-      await assertSetupImportAllowed(databaseAdapter);
-    } catch (error) {
-      return setupImportErrorResponse(error);
-    }
+    await assertSetupImportAllowed(databaseAdapter);
 
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
 
@@ -141,11 +137,7 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    try {
-      await assertSetupImportAllowed(databaseAdapter);
-    } catch (error) {
-      return setupImportErrorResponse(error);
-    }
+    await assertSetupImportAllowed(databaseAdapter);
 
     const body = await readJson<RestoreDataImportRequest>(c.req.raw);
 
@@ -188,9 +180,4 @@ async function assertSetupImportAllowed(
       409
     );
   }
-}
-
-function setupImportErrorResponse(error: unknown): Response {
-  const status = error instanceof NakamaApiError ? error.status : 500;
-  return errorResponse(formatServerError(error), status);
 }

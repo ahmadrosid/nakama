@@ -529,24 +529,20 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
     requireNotViewerFromContext(c);
-    try {
-      const orgId = requireActiveOrgIdFromContext(c);
-      const sessionId = decodeURIComponent(c.req.param("sessionId"));
-      const body = await readJson<BranchSessionRequest>(c.req.raw);
-      const result = await agent.branchSession(
-        sessionId,
-        body.messageIndex,
-        orgId
-      );
+    const orgId = requireActiveOrgIdFromContext(c);
+    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const body = await readJson<BranchSessionRequest>(c.req.raw);
+    const result = await agent.branchSession(
+      sessionId,
+      body.messageIndex,
+      orgId
+    );
 
-      if (!result) {
-        return errorResponse("Session not found", 404);
-      }
-
-      return json<BranchSessionResponse>(result, 201);
-    } catch (error) {
-      return errorResponse(formatServerError(error), 400);
+    if (!result) {
+      return errorResponse("Session not found", 404);
     }
+
+    return json<BranchSessionResponse>(result, 201);
   });
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {

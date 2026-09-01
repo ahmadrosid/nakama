@@ -1,4 +1,4 @@
-import type { AgentBrowserInstallEvent } from "@nakama/core";
+import { type AgentBrowserInstallEvent, formatServerError } from "@nakama/core";
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 
@@ -75,7 +75,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
         await executor(send);
       } catch (error) {
         send({
-          error: error instanceof Error ? error.message : String(error),
+          error: formatServerError(error),
           type: "error",
         } as Extract<TEvent, InstallStreamErrorEvent>);
       } finally {
