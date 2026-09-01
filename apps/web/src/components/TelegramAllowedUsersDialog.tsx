@@ -24,7 +24,9 @@ export interface AllowedTelegramUser {
   username?: string;
 }
 
-function parseAllowedTelegramUsers(input: string): AllowedTelegramUser[] {
+export function parseAllowedTelegramUsers(
+  input: string
+): AllowedTelegramUser[] {
   const trimmed = input.trim();
 
   if (!trimmed) {
@@ -38,10 +40,11 @@ function parseAllowedTelegramUsers(input: string): AllowedTelegramUser[] {
         message?: { from?: { id?: unknown; username?: unknown } };
       };
       const user = payload.message?.from ?? payload.from;
-      const id =
-        typeof user?.id === "number"
-          ? String(user.id)
-          : String(user?.id ?? "").trim();
+      if (typeof user?.id !== "number" || !Number.isFinite(user.id)) {
+        throw new Error("Missing Telegram from.id.");
+      }
+
+      const id = String(user.id);
       const username =
         typeof user?.username === "string" ? user.username.trim() : "";
 
