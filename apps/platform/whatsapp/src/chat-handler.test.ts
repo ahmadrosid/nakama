@@ -4,13 +4,13 @@ import {
   hasActiveStreams,
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
+import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import { WhatsAppAuthStore } from "./auth-store";
 import {
   createChatHandler,
   resetChatLocksForTests,
   withChatLock,
 } from "./chat-handler";
-import { SessionStore } from "./session-store";
 import {
   createMockClient,
   createMultiTestOrgs,
