@@ -78,36 +78,39 @@ describe("withToolRetries", () => {
   test("an aborted signal during the run stops immediately and is never retried", async () => {
     let attempts = 0;
     const controller = new AbortController();
+    const cancellation = { code: "cancelled" };
     const run = async () => {
       attempts += 1;
-      controller.abort(new Error("cancelled"));
+      controller.abort(cancellation);
       throw new Error("boom");
     };
 
-    await expect(
-      withToolRetries(run)({}, ctx(controller.signal))
-    ).rejects.toThrow("boom");
+    await expect(withToolRetries(run)({}, ctx(controller.signal))).rejects.toBe(
+      cancellation
+    );
     expect(attempts).toBe(1);
   });
 
   test("an already-aborted signal never starts the run", async () => {
     const controller = new AbortController();
-    controller.abort(new Error("cancelled"));
+    controller.abort();
+    const cancellation = controller.signal.reason;
     let attempts = 0;
     const run = async () => {
       attempts += 1;
       return { ok: true };
     };
 
-    await expect(
-      withToolRetries(run)({}, ctx(controller.signal))
-    ).rejects.toThrow("cancelled");
+    await expect(withToolRetries(run)({}, ctx(controller.signal))).rejects.toBe(
+      cancellation
+    );
     expect(attempts).toBe(0);
   });
 
   test("aborting during the backoff cancels the retry", async () => {
     let attempts = 0;
     const controller = new AbortController();
+    const cancellation = new Error("cancelled");
     const run = async () => {
       attempts += 1;
       if (attempts === 1) {
@@ -117,9 +120,9 @@ describe("withToolRetries", () => {
     };
 
     const pending = withToolRetries(run)({}, ctx(controller.signal));
-    setTimeout(() => controller.abort(), 25);
+    setTimeout(() => controller.abort(cancellation), 25);
 
-    await expect(pending).rejects.toThrow();
+    await expect(pending).rejects.toBe(cancellation);
     // Never reached the second attempt.
     expect(attempts).toBe(1);
   });

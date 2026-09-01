@@ -103,4 +103,30 @@ describe("tool-loop", () => {
       warnSpy.mockRestore();
     }
   });
+
+  test("executeToolCall re-throws the cancellation reason", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancelled");
+    const cancellingTool: ToolDefinition = {
+      description: "Cancels its turn",
+      name: "cancel",
+      parameters: { properties: {}, type: "object" },
+      async run() {
+        controller.abort(cancellation);
+        throw new Error("tool failed while cancelling");
+      },
+    };
+
+    const pending = executeToolCall(
+      [cancellingTool],
+      {
+        arguments: {},
+        id: "call_5",
+        name: "cancel",
+      },
+      { signal: controller.signal }
+    );
+
+    await expect(pending).rejects.toBe(cancellation);
+  });
 });

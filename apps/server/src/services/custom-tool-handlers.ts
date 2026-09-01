@@ -58,19 +58,13 @@ export const TOOL_RETRY_LIMIT = 2;
  */
 const TOOL_RETRY_BASE_DELAY_MS = 500;
 
-function abortReason(signal: AbortSignal): Error {
-  return signal.reason instanceof Error
-    ? signal.reason
-    : new Error("Tool execution aborted");
-}
-
 /**
  * Wraps a custom tool run with at-most-two retries and exponential backoff.
  *
  * Thrown errors (including timeouts) are transient by default and get
  * retried; an aborted `context.signal` stops immediately and is never
- * retried, including mid-backoff. The final failure is re-thrown unchanged
- * so callers keep the current error message shape.
+ * retried, including mid-backoff. Cancellation preserves the signal's reason;
+ * other final failures are re-thrown unchanged.
  */
 export function withToolRetries(
   run: (input: unknown, context: ToolContext) => Promise<unknown>
@@ -78,21 +72,27 @@ export function withToolRetries(
   return async (input, context) => {
     let attempts = 0;
     for (;;) {
-      if (context.signal?.aborted) {
-        throw abortReason(context.signal);
-      }
+      context.signal?.throwIfAborted();
       try {
         return await run(input, context);
       } catch (error) {
         attempts += 1;
-        if (attempts > TOOL_RETRY_LIMIT || context.signal?.aborted) {
+        context.signal?.throwIfAborted();
+        if (attempts > TOOL_RETRY_LIMIT) {
           throw error;
         }
         // Rejects immediately if the signal aborts mid-backoff (including an
         // already-aborted signal), so a cancelled turn never waits out the delay.
-        await delay(TOOL_RETRY_BASE_DELAY_MS * 2 ** (attempts - 1), undefined, {
-          signal: context.signal,
-        });
+        try {
+          await delay(
+            TOOL_RETRY_BASE_DELAY_MS * 2 ** (attempts - 1),
+            undefined,
+            { signal: context.signal }
+          );
+        } catch (delayError) {
+          context.signal?.throwIfAborted();
+          throw delayError;
+        }
       }
     }
   };

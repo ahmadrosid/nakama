@@ -49,6 +49,7 @@ export async function executeToolCall(
       return result;
     }
   } catch (error) {
+    context.signal?.throwIfAborted();
     return {
       error: error instanceof Error ? error.message : String(error),
     };
