@@ -367,6 +367,13 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
       "tc_local_same\n",
       "utf8"
     );
+    await saveUserConfig({
+      defaultProviderId: null,
+      localAuthTokenHash: createHash("sha256")
+        .update("tc_local_same")
+        .digest("hex"),
+      providers: [],
+    });
 
     const client = new NakamaClient({
       authToken: "tc_local_same",
@@ -394,7 +401,7 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
   }
 });
 
-test("non-browser clients throw NakamaAuthExpiredError when token file is missing", async () => {
+test("non-browser clients throw NakamaAuthExpiredError when token reload still 401s", async () => {
   const configDir = await mkdtemp(
     join(tmpdir(), "nakama-client-auth-missing-")
   );

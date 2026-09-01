@@ -2452,6 +2452,13 @@ export class NakamaClient {
         );
       }
 
+      if (response.status === 401 && retried) {
+        throw new NakamaAuthExpiredError(
+          await readApiErrorMessage(response),
+          path
+        );
+      }
+
       throw await createApiError(response, path);
     }
 
@@ -2486,6 +2493,13 @@ export class NakamaClient {
           return this.fetchRaw(path, init, true);
         }
 
+        throw new NakamaAuthExpiredError(
+          await readApiErrorMessage(response),
+          path
+        );
+      }
+
+      if (response.status === 401 && retried) {
         throw new NakamaAuthExpiredError(
           await readApiErrorMessage(response),
           path
