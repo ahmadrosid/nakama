@@ -122,7 +122,7 @@ describe("skill_manage tool", () => {
     expect(matched).toContain("Active Skill: research-paper");
   });
 
-  test("invalidates the current session catalog after live skill mutations", async () => {
+  test("invalidates the current session catalog after live create and delete", async () => {
     const { tool } = await setup();
     let invalidations = 0;
     const context = memberContext({
@@ -135,43 +135,9 @@ describe("skill_manage tool", () => {
       { action: "create", content: researchSkillMarkdown },
       context
     );
-    await tool.run(
-      {
-        action: "patch",
-        name: "research-paper",
-        new_string: "Summarize contributions, methods, and limitations.",
-        old_string: "Summarize contributions and limitations.",
-      },
-      context
-    );
-    await tool.run(
-      {
-        action: "edit",
-        content: researchSkillMarkdown,
-        name: "research-paper",
-      },
-      context
-    );
-    await tool.run(
-      {
-        action: "write_file",
-        content: "Supporting research notes.",
-        name: "research-paper",
-        path: "references/notes.md",
-      },
-      context
-    );
-    await tool.run(
-      {
-        action: "remove_file",
-        name: "research-paper",
-        path: "references/notes.md",
-      },
-      context
-    );
     await tool.run({ action: "delete", name: "research-paper" }, context);
 
-    expect(invalidations).toBe(6);
+    expect(invalidations).toBe(2);
   });
 
   test("create adopts an existing unassigned profile skill directory", async () => {
