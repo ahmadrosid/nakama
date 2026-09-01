@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { streamInstallEvents } from "./coding-harness-install-stream";
 
 type TestEvent = { type: string; message?: string; error?: string };
@@ -54,15 +55,31 @@ describe("streamInstallEvents", () => {
     ]);
   });
 
-  test("reports an executor failure as an error event", async () => {
+  test("reports an executor's intentional failure as an error event", async () => {
     const response = streamInstallEvents<TestEvent>(() =>
-      Promise.reject(new Error("installer exited with code 1"))
+      Promise.reject(new NakamaApiError("installer exited with code 1", 502))
     );
 
     const events = await readEvents(response);
 
     expect(events.map((event) => event.type)).toEqual(["error"]);
     expect(events[0]?.error).toContain("installer exited with code 1");
+  });
+
+  test("does not leak an unexpected executor error's message", async () => {
+    const response = streamInstallEvents<TestEvent>(() =>
+      Promise.reject(
+        new Error(
+          "ENOENT: no such file or directory, open '/home/nakama/.config/nakama/nakama.db'"
+        )
+      )
+    );
+
+    const events = await readEvents(response);
+
+    expect(events).toEqual([
+      { error: "An unexpected server error occurred.", type: "error" },
+    ]);
   });
 
   test("ends the stream with a timeout error when the installer stalls", async () => {

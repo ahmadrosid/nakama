@@ -1,4 +1,4 @@
-import type { AgentBrowserStatusResponse } from "@nakama/core";
+import { type AgentBrowserStatusResponse, NakamaApiError } from "@nakama/core";
 import {
   ensureBunGlobalInstallDirs,
   ensureProcessPath,
@@ -91,16 +91,18 @@ export async function installAgentBrowser(
     .trim();
 
   if (cliResult.timedOut) {
-    throw new Error(
-      "Install timed out while installing the agent-browser CLI."
+    throw new NakamaApiError(
+      "Install timed out while installing the agent-browser CLI.",
+      502
     );
   }
 
   if (cliResult.exitCode !== 0) {
-    throw new Error(
+    throw new NakamaApiError(
       cliOutput
         ? `agent-browser CLI install failed: ${summarizeInstallOutput(cliOutput)}`
-        : "agent-browser CLI install failed."
+        : "agent-browser CLI install failed.",
+      502
     );
   }
 
@@ -121,16 +123,18 @@ export async function installAgentBrowser(
     .trim();
 
   if (browserResult.timedOut) {
-    throw new Error(
-      "Install timed out while downloading Chrome for agent-browser."
+    throw new NakamaApiError(
+      "Install timed out while downloading Chrome for agent-browser.",
+      502
     );
   }
 
   if (browserResult.exitCode !== 0) {
-    throw new Error(
+    throw new NakamaApiError(
       browserOutput
         ? `agent-browser browser install failed: ${summarizeInstallOutput(browserOutput)}`
-        : "agent-browser browser install failed."
+        : "agent-browser browser install failed.",
+      502
     );
   }
 

@@ -1786,13 +1786,16 @@ export class AgentService {
     }
 
     if (!Number.isInteger(messageIndex) || messageIndex < 0) {
-      throw new Error("messageIndex must be a non-negative integer.");
+      throw new NakamaApiError(
+        "messageIndex must be a non-negative integer.",
+        400
+      );
     }
 
     const sourceMessages = await loadSessionHistory(this.db, sessionId);
 
     if (messageIndex >= sourceMessages.length) {
-      throw new Error("messageIndex is out of bounds.");
+      throw new NakamaApiError("messageIndex is out of bounds.", 400);
     }
 
     const nextSessionId = nanoid();
@@ -2069,7 +2072,10 @@ export class AgentService {
       const apiKey = request.apiKey?.trim() ?? "";
 
       if (!apiKey) {
-        throw new Error("API key is required to discover Fireworks models.");
+        throw new NakamaApiError(
+          "API key is required to discover Fireworks models.",
+          400
+        );
       }
 
       const entries = await fetchFireworksGatewayModels(apiKey);
@@ -2105,7 +2111,7 @@ export class AgentService {
 
     const baseUrl = request.baseUrl?.trim();
     if (!baseUrl) {
-      throw new Error("baseUrl or providerId is required.");
+      throw new NakamaApiError("baseUrl or providerId is required.", 400);
     }
 
     const entries =
@@ -2154,7 +2160,7 @@ export class AgentService {
     );
 
     if (!instance) {
-      throw new Error("Provider not found.");
+      throw new NakamaApiError("Provider not found.", 404);
     }
 
     if (instance.type === "ollama" || instance.type === "openai_compatible") {
@@ -2177,8 +2183,9 @@ export class AgentService {
         ollamaRequiresApiKey(hostMode!) &&
         !apiKey.trim()
       ) {
-        throw new Error(
-          "Add an API key before discovering Ollama Cloud models."
+        throw new NakamaApiError(
+          "Add an API key before discovering Ollama Cloud models.",
+          400
         );
       }
 
@@ -2189,7 +2196,10 @@ export class AgentService {
         (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
 
       if (!baseUrl) {
-        throw new Error("A base URL is required to discover models.");
+        throw new NakamaApiError(
+          "A base URL is required to discover models.",
+          400
+        );
       }
 
       const entries =
@@ -2218,7 +2228,10 @@ export class AgentService {
         "";
 
       if (!apiKey.trim()) {
-        throw new Error("Add an API key before discovering Fireworks models.");
+        throw new NakamaApiError(
+          "Add an API key before discovering Fireworks models.",
+          400
+        );
       }
 
       const entries = await fetchFireworksGatewayModels(apiKey);
@@ -2237,13 +2250,17 @@ export class AgentService {
     }
 
     if (instance.type !== "openai") {
-      throw new Error(
-        `Remote model discovery is not supported for ${instance.type}.`
+      throw new NakamaApiError(
+        `Remote model discovery is not supported for ${instance.type}.`,
+        400
       );
     }
 
     if (!instance.apiKey.trim()) {
-      throw new Error("Add an API key before discovering models.");
+      throw new NakamaApiError(
+        "Add an API key before discovering models.",
+        400
+      );
     }
 
     const baseUrl = instance.baseUrl?.trim() || "https://api.openai.com/v1";
@@ -2616,7 +2633,7 @@ export class AgentService {
     const record = await this.db.getTool(toolId);
 
     if (!record) {
-      throw new Error("Tool not found.");
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     const profileId = await this.resolvePlaygroundProfileId(
@@ -2670,7 +2687,7 @@ export class AgentService {
     const record = await this.db.getTool(toolId);
 
     if (!record) {
-      throw new Error("Tool not found.");
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     const loaded = await handler.load(record);

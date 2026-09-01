@@ -640,7 +640,7 @@ export function streamMessage(
               }
 
               timedOut = true;
-              reject(new Error(message));
+              reject(new NakamaApiError(message, 504));
               // After rejecting, so the race reports the timeout and not the
               // abort. The provider request is still open at this point and
               // nothing else ever stops it.

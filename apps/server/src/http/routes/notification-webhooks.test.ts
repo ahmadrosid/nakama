@@ -113,6 +113,38 @@ describe("notification webhook routes", () => {
     expect(response.status).toBe(401);
   });
 
+  test("does not leak an unexpected internal failure's message", async () => {
+    const { app, databaseAdapter } = await createApp();
+    const lookupSpy = spyOn(
+      databaseAdapter,
+      "getNotificationDestination"
+    ).mockImplementation(() => {
+      throw new Error(
+        "SQLITE_IOERR: disk I/O error at /home/nakama/.config/nakama/nakama.db"
+      );
+    });
+
+    try {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/notify/dest_1", {
+          body: JSON.stringify({ body: "Hello" }),
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": "secret_key",
+          },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "An unexpected server error occurred.",
+      });
+    } finally {
+      lookupSpy.mockRestore();
+    }
+  });
+
   test("does not deliver for an archived organization", async () => {
     const telegramCalls: unknown[] = [];
     const originalFetch = globalThis.fetch;

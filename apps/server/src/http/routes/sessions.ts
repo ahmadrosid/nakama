@@ -14,7 +14,7 @@ import type {
   SessionStatusResponse,
   UpdateSessionRequest,
 } from "@nakama/core";
-import { AGENT_CHANNELS } from "@nakama/core";
+import { AGENT_CHANNELS, formatServerError } from "@nakama/core";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
@@ -529,25 +529,20 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
     requireNotViewerFromContext(c);
-    try {
-      const orgId = requireActiveOrgIdFromContext(c);
-      const sessionId = decodeURIComponent(c.req.param("sessionId"));
-      const body = await readJson<BranchSessionRequest>(c.req.raw);
-      const result = await agent.branchSession(
-        sessionId,
-        body.messageIndex,
-        orgId
-      );
+    const orgId = requireActiveOrgIdFromContext(c);
+    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const body = await readJson<BranchSessionRequest>(c.req.raw);
+    const result = await agent.branchSession(
+      sessionId,
+      body.messageIndex,
+      orgId
+    );
 
-      if (!result) {
-        return errorResponse("Session not found", 404);
-      }
-
-      return json<BranchSessionResponse>(result, 201);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return errorResponse(message, 400);
+    if (!result) {
+      return errorResponse("Session not found", 404);
     }
+
+    return json<BranchSessionResponse>(result, 201);
   });
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
@@ -626,7 +621,7 @@ export function registerSessionRoutes(
         ...(contextUsage ? { contextUsage } : {}),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatServerError(error);
       sessionTurnRegistry.endTurn(sessionId, { error: message, type: "error" });
       return errorResponse(message, 500);
     }
