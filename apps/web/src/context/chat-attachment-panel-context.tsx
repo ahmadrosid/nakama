@@ -9,6 +9,9 @@ import {
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
 import {
+  type AttachmentPanelCloseInFlight,
+  beginAttachmentPanelClose,
+  beginPriorAttachmentPanelClose,
   type ChatAttachmentPanelConfig,
   ChatAttachmentPanelContext,
 } from "@/context/chat-attachment-panel-context-shared";
@@ -63,6 +66,7 @@ export function ChatAttachmentPanelProvider({
   }, []);
 
   const showGenerationRef = useRef(0);
+  const closeInFlightRef = useRef<AttachmentPanelCloseInFlight>(null);
 
   const show = useCallback((nextConfig: ChatAttachmentPanelConfig) => {
     const generation = ++showGenerationRef.current;
@@ -77,9 +81,13 @@ export function ChatAttachmentPanelProvider({
       }
     };
 
-    const current = configRef.current;
-    if (current && current.id !== nextConfig.id && current.onClose) {
-      void Promise.resolve(current.onClose()).finally(apply);
+    const priorClose = beginPriorAttachmentPanelClose(
+      configRef.current,
+      nextConfig.id,
+      closeInFlightRef
+    );
+    if (priorClose) {
+      void priorClose.finally(apply);
       return;
     }
 
@@ -103,7 +111,18 @@ export function ChatAttachmentPanelProvider({
   );
 
   const handlePanelClose = useCallback(() => {
-    configRef.current?.onClose?.();
+    // Drop any pending show() apply so a late prior-close cannot remount.
+    showGenerationRef.current += 1;
+    const priorClose = beginAttachmentPanelClose(
+      configRef.current,
+      closeInFlightRef
+    );
+    if (priorClose) {
+      void priorClose.finally(() => {
+        setConfig(null);
+      });
+      return;
+    }
     setConfig(null);
   }, []);
 
