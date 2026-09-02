@@ -1318,8 +1318,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
   // Per-org context lives on org_members only. users.user_context is a legacy
-  // column left in place for existing installs; it is never written and must
-  // not be read (see #550).
+  // column left in place for existing installs; migrateLegacyUserContextToOrgMembers
+  // copies any remaining values once, and this read path must not use it (#550).
   const getUserContextStmt = db.prepare(`
     SELECT om.user_context AS user_context
     FROM org_members om

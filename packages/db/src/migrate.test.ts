@@ -627,6 +627,48 @@ describe("organization schema migration", () => {
     }
   });
 
+  test("copies legacy users.user_context into empty org_members rows", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO users (
+          id, email, password_hash, is_platform_admin, user_context,
+          created_at, updated_at
+        ) VALUES (
+          'user_legacy', 'legacy@example.com', 'hash', 0,
+          '# From users table',
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES (
+          'org_acme', 'Acme', 'acme',
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+
+        INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (
+          'org_acme', 'user_legacy', 'member', '2026-06-21T00:00:00.000Z'
+        );
+      `);
+
+      migrateDatabase(db);
+
+      const member = db
+        .prepare(
+          "SELECT user_context FROM org_members WHERE org_id = ? AND user_id = ?"
+        )
+        .get("org_acme", "user_legacy") as { user_context: string | null };
+
+      expect(member.user_context).toBe("# From users table");
+    } finally {
+      db.close();
+    }
+  });
+
   test("rolls back profile org backfill when a related update fails", () => {
     const db = new Database(":memory:");
 
