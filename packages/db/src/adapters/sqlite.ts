@@ -1627,44 +1627,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET status = 'applied', applied_at = ?
     WHERE org_id = ? AND id = ?
   `);
-  const listSkillSuggestionsStmtCache = new Map<
-    string,
-    ReturnType<Database["prepare"]>
-  >();
-  const getListSkillSuggestionsStmt = (filters: {
-    profileId: boolean;
-    sessionId: boolean;
-    status: boolean;
-  }) => {
-    const key = `${filters.sessionId ? "s" : "_"}${filters.status ? "t" : "_"}${filters.profileId ? "p" : "_"}`;
-    const cached = listSkillSuggestionsStmtCache.get(key);
-    if (cached) {
-      return cached;
-    }
-
-    const conditions = ["org_id = ?"];
-    if (filters.sessionId) {
-      conditions.push("session_id = ?");
-    }
-    if (filters.status) {
-      conditions.push("status = ?");
-    }
-    if (filters.profileId) {
-      conditions.push("profile_id = ?");
-    }
-
-    const stmt = db.prepare(`
-      SELECT
-        id, org_id, profile_id, session_id, proposed_by_user_id,
-        action, skill_name, content, patch_old_string, patch_new_string,
-        status, source, warnings, created_at, applied_at
-      FROM skill_suggestions
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY created_at DESC
-    `);
-    listSkillSuggestionsStmtCache.set(key, stmt);
-    return stmt;
-  };
+  const listSkillSuggestionsStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      action, skill_name, content, patch_old_string, patch_new_string,
+      status, source, warnings, created_at, applied_at
+    FROM skill_suggestions
+    WHERE org_id = ?
+      AND (? IS NULL OR session_id = ?)
+      AND (? IS NULL OR status = ?)
+      AND (? IS NULL OR profile_id = ?)
+    ORDER BY created_at DESC
+  `);
   const createArtifactShareStmt = db.prepare(`
     INSERT INTO artifact_shares (
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
@@ -2677,23 +2651,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listSkillSuggestions(orgId, options = {}) {
       const { sessionId, status, profileId } = options;
-      const params: string[] = [orgId];
-
-      if (sessionId) {
-        params.push(sessionId);
-      }
-      if (status) {
-        params.push(status);
-      }
-      if (profileId) {
-        params.push(profileId);
-      }
-
-      const rows = getListSkillSuggestionsStmt({
-        profileId: Boolean(profileId),
-        sessionId: Boolean(sessionId),
-        status: Boolean(status),
-      }).all(...params) as SkillSuggestionRow[];
+      const sessionFilter = sessionId ?? null;
+      const statusFilter = status ?? null;
+      const profileFilter = profileId ?? null;
+      const rows = listSkillSuggestionsStmt.all(
+        orgId,
+        sessionFilter,
+        sessionFilter,
+        statusFilter,
+        statusFilter,
+        profileFilter,
+        profileFilter
+      ) as SkillSuggestionRow[];
       return rows.map(toSkillSuggestionRecord);
     },
 
