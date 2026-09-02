@@ -27,7 +27,6 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
-import { installedVersionLabel } from "@/lib/installed-version";
 import { cn } from "@/lib/utils";
 
 export function SidebarUserMenu() {
@@ -36,7 +35,7 @@ export function SidebarUserMenu() {
   const { theme, setTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const [personalisationOpen, setPersonalisationOpen] = useState(false);
-  const versionLabel = installedVersionLabel(health?.version);
+  const versionLabel = health?.version?.trim() || null;
 
   if (!user) {
     return null;

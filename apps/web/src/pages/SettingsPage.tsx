@@ -14,7 +14,6 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
-import { installedVersionLabel } from "@/lib/installed-version";
 import { getBrowserTimezone } from "@/lib/timezones";
 
 export function SettingsPage() {
@@ -27,7 +26,7 @@ export function SettingsPage() {
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
   const { data: savedTimezone } = useUserTimezone();
   const saveTimezoneMutation = useSaveUserTimezone();
-  const versionLabel = installedVersionLabel(health?.version);
+  const versionLabel = health?.version?.trim() || null;
 
   useEffect(() => {
     if (savedTimezone) {

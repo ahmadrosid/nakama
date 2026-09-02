@@ -19,7 +19,7 @@ export function getNakamaVersion(env: NodeJS.ProcessEnv = process.env): string {
   return readPackageVersion() ?? FALLBACK_VERSION;
 }
 
-export function normalizeNakamaVersion(value: string): string {
+function normalizeNakamaVersion(value: string): string {
   const trimmed = value.trim();
   if (trimmed.startsWith("v") || trimmed.startsWith("V")) {
     return trimmed.slice(1);
