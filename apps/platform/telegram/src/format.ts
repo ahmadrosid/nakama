@@ -53,7 +53,7 @@ function restoreBareUrls(text: string, urls: string[]): string {
   let result = text;
 
   for (let index = 0; index < urls.length; index++) {
-    result = result.replace(`@@TCURL${index}@@`, urls[index]!);
+    result = result.replace(`@@TCURL${index}@@`, () => urls[index]!);
   }
 
   return result;
@@ -99,7 +99,7 @@ function restoreProtectedBlocks(text: string, blocks: string[]): string {
   let result = text;
 
   for (let index = 0; index < blocks.length; index++) {
-    result = result.replace(`@@TCTOKEN${index}@@`, blocks[index]!);
+    result = result.replace(`@@TCTOKEN${index}@@`, () => blocks[index]!);
   }
 
   return result;
