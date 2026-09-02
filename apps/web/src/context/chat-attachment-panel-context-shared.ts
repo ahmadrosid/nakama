@@ -8,7 +8,7 @@ export interface ChatAttachmentPanelConfig {
   headerActions?: ReactNode;
   id: string;
   leading?: ReactNode;
-  onClose?: () => void;
+  onClose?: () => void | Promise<void>;
   resizable?: boolean;
   subtitle?: string | null;
   title: string;

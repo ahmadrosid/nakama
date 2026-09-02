@@ -62,15 +62,28 @@ export function ChatAttachmentPanelProvider({
     });
   }, []);
 
+  const showGenerationRef = useRef(0);
+
   const show = useCallback((nextConfig: ChatAttachmentPanelConfig) => {
+    const generation = ++showGenerationRef.current;
+
+    const apply = () => {
+      if (generation !== showGenerationRef.current) {
+        return;
+      }
+      setConfig(nextConfig);
+      if (nextConfig.defaultWidth != null) {
+        setWidth(clampAttachmentPanelWidth(nextConfig.defaultWidth));
+      }
+    };
+
     const current = configRef.current;
-    if (current && current.id !== nextConfig.id) {
-      current.onClose?.();
+    if (current && current.id !== nextConfig.id && current.onClose) {
+      void Promise.resolve(current.onClose()).finally(apply);
+      return;
     }
-    setConfig(nextConfig);
-    if (nextConfig.defaultWidth != null) {
-      setWidth(clampAttachmentPanelWidth(nextConfig.defaultWidth));
-    }
+
+    apply();
   }, []);
 
   const update = useCallback(
