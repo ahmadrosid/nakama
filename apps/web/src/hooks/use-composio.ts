@@ -10,6 +10,24 @@ import {
 } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/lib/toast";
+
+/**
+ * Composio OAuth connect links are hosted on composio.dev (and subdomains such
+ * as backend.composio.dev). Reject anything else before assigning location.href.
+ */
+export function isAllowedComposioRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase();
+    return host === "composio.dev" || host.endsWith(".composio.dev");
+  } catch {
+    return false;
+  }
+}
 
 export const composioSettingsQueryOptions = queryOptions({
   queryFn: () => client.getComposioSettings(),
@@ -78,6 +96,10 @@ export function useConnectComposioToolkit() {
     onSuccess: (response) => {
       // Composio hosts the account picker and consent, then redirects back to
       // /integrations through our OAuth callback.
+      if (!isAllowedComposioRedirectUrl(response.redirectUrl)) {
+        toast("Blocked an unexpected Composio redirect URL.");
+        return;
+      }
       window.location.href = response.redirectUrl;
     },
   });
