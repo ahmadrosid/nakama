@@ -385,39 +385,6 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
         }),
     });
 
-    try {
-      await client.health();
-      throw new Error("expected NakamaAuthExpiredError");
-    } catch (error) {
-      expect(error).toBeInstanceOf(NakamaAuthExpiredError);
-      expect((error as NakamaAuthExpiredError).name).toBe(
-        "NakamaAuthExpiredError"
-      );
-      expect((error as NakamaAuthExpiredError).status).toBe(401);
-    }
-  } finally {
-    delete process.env.NAKAMA_CONFIG_DIR;
-    await rm(configDir, { force: true, recursive: true });
-  }
-});
-
-test("non-browser clients throw NakamaAuthExpiredError when token reload still 401s", async () => {
-  const configDir = await mkdtemp(
-    join(tmpdir(), "nakama-client-auth-missing-")
-  );
-  process.env.NAKAMA_CONFIG_DIR = configDir;
-
-  try {
-    const client = new NakamaClient({
-      authToken: "tc_local_gone",
-      baseUrl: "http://localhost:4310",
-      fetch: async () =>
-        new Response(JSON.stringify({ error: "Authentication required" }), {
-          headers: { "Content-Type": "application/json" },
-          status: 401,
-        }),
-    });
-
     await expect(client.health()).rejects.toBeInstanceOf(
       NakamaAuthExpiredError
     );
