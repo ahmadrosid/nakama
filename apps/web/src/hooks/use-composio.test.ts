@@ -24,6 +24,16 @@ describe("isAllowedComposioRedirectUrl", () => {
     expect(
       isAllowedComposioRedirectUrl("https://composio.dev.evil.com/phish")
     ).toBe(false);
+    expect(
+      isAllowedComposioRedirectUrl("https://notcomposio.dev/connect")
+    ).toBe(false);
+    expect(isAllowedComposioRedirectUrl("")).toBe(false);
     expect(isAllowedComposioRedirectUrl("not a url")).toBe(false);
+  });
+
+  test("allows documented dashboard host", () => {
+    expect(
+      isAllowedComposioRedirectUrl("https://dashboard.composio.dev/oauth")
+    ).toBe(true);
   });
 });
