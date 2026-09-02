@@ -23,16 +23,20 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
+import { installedVersionLabel } from "@/lib/installed-version";
 import { cn } from "@/lib/utils";
 
 export function SidebarUserMenu() {
   const { user, logout, refreshSession } = useAuth();
+  const { health } = useAppContext();
   const { theme, setTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const [personalisationOpen, setPersonalisationOpen] = useState(false);
+  const versionLabel = installedVersionLabel(health?.version);
 
   if (!user) {
     return null;
@@ -156,6 +160,15 @@ export function SidebarUserMenu() {
                       Log out
                     </DropdownMenuItem>
                   </div>
+
+                  {versionLabel ? (
+                    <>
+                      <div className="h-px bg-border" />
+                      <p className="px-3.5 py-2 font-mono text-2xs text-muted-foreground tabular-nums">
+                        Nakama {versionLabel}
+                      </p>
+                    </>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             </span>

@@ -113,6 +113,11 @@ export interface HealthResponse {
   ok: true;
   providerConfigured: boolean;
   userConfigured: boolean;
+  /**
+   * Installed Nakama application version (`NAKAMA_VERSION` or root package.json).
+   * Distinct from `apiVersion`, which is the HTTP contract number.
+   */
+  version: string;
 }
 
 export interface AutomationSchedule {

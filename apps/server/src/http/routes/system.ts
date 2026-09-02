@@ -1,5 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
+import {
+  getNakamaVersion,
+  isComposioConfiguredAsync,
+  NAKAMA_API_VERSION,
+} from "@nakama/core";
 import type { UpdateWebPublicUrlRequest } from "@nakama/core/contract";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import {
@@ -55,6 +59,10 @@ export function registerSystemRoutes(
       ok: z.literal(true),
       providerConfigured: z.boolean(),
       userConfigured: z.boolean(),
+      version: z.string().openapi({
+        description:
+          "Installed Nakama application version. Prefer NAKAMA_VERSION, else root package.json.",
+      }),
     })
     .openapi("HealthResponse");
   const systemStatusSchema = z
@@ -187,6 +195,7 @@ export function registerSystemRoutes(
         ok: true,
         providerConfigured: agent.providerConfigured,
         userConfigured: humanUserCount > 0,
+        version: getNakamaVersion(),
       },
       200
     );

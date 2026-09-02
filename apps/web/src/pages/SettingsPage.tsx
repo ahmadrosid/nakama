@@ -10,13 +10,16 @@ import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
+import { installedVersionLabel } from "@/lib/installed-version";
 import { getBrowserTimezone } from "@/lib/timezones";
 
 export function SettingsPage() {
   const { user, activeOrg } = useAuth();
+  const { health } = useAppContext();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const isOrgAdmin = activeOrg?.role === "admin";
   const [formError, setFormError] = useState<string | null>(null);
@@ -24,6 +27,7 @@ export function SettingsPage() {
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
   const { data: savedTimezone } = useUserTimezone();
   const saveTimezoneMutation = useSaveUserTimezone();
+  const versionLabel = installedVersionLabel(health?.version);
 
   useEffect(() => {
     if (savedTimezone) {
@@ -54,6 +58,15 @@ export function SettingsPage() {
             <p className="font-medium text-foreground text-sm">Appearance</p>
             <ThemeToggle />
           </div>
+
+          {versionLabel ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <p className="font-medium text-foreground text-sm">Version</p>
+              <p className="font-mono text-muted-foreground text-sm tabular-nums">
+                {versionLabel}
+              </p>
+            </div>
+          ) : null}
 
           {isOrgAdmin ? (
             <>
