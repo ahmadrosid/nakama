@@ -11,7 +11,6 @@ import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-wi
 import {
   type AttachmentPanelCloseInFlight,
   beginAttachmentPanelClose,
-  beginPriorAttachmentPanelClose,
   type ChatAttachmentPanelConfig,
   ChatAttachmentPanelContext,
 } from "@/context/chat-attachment-panel-context-shared";
@@ -81,11 +80,11 @@ export function ChatAttachmentPanelProvider({
       }
     };
 
-    const priorClose = beginPriorAttachmentPanelClose(
-      configRef.current,
-      nextConfig.id,
-      closeInFlightRef
-    );
+    const current = configRef.current;
+    const priorClose =
+      current && current.id !== nextConfig.id
+        ? beginAttachmentPanelClose(current, closeInFlightRef)
+        : null;
     if (priorClose) {
       void priorClose.finally(apply);
       return;

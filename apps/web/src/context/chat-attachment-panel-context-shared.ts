@@ -51,18 +51,6 @@ export function beginAttachmentPanelClose(
   return promise;
 }
 
-/** Await prior panel close before mounting a different `nextId`, or null. */
-export function beginPriorAttachmentPanelClose(
-  current: Pick<ChatAttachmentPanelConfig, "id" | "onClose"> | null,
-  nextId: string,
-  inFlight: { current: AttachmentPanelCloseInFlight }
-): Promise<void> | null {
-  if (!current || current.id === nextId) {
-    return null;
-  }
-  return beginAttachmentPanelClose(current, inFlight);
-}
-
 export interface ChatAttachmentPanelContextValue {
   activeId: string | null;
   hide: (id?: string) => void;
