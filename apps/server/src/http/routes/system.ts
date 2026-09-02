@@ -59,10 +59,7 @@ export function registerSystemRoutes(
       ok: z.literal(true),
       providerConfigured: z.boolean(),
       userConfigured: z.boolean(),
-      version: z.string().openapi({
-        description:
-          "Installed Nakama application version. Prefer NAKAMA_VERSION, else root package.json.",
-      }),
+      version: z.string(),
     })
     .openapi("HealthResponse");
   const systemStatusSchema = z

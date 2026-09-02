@@ -26,7 +26,7 @@ export function SettingsPage() {
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
   const { data: savedTimezone } = useUserTimezone();
   const saveTimezoneMutation = useSaveUserTimezone();
-  const versionLabel = health?.version?.trim() || null;
+  const version = health?.version?.trim();
 
   useEffect(() => {
     if (savedTimezone) {
@@ -58,11 +58,11 @@ export function SettingsPage() {
             <ThemeToggle />
           </div>
 
-          {versionLabel ? (
+          {version ? (
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <p className="font-medium text-foreground text-sm">Version</p>
               <p className="font-mono text-muted-foreground text-sm tabular-nums">
-                {versionLabel}
+                {version}
               </p>
             </div>
           ) : null}

@@ -35,7 +35,7 @@ export function SidebarUserMenu() {
   const { theme, setTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const [personalisationOpen, setPersonalisationOpen] = useState(false);
-  const versionLabel = health?.version?.trim() || null;
+  const version = health?.version?.trim();
 
   if (!user) {
     return null;
@@ -160,11 +160,11 @@ export function SidebarUserMenu() {
                     </DropdownMenuItem>
                   </div>
 
-                  {versionLabel ? (
+                  {version ? (
                     <>
                       <div className="h-px bg-border" />
                       <p className="px-3.5 py-2 font-mono text-2xs text-muted-foreground tabular-nums">
-                        Nakama {versionLabel}
+                        Nakama {version}
                       </p>
                     </>
                   ) : null}
