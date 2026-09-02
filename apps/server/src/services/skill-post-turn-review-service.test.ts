@@ -140,7 +140,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
 
 describe("SkillPostTurnReviewService", () => {
   test("runs runner once for eligible interactive channels when flag on and manage-skills assigned", async () => {
-    for (const channel of ["web", "discord", "telegram", "whatsapp"]) {
+    for (const channel of ["web", "cli", "discord", "telegram", "whatsapp"]) {
       const db = createInMemoryDatabaseAdapter();
       await seedEligibleTurn(db, channel);
 
@@ -158,7 +158,54 @@ describe("SkillPostTurnReviewService", () => {
     }
   });
 
-  test("skips headless automation channel as channel_not_interactive", async () => {
+  // The other half of the same table. Together these two cover all eight
+  // channels, so flipping any value in POST_TURN_REVIEW_CHANNELS fails a test
+  // rather than only shifting behaviour.
+  test("skips the non-interactive channels even when the turn is eligible", async () => {
+    for (const channel of ["automation", "task", "subagent"]) {
+      const db = createInMemoryDatabaseAdapter();
+      await seedEligibleTurn(db, channel);
+
+      let ran = 0;
+      const service = new SkillPostTurnReviewService(
+        db,
+        () => null,
+        async () => {
+          ran += 1;
+        }
+      );
+
+      expect(await service.runPostTurnSkillReview("session_1")).toBe(
+        "channel_not_interactive"
+      );
+      expect(ran).toBe(0);
+    }
+  });
+
+  test("skips a channel value that is not an agent channel at all", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await seedEligibleTurn(db, "sms");
+
+    let ran = 0;
+    const service = new SkillPostTurnReviewService(
+      db,
+      () => null,
+      async () => {
+        ran += 1;
+      }
+    );
+
+    expect(await service.runPostTurnSkillReview("session_1")).toBe(
+      "channel_not_interactive"
+    );
+    expect(ran).toBe(0);
+  });
+
+  // A different property from the table above: not which channels skip, but
+  // that the channel decides before anything later can claim the skip. This
+  // session would fail the manage-skills check too, so if the gate moved below
+  // it the reason would change to manage_skills_unassigned.
+  test("reports the channel before a later check can claim the skip", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({

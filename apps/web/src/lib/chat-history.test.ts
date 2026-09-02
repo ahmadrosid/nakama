@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
+import { AGENT_CHANNELS } from "@nakama/core/contract";
 import { extractTurnArtifacts } from "./chat-artifacts";
 import {
   chatMessagesToListItems,
   formatSessionRelativeTime,
   formatSessionTimestamp,
+  HISTORY_SESSION_CHANNELS,
+  isReadOnlySessionChannel,
 } from "./chat-history";
 
 const tinyPngBase64 =
@@ -433,5 +436,27 @@ describe("formatSessionTimestamp", () => {
       "Unknown time"
     );
     expect(formatSessionRelativeTime("totally-bogus")).toBe("Unknown time");
+  });
+});
+
+// Both web channel tables, every channel named. Flipping one value in either
+// table fails one of these, which is what the tables are for: a channel that
+// joins AGENT_CHANNELS has to be decided rather than dropping out in silence.
+describe("session channel tables", () => {
+  test("lists the four channels that have a web history", () => {
+    expect(HISTORY_SESSION_CHANNELS).toEqual([
+      "web",
+      "telegram",
+      "whatsapp",
+      "discord",
+    ]);
+  });
+
+  test("marks the three messaging channels read only and no others", () => {
+    const readOnly = AGENT_CHANNELS.filter((channel) =>
+      isReadOnlySessionChannel(channel)
+    );
+
+    expect(readOnly).toEqual(["telegram", "whatsapp", "discord"]);
   });
 });
