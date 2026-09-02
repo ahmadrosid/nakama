@@ -12,6 +12,9 @@ describe("isAllowedComposioRedirectUrl", () => {
     expect(
       isAllowedComposioRedirectUrl("https://PLATFORM.COMPOSIO.DEV/oauth/start")
     ).toBe(true);
+    expect(
+      isAllowedComposioRedirectUrl("https://dashboard.composio.dev/oauth")
+    ).toBe(true);
   });
 
   test("rejects non-https, foreign hosts, and garbage", () => {
@@ -29,11 +32,5 @@ describe("isAllowedComposioRedirectUrl", () => {
     ).toBe(false);
     expect(isAllowedComposioRedirectUrl("")).toBe(false);
     expect(isAllowedComposioRedirectUrl("not a url")).toBe(false);
-  });
-
-  test("allows documented dashboard host", () => {
-    expect(
-      isAllowedComposioRedirectUrl("https://dashboard.composio.dev/oauth")
-    ).toBe(true);
   });
 });
