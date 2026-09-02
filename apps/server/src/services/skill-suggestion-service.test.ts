@@ -273,7 +273,7 @@ describe("SkillSuggestionService", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  test("listSuggestions filter permutations reuse prepared statements", async () => {
+  test("listSuggestions filter permutations return the same row", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrg(db);
     const { suggestions } = buildServices(db);
