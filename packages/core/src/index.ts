@@ -80,6 +80,7 @@ export * from "./local-auth";
 export { createImapReader } from "./mail/imap-reader";
 export { createSmtpSender } from "./mail/smtp-sender";
 export * from "./message-content";
+export { getNakamaVersion } from "./nakama-version";
 export * from "./normalize-task-prompt";
 export * from "./notification-destinations";
 export * from "./ollama-provider-config";

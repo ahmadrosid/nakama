@@ -689,6 +689,7 @@ describe("createHonoApp", () => {
       ok: true,
       providerConfigured: true,
       userConfigured: false,
+      version: expect.any(String),
     });
   });
 

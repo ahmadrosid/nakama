@@ -47,6 +47,7 @@ const healthyStatus: SystemStatusResponse = {
     ok: true,
     providerConfigured: true,
     userConfigured: true,
+    version: "0.4.6",
   },
   taskWorker: { activeRuns: 0, ok: true, providerConfigured: true },
   telegramWorker: { configured: true, ok: true, paired: true, running: true },
