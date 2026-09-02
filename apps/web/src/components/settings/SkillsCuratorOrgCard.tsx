@@ -22,11 +22,14 @@ function formatRunTime(value: string | null | undefined): string {
 }
 
 export function SkillsCuratorOrgCard() {
-  const { activeOrg, updateOrg } = useAuth();
+  const { activeOrg, updateOrg, user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [latest, setLatest] = useState<SkillCuratorRunResult | null>(null);
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
+  const [pollIntervalMinutes, setPollIntervalMinutes] = useState<number | null>(
+    null
+  );
 
   const orgId = activeOrg?.id;
 
@@ -46,6 +49,17 @@ export function SkillsCuratorOrgCard() {
     });
   }, [activeOrg?.role, loadLatest, orgId]);
 
+  useEffect(() => {
+    if (!orgId || user?.isPlatformAdmin !== true) {
+      return;
+    }
+
+    void client
+      .getAutomationWorkerSettings()
+      .then((settings) => setPollIntervalMinutes(settings.pollIntervalMinutes))
+      .catch((error: unknown) => toast(formatError(error)));
+  }, [orgId, user?.isPlatformAdmin]);
+
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
   }
@@ -60,6 +74,18 @@ export function SkillsCuratorOrgCard() {
     setBusy(true);
     try {
       await updateOrg(currentOrgId, patch);
+    } catch (error) {
+      toast(formatError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updatePollInterval(value: number): Promise<void> {
+    setBusy(true);
+    try {
+      const settings = await client.setAutomationWorkerSettings(value);
+      setPollIntervalMinutes(settings.pollIntervalMinutes);
     } catch (error) {
       toast(formatError(error));
     } finally {
@@ -87,9 +113,11 @@ export function SkillsCuratorOrgCard() {
   return (
     <Card className="w-full overflow-hidden shadow-none">
       <div className="border-border border-b px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <p className="font-medium text-foreground text-sm">Skill curator</p>
-          <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-medium text-foreground text-sm">Skill curator</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {busy ? <Spinner /> : null}
             <Switch
               aria-label="Enable skill curator"
@@ -120,6 +148,71 @@ export function SkillsCuratorOrgCard() {
           </div>
         </div>
       </div>
+      <div className="border-border border-b px-4 py-3">
+        <p className="font-medium text-foreground text-sm">Freshness clocks</p>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label className="grid gap-1 text-muted-foreground text-xs">
+            Stale after
+            <input
+              aria-label="Stale after days"
+              className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
+              defaultValue={activeOrg.skillsCuratorStaleAfterDays ?? 30}
+              disabled={busy}
+              min={1}
+              onBlur={(event) => {
+                const value = Number(event.currentTarget.value);
+                if (Number.isInteger(value)) {
+                  void updateOrgFlag({ skillsCuratorStaleAfterDays: value });
+                }
+              }}
+              type="number"
+            />
+          </label>
+          <label className="grid gap-1 text-muted-foreground text-xs">
+            Archive after
+            <input
+              aria-label="Archive after days"
+              className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
+              defaultValue={activeOrg.skillsCuratorArchiveAfterDays ?? 90}
+              disabled={busy}
+              max={3650}
+              min={2}
+              onBlur={(event) => {
+                const value = Number(event.currentTarget.value);
+                if (Number.isInteger(value)) {
+                  void updateOrgFlag({ skillsCuratorArchiveAfterDays: value });
+                }
+              }}
+              type="number"
+            />
+          </label>
+        </div>
+      </div>
+      {user?.isPlatformAdmin === true ? (
+        <div className="border-border border-b px-4 py-3">
+          <label className="grid gap-1 text-muted-foreground text-xs">
+            Automation worker poll interval (minutes)
+            <input
+              aria-label="Automation worker poll interval minutes"
+              className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
+              disabled={busy || pollIntervalMinutes === null}
+              max={1440}
+              min={1}
+              onBlur={(event) => {
+                const value = Number(event.currentTarget.value);
+                if (Number.isInteger(value)) {
+                  void updatePollInterval(value);
+                }
+              }}
+              onChange={(event) =>
+                setPollIntervalMinutes(Number(event.currentTarget.value))
+              }
+              type="number"
+              value={pollIntervalMinutes ?? 5}
+            />
+          </label>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-3 px-4 py-3">
         <p className="text-muted-foreground text-xs tabular-nums">
           {latest?.dryRun ? "Preview · " : null}

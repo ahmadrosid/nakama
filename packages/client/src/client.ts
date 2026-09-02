@@ -18,6 +18,7 @@ import type {
   AutomationResponse,
   AutomationRunRecord,
   AutomationSchedule,
+  AutomationWorkerSettingsResponse,
   BranchSessionRequest,
   BranchSessionResponse,
   ChangePasswordRequest,
@@ -166,6 +167,7 @@ import type {
   UpdateArtifactResponse,
   UpdateAuthProfileRequest,
   UpdateAutomationRequest,
+  UpdateAutomationWorkerSettingsRequest,
   UpdateComposioSettingsRequest,
   UpdateDiscordSettingsRequest,
   UpdateEmailSettingsRequest,
@@ -272,6 +274,26 @@ export class NakamaClient {
       "/v1/token-optimization",
       {
         body: JSON.stringify({ enabled }),
+        method: "PUT",
+      }
+    );
+  }
+
+  async getAutomationWorkerSettings(): Promise<AutomationWorkerSettingsResponse> {
+    return this.request<AutomationWorkerSettingsResponse>(
+      "/v1/settings/automation-worker"
+    );
+  }
+
+  async setAutomationWorkerSettings(
+    pollIntervalMinutes: number
+  ): Promise<AutomationWorkerSettingsResponse> {
+    return this.request<AutomationWorkerSettingsResponse>(
+      "/v1/settings/automation-worker",
+      {
+        body: JSON.stringify({
+          pollIntervalMinutes,
+        } satisfies UpdateAutomationWorkerSettingsRequest),
         method: "PUT",
       }
     );

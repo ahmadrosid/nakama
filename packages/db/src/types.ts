@@ -168,6 +168,8 @@ export interface StoredLlmUsageModelStatsRecord {
 }
 
 export interface StoredWorkspaceSettingsRecord {
+  /** Workspace-global interval for refreshing automation schedules and curator work. */
+  automationWorkerPollIntervalMs: number;
   codingAgentHarnesses: StoredCodingAgentHarnessRecord[];
   /**
    * When true (default), coding CLIs get Nakama provider credentials at spawn.
@@ -384,9 +386,11 @@ export interface StoredOrganizationRecord {
   createdAt: string;
   id: string;
   name: string;
+  skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
   skillsCuratorLastRunAt?: string | null;
+  skillsCuratorStaleAfterDays?: number;
   skillsPostTurnReview?: boolean;
   skillsWriteApproval?: boolean;
   slug: string;

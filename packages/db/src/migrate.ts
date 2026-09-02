@@ -570,6 +570,18 @@ function migrateSkillsCuratorColumns(db: Database): void {
     );
   }
 
+  if (!names.has("skills_curator_stale_after_days")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN skills_curator_stale_after_days INTEGER NOT NULL DEFAULT 30;"
+    );
+  }
+
+  if (!names.has("skills_curator_archive_after_days")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN skills_curator_archive_after_days INTEGER NOT NULL DEFAULT 90;"
+    );
+  }
+
   if (!names.has("skills_curator_last_run_at")) {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN skills_curator_last_run_at TEXT;"
@@ -1217,6 +1229,12 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   if (!columnNames.has("coding_agent_provider_passthrough")) {
     db.exec(`
       ALTER TABLE workspace_settings ADD COLUMN coding_agent_provider_passthrough INTEGER NOT NULL DEFAULT 1;
+    `);
+  }
+
+  if (!columnNames.has("automation_worker_poll_interval_ms")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN automation_worker_poll_interval_ms INTEGER NOT NULL DEFAULT 300000;
     `);
   }
 }

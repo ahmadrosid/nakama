@@ -7,6 +7,9 @@ function createMockClient(
   overrides: Partial<{
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
     runAutomationInternal: (id: string) => Promise<void>;
+    getAutomationWorkerSettings: () => Promise<{ pollIntervalMinutes: number }>;
+    getTimezone: () => Promise<string>;
+    listSkillCuratorOrgs: () => Promise<{ orgs: [] }>;
   }> = {}
 ): NakamaClient {
   return {
@@ -63,102 +66,37 @@ describe("AutomationWorkerScheduler", () => {
     scheduler.stop();
   });
 
-  test("serializes complete poll cycles and resumes after failures", async () => {
-    const releaseFirstReload = Promise.withResolvers<void>();
-    const curatorStarted = Promise.withResolvers<void>();
-    const releaseCurator = Promise.withResolvers<void>();
-    const failingReload = Promise.withResolvers<AutomationSchedule[]>();
-    let intervalCallback: (() => Promise<void>) | undefined;
-    let listCalls = 0;
-    let statusChanges = 0;
-    const client = createMockClient({
-      listAutomationSchedules: async () => {
-        listCalls += 1;
-        if (listCalls === 1) {
-          return [];
-        }
-
-        if (listCalls === 2) {
-          await releaseFirstReload.promise;
-          return [];
-        }
-
-        if (listCalls === 3) {
-          return failingReload.promise;
-        }
-
-        return [];
-      },
-    });
-    const scheduler = new AutomationWorkerScheduler(client, () => {
-      statusChanges += 1;
-    });
-    const intervalSpy = spyOn(globalThis, "setInterval").mockImplementation(
-      (callback) => {
-        intervalCallback = callback as () => Promise<void>;
-        return {} as ReturnType<typeof setInterval>;
-      }
-    );
-    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
-    const pendingPolls: Promise<void>[] = [];
+  test("reschedules polling when the workspace-global interval changes", async () => {
+    const callbacks: Array<() => Promise<void>> = [];
+    const intervals: number[] = [];
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    globalThis.setInterval = ((
+      callback: () => Promise<void>,
+      interval: number
+    ) => {
+      callbacks.push(callback);
+      intervals.push(interval);
+      return 1 as ReturnType<typeof setInterval>;
+    }) as typeof setInterval;
+    globalThis.clearInterval = (() => undefined) as typeof clearInterval;
 
     try {
-      await scheduler.start();
-      client.listSkillCuratorOrgs = async () => {
-        curatorStarted.resolve();
-        await releaseCurator.promise;
-        return { orgs: [] };
-      };
-      scheduler.beginPolling(1000);
-      const poll = intervalCallback;
-      if (!poll) {
-        throw new Error("Polling callback was not registered.");
-      }
-
-      const firstPoll = poll();
-      pendingPolls.push(firstPoll);
-      expect(listCalls).toBe(2);
-
-      const reloadOverlap = poll();
-      pendingPolls.push(reloadOverlap);
-      expect(listCalls).toBe(2);
-
-      releaseFirstReload.resolve();
-      await curatorStarted.promise;
-      const curatorOverlap = poll();
-      pendingPolls.push(curatorOverlap);
-      expect(listCalls).toBe(2);
-      expect(statusChanges).toBe(1);
-
-      releaseCurator.resolve();
-      await Promise.all([firstPoll, reloadOverlap, curatorOverlap]);
-      expect(statusChanges).toBe(2);
-
-      const failedReloadPoll = poll();
-      const failedReloadOverlap = poll();
-      pendingPolls.push(failedReloadPoll, failedReloadOverlap);
-      expect(listCalls).toBe(3);
-
-      failingReload.reject(new Error("reload failed"));
-      await Promise.all([failedReloadPoll, failedReloadOverlap]);
-
-      const resumedPoll = poll();
-      pendingPolls.push(resumedPoll);
-      await resumedPoll;
-
-      expect(listCalls).toBe(4);
-      expect(statusChanges).toBe(3);
-      expect(errorSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      releaseFirstReload.resolve();
-      releaseCurator.resolve();
-      failingReload.resolve([]);
-      await Promise.all(
-        pendingPolls.map((pendingPoll) => pendingPoll.catch(() => undefined))
+      const scheduler = new AutomationWorkerScheduler(
+        createMockClient({
+          getAutomationWorkerSettings: async () => ({
+            pollIntervalMinutes: 10,
+          }),
+        })
       );
+      scheduler.beginPolling(5 * 60 * 1000);
+      await callbacks[0]!();
+
+      expect(intervals).toEqual([5 * 60 * 1000, 10 * 60 * 1000]);
       scheduler.stop();
-      errorSpy.mockRestore();
-      intervalSpy.mockRestore();
+    } finally {
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
     }
   });
 });
