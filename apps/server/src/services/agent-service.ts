@@ -3527,6 +3527,9 @@ export class AgentService {
         forbidProfileSkillMarkdownWrites: hasSkillManage,
         isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
+        onSkillCatalogChange: () => {
+          this.sessions.delete(sessionId);
+        },
         orgId,
         orgRole: orgRole ?? undefined,
         profileId,

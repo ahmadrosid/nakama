@@ -103,16 +103,18 @@ function skillManageResult(options: {
   action: SkillManageAction;
   name: string;
   assigned: boolean;
+  context: ToolContext;
   description?: string;
   created?: boolean;
   path?: string;
 }) {
+  options.context.onSkillCatalogChange?.();
   const matchHint =
     options.action === "delete"
       ? "The skill was removed from this profile (disk, assignment, and DB row). Keyword match and /skill will no longer find it."
       : options.action === "write_file" || options.action === "remove_file"
         ? "Supporting file change applied under the profile skill directory."
-        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the baked session skills catalog list may refresh on a new session.";
+        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the session skills catalog refreshes before the next turn.";
 
   return {
     action: options.action,
@@ -425,6 +427,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "create",
             assigned: true,
+            context,
             created: response.created,
             description: response.skill.description,
             name: response.skill.name,
@@ -461,6 +464,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "patch",
             assigned: true,
+            context,
             description: response.skill.description,
             name: response.skill.name,
           });
@@ -492,6 +496,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "edit",
             assigned: true,
+            context,
             description: response.skill.description,
             name: response.skill.name,
           });
@@ -522,6 +527,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "write_file",
             assigned: true,
+            context,
             name: written.skillName,
             path: written.relativePath,
           });
@@ -548,6 +554,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "remove_file",
             assigned: true,
+            context,
             name: removed.skillName,
             path: removed.relativePath,
           });
@@ -566,6 +573,7 @@ export function createSkillManageTools(
         return skillManageResult({
           action: "delete",
           assigned: false,
+          context,
           name,
         });
       },

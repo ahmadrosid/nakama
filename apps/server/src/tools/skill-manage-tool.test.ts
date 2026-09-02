@@ -122,6 +122,24 @@ describe("skill_manage tool", () => {
     expect(matched).toContain("Active Skill: research-paper");
   });
 
+  test("invalidates the current session catalog after live create and delete", async () => {
+    const { tool } = await setup();
+    let invalidations = 0;
+    const context = memberContext({
+      onSkillCatalogChange: () => {
+        invalidations += 1;
+      },
+    });
+
+    await tool.run(
+      { action: "create", content: researchSkillMarkdown },
+      context
+    );
+    await tool.run({ action: "delete", name: "research-paper" }, context);
+
+    expect(invalidations).toBe(2);
+  });
+
   test("create adopts an existing unassigned profile skill directory", async () => {
     const { db, tool } = await setup();
     const leftoverDir = join(
@@ -416,10 +434,16 @@ Profile body.
     const service = new SkillsService(db);
     const proposalService = new SkillProposalService(db, service);
     const tool = skillManageTool(service, proposalService);
+    let invalidations = 0;
 
     const result = await tool.run(
       { action: "create", content: researchSkillMarkdown },
-      memberContext({ profileId: profile.id })
+      memberContext({
+        onSkillCatalogChange: () => {
+          invalidations += 1;
+        },
+        profileId: profile.id,
+      })
     );
 
     expect(result).toMatchObject({
@@ -429,6 +453,7 @@ Profile body.
       staged: true,
     });
     expect(await db.listSkillsForProfile(profile.id)).toHaveLength(0);
+    expect(invalidations).toBe(0);
   });
 
   test("write_file refuses skills/*/SKILL.md when forbidProfileSkillMarkdownWrites is set", async () => {
