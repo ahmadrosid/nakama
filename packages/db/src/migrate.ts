@@ -451,14 +451,7 @@ function migrateLegacyUserContextToOrgMembers(db: Database): void {
         AND users.user_context IS NOT NULL
         AND TRIM(users.user_context) != ''
     )
-    WHERE user_context IS NULL
-      AND EXISTS (
-        SELECT 1
-        FROM users
-        WHERE users.id = org_members.user_id
-          AND users.user_context IS NOT NULL
-          AND TRIM(users.user_context) != ''
-      );
+    WHERE user_context IS NULL;
   `);
 }
 
