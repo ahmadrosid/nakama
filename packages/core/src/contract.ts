@@ -113,6 +113,8 @@ export interface HealthResponse {
   ok: true;
   providerConfigured: boolean;
   userConfigured: boolean;
+  /** App version (`NAKAMA_VERSION` or package.json). Not `apiVersion`. */
+  version: string;
 }
 
 export interface AutomationSchedule {
