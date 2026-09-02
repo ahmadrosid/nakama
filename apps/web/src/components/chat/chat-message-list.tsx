@@ -543,7 +543,7 @@ function AssistantMessageActions({
     : null;
 
   return (
-    <div className="flex items-center gap-1 pt-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+    <div className="flex items-center gap-1 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 group-active:opacity-100">
       <button
         aria-label={copied ? "Copied" : "Copy response"}
         className={cn(
