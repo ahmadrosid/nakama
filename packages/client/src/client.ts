@@ -2459,22 +2459,15 @@ export class NakamaClient {
       if (
         response.status === 401 &&
         this.authToken &&
-        !retried &&
-        path !== "/v1/auth/local-token/rotate"
+        (retried || path !== "/v1/auth/local-token/rotate")
       ) {
-        const freshToken = await loadLocalAuthToken();
-        if (freshToken && freshToken !== this.authToken) {
-          this.authToken = freshToken;
-          return this.request(path, init, true);
+        if (!retried) {
+          const freshToken = await loadLocalAuthToken();
+          if (freshToken && freshToken !== this.authToken) {
+            this.authToken = freshToken;
+            return this.request(path, init, true);
+          }
         }
-
-        throw new NakamaAuthExpiredError(
-          await readApiErrorMessage(response),
-          path
-        );
-      }
-
-      if (response.status === 401 && retried) {
         throw new NakamaAuthExpiredError(
           await readApiErrorMessage(response),
           path
@@ -2511,22 +2504,15 @@ export class NakamaClient {
       if (
         response.status === 401 &&
         this.authToken &&
-        !retried &&
-        path !== "/v1/auth/local-token/rotate"
+        (retried || path !== "/v1/auth/local-token/rotate")
       ) {
-        const freshToken = await loadLocalAuthToken();
-        if (freshToken && freshToken !== this.authToken) {
-          this.authToken = freshToken;
-          return this.fetchRaw(path, init, true);
+        if (!retried) {
+          const freshToken = await loadLocalAuthToken();
+          if (freshToken && freshToken !== this.authToken) {
+            this.authToken = freshToken;
+            return this.fetchRaw(path, init, true);
+          }
         }
-
-        throw new NakamaAuthExpiredError(
-          await readApiErrorMessage(response),
-          path
-        );
-      }
-
-      if (response.status === 401 && retried) {
         throw new NakamaAuthExpiredError(
           await readApiErrorMessage(response),
           path
