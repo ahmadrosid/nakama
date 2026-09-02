@@ -102,17 +102,20 @@ export class ProfileSandboxManager {
       hostWorkspace: args.hostWorkspace,
     });
 
-    return this.runtime.exec({
-      command: args.command,
-      env: args.env,
-      guestCwd,
-      name,
-      signal: args.signal,
-      timeoutMs: args.timeoutMs,
-    });
-  }
-
-  ensuredNamesForTests(): string[] {
-    return [...this.ensured.keys()];
+    try {
+      return await this.runtime.exec({
+        command: args.command,
+        env: args.env,
+        guestCwd,
+        name,
+        signal: args.signal,
+        timeoutMs: args.timeoutMs,
+      });
+    } catch (error) {
+      // Sandbox may have died out of band (msb restart, host reboot, manual
+      // remove). Drop the warm claim so the next call re-runs ensure.
+      this.ensured.delete(name);
+      throw error;
+    }
   }
 }

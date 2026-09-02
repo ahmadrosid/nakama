@@ -93,20 +93,34 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     };
     args.signal?.addEventListener("abort", onAbort, { once: true });
 
+    let stdout = "";
+    let stderr = "";
+    let exitCode: number | null = null;
+
     try {
-      const result = await handle.collect();
+      // Stream events so a timeout still returns output buffered before the deadline
+      // (same I/O contract as host bash).
+      for await (const event of handle) {
+        if (event.kind === "stdout") {
+          stdout += new TextDecoder().decode(event.data);
+        } else if (event.kind === "stderr") {
+          stderr += new TextDecoder().decode(event.data);
+        } else if (event.kind === "exited") {
+          exitCode = event.code;
+        }
+      }
       return {
-        exitCode: result.code,
-        stderr: truncateOutput(result.stderr()),
-        stdout: truncateOutput(result.stdout()),
+        exitCode,
+        stderr: truncateOutput(stderr),
+        stdout: truncateOutput(stdout),
         timedOut: false,
       };
     } catch (error) {
       if (error instanceof ExecTimeoutError) {
         return {
           exitCode: null,
-          stderr: "",
-          stdout: "",
+          stderr: truncateOutput(stderr),
+          stdout: truncateOutput(stdout),
           timedOut: true,
         };
       }

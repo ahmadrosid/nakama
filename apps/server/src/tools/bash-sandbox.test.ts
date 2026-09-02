@@ -72,7 +72,7 @@ describe("bash sandbox env", () => {
       workspaceRoot: "/workspace",
     });
 
-    expect(env.PATH).toBe("/bin");
+    expect(env.PATH).toBeUndefined();
     expect(env.FOO).toBe("bar");
     expect(env.NAKAMA_WORKSPACE_ROOT).toBe("/workspace");
     expect(env.HOME).toBe("/workspace");
@@ -236,7 +236,56 @@ describe("bash microsandbox path with fake runtime", () => {
     );
 
     expect(result.timedOut).toBe(true);
-    expect(manager.ensuredNamesForTests()).toHaveLength(1);
+    expect(fake.ensures).toHaveLength(1);
+
+    await runBash(
+      { command: "echo after", timeoutMs: 10 },
+      { orgId: "org_test", profileId: "profile_a" },
+      { backend: "microsandbox", sandboxManager: manager, workspaceRoot }
+    );
+    expect(fake.ensures).toHaveLength(1);
+  });
+
+  test("clears warm claim when exec fails so next call re-ensures", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-msb-"));
+    let failNextExec = true;
+    const ensures: BashSandboxEnsureArgs[] = [];
+    const fake: BashSandboxRuntime & { ensures: BashSandboxEnsureArgs[] } = {
+      async ensure(args) {
+        ensures.push(args);
+      },
+      ensures,
+      async exec() {
+        if (failNextExec) {
+          failNextExec = false;
+          throw new Error(
+            "MicroSandbox backend unavailable: sandbox connect failed. No host fallback."
+          );
+        }
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: "recovered",
+          timedOut: false,
+        };
+      },
+    };
+    const manager = new ProfileSandboxManager(fake);
+    const ctx = { orgId: "org_test", profileId: "profile_a" };
+    const opts = {
+      backend: "microsandbox" as const,
+      sandboxManager: manager,
+      workspaceRoot,
+    };
+
+    await expect(runBash({ command: "echo 1" }, ctx, opts)).rejects.toThrow(
+      /No host fallback/
+    );
+    expect(fake.ensures).toHaveLength(1);
+
+    const result = await runBash({ command: "echo 2" }, ctx, opts);
+    expect(result.stdout).toBe("recovered");
+    expect(fake.ensures).toHaveLength(2);
   });
 
   test("fail-closed when probe fails", async () => {

@@ -95,7 +95,7 @@ const BASH_TOOL_DESCRIPTION_BASE =
 function bashToolDescription(): string {
   try {
     if (resolveBashBackend() === "microsandbox") {
-      return `${BASH_TOOL_DESCRIPTION_BASE} Public network is denied by default. codingAgent harness runs are unsupported on this backend.`;
+      return `${BASH_TOOL_DESCRIPTION_BASE} Commands run under /bin/sh (POSIX ash on alpine — not bash; no [[ ]], arrays, or pipefail). Public network is denied by default. codingAgent harness runs are unsupported on this backend.`;
     }
   } catch {
     // Invalid backend config — keep the host description.

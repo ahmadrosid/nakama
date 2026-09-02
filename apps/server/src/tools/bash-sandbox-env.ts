@@ -9,6 +9,8 @@ function isSecretEnvKey(key: string): boolean {
  * Env for microsandbox bash runs: small allowlist base ∪ tool overrides,
  * then strip secret-shaped keys (including overrides).
  *
+ * Does not copy host PATH — the guest image keeps its own default.
+ *
  * `workspaceRoot` must be the **guest** workspace path (e.g. `/workspace`),
  * not the host soul directory.
  */
@@ -20,9 +22,8 @@ export function buildBashSandboxEnv(args: {
   const host = args.hostEnv ?? process.env;
   const env: Record<string, string> = {};
 
-  if (host.PATH) {
-    env.PATH = host.PATH;
-  }
+  // Do not copy host PATH — guest images (alpine / bun slim) have their own,
+  // and macOS/dev host paths do not exist inside the microVM.
   if (host.LANG) {
     env.LANG = host.LANG;
   }
