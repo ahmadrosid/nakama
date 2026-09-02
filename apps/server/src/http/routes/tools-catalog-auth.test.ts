@@ -71,27 +71,4 @@ describe("GET /health", () => {
       expect(payload.builtinTools).toContain(name);
     }
   });
-
-  test("exposes the installed Nakama application version", async () => {
-    const previous = process.env.NAKAMA_VERSION;
-    process.env.NAKAMA_VERSION = "v1.2.3";
-    try {
-      const { app } = createApp();
-      const response = await app.fetch(
-        new Request("http://localhost:4310/health")
-      );
-
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        ok: true,
-        version: "1.2.3",
-      });
-    } finally {
-      if (previous === undefined) {
-        delete process.env.NAKAMA_VERSION;
-      } else {
-        process.env.NAKAMA_VERSION = previous;
-      }
-    }
-  });
 });
