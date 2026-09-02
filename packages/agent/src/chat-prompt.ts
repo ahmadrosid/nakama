@@ -1,7 +1,5 @@
-import type { ToolDefinition } from "@nakama/core";
+import type { AgentChannel, ToolDefinition } from "@nakama/core";
 import type { AgentRequest } from "./chat";
-
-type MessagingChannel = "telegram" | "whatsapp" | "discord";
 
 type MessagingChannelPromptConfig = {
   label: string;
@@ -10,6 +8,8 @@ type MessagingChannelPromptConfig = {
 };
 
 const MESSAGING_CHANNEL_PROMPT = {
+  automation: null,
+  cli: null,
   discord: {
     format: [
       "Discord supports a Markdown subset: **bold**, *italic*, __underline__, ~~strikethrough~~, inline code, fenced code blocks, and headings.",
@@ -19,6 +19,8 @@ const MESSAGING_CHANNEL_PROMPT = {
     label: "Discord",
     supportsGroupAudience: true,
   },
+  subagent: null,
+  task: null,
   telegram: {
     format: [
       "Write in normal Markdown when formatting helps; Telegram delivery will render a safe rich subset.",
@@ -29,6 +31,7 @@ const MESSAGING_CHANNEL_PROMPT = {
     label: "Telegram",
     supportsGroupAudience: true,
   },
+  web: null,
   whatsapp: {
     format: [
       "WhatsApp only supports simple *bold* and _italic_ formatting.",
@@ -38,7 +41,18 @@ const MESSAGING_CHANNEL_PROMPT = {
     label: "WhatsApp",
     supportsGroupAudience: true,
   },
-} as const satisfies Record<MessagingChannel, MessagingChannelPromptConfig>;
+} as const satisfies Record<AgentChannel, MessagingChannelPromptConfig | null>;
+
+/**
+ * The channels that get a messaging style, read back off the map above instead
+ * of hand-written beside it. The map is total over `AgentChannel`, so a new
+ * channel fails the typecheck there and has to say whether it is one of these.
+ */
+type MessagingChannel = {
+  [K in AgentChannel]: (typeof MESSAGING_CHANNEL_PROMPT)[K] extends null
+    ? never
+    : K;
+}[AgentChannel];
 
 const SHARED_MESSAGING_STYLE = [
   "Write like texting a friend: short paragraphs and a conversational tone.",
@@ -50,7 +64,7 @@ const SHARED_MESSAGING_STYLE = [
 function isMessagingChannel(
   channel: AgentRequest["channel"] | undefined
 ): channel is MessagingChannel {
-  return channel !== undefined && channel in MESSAGING_CHANNEL_PROMPT;
+  return channel !== undefined && MESSAGING_CHANNEL_PROMPT[channel] !== null;
 }
 
 export const UNTRUSTED_DOCUMENT_GUIDANCE =

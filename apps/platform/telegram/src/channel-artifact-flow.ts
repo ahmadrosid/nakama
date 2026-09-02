@@ -1,16 +1,13 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import {
-  extractPairedTurnArtifacts,
-  formatArtifactShareFooter,
+  deliverTurnArtifactShares,
   getMostRecentDeliverableArtifact,
   isAttachIntent,
-  mintDeliverableArtifacts,
-  pushDeliverableArtifact,
 } from "@nakama/core";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { Context } from "grammy";
 import type { TelegramRichMessenger } from "./rich-message";
 import { sendTelegramArtifactDocument } from "./send-artifact-document";
-import type { SessionStore } from "./session-store";
 
 export async function maybeSendRequestedTelegramArtifactAttachment(input: {
   ctx: Context;
@@ -19,7 +16,7 @@ export async function maybeSendRequestedTelegramArtifactAttachment(input: {
   profileId: string;
   /** Raw user text before group-context prefixing. */
   attachUserText: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   messenger: TelegramRichMessenger;
 }): Promise<void> {
   if (!isAttachIntent(input.attachUserText)) {
@@ -52,55 +49,16 @@ export async function deliverTelegramTurnArtifactShares(input: {
   session: RemoteChatSession;
   conversationKey: string;
   profileId: string;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
   messenger: TelegramRichMessenger;
 }): Promise<void> {
-  const messages = await input.session.getMessages();
-  const paired = extractPairedTurnArtifacts(messages);
-  if (paired.length === 0) {
-    return;
-  }
-
-  const shareUrlCache = input.sessionStore.getArtifactShareUrls(
-    input.conversationKey
-  );
-  let webPublicUrlConfigured = true;
-  const delivered = await mintDeliverableArtifacts({
-    artifacts: paired,
-    publish: async (path) => {
-      const response = await input.client.publishProfileArtifactShare(
-        input.profileId,
-        path
-      );
-      webPublicUrlConfigured = response.webPublicUrlConfigured;
-      return response;
-    },
-    shareUrlCache,
-  });
-
-  if (delivered.length === 0) {
-    return;
-  }
-
-  let registry = input.sessionStore.getDeliverableArtifacts(
-    input.conversationKey
-  );
-  for (const artifact of delivered) {
-    registry = pushDeliverableArtifact(registry, artifact);
-  }
-
-  input.sessionStore.updateArtifactState(input.conversationKey, {
-    artifactShareUrls: shareUrlCache,
-    deliverableArtifacts: registry,
-  });
-  await input.sessionStore.save();
-
-  const footer = formatArtifactShareFooter(delivered, {
-    webPublicUrlConfigured,
-  });
-
-  if (footer.trim()) {
+  await deliverTurnArtifactShares({
+    conversationKey: input.conversationKey,
+    publish: (path) =>
+      input.client.publishProfileArtifactShare(input.profileId, path),
     // Raw: share tokens must not pass through markdown underscore stripping.
-    await input.messenger.sendRaw(footer);
-  }
+    sendFooter: (footer) => input.messenger.sendRaw(footer),
+    session: input.session,
+    sessionStore: input.sessionStore,
+  });
 }

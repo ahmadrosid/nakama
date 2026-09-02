@@ -16,30 +16,35 @@ export class LlmUsageTracker {
     Omit<LlmUsageModelStats, "totalTokens">
   >();
   private pricingContext: PricingContext = {};
+  private recordRevision = 0;
+  private readonly pendingWrites = new Set<Promise<void>>();
 
   private constructor(private readonly db?: DatabaseAdapter) {}
 
   static async create(db?: DatabaseAdapter): Promise<LlmUsageTracker> {
     const tracker = new LlmUsageTracker(db);
-    await tracker.load();
+    await tracker.loadSnapshotIfRevisionUnchanged();
     return tracker;
   }
 
-  private async load(): Promise<void> {
-    if (!this.db) {
-      return;
+  private async loadSnapshotIfRevisionUnchanged(
+    expectedRevision = this.recordRevision
+  ): Promise<boolean> {
+    const stored = (await this.db?.getLlmUsageStats()) ?? null;
+    const byModel = (await this.db?.listLlmUsageStatsByModel()) ?? [];
+
+    // Publish only a snapshot that spans no record(), otherwise reload retries
+    // after the new record's database write finishes.
+    if (expectedRevision !== this.recordRevision) {
+      return false;
     }
 
-    const stored = await this.db.getLlmUsageStats();
-    if (stored) {
-      this.requestCount = stored.requestCount;
-      this.inputTokens = stored.inputTokens;
-      this.outputTokens = stored.outputTokens;
-      this.estimatedCostUsd = stored.estimatedCostUsd;
-      this.trackedSince = stored.trackedSince;
-    }
-
-    const byModel = await this.db.listLlmUsageStatsByModel();
+    this.requestCount = stored?.requestCount ?? 0;
+    this.inputTokens = stored?.inputTokens ?? 0;
+    this.outputTokens = stored?.outputTokens ?? 0;
+    this.estimatedCostUsd = stored?.estimatedCostUsd ?? 0;
+    this.trackedSince = stored?.trackedSince ?? new Date().toISOString();
+    this.usageByModel.clear();
     for (const entry of byModel) {
       this.usageByModel.set(entry.modelId, {
         estimatedCostUsd: entry.estimatedCostUsd,
@@ -50,16 +55,22 @@ export class LlmUsageTracker {
         trackedSince: entry.trackedSince,
       });
     }
+    return true;
   }
 
   async reloadFromDatabase(): Promise<void> {
-    this.requestCount = 0;
-    this.inputTokens = 0;
-    this.outputTokens = 0;
-    this.estimatedCostUsd = 0;
-    this.trackedSince = new Date().toISOString();
-    this.usageByModel.clear();
-    await this.load();
+    while (true) {
+      const revision = this.recordRevision;
+      await Promise.all(this.pendingWrites);
+
+      if (revision !== this.recordRevision) {
+        continue;
+      }
+
+      if (await this.loadSnapshotIfRevisionUnchanged(revision)) {
+        return;
+      }
+    }
   }
 
   setPricingContext(context: PricingContext): void {
@@ -74,6 +85,7 @@ export class LlmUsageTracker {
       this.pricingContext
     );
 
+    this.recordRevision += 1;
     this.requestCount += 1;
     this.inputTokens += inputTokens;
     this.outputTokens += outputTokens;
@@ -89,7 +101,7 @@ export class LlmUsageTracker {
       trackedSince: existing?.trackedSince ?? new Date().toISOString(),
     });
 
-    void this.persist(
+    const persistence = this.persist(
       {
         estimatedCostUsd: costDelta,
         inputTokens,
@@ -98,6 +110,10 @@ export class LlmUsageTracker {
       },
       modelId
     );
+    this.pendingWrites.add(persistence);
+    void persistence.then(() => {
+      this.pendingWrites.delete(persistence);
+    });
   }
 
   private async persist(

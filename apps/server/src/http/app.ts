@@ -38,7 +38,7 @@ import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
-import { errorResponse } from "./shared";
+import { errorResponse, isSecureRequest } from "./shared";
 import type { HonoApp } from "./types";
 
 /**
@@ -74,7 +74,6 @@ export function createHonoApp(options: ServerOptions) {
       const headers = new Headers(response.headers);
       headers.set("X-Content-Type-Options", "nosniff");
       headers.set("X-Frame-Options", "DENY");
-      headers.set("X-XSS-Protection", "1; mode=block");
       // Only set Referrer-Policy if it's not already set
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -83,8 +82,8 @@ export function createHonoApp(options: ServerOptions) {
         "Content-Security-Policy",
         `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
       );
-      // Only enable HSTS if the request is secure (HTTPS)
-      if (new URL(c.req.url).protocol === "https:") {
+      // Also true behind a TLS terminator, which is where HSTS matters most.
+      if (isSecureRequest(c.req.raw)) {
         headers.set(
           "Strict-Transport-Security",
           "max-age=31536000; includeSubDomains"

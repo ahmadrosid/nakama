@@ -3,14 +3,34 @@ import {
   type SkillPostTurnReviewOutcome,
 } from "@nakama/agent";
 import {
+  type AgentChannel,
   type ChatMessage,
   extractLatestTurnMessages,
+  parseAgentChannel,
   resolveSkillPostTurnReviewEnabled,
   type UserConfig,
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { resolveProfileProviderSelection } from "./provider-instance-helpers";
+
+/**
+ * Which channels run the post-turn skill review. Total over `AgentChannel`, so
+ * a new channel fails the typecheck here and has to be decided. This gate is
+ * where #213 happened: `ae27f7b2` shipped it as
+ * `channel !== "web" && channel !== "cli"`, and Discord, Telegram and WhatsApp
+ * skipped the review for five days and 23 hours until `e0026ea6` (#224).
+ */
+const POST_TURN_REVIEW_CHANNELS = {
+  automation: false,
+  cli: true,
+  discord: true,
+  subagent: false,
+  task: false,
+  telegram: true,
+  web: true,
+  whatsapp: true,
+} as const satisfies Record<AgentChannel, boolean>;
 
 const MIN_TOOL_CALLS_FOR_COMPLEX_TURN = 5;
 const MANAGE_SKILLS_NAME = "manage-skills";
@@ -49,7 +69,7 @@ export type PostTurnReviewRunner = (
   context: PostTurnReviewRunnerContext
 ) => Promise<SkillPostTurnReviewOutcome | void>;
 
-export function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
+function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
   let count = 0;
   for (const message of turnMessages) {
     if (message.role === "assistant" && message.toolCalls) {
@@ -59,7 +79,7 @@ export function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
   return count;
 }
 
-export function turnHasToolError(turnMessages: ChatMessage[]): boolean {
+function turnHasToolError(turnMessages: ChatMessage[]): boolean {
   for (const message of turnMessages) {
     if (message.role !== "tool") {
       continue;
@@ -81,7 +101,7 @@ export function turnHasToolError(turnMessages: ChatMessage[]): boolean {
   return false;
 }
 
-export function turnUsedSkillManage(turnMessages: ChatMessage[]): boolean {
+function turnUsedSkillManage(turnMessages: ChatMessage[]): boolean {
   for (const message of turnMessages) {
     if (
       message.role === "assistant" &&
@@ -193,15 +213,10 @@ export class SkillPostTurnReviewService {
         return "session_missing";
       }
 
-      const channel = session.channel;
-      const interactiveChannels = new Set([
-        "web",
-        "cli",
-        "discord",
-        "telegram",
-        "whatsapp",
-      ]);
-      if (!interactiveChannels.has(channel)) {
+      // The session row keeps `channel` as a string, so an unknown value is
+      // narrowed away here and skips the review exactly as it did before.
+      const channel = parseAgentChannel(session.channel);
+      if (!(channel && POST_TURN_REVIEW_CHANNELS[channel])) {
         return "channel_not_interactive";
       }
 

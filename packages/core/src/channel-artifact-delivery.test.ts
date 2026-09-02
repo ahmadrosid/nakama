@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  deliverTurnArtifactShares,
   formatArtifactShareFooter,
   isAttachIntent,
   isAttachOnlyCommand,
@@ -8,6 +9,7 @@ import {
   resolveArtifactForAttach,
   resolveShareUrlForPublish,
 } from "./channel-artifact-delivery";
+import type { ChatMessage } from "./contract";
 
 describe("isAttachIntent", () => {
   test("matches common attach phrases", () => {
@@ -199,5 +201,140 @@ describe("pushDeliverableArtifact", () => {
     );
 
     expect(registry.map((entry) => entry.path)).toEqual(["b.md", "c.md"]);
+  });
+});
+
+describe("deliverTurnArtifactShares", () => {
+  test("mints shares, updates session store, and sends footer", async () => {
+    const artifactsRoot =
+      "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+    const metaJson = JSON.stringify({
+      mimeType: "text/markdown",
+      savedAt: "2026-07-13T10:00:00.000Z",
+      sizeBytes: 42,
+    });
+    const messages: ChatMessage[] = [
+      { content: "save report", role: "user" },
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [
+          {
+            arguments: { content: "# Report", path: "artifacts/report.md" },
+            id: "tool_1",
+            name: "write_file",
+          },
+          {
+            arguments: {
+              content: metaJson,
+              path: "artifacts/report.md.nakama-meta.json",
+            },
+            id: "tool_2",
+            name: "write_file",
+          },
+        ],
+      },
+      {
+        content: JSON.stringify({
+          bytesWritten: 8,
+          path: `${artifactsRoot}/report.md`,
+        }),
+        name: "write_file",
+        role: "tool",
+        toolCallId: "tool_1",
+      },
+      {
+        content: JSON.stringify({
+          bytesWritten: metaJson.length,
+          path: `${artifactsRoot}/report.md.nakama-meta.json`,
+        }),
+        name: "write_file",
+        role: "tool",
+        toolCallId: "tool_2",
+      },
+      { content: "Saved the report.", role: "assistant" },
+    ];
+
+    const shareUrls: Record<string, string> = {};
+    let registry: Array<{
+      filename: string;
+      mimeType: string;
+      path: string;
+      savedAt: string;
+      sharePath: string;
+      shareUrl: string | null;
+      sizeBytes: number;
+    }> = [];
+    let saved = false;
+    const footers: string[] = [];
+
+    const delivered = await deliverTurnArtifactShares({
+      conversationKey: "chat:1",
+      publish: async () => ({
+        refreshed: false,
+        sharePath: "/s/tok_1",
+        shareUrl: "https://app.example/s/tok_1",
+        webPublicUrlConfigured: true,
+      }),
+      sendFooter: async (footer) => {
+        footers.push(footer);
+      },
+      session: {
+        getMessages: async () => messages,
+      },
+      sessionStore: {
+        getArtifactShareUrls: () => shareUrls,
+        getDeliverableArtifacts: () => registry,
+        save: async () => {
+          saved = true;
+        },
+        updateArtifactState: (_key, update) => {
+          if (update.artifactShareUrls) {
+            Object.assign(shareUrls, update.artifactShareUrls);
+          }
+          if (update.deliverableArtifacts) {
+            registry = update.deliverableArtifacts;
+          }
+        },
+      },
+    });
+
+    expect(delivered).toEqual([
+      {
+        filename: "report.md",
+        mimeType: "text/markdown",
+        path: "report.md",
+        savedAt: "2026-07-13T10:00:00.000Z",
+        sharePath: "/s/tok_1",
+        shareUrl: "https://app.example/s/tok_1",
+        sizeBytes: 42,
+      },
+    ]);
+    expect(saved).toBe(true);
+    expect(registry.map((entry) => entry.path)).toEqual(["report.md"]);
+    expect(footers).toEqual(["report.md: https://app.example/s/tok_1"]);
+  });
+
+  test("returns empty when the turn has no paired artifacts", async () => {
+    const delivered = await deliverTurnArtifactShares({
+      conversationKey: "chat:empty",
+      publish: async () => {
+        throw new Error("should not publish");
+      },
+      sendFooter: async () => {
+        throw new Error("should not send footer");
+      },
+      session: {
+        getMessages: async () => [{ content: "hi", role: "user" }],
+      },
+      sessionStore: {
+        getArtifactShareUrls: () => ({}),
+        getDeliverableArtifacts: () => [],
+        save: async () => undefined,
+        updateArtifactState: () => undefined,
+      },
+    });
+
+    expect(delivered).toEqual([]);
   });
 });

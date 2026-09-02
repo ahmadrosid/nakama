@@ -1,11 +1,13 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import { isAttachOnlyCommand } from "@nakama/core";
+import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
   isAbortError,
   registerActiveStream,
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
+import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   type ChannelOrgStore,
   findOrgBySelectionInput,
@@ -13,6 +15,7 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
+import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { SendMessageInput } from "@nakama/core/contract";
 import { pickProfileForOrg } from "@nakama/core/profiles";
 import { normalizePairingCode } from "@nakama/core/whatsapp-config";
@@ -25,7 +28,6 @@ import {
 } from "./channel-artifact-flow";
 import type { WhatsAppBridgeConfig } from "./config";
 import {
-  formatError,
   HELP_TEXT,
   prepareWhatsAppReply,
   splitWhatsAppMessage,
@@ -38,11 +40,10 @@ import {
 } from "./group-message";
 import type { WhatsAppInboundChat } from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
-import type { SessionStore } from "./session-store";
 import { WhatsAppTodoStatusMessage } from "./todo-status-message";
 import { createTypingLoop } from "./typing-indicator";
 
-const chatLocks = new Map<string, Promise<void>>();
+const chatLock = createChatLock();
 
 const GROUP_MESSAGE_PREFIX =
   "[WhatsApp group — your reply is visible to everyone in this group.]\n";
@@ -63,7 +64,7 @@ export interface ChatHandlerDeps {
   config: WhatsAppBridgeConfig;
   getSocket: () => WASocket | null;
   orgStore: ChannelOrgStore;
-  sessionStore: SessionStore;
+  sessionStore: ChannelSessionStore;
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
@@ -437,7 +438,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       await todoStatus.fail();
-      await sendText(jid, formatError(error));
+      await sendText(jid, formatClientError(error));
       return;
     } finally {
       clearActiveStream(conversationKey);
@@ -504,7 +505,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       await sendText(jid, lines.join("\n"));
     } catch (error) {
-      await sendText(jid, formatError(error));
+      await sendText(jid, formatClientError(error));
     }
   }
 
@@ -664,35 +665,14 @@ function looksLikePairingCodeAttempt(text: string): boolean {
 }
 
 export function resetChatLocksForTests(): void {
-  chatLocks.clear();
+  chatLock.resetForTests();
 }
 
 export async function withChatLock(
   jid: string,
   fn: () => Promise<void>
 ): Promise<void> {
-  const previous = chatLocks.get(jid) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  // Second handler keeps the chain alive if `previous` rejects, so the stored
-  // promise does not become an unhandled rejection when nobody awaits `chain`.
-  const chain = previous.then(
-    () => current,
-    () => current
-  );
-  chatLocks.set(jid, chain);
-
-  try {
-    await previous.catch(() => undefined);
-    await fn();
-  } finally {
-    release();
-    if (chatLocks.get(jid) === chain) {
-      chatLocks.delete(jid);
-    }
-  }
+  return chatLock.withLock(jid, fn);
 }
 
 /** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
@@ -700,5 +680,5 @@ export function seedChatLockForTests(
   jid: string,
   promise: Promise<void>
 ): void {
-  chatLocks.set(jid, promise);
+  chatLock.seedForTests(jid, promise);
 }

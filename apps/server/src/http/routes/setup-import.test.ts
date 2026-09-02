@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getUserConfigDir } from "@nakama/core";
+import * as dataPortability from "../../services/data-portability";
 import {
   createNakamaDataExport,
   previewNakamaDataImport,
@@ -185,6 +186,40 @@ describe("setup import routes", () => {
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("keep");
+  });
+
+  test("setup import preview does not leak an unexpected error's message", async () => {
+    const { app } = createApp();
+    await writeFile(join(getUserConfigDir(), "config.ini"), "keep");
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+
+    const previewSpy = spyOn(
+      dataPortability,
+      "previewNakamaDataImport"
+    ).mockImplementation(async () => {
+      throw new Error(
+        "ENOENT: no such file or directory, open '/home/nakama/.config/nakama/nakama.db'"
+      );
+    });
+
+    try {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+          body: JSON.stringify({ data: archive.toString("base64") }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: "An unexpected server error occurred.",
+      });
+    } finally {
+      previewSpy.mockRestore();
+    }
   });
 
   test("setup import preview accepts valid archives", async () => {

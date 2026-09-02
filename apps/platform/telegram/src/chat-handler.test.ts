@@ -11,6 +11,7 @@ import {
   hasActiveStreams,
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
+import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
@@ -22,7 +23,6 @@ import {
   resetChatLocksForTests,
   withChatLock,
 } from "./chat-handler";
-import { SessionStore } from "./session-store";
 import {
   createMessageContext,
   createMockClient,

@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { ToolDefinition } from "@nakama/core";
+import * as core from "@nakama/core";
 import { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 
 const sampleTool: ToolDefinition = {
@@ -77,5 +78,55 @@ describe("tool-loop", () => {
     });
 
     expect(result).toEqual({ error: "boom" });
+  });
+
+  test("executeToolCall returns raw result when distillToolResult throws", async () => {
+    const payload = { message: "kept" };
+    const spy = spyOn(core, "distillToolResult").mockImplementation(
+      async () => {
+        throw new Error("omni unavailable");
+      }
+    );
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const result = await executeToolCall([sampleTool], {
+        arguments: payload,
+        id: "call_4",
+        name: "sample",
+      });
+
+      expect(result).toEqual(payload);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test("executeToolCall re-throws the cancellation reason", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancelled");
+    const cancellingTool: ToolDefinition = {
+      description: "Cancels its turn",
+      name: "cancel",
+      parameters: { properties: {}, type: "object" },
+      async run() {
+        controller.abort(cancellation);
+        throw new Error("tool failed while cancelling");
+      },
+    };
+
+    const pending = executeToolCall(
+      [cancellingTool],
+      {
+        arguments: {},
+        id: "call_5",
+        name: "cancel",
+      },
+      { signal: controller.signal }
+    );
+
+    await expect(pending).rejects.toBe(cancellation);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  type AgentChannel,
   parseRawProfileSkillContent,
   type ToolContext,
   type ToolDefinition,
@@ -31,6 +32,23 @@ function requireProfileId(context: ToolContext): string {
 }
 
 /**
+ * Which channels get the skill-management surface. Total over `AgentChannel`,
+ * so a new channel fails the typecheck here instead of inheriting `false` in
+ * silence. `agent-service` reads the same table when it decides whether to
+ * attach the tools, so the offer and this gate cannot drift apart.
+ */
+export const SKILL_MANAGE_CHANNELS = {
+  automation: false,
+  cli: true,
+  discord: false,
+  subagent: false,
+  task: false,
+  telegram: false,
+  web: true,
+  whatsapp: false,
+} as const satisfies Record<AgentChannel, boolean>;
+
+/**
  * Deny-by-default role gate for skill_manage. Viewers are blocked; an undefined
  * role also blocks — same pattern as org-memory tools.
  */
@@ -43,7 +61,7 @@ function requireSkillManageAccess(context: ToolContext): {
   }
 
   const channel = context.channel;
-  if (channel !== undefined && channel !== "web" && channel !== "cli") {
+  if (channel !== undefined && !SKILL_MANAGE_CHANNELS[channel]) {
     throw new Error(
       "skill_manage is only available in interactive web or CLI chat."
     );
@@ -103,16 +121,18 @@ function skillManageResult(options: {
   action: SkillManageAction;
   name: string;
   assigned: boolean;
+  context: ToolContext;
   description?: string;
   created?: boolean;
   path?: string;
 }) {
+  options.context.onSkillCatalogChange?.();
   const matchHint =
     options.action === "delete"
       ? "The skill was removed from this profile (disk, assignment, and DB row). Keyword match and /skill will no longer find it."
       : options.action === "write_file" || options.action === "remove_file"
         ? "Supporting file change applied under the profile skill directory."
-        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the baked session skills catalog list may refresh on a new session.";
+        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the session skills catalog refreshes before the next turn.";
 
   return {
     action: options.action,
@@ -425,6 +445,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "create",
             assigned: true,
+            context,
             created: response.created,
             description: response.skill.description,
             name: response.skill.name,
@@ -461,6 +482,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "patch",
             assigned: true,
+            context,
             description: response.skill.description,
             name: response.skill.name,
           });
@@ -492,6 +514,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "edit",
             assigned: true,
+            context,
             description: response.skill.description,
             name: response.skill.name,
           });
@@ -522,6 +545,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "write_file",
             assigned: true,
+            context,
             name: written.skillName,
             path: written.relativePath,
           });
@@ -548,6 +572,7 @@ export function createSkillManageTools(
           return skillManageResult({
             action: "remove_file",
             assigned: true,
+            context,
             name: removed.skillName,
             path: removed.relativePath,
           });
@@ -566,6 +591,7 @@ export function createSkillManageTools(
         return skillManageResult({
           action: "delete",
           assigned: false,
+          context,
           name,
         });
       },

@@ -173,6 +173,7 @@ describe("data portability routes", () => {
     };
     const loginResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/login", {
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: "admin@acme.test",
           password: created.adminMember.temporaryPassword,

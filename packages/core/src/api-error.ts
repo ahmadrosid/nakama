@@ -137,22 +137,15 @@ export function formatAutomationRunError(error: unknown): string {
 }
 
 export function formatServerError(error: unknown): string {
+  if (error instanceof NakamaApiError) {
+    return error.message;
+  }
+
   if (error instanceof SyntaxError) {
     return "Invalid JSON in request body.";
   }
 
-  if (error instanceof Error) {
-    const message = error.message.trim();
-
-    if (message) {
-      return message;
-    }
-  }
-
-  if (typeof error === "string" && error.trim()) {
-    return error.trim();
-  }
-
+  console.error(error);
   return "An unexpected server error occurred.";
 }
 
