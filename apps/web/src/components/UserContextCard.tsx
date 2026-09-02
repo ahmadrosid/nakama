@@ -238,6 +238,90 @@ interface UserContextSettingsProps {
   onSaveSuccess?: () => void;
 }
 
+function UserContextActionButton({
+  isLoading,
+  loadError,
+  isActive,
+  autoInit,
+  busy,
+  initPending,
+  onEdit,
+  onInitAndEdit,
+  onInit,
+}: {
+  isLoading: boolean;
+  loadError: unknown;
+  isActive: boolean;
+  autoInit: boolean;
+  busy: boolean;
+  initPending: boolean;
+  onEdit: () => void;
+  onInitAndEdit: () => void;
+  onInit: () => void;
+}) {
+  if (isLoading) {
+    return <Spinner />;
+  }
+
+  if (loadError) {
+    return null;
+  }
+
+  if (isActive) {
+    return (
+      <Button
+        disabled={busy}
+        onClick={onEdit}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Edit
+      </Button>
+    );
+  }
+
+  if (autoInit) {
+    return (
+      <Button
+        disabled={busy}
+        onClick={onInitAndEdit}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {initPending ? (
+          <>
+            <Spinner className="mr-2" />
+            Creating…
+          </>
+        ) : (
+          "Edit"
+        )}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      disabled={busy}
+      onClick={onInit}
+      size="sm"
+      type="button"
+      variant="outline"
+    >
+      {initPending ? (
+        <>
+          <Spinner className="mr-2" />
+          Creating…
+        </>
+      ) : (
+        "Create"
+      )}
+    </Button>
+  );
+}
+
 /** USER.md editor row for setup wizard — render inside a parent card. */
 export function UserContextSettings({
   onSaveSuccess,
@@ -369,53 +453,17 @@ export function UserContextSettings({
           )}
         </div>
 
-        {isLoading ? (
-          <Spinner />
-        ) : loadError ? null : isActive ? (
-          <Button
-            disabled={busy}
-            onClick={() => setEditorOpen(true)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Edit
-          </Button>
-        ) : autoInit ? (
-          <Button
-            disabled={busy}
-            onClick={() => void handleInitAndEdit()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {initMutation.isPending ? (
-              <>
-                <Spinner className="mr-2" />
-                Creating…
-              </>
-            ) : (
-              "Edit"
-            )}
-          </Button>
-        ) : (
-          <Button
-            disabled={busy}
-            onClick={() => void handleInit()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {initMutation.isPending ? (
-              <>
-                <Spinner className="mr-2" />
-                Creating…
-              </>
-            ) : (
-              "Create"
-            )}
-          </Button>
-        )}
+        <UserContextActionButton
+          autoInit={autoInit}
+          busy={busy}
+          initPending={initMutation.isPending}
+          isActive={isActive}
+          isLoading={isLoading}
+          loadError={loadError}
+          onEdit={() => setEditorOpen(true)}
+          onInit={() => void handleInit()}
+          onInitAndEdit={() => void handleInitAndEdit()}
+        />
       </div>
 
       <UserContextEditorDialog

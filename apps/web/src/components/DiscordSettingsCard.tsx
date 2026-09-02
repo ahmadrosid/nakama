@@ -1,5 +1,5 @@
 import type { UpdateDiscordSettingsRequest } from "@nakama/core/contract";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   type AllowedDiscordUser,
   DiscordAllowedUsersDialog,
@@ -19,6 +19,103 @@ interface DiscordSettingsCardProps {
   embedded?: boolean;
   onSaveSuccess?: () => void;
   submitLabel?: string;
+}
+
+function allowedUsersSummaryLabel(count: number): string {
+  if (count === 0) {
+    return "No manual users";
+  }
+  return `${count} user${count === 1 ? "" : "s"}`;
+}
+
+function resolveDiscordStatusCopy(input: {
+  configured: boolean;
+  hasLinkedUsers: boolean;
+  pairingCode: string | null;
+  running: boolean;
+}): { headerSubtitle: string; statusBadge: string } {
+  if (!input.configured) {
+    return {
+      headerSubtitle: "Step 1: paste a bot token from Discord Developer Portal",
+      statusBadge: "Not set up",
+    };
+  }
+
+  if (input.hasLinkedUsers && input.running) {
+    return {
+      headerSubtitle: "Your Discord is connected to Nakama",
+      statusBadge: "Connected",
+    };
+  }
+
+  if (input.hasLinkedUsers) {
+    return {
+      headerSubtitle: "Linked. Start the bridge to receive messages",
+      statusBadge: "Paired",
+    };
+  }
+
+  if (input.pairingCode) {
+    return {
+      headerSubtitle: "Step 2: send your pairing code to the bot in Discord",
+      statusBadge: "Awaiting link",
+    };
+  }
+
+  return {
+    headerSubtitle: "Step 2: generate a pairing code and send it to your bot",
+    statusBadge: "Awaiting link",
+  };
+}
+
+function discordSaveHint(saved: {
+  handshakeCode?: string | null;
+  pairedUserIds: unknown[];
+  allowedUserIds: unknown[];
+}): string {
+  const savedHasLinkedUsers =
+    saved.pairedUserIds.length > 0 || saved.allowedUserIds.length > 0;
+
+  if (saved.handshakeCode && !savedHasLinkedUsers) {
+    return "Saved. Send the pairing code to your bot.";
+  }
+
+  if (savedHasLinkedUsers) {
+    return "Saved.";
+  }
+
+  return "Saved. Get a pairing code if you still need to link.";
+}
+
+function DiscordSettingsCardShell({
+  embedded,
+  headerSubtitle,
+  content,
+  allowedUsersDialog,
+}: {
+  embedded: boolean;
+  headerSubtitle: string;
+  content: ReactNode;
+  allowedUsersDialog: ReactNode;
+}) {
+  if (embedded) {
+    return (
+      <>
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-xs">{headerSubtitle}</p>
+          {content}
+        </div>
+        {allowedUsersDialog}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {content}
+      {allowedUsersDialog}
+    </>
+  );
 }
 
 export function DiscordSettingsCard({
@@ -80,33 +177,17 @@ export function DiscordSettingsCard({
   const worker = status?.discordWorker;
   const running = worker?.running === true;
   const canSave = configured || botToken.trim().length > 0;
-  const allowedUserSummary =
-    allowedUsers.length === 0
-      ? "No manual users"
-      : `${allowedUsers.length} user${allowedUsers.length === 1 ? "" : "s"}`;
-
+  const allowedUserSummary = allowedUsersSummaryLabel(allowedUsers.length);
   const statusLine =
     hint ??
     (formError ? formError : null) ??
     (loadError ? formatError(loadError) : null);
-
-  const headerSubtitle = configured
-    ? hasLinkedUsers && running
-      ? "Your Discord is connected to Nakama"
-      : hasLinkedUsers
-        ? "Linked. Start the bridge to receive messages"
-        : pairingCode
-          ? "Step 2: send your pairing code to the bot in Discord"
-          : "Step 2: generate a pairing code and send it to your bot"
-    : "Step 1: paste a bot token from Discord Developer Portal";
-
-  const statusBadge = configured
-    ? hasLinkedUsers && running
-      ? "Connected"
-      : hasLinkedUsers
-        ? "Paired"
-        : "Awaiting link"
-    : "Not set up";
+  const { headerSubtitle, statusBadge } = resolveDiscordStatusCopy({
+    configured,
+    hasLinkedUsers,
+    pairingCode,
+    running,
+  });
 
   async function copyHandshakeCode() {
     if (!pairingCode) {
@@ -147,16 +228,7 @@ export function DiscordSettingsCard({
       },
       onSuccess: (saved) => {
         setBotToken("");
-        const savedHasLinkedUsers =
-          saved.pairedUserIds.length > 0 || saved.allowedUserIds.length > 0;
-
-        if (saved.handshakeCode && !savedHasLinkedUsers) {
-          setHint("Saved. Send the pairing code to your bot.");
-        } else if (savedHasLinkedUsers) {
-          setHint("Saved.");
-        } else {
-          setHint("Saved. Get a pairing code if you still need to link.");
-        }
+        setHint(discordSaveHint(saved));
         afterSuccess?.();
         onSaveSuccess?.();
       },
@@ -246,22 +318,12 @@ export function DiscordSettingsCard({
     />
   );
 
-  if (embedded) {
-    return (
-      <>
-        <div className="space-y-2">
-          <p className="text-muted-foreground text-xs">{headerSubtitle}</p>
-          {content}
-        </div>
-        {allowedUsersDialog}
-      </>
-    );
-  }
-
   return (
-    <>
-      {content}
-      {allowedUsersDialog}
-    </>
+    <DiscordSettingsCardShell
+      allowedUsersDialog={allowedUsersDialog}
+      content={content}
+      embedded={embedded}
+      headerSubtitle={headerSubtitle}
+    />
   );
 }

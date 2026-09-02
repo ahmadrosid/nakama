@@ -56,100 +56,182 @@ export function HistorySessionsPanel({
 }) {
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
-  const groupedSessions = groupSessionsByDate(filteredSessions);
 
   return (
     <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-3 border-border border-b p-4">
-        <div className="relative min-w-0 flex-1">
-          <Search01Icon
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="Search chats"
-            className={cn("pl-9", isSearching && "pr-9")}
-            disabled={!profileId || initialLoading}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search chats…"
-            value={searchQuery}
-          />
-          {isSearching ? (
-            <button
-              aria-label="Clear search"
-              className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              onClick={onClearSearch}
-              type="button"
-            >
-              <Cancel01Icon className="size-4" />
-            </button>
-          ) : null}
-        </div>
+      <HistorySessionsToolbar
+        busy={busy}
+        countLabel={countLabel}
+        initialLoading={initialLoading}
+        isSearching={isSearching}
+        onClearSearch={onClearSearch}
+        onRefresh={onRefresh}
+        onSearchChange={onSearchChange}
+        profileId={profileId}
+        refreshing={refreshing}
+        searchQuery={searchQuery}
+      />
 
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground text-xs tabular-nums">
-            {countLabel}
-          </span>
-          <Button
-            aria-label="Refresh chats"
-            disabled={refreshing || busy || !profileId}
-            onClick={onRefresh}
-            size="icon-sm"
+      <HistorySessionsContent
+        busy={busy}
+        filteredSessions={filteredSessions}
+        initialLoading={initialLoading}
+        onClearSearch={onClearSearch}
+        onDeleteSession={onDeleteSession}
+        onGoToChat={onGoToChat}
+        onGoToProfiles={onGoToProfiles}
+        onOpenSession={onOpenSession}
+        profiles={profiles}
+        sessions={sessions}
+      />
+    </div>
+  );
+}
+
+function HistorySessionsToolbar({
+  profileId,
+  searchQuery,
+  isSearching,
+  countLabel,
+  refreshing,
+  busy,
+  initialLoading,
+  onSearchChange,
+  onClearSearch,
+  onRefresh,
+}: {
+  profileId: string;
+  searchQuery: string;
+  isSearching: boolean;
+  countLabel: string;
+  refreshing: boolean;
+  busy: boolean;
+  initialLoading: boolean;
+  onSearchChange: (value: string) => void;
+  onClearSearch: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-border border-b p-4">
+      <div className="relative min-w-0 flex-1">
+        <Search01Icon
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          aria-label="Search chats"
+          className={cn("pl-9", isSearching && "pr-9")}
+          disabled={!profileId || initialLoading}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search chats…"
+          value={searchQuery}
+        />
+        {isSearching ? (
+          <button
+            aria-label="Clear search"
+            className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            onClick={onClearSearch}
             type="button"
-            variant="ghost"
           >
-            {refreshing ? (
-              <Spinner className="size-4" />
-            ) : (
-              <RefreshIcon className="size-4" />
-            )}
-          </Button>
-        </div>
+            <Cancel01Icon className="size-4" />
+          </button>
+        ) : null}
       </div>
 
-      {profiles.length === 0 ? (
-        <HistoryEmptyMessage
-          actionLabel="Go to Profiles"
-          message="Create a profile to start chatting."
-          onAction={onGoToProfiles}
-        />
-      ) : initialLoading ? (
-        <HistoryListSkeleton />
-      ) : filteredSessions.length === 0 ? (
-        <HistoryEmptyMessage
-          actionLabel={sessions.length > 0 ? "Clear search" : "New chat"}
-          message={
-            sessions.length > 0
-              ? "No chats match your search."
-              : "No chats yet."
-          }
-          onAction={() =>
-            sessions.length > 0 ? onClearSearch() : onGoToChat()
-          }
-        />
-      ) : (
-        <div className="divide-y divide-border">
-          {groupedSessions.map((group) => (
-            <section key={group.label}>
-              <p className="px-4 py-2 font-medium text-muted-foreground text-xs">
-                {group.label}
-              </p>
-              <ul>
-                {group.sessions.map((session) => (
-                  <li key={session.id}>
-                    <HistorySessionRow
-                      disabled={busy}
-                      onDelete={() => onDeleteSession(session)}
-                      onOpen={() => onOpenSession(session)}
-                      session={session}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {countLabel}
+        </span>
+        <Button
+          aria-label="Refresh chats"
+          disabled={refreshing || busy || !profileId}
+          onClick={onRefresh}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          {refreshing ? (
+            <Spinner className="size-4" />
+          ) : (
+            <RefreshIcon className="size-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function HistorySessionsContent({
+  profiles,
+  initialLoading,
+  sessions,
+  filteredSessions,
+  busy,
+  onGoToProfiles,
+  onGoToChat,
+  onClearSearch,
+  onOpenSession,
+  onDeleteSession,
+}: {
+  profiles: ProfileSummary[];
+  initialLoading: boolean;
+  sessions: SessionSummary[];
+  filteredSessions: SessionSummary[];
+  busy: boolean;
+  onGoToProfiles: () => void;
+  onGoToChat: () => void;
+  onClearSearch: () => void;
+  onOpenSession: (session: SessionSummary) => void;
+  onDeleteSession: (session: SessionSummary) => void;
+}) {
+  if (profiles.length === 0) {
+    return (
+      <HistoryEmptyMessage
+        actionLabel="Go to Profiles"
+        message="Create a profile to start chatting."
+        onAction={onGoToProfiles}
+      />
+    );
+  }
+
+  if (initialLoading) {
+    return <HistoryListSkeleton />;
+  }
+
+  if (filteredSessions.length === 0) {
+    const hasSessions = sessions.length > 0;
+    return (
+      <HistoryEmptyMessage
+        actionLabel={hasSessions ? "Clear search" : "New chat"}
+        message={hasSessions ? "No chats match your search." : "No chats yet."}
+        onAction={() => (hasSessions ? onClearSearch() : onGoToChat())}
+      />
+    );
+  }
+
+  const groupedSessions = groupSessionsByDate(filteredSessions);
+
+  return (
+    <div className="divide-y divide-border">
+      {groupedSessions.map((group) => (
+        <section key={group.label}>
+          <p className="px-4 py-2 font-medium text-muted-foreground text-xs">
+            {group.label}
+          </p>
+          <ul>
+            {group.sessions.map((session) => (
+              <li key={session.id}>
+                <HistorySessionRow
+                  disabled={busy}
+                  onDelete={() => onDeleteSession(session)}
+                  onOpen={() => onOpenSession(session)}
+                  session={session}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }

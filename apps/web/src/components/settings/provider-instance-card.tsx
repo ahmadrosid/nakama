@@ -69,6 +69,117 @@ function ProviderActionButton({
   );
 }
 
+function ProviderManageModelsFields({
+  card,
+  instance,
+}: {
+  card: ReturnType<typeof useProviderInstanceCard>;
+  instance: ProviderInstanceSummary;
+}) {
+  if (card.isCompatibleLike) {
+    return (
+      <CustomProviderFields
+        apiKey=""
+        baseUrl={instance.baseUrl ?? ""}
+        baseUrlError={null}
+        browseLabel={card.isOllama ? "Ollama" : undefined}
+        browseSource="remote"
+        customModels={card.manageModels}
+        disabled={card.busy}
+        displayName={instance.label}
+        displayNameError={null}
+        hostMode={instance.hostMode ?? undefined}
+        identityReadOnly
+        modelsError={null}
+        onBaseUrlChange={() => {}}
+        onCustomModelsChange={card.handleManageModelsChange}
+        onDisplayNameChange={() => {}}
+        providerInstanceId={instance.id}
+        remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+      />
+    );
+  }
+
+  if (card.isOpenRouter) {
+    return (
+      <OpenRouterProviderModelFields
+        customModels={card.manageModels}
+        disabled={card.busy}
+        modelsError={card.dialogError}
+        onCustomModelsChange={card.handleManageModelsChange}
+      />
+    );
+  }
+
+  if (isShortlistBrowseProvider(card.providerType)) {
+    return (
+      <ShortlistBrowseProviderModelFields
+        customModels={card.manageModels}
+        disabled={card.busy}
+        modelsError={card.dialogError}
+        onCustomModelsChange={card.handleManageModelsChange}
+        provider={card.providerType}
+        providerId={card.providerType === "fireworks" ? instance.id : undefined}
+      />
+    );
+  }
+
+  if (card.isCatalogShortlist) {
+    return (
+      <CatalogProviderModelFields
+        catalogModels={card.catalogModelsForType}
+        customModels={card.manageModels}
+        disabled={card.busy}
+        modelsError={card.dialogError}
+        onCustomModelsChange={card.handleManageModelsChange}
+        provider={card.providerType as CatalogShortlistProvider}
+        providerInstanceId={instance.id}
+      />
+    );
+  }
+
+  return null;
+}
+
+function ProviderInstanceActions({
+  card,
+  instance,
+  canManage,
+}: {
+  card: ReturnType<typeof useProviderInstanceCard>;
+  instance: ProviderInstanceSummary;
+  canManage: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-0.5">
+      {card.isCompatibleLike ? (
+        <ProviderActionButton label="Edit" onClick={card.openEdit}>
+          <Edit03Icon className="size-3.5" />
+        </ProviderActionButton>
+      ) : null}
+      {canManage ? (
+        <ProviderActionButton label="Manage models" onClick={card.openManage}>
+          <ListViewIcon className="size-3.5" />
+        </ProviderActionButton>
+      ) : null}
+      <ProviderActionButton
+        label={instance.hasApiKey ? "Update key" : "Add key"}
+        onClick={() => card.setReplaceKeyOpen(true)}
+      >
+        <Key01Icon className="size-3.5" />
+      </ProviderActionButton>
+      <ProviderActionButton
+        destructive
+        disabled={card.busy}
+        label="Remove"
+        onClick={() => card.setDeleteOpen(true)}
+      >
+        <Delete02Icon className="size-3.5" />
+      </ProviderActionButton>
+    </div>
+  );
+}
+
 export function ProviderInstanceCard({
   instance,
   catalog,
@@ -129,35 +240,11 @@ export function ProviderInstanceCard({
           <span className="text-muted-foreground text-sm">{modelLabel}</span>
         </td>
         <td className="px-3 py-2.5 align-middle">
-          <div className="flex items-center justify-end gap-0.5">
-            {card.isCompatibleLike ? (
-              <ProviderActionButton label="Edit" onClick={card.openEdit}>
-                <Edit03Icon className="size-3.5" />
-              </ProviderActionButton>
-            ) : null}
-            {canManage ? (
-              <ProviderActionButton
-                label="Manage models"
-                onClick={card.openManage}
-              >
-                <ListViewIcon className="size-3.5" />
-              </ProviderActionButton>
-            ) : null}
-            <ProviderActionButton
-              label={instance.hasApiKey ? "Update key" : "Add key"}
-              onClick={() => card.setReplaceKeyOpen(true)}
-            >
-              <Key01Icon className="size-3.5" />
-            </ProviderActionButton>
-            <ProviderActionButton
-              destructive
-              disabled={card.busy}
-              label="Remove"
-              onClick={() => card.setDeleteOpen(true)}
-            >
-              <Delete02Icon className="size-3.5" />
-            </ProviderActionButton>
-          </div>
+          <ProviderInstanceActions
+            canManage={canManage}
+            card={card}
+            instance={instance}
+          />
         </td>
       </tr>
 
@@ -214,58 +301,7 @@ export function ProviderInstanceCard({
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
         >
-          {card.isCompatibleLike ? (
-            <CustomProviderFields
-              apiKey=""
-              baseUrl={instance.baseUrl ?? ""}
-              baseUrlError={null}
-              browseLabel={card.isOllama ? "Ollama" : undefined}
-              browseSource="remote"
-              customModels={card.manageModels}
-              disabled={card.busy}
-              displayName={instance.label}
-              displayNameError={null}
-              hostMode={instance.hostMode ?? undefined}
-              identityReadOnly
-              modelsError={null}
-              onBaseUrlChange={() => {}}
-              onCustomModelsChange={card.handleManageModelsChange}
-              onDisplayNameChange={() => {}}
-              providerInstanceId={instance.id}
-              remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
-            />
-          ) : null}
-          {card.isOpenRouter ? (
-            <OpenRouterProviderModelFields
-              customModels={card.manageModels}
-              disabled={card.busy}
-              modelsError={card.dialogError}
-              onCustomModelsChange={card.handleManageModelsChange}
-            />
-          ) : null}
-          {isShortlistBrowseProvider(card.providerType) ? (
-            <ShortlistBrowseProviderModelFields
-              customModels={card.manageModels}
-              disabled={card.busy}
-              modelsError={card.dialogError}
-              onCustomModelsChange={card.handleManageModelsChange}
-              provider={card.providerType}
-              providerId={
-                card.providerType === "fireworks" ? instance.id : undefined
-              }
-            />
-          ) : null}
-          {card.isCatalogShortlist ? (
-            <CatalogProviderModelFields
-              catalogModels={card.catalogModelsForType}
-              customModels={card.manageModels}
-              disabled={card.busy}
-              modelsError={card.dialogError}
-              onCustomModelsChange={card.handleManageModelsChange}
-              provider={card.providerType as CatalogShortlistProvider}
-              providerInstanceId={instance.id}
-            />
-          ) : null}
+          <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
       ) : null}
     </>

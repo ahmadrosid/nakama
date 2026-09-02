@@ -47,6 +47,45 @@ function useThinkingElapsed(isWorkActive: boolean, startedAt?: string): number {
   return elapsed;
 }
 
+function useThinkingCollapseState(isWorkActive: boolean, hasBody: boolean) {
+  const [done, setDone] = useState(!isWorkActive && hasBody);
+  const [open, setOpen] = useState(isWorkActive);
+
+  useEffect(() => {
+    if (isWorkActive) {
+      setDone(false);
+      setOpen(true);
+      return;
+    }
+
+    if (!hasBody) {
+      return;
+    }
+
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    const delay = reducedMotion ? 0 : COLLAPSE_BEAT;
+    const timerId = window.setTimeout(() => {
+      setDone(true);
+      setOpen(false);
+    }, delay);
+
+    return () => window.clearTimeout(timerId);
+  }, [hasBody, isWorkActive]);
+
+  const expanded = done ? open : true;
+
+  const toggle = () => {
+    if (!done) {
+      return;
+    }
+    setOpen((current) => !current);
+  };
+
+  return { done, expanded, toggle };
+}
+
 function ThinkingReasoningViewport({
   sentences,
   isWorkActive,
@@ -146,6 +185,112 @@ function ThinkingReasoningViewport({
   );
 }
 
+function ThinkingReasoningHeader({
+  done,
+  expanded,
+  elapsedSeconds,
+  isThinkingStreaming,
+  children,
+  onToggle,
+}: {
+  done: boolean;
+  expanded: boolean;
+  elapsedSeconds: number;
+  isThinkingStreaming: boolean;
+  children?: ReactNode;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      aria-expanded={expanded}
+      aria-label="Toggle thought"
+      className={cn(
+        styles.header,
+        done && styles.headerClickable,
+        expanded && styles.headerExpanded
+      )}
+      onClick={() => done && onToggle()}
+      type="button"
+    >
+      {done ? (
+        <span className={styles.label}>
+          <span className={styles.verb}>Thought</span> for {elapsedSeconds}s
+        </span>
+      ) : (
+        <span className={cn(styles.label, styles.shimmer)}>
+          {children && !isThinkingStreaming
+            ? `Working… · ${formatElapsedSeconds(elapsedSeconds)}`
+            : "Thinking…"}
+        </span>
+      )}
+      {done ? (
+        <svg
+          aria-hidden="true"
+          className={styles.chevron}
+          height="12"
+          viewBox="0 0 24 24"
+          width="12"
+        >
+          <path
+            d="m4.5 15.75 7.5-7.5 7.5 7.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+          />
+        </svg>
+      ) : null}
+    </button>
+  );
+}
+
+function ThinkingReasoningBody({
+  expanded,
+  sentences,
+  isWorkActive,
+  children,
+}: {
+  expanded: boolean;
+  sentences: string[];
+  isWorkActive: boolean;
+  children?: ReactNode;
+}) {
+  const showTimeline = sentences.length > 0 || Boolean(children);
+
+  return (
+    <div
+      className={cn(
+        styles.collapsible,
+        !expanded && styles.collapsibleCollapsed
+      )}
+    >
+      <div className={styles.inner}>
+        {showTimeline ? (
+          <div className={styles.timeline}>
+            {sentences.length > 0 ? (
+              <ThinkingReasoningViewport
+                isWorkActive={isWorkActive}
+                sentences={sentences}
+              />
+            ) : null}
+            {children ? (
+              <div
+                className={cn(
+                  styles.tools,
+                  sentences.length > 0 && styles.toolsAfterReasoning
+                )}
+              >
+                {children}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function ThinkingReasoning({
   text,
   isThinkingStreaming,
@@ -162,31 +307,10 @@ export function ThinkingReasoning({
   );
   const hasBody = sentences.length > 0 || Boolean(children);
   const elapsedSeconds = useThinkingElapsed(isWorkActive, startedAt);
-  const [done, setDone] = useState(!isWorkActive && hasBody);
-  const [open, setOpen] = useState(isWorkActive);
-
-  useEffect(() => {
-    if (isWorkActive) {
-      setDone(false);
-      setOpen(true);
-      return;
-    }
-
-    if (!hasBody) {
-      return;
-    }
-
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const delay = reducedMotion ? 0 : COLLAPSE_BEAT;
-    const timerId = window.setTimeout(() => {
-      setDone(true);
-      setOpen(false);
-    }, delay);
-
-    return () => window.clearTimeout(timerId);
-  }, [hasBody, isWorkActive]);
+  const { done, expanded, toggle } = useThinkingCollapseState(
+    isWorkActive,
+    hasBody
+  );
 
   if (isWorkActive && isThinkingStreaming && !trimmed && !children) {
     return <ThinkingState className={className} />;
@@ -196,89 +320,24 @@ export function ThinkingReasoning({
     return null;
   }
 
-  const expanded = done ? open : true;
-  const showTimeline = sentences.length > 0 || Boolean(children);
-
-  const toggle = () => {
-    if (!done) {
-      return;
-    }
-    setOpen((current) => !current);
-  };
-
   return (
     <div className={cn(styles.root, className)}>
-      <button
-        aria-expanded={expanded}
-        aria-label="Toggle thought"
-        className={cn(
-          styles.header,
-          done && styles.headerClickable,
-          expanded && styles.headerExpanded
-        )}
-        onClick={() => done && toggle()}
-        type="button"
+      <ThinkingReasoningHeader
+        done={done}
+        elapsedSeconds={elapsedSeconds}
+        expanded={expanded}
+        isThinkingStreaming={isThinkingStreaming}
+        onToggle={toggle}
       >
-        {done ? (
-          <span className={styles.label}>
-            <span className={styles.verb}>Thought</span> for {elapsedSeconds}s
-          </span>
-        ) : (
-          <span className={cn(styles.label, styles.shimmer)}>
-            {children && !isThinkingStreaming
-              ? `Working… · ${formatElapsedSeconds(elapsedSeconds)}`
-              : "Thinking…"}
-          </span>
-        )}
-        {done ? (
-          <svg
-            aria-hidden="true"
-            className={styles.chevron}
-            height="12"
-            viewBox="0 0 24 24"
-            width="12"
-          >
-            <path
-              d="m4.5 15.75 7.5-7.5 7.5 7.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-            />
-          </svg>
-        ) : null}
-      </button>
-
-      <div
-        className={cn(
-          styles.collapsible,
-          !expanded && styles.collapsibleCollapsed
-        )}
+        {children}
+      </ThinkingReasoningHeader>
+      <ThinkingReasoningBody
+        expanded={expanded}
+        isWorkActive={isWorkActive}
+        sentences={sentences}
       >
-        <div className={styles.inner}>
-          {showTimeline ? (
-            <div className={styles.timeline}>
-              {sentences.length > 0 ? (
-                <ThinkingReasoningViewport
-                  isWorkActive={isWorkActive}
-                  sentences={sentences}
-                />
-              ) : null}
-              {children ? (
-                <div
-                  className={cn(
-                    styles.tools,
-                    sentences.length > 0 && styles.toolsAfterReasoning
-                  )}
-                >
-                  {children}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
+        {children}
+      </ThinkingReasoningBody>
     </div>
   );
 }

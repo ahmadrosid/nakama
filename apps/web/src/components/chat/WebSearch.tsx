@@ -187,35 +187,94 @@ function formatWebSearchDisplayUrl(source: WebSearchSource): string {
   }
 }
 
-export function WebSourceCard({
+function webSourceHeaderLabel(
+  mode: WebSourceCardMode,
+  isComplete: boolean
+): string {
+  if (mode === "fetch") {
+    return isComplete ? "Fetched" : "Fetching";
+  }
+  return isComplete ? "Searched" : "Searching";
+}
+
+function WebSourceSiteRow({
+  source,
+  state,
+  index,
+  formatDisplayUrl,
+}: {
+  source: WebSearchSource;
+  state: WebSearchSiteState;
+  index: number;
+  formatDisplayUrl: (source: WebSearchSource) => string;
+}) {
+  const href = source.href ?? source.url;
+  const displayUrl = formatDisplayUrl(source);
+  const row = (
+    <>
+      <span className={styles.wsBullet}>
+        <span className={styles.wsDots}>
+          <DotsIcon />
+        </span>
+        <span className={styles.wsGlobe}>
+          <Globe />
+        </span>
+        <span className={styles.wsCheck}>
+          <CheckIcon />
+        </span>
+      </span>
+      <span className={styles.wsTitle}>{source.title}</span>
+      <span className={styles.wsSep}>·</span>
+      <span className={styles.wsUrl}>{displayUrl}</span>
+      <span className={styles.wsArrow}>
+        <ArrowUpIcon />
+      </span>
+    </>
+  );
+
+  return (
+    <li
+      className={styles.wsSite}
+      data-state={state}
+      style={{ animationDelay: `${index * 40}ms` }}
+    >
+      {state === "done" && href ? (
+        <a
+          className={styles.wsSiteLink}
+          href={href.startsWith("http") ? href : `https://${href}`}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {row}
+        </a>
+      ) : (
+        row
+      )}
+    </li>
+  );
+}
+
+function WebSourceCardHeaderContent({
   mode,
   headerText,
-  sources,
-  siteStates,
   isComplete,
+  canExpand,
   open,
-  onOpenChange,
-  formatDisplayUrl = formatWebSearchDisplayUrl,
-}: WebSourceCardProps) {
-  const headerLabel =
-    mode === "fetch"
-      ? isComplete
-        ? "Fetched"
-        : "Fetching"
-      : isComplete
-        ? "Searched"
-        : "Searching";
+}: {
+  mode: WebSourceCardMode;
+  headerText: string;
+  isComplete: boolean;
+  canExpand: boolean;
+  open: boolean;
+}) {
+  const headerLabel = webSourceHeaderLabel(mode, isComplete);
   const quoteHeader = mode === "search" || !/^\d+ pages$/.test(headerText);
 
-  const canExpand = sources.length > 0;
-  const leadingIcon = (
-    <span className={styles.wsIcon}>
-      {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
-    </span>
-  );
-  const headerContent = (
+  return (
     <>
-      {leadingIcon}
+      <span className={styles.wsIcon}>
+        {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
+      </span>
       <span className={styles.wsLabel}>
         <span
           className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}
@@ -238,6 +297,28 @@ export function WebSourceCard({
         />
       ) : null}
     </>
+  );
+}
+
+export function WebSourceCard({
+  mode,
+  headerText,
+  sources,
+  siteStates,
+  isComplete,
+  open,
+  onOpenChange,
+  formatDisplayUrl = formatWebSearchDisplayUrl,
+}: WebSourceCardProps) {
+  const canExpand = sources.length > 0;
+  const headerContent = (
+    <WebSourceCardHeaderContent
+      canExpand={canExpand}
+      headerText={headerText}
+      isComplete={isComplete}
+      mode={mode}
+      open={open}
+    />
   );
 
   return (
@@ -263,57 +344,15 @@ export function WebSourceCard({
           <div className={styles.wsCollapsibleInner}>
             <div className={styles.wsResults}>
               <ul className={styles.wsList}>
-                {sources.map((source, index) => {
-                  const state = siteStates[index] ?? "pending";
-                  const href = source.href ?? source.url;
-                  const displayUrl = formatDisplayUrl(source);
-
-                  const row = (
-                    <>
-                      <span className={styles.wsBullet}>
-                        <span className={styles.wsDots}>
-                          <DotsIcon />
-                        </span>
-                        <span className={styles.wsGlobe}>
-                          <Globe />
-                        </span>
-                        <span className={styles.wsCheck}>
-                          <CheckIcon />
-                        </span>
-                      </span>
-                      <span className={styles.wsTitle}>{source.title}</span>
-                      <span className={styles.wsSep}>·</span>
-                      <span className={styles.wsUrl}>{displayUrl}</span>
-                      <span className={styles.wsArrow}>
-                        <ArrowUpIcon />
-                      </span>
-                    </>
-                  );
-
-                  return (
-                    <li
-                      className={styles.wsSite}
-                      data-state={state}
-                      key={source.url}
-                      style={{ animationDelay: `${index * 40}ms` }}
-                    >
-                      {state === "done" && href ? (
-                        <a
-                          className={styles.wsSiteLink}
-                          href={
-                            href.startsWith("http") ? href : `https://${href}`
-                          }
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          {row}
-                        </a>
-                      ) : (
-                        row
-                      )}
-                    </li>
-                  );
-                })}
+                {sources.map((source, index) => (
+                  <WebSourceSiteRow
+                    formatDisplayUrl={formatDisplayUrl}
+                    index={index}
+                    key={source.url}
+                    source={source}
+                    state={siteStates[index] ?? "pending"}
+                  />
+                ))}
               </ul>
             </div>
           </div>

@@ -9,7 +9,7 @@ import type {
 } from "@nakama/core/contract";
 import { useQueries } from "@tanstack/react-query";
 import { MoreHorizontalIcon, Search01Icon } from "hugeicons-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import { ComposioProfileAssignPicker } from "@/components/ComposioProfileAssignPicker";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
@@ -182,6 +182,173 @@ interface ComposioToolkitRowProps {
   row: ToolkitRowModel;
 }
 
+function ComposioToolkitRowMeta({
+  catalog,
+  orgEnabled,
+  userStatus,
+  lastError,
+}: {
+  catalog: ComposioCatalogToolkitSummary;
+  orgEnabled: boolean;
+  userStatus: ComposioUserConnectionStatus | undefined;
+  lastError: string | null;
+}) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <p
+          className="truncate font-medium text-foreground text-sm"
+          title={catalog.description ?? catalog.name}
+        >
+          {catalog.name}
+        </p>
+        <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+          {catalog.slug}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <StatusPill
+          label={orgEnabled ? "Enabled for org" : "Not enabled"}
+          tone={orgEnabled ? "success" : "muted"}
+        />
+        {orgEnabled ? (
+          <StatusPill
+            label={userConnectionLabel(userStatus)}
+            tone={userConnectionTone(userStatus)}
+          />
+        ) : null}
+      </div>
+      {orgEnabled && userStatus === "connected" ? (
+        <p className="mt-1 text-muted-foreground text-xs">
+          Assigned to the default profile when it was enabled.
+        </p>
+      ) : null}
+      {lastError ? (
+        <p className="mt-1 truncate text-destructive text-xs">{lastError}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ComposioToolkitRowActions({
+  catalog,
+  orgToolkit,
+  orgEnabled,
+  userStatus,
+  isOrgAdmin,
+  busy,
+  assignedProfileIds,
+  profiles,
+  onToggleProfile,
+  onConnect,
+  onEnable,
+  onDisable,
+  onSync,
+  onDisconnect,
+}: {
+  catalog: ComposioCatalogToolkitSummary;
+  orgToolkit: ComposioToolkitSummary | undefined;
+  orgEnabled: boolean;
+  userStatus: ComposioUserConnectionStatus | undefined;
+  isOrgAdmin: boolean;
+  busy: boolean;
+  assignedProfileIds: string[];
+  profiles: ProfileSummary[];
+  onToggleProfile: ComposioToolkitRowProps["onToggleProfile"];
+  onConnect: (slug: string) => void;
+  onEnable: (slug: string) => void;
+  onDisable: (slug: string) => void;
+  onSync: (slug: string) => void;
+  onDisconnect: (slug: string) => void;
+}) {
+  const showEnable = isOrgAdmin && !orgEnabled;
+  const showConnectedMenu = orgEnabled && userStatus === "connected";
+  const showAssign = isOrgAdmin && orgEnabled && orgToolkit;
+  const showConnect = orgEnabled && userStatus !== "connected";
+  const showDisable = isOrgAdmin && orgEnabled && userStatus !== "connected";
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      {showEnable ? (
+        <Button
+          disabled={busy}
+          onClick={() => onEnable(catalog.slug)}
+          size="sm"
+          type="button"
+        >
+          Enable
+        </Button>
+      ) : null}
+
+      {showConnectedMenu ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label="Toolkit actions"
+                disabled={busy}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+              />
+            }
+          >
+            <MoreHorizontalIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onSync(catalog.slug)}>
+              Sync tools
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDisconnect(catalog.slug)}>
+              Disconnect
+            </DropdownMenuItem>
+            {isOrgAdmin ? (
+              <DropdownMenuItem onClick={() => onDisable(catalog.slug)}>
+                Disable for org
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+
+      {showAssign ? (
+        <ComposioProfileAssignPicker
+          assignedProfileIds={assignedProfileIds}
+          busy={busy}
+          onToggle={(profileId, assigned) =>
+            onToggleProfile(profileId, orgToolkit.id, assigned)
+          }
+          profiles={profiles}
+          toolkitName={catalog.name}
+        />
+      ) : null}
+
+      {showConnect ? (
+        <Button
+          disabled={busy}
+          onClick={() => onConnect(catalog.slug)}
+          size="sm"
+          type="button"
+        >
+          {userStatus === "oauth_in_progress" ? "Finish connecting" : "Connect"}
+        </Button>
+      ) : null}
+
+      {showDisable ? (
+        <Button
+          disabled={busy}
+          onClick={() => onDisable(catalog.slug)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Disable
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function ComposioToolkitRow({
   row,
   isOrgAdmin,
@@ -203,120 +370,28 @@ function ComposioToolkitRow({
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
       <ComposioToolkitLogo logoUrl={catalog.logoUrl} name={catalog.name} />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p
-            className="truncate font-medium text-foreground text-sm"
-            title={catalog.description ?? catalog.name}
-          >
-            {catalog.name}
-          </p>
-          <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-            {catalog.slug}
-          </span>
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          <StatusPill
-            label={orgEnabled ? "Enabled for org" : "Not enabled"}
-            tone={orgEnabled ? "success" : "muted"}
-          />
-          {orgEnabled ? (
-            <StatusPill
-              label={userConnectionLabel(userStatus)}
-              tone={userConnectionTone(userStatus)}
-            />
-          ) : null}
-        </div>
-        {orgEnabled && userStatus === "connected" ? (
-          <p className="mt-1 text-muted-foreground text-xs">
-            Assigned to the default profile when it was enabled.
-          </p>
-        ) : null}
-        {lastError ? (
-          <p className="mt-1 truncate text-destructive text-xs">{lastError}</p>
-        ) : null}
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1.5">
-        {isOrgAdmin && !orgEnabled ? (
-          <Button
-            disabled={busy}
-            onClick={() => onEnable(catalog.slug)}
-            size="sm"
-            type="button"
-          >
-            Enable
-          </Button>
-        ) : null}
-
-        {orgEnabled && userStatus === "connected" ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  aria-label="Toolkit actions"
-                  disabled={busy}
-                  size="icon-sm"
-                  type="button"
-                  variant="outline"
-                />
-              }
-            >
-              <MoreHorizontalIcon className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onSync(catalog.slug)}>
-                Sync tools
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDisconnect(catalog.slug)}>
-                Disconnect
-              </DropdownMenuItem>
-              {isOrgAdmin ? (
-                <DropdownMenuItem onClick={() => onDisable(catalog.slug)}>
-                  Disable for org
-                </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-
-        {isOrgAdmin && orgEnabled && orgToolkit ? (
-          <ComposioProfileAssignPicker
-            assignedProfileIds={assignedProfileIds}
-            busy={busy}
-            onToggle={(profileId, assigned) =>
-              onToggleProfile(profileId, orgToolkit.id, assigned)
-            }
-            profiles={profiles}
-            toolkitName={catalog.name}
-          />
-        ) : null}
-
-        {orgEnabled && userStatus !== "connected" ? (
-          <Button
-            disabled={busy}
-            onClick={() => onConnect(catalog.slug)}
-            size="sm"
-            type="button"
-          >
-            {userStatus === "oauth_in_progress"
-              ? "Finish connecting"
-              : "Connect"}
-          </Button>
-        ) : null}
-
-        {isOrgAdmin && orgEnabled && userStatus !== "connected" ? (
-          <Button
-            disabled={busy}
-            onClick={() => onDisable(catalog.slug)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Disable
-          </Button>
-        ) : null}
-      </div>
+      <ComposioToolkitRowMeta
+        catalog={catalog}
+        lastError={lastError}
+        orgEnabled={orgEnabled}
+        userStatus={userStatus}
+      />
+      <ComposioToolkitRowActions
+        assignedProfileIds={assignedProfileIds}
+        busy={busy}
+        catalog={catalog}
+        isOrgAdmin={isOrgAdmin}
+        onConnect={onConnect}
+        onDisable={onDisable}
+        onDisconnect={onDisconnect}
+        onEnable={onEnable}
+        onSync={onSync}
+        onToggleProfile={onToggleProfile}
+        orgEnabled={orgEnabled}
+        orgToolkit={orgToolkit}
+        profiles={profiles}
+        userStatus={userStatus}
+      />
     </div>
   );
 }
@@ -337,6 +412,196 @@ interface ComposioToolkitListProps {
     assigned: boolean
   ) => void;
   profiles: ProfileSummary[];
+}
+
+function buildToolkitRows(
+  data: ListComposioToolkitsResponse
+): ToolkitRowModel[] {
+  const orgBySlug = new Map(
+    data.orgToolkits.map((toolkit) => [toolkit.toolkitSlug, toolkit])
+  );
+  const userByToolkitId = new Map(
+    data.userConnections.map((connection) => [connection.toolkitId, connection])
+  );
+
+  return data.catalog.map((catalogToolkit) => {
+    const orgToolkit = orgBySlug.get(catalogToolkit.slug);
+    const userConnection = orgToolkit
+      ? userByToolkitId.get(orgToolkit.id)
+      : undefined;
+
+    return { catalog: catalogToolkit, orgToolkit, userConnection };
+  });
+}
+
+function filterToolkitRows(input: {
+  activeRows: ToolkitRowModel[];
+  isOrgAdmin: boolean;
+  isSearching: boolean;
+  query: string;
+  rows: ToolkitRowModel[];
+  showAllApps: boolean;
+}): ToolkitRowModel[] {
+  const { activeRows, isOrgAdmin, isSearching, query, rows, showAllApps } =
+    input;
+
+  if (isSearching) {
+    const matches = rows.filter((row) =>
+      matchesToolkitSearch(row.catalog, query)
+    );
+    return isOrgAdmin
+      ? matches.toSorted(compareToolkitRows)
+      : matches.filter((row) => row.orgToolkit?.status === "enabled");
+  }
+
+  if (!isOrgAdmin) {
+    return activeRows.filter((row) => row.orgToolkit?.status === "enabled");
+  }
+
+  const base = showAllApps
+    ? rows
+    : rows.filter(
+        (row) =>
+          FEATURED_TOOLKIT_SLUGS.has(row.catalog.slug) || isActiveToolkit(row)
+      );
+
+  return base.toSorted(compareToolkitRows);
+}
+
+function ToolkitListSummary({
+  connectedCount,
+  enabledCount,
+  filteredCount,
+  isOrgAdmin,
+  isSearching,
+  showAllApps,
+  totalCatalog,
+}: {
+  connectedCount: number;
+  enabledCount: number;
+  filteredCount: number;
+  isOrgAdmin: boolean;
+  isSearching: boolean;
+  showAllApps: boolean;
+  totalCatalog: number;
+}) {
+  if (isSearching) {
+    return (
+      <>
+        {filteredCount} match{filteredCount === 1 ? "" : "es"}
+      </>
+    );
+  }
+
+  if (isOrgAdmin) {
+    return (
+      <>
+        {enabledCount} enabled · {connectedCount} connected by you ·{" "}
+        {showAllApps ? totalCatalog : filteredCount} shown
+      </>
+    );
+  }
+
+  return (
+    <>
+      {enabledCount} enabled · {connectedCount} connected by you
+    </>
+  );
+}
+
+function ToolkitListEmpty({
+  isSearching,
+  search,
+}: {
+  isSearching: boolean;
+  search: string;
+}) {
+  if (isSearching) {
+    return (
+      <div className="space-y-1 px-4 py-8 text-center text-muted-foreground text-sm">
+        <p>No apps match &ldquo;{search.trim()}&rdquo;.</p>
+        <p className="text-xs">Try another name or slug.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1 px-4 py-8 text-center text-muted-foreground text-sm">
+      <p>No apps are enabled for your org yet.</p>
+      <p className="text-xs">Ask an org admin to enable toolkits first.</p>
+    </div>
+  );
+}
+
+function ToolkitListBody({
+  assignedProfileIdsByToolkit,
+  busy,
+  displayedRows,
+  isOrgAdmin,
+  onConnect,
+  onDisable,
+  onDisconnect,
+  onEnable,
+  onSync,
+  onToggleProfile,
+  profiles,
+  remainingCount,
+  onShowMore,
+}: {
+  assignedProfileIdsByToolkit: Map<string, string[]>;
+  busy: boolean;
+  displayedRows: ToolkitRowModel[];
+  isOrgAdmin: boolean;
+  onConnect: (slug: string) => void;
+  onDisable: (slug: string) => void;
+  onDisconnect: (slug: string) => void;
+  onEnable: (slug: string) => void;
+  onSync: (slug: string) => void;
+  onToggleProfile: ComposioToolkitListProps["onToggleProfile"];
+  profiles: ProfileSummary[];
+  remainingCount: number;
+  onShowMore: () => void;
+}) {
+  return (
+    <>
+      <div className="max-h-[min(28rem,60vh)] overflow-y-auto">
+        <div className="divide-y divide-border">
+          {displayedRows.map((row) => (
+            <ComposioToolkitRow
+              assignedProfileIds={
+                assignedProfileIdsByToolkit.get(row.orgToolkit?.id ?? "") ?? []
+              }
+              busy={busy}
+              isOrgAdmin={isOrgAdmin}
+              key={row.catalog.slug}
+              onConnect={onConnect}
+              onDisable={onDisable}
+              onDisconnect={onDisconnect}
+              onEnable={onEnable}
+              onSync={onSync}
+              onToggleProfile={onToggleProfile}
+              profiles={profiles}
+              row={row}
+            />
+          ))}
+        </div>
+      </div>
+
+      {remainingCount > 0 ? (
+        <div className="border-border border-t px-4 py-3 text-center">
+          <Button
+            onClick={onShowMore}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Show more (<span className="tabular-nums">{remainingCount}</span>{" "}
+            remaining)
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 function ComposioToolkitList({
@@ -360,27 +625,7 @@ function ComposioToolkitList({
   const query = deferredSearch.trim().toLowerCase();
   const isSearching = query.length > 0;
 
-  const rows = useMemo(() => {
-    const orgBySlug = new Map(
-      data.orgToolkits.map((toolkit) => [toolkit.toolkitSlug, toolkit])
-    );
-    const userByToolkitId = new Map(
-      data.userConnections.map((connection) => [
-        connection.toolkitId,
-        connection,
-      ])
-    );
-
-    return data.catalog.map((catalogToolkit) => {
-      const orgToolkit = orgBySlug.get(catalogToolkit.slug);
-      const userConnection = orgToolkit
-        ? userByToolkitId.get(orgToolkit.id)
-        : undefined;
-
-      return { catalog: catalogToolkit, orgToolkit, userConnection };
-    });
-  }, [data.catalog, data.orgToolkits, data.userConnections]);
-
+  const rows = useMemo(() => buildToolkitRows(data), [data]);
   const activeRows = useMemo(() => rows.filter(isActiveToolkit), [rows]);
   const enabledCount = useMemo(
     () => rows.filter((row) => row.orgToolkit?.status === "enabled").length,
@@ -392,35 +637,57 @@ function ComposioToolkitList({
     [rows]
   );
 
-  const filteredRows = useMemo(() => {
-    if (isSearching) {
-      const matches = rows.filter((row) =>
-        matchesToolkitSearch(row.catalog, query)
-      );
-      return isOrgAdmin
-        ? matches.toSorted(compareToolkitRows)
-        : matches.filter((row) => row.orgToolkit?.status === "enabled");
-    }
-
-    if (!isOrgAdmin) {
-      return activeRows.filter((row) => row.orgToolkit?.status === "enabled");
-    }
-
-    const base = showAllApps
-      ? rows
-      : rows.filter(
-          (row) =>
-            FEATURED_TOOLKIT_SLUGS.has(row.catalog.slug) || isActiveToolkit(row)
-        );
-
-    return base.toSorted(compareToolkitRows);
-  }, [activeRows, isOrgAdmin, isSearching, query, rows, showAllApps]);
+  const filteredRows = useMemo(
+    () =>
+      filterToolkitRows({
+        activeRows,
+        isOrgAdmin,
+        isSearching,
+        query,
+        rows,
+        showAllApps,
+      }),
+    [activeRows, isOrgAdmin, isSearching, query, rows, showAllApps]
+  );
 
   const displayedRows = filteredRows.slice(0, visibleCount);
   const remainingCount = Math.max(
     filteredRows.length - displayedRows.length,
     0
   );
+
+  let listContent: ReactNode;
+  if (data.catalog.length === 0) {
+    listContent = (
+      <div className="px-4 py-6 text-muted-foreground text-sm">
+        No toolkits available yet.
+      </div>
+    );
+  } else if (filteredRows.length === 0) {
+    listContent = (
+      <ToolkitListEmpty isSearching={isSearching} search={search} />
+    );
+  } else {
+    listContent = (
+      <ToolkitListBody
+        assignedProfileIdsByToolkit={assignedProfileIdsByToolkit}
+        busy={busy}
+        displayedRows={displayedRows}
+        isOrgAdmin={isOrgAdmin}
+        onConnect={onConnect}
+        onDisable={onDisable}
+        onDisconnect={onDisconnect}
+        onEnable={onEnable}
+        onShowMore={() =>
+          setVisibleCount((current) => current + CATALOG_PAGE_SIZE)
+        }
+        onSync={onSync}
+        onToggleProfile={onToggleProfile}
+        profiles={profiles}
+        remainingCount={remainingCount}
+      />
+    );
+  }
 
   return (
     <>
@@ -456,21 +723,15 @@ function ComposioToolkitList({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs tabular-nums">
-            {isSearching ? (
-              <>
-                {filteredRows.length} match
-                {filteredRows.length === 1 ? "" : "es"}
-              </>
-            ) : isOrgAdmin ? (
-              <>
-                {enabledCount} enabled · {connectedCount} connected by you ·{" "}
-                {showAllApps ? data.catalog.length : filteredRows.length} shown
-              </>
-            ) : (
-              <>
-                {enabledCount} enabled · {connectedCount} connected by you
-              </>
-            )}
+            <ToolkitListSummary
+              connectedCount={connectedCount}
+              enabledCount={enabledCount}
+              filteredCount={filteredRows.length}
+              isOrgAdmin={isOrgAdmin}
+              isSearching={isSearching}
+              showAllApps={showAllApps}
+              totalCatalog={data.catalog.length}
+            />
           </p>
 
           {isOrgAdmin && !isSearching ? (
@@ -491,70 +752,7 @@ function ComposioToolkitList({
         </div>
       </div>
 
-      {data.catalog.length === 0 ? (
-        <div className="px-4 py-6 text-muted-foreground text-sm">
-          No toolkits available yet.
-        </div>
-      ) : filteredRows.length === 0 ? (
-        <div className="space-y-1 px-4 py-8 text-center text-muted-foreground text-sm">
-          {isSearching ? (
-            <>
-              <p>No apps match &ldquo;{search.trim()}&rdquo;.</p>
-              <p className="text-xs">Try another name or slug.</p>
-            </>
-          ) : (
-            <>
-              <p>No apps are enabled for your org yet.</p>
-              <p className="text-xs">
-                Ask an org admin to enable toolkits first.
-              </p>
-            </>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="max-h-[min(28rem,60vh)] overflow-y-auto">
-            <div className="divide-y divide-border">
-              {displayedRows.map((row) => (
-                <ComposioToolkitRow
-                  assignedProfileIds={
-                    assignedProfileIdsByToolkit.get(row.orgToolkit?.id ?? "") ??
-                    []
-                  }
-                  busy={busy}
-                  isOrgAdmin={isOrgAdmin}
-                  key={row.catalog.slug}
-                  onConnect={onConnect}
-                  onDisable={onDisable}
-                  onDisconnect={onDisconnect}
-                  onEnable={onEnable}
-                  onSync={onSync}
-                  onToggleProfile={onToggleProfile}
-                  profiles={profiles}
-                  row={row}
-                />
-              ))}
-            </div>
-          </div>
-
-          {remainingCount > 0 ? (
-            <div className="border-border border-t px-4 py-3 text-center">
-              <Button
-                onClick={() =>
-                  setVisibleCount((current) => current + CATALOG_PAGE_SIZE)
-                }
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Show more (
-                <span className="tabular-nums">{remainingCount}</span>{" "}
-                remaining)
-              </Button>
-            </div>
-          ) : null}
-        </>
-      )}
+      {listContent}
     </>
   );
 }
@@ -599,6 +797,102 @@ function ComposioConnectionsSkeleton({
   );
 }
 
+function ComposioNotConfiguredMessage({ isOrgAdmin }: { isOrgAdmin: boolean }) {
+  if (isOrgAdmin) {
+    return (
+      <div className="space-y-2 p-4 text-muted-foreground text-sm">
+        <p className="font-medium text-foreground">
+          Save your Composio API key first
+        </p>
+        <p>
+          Once the key is saved above, you can enable toolkits here. Members
+          connect from chat.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 p-4 text-muted-foreground text-sm">
+      <p className="font-medium text-foreground">
+        Composio is not configured on this server
+      </p>
+      <p>
+        Ask an org admin to save the Composio project API key on Integrations.
+      </p>
+    </div>
+  );
+}
+
+function ComposioCatalogErrorMessage({
+  catalogError,
+  isOrgAdmin,
+}: {
+  catalogError: string;
+  isOrgAdmin: boolean;
+}) {
+  return (
+    <div className="space-y-2 p-4 text-sm">
+      <p className="font-medium text-foreground">
+        Could not load Composio toolkits
+      </p>
+      <p className="text-destructive">{catalogError}</p>
+      {isOrgAdmin ? (
+        <p className="text-muted-foreground">
+          Verify the saved project API key under Settings → Project Settings →
+          API Keys, then save it again above.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function buildAssignedProfileIdsByToolkit(
+  profiles: ProfileSummary[],
+  assignmentQueries: Array<{
+    data?: { assignments?: Array<{ toolkitId: string }> };
+  }>
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+
+  profiles.forEach((profile, index) => {
+    for (const assignment of assignmentQueries[index]?.data?.assignments ??
+      []) {
+      map.set(assignment.toolkitId, [
+        ...(map.get(assignment.toolkitId) ?? []),
+        profile.id,
+      ]);
+    }
+  });
+
+  return map;
+}
+
+function nextToolkitAssignments(
+  current: NonNullable<UpdateProfileComposioToolkitsRequest["assignments"]>,
+  toolkitId: string,
+  assigned: boolean
+): UpdateProfileComposioToolkitsRequest["assignments"] {
+  const next: UpdateProfileComposioToolkitsRequest["assignments"] = [];
+
+  for (const entry of current) {
+    if (!assigned && entry.toolkitId === toolkitId) {
+      continue;
+    }
+
+    next.push({
+      allowedActions: entry.allowedActions,
+      toolkitId: entry.toolkitId,
+    });
+  }
+
+  if (assigned) {
+    next.push({ allowedActions: null, toolkitId });
+  }
+
+  return next;
+}
+
 export function ComposioConnectionsCard({
   embedded = false,
   bordered = false,
@@ -627,21 +921,10 @@ export function ComposioConnectionsCard({
     ),
   });
 
-  const assignedProfileIdsByToolkit = useMemo(() => {
-    const map = new Map<string, string[]>();
-
-    profiles.forEach((profile, index) => {
-      for (const assignment of assignmentQueries[index]?.data?.assignments ??
-        []) {
-        map.set(assignment.toolkitId, [
-          ...(map.get(assignment.toolkitId) ?? []),
-          profile.id,
-        ]);
-      }
-    });
-
-    return map;
-  }, [profiles, assignmentQueries]);
+  const assignedProfileIdsByToolkit = useMemo(
+    () => buildAssignedProfileIdsByToolkit(profiles, assignmentQueries),
+    [profiles, assignmentQueries]
+  );
 
   const toggleProfileAssignment = (
     profileId: string,
@@ -650,24 +933,10 @@ export function ComposioConnectionsCard({
   ) => {
     const index = profiles.findIndex((profile) => profile.id === profileId);
     const current = assignmentQueries[index]?.data?.assignments ?? [];
-    const next: UpdateProfileComposioToolkitsRequest["assignments"] = [];
-
-    for (const entry of current) {
-      if (!assigned && entry.toolkitId === toolkitId) {
-        continue;
-      }
-
-      next.push({
-        allowedActions: entry.allowedActions,
-        toolkitId: entry.toolkitId,
-      });
-    }
-
-    if (assigned) {
-      next.push({ allowedActions: null, toolkitId });
-    }
-
-    assignMutation.mutate({ assignments: next, profileId });
+    assignMutation.mutate({
+      assignments: nextToolkitAssignments(current, toolkitId, assigned),
+      profileId,
+    });
   };
   const disableMutation = useDisableComposioToolkit();
   const disconnectMutation = useDisconnectComposioToolkit();
@@ -682,6 +951,8 @@ export function ComposioConnectionsCard({
     syncMutation.isPending;
 
   const shellProps = { bordered, embedded };
+  const data = toolkitsQuery.data;
+  const configured = settings?.configured === true || data?.configured === true;
 
   if (toolkitsQuery.isLoading) {
     return <ComposioConnectionsSkeleton bordered={bordered} />;
@@ -697,24 +968,10 @@ export function ComposioConnectionsCard({
     );
   }
 
-  const data = toolkitsQuery.data;
-  const configured = settings?.configured === true || data?.configured === true;
-
   if (!configured) {
     return (
       <IntegrationCardShell {...shellProps}>
-        <div className="space-y-2 p-4 text-muted-foreground text-sm">
-          <p className="font-medium text-foreground">
-            {isOrgAdmin
-              ? "Save your Composio API key first"
-              : "Composio is not configured on this server"}
-          </p>
-          <p>
-            {isOrgAdmin
-              ? "Once the key is saved above, you can enable toolkits here. Members connect from chat."
-              : "Ask an org admin to save the Composio project API key on Integrations."}
-          </p>
-        </div>
+        <ComposioNotConfiguredMessage isOrgAdmin={isOrgAdmin} />
       </IntegrationCardShell>
     );
   }
@@ -726,18 +983,10 @@ export function ComposioConnectionsCard({
   if (data.catalogError) {
     return (
       <IntegrationCardShell {...shellProps}>
-        <div className="space-y-2 p-4 text-sm">
-          <p className="font-medium text-foreground">
-            Could not load Composio toolkits
-          </p>
-          <p className="text-destructive">{data.catalogError}</p>
-          {isOrgAdmin ? (
-            <p className="text-muted-foreground">
-              Verify the saved project API key under Settings → Project Settings
-              → API Keys, then save it again above.
-            </p>
-          ) : null}
-        </div>
+        <ComposioCatalogErrorMessage
+          catalogError={data.catalogError}
+          isOrgAdmin={isOrgAdmin}
+        />
       </IntegrationCardShell>
     );
   }

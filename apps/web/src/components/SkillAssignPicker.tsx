@@ -192,6 +192,83 @@ function SkillDeleteConfirmActions({
   );
 }
 
+function AvailableSkillPrimaryAction({
+  rowAction,
+  disabled,
+  assigningBash,
+  installingAgentBrowser,
+  skillDisabled,
+  onAssignBash,
+  onInstall,
+  onAdd,
+}: {
+  rowAction: AgentBrowserRowAction;
+  disabled: boolean;
+  assigningBash: boolean;
+  installingAgentBrowser: boolean;
+  skillDisabled: boolean;
+  onAssignBash: (event: SyntheticEvent) => void;
+  onInstall: (event: SyntheticEvent) => void;
+  onAdd: (event: SyntheticEvent) => void;
+}) {
+  if (rowAction === "add-bash") {
+    return (
+      <Button
+        className="[&_svg]:pointer-events-auto"
+        disabled={disabled || assigningBash}
+        onClick={(event) => void onAssignBash(event)}
+        onPointerDown={stopCommandItemSelect}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        {assigningBash ? (
+          <Spinner className="size-3.5" />
+        ) : (
+          <Add01Icon aria-hidden />
+        )}
+        Add bash
+      </Button>
+    );
+  }
+
+  if (rowAction === "install") {
+    return (
+      <Button
+        className="[&_svg]:pointer-events-auto"
+        disabled={disabled || installingAgentBrowser}
+        onClick={onInstall}
+        onPointerDown={stopCommandItemSelect}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        {installingAgentBrowser ? (
+          <Spinner className="size-3.5" />
+        ) : (
+          <Download04Icon aria-hidden />
+        )}
+        Install
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      className="[&_svg]:pointer-events-auto"
+      disabled={disabled || skillDisabled}
+      onClick={onAdd}
+      onPointerDown={stopCommandItemSelect}
+      size="xs"
+      type="button"
+      variant="outline"
+    >
+      <Add01Icon aria-hidden />
+      Add
+    </Button>
+  );
+}
+
 function AvailableSkillActions({
   skill,
   rowAction,
@@ -221,54 +298,16 @@ function AvailableSkillActions({
 }) {
   return (
     <div className="pointer-events-auto flex shrink-0 items-center gap-1">
-      {rowAction === "add-bash" ? (
-        <Button
-          className="[&_svg]:pointer-events-auto"
-          disabled={disabled || assigningBash}
-          onClick={(event) => void onAssignBash(event)}
-          onPointerDown={stopCommandItemSelect}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          {assigningBash ? (
-            <Spinner className="size-3.5" />
-          ) : (
-            <Add01Icon aria-hidden />
-          )}
-          Add bash
-        </Button>
-      ) : rowAction === "install" ? (
-        <Button
-          className="[&_svg]:pointer-events-auto"
-          disabled={disabled || installingAgentBrowser}
-          onClick={onInstall}
-          onPointerDown={stopCommandItemSelect}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          {installingAgentBrowser ? (
-            <Spinner className="size-3.5" />
-          ) : (
-            <Download04Icon aria-hidden />
-          )}
-          Install
-        </Button>
-      ) : (
-        <Button
-          className="[&_svg]:pointer-events-auto"
-          disabled={disabled || skillDisabled}
-          onClick={onAdd}
-          onPointerDown={stopCommandItemSelect}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          <Add01Icon aria-hidden />
-          Add
-        </Button>
-      )}
+      <AvailableSkillPrimaryAction
+        assigningBash={assigningBash}
+        disabled={disabled}
+        installingAgentBrowser={installingAgentBrowser}
+        onAdd={onAdd}
+        onAssignBash={onAssignBash}
+        onInstall={onInstall}
+        rowAction={rowAction}
+        skillDisabled={skillDisabled}
+      />
       {onDelete ? (
         <Button
           aria-label={
@@ -447,6 +486,152 @@ function OnProfileSkillCommandItem({
   );
 }
 
+function SkillAssignManagePanel({
+  showAgentBrowserPrereqs,
+  agentBrowserNeedsInstall,
+  assigningBash,
+  bashNeedsAssign,
+  disabled,
+  agentBrowserInstallError,
+  agentBrowserInstallProgress,
+  onAssignBash,
+  onAssignBashClick,
+  availableSkills,
+  onProfileSkills,
+  bashAssigned,
+  installingAgentBrowser,
+  isSkillDisabled,
+  canDeleteSkill,
+  onAssign,
+  setOpen,
+  onDelete,
+  onInstall,
+  onRequestDelete,
+  agentBrowserRowAction,
+}: {
+  showAgentBrowserPrereqs: boolean;
+  agentBrowserNeedsInstall: boolean;
+  assigningBash: boolean;
+  bashNeedsAssign: boolean;
+  disabled: boolean;
+  agentBrowserInstallError: string | null;
+  agentBrowserInstallProgress: string | null;
+  onAssignBash?: () => void | Promise<void>;
+  onAssignBashClick: (event: SyntheticEvent) => void;
+  availableSkills: SkillSummary[];
+  onProfileSkills: SkillSummary[];
+  bashAssigned: boolean;
+  installingAgentBrowser: boolean;
+  isSkillDisabled: (skill: SkillSummary) => boolean;
+  canDeleteSkill: (skill: SkillSummary) => boolean;
+  onAssign: (skillId: string) => void;
+  setOpen: (open: boolean) => void;
+  onDelete?: (skillId: string) => void | Promise<void>;
+  onInstall: (event: SyntheticEvent) => void;
+  onRequestDelete: (skill: SkillSummary, event: SyntheticEvent) => void;
+  agentBrowserRowAction: (skill: SkillSummary) => AgentBrowserRowAction;
+}) {
+  return (
+    <>
+      {showAgentBrowserPrereqs ? (
+        <AgentBrowserPrerequisitesNotice
+          agentBrowserNeedsInstall={agentBrowserNeedsInstall}
+          assigningBash={assigningBash}
+          bashNeedsAssign={bashNeedsAssign}
+          disabled={disabled}
+          installError={agentBrowserInstallError}
+          installProgress={agentBrowserInstallProgress}
+          onAssignBash={onAssignBash}
+          onAssignBashClick={onAssignBashClick}
+        />
+      ) : null}
+
+      <Command className="min-w-0 rounded-none bg-transparent">
+        <div className="min-w-0 border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
+          <CommandInput placeholder="Search skills…" />
+        </div>
+        <CommandList className="max-h-72 min-w-0 p-2">
+          <CommandEmpty>No skills found.</CommandEmpty>
+
+          {availableSkills.length > 0 ? (
+            <CommandGroup className="space-y-1" heading="Add to profile">
+              {availableSkills.map((skill) => (
+                <AvailableSkillCommandItem
+                  agentBrowserDisabled={isSkillDisabled(skill)}
+                  assigningBash={assigningBash}
+                  bashAssigned={bashAssigned}
+                  canDelete={canDeleteSkill(skill)}
+                  commandItemDisabled={disabled}
+                  disabled={disabled}
+                  installingAgentBrowser={installingAgentBrowser}
+                  key={skill.id}
+                  onAdd={(event) => {
+                    stopCommandItemSelect(event);
+                    if (isSkillDisabled(skill)) {
+                      return;
+                    }
+                    assignSkill(skill.id, onAssign, setOpen);
+                  }}
+                  onAssignBash={onAssignBashClick}
+                  onDelete={onDelete}
+                  onInstall={onInstall}
+                  onRequestDelete={onRequestDelete}
+                  onSelect={() => {
+                    if (isSkillDisabled(skill)) {
+                      return;
+                    }
+                    assignSkill(skill.id, onAssign, setOpen);
+                  }}
+                  rowAction={agentBrowserRowAction(skill)}
+                  skill={skill}
+                  skillDisabled={isSkillDisabled(skill)}
+                />
+              ))}
+            </CommandGroup>
+          ) : null}
+
+          {availableSkills.length > 0 && onProfileSkills.length > 0 ? (
+            <CommandSeparator className="my-2" />
+          ) : null}
+
+          {onProfileSkills.length > 0 ? (
+            <CommandGroup
+              className="space-y-1"
+              heading="Already on this profile"
+            >
+              {onProfileSkills.map((skill) => (
+                <OnProfileSkillCommandItem
+                  key={skill.id}
+                  onDelete={onDelete}
+                  skill={skill}
+                />
+              ))}
+            </CommandGroup>
+          ) : null}
+        </CommandList>
+      </Command>
+    </>
+  );
+}
+
+function resolveAgentBrowserRowAction(
+  skill: SkillSummary,
+  bashNeedsAssign: boolean,
+  agentBrowserNeedsInstall: boolean,
+  onAssignBash?: () => void | Promise<void>
+): AgentBrowserRowAction {
+  if (skill.name !== AGENT_BROWSER_SKILL_NAME) {
+    return "add";
+  }
+  if (bashNeedsAssign && onAssignBash) {
+    return "add-bash";
+  }
+  if (agentBrowserNeedsInstall) {
+    return "install";
+  }
+  return "add";
+}
+
 export function SkillAssignPicker({
   skills,
   assignedSkillIds = new Set(),
@@ -496,40 +681,20 @@ export function SkillAssignPicker({
     hasAgentBrowserSkill && (agentBrowserNeedsInstall || bashNeedsAssign);
   const installingAgentBrowser = installAgentBrowserMutation.isPending;
 
-  function isAgentBrowserDisabled(skill: SkillSummary): boolean {
+  function isSkillDisabled(skill: SkillSummary): boolean {
     return (
       skill.name === AGENT_BROWSER_SKILL_NAME &&
       (agentBrowserSettings?.ready === false || !bashAssigned)
     );
   }
 
-  function isCommandItemDisabled(): boolean {
-    if (disabled) {
-      return true;
-    }
-
-    // Keep agent-browser rows interactive so Install / Add bash buttons stay clickable.
-    return false;
-  }
-
-  function isSkillDisabled(skill: SkillSummary): boolean {
-    return isAgentBrowserDisabled(skill);
-  }
-
   function agentBrowserRowAction(skill: SkillSummary): AgentBrowserRowAction {
-    if (skill.name !== AGENT_BROWSER_SKILL_NAME) {
-      return "add";
-    }
-
-    if (bashNeedsAssign && onAssignBash) {
-      return "add-bash";
-    }
-
-    if (agentBrowserNeedsInstall) {
-      return "install";
-    }
-
-    return "add";
+    return resolveAgentBrowserRowAction(
+      skill,
+      bashNeedsAssign,
+      agentBrowserNeedsInstall,
+      onAssignBash
+    );
   }
 
   function canDeleteSkill(skill: SkillSummary): boolean {
@@ -653,88 +818,29 @@ export function SkillAssignPicker({
               onConfirm={() => void confirmDelete()}
             />
           ) : (
-            <>
-              {showAgentBrowserPrereqs ? (
-                <AgentBrowserPrerequisitesNotice
-                  agentBrowserNeedsInstall={agentBrowserNeedsInstall}
-                  assigningBash={assigningBash}
-                  bashNeedsAssign={bashNeedsAssign}
-                  disabled={disabled}
-                  installError={agentBrowserInstallError}
-                  installProgress={agentBrowserInstallProgress}
-                  onAssignBash={onAssignBash}
-                  onAssignBashClick={handleAssignBash}
-                />
-              ) : null}
-
-              <Command className="min-w-0 rounded-none bg-transparent">
-                <div className="min-w-0 border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
-                  <CommandInput placeholder="Search skills…" />
-                </div>
-                <CommandList className="max-h-72 min-w-0 p-2">
-                  <CommandEmpty>No skills found.</CommandEmpty>
-
-                  {availableSkills.length > 0 ? (
-                    <CommandGroup
-                      className="space-y-1"
-                      heading="Add to profile"
-                    >
-                      {availableSkills.map((skill) => (
-                        <AvailableSkillCommandItem
-                          agentBrowserDisabled={isAgentBrowserDisabled(skill)}
-                          assigningBash={assigningBash}
-                          bashAssigned={bashAssigned}
-                          canDelete={canDeleteSkill(skill)}
-                          commandItemDisabled={isCommandItemDisabled()}
-                          disabled={disabled}
-                          installingAgentBrowser={installingAgentBrowser}
-                          key={skill.id}
-                          onAdd={(event) => {
-                            stopCommandItemSelect(event);
-                            if (isSkillDisabled(skill)) {
-                              return;
-                            }
-                            assignSkill(skill.id, onAssign, setOpen);
-                          }}
-                          onAssignBash={handleAssignBash}
-                          onDelete={onDelete}
-                          onInstall={handleInstallAgentBrowser}
-                          onRequestDelete={requestDelete}
-                          onSelect={() => {
-                            if (isSkillDisabled(skill)) {
-                              return;
-                            }
-                            assignSkill(skill.id, onAssign, setOpen);
-                          }}
-                          rowAction={agentBrowserRowAction(skill)}
-                          skill={skill}
-                          skillDisabled={isSkillDisabled(skill)}
-                        />
-                      ))}
-                    </CommandGroup>
-                  ) : null}
-
-                  {availableSkills.length > 0 && onProfileSkills.length > 0 ? (
-                    <CommandSeparator className="my-2" />
-                  ) : null}
-
-                  {onProfileSkills.length > 0 ? (
-                    <CommandGroup
-                      className="space-y-1"
-                      heading="Already on this profile"
-                    >
-                      {onProfileSkills.map((skill) => (
-                        <OnProfileSkillCommandItem
-                          key={skill.id}
-                          onDelete={onDelete}
-                          skill={skill}
-                        />
-                      ))}
-                    </CommandGroup>
-                  ) : null}
-                </CommandList>
-              </Command>
-            </>
+            <SkillAssignManagePanel
+              agentBrowserInstallError={agentBrowserInstallError}
+              agentBrowserInstallProgress={agentBrowserInstallProgress}
+              agentBrowserNeedsInstall={agentBrowserNeedsInstall}
+              agentBrowserRowAction={agentBrowserRowAction}
+              assigningBash={assigningBash}
+              availableSkills={availableSkills}
+              bashAssigned={bashAssigned}
+              bashNeedsAssign={bashNeedsAssign}
+              canDeleteSkill={canDeleteSkill}
+              disabled={disabled}
+              installingAgentBrowser={installingAgentBrowser}
+              isSkillDisabled={isSkillDisabled}
+              onAssign={onAssign}
+              onAssignBash={onAssignBash}
+              onAssignBashClick={handleAssignBash}
+              onDelete={onDelete}
+              onInstall={handleInstallAgentBrowser}
+              onProfileSkills={onProfileSkills}
+              onRequestDelete={requestDelete}
+              setOpen={setOpen}
+              showAgentBrowserPrereqs={showAgentBrowserPrereqs}
+            />
           )}
         </DialogContent>
       </Dialog>

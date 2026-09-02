@@ -17,7 +17,7 @@ import {
   Image01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputBody,
@@ -146,209 +146,358 @@ const EMPTY_TODOS: AgentTodo[] = [];
 const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
 const EMPTY_SKILLS: SkillSummary[] = [];
 
+const COMPOSER_TEXTAREA_FULL_CLASS =
+  "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm";
+const COMPOSER_TEXTAREA_MINIMAL_CLASS =
+  "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
+
+function ChatComposerOfflineHint({
+  onNavigateSetup,
+}: {
+  onNavigateSetup?: () => void;
+}) {
+  return (
+    <p
+      className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-800 text-xs dark:text-amber-200"
+      role="status"
+    >
+      <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />
+      <span>
+        No provider configured — limited responses.{" "}
+        <button
+          className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+          onClick={onNavigateSetup}
+          type="button"
+        >
+          Set up provider
+        </button>
+      </span>
+    </p>
+  );
+}
+
+function ChatComposerSessionStack({
+  hasQuestionnaire,
+  showTodos,
+  hasQueuedMessages,
+  disabled,
+  busy,
+  questionnaire,
+  onSubmitQuestionnaire,
+  todos,
+  queuedMessages,
+  queueStackEdge,
+  children,
+}: {
+  hasQuestionnaire: boolean;
+  showTodos: boolean;
+  hasQueuedMessages: boolean;
+  disabled: boolean;
+  busy: boolean;
+  questionnaire: AgentQuestionnaire | null;
+  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
+  todos: AgentTodo[];
+  queuedMessages: QueuedComposerMessage[];
+  queueStackEdge: ComposerStackEdge;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative flex w-full flex-col">
+      {hasQuestionnaire ? (
+        <AgentQuestionnairePanel
+          disabled={disabled || busy}
+          onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
+          questionnaire={questionnaire}
+        />
+      ) : null}
+      {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
+      {hasQueuedMessages ? (
+        <ChatMessageQueuePanel
+          messages={queuedMessages}
+          stack
+          stackEdge={queueStackEdge}
+        />
+      ) : null}
+      <div className="relative z-10 -mt-2 w-full">{children}</div>
+    </div>
+  );
+}
+
+function ChatComposerPrompt({
+  mode,
+  shellClass,
+  busy,
+  disabled,
+  placeholder,
+  skillPickerKey,
+  availableSkills,
+  footerClassName,
+  primarySupportsVision,
+  onSubmitText,
+  onAttachmentError,
+  canStop,
+  chatStatus,
+  onStop,
+  fullProps,
+}: {
+  mode: "minimal" | "full";
+  shellClass: string;
+  busy: boolean;
+  disabled: boolean;
+  placeholder: string;
+  skillPickerKey: string;
+  availableSkills: SkillSummary[];
+  footerClassName?: string;
+  primarySupportsVision?: boolean;
+  onSubmitText: (text: string, files: FileUIPart[]) => void;
+  onAttachmentError?: (message: string) => void;
+  canStop: boolean;
+  chatStatus: ChatStatus;
+  onStop?: () => void;
+  fullProps?: ChatComposerFullProps;
+}) {
+  const isMinimal = mode === "minimal";
+
+  return (
+    <PromptInput
+      accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
+      className={shellClass}
+      inputGroupClassName={composerInputGroupClass}
+      maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
+      maxFiles={isMinimal ? undefined : 5}
+      multiple={!isMinimal}
+      onError={
+        onAttachmentError
+          ? (attachmentErr) => onAttachmentError(attachmentErr.message)
+          : undefined
+      }
+      onSubmit={({ text, files }) => {
+        onSubmitText(text.trim(), files);
+      }}
+      prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
+      rimActive={busy}
+    >
+      {isMinimal ? null : (
+        <ChatAttachmentHeader primarySupportsVision={primarySupportsVision} />
+      )}
+      <PromptInputBody>
+        <ChatComposerTextarea
+          availableSkills={availableSkills}
+          className={
+            isMinimal
+              ? COMPOSER_TEXTAREA_MINIMAL_CLASS
+              : COMPOSER_TEXTAREA_FULL_CLASS
+          }
+          disabled={disabled}
+          key={skillPickerKey}
+          longPasteWordThreshold={
+            isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD
+          }
+          placeholder={placeholder}
+        />
+      </PromptInputBody>
+      <PromptInputFooter
+        className={cn(
+          "w-full border-0 px-0 py-0",
+          isMinimal
+            ? "justify-end pt-1.5"
+            : "flex-nowrap items-center gap-1.5 pt-1.5",
+          footerClassName
+        )}
+      >
+        {isMinimal ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <ChatComposerSubmitButton
+              busy={busy}
+              canStop={canStop}
+              chatStatus={chatStatus}
+              disabled={disabled}
+              onStop={onStop}
+            />
+          </div>
+        ) : (
+          <ChatComposerFullFooter
+            busy={busy}
+            canStop={canStop}
+            chatStatus={chatStatus}
+            disabled={disabled}
+            onStop={onStop}
+            props={fullProps!}
+          />
+        )}
+      </PromptInputFooter>
+    </PromptInput>
+  );
+}
+
+function ChatComposerNotice({
+  displayError,
+  showTips,
+}: {
+  displayError: string | null;
+  showTips: boolean;
+}) {
+  if (displayError) {
+    return <ChatComposerError message={displayError} />;
+  }
+  if (showTips) {
+    return <ChatTips />;
+  }
+  return null;
+}
+
+function ChatComposerContent({
+  stacked,
+  stackProps,
+  notice,
+  prompt,
+}: {
+  stacked: boolean;
+  stackProps: {
+    hasQuestionnaire: boolean;
+    showTodos: boolean;
+    hasQueuedMessages: boolean;
+    disabled: boolean;
+    busy: boolean;
+    questionnaire: AgentQuestionnaire | null;
+    onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
+    todos: AgentTodo[];
+    queuedMessages: QueuedComposerMessage[];
+    queueStackEdge: ComposerStackEdge;
+  };
+  notice: ReactNode;
+  prompt: ReactNode;
+}) {
+  if (stacked) {
+    return (
+      <ChatComposerSessionStack {...stackProps}>
+        {notice}
+        {prompt}
+      </ChatComposerSessionStack>
+    );
+  }
+
+  return (
+    <>
+      {notice}
+      {prompt}
+    </>
+  );
+}
+
+function deriveChatComposerState(
+  props: ChatComposerProps,
+  attachmentError: string | null
+) {
+  const isMinimal = props.variant === "minimal";
+  const todos = props.todos ?? EMPTY_TODOS;
+  const questionnaire = props.questionnaire ?? null;
+  const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+  const displayError = props.error ?? attachmentError;
+  const hasTodos = hasActiveAgentTodos(todos);
+  const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
+  const showTodos = hasTodos && !hasQuestionnaire && !displayError;
+  const hasQueuedMessages = queuedMessages.length > 0;
+  const availableSkills = isMinimal
+    ? EMPTY_SKILLS
+    : (props.availableSkills ?? EMPTY_SKILLS);
+
+  return {
+    availableSkills,
+    displayError,
+    hasQuestionnaire,
+    hasQueuedMessages,
+    isMinimal,
+    mode: (isMinimal ? "minimal" : "full") as "minimal" | "full",
+    questionnaire,
+    queuedMessages,
+    queueStackEdge: (hasQuestionnaire || showTodos
+      ? "continue"
+      : "start") as ComposerStackEdge,
+    shellClass: isMinimal ? composerShellCompactClass : composerShellClass,
+    showOfflineHint: !isMinimal && props.showOfflineHint === true,
+    showTips: !isMinimal && props.showTips === true,
+    showTodos,
+    skillPickerKey: availableSkills.map((skill) => skill.id).join("\0"),
+    stacked: (hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal,
+    todos,
+  };
+}
+
 export function ChatComposer(props: ChatComposerProps) {
   const {
     chatStatus,
     busy,
     canStop,
     disabled = false,
-    error,
     placeholder = "Do anything...",
     onSubmit,
     onStop,
     className,
     footerClassName,
-    todos = EMPTY_TODOS,
-    questionnaire = null,
-    queuedMessages = EMPTY_QUEUED_MESSAGES,
     onSubmitQuestionnaire,
   } = props;
 
-  const isMinimal = props.variant === "minimal";
-  const showTips = !isMinimal && props.showTips === true;
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const displayError = error ?? attachmentError;
-  const hasTodos = hasActiveAgentTodos(todos);
-  const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
-  const showTodos = hasTodos && !hasQuestionnaire && !displayError;
-  const hasQueuedMessages = queuedMessages.length > 0;
-  const queueStackEdge: ComposerStackEdge =
-    hasQuestionnaire || showTodos ? "continue" : "start";
-  const availableSkills = isMinimal
-    ? EMPTY_SKILLS
-    : (props.availableSkills ?? EMPTY_SKILLS);
-  const skillPickerKey = availableSkills.map((skill) => skill.id).join("\0");
-  const composerNotice = displayError ? (
-    <ChatComposerError message={displayError} />
-  ) : showTips ? (
-    <ChatTips />
-  ) : null;
-  const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
+  const state = deriveChatComposerState(props, attachmentError);
+
+  const handleSubmit = (text: string, files: FileUIPart[]) => {
+    setAttachmentError(null);
+    onSubmit(text, files);
+  };
+
+  const fullProps = props.variant === "minimal" ? undefined : props;
+  const notice = (
+    <ChatComposerNotice
+      displayError={state.displayError}
+      showTips={state.showTips}
+    />
+  );
+
+  const prompt = (
+    <ChatComposerPrompt
+      availableSkills={state.availableSkills}
+      busy={busy}
+      canStop={canStop}
+      chatStatus={chatStatus}
+      disabled={disabled}
+      footerClassName={footerClassName}
+      fullProps={fullProps}
+      mode={state.mode}
+      onAttachmentError={
+        fullProps ? (message) => setAttachmentError(message) : undefined
+      }
+      onStop={onStop}
+      onSubmitText={handleSubmit}
+      placeholder={placeholder}
+      primarySupportsVision={fullProps?.primarySupportsVision}
+      shellClass={state.shellClass}
+      skillPickerKey={state.skillPickerKey}
+    />
+  );
 
   return (
     <div className={cn("w-full shrink-0", className)}>
-      {!isMinimal && props.showOfflineHint ? (
-        <p
-          className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-800 text-xs dark:text-amber-200"
-          role="status"
-        >
-          <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />
-          <span>
-            No provider configured — limited responses.{" "}
-            <button
-              className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
-              onClick={props.onNavigateSetup}
-              type="button"
-            >
-              Set up provider
-            </button>
-          </span>
-        </p>
+      {state.showOfflineHint ? (
+        <ChatComposerOfflineHint onNavigateSetup={fullProps?.onNavigateSetup} />
       ) : null}
-      {(hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal ? (
-        <div className="relative flex w-full flex-col">
-          {hasQuestionnaire ? (
-            <AgentQuestionnairePanel
-              disabled={disabled || busy}
-              onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
-              questionnaire={questionnaire}
-            />
-          ) : null}
-          {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
-          {hasQueuedMessages ? (
-            <ChatMessageQueuePanel
-              messages={queuedMessages}
-              stack
-              stackEdge={queueStackEdge}
-            />
-          ) : null}
-          <div className="relative z-10 -mt-2 w-full">
-            {composerNotice}
-            <PromptInput
-              accept={ALL_ATTACHMENT_ACCEPT}
-              className={shellClass}
-              inputGroupClassName={composerInputGroupClass}
-              maxFileSize={MAX_IMAGE_BYTES}
-              maxFiles={5}
-              multiple
-              onError={(attachmentErr) =>
-                setAttachmentError(attachmentErr.message)
-              }
-              onSubmit={({ text, files }) => {
-                setAttachmentError(null);
-                onSubmit(text.trim(), files);
-              }}
-              prepareFiles={prepareChatUploadFiles}
-              rimActive={busy}
-            >
-              <ChatAttachmentHeader
-                primarySupportsVision={props.primarySupportsVision}
-              />
-              <PromptInputBody>
-                <ChatComposerTextarea
-                  availableSkills={availableSkills}
-                  className="max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
-                  disabled={disabled}
-                  key={skillPickerKey}
-                  longPasteWordThreshold={LONG_PASTE_WORD_THRESHOLD}
-                  placeholder={placeholder}
-                />
-              </PromptInputBody>
-              <PromptInputFooter
-                className={cn(
-                  "w-full border-0 px-0 py-0",
-                  "flex-nowrap items-center gap-1.5 pt-1.5",
-                  footerClassName
-                )}
-              >
-                <ChatComposerFullFooter
-                  busy={busy}
-                  canStop={canStop}
-                  chatStatus={chatStatus}
-                  disabled={disabled}
-                  onStop={onStop}
-                  props={props}
-                />
-              </PromptInputFooter>
-            </PromptInput>
-          </div>
-        </div>
-      ) : (
-        <>
-          {composerNotice}
-          <PromptInput
-            accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
-            className={shellClass}
-            inputGroupClassName={composerInputGroupClass}
-            maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
-            maxFiles={isMinimal ? undefined : 5}
-            multiple={!isMinimal}
-            onError={
-              isMinimal
-                ? undefined
-                : (attachmentErr) => setAttachmentError(attachmentErr.message)
-            }
-            onSubmit={({ text, files }) => {
-              setAttachmentError(null);
-              onSubmit(text.trim(), files);
-            }}
-            prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
-            rimActive={busy}
-          >
-            {isMinimal ? null : (
-              <ChatAttachmentHeader
-                primarySupportsVision={props.primarySupportsVision}
-              />
-            )}
-            <PromptInputBody>
-              <ChatComposerTextarea
-                availableSkills={availableSkills}
-                className={
-                  isMinimal
-                    ? "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground"
-                    : "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
-                }
-                disabled={disabled}
-                key={skillPickerKey}
-                longPasteWordThreshold={
-                  isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD
-                }
-                placeholder={placeholder}
-              />
-            </PromptInputBody>
-            <PromptInputFooter
-              className={cn(
-                "w-full border-0 px-0 py-0",
-                isMinimal
-                  ? "justify-end pt-1.5"
-                  : "flex-nowrap items-center gap-1.5 pt-1.5",
-                footerClassName
-              )}
-            >
-              {isMinimal ? (
-                <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                  <ChatComposerSubmitButton
-                    busy={busy}
-                    canStop={canStop}
-                    chatStatus={chatStatus}
-                    disabled={disabled}
-                    onStop={onStop}
-                  />
-                </div>
-              ) : (
-                <ChatComposerFullFooter
-                  busy={busy}
-                  canStop={canStop}
-                  chatStatus={chatStatus}
-                  disabled={disabled}
-                  onStop={onStop}
-                  props={props}
-                />
-              )}
-            </PromptInputFooter>
-          </PromptInput>
-        </>
-      )}
+      <ChatComposerContent
+        notice={notice}
+        prompt={prompt}
+        stacked={state.stacked}
+        stackProps={{
+          busy,
+          disabled,
+          hasQuestionnaire: state.hasQuestionnaire,
+          hasQueuedMessages: state.hasQueuedMessages,
+          onSubmitQuestionnaire,
+          questionnaire: state.questionnaire,
+          queuedMessages: state.queuedMessages,
+          queueStackEdge: state.queueStackEdge,
+          showTodos: state.showTodos,
+          todos: state.todos,
+        }}
+      />
     </div>
   );
 }

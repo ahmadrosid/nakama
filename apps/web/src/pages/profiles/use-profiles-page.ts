@@ -159,21 +159,22 @@ export function useProfilesPage() {
     );
   }, [editModel, providerModelGroups]);
 
-  const busy =
-    updateMutation.isPending ||
-    cloneProfileMutation.isPending ||
-    deleteMutation.isPending ||
-    assignMutation.isPending ||
-    unassignMutation.isPending ||
-    assignMcpMutation.isPending ||
-    unassignMcpMutation.isPending ||
-    createMcpMutation.isPending ||
-    createSkillMutation.isPending ||
-    installSkillMutation.isPending ||
-    assignSkillMutation.isPending ||
-    unassignSkillMutation.isPending ||
-    deleteSkillMutation.isPending ||
-    updateComposioMutation.isPending;
+  const busy = [
+    updateMutation.isPending,
+    cloneProfileMutation.isPending,
+    deleteMutation.isPending,
+    assignMutation.isPending,
+    unassignMutation.isPending,
+    assignMcpMutation.isPending,
+    unassignMcpMutation.isPending,
+    createMcpMutation.isPending,
+    createSkillMutation.isPending,
+    installSkillMutation.isPending,
+    assignSkillMutation.isPending,
+    unassignSkillMutation.isPending,
+    deleteSkillMutation.isPending,
+    updateComposioMutation.isPending,
+  ].some(Boolean);
 
   const refreshing =
     profilesRefreshing || (detailLoading && Boolean(selectedId));
@@ -871,7 +872,7 @@ export function useProfilesPage() {
     }
   }
 
-  async function handleRemoveAssignmentConfirm() {
+  async function runRemoveAssignmentConfirm() {
     if (!(selectedId && removeConfirm)) {
       return;
     }
@@ -923,6 +924,8 @@ export function useProfilesPage() {
       setError(formatError(err));
     }
   }
+
+  const handleRemoveAssignmentConfirm = () => runRemoveAssignmentConfirm();
 
   async function handleAvatarSelected(
     event: React.ChangeEvent<HTMLInputElement>

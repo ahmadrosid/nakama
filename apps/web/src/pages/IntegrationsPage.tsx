@@ -158,34 +158,53 @@ export function IntegrationsPage() {
         </aside>
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
-          {section === "token" ? <LocalAuthTokenCard /> : null}
-
-          {section === "optimization" ? <TokenOptimizationCard /> : null}
-
-          {section === "coding-agents" ? <CodingAgentsSettingsCard /> : null}
-
-          {section === "composio" ? (
-            <div className={cn(isOrgAdmin && "space-y-4")}>
-              {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
-              <ComposioConnectionsCard bordered embedded />
-            </div>
-          ) : null}
-
-          {section === "telegram" ? <TelegramSettingsCard /> : null}
-
-          {section === "discord" ? <DiscordSettingsCard /> : null}
-
-          {section === "notifications" ? (
-            <NotificationDestinationsCard />
-          ) : null}
-
-          {section === "error-tracking" ? <ErrorTrackingSettingsCard /> : null}
-
-          {section === "whatsapp" ? <WhatsAppSettingsCard /> : null}
+          <IntegrationSectionPanel isOrgAdmin={isOrgAdmin} section={section} />
         </div>
       </div>
     </section>
   );
+}
+
+function IntegrationSectionPanel({
+  section,
+  isOrgAdmin,
+}: {
+  section: IntegrationSectionId;
+  isOrgAdmin: boolean;
+}) {
+  if (section === "token") {
+    return <LocalAuthTokenCard />;
+  }
+  if (section === "optimization") {
+    return <TokenOptimizationCard />;
+  }
+  if (section === "coding-agents") {
+    return <CodingAgentsSettingsCard />;
+  }
+  if (section === "composio") {
+    return (
+      <div className={cn(isOrgAdmin && "space-y-4")}>
+        {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
+        <ComposioConnectionsCard bordered embedded />
+      </div>
+    );
+  }
+  if (section === "telegram") {
+    return <TelegramSettingsCard />;
+  }
+  if (section === "discord") {
+    return <DiscordSettingsCard />;
+  }
+  if (section === "notifications") {
+    return <NotificationDestinationsCard />;
+  }
+  if (section === "error-tracking") {
+    return <ErrorTrackingSettingsCard />;
+  }
+  if (section === "whatsapp") {
+    return <WhatsAppSettingsCard />;
+  }
+  return null;
 }
 
 function SidebarButton({

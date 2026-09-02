@@ -24,40 +24,40 @@ interface UsePostTurnSkillReviewOverlayArgs {
   sessionId: string | null;
 }
 
-export function usePostTurnSkillReviewOverlay({
+function resolvePostTurnCanPoll({
+  reviewEnabled,
+  orgId,
+  orgRole,
   sessionId,
-  profile,
   sessionChannel,
-  lastSuccessfulTurnAt,
   readOnlySession,
-}: UsePostTurnSkillReviewOverlayArgs) {
-  const { activeOrg } = useAuth();
-  const [now, setNow] = useState(() => Date.now());
-  const [applyStateById, setApplyStateById] = useState<
-    Record<string, SuggestionApplyState>
-  >({});
-  const [applyErrorById, setApplyErrorById] = useState<
-    Record<string, string | undefined>
-  >({});
-
-  const reviewEnabled = resolveSkillPostTurnReviewEnabled({
-    orgSkillsPostTurnReview: activeOrg?.skillsPostTurnReview ?? false,
-    profileSkillsPostTurnReview: profile?.skillsPostTurnReview ?? null,
-  });
-
-  const canPoll =
+}: {
+  reviewEnabled: boolean;
+  orgId: string | undefined;
+  orgRole: string | undefined;
+  sessionId: string | null;
+  sessionChannel: AgentChannel;
+  readOnlySession: boolean;
+}): boolean {
+  return (
     reviewEnabled &&
-    Boolean(activeOrg?.id) &&
+    Boolean(orgId) &&
     Boolean(sessionId) &&
     sessionChannel === "web" &&
     !readOnlySession &&
-    activeOrg?.role !== "viewer";
+    orgRole !== "viewer"
+  );
+}
 
+function usePostTurnPolling(
+  canPoll: boolean,
+  lastSuccessfulTurnAt: number | null
+): boolean {
+  const [now, setNow] = useState(() => Date.now());
   const pollUntil =
     lastSuccessfulTurnAt != null && canPoll
       ? lastSuccessfulTurnAt + POST_TURN_POLL_WINDOW_MS
       : null;
-
   const polling = pollUntil != null && now < pollUntil;
 
   useEffect(() => {
@@ -69,6 +69,101 @@ export function usePostTurnSkillReviewOverlay({
     }, 1000);
     return () => window.clearInterval(timer);
   }, [polling]);
+
+  return polling;
+}
+
+function PostTurnReviewBannerSlot({
+  orgId,
+  orgRole,
+  canPoll,
+  suggestions,
+  pendingProposals,
+  onApplied,
+}: {
+  orgId: string | undefined;
+  orgRole: string | undefined;
+  canPoll: boolean;
+  suggestions: NonNullable<
+    ReturnType<typeof useSkillSuggestions>["data"]
+  >["suggestions"];
+  pendingProposals: NonNullable<
+    ReturnType<typeof useSkillProposals>["data"]
+  >["proposals"];
+  onApplied: () => void;
+}) {
+  const [applyStateById, setApplyStateById] = useState<
+    Record<string, SuggestionApplyState>
+  >({});
+  const [applyErrorById, setApplyErrorById] = useState<
+    Record<string, string | undefined>
+  >({});
+  const applyMutation = useApplySkillSuggestion(orgId ?? "");
+
+  async function handleApply(suggestionId: string) {
+    if (!orgId) {
+      return;
+    }
+    setApplyStateById((current) => ({ ...current, [suggestionId]: "loading" }));
+    setApplyErrorById((current) => ({ ...current, [suggestionId]: undefined }));
+    try {
+      const result = await applyMutation.mutateAsync(suggestionId);
+      setApplyStateById((current) => ({
+        ...current,
+        [suggestionId]:
+          result.outcome === "staged_as_proposal" ? "staged" : "applied",
+      }));
+      onApplied();
+    } catch (error) {
+      setApplyStateById((current) => ({ ...current, [suggestionId]: "error" }));
+      setApplyErrorById((current) => ({
+        ...current,
+        [suggestionId]: formatError(error),
+      }));
+    }
+  }
+
+  if (!(canPoll && (suggestions.length > 0 || pendingProposals.length > 0))) {
+    return null;
+  }
+
+  return (
+    <SkillPostTurnReviewBanner
+      applyErrorById={applyErrorById}
+      applyStateById={applyStateById}
+      canApply={orgRole !== "viewer"}
+      isOrgAdmin={orgRole === "admin"}
+      onApply={(id) => void handleApply(id)}
+      pendingProposals={pendingProposals}
+      suggestions={suggestions}
+    />
+  );
+}
+
+export function usePostTurnSkillReviewOverlay({
+  sessionId,
+  profile,
+  sessionChannel,
+  lastSuccessfulTurnAt,
+  readOnlySession,
+}: UsePostTurnSkillReviewOverlayArgs) {
+  const { activeOrg } = useAuth();
+
+  const reviewEnabled = resolveSkillPostTurnReviewEnabled({
+    orgSkillsPostTurnReview: activeOrg?.skillsPostTurnReview ?? false,
+    profileSkillsPostTurnReview: profile?.skillsPostTurnReview ?? null,
+  });
+
+  const canPoll = resolvePostTurnCanPoll({
+    orgId: activeOrg?.id,
+    orgRole: activeOrg?.role,
+    readOnlySession,
+    reviewEnabled,
+    sessionChannel,
+    sessionId,
+  });
+
+  const polling = usePostTurnPolling(canPoll, lastSuccessfulTurnAt);
 
   const suggestionsQuery = useSkillSuggestions(
     canPoll ? (activeOrg?.id ?? null) : null,
@@ -90,8 +185,6 @@ export function usePostTurnSkillReviewOverlay({
     }
   );
 
-  const applyMutation = useApplySkillSuggestion(activeOrg?.id ?? "");
-
   const suggestions = suggestionsQuery.data?.suggestions ?? [];
   const pendingProposals = useMemo(
     () =>
@@ -102,42 +195,19 @@ export function usePostTurnSkillReviewOverlay({
     [proposalsQuery.data?.proposals, sessionId]
   );
 
-  async function handleApply(suggestionId: string) {
-    if (!activeOrg?.id) {
-      return;
-    }
-    setApplyStateById((current) => ({ ...current, [suggestionId]: "loading" }));
-    setApplyErrorById((current) => ({ ...current, [suggestionId]: undefined }));
-    try {
-      const result = await applyMutation.mutateAsync(suggestionId);
-      setApplyStateById((current) => ({
-        ...current,
-        [suggestionId]:
-          result.outcome === "staged_as_proposal" ? "staged" : "applied",
-      }));
-      void suggestionsQuery.refetch();
-      void proposalsQuery.refetch();
-    } catch (error) {
-      setApplyStateById((current) => ({ ...current, [suggestionId]: "error" }));
-      setApplyErrorById((current) => ({
-        ...current,
-        [suggestionId]: formatError(error),
-      }));
-    }
-  }
-
-  const banner =
-    canPoll && (suggestions.length > 0 || pendingProposals.length > 0) ? (
-      <SkillPostTurnReviewBanner
-        applyErrorById={applyErrorById}
-        applyStateById={applyStateById}
-        canApply={activeOrg?.role !== "viewer"}
-        isOrgAdmin={activeOrg?.role === "admin"}
-        onApply={(id) => void handleApply(id)}
-        pendingProposals={pendingProposals}
-        suggestions={suggestions}
-      />
-    ) : null;
+  const banner = (
+    <PostTurnReviewBannerSlot
+      canPoll={canPoll}
+      onApplied={() => {
+        void suggestionsQuery.refetch();
+        void proposalsQuery.refetch();
+      }}
+      orgId={activeOrg?.id}
+      orgRole={activeOrg?.role}
+      pendingProposals={pendingProposals}
+      suggestions={suggestions}
+    />
+  );
 
   return { banner, reviewEnabled };
 }

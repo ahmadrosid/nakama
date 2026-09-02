@@ -22,6 +22,34 @@ import { cn } from "@/lib/utils";
 type AddMcpMode = "existing" | "new";
 type McpServerDialogState = ReturnType<typeof useMcpServerDialogState>;
 
+function mcpServerDialogDescription({
+  canAssignExisting,
+  isEdit,
+  onAssign,
+  transport,
+}: {
+  canAssignExisting: boolean;
+  isEdit: boolean;
+  onAssign?: (serverId: string) => void;
+  transport: McpServerDialogState["transport"];
+}): string {
+  if (isEdit) {
+    return transport === "stdio"
+      ? "Update the command, args, or environment. Leave values blank to keep the current ones."
+      : "Update the server URL or headers. Leave values blank to keep the current ones.";
+  }
+
+  if (canAssignExisting) {
+    return "Add a registered server or create a new one.";
+  }
+
+  if (onAssign) {
+    return "Register an HTTP or command-based server and assign it to this profile.";
+  }
+
+  return "Register an HTTP or command-based server, then assign it to profiles on the Profiles page.";
+}
+
 function McpServerDialogCreateForm({
   busy,
   className,
@@ -117,6 +145,112 @@ function McpServerDialogCreateForm({
   );
 }
 
+function McpServerAddModeTabs({
+  formDisabled,
+  idPrefix,
+  mode,
+  onModeChange,
+}: {
+  formDisabled: boolean;
+  idPrefix: string;
+  mode: AddMcpMode;
+  onModeChange: (mode: AddMcpMode) => void;
+}) {
+  return (
+    <div
+      aria-label="Add MCP server"
+      className="segmented-control w-full"
+      role="tablist"
+    >
+      {(
+        [
+          { id: "existing" as const, label: "Existing" },
+          { id: "new" as const, label: "New" },
+        ] as const
+      ).map((item) => (
+        <button
+          aria-controls={`${idPrefix}-mode-panel-${item.id}`}
+          aria-selected={mode === item.id}
+          className="segmented-control-item"
+          data-active={mode === item.id || undefined}
+          disabled={formDisabled}
+          id={`${idPrefix}-mode-${item.id}`}
+          key={item.id}
+          onClick={() => {
+            onModeChange(item.id);
+          }}
+          role="tab"
+          type="button"
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function McpServerDialogBody({
+  assignMode,
+  availableServers,
+  busy,
+  canAssignExisting,
+  onAssign,
+  onOpenChange,
+  state,
+}: {
+  assignMode: boolean;
+  availableServers?: McpServerSummary[];
+  busy: boolean;
+  canAssignExisting: boolean;
+  onAssign?: (serverId: string) => void;
+  onOpenChange: (open: boolean) => void;
+  state: McpServerDialogState;
+}) {
+  if (canAssignExisting && onAssign) {
+    return (
+      <div className="grid">
+        <div
+          aria-hidden={!assignMode}
+          className={cn(
+            "col-start-1 row-start-1 flex min-h-0 flex-col",
+            !assignMode && "invisible"
+          )}
+          id={`${state.idPrefix}-mode-panel-existing`}
+          inert={!assignMode}
+          role="tabpanel"
+        >
+          <McpServerAssignList
+            disabled={busy}
+            onAssign={onAssign}
+            servers={availableServers ?? []}
+          />
+        </div>
+        <McpServerDialogCreateForm
+          aria-hidden={assignMode}
+          busy={busy}
+          className={cn("col-start-1 row-start-1", assignMode && "invisible")}
+          id={`${state.idPrefix}-mode-panel-new`}
+          inert={assignMode}
+          nameAutoFocus={!assignMode}
+          onOpenChange={onOpenChange}
+          role="tabpanel"
+          state={state}
+          submitLabel="Add server"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <McpServerDialogCreateForm
+      busy={busy}
+      onOpenChange={onOpenChange}
+      state={state}
+      submitLabel={state.isEdit ? "Save changes" : "Add server"}
+    />
+  );
+}
+
 export function McpServerDialog({
   open,
   busy,
@@ -160,91 +294,32 @@ export function McpServerDialog({
               {state.isEdit ? "Edit MCP server" : "Add MCP server"}
             </DialogTitle>
             <DialogDescription>
-              {state.isEdit
-                ? state.transport === "stdio"
-                  ? "Update the command, args, or environment. Leave values blank to keep the current ones."
-                  : "Update the server URL or headers. Leave values blank to keep the current ones."
-                : canAssignExisting
-                  ? "Add a registered server or create a new one."
-                  : onAssign
-                    ? "Register an HTTP or command-based server and assign it to this profile."
-                    : "Register an HTTP or command-based server, then assign it to profiles on the Profiles page."}
+              {mcpServerDialogDescription({
+                canAssignExisting,
+                isEdit: state.isEdit,
+                onAssign,
+                transport: state.transport,
+              })}
             </DialogDescription>
             {canAssignExisting ? (
-              <div
-                aria-label="Add MCP server"
-                className="segmented-control w-full"
-                role="tablist"
-              >
-                {(
-                  [
-                    { id: "existing" as const, label: "Existing" },
-                    { id: "new" as const, label: "New" },
-                  ] as const
-                ).map((item) => (
-                  <button
-                    aria-controls={`${state.idPrefix}-mode-panel-${item.id}`}
-                    aria-selected={mode === item.id}
-                    className="segmented-control-item"
-                    data-active={mode === item.id || undefined}
-                    disabled={state.formDisabled}
-                    id={`${state.idPrefix}-mode-${item.id}`}
-                    key={item.id}
-                    onClick={() => {
-                      setMode(item.id);
-                    }}
-                    role="tab"
-                    type="button"
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
+              <McpServerAddModeTabs
+                formDisabled={state.formDisabled}
+                idPrefix={state.idPrefix}
+                mode={mode}
+                onModeChange={setMode}
+              />
             ) : null}
           </DialogHeader>
 
-          {canAssignExisting && onAssign ? (
-            <div className="grid">
-              <div
-                aria-hidden={!assignMode}
-                className={cn(
-                  "col-start-1 row-start-1 flex min-h-0 flex-col",
-                  !assignMode && "invisible"
-                )}
-                id={`${state.idPrefix}-mode-panel-existing`}
-                inert={!assignMode}
-                role="tabpanel"
-              >
-                <McpServerAssignList
-                  disabled={busy}
-                  onAssign={onAssign}
-                  servers={availableServers ?? []}
-                />
-              </div>
-              <McpServerDialogCreateForm
-                aria-hidden={assignMode}
-                busy={busy}
-                className={cn(
-                  "col-start-1 row-start-1",
-                  assignMode && "invisible"
-                )}
-                id={`${state.idPrefix}-mode-panel-new`}
-                inert={assignMode}
-                nameAutoFocus={!assignMode}
-                onOpenChange={onOpenChange}
-                role="tabpanel"
-                state={state}
-                submitLabel="Add server"
-              />
-            </div>
-          ) : (
-            <McpServerDialogCreateForm
-              busy={busy}
-              onOpenChange={onOpenChange}
-              state={state}
-              submitLabel={state.isEdit ? "Save changes" : "Add server"}
-            />
-          )}
+          <McpServerDialogBody
+            assignMode={assignMode}
+            availableServers={availableServers}
+            busy={busy}
+            canAssignExisting={canAssignExisting}
+            onAssign={onAssign}
+            onOpenChange={onOpenChange}
+            state={state}
+          />
         </DialogContent>
       </Dialog>
 

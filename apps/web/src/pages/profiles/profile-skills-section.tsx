@@ -156,6 +156,107 @@ function SkillGroupHeader({ label }: { label: string }) {
   );
 }
 
+function ProfileSkillsToolbar({
+  allSkills,
+  assignedSkillIds,
+  bashAssigned,
+  busy,
+  onAssign,
+  onAssignBash,
+  onCreateOpen,
+  onDelete,
+  onInstallOpen,
+}: {
+  allSkills: SkillSummary[];
+  assignedSkillIds: ReadonlySet<string>;
+  bashAssigned: boolean;
+  busy: boolean;
+  onAssign: (skillId: string) => void;
+  onAssignBash: () => void | Promise<void>;
+  onCreateOpen: () => void;
+  onDelete: (skillId: string) => void;
+  onInstallOpen: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        disabled={busy}
+        onClick={onCreateOpen}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Create skill
+      </Button>
+      <Button
+        disabled={busy}
+        onClick={onInstallOpen}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Install from GitHub
+      </Button>
+      <SkillAssignPicker
+        assignedSkillIds={assignedSkillIds}
+        bashAssigned={bashAssigned}
+        buttonLabel="Add skills"
+        disabled={busy}
+        onAssign={onAssign}
+        onAssignBash={onAssignBash}
+        onDelete={onDelete}
+        skills={allSkills}
+      />
+    </div>
+  );
+}
+
+function ProfileSkillGroupList({
+  busy,
+  headerLabel,
+  onRemove,
+  onViewDetail,
+  showHeader,
+  skills,
+  staleAfterDays,
+  withTopBorder,
+}: {
+  busy: boolean;
+  headerLabel: string;
+  onRemove: (target: RemoveAssignmentTarget) => void;
+  onViewDetail: (skillId: string) => void;
+  showHeader: boolean;
+  skills: SkillSummary[];
+  staleAfterDays: number;
+  withTopBorder?: boolean;
+}) {
+  if (skills.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul
+      className={
+        withTopBorder
+          ? "divide-y divide-border border-border border-t"
+          : "divide-y divide-border"
+      }
+    >
+      {showHeader ? <SkillGroupHeader label={headerLabel} /> : null}
+      {skills.map((skill) => (
+        <ProfileSkillRow
+          busy={busy}
+          key={skill.id}
+          onRemove={onRemove}
+          onViewDetail={onViewDetail}
+          skill={skill}
+          staleAfterDays={staleAfterDays}
+        />
+      ))}
+    </ul>
+  );
+}
+
 export function ProfileSkillsSection({
   detail,
   busy,
@@ -208,36 +309,17 @@ export function ProfileSkillsSection({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            disabled={busy}
-            onClick={onCreateOpen}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Create skill
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={onInstallOpen}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Install from GitHub
-          </Button>
-          <SkillAssignPicker
-            assignedSkillIds={assignedSkillIds}
-            bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
-            buttonLabel="Add skills"
-            disabled={busy}
-            onAssign={onAssign}
-            onAssignBash={onAssignBash}
-            onDelete={onDelete}
-            skills={allSkills}
-          />
-        </div>
+        <ProfileSkillsToolbar
+          allSkills={allSkills}
+          assignedSkillIds={assignedSkillIds}
+          bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
+          busy={busy}
+          onAssign={onAssign}
+          onAssignBash={onAssignBash}
+          onCreateOpen={onCreateOpen}
+          onDelete={onDelete}
+          onInstallOpen={onInstallOpen}
+        />
       </div>
 
       {allSkills.length === 0 ? (
@@ -248,46 +330,25 @@ export function ProfileSkillsSection({
         </p>
       ) : detail.skills.length === 0 ? null : (
         <div className="overflow-hidden rounded-md border border-border">
-          {customSkills.length > 0 ? (
-            <ul className="divide-y divide-border">
-              {showGroupHeaders ? (
-                <SkillGroupHeader label="Your skills" />
-              ) : null}
-              {customSkills.map((skill) => (
-                <ProfileSkillRow
-                  busy={busy}
-                  key={skill.id}
-                  onRemove={onRemove}
-                  onViewDetail={onViewDetail}
-                  skill={skill}
-                  staleAfterDays={staleAfterDays}
-                />
-              ))}
-            </ul>
-          ) : null}
-          {bundledSkills.length > 0 ? (
-            <ul
-              className={
-                customSkills.length > 0
-                  ? "divide-y divide-border border-border border-t"
-                  : "divide-y divide-border"
-              }
-            >
-              {showGroupHeaders || customSkills.length === 0 ? (
-                <SkillGroupHeader label="Built-in skills" />
-              ) : null}
-              {bundledSkills.map((skill) => (
-                <ProfileSkillRow
-                  busy={busy}
-                  key={skill.id}
-                  onRemove={onRemove}
-                  onViewDetail={onViewDetail}
-                  skill={skill}
-                  staleAfterDays={staleAfterDays}
-                />
-              ))}
-            </ul>
-          ) : null}
+          <ProfileSkillGroupList
+            busy={busy}
+            headerLabel="Your skills"
+            onRemove={onRemove}
+            onViewDetail={onViewDetail}
+            showHeader={showGroupHeaders}
+            skills={customSkills}
+            staleAfterDays={staleAfterDays}
+          />
+          <ProfileSkillGroupList
+            busy={busy}
+            headerLabel="Built-in skills"
+            onRemove={onRemove}
+            onViewDetail={onViewDetail}
+            showHeader={showGroupHeaders || customSkills.length === 0}
+            skills={bundledSkills}
+            staleAfterDays={staleAfterDays}
+            withTopBorder={customSkills.length > 0}
+          />
         </div>
       )}
     </div>

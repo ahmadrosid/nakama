@@ -38,6 +38,44 @@ export interface CatalogModelsBrowseListProps<
   toolbarTrailing?: ReactNode;
 }
 
+function resolveCatalogStatus<T extends { id: string; name: string }>(input: {
+  status: CatalogModelsBrowseListProps<T>["status"];
+  filtered: T[];
+  canFetch: boolean;
+  idleMessage?: string;
+}): ReactNode {
+  const { status, filtered, canFetch, idleMessage } = input;
+  if (typeof status === "function") {
+    return status({ filteredCount: filtered.length, filteredRows: filtered });
+  }
+
+  if (status != null) {
+    return status;
+  }
+
+  if (canFetch) {
+    return `${filtered.length} model${filtered.length === 1 ? "" : "s"}`;
+  }
+
+  return idleMessage ?? "Enter credentials to browse models.";
+}
+
+function resolveCatalogEmptyMessage(input: {
+  emptyMessage?: string;
+  canFetch: boolean;
+  idleMessage?: string;
+}): string {
+  if (input.emptyMessage) {
+    return input.emptyMessage;
+  }
+
+  if (input.canFetch) {
+    return "No models found.";
+  }
+
+  return input.idleMessage ?? "Enter credentials to browse models.";
+}
+
 export function CatalogModelsBrowseList<
   T extends { id: string; name: string },
 >({
@@ -97,19 +135,17 @@ export function CatalogModelsBrowseList<
     showDeprecatedFilter,
   ]);
 
-  const resolvedStatus =
-    typeof status === "function"
-      ? status({ filteredCount: filtered.length, filteredRows: filtered })
-      : (status ??
-        (canFetch
-          ? `${filtered.length} model${filtered.length === 1 ? "" : "s"}`
-          : (idleMessage ?? "Enter credentials to browse models.")));
-
-  const resolvedEmptyMessage =
-    emptyMessage ??
-    (canFetch
-      ? "No models found."
-      : (idleMessage ?? "Enter credentials to browse models."));
+  const resolvedStatus = resolveCatalogStatus({
+    canFetch,
+    filtered,
+    idleMessage,
+    status,
+  });
+  const resolvedEmptyMessage = resolveCatalogEmptyMessage({
+    canFetch,
+    emptyMessage,
+    idleMessage,
+  });
 
   const toolbarDisabled = !canFetch;
 

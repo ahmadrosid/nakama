@@ -21,6 +21,121 @@ import { Spinner } from "@/components/ui/spinner";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { cn } from "@/lib/utils";
 
+function pairingCodeDescription(
+  pairingCode: string | null,
+  isPaired: boolean
+): string {
+  if (pairingCode) {
+    return isPaired
+      ? "Send this code to your bot in Discord to link another account."
+      : "Send this code to your bot in Discord to finish linking.";
+  }
+
+  return isPaired
+    ? "Discord is linked. Generate a new code to link another account."
+    : "Generate a code, then message it to your bot once.";
+}
+
+function DiscordPairingCodeControls({
+  pairingCode,
+  isPaired,
+  copied,
+  savePending,
+  regeneratePending,
+  onCopyHandshakeCode,
+  onRegenerateHandshake,
+}: {
+  pairingCode: string | null;
+  isPaired: boolean;
+  copied: boolean;
+  savePending: boolean;
+  regeneratePending: boolean;
+  onCopyHandshakeCode: () => void;
+  onRegenerateHandshake: () => void;
+}) {
+  if (pairingCode) {
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
+          {pairingCode}
+        </code>
+        <Button
+          className="min-w-[5.25rem] justify-center"
+          onClick={onCopyHandshakeCode}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {copied ? (
+            <CheckmarkCircle01Icon
+              aria-hidden
+              className="size-3.5 text-emerald-600 dark:text-emerald-400"
+            />
+          ) : (
+            <Copy01Icon aria-hidden className="size-3.5" />
+          )}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+        <Button
+          disabled={regeneratePending || savePending}
+          onClick={onRegenerateHandshake}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {regeneratePending ? (
+            <Spinner />
+          ) : (
+            <>
+              <RefreshIcon aria-hidden="true" className="size-3.5" />
+              New code
+            </>
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  if (isPaired) {
+    return (
+      <Button
+        disabled={regeneratePending || savePending}
+        onClick={onRegenerateHandshake}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {regeneratePending ? (
+          <Spinner />
+        ) : (
+          <>
+            <RefreshIcon aria-hidden="true" className="size-3.5" />
+            New code
+          </>
+        )}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      disabled={regeneratePending || savePending}
+      onClick={onRegenerateHandshake}
+      size="sm"
+      type="button"
+    >
+      {regeneratePending ? (
+        <>
+          <Spinner className="size-3" />
+          Generating…
+        </>
+      ) : (
+        "Generate pairing code"
+      )}
+    </Button>
+  );
+}
+
 export function DiscordSettingsPairingSection({
   isPaired,
   pairingCode,
@@ -48,90 +163,18 @@ export function DiscordSettingsPairingSection({
     <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
       <SettingsRow
         className={rowClassName}
-        description={
-          pairingCode
-            ? isPaired
-              ? "Send this code to your bot in Discord to link another account."
-              : "Send this code to your bot in Discord to finish linking."
-            : isPaired
-              ? "Discord is linked. Generate a new code to link another account."
-              : "Generate a code, then message it to your bot once."
-        }
+        description={pairingCodeDescription(pairingCode, isPaired)}
         label="Pairing code"
       >
-        {pairingCode ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
-              {pairingCode}
-            </code>
-            <Button
-              className="min-w-[5.25rem] justify-center"
-              onClick={onCopyHandshakeCode}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {copied ? (
-                <CheckmarkCircle01Icon
-                  aria-hidden
-                  className="size-3.5 text-emerald-600 dark:text-emerald-400"
-                />
-              ) : (
-                <Copy01Icon aria-hidden className="size-3.5" />
-              )}
-              {copied ? "Copied" : "Copy"}
-            </Button>
-            <Button
-              disabled={regeneratePending || savePending}
-              onClick={onRegenerateHandshake}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {regeneratePending ? (
-                <Spinner />
-              ) : (
-                <>
-                  <RefreshIcon aria-hidden="true" className="size-3.5" />
-                  New code
-                </>
-              )}
-            </Button>
-          </div>
-        ) : isPaired ? (
-          <Button
-            disabled={regeneratePending || savePending}
-            onClick={onRegenerateHandshake}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {regeneratePending ? (
-              <Spinner />
-            ) : (
-              <>
-                <RefreshIcon aria-hidden="true" className="size-3.5" />
-                New code
-              </>
-            )}
-          </Button>
-        ) : (
-          <Button
-            disabled={regeneratePending || savePending}
-            onClick={onRegenerateHandshake}
-            size="sm"
-            type="button"
-          >
-            {regeneratePending ? (
-              <>
-                <Spinner className="size-3" />
-                Generating…
-              </>
-            ) : (
-              "Generate pairing code"
-            )}
-          </Button>
-        )}
+        <DiscordPairingCodeControls
+          copied={copied}
+          isPaired={isPaired}
+          onCopyHandshakeCode={onCopyHandshakeCode}
+          onRegenerateHandshake={onRegenerateHandshake}
+          pairingCode={pairingCode}
+          regeneratePending={regeneratePending}
+          savePending={savePending}
+        />
       </SettingsRow>
 
       {pairingCode ? (

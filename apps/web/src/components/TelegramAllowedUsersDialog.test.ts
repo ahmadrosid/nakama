@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseAllowedTelegramUsers } from "./TelegramAllowedUsersDialog";
+import { parseAllowedTelegramUsers } from "./parse-allowed-telegram-users";
 
 describe("parseAllowedTelegramUsers", () => {
   test("accepts numeric from.id in pasted JSON", () => {

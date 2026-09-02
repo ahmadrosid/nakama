@@ -1,5 +1,5 @@
 import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
 import {
   type AllowedTelegramUser,
@@ -19,6 +19,103 @@ interface TelegramSettingsCardProps {
   embedded?: boolean;
   onSaveSuccess?: () => void;
   submitLabel?: string;
+}
+
+function allowedUsersSummaryLabel(count: number): string {
+  if (count === 0) {
+    return "No manual users";
+  }
+  return `${count} user${count === 1 ? "" : "s"}`;
+}
+
+function resolveTelegramStatusCopy(input: {
+  configured: boolean;
+  hasLinkedUsers: boolean;
+  pairingCode: string | null;
+  running: boolean;
+}): { headerSubtitle: string; statusBadge: string } {
+  if (!input.configured) {
+    return {
+      headerSubtitle: "Step 1: paste a bot token from @BotFather",
+      statusBadge: "Not set up",
+    };
+  }
+
+  if (input.hasLinkedUsers && input.running) {
+    return {
+      headerSubtitle: "Your Telegram is connected to Nakama",
+      statusBadge: "Connected",
+    };
+  }
+
+  if (input.hasLinkedUsers) {
+    return {
+      headerSubtitle: "Linked. Start the bridge to receive messages",
+      statusBadge: "Paired",
+    };
+  }
+
+  if (input.pairingCode) {
+    return {
+      headerSubtitle: "Step 2: send your pairing code to the bot in Telegram",
+      statusBadge: "Awaiting link",
+    };
+  }
+
+  return {
+    headerSubtitle: "Step 2: generate a pairing code and send it to your bot",
+    statusBadge: "Awaiting link",
+  };
+}
+
+function telegramSaveHint(saved: {
+  handshakeCode?: string | null;
+  pairedUserIds: unknown[];
+  allowedUserIds: unknown[];
+}): string {
+  const savedHasLinkedUsers =
+    saved.pairedUserIds.length > 0 || saved.allowedUserIds.length > 0;
+
+  if (saved.handshakeCode && !savedHasLinkedUsers) {
+    return "Saved. Send the pairing code to your bot.";
+  }
+
+  if (savedHasLinkedUsers) {
+    return "Saved.";
+  }
+
+  return "Saved. Get a pairing code if you still need to link.";
+}
+
+function TelegramSettingsCardShell({
+  embedded,
+  headerSubtitle,
+  content,
+  allowedUsersDialog,
+}: {
+  embedded: boolean;
+  headerSubtitle: string;
+  content: ReactNode;
+  allowedUsersDialog: ReactNode;
+}) {
+  if (embedded) {
+    return (
+      <>
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-xs">{headerSubtitle}</p>
+          {content}
+        </div>
+        {allowedUsersDialog}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {content}
+      {allowedUsersDialog}
+    </>
+  );
 }
 
 export function TelegramSettingsCard({
@@ -64,33 +161,17 @@ export function TelegramSettingsCard({
   const worker = status?.telegramWorker;
   const running = worker?.running === true;
   const canSave = configured || botToken.trim().length > 0;
-  const allowedUserSummary =
-    allowedUsers.length === 0
-      ? "No manual users"
-      : `${allowedUsers.length} user${allowedUsers.length === 1 ? "" : "s"}`;
-
+  const allowedUserSummary = allowedUsersSummaryLabel(allowedUsers.length);
   const statusLine =
     hint ??
     (formError ? formError : null) ??
     (loadError ? formatError(loadError) : null);
-
-  const headerSubtitle = configured
-    ? hasLinkedUsers && running
-      ? "Your Telegram is connected to Nakama"
-      : hasLinkedUsers
-        ? "Linked. Start the bridge to receive messages"
-        : pairingCode
-          ? "Step 2: send your pairing code to the bot in Telegram"
-          : "Step 2: generate a pairing code and send it to your bot"
-    : "Step 1: paste a bot token from @BotFather";
-
-  const statusBadge = configured
-    ? hasLinkedUsers && running
-      ? "Connected"
-      : hasLinkedUsers
-        ? "Paired"
-        : "Awaiting link"
-    : "Not set up";
+  const { headerSubtitle, statusBadge } = resolveTelegramStatusCopy({
+    configured,
+    hasLinkedUsers,
+    pairingCode,
+    running,
+  });
 
   async function copyHandshakeCode() {
     if (!pairingCode) {
@@ -124,16 +205,7 @@ export function TelegramSettingsCard({
       },
       onSuccess: (saved) => {
         setBotToken("");
-        const savedHasLinkedUsers =
-          saved.pairedUserIds.length > 0 || saved.allowedUserIds.length > 0;
-
-        if (saved.handshakeCode && !savedHasLinkedUsers) {
-          setHint("Saved. Send the pairing code to your bot.");
-        } else if (savedHasLinkedUsers) {
-          setHint("Saved.");
-        } else {
-          setHint("Saved. Get a pairing code if you still need to link.");
-        }
+        setHint(telegramSaveHint(saved));
         afterSuccess?.();
         onSaveSuccess?.();
       },
@@ -222,22 +294,12 @@ export function TelegramSettingsCard({
     />
   );
 
-  if (embedded) {
-    return (
-      <>
-        <div className="space-y-2">
-          <p className="text-muted-foreground text-xs">{headerSubtitle}</p>
-          {content}
-        </div>
-        {allowedUsersDialog}
-      </>
-    );
-  }
-
   return (
-    <>
-      {content}
-      {allowedUsersDialog}
-    </>
+    <TelegramSettingsCardShell
+      allowedUsersDialog={allowedUsersDialog}
+      content={content}
+      embedded={embedded}
+      headerSubtitle={headerSubtitle}
+    />
   );
 }

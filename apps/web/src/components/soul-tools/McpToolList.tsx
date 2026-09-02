@@ -168,6 +168,125 @@ export function McpToolList({
   );
 }
 
+function formatMcpToolParamSummary(
+  parameters: ReturnType<typeof parseMcpToolParameters>
+): string | null {
+  if (parameters.length === 0) {
+    return null;
+  }
+
+  const requiredCount = parameters.filter(
+    (parameter) => parameter.required
+  ).length;
+  const requiredSuffix =
+    requiredCount > 0 ? ` · ${requiredCount} required` : "";
+
+  return `${parameters.length} param${parameters.length === 1 ? "" : "s"}${requiredSuffix}`;
+}
+
+function McpToolItemToggle({
+  expanded,
+  hasDetails,
+  onToggle,
+  paramCount,
+  paramSummary,
+  toolName,
+}: {
+  expanded: boolean;
+  hasDetails: boolean;
+  onToggle: () => void;
+  paramCount: number;
+  paramSummary: string | null;
+  toolName: string;
+}) {
+  return (
+    <button
+      aria-expanded={hasDetails ? expanded : undefined}
+      className={cn(
+        "grid h-14 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/30",
+        expanded && "bg-muted/20",
+        !hasDetails && "cursor-default hover:bg-transparent"
+      )}
+      disabled={!hasDetails}
+      onClick={hasDetails ? onToggle : undefined}
+      type="button"
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden pt-0.5">
+        {hasDetails ? (
+          <ArrowRight01Icon
+            aria-hidden
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              expanded && "rotate-90"
+            )}
+          />
+        ) : null}
+      </span>
+
+      <span className="min-w-0 pt-px">
+        <span className="block truncate font-mono text-foreground text-sm leading-5">
+          {toolName}
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 block h-4 truncate text-muted-foreground text-xs leading-4",
+            !paramSummary && "invisible"
+          )}
+        >
+          {paramSummary ?? "No parameters"}
+        </span>
+      </span>
+
+      <span
+        aria-hidden
+        className={cn(
+          "mt-px hidden w-7 shrink-0 justify-self-end rounded-full bg-muted px-2 py-0.5 text-center font-mono text-2xs text-muted-foreground leading-4 sm:inline",
+          !paramCount && "invisible"
+        )}
+      >
+        {paramCount || 0}
+      </span>
+    </button>
+  );
+}
+
+function McpToolItemDetails({
+  expanded,
+  hasDetails,
+  parameters,
+  toolDescription,
+}: {
+  expanded: boolean;
+  hasDetails: boolean;
+  parameters: ReturnType<typeof parseMcpToolParameters>;
+  toolDescription?: string | null;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid transition-[grid-template-rows] duration-200 ease-out",
+        expanded && hasDetails ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+      )}
+    >
+      <div className="overflow-hidden">
+        {hasDetails ? (
+          <div className="space-y-3 border-border/70 border-t bg-muted/10 px-3 py-3 pl-9">
+            {toolDescription ? (
+              <p className="whitespace-pre-wrap text-muted-foreground text-xs leading-relaxed">
+                {toolDescription}
+              </p>
+            ) : null}
+
+            {parameters.length > 0 ? (
+              <McpToolParameters parameters={parameters} />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function McpToolItem({
   tool,
   expanded,
@@ -178,89 +297,25 @@ function McpToolItem({
   onToggle: () => void;
 }) {
   const parameters = parseMcpToolParameters(tool.inputSchema);
-  const requiredCount = parameters.filter(
-    (parameter) => parameter.required
-  ).length;
   const hasDetails = Boolean(tool.description) || parameters.length > 0;
-  const paramSummary =
-    parameters.length > 0
-      ? `${parameters.length} param${parameters.length === 1 ? "" : "s"}${
-          requiredCount > 0 ? ` · ${requiredCount} required` : ""
-        }`
-      : null;
+  const paramSummary = formatMcpToolParamSummary(parameters);
 
   return (
     <li className="border-border border-b last:border-b-0">
-      <button
-        aria-expanded={hasDetails ? expanded : undefined}
-        className={cn(
-          "grid h-14 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/30",
-          expanded && "bg-muted/20",
-          !hasDetails && "cursor-default hover:bg-transparent"
-        )}
-        disabled={!hasDetails}
-        onClick={hasDetails ? onToggle : undefined}
-        type="button"
-      >
-        <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden pt-0.5">
-          {hasDetails ? (
-            <ArrowRight01Icon
-              aria-hidden
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                expanded && "rotate-90"
-              )}
-            />
-          ) : null}
-        </span>
-
-        <span className="min-w-0 pt-px">
-          <span className="block truncate font-mono text-foreground text-sm leading-5">
-            {tool.name}
-          </span>
-          <span
-            className={cn(
-              "mt-0.5 block h-4 truncate text-muted-foreground text-xs leading-4",
-              !paramSummary && "invisible"
-            )}
-          >
-            {paramSummary ?? "No parameters"}
-          </span>
-        </span>
-
-        <span
-          aria-hidden
-          className={cn(
-            "mt-px hidden w-7 shrink-0 justify-self-end rounded-full bg-muted px-2 py-0.5 text-center font-mono text-2xs text-muted-foreground leading-4 sm:inline",
-            !parameters.length && "invisible"
-          )}
-        >
-          {parameters.length || 0}
-        </span>
-      </button>
-
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          expanded && hasDetails ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-        )}
-      >
-        <div className="overflow-hidden">
-          {hasDetails ? (
-            <div className="space-y-3 border-border/70 border-t bg-muted/10 px-3 py-3 pl-9">
-              {tool.description ? (
-                <p className="whitespace-pre-wrap text-muted-foreground text-xs leading-relaxed">
-                  {tool.description}
-                </p>
-              ) : null}
-
-              {parameters.length > 0 ? (
-                <McpToolParameters parameters={parameters} />
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <McpToolItemToggle
+        expanded={expanded}
+        hasDetails={hasDetails}
+        onToggle={onToggle}
+        paramCount={parameters.length}
+        paramSummary={paramSummary}
+        toolName={tool.name}
+      />
+      <McpToolItemDetails
+        expanded={expanded}
+        hasDetails={hasDetails}
+        parameters={parameters}
+        toolDescription={tool.description}
+      />
     </li>
   );
 }

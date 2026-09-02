@@ -137,45 +137,135 @@ function OrgMemoryPinnedContent({ pinned }: { pinned: string[] }) {
   );
 }
 
-export function OrgMemoryCard() {
-  const { activeOrg } = useAuth();
-  const [searchParams] = useSearchParams();
-  const orgId = activeOrg?.id ?? null;
-  const isAdmin = activeOrg?.role === "admin";
+function OrgMemoryTabPanel({
+  activeTab,
+  orgId,
+  isLoading,
+  pinnedFacts,
+}: {
+  activeTab: OrgMemoryTab;
+  orgId: string | null;
+  isLoading: boolean;
+  pinnedFacts: string[];
+}) {
+  if (activeTab === "proposals") {
+    return orgId ? <OrgMemoryProposalsPanel orgId={orgId} /> : null;
+  }
 
-  const {
-    data,
-    isLoading,
-    error: loadError,
-    dataUpdatedAt,
-  } = useOrgMemory(isAdmin ? orgId : null);
-  const { data: proposalsData } = useOrgMemoryProposals(
-    isAdmin ? orgId : null,
-    "pending"
+  if (activeTab === "history") {
+    return orgId ? <OrgMemoryHistoryPanel orgId={orgId} /> : null;
+  }
+
+  return (
+    <div className="px-4 py-3">
+      {isLoading ? (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      ) : (
+        <OrgMemoryPinnedContent pinned={pinnedFacts} />
+      )}
+    </div>
   );
-  const updateMutation = useUpdateOrgMemory(orgId ?? "");
+}
 
+function OrgMemoryEditDialog({
+  open,
+  onOpenChange,
+  draft,
+  onDraftChange,
+  formError,
+  busy,
+  dirty,
+  draftBytes,
+  savePending,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  formError: string | null;
+  busy: boolean;
+  dirty: boolean;
+  draftBytes: number;
+  savePending: boolean;
+  onSave: () => void;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
+        <DialogHeader className="pr-8">
+          <DialogTitle>Edit org memory</DialogTitle>
+          <DialogDescription>
+            Raw Markdown. Keep the ## Org Memory / ## Pinned structure.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex min-h-0 flex-1 flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onSave();
+          }}
+        >
+          <Textarea
+            autoFocus
+            className="field-sizing-fixed min-h-[min(52dvh,22rem)] flex-1 resize-none overflow-y-auto font-mono text-xs leading-relaxed sm:min-h-[min(58dvh,26rem)]"
+            disabled={busy}
+            onChange={(e) => onDraftChange(e.target.value)}
+            placeholder={"## Org Memory\n\n## Pinned\n- ..."}
+            rows={12}
+            value={draft}
+          />
+          {formError ? (
+            <p className="text-destructive text-sm">{formError}</p>
+          ) : null}
+          <DialogFooter className="mx-0 mb-0 shrink-0 border-border border-t bg-transparent p-0 pt-4">
+            <div className="flex w-full items-center justify-between gap-3">
+              <span className="text-muted-foreground text-xs">
+                {draftBytes} bytes
+              </span>
+              <Button disabled={busy || !dirty} size="sm" type="submit">
+                {savePending ? <Spinner className="mr-2" /> : null}
+                Save
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OrgMemoryAdminCard({
+  orgId,
+  dataUpdatedAt,
+  isLoading,
+  loadError,
+  liveContent,
+  pinnedFacts,
+  pendingCount,
+  updateMutation,
+}: {
+  orgId: string | null;
+  dataUpdatedAt: number;
+  isLoading: boolean;
+  loadError: unknown;
+  liveContent: string;
+  pinnedFacts: string[];
+  pendingCount: number;
+  updateMutation: ReturnType<typeof useUpdateOrgMemory>;
+}) {
   const [activeTab, setActiveTab] = useState<OrgMemoryTab>("live");
+  const [searchParams] = useSearchParams();
+  const [draft, setDraft] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const draftBytes = new TextEncoder().encode(draft).byteLength;
 
   useEffect(() => {
     if (searchParams.get("orgMemory") === "proposals") {
       setActiveTab("proposals");
     }
   }, [searchParams]);
-
-  const [draft, setDraft] = useState("");
-  const [editOpen, setEditOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const liveContent = data?.content ?? "";
-  const parsedLive = parseOrgMemoryContent(liveContent);
-  const pinnedFacts = parsedLive.pinned;
-  const pendingCount = proposalsData?.pendingCount ?? 0;
-  const draftBytes = new TextEncoder().encode(draft).byteLength;
-
-  if (!isAdmin) {
-    return null;
-  }
 
   function openEdit() {
     setFormError(null);
@@ -268,23 +358,12 @@ export function OrgMemoryCard() {
           </div>
         </div>
 
-        {activeTab === "proposals" ? (
-          orgId ? (
-            <OrgMemoryProposalsPanel orgId={orgId} />
-          ) : null
-        ) : activeTab === "history" ? (
-          orgId ? (
-            <OrgMemoryHistoryPanel orgId={orgId} />
-          ) : null
-        ) : (
-          <div className="px-4 py-3">
-            {isLoading ? (
-              <p className="text-muted-foreground text-sm">Loading…</p>
-            ) : (
-              <OrgMemoryPinnedContent pinned={pinnedFacts} />
-            )}
-          </div>
-        )}
+        <OrgMemoryTabPanel
+          activeTab={activeTab}
+          isLoading={isLoading}
+          orgId={orgId}
+          pinnedFacts={pinnedFacts}
+        />
 
         {showPinnedFooter ? (
           <div className="flex items-center justify-between border-border border-t px-4 py-2 text-muted-foreground text-xs">
@@ -302,7 +381,13 @@ export function OrgMemoryCard() {
         ) : null}
       </Card>
 
-      <Dialog
+      <OrgMemoryEditDialog
+        busy={busy}
+        dirty={dirty}
+        draft={draft}
+        draftBytes={draftBytes}
+        formError={formError}
+        onDraftChange={setDraft}
         onOpenChange={(open) => {
           setEditOpen(open);
           if (!open) {
@@ -310,50 +395,49 @@ export function OrgMemoryCard() {
             setFormError(null);
           }
         }}
+        onSave={() => void handleSave()}
         open={editOpen}
-      >
-        <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
-          <DialogHeader className="pr-8">
-            <DialogTitle>Edit org memory</DialogTitle>
-            <DialogDescription>
-              Raw Markdown. Keep the ## Org Memory / ## Pinned structure.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className="flex min-h-0 flex-1 flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleSave();
-            }}
-          >
-            <Textarea
-              autoFocus
-              className="field-sizing-fixed min-h-[min(52dvh,22rem)] flex-1 resize-none overflow-y-auto font-mono text-xs leading-relaxed sm:min-h-[min(58dvh,26rem)]"
-              disabled={busy}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={"## Org Memory\n\n## Pinned\n- ..."}
-              rows={12}
-              value={draft}
-            />
-            {formError ? (
-              <p className="text-destructive text-sm">{formError}</p>
-            ) : null}
-            <DialogFooter className="mx-0 mb-0 shrink-0 border-border border-t bg-transparent p-0 pt-4">
-              <div className="flex w-full items-center justify-between gap-3">
-                <span className="text-muted-foreground text-xs">
-                  {draftBytes} bytes
-                </span>
-                <Button disabled={busy || !dirty} size="sm" type="submit">
-                  {updateMutation.isPending ? (
-                    <Spinner className="mr-2" />
-                  ) : null}
-                  Save
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        savePending={updateMutation.isPending}
+      />
     </>
+  );
+}
+
+export function OrgMemoryCard() {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? null;
+  const isAdmin = activeOrg?.role === "admin";
+
+  const {
+    data,
+    isLoading,
+    error: loadError,
+    dataUpdatedAt,
+  } = useOrgMemory(isAdmin ? orgId : null);
+  const { data: proposalsData } = useOrgMemoryProposals(
+    isAdmin ? orgId : null,
+    "pending"
+  );
+  const updateMutation = useUpdateOrgMemory(orgId ?? "");
+
+  if (!isAdmin) {
+    return null;
+  }
+
+  const liveContent = data?.content ?? "";
+  const pinnedFacts = parseOrgMemoryContent(liveContent).pinned;
+  const pendingCount = proposalsData?.pendingCount ?? 0;
+
+  return (
+    <OrgMemoryAdminCard
+      dataUpdatedAt={dataUpdatedAt}
+      isLoading={isLoading}
+      liveContent={liveContent}
+      loadError={loadError}
+      orgId={orgId}
+      pendingCount={pendingCount}
+      pinnedFacts={pinnedFacts}
+      updateMutation={updateMutation}
+    />
   );
 }

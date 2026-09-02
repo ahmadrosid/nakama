@@ -32,11 +32,76 @@ interface SetupStepBackupImportProps {
   onRestored: () => void;
 }
 
-export function SetupStepBackupImport({
-  initialFile = null,
-  onBack,
+function SetupBackupProgressCard({
+  phase,
+  requiresRestart,
+  successEntered,
+}: {
+  phase: "restoring" | "done";
+  requiresRestart: boolean;
+  successEntered: boolean;
+}) {
+  return (
+    <Card className="p-6">
+      <div
+        aria-live="polite"
+        className="flex flex-col items-center justify-center gap-3 py-10 text-center"
+        role="status"
+      >
+        {phase === "restoring" ? (
+          <>
+            <Spinner className="size-8 text-primary" />
+            <p className="text-balance font-medium text-foreground text-sm">
+              Restoring backup…
+            </p>
+          </>
+        ) : (
+          <>
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-10 items-center justify-center text-primary",
+                "transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+                "motion-reduce:transition-none",
+                successEntered
+                  ? "scale-100 opacity-100 blur-0"
+                  : "scale-[0.25] opacity-0 blur-[4px]"
+              )}
+            >
+              <CheckmarkCircle01Icon className="size-10" strokeWidth={1.75} />
+            </span>
+            <div
+              className={cn(
+                "space-y-1 transition-[opacity,filter,translate] duration-300 ease-out",
+                "motion-reduce:transition-none",
+                successEntered
+                  ? "translate-y-0 opacity-100 blur-0 delay-100"
+                  : "translate-y-3 opacity-0 blur-[4px]"
+              )}
+            >
+              <p className="text-balance font-medium text-foreground text-sm">
+                Backup restored
+              </p>
+              <p className="text-pretty text-muted-foreground text-xs">
+                {requiresRestart
+                  ? "Restart Nakama, then sign in with your restored account."
+                  : "Taking you to sign in…"}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function useSetupBackupImportState({
+  initialFile,
   onRestored,
-}: SetupStepBackupImportProps) {
+}: {
+  initialFile: File | null;
+  onRestored: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const initialPreviewStartedForRef = useRef<File | null>(null);
   const previewGenerationRef = useRef(0);
@@ -89,8 +154,6 @@ export function SetupStepBackupImport({
       return;
     }
 
-    // useMutation's result object changes identity when pending/error state flips.
-    // Depend on stable mutateAsync only, and skip if we already started this File.
     if (
       !shouldStartInitialFilePreview(
         initialFile,
@@ -121,8 +184,6 @@ export function SetupStepBackupImport({
 
     return () => {
       cancelled = true;
-      // Strict Mode remount may retry the same File only when this generation
-      // is still current — do not clear a newer in-flight preview's dedupe key.
       if (
         shouldClearInitialPreviewDedupe(
           generation,
@@ -185,61 +246,48 @@ export function SetupStepBackupImport({
     }
   }
 
-  if (phase === "restoring" || phase === "done") {
-    return (
-      <Card className="p-6">
-        <div
-          aria-live="polite"
-          className="flex flex-col items-center justify-center gap-3 py-10 text-center"
-          role="status"
-        >
-          {phase === "restoring" ? (
-            <>
-              <Spinner className="size-8 text-primary" />
-              <p className="text-balance font-medium text-foreground text-sm">
-                Restoring backup…
-              </p>
-            </>
-          ) : (
-            <>
-              <span
-                aria-hidden
-                className={cn(
-                  "flex size-10 items-center justify-center text-primary",
-                  "transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
-                  "motion-reduce:transition-none",
-                  successEntered
-                    ? "scale-100 opacity-100 blur-0"
-                    : "scale-[0.25] opacity-0 blur-[4px]"
-                )}
-              >
-                <CheckmarkCircle01Icon className="size-10" strokeWidth={1.75} />
-              </span>
-              <div
-                className={cn(
-                  "space-y-1 transition-[opacity,filter,translate] duration-300 ease-out",
-                  "motion-reduce:transition-none",
-                  successEntered
-                    ? "translate-y-0 opacity-100 blur-0 delay-100"
-                    : "translate-y-3 opacity-0 blur-[4px]"
-                )}
-              >
-                <p className="text-balance font-medium text-foreground text-sm">
-                  Backup restored
-                </p>
-                <p className="text-pretty text-muted-foreground text-xs">
-                  {requiresRestart
-                    ? "Restart Nakama, then sign in with your restored account."
-                    : "Taking you to sign in…"}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
-    );
-  }
+  return {
+    error,
+    handlePreview,
+    handleRestore,
+    inputRef,
+    isBusy,
+    phase,
+    preview,
+    previewPending,
+    requiresRestart,
+    restoreAvailable,
+    restoreMutation,
+    selectedFile,
+    successEntered,
+  };
+}
 
+function SetupBackupImportForm({
+  error,
+  inputRef,
+  isBusy,
+  onBack,
+  onPreview,
+  onRestore,
+  preview,
+  previewPending,
+  restoreAvailable,
+  restorePending,
+  selectedFile,
+}: {
+  error: string | null;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  isBusy: boolean;
+  onBack: () => void;
+  onPreview: (file: File | null) => void;
+  onRestore: () => void;
+  preview: DataImportPreviewResponse | null;
+  previewPending: boolean;
+  restoreAvailable: boolean;
+  restorePending: boolean;
+  selectedFile: File | null;
+}) {
   return (
     <Card className="p-6">
       <div className="space-y-5">
@@ -262,9 +310,7 @@ export function SetupStepBackupImport({
             aria-label="Choose a backup file"
             className="sr-only"
             disabled={isBusy}
-            onChange={(event) =>
-              void handlePreview(event.target.files?.[0] ?? null)
-            }
+            onChange={(event) => onPreview(event.target.files?.[0] ?? null)}
             ref={inputRef}
             type="file"
           />
@@ -274,10 +320,10 @@ export function SetupStepBackupImport({
           <DataImportPreview
             fileName={selectedFile.name}
             inspecting={previewPending}
-            onRestore={() => void handleRestore()}
+            onRestore={onRestore}
             preview={preview}
             restoreDisabled={!restoreAvailable}
-            restorePending={restoreMutation.isPending}
+            restorePending={restorePending}
           />
         ) : null}
 
@@ -304,5 +350,39 @@ export function SetupStepBackupImport({
         </Button>
       </div>
     </Card>
+  );
+}
+
+export function SetupStepBackupImport({
+  initialFile = null,
+  onBack,
+  onRestored,
+}: SetupStepBackupImportProps) {
+  const state = useSetupBackupImportState({ initialFile, onRestored });
+
+  if (state.phase === "restoring" || state.phase === "done") {
+    return (
+      <SetupBackupProgressCard
+        phase={state.phase}
+        requiresRestart={state.requiresRestart}
+        successEntered={state.successEntered}
+      />
+    );
+  }
+
+  return (
+    <SetupBackupImportForm
+      error={state.error}
+      inputRef={state.inputRef}
+      isBusy={state.isBusy}
+      onBack={onBack}
+      onPreview={(file) => void state.handlePreview(file)}
+      onRestore={() => void state.handleRestore()}
+      preview={state.preview}
+      previewPending={state.previewPending}
+      restoreAvailable={state.restoreAvailable}
+      restorePending={state.restoreMutation.isPending}
+      selectedFile={state.selectedFile}
+    />
   );
 }

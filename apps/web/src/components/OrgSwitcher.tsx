@@ -40,6 +40,77 @@ interface OrgSwitcherProps {
   collapsed?: boolean;
 }
 
+async function submitCreateOrg(input: {
+  name: string;
+  slug: string;
+  createOrg: (request: { name: string; slug: string }) => Promise<unknown>;
+  setError: (error: string | null) => void;
+  setIsSubmitting: (value: boolean) => void;
+  onSuccess: () => void;
+}): Promise<void> {
+  input.setError(null);
+
+  const trimmedName = input.name.trim();
+  const trimmedSlug = input.slug.trim().toLowerCase();
+
+  if (!trimmedName) {
+    input.setError("Organization name is required.");
+    return;
+  }
+
+  if (!(trimmedSlug && SLUG_PATTERN.test(trimmedSlug))) {
+    input.setError("Slug must use lowercase letters, numbers, and hyphens.");
+    return;
+  }
+
+  input.setIsSubmitting(true);
+
+  try {
+    await input.createOrg({ name: trimmedName, slug: trimmedSlug });
+    input.onSuccess();
+  } catch (err) {
+    input.setError(
+      err instanceof Error ? err.message : "Failed to create organization"
+    );
+  } finally {
+    input.setIsSubmitting(false);
+  }
+}
+
+async function submitEditOrg(input: {
+  orgId: string | undefined;
+  name: string;
+  updateOrg: (id: string, request: { name: string }) => Promise<unknown>;
+  setError: (error: string | null) => void;
+  setIsSubmitting: (value: boolean) => void;
+  onSuccess: () => void;
+}): Promise<void> {
+  if (!input.orgId) {
+    return;
+  }
+
+  input.setError(null);
+
+  const trimmedName = input.name.trim();
+  if (!trimmedName) {
+    input.setError("Organization name is required.");
+    return;
+  }
+
+  input.setIsSubmitting(true);
+
+  try {
+    await input.updateOrg(input.orgId, { name: trimmedName });
+    input.onSuccess();
+  } catch (err) {
+    input.setError(
+      err instanceof Error ? err.message : "Failed to update organization"
+    );
+  } finally {
+    input.setIsSubmitting(false);
+  }
+}
+
 export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
   const { user, orgs, activeOrg, switchOrg, createOrg, updateOrg } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
@@ -63,78 +134,6 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
 
   const label = activeOrg?.name ?? "Organization";
   const initial = label.charAt(0).toUpperCase();
-
-  function openEditDialog(org: UserOrgSummary) {
-    editingOrgRef.current = org;
-    setName(org.name);
-    setError(null);
-    setEditOpen(true);
-  }
-
-  async function handleCreate(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-
-    const trimmedName = name.trim();
-    const trimmedSlug = slug.trim().toLowerCase();
-
-    if (!trimmedName) {
-      setError("Organization name is required.");
-      return;
-    }
-
-    if (!(trimmedSlug && SLUG_PATTERN.test(trimmedSlug))) {
-      setError("Slug must use lowercase letters, numbers, and hyphens.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      await createOrg({ name: trimmedName, slug: trimmedSlug });
-      setCreateOpen(false);
-      setName("");
-      setSlug("");
-      slugEditedRef.current = false;
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to create organization"
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleEdit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!editingOrgRef.current) {
-      return;
-    }
-
-    setError(null);
-
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError("Organization name is required.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      await updateOrg(editingOrgRef.current.id, { name: trimmedName });
-      setEditOpen(false);
-      editingOrgRef.current = null;
-      setName("");
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update organization"
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   const trigger = (
     <Button
       aria-label={collapsed ? `Current organization: ${label}` : undefined}
@@ -160,6 +159,46 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
       )}
     </Button>
   );
+
+  function openEditDialog(org: UserOrgSummary) {
+    editingOrgRef.current = org;
+    setName(org.name);
+    setError(null);
+    setEditOpen(true);
+  }
+
+  async function handleCreate(event: React.FormEvent) {
+    event.preventDefault();
+    await submitCreateOrg({
+      createOrg,
+      name,
+      onSuccess: () => {
+        setCreateOpen(false);
+        setName("");
+        setSlug("");
+        slugEditedRef.current = false;
+      },
+      setError,
+      setIsSubmitting,
+      slug,
+    });
+  }
+
+  async function handleEdit(event: React.FormEvent) {
+    event.preventDefault();
+    await submitEditOrg({
+      name,
+      onSuccess: () => {
+        setEditOpen(false);
+        editingOrgRef.current = null;
+        setName("");
+      },
+      orgId: editingOrgRef.current?.id,
+      setError,
+      setIsSubmitting,
+      updateOrg,
+    });
+  }
 
   return (
     <>

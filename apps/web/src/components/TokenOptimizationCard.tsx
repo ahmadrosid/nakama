@@ -246,6 +246,27 @@ export function TokenOptimizationCard() {
     );
   }
 
+  return (
+    <TokenOptimizationLoaded
+      data={data}
+      error={error}
+      onToggle={toggle}
+      saving={saving}
+    />
+  );
+}
+
+function TokenOptimizationLoaded({
+  data,
+  error,
+  saving,
+  onToggle,
+}: {
+  data: TokenOptimizationResponse;
+  error: string | null;
+  saving: boolean;
+  onToggle: (next: boolean) => void;
+}) {
   const { arms, byTool, days, inputTokens, optimizers, totals, windowDays } =
     data;
   const omni = optimizers?.[0];
@@ -296,7 +317,7 @@ export function TokenOptimizationCard() {
           checked={Boolean(omni?.enabled)}
           className="mt-0.5"
           disabled={saving}
-          onCheckedChange={toggle}
+          onCheckedChange={onToggle}
         />
       </div>
 
@@ -315,126 +336,15 @@ export function TokenOptimizationCard() {
           Nothing measured in the last {windowDays} days.
         </p>
       ) : (
-        <>
-          <div>
-            {/* A stat tile is read by its number, so the number leads. The
-                colour is the "saved" series colour, not a decorative one,
-                so colour still carries identity here. */}
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span
-                className="font-semibold text-4xl tabular-nums leading-none"
-                style={{ color: "var(--out)" }}
-              >
-                {percent.toFixed(0)}%
-              </span>
-              <span className="text-pretty text-muted-foreground text-sm">
-                of tool output saved
-              </span>
-            </p>
-            <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
-              {formatBytes(totals.bytesRemoved)} saved from{" "}
-              {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
-            </p>
-          </div>
-
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="size-2.5 rounded-[2px]"
-                  style={{ background: "var(--out)" }}
-                />
-                <span className="text-muted-foreground">saved</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="size-2.5 rounded-[2px]"
-                  style={{ background: "var(--in)" }}
-                />
-                <span className="text-muted-foreground">sent to the model</span>
-              </span>
-            </div>
-            <DailyChart days={days} />
-          </div>
-
-          {/* The only tokens on this card. Shown per turn because the arms
-              never have the same turn count, and only once both arms have
-              enough turns to be worth printing. */}
-          {inputTokens.optimized.turns < MIN_TURNS ||
-          inputTokens.control.turns < MIN_TURNS ? (
-            // Say the threshold rather than hide the block. An absent panel
-            // reads as unbuilt; a stated one reads as not enough data yet,
-            // which is what it is.
-            <div className="rounded-md border border-border border-dashed px-4 py-3.5">
-              <p className="font-medium text-sm">
-                Provider input tokens per turn
-              </p>
-              <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
-                Needs {MIN_TURNS} turns in each arm before the two are worth
-                comparing. So far {inputTokens.optimized.turns} optimised and{" "}
-                {inputTokens.control.turns} passthrough.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-md border border-border px-4 py-3.5">
-              <p className="mb-3 font-medium text-sm">
-                Provider input tokens per turn
-              </p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="tabular-nums">
-                    {inputTokens.optimized.inputTokensPerTurn.toLocaleString()}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    optimised, {inputTokens.optimized.turns} turns
-                  </p>
-                </div>
-                <div>
-                  <p className="tabular-nums">
-                    {inputTokens.control.inputTokensPerTurn.toLocaleString()}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    passthrough, {inputTokens.control.turns} turns
-                  </p>
-                </div>
-              </div>
-              <p className="mt-3 text-muted-foreground text-xs leading-relaxed">
-                Counted by the provider, not estimated here. Turns fall into an
-                arm by what happened rather than by assignment, so a difference
-                in the work itself can explain part of any gap.
-              </p>
-            </div>
-          )}
-
-          {byTool?.length ? (
-            <table className="w-full text-sm">
-              <tbody>
-                {byTool.map((row) => (
-                  <tr className="border-border/60 border-t" key={row.tool}>
-                    <td className="py-1.5">{row.tool}</td>
-                    <td className="py-1.5 text-right text-muted-foreground tabular-nums">
-                      {row.calls} calls
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums">
-                      {formatBytes(row.bytesIn - row.bytesOut)} saved
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-border/60 border-t text-muted-foreground">
-                  <td className="py-1.5">passthrough</td>
-                  <td className="py-1.5 text-right tabular-nums">
-                    {arms.control.calls} calls
-                  </td>
-                  <td className="py-1.5 text-right tabular-nums">
-                    {formatBytes(arms.control.bytesIn)} sent
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          ) : null}
-        </>
+        <TokenOptimizationMetrics
+          arms={arms}
+          byTool={byTool}
+          days={days}
+          inputTokens={inputTokens}
+          percent={percent}
+          totals={totals}
+          windowDays={windowDays}
+        />
       )}
 
       <Tooltip>
@@ -456,5 +366,144 @@ export function TokenOptimizationCard() {
         </TooltipContent>
       </Tooltip>
     </div>
+  );
+}
+
+function TokenOptimizationMetrics({
+  arms,
+  byTool,
+  days,
+  inputTokens,
+  percent,
+  totals,
+  windowDays,
+}: {
+  arms: NonNullable<TokenOptimizationResponse["arms"]>;
+  byTool: TokenOptimizationResponse["byTool"];
+  days: NonNullable<TokenOptimizationResponse["days"]>;
+  inputTokens: NonNullable<TokenOptimizationResponse["inputTokens"]>;
+  percent: number;
+  totals: NonNullable<TokenOptimizationResponse["totals"]>;
+  windowDays: number;
+}) {
+  return (
+    <>
+      <div>
+        {/* A stat tile is read by its number, so the number leads. The
+            colour is the "saved" series colour, not a decorative one,
+            so colour still carries identity here. */}
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span
+            className="font-semibold text-4xl tabular-nums leading-none"
+            style={{ color: "var(--out)" }}
+          >
+            {percent.toFixed(0)}%
+          </span>
+          <span className="text-pretty text-muted-foreground text-sm">
+            of tool output saved
+          </span>
+        </p>
+        <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
+          {formatBytes(totals.bytesRemoved)} saved from{" "}
+          {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
+        </p>
+      </div>
+
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-4 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-2.5 rounded-[2px]"
+              style={{ background: "var(--out)" }}
+            />
+            <span className="text-muted-foreground">saved</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-2.5 rounded-[2px]"
+              style={{ background: "var(--in)" }}
+            />
+            <span className="text-muted-foreground">sent to the model</span>
+          </span>
+        </div>
+        <DailyChart days={days} />
+      </div>
+
+      {/* The only tokens on this card. Shown per turn because the arms
+          never have the same turn count, and only once both arms have
+          enough turns to be worth printing. */}
+      {inputTokens.optimized.turns < MIN_TURNS ||
+      inputTokens.control.turns < MIN_TURNS ? (
+        // Say the threshold rather than hide the block. An absent panel
+        // reads as unbuilt; a stated one reads as not enough data yet,
+        // which is what it is.
+        <div className="rounded-md border border-border border-dashed px-4 py-3.5">
+          <p className="font-medium text-sm">Provider input tokens per turn</p>
+          <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+            Needs {MIN_TURNS} turns in each arm before the two are worth
+            comparing. So far {inputTokens.optimized.turns} optimised and{" "}
+            {inputTokens.control.turns} passthrough.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-md border border-border px-4 py-3.5">
+          <p className="mb-3 font-medium text-sm">
+            Provider input tokens per turn
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="tabular-nums">
+                {inputTokens.optimized.inputTokensPerTurn.toLocaleString()}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                optimised, {inputTokens.optimized.turns} turns
+              </p>
+            </div>
+            <div>
+              <p className="tabular-nums">
+                {inputTokens.control.inputTokensPerTurn.toLocaleString()}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                passthrough, {inputTokens.control.turns} turns
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-muted-foreground text-xs leading-relaxed">
+            Counted by the provider, not estimated here. Turns fall into an arm
+            by what happened rather than by assignment, so a difference in the
+            work itself can explain part of any gap.
+          </p>
+        </div>
+      )}
+
+      {byTool?.length ? (
+        <table className="w-full text-sm">
+          <tbody>
+            {byTool.map((row) => (
+              <tr className="border-border/60 border-t" key={row.tool}>
+                <td className="py-1.5">{row.tool}</td>
+                <td className="py-1.5 text-right text-muted-foreground tabular-nums">
+                  {row.calls} calls
+                </td>
+                <td className="py-1.5 text-right tabular-nums">
+                  {formatBytes(row.bytesIn - row.bytesOut)} saved
+                </td>
+              </tr>
+            ))}
+            <tr className="border-border/60 border-t text-muted-foreground">
+              <td className="py-1.5">passthrough</td>
+              <td className="py-1.5 text-right tabular-nums">
+                {arms.control.calls} calls
+              </td>
+              <td className="py-1.5 text-right tabular-nums">
+                {formatBytes(arms.control.bytesIn)} sent
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      ) : null}
+    </>
   );
 }

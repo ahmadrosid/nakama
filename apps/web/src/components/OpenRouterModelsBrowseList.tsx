@@ -2,12 +2,9 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { CatalogModelsBrowseList } from "@/components/CatalogModelsBrowseList";
 import { formatBrowseCapabilities } from "@/components/model-browse-utils";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  type ModelCostFilter,
+  ModelCostFilterSelect,
+} from "@/components/model-cost-filter-select";
 import { useOpenRouterModels } from "@/hooks/use-openrouter-models";
 import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 
@@ -27,7 +24,7 @@ export function OpenRouterModelsBrowseList({
   onAddMany,
 }: OpenRouterModelsBrowseListProps) {
   const { data: rows = [], isLoading, error } = useOpenRouterModels();
-  const [costFilter, setCostFilter] = useState<"all" | "free">("all");
+  const [costFilter, setCostFilter] = useState<ModelCostFilter>("all");
   const deferredCostFilter = useDeferredValue(costFilter);
 
   const catalogRows = useMemo(() => {
@@ -65,20 +62,10 @@ export function OpenRouterModelsBrowseList({
         name: row.name,
       })}
       toolbarTrailing={
-        <Select
-          onValueChange={(value) => setCostFilter(value as "all" | "free")}
+        <ModelCostFilterSelect
+          onValueChange={setCostFilter}
           value={costFilter}
-        >
-          <SelectTrigger className="w-27.5">
-            <SelectValue>
-              {costFilter === "free" ? "Free only" : "All"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="free">Free only</SelectItem>
-          </SelectContent>
-        </Select>
+        />
       }
     />
   );

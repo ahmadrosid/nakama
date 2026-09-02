@@ -35,11 +35,7 @@ function resolveDefaultProfileId(
   return resolveInitialProfileId(profiles);
 }
 
-export function SoulTab({
-  profileId: controlledProfileId,
-}: {
-  profileId?: string | null;
-} = {}) {
+function useSoulTabState(controlledProfileId?: string | null) {
   const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -112,11 +108,7 @@ export function SoulTab({
   );
 
   useEffect(() => {
-    if (embedded) {
-      return;
-    }
-
-    if (profiles.length === 0) {
+    if (embedded || profiles.length === 0) {
       return;
     }
 
@@ -206,6 +198,49 @@ export function SoulTab({
     await Promise.all([refetchProfiles(), refetchStatus()]);
   }
 
+  return {
+    busy,
+    dialogError,
+    dialogLoading,
+    editContent,
+    embedded,
+    error,
+    handleDialogOpenChange,
+    handleOpenFile,
+    handleSave,
+    isDirty,
+    isWritable,
+    loading,
+    openFile,
+    openFileMeta,
+    presentCount,
+    profileId,
+    profiles,
+    profilesFetching,
+    refresh,
+    refreshing,
+    selectedProfile,
+    setEditContent,
+    setProfileId,
+    status,
+  };
+}
+
+function SoulTabGate({
+  embedded,
+  loading,
+  profileId,
+  profiles,
+  profilesFetching,
+  children,
+}: {
+  embedded: boolean;
+  loading: boolean;
+  profileId: string | null | undefined;
+  profiles: Array<{ id: string }>;
+  profilesFetching: boolean;
+  children: React.ReactNode;
+}) {
   if (!embedded && profiles.length === 0 && !profilesFetching) {
     return (
       <div className={cn(sectionClass, "p-8 text-muted-foreground text-sm")}>
@@ -222,62 +257,86 @@ export function SoulTab({
     );
   }
 
-  if (loading && !status) {
+  if (loading) {
     return (
       <SoulTabPageState embedded={embedded} message="Loading prompt stack…" />
     );
   }
 
+  return children;
+}
+
+function SoulTabView({ state }: { state: ReturnType<typeof useSoulTabState> }) {
   const soulPanel = (
     <SoulTabPanel
-      busy={busy}
-      embedded={embedded}
-      onOpenFile={handleOpenFile}
-      onRefresh={() => void refresh()}
-      presentCount={presentCount}
-      refreshing={refreshing}
-      selectedProfile={selectedProfile}
-      status={status}
+      busy={state.busy}
+      embedded={state.embedded}
+      onOpenFile={state.handleOpenFile}
+      onRefresh={() => void state.refresh()}
+      presentCount={state.presentCount}
+      refreshing={state.refreshing}
+      selectedProfile={state.selectedProfile}
+      status={state.status}
     />
   );
 
   return (
     <>
-      {error ? (
+      {state.error ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
-          {error}
+          {state.error}
         </p>
       ) : null}
 
-      {embedded ? (
+      {state.embedded ? (
         soulPanel
       ) : (
         <SoulTabShell
-          busy={busy}
-          onProfileSelect={setProfileId}
-          onRefresh={() => void refresh()}
+          busy={state.busy}
+          onProfileSelect={state.setProfileId}
+          onRefresh={() => void state.refresh()}
           panel={soulPanel}
-          profileId={profileId}
-          profiles={profiles}
-          refreshing={refreshing}
+          profileId={state.profileId}
+          profiles={state.profiles}
+          refreshing={state.refreshing}
         />
       )}
 
       <SoulFileEditorDialog
-        busy={busy}
-        dialogError={dialogError}
-        dialogLoading={dialogLoading}
-        editContent={editContent}
-        isDirty={isDirty}
-        isWritable={isWritable}
-        onEditContentChange={setEditContent}
-        onOpenChange={handleDialogOpenChange}
-        onSave={() => void handleSave()}
-        open={openFile !== null}
-        openFile={openFile}
-        openFileMeta={openFileMeta}
-        status={status}
+        busy={state.busy}
+        dialogError={state.dialogError}
+        dialogLoading={state.dialogLoading}
+        editContent={state.editContent}
+        isDirty={state.isDirty}
+        isWritable={state.isWritable}
+        onEditContentChange={state.setEditContent}
+        onOpenChange={state.handleDialogOpenChange}
+        onSave={() => void state.handleSave()}
+        open={state.openFile !== null}
+        openFile={state.openFile}
+        openFileMeta={state.openFileMeta}
+        status={state.status}
       />
     </>
+  );
+}
+
+export function SoulTab({
+  profileId: controlledProfileId,
+}: {
+  profileId?: string | null;
+} = {}) {
+  const state = useSoulTabState(controlledProfileId);
+
+  return (
+    <SoulTabGate
+      embedded={state.embedded}
+      loading={state.loading && !state.status}
+      profileId={state.profileId}
+      profiles={state.profiles}
+      profilesFetching={state.profilesFetching}
+    >
+      <SoulTabView state={state} />
+    </SoulTabGate>
   );
 }

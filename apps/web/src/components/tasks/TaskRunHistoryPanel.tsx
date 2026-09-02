@@ -63,20 +63,8 @@ interface TaskRunHistoryPanelProps {
   task: StoredTask;
 }
 
-export function TaskRunHistoryPanel({
-  task,
-  profile,
-  onClose,
-}: TaskRunHistoryPanelProps) {
-  const navigate = useNavigate();
+function useTaskRunHistoryMessages(task: StoredTask) {
   const queryClient = useQueryClient();
-  const { health, models } = useAppContext();
-  const profileId = profile?.id ?? task.profileId;
-  const profileDetailQuery = useProfileQuery(profileId || null);
-  const updateProfileMutation = useUpdateProfileMutation();
-  const { data: thinkingSettings, isLoading: thinkingSettingsLoading } =
-    useThinkingSettings();
-  const saveThinkingSettingsMutation = useSaveThinkingSettings();
   const {
     data,
     isLoading,
@@ -84,23 +72,44 @@ export function TaskRunHistoryPanel({
     error: loadError,
   } = useTaskMessagesQuery(task.id);
 
-  // Prefetch can resolve before mount; seed from cached query data so the
-  // data!==syncedData sync is not skipped when both start as the same reference.
   const [messages, setMessages] = useState<ChatListItem[]>(() =>
     data ? chatMessagesToListItems(data.messages) : []
   );
   const [sessionId, setSessionId] = useState<string | null>(
     () => data?.sessionId || task.sessionId
   );
-  const [busy, setBusy] = useState(false);
-  const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncedData, setSyncedData] = useState(data);
 
-  const streamAbortRef = useRef<AbortController | null>(null);
-  const statusBadge = TASK_STATUS_BADGE[task.status];
-  const profileLabel = profile?.name ?? task.profileId;
-  const availableSkills = profileDetailQuery.data?.skills ?? [];
+  if (data !== syncedData) {
+    setSyncedData(data);
+    if (data) {
+      setSessionId(data.sessionId || task.sessionId);
+      setMessages(chatMessagesToListItems(data.messages));
+      setError(null);
 
+      if (!task.sessionId && data.sessionId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+      }
+    }
+  }
+
+  const waitingForMessages = isLoading || (isFetching && messages.length === 0);
+
+  return {
+    error,
+    loadError,
+    messages,
+    queryClient,
+    sessionId,
+    setError,
+    setMessages,
+    waitingForMessages,
+  };
+}
+
+function useTaskRunHistoryModel(profile: ProfileSummary | null | undefined) {
+  const { models } = useAppContext();
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(models?.models ?? []),
     [models?.models]
@@ -145,33 +154,45 @@ export function TaskRunHistoryPanel({
     [currentModelSelection, providerModelGroups]
   );
 
-  const thinkingEffortVisible = shouldShowThinkingEffort(
-    activeModelSupportsThinking
-  );
-  const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
-  const thinkingEffortDisabled =
-    busy || thinkingSettingsLoading || saveThinkingSettingsMutation.isPending;
+  return {
+    activeModelSupportsThinking,
+    activeModelSupportsVision,
+    currentModelSelection,
+    providerModelGroups,
+    renderModelLabel,
+  };
+}
 
-  const waitingForMessages = isLoading || (isFetching && messages.length === 0);
-  const [syncedData, setSyncedData] = useState(data);
-
-  if (data !== syncedData) {
-    setSyncedData(data);
-    if (data) {
-      setSessionId(data.sessionId || task.sessionId);
-      setMessages(chatMessagesToListItems(data.messages));
-      setError(null);
-
-      if (!task.sessionId && data.sessionId) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-      }
-    }
-  }
-
-  const chatStatus = useMemo(
-    () => deriveChatStatus(busy, error, messages),
-    [busy, error, messages]
-  );
+function useTaskRunHistoryChat({
+  activeModelSupportsVision,
+  busy,
+  profileId,
+  queryClient,
+  sessionId,
+  setBusy,
+  setCanStop,
+  setError,
+  setMessages,
+  taskId,
+  thinkingEffort,
+  thinkingEffortVisible,
+}: {
+  activeModelSupportsVision: boolean | undefined;
+  busy: boolean;
+  profileId: string;
+  queryClient: ReturnType<typeof useQueryClient>;
+  sessionId: string | null;
+  setBusy: (busy: boolean) => void;
+  setCanStop: (canStop: boolean) => void;
+  setError: (error: string | null) => void;
+  setMessages: React.Dispatch<React.SetStateAction<ChatListItem[]>>;
+  taskId: string;
+  thinkingEffort: ThinkingEffort;
+  thinkingEffortVisible: boolean;
+}) {
+  const updateProfileMutation = useUpdateProfileMutation();
+  const saveThinkingSettingsMutation = useSaveThinkingSettings();
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const stopStreaming = useCallback(() => {
     streamAbortRef.current?.abort();
@@ -192,7 +213,7 @@ export function TaskRunHistoryPanel({
           setError(formatError(err));
         });
     },
-    [profileId, updateProfileMutation]
+    [profileId, setError, updateProfileMutation]
   );
 
   const handleThinkingEffortChange = useCallback(
@@ -217,7 +238,7 @@ export function TaskRunHistoryPanel({
           setError(formatError(err));
         });
     },
-    [profileId, thinkingEffort, busy, saveThinkingSettingsMutation]
+    [profileId, thinkingEffort, busy, saveThinkingSettingsMutation, setError]
   );
 
   const sendMessage = useCallback(
@@ -270,7 +291,7 @@ export function TaskRunHistoryPanel({
 
         setMessages((current) => finalizeStreamingMessages(current));
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.tasks.messages(task.id),
+          queryKey: queryKeys.tasks.messages(taskId),
         });
       } catch (err) {
         if (isAbortError(err)) {
@@ -293,17 +314,80 @@ export function TaskRunHistoryPanel({
       busy,
       queryClient,
       sessionId,
-      task.id,
+      setBusy,
+      setCanStop,
+      setError,
+      setMessages,
+      taskId,
       thinkingEffortVisible,
     ]
   );
 
-  const displayError = error ?? (loadError ? formatError(loadError) : null);
+  return {
+    handleModelChange,
+    handleThinkingEffortChange,
+    saveThinkingSettingsMutation,
+    sendMessage,
+    stopStreaming,
+  };
+}
+
+export function TaskRunHistoryPanel({
+  task,
+  profile,
+  onClose,
+}: TaskRunHistoryPanelProps) {
+  const navigate = useNavigate();
+  const { health } = useAppContext();
+  const profileId = profile?.id ?? task.profileId;
+  const profileDetailQuery = useProfileQuery(profileId || null);
+  const { data: thinkingSettings, isLoading: thinkingSettingsLoading } =
+    useThinkingSettings();
+  const [busy, setBusy] = useState(false);
+  const [canStop, setCanStop] = useState(false);
+
+  const messagesState = useTaskRunHistoryMessages(task);
+  const modelState = useTaskRunHistoryModel(profile);
+  const thinkingEffortVisible = shouldShowThinkingEffort(
+    modelState.activeModelSupportsThinking
+  );
+  const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
+  const chat = useTaskRunHistoryChat({
+    activeModelSupportsVision: modelState.activeModelSupportsVision,
+    busy,
+    profileId,
+    queryClient: messagesState.queryClient,
+    sessionId: messagesState.sessionId,
+    setBusy,
+    setCanStop,
+    setError: messagesState.setError,
+    setMessages: messagesState.setMessages,
+    taskId: task.id,
+    thinkingEffort,
+    thinkingEffortVisible,
+  });
+
+  const thinkingEffortDisabled =
+    busy ||
+    thinkingSettingsLoading ||
+    chat.saveThinkingSettingsMutation.isPending;
+  const displayError =
+    messagesState.error ??
+    (messagesState.loadError ? formatError(messagesState.loadError) : null);
   const chatUnavailable =
-    !(sessionId || waitingForMessages) && messages.length > 0;
+    !(messagesState.sessionId || messagesState.waitingForMessages) &&
+    messagesState.messages.length > 0;
   const emptyHistory =
-    !(waitingForMessages || displayError) && messages.length === 0;
+    !(messagesState.waitingForMessages || displayError) &&
+    messagesState.messages.length === 0;
   const showOfflineHint = health?.providerConfigured === false;
+  const statusBadge = TASK_STATUS_BADGE[task.status];
+  const profileLabel = profile?.name ?? task.profileId;
+  const availableSkills = profileDetailQuery.data?.skills ?? [];
+  const chatStatus = useMemo(
+    () => deriveChatStatus(busy, messagesState.error, messagesState.messages),
+    [busy, messagesState.error, messagesState.messages]
+  );
 
   return (
     <aside
@@ -324,8 +408,8 @@ export function TaskRunHistoryPanel({
 
       <TaskRunHistoryPanelMessages
         emptyHistory={emptyHistory}
-        messages={messages}
-        waitingForMessages={waitingForMessages}
+        messages={messagesState.messages}
+        waitingForMessages={messagesState.waitingForMessages}
       />
 
       <TaskRunHistoryPanelComposer
@@ -334,19 +418,19 @@ export function TaskRunHistoryPanel({
         canStop={canStop}
         chatStatus={chatStatus}
         chatUnavailable={chatUnavailable}
-        currentModelSelection={currentModelSelection}
-        disabled={!sessionId || waitingForMessages}
+        currentModelSelection={modelState.currentModelSelection}
+        disabled={!messagesState.sessionId || messagesState.waitingForMessages}
         displayError={displayError}
-        onModelChange={handleModelChange}
+        onModelChange={chat.handleModelChange}
         onNavigateSetup={() => navigate(SETUP_PATH)}
-        onStop={stopStreaming}
-        onSubmit={(text, files) => void sendMessage(text, files)}
-        onThinkingEffortChange={handleThinkingEffortChange}
-        primarySupportsVision={activeModelSupportsVision}
+        onStop={chat.stopStreaming}
+        onSubmit={(text, files) => void chat.sendMessage(text, files)}
+        onThinkingEffortChange={chat.handleThinkingEffortChange}
+        primarySupportsVision={modelState.activeModelSupportsVision}
         profileModelId={extractModelId(profile?.model)}
         providerConfigured={health?.providerConfigured}
-        providerModelGroups={providerModelGroups}
-        renderModelLabel={renderModelLabel}
+        providerModelGroups={modelState.providerModelGroups}
+        renderModelLabel={modelState.renderModelLabel}
         showOfflineHint={showOfflineHint}
         thinkingEffort={thinkingEffort}
         thinkingEffortDisabled={thinkingEffortDisabled}

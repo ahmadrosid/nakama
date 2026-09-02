@@ -38,6 +38,79 @@ import {
 import { cn } from "@/lib/utils";
 import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
 
+function mainPaneClassName(page: string, pathname: string): string {
+  const flush =
+    page === "chat" ||
+    page === "tasks" ||
+    page === "automations" ||
+    page === "files" ||
+    pathname.startsWith(`${PAGE_PATHS.soul}/playground/`);
+
+  const padded =
+    !pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) &&
+    page !== "chat" &&
+    page !== "tasks" &&
+    page !== "automations" &&
+    page !== "files" &&
+    !pathname.startsWith(`${PAGE_PATHS.soul}/playground/`);
+
+  return cn(
+    "min-h-0 flex-1",
+    flush ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+    padded ? "p-6" : null
+  );
+}
+
+function LayoutPageHeader({
+  page,
+  activeNav,
+}: {
+  page: string;
+  activeNav: ReturnType<typeof findNavItem>;
+}) {
+  if (page === "chat") {
+    return null;
+  }
+
+  return (
+    <header className="app-shell-header gap-4 bg-card px-6">
+      {page === "automations" ? (
+        <AgentWorkTabs />
+      ) : page === "soul" || page === "profiles" ? null : (
+        <h1 className="type-brand min-w-0 truncate">{activeNav?.label}</h1>
+      )}
+      <div
+        className={cn(
+          "flex h-full shrink-0 items-stretch gap-2",
+          page !== "soul" && page !== "profiles" && "ml-auto"
+        )}
+        data-page-header-actions
+      />
+    </header>
+  );
+}
+
+function LayoutSidebarHeader({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  if (collapsed) {
+    return <CollapsedOrgExpandControl onExpand={onToggle} />;
+  }
+
+  return (
+    <>
+      <div className="flex min-w-0 flex-1">
+        <OrgSwitcher collapsed={false} />
+      </div>
+      <SidebarCollapseButton onToggle={onToggle} />
+    </>
+  );
+}
+
 export function Layout() {
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
@@ -71,116 +144,28 @@ export function Layout() {
             data-collapsed={collapsed || undefined}
           >
             <div className="app-shell-header">
-              {collapsed ? (
-                <CollapsedOrgExpandControl onExpand={toggle} />
-              ) : (
-                <>
-                  <div className="flex min-w-0 flex-1">
-                    <OrgSwitcher collapsed={false} />
-                  </div>
-                  <SidebarCollapseButton onToggle={toggle} />
-                </>
-              )}
+              <LayoutSidebarHeader collapsed={collapsed} onToggle={toggle} />
             </div>
 
             <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
-              {navGroups.map((group) => {
-                const containsActive =
-                  group.collapsible === true &&
-                  group.items.some((item) => item.id === page);
-                const groupExpanded = !systemNavCollapsed || containsActive;
-                // Icon rail always shows every destination; tree collapse only
-                // applies when labels are visible.
-                const itemsVisible =
-                  !group.collapsible || collapsed || groupExpanded;
-
-                return (
-                  <div
-                    aria-label={group.label}
-                    className="sidebar-nav-group"
-                    data-items-hidden={itemsVisible ? undefined : true}
-                    data-tree={group.collapsible || undefined}
-                    key={group.id}
-                    role="group"
-                  >
-                    {group.collapsible && !collapsed ? (
-                      <button
-                        aria-expanded={groupExpanded}
-                        className="sidebar-nav-group-label"
-                        onClick={() => {
-                          if (groupExpanded && containsActive) {
-                            return;
-                          }
-                          toggleSystemNav();
-                        }}
-                        type="button"
-                      >
-                        <ArrowDown01Icon
-                          aria-hidden="true"
-                          className={cn(
-                            "sidebar-nav-group-chevron",
-                            !groupExpanded && "-rotate-90"
-                          )}
-                          strokeWidth={1.75}
-                        />
-                        <span className="truncate">{group.label}</span>
-                      </button>
-                    ) : null}
-                    <div
-                      aria-hidden={!itemsVisible}
-                      className="sidebar-nav-group-items"
-                      inert={itemsVisible ? undefined : true}
-                    >
-                      {group.items.map((item) => (
-                        <SidebarNavButton
-                          active={item.id === page}
-                          badge={
-                            item.id === "automations"
-                              ? automationUnreadTotal
-                              : undefined
-                          }
-                          collapsed={collapsed}
-                          icon={item.icon}
-                          item={item}
-                          key={item.id}
-                          onPrefetch={
-                            item.id === "automations"
-                              ? prefetchAppData
-                              : undefined
-                          }
-                          to={
-                            item.id === "soul"
-                              ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
-                              : navHrefForPage(item.id, chatProfileId)
-                          }
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+              {navGroups.map((group) => (
+                <SidebarNavGroup
+                  automationUnreadTotal={automationUnreadTotal}
+                  chatProfileId={chatProfileId}
+                  collapsed={collapsed}
+                  group={group}
+                  key={group.id}
+                  page={page}
+                  prefetchAppData={prefetchAppData}
+                  systemNavCollapsed={systemNavCollapsed}
+                  toggleSystemNav={toggleSystemNav}
+                />
+              ))}
             </nav>
           </aside>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {page === "chat" ? null : (
-              <header className="app-shell-header gap-4 bg-card px-6">
-                {page === "automations" ? (
-                  <AgentWorkTabs />
-                ) : page === "soul" || page === "profiles" ? null : (
-                  <h1 className="type-brand min-w-0 truncate">
-                    {activeNav?.label}
-                  </h1>
-                )}
-                <div
-                  className={cn(
-                    "flex h-full shrink-0 items-stretch gap-2",
-                    page !== "soul" && page !== "profiles" && "ml-auto"
-                  )}
-                  data-page-header-actions
-                />
-              </header>
-            )}
+            <LayoutPageHeader activeNav={activeNav} page={page} />
 
             {error ? (
               <div className="shrink-0 border-red-200 border-b bg-red-50 px-6 py-3 text-red-800 text-sm dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
@@ -188,30 +173,7 @@ export function Layout() {
               </div>
             ) : null}
 
-            <main
-              className={cn(
-                "min-h-0 flex-1",
-                page === "chat" ||
-                  page === "tasks" ||
-                  page === "automations" ||
-                  page === "files" ||
-                  location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
-                  ? "flex flex-col overflow-hidden"
-                  : "overflow-y-auto",
-                !location.pathname.startsWith(
-                  `${PAGE_PATHS.profiles}/skills/`
-                ) &&
-                  page !== "chat" &&
-                  page !== "tasks" &&
-                  page !== "automations" &&
-                  page !== "files" &&
-                  !location.pathname.startsWith(
-                    `${PAGE_PATHS.soul}/playground/`
-                  )
-                  ? "p-6"
-                  : null
-              )}
-            >
+            <main className={mainPaneClassName(page, location.pathname)}>
               <RouteBoundary resetKey={location.pathname}>
                 <Outlet />
               </RouteBoundary>
@@ -245,6 +207,91 @@ function NarrowViewportNotice() {
         To chat with your agent from a phone, use the Telegram, WhatsApp or
         Discord bridge instead.
       </p>
+    </div>
+  );
+}
+
+function SidebarNavGroup({
+  group,
+  page,
+  collapsed,
+  systemNavCollapsed,
+  toggleSystemNav,
+  automationUnreadTotal,
+  prefetchAppData,
+  chatProfileId,
+}: {
+  group: ReturnType<typeof visibleNavGroups>[number];
+  page: string;
+  collapsed: boolean;
+  systemNavCollapsed: boolean;
+  toggleSystemNav: () => void;
+  automationUnreadTotal: number;
+  prefetchAppData: () => void;
+  chatProfileId: string | null;
+}) {
+  const containsActive =
+    group.collapsible === true && group.items.some((item) => item.id === page);
+  const groupExpanded = !systemNavCollapsed || containsActive;
+  // Icon rail always shows every destination; tree collapse only
+  // applies when labels are visible.
+  const itemsVisible = !group.collapsible || collapsed || groupExpanded;
+
+  return (
+    <div
+      aria-label={group.label}
+      className="sidebar-nav-group"
+      data-items-hidden={itemsVisible ? undefined : true}
+      data-tree={group.collapsible || undefined}
+      role="group"
+    >
+      {group.collapsible && !collapsed ? (
+        <button
+          aria-expanded={groupExpanded}
+          className="sidebar-nav-group-label"
+          onClick={() => {
+            if (groupExpanded && containsActive) {
+              return;
+            }
+            toggleSystemNav();
+          }}
+          type="button"
+        >
+          <ArrowDown01Icon
+            aria-hidden="true"
+            className={cn(
+              "sidebar-nav-group-chevron",
+              !groupExpanded && "-rotate-90"
+            )}
+            strokeWidth={1.75}
+          />
+          <span className="truncate">{group.label}</span>
+        </button>
+      ) : null}
+      <div
+        aria-hidden={!itemsVisible}
+        className="sidebar-nav-group-items"
+        inert={itemsVisible ? undefined : true}
+      >
+        {group.items.map((item) => (
+          <SidebarNavButton
+            active={item.id === page}
+            badge={
+              item.id === "automations" ? automationUnreadTotal : undefined
+            }
+            collapsed={collapsed}
+            icon={item.icon}
+            item={item}
+            key={item.id}
+            onPrefetch={item.id === "automations" ? prefetchAppData : undefined}
+            to={
+              item.id === "soul"
+                ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
+                : navHrefForPage(item.id, chatProfileId)
+            }
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -286,7 +333,7 @@ function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
   );
 }
 
-function SidebarNavButton({
+function SidebarNavLinkContent({
   item,
   icon: Icon,
   active,
@@ -295,6 +342,8 @@ function SidebarNavButton({
   onPrefetch,
   badge,
   className,
+  showBadge,
+  badgeLabel,
 }: {
   item: NavItem;
   icon: ElementType;
@@ -304,11 +353,10 @@ function SidebarNavButton({
   onPrefetch?: () => void;
   badge?: number;
   className?: string;
+  showBadge: boolean;
+  badgeLabel: string;
 }) {
-  const showBadge = Boolean(badge && badge > 0);
-  const badgeLabel = badge && badge > 99 ? "99+" : String(badge ?? "");
-
-  const link = (
+  return (
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={
@@ -318,7 +366,7 @@ function SidebarNavButton({
       }
       className={cn(
         "sidebar-nav-link",
-        collapsed && "sidebar-nav-link--collapsed",
+        collapsed && "sidebar-nav-link--glyph",
         className
       )}
       data-active={active || undefined}
@@ -352,6 +400,44 @@ function SidebarNavButton({
         </span>
       ) : null}
     </Link>
+  );
+}
+
+function SidebarNavButton({
+  item,
+  icon,
+  active,
+  collapsed,
+  to,
+  onPrefetch,
+  badge,
+  className,
+}: {
+  item: NavItem;
+  icon: ElementType;
+  active: boolean;
+  collapsed: boolean;
+  to: string;
+  onPrefetch?: () => void;
+  badge?: number;
+  className?: string;
+}) {
+  const showBadge = Boolean(badge && badge > 0);
+  const badgeLabel = badge && badge > 99 ? "99+" : String(badge ?? "");
+
+  const link = (
+    <SidebarNavLinkContent
+      active={active}
+      badge={badge}
+      badgeLabel={badgeLabel}
+      className={className}
+      collapsed={collapsed}
+      icon={icon}
+      item={item}
+      onPrefetch={onPrefetch}
+      showBadge={showBadge}
+      to={to}
+    />
   );
 
   if (!collapsed) {

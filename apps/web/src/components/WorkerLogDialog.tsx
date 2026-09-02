@@ -22,6 +22,152 @@ interface WorkerLogDialogProps {
   workerName: string;
 }
 
+function WorkerLogBody({
+  isLoading,
+  errorMessage,
+  isEmpty,
+  content,
+  onRetry,
+}: {
+  isLoading: boolean;
+  errorMessage: string | null;
+  isEmpty: boolean;
+  content: string;
+  onRetry: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
+        <p className="text-destructive text-sm">
+          Failed to load logs: {errorMessage}
+        </p>
+        <Button onClick={onRetry} size="sm" type="button" variant="outline">
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-border border-dashed bg-muted/15 px-4 py-3">
+        <p className="font-medium text-muted-foreground text-sm">
+          No log output
+        </p>
+        <p className="text-muted-foreground text-xs">
+          The log file is empty or the worker has not produced any output yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <pre className="flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
+      {content}
+    </pre>
+  );
+}
+
+function WorkerLogToolbar({
+  activeTab,
+  onSelectTab,
+  isLoading,
+  isEmpty,
+  clearPending,
+  copied,
+  confirmClear,
+  onCopy,
+  onRefresh,
+  onClear,
+}: {
+  activeTab: "stdout" | "stderr";
+  onSelectTab: (tab: "stdout" | "stderr") => void;
+  isLoading: boolean;
+  isEmpty: boolean;
+  clearPending: boolean;
+  copied: boolean;
+  confirmClear: boolean;
+  onCopy: () => void;
+  onRefresh: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        className={cn(
+          "rounded-md px-3 py-1.5 font-medium text-xs transition-colors",
+          activeTab === "stdout"
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground hover:bg-muted/80"
+        )}
+        onClick={() => onSelectTab("stdout")}
+        type="button"
+      >
+        Stdout
+      </button>
+      <button
+        className={cn(
+          "rounded-md px-3 py-1.5 font-medium text-xs transition-colors",
+          activeTab === "stderr"
+            ? "bg-destructive text-primary-foreground"
+            : "bg-muted text-muted-foreground hover:bg-muted/80"
+        )}
+        onClick={() => onSelectTab("stderr")}
+        type="button"
+      >
+        Stderr
+      </button>
+      <Button
+        className="ml-auto text-xs"
+        disabled={isLoading || isEmpty || clearPending}
+        onClick={onCopy}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {copied ? (
+          <CheckmarkCircle01Icon
+            aria-hidden
+            className="mr-1 size-3 text-emerald-600 dark:text-emerald-400"
+          />
+        ) : (
+          <Copy01Icon aria-hidden className="mr-1 size-3" />
+        )}
+        {copied ? "Copied" : "Copy"}
+      </Button>
+      <Button
+        className="text-xs"
+        disabled={isLoading || clearPending}
+        onClick={onRefresh}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Refresh
+      </Button>
+      <Button
+        className="text-destructive text-xs hover:bg-destructive/10 hover:text-destructive"
+        disabled={isLoading || clearPending}
+        onClick={onClear}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <Delete02Icon aria-hidden className="mr-1 size-3" />
+        {confirmClear ? "Confirm?" : "Clear"}
+      </Button>
+    </div>
+  );
+}
+
 export function WorkerLogDialog({
   workerName,
   open,
@@ -114,74 +260,21 @@ export function WorkerLogDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex items-center gap-2">
-          <button
-            className={cn(
-              "rounded-md px-3 py-1.5 font-medium text-xs transition-colors",
-              activeTab === "stdout"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            )}
-            onClick={() => selectTab("stdout")}
-            type="button"
-          >
-            Stdout
-          </button>
-          <button
-            className={cn(
-              "rounded-md px-3 py-1.5 font-medium text-xs transition-colors",
-              activeTab === "stderr"
-                ? "bg-destructive text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            )}
-            onClick={() => selectTab("stderr")}
-            type="button"
-          >
-            Stderr
-          </button>
-          <Button
-            className="ml-auto text-xs"
-            disabled={isLoading || isEmpty || clearLogs.isPending}
-            onClick={() => void copyLogs()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {copied ? (
-              <CheckmarkCircle01Icon
-                aria-hidden
-                className="mr-1 size-3 text-emerald-600 dark:text-emerald-400"
-              />
-            ) : (
-              <Copy01Icon aria-hidden className="mr-1 size-3" />
-            )}
-            {copied ? "Copied" : "Copy"}
-          </Button>
-          <Button
-            className="text-xs"
-            disabled={isLoading || clearLogs.isPending}
-            onClick={() => {
-              setConfirmClear(false);
-              void refetch().then(() => setCopied(false));
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Refresh
-          </Button>
-          <Button
-            className="text-destructive text-xs hover:bg-destructive/10 hover:text-destructive"
-            disabled={isLoading || clearLogs.isPending}
-            onClick={() => void handleClearLogs()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Delete02Icon aria-hidden className="mr-1 size-3" />
-            {confirmClear ? "Confirm?" : "Clear"}
-          </Button>
-        </div>
+        <WorkerLogToolbar
+          activeTab={activeTab}
+          clearPending={clearLogs.isPending}
+          confirmClear={confirmClear}
+          copied={copied}
+          isEmpty={isEmpty}
+          isLoading={isLoading}
+          onClear={() => void handleClearLogs()}
+          onCopy={() => void copyLogs()}
+          onRefresh={() => {
+            setConfirmClear(false);
+            void refetch().then(() => setCopied(false));
+          }}
+          onSelectTab={selectTab}
+        />
 
         {clearErrorMessage ? (
           <div className="flex items-center justify-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-destructive text-sm">
@@ -189,39 +282,13 @@ export function WorkerLogDialog({
           </div>
         ) : null}
 
-        {isLoading ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
-        ) : errorMessage ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
-            <p className="text-destructive text-sm">
-              Failed to load logs: {errorMessage}
-            </p>
-            <Button
-              onClick={() => void refetch()}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Try again
-            </Button>
-          </div>
-        ) : isEmpty ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-border border-dashed bg-muted/15 px-4 py-3">
-            <p className="font-medium text-muted-foreground text-sm">
-              No log output
-            </p>
-            <p className="text-muted-foreground text-xs">
-              The log file is empty or the worker has not produced any output
-              yet.
-            </p>
-          </div>
-        ) : (
-          <pre className="flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
-            {content}
-          </pre>
-        )}
+        <WorkerLogBody
+          content={content}
+          errorMessage={errorMessage}
+          isEmpty={isEmpty}
+          isLoading={isLoading}
+          onRetry={() => void refetch()}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -21,6 +21,150 @@ function formatRunTime(value: string | null | undefined): string {
   return new Date(time).toLocaleString();
 }
 
+function SkillsCuratorFreshnessClocks({
+  activeOrg,
+  busy,
+  onUpdateFlag,
+}: {
+  activeOrg: NonNullable<ReturnType<typeof useAuth>["activeOrg"]>;
+  busy: boolean;
+  onUpdateFlag: (
+    patch: Parameters<NonNullable<ReturnType<typeof useAuth>["updateOrg"]>>[1]
+  ) => void;
+}) {
+  return (
+    <div className="border-border border-b px-4 py-3">
+      <p className="font-medium text-foreground text-sm">Freshness clocks</p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <label className="grid gap-1 text-muted-foreground text-xs">
+          Stale after
+          <input
+            aria-label="Stale after days"
+            className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
+            defaultValue={activeOrg.skillsCuratorStaleAfterDays ?? 30}
+            disabled={busy}
+            min={1}
+            onBlur={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+              if (Number.isInteger(value) && value >= 1) {
+                onUpdateFlag({ skillsCuratorStaleAfterDays: value });
+              }
+            }}
+            type="number"
+          />
+        </label>
+        <label className="grid gap-1 text-muted-foreground text-xs">
+          Archive after
+          <input
+            aria-label="Archive after days"
+            className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
+            defaultValue={activeOrg.skillsCuratorArchiveAfterDays ?? 90}
+            disabled={busy}
+            max={3650}
+            min={2}
+            onBlur={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+              if (Number.isInteger(value) && value >= 2) {
+                onUpdateFlag({ skillsCuratorArchiveAfterDays: value });
+              }
+            }}
+            type="number"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function SkillsCuratorPollInterval({
+  busy,
+  pollIntervalMinutes,
+  onBlur,
+  onChange,
+}: {
+  busy: boolean;
+  pollIntervalMinutes: number | null;
+  onBlur: (value: number) => void;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <div className="border-border border-b px-4 py-3">
+      <label className="grid gap-1 text-muted-foreground text-xs">
+        Automation worker poll interval (minutes)
+        <input
+          aria-label="Automation worker poll interval minutes"
+          className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
+          disabled={busy || pollIntervalMinutes === null}
+          max={1440}
+          min={1}
+          onBlur={(event) => {
+            const value = event.currentTarget.valueAsNumber;
+            if (Number.isInteger(value) && value >= 1) {
+              onBlur(value);
+            }
+          }}
+          onChange={(event) => {
+            const value = event.currentTarget.valueAsNumber;
+            onChange(Number.isFinite(value) ? value : null);
+          }}
+          type="number"
+          value={pollIntervalMinutes ?? 5}
+        />
+      </label>
+    </div>
+  );
+}
+
+function SkillsCuratorRunSummary({
+  latest,
+  lastRunAt,
+  orgLastRunAt,
+  running,
+  onRun,
+}: {
+  latest: SkillCuratorRunResult | null;
+  lastRunAt: string | null;
+  orgLastRunAt: string | null | undefined;
+  running: boolean;
+  onRun: (dryRun: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 px-4 py-3">
+      <p className="text-muted-foreground text-xs tabular-nums">
+        {latest?.dryRun ? "Preview · " : null}
+        Last run {formatRunTime(lastRunAt ?? orgLastRunAt)}
+      </p>
+      {latest ? (
+        <p className="text-muted-foreground text-xs tabular-nums">
+          Stale {latest.stale} · Archived {latest.archived} · Skipped{" "}
+          {latest.skippedBundled +
+            latest.skippedAutomation +
+            latest.skippedTooNew +
+            latest.skippedError}{" "}
+          · Merged {latest.consolidateMerged ?? 0} · Deslop{" "}
+          {latest.consolidateDeslopified ?? 0} · Staged{" "}
+          {latest.consolidateStaged ?? 0} · Applied{" "}
+          {latest.consolidateApplied ?? 0}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={running}
+          onClick={() => void onRun(true)}
+          size="sm"
+          variant="outline"
+        >
+          Dry run
+        </Button>
+        <Button disabled={running} onClick={() => void onRun(false)} size="sm">
+          Run now
+        </Button>
+        {running ? <Spinner /> : null}
+      </div>
+    </div>
+  );
+}
+
 export function SkillsCuratorOrgCard() {
   const { activeOrg, updateOrg, user } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -148,109 +292,26 @@ export function SkillsCuratorOrgCard() {
           </div>
         </div>
       </div>
-      <div className="border-border border-b px-4 py-3">
-        <p className="font-medium text-foreground text-sm">Freshness clocks</p>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-muted-foreground text-xs">
-            Stale after
-            <input
-              aria-label="Stale after days"
-              className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
-              defaultValue={activeOrg.skillsCuratorStaleAfterDays ?? 30}
-              disabled={busy}
-              min={1}
-              onBlur={(event) => {
-                const value = Number(event.currentTarget.value);
-                if (Number.isInteger(value)) {
-                  void updateOrgFlag({ skillsCuratorStaleAfterDays: value });
-                }
-              }}
-              type="number"
-            />
-          </label>
-          <label className="grid gap-1 text-muted-foreground text-xs">
-            Archive after
-            <input
-              aria-label="Archive after days"
-              className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
-              defaultValue={activeOrg.skillsCuratorArchiveAfterDays ?? 90}
-              disabled={busy}
-              max={3650}
-              min={2}
-              onBlur={(event) => {
-                const value = Number(event.currentTarget.value);
-                if (Number.isInteger(value)) {
-                  void updateOrgFlag({ skillsCuratorArchiveAfterDays: value });
-                }
-              }}
-              type="number"
-            />
-          </label>
-        </div>
-      </div>
+      <SkillsCuratorFreshnessClocks
+        activeOrg={activeOrg}
+        busy={busy}
+        onUpdateFlag={(patch) => void updateOrgFlag(patch)}
+      />
       {user?.isPlatformAdmin === true ? (
-        <div className="border-border border-b px-4 py-3">
-          <label className="grid gap-1 text-muted-foreground text-xs">
-            Automation worker poll interval (minutes)
-            <input
-              aria-label="Automation worker poll interval minutes"
-              className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
-              disabled={busy || pollIntervalMinutes === null}
-              max={1440}
-              min={1}
-              onBlur={(event) => {
-                const value = Number(event.currentTarget.value);
-                if (Number.isInteger(value)) {
-                  void updatePollInterval(value);
-                }
-              }}
-              onChange={(event) =>
-                setPollIntervalMinutes(Number(event.currentTarget.value))
-              }
-              type="number"
-              value={pollIntervalMinutes ?? 5}
-            />
-          </label>
-        </div>
+        <SkillsCuratorPollInterval
+          busy={busy}
+          onBlur={(value) => void updatePollInterval(value)}
+          onChange={setPollIntervalMinutes}
+          pollIntervalMinutes={pollIntervalMinutes}
+        />
       ) : null}
-      <div className="flex flex-col gap-3 px-4 py-3">
-        <p className="text-muted-foreground text-xs tabular-nums">
-          {latest?.dryRun ? "Preview · " : null}
-          Last run{" "}
-          {formatRunTime(lastRunAt ?? activeOrg.skillsCuratorLastRunAt)}
-        </p>
-        {latest ? (
-          <p className="text-muted-foreground text-xs tabular-nums">
-            Stale {latest.stale} · Archived {latest.archived} · Skipped{" "}
-            {latest.skippedBundled +
-              latest.skippedAutomation +
-              latest.skippedTooNew +
-              latest.skippedError}{" "}
-            · Merged {latest.consolidateMerged ?? 0} · Deslop{" "}
-            {latest.consolidateDeslopified ?? 0} · Staged{" "}
-            {latest.consolidateStaged ?? 0} · Applied{" "}
-            {latest.consolidateApplied ?? 0}
-          </p>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={running}
-            onClick={() => void handleRun(true)}
-            size="sm"
-            variant="outline"
-          >
-            Dry run
-          </Button>
-          <Button
-            disabled={running}
-            onClick={() => void handleRun(false)}
-            size="sm"
-          >
-            Run now
-          </Button>
-          {running ? <Spinner /> : null}
-        </div>
-      </div>
+      <SkillsCuratorRunSummary
+        lastRunAt={lastRunAt}
+        latest={latest}
+        onRun={handleRun}
+        orgLastRunAt={activeOrg.skillsCuratorLastRunAt}
+        running={running}
+      />
     </Card>
   );
 }
