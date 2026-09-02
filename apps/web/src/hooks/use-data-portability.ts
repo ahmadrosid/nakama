@@ -80,3 +80,14 @@ export function shouldStartInitialFilePreview(
 ): boolean {
   return initialFile != null && initialFile !== alreadyStartedFor;
 }
+
+/**
+ * Only the latest preview generation may clear the dedupe key on cleanup.
+ * Older cleanups must leave a newer in-flight File marked as started.
+ */
+export function shouldClearInitialPreviewDedupe(
+  effectGeneration: number,
+  currentGeneration: number
+): boolean {
+  return effectGeneration === currentGeneration;
+}
