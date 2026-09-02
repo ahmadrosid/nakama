@@ -1627,6 +1627,44 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET status = 'applied', applied_at = ?
     WHERE org_id = ? AND id = ?
   `);
+  const listSkillSuggestionsStmtCache = new Map<
+    string,
+    ReturnType<Database["prepare"]>
+  >();
+  const getListSkillSuggestionsStmt = (filters: {
+    profileId: boolean;
+    sessionId: boolean;
+    status: boolean;
+  }) => {
+    const key = `${filters.sessionId ? "s" : "_"}${filters.status ? "t" : "_"}${filters.profileId ? "p" : "_"}`;
+    const cached = listSkillSuggestionsStmtCache.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const conditions = ["org_id = ?"];
+    if (filters.sessionId) {
+      conditions.push("session_id = ?");
+    }
+    if (filters.status) {
+      conditions.push("status = ?");
+    }
+    if (filters.profileId) {
+      conditions.push("profile_id = ?");
+    }
+
+    const stmt = db.prepare(`
+      SELECT
+        id, org_id, profile_id, session_id, proposed_by_user_id,
+        action, skill_name, content, patch_old_string, patch_new_string,
+        status, source, warnings, created_at, applied_at
+      FROM skill_suggestions
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY created_at DESC
+    `);
+    listSkillSuggestionsStmtCache.set(key, stmt);
+    return stmt;
+  };
   const createArtifactShareStmt = db.prepare(`
     INSERT INTO artifact_shares (
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
@@ -2639,32 +2677,23 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listSkillSuggestions(orgId, options = {}) {
       const { sessionId, status, profileId } = options;
-      const conditions = ["org_id = ?"];
       const params: string[] = [orgId];
 
       if (sessionId) {
-        conditions.push("session_id = ?");
         params.push(sessionId);
       }
       if (status) {
-        conditions.push("status = ?");
         params.push(status);
       }
       if (profileId) {
-        conditions.push("profile_id = ?");
         params.push(profileId);
       }
 
-      const sql = `
-        SELECT
-          id, org_id, profile_id, session_id, proposed_by_user_id,
-          action, skill_name, content, patch_old_string, patch_new_string,
-          status, source, warnings, created_at, applied_at
-        FROM skill_suggestions
-        WHERE ${conditions.join(" AND ")}
-        ORDER BY created_at DESC
-      `;
-      const rows = db.query(sql).all(...params) as SkillSuggestionRow[];
+      const rows = getListSkillSuggestionsStmt({
+        profileId: Boolean(profileId),
+        sessionId: Boolean(sessionId),
+        status: Boolean(status),
+      }).all(...params) as SkillSuggestionRow[];
       return rows.map(toSkillSuggestionRecord);
     },
 

@@ -272,4 +272,43 @@ describe("SkillSuggestionService", () => {
       suggestions.applySuggestion("org_other", created.id, "admin_user")
     ).rejects.toMatchObject({ status: 404 });
   });
+
+  test("listSuggestions filter permutations reuse prepared statements", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrg(db);
+    const { suggestions } = buildServices(db);
+
+    await suggestions.createSuggestion({
+      orgId: ORG_ID,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
+      profileId: profile.id,
+      sessionId: "session_1",
+    });
+
+    const all = await suggestions.listSuggestions(ORG_ID);
+    const byStatus = await suggestions.listSuggestions(ORG_ID, {
+      status: "pending",
+    });
+    const byProfile = await suggestions.listSuggestions(ORG_ID, {
+      profileId: profile.id,
+    });
+    const bySession = await suggestions.listSuggestions(ORG_ID, {
+      sessionId: "session_1",
+    });
+    const byAll = await suggestions.listSuggestions(ORG_ID, {
+      profileId: profile.id,
+      sessionId: "session_1",
+      status: "pending",
+    });
+
+    expect(all).toHaveLength(1);
+    expect(byStatus).toHaveLength(1);
+    expect(byProfile).toHaveLength(1);
+    expect(bySession).toHaveLength(1);
+    expect(byAll).toHaveLength(1);
+  });
 });
