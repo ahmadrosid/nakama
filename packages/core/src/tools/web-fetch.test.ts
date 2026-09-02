@@ -13,6 +13,13 @@ mock.module("node:dns/promises", () => ({
         { address: "fd00:aa:bb:2250::b9c7:6f99" },
       ]);
     }
+    if (hostname === "dual.test") {
+      // Two public records, IPv6 first — the shape most real names have.
+      return Promise.resolve([
+        { address: "2606:4700:20::681a:58a" },
+        { address: "185.199.111.153" },
+      ]);
+    }
     if (hostname === "private-alias.test") {
       return Promise.resolve([{ address: "fd00:aa:bb:2250::0a00:0001" }]);
     }
@@ -252,6 +259,121 @@ describe("web_fetch SSRF guard", () => {
     await expect(
       webFetchTool.run({ url: "https://private-alias.test/" }, CTX)
     ).rejects.toThrow(/resolves to private address/);
+  });
+});
+
+describe("web_fetch pins the address it verified", () => {
+  test("connects to the resolved address, not the hostname", async () => {
+    const inputs: string[] = [];
+    stubFetch(async (input) => {
+      inputs.push(String(input));
+      return htmlResponse("<p>ok</p>");
+    });
+
+    await webFetchTool.run({ url: "https://github-pages.test/page" }, CTX);
+
+    // 185.199.111.153 is what the stubbed resolver returned for that name.
+    expect(inputs).toEqual(["https://185.199.111.153/page"]);
+  });
+
+  test("sends the hostname as Host and as the TLS server name", async () => {
+    let init: (RequestInit & { tls?: { serverName: string } }) | undefined;
+    stubFetch(async (_input, requestInit) => {
+      init = requestInit as typeof init;
+      return htmlResponse("<p>ok</p>");
+    });
+
+    await webFetchTool.run({ url: "https://github-pages.test/" }, CTX);
+
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.host).toBe("github-pages.test");
+    expect(init?.tls?.serverName).toBe("github-pages.test");
+  });
+
+  test("leaves the TLS override off for plain http", async () => {
+    let init: (RequestInit & { tls?: { serverName: string } }) | undefined;
+    stubFetch(async (_input, requestInit) => {
+      init = requestInit as typeof init;
+      return htmlResponse("<p>ok</p>");
+    });
+
+    await webFetchTool.run({ url: "http://github-pages.test/" }, CTX);
+
+    expect(init?.tls).toBeUndefined();
+  });
+
+  test("keeps IPv6 literals bracketed when pinning", async () => {
+    const inputs: string[] = [];
+    stubFetch(async (input) => {
+      inputs.push(String(input));
+      return htmlResponse("<p>ok</p>");
+    });
+
+    await webFetchTool.run({ url: "https://[2606:4700::1111]/p" }, CTX);
+
+    expect(inputs).toEqual(["https://[2606:4700::1111]/p"]);
+  });
+
+  test("falls back to the next public address when the first refuses", async () => {
+    const inputs: string[] = [];
+    stubFetch(async (input) => {
+      inputs.push(String(input));
+      if (inputs.length === 1) {
+        throw new Error("connect ECONNREFUSED");
+      }
+      return htmlResponse("<p>ok</p>");
+    });
+
+    const out = await webFetchTool.run({ url: "https://dual.test/" }, CTX);
+
+    expect(out.status).toBe(200);
+    expect(inputs).toEqual([
+      "https://[2606:4700:20::681a:58a]/",
+      "https://185.199.111.153/",
+    ]);
+  });
+
+  test("never connects to a private record in a mixed answer", async () => {
+    const inputs: string[] = [];
+    stubFetch(async (input) => {
+      inputs.push(String(input));
+      return htmlResponse("<p>ok</p>");
+    });
+
+    // github-pages.test answers with a public IPv4 and a unique-local IPv6.
+    await webFetchTool.run({ url: "https://github-pages.test/" }, CTX);
+
+    expect(inputs).toEqual(["https://185.199.111.153/"]);
+  });
+
+  test("re-pins each redirect hop and still reports the logical url", async () => {
+    const inputs: string[] = [];
+    const hosts: string[] = [];
+    stubFetch(async (input, requestInit) => {
+      const headers = (requestInit?.headers ?? {}) as Record<string, string>;
+      inputs.push(String(input));
+      hosts.push(headers.host);
+      if (inputs.length === 1) {
+        return new Response(null, {
+          headers: { location: "https://github-pages.test/fin" },
+          status: 302,
+        });
+      }
+      return htmlResponse("<p>final</p>");
+    });
+
+    const out = await webFetchTool.run(
+      { url: "https://start.example.com/" },
+      CTX
+    );
+
+    // Hop 1 uses the fallback address, hop 2 the github-pages one.
+    expect(inputs).toEqual([
+      "https://93.184.216.34/",
+      "https://185.199.111.153/fin",
+    ]);
+    expect(hosts).toEqual(["start.example.com", "github-pages.test"]);
+    expect(out.finalUrl).toBe("https://github-pages.test/fin");
   });
 });
 

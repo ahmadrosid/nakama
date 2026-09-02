@@ -3,7 +3,7 @@ import { BlockList, isIP } from "node:net";
 import { NodeHtmlMarkdown } from "node-html-markdown";
 import { z } from "zod";
 import type { JsonSchema, ToolDefinition } from "../contract";
-import { withDisabledFetchIdle } from "../fetch-idle";
+import { type BunFetchInit, withDisabledFetchIdle } from "../fetch-idle";
 
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
@@ -160,7 +160,20 @@ function isPrivateIp(ip: string): boolean {
   return true;
 }
 
-async function assertPublicHostname(hostname: string): Promise<void> {
+/**
+ * Resolve `hostname` once and return every public address it answers with.
+ *
+ * Returning the addresses is the point: checking a hostname and then handing the
+ * hostname to `fetch` lets the name resolve a second time, so a DNS answer that
+ * is public during the check can be private during the connection. Callers pin
+ * these addresses instead, which closes that window.
+ *
+ * All of them, in resolver order, because pinning a single address would drop
+ * the fallback `fetch` does today. Most public names answer with an IPv6 record
+ * first, so pinning only the first would break every fetch from an IPv4-only
+ * host.
+ */
+async function resolvePublicAddresses(hostname: string): Promise<string[]> {
   const bare = hostname.replace(/^\[|\]$/g, "");
 
   if (isIP(bare)) {
@@ -169,7 +182,7 @@ async function assertPublicHostname(hostname: string): Promise<void> {
         `web_fetch blocked: address ${bare} is private or reserved.`
       );
     }
-    return;
+    return [bare];
   }
 
   let records: { address: string }[];
@@ -188,17 +201,23 @@ async function assertPublicHostname(hostname: string): Promise<void> {
   }
 
   let privateAddress: string | null = null;
+  const publicAddresses: string[] = [];
 
   for (const record of records) {
-    if (!isPrivateIp(record.address)) {
-      return;
+    if (isPrivateIp(record.address)) {
+      privateAddress ??= record.address;
+      continue;
     }
-    privateAddress ??= record.address;
+    publicAddresses.push(record.address);
   }
 
-  throw new Error(
-    `web_fetch blocked: hostname ${bare} resolves to private address ${privateAddress}.`
-  );
+  if (publicAddresses.length === 0) {
+    throw new Error(
+      `web_fetch blocked: hostname ${bare} resolves to private address ${privateAddress}.`
+    );
+  }
+
+  return publicAddresses;
 }
 
 function parseUrl(rawUrl: string): URL {
@@ -226,23 +245,81 @@ function contentTypeIsHtml(contentType: string): boolean {
   return /text\/html|application\/xhtml\+xml/i.test(contentType ?? "");
 }
 
+/** Bun's fetch takes a TLS override; the DOM `RequestInit` type does not model it. */
+type PinnedFetchInit = BunFetchInit & { tls?: { serverName: string } };
+
+/**
+ * Same request, aimed at `address` instead of re-resolving the hostname.
+ * The logical URL still supplies the path, the `Host` header and the TLS
+ * server name, so virtual hosts and certificate checks behave as before.
+ */
+function pinnedRequest(
+  logical: URL,
+  address: string,
+  signal: AbortSignal
+): { input: URL; init: PinnedFetchInit } {
+  const input = new URL(logical.toString());
+  input.hostname = isIP(address) === 6 ? `[${address}]` : address;
+
+  const init: PinnedFetchInit = withDisabledFetchIdle({
+    headers: {
+      accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
+      host: logical.host,
+      "user-agent":
+        "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
+    },
+    redirect: "manual",
+    signal,
+  });
+
+  if (logical.protocol === "https:") {
+    init.tls = { serverName: logical.hostname };
+  }
+
+  return { init, input };
+}
+
+/**
+ * Try each verified address in turn, keeping the fallback `fetch` would do.
+ * Only a connect-level throw moves on; an HTTP error is a real answer, and an
+ * aborted signal means the caller gave up.
+ */
+async function fetchFirstReachable(
+  logical: URL,
+  addresses: string[],
+  signal: AbortSignal
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (const address of addresses) {
+    const { input, init } = pinnedRequest(logical, address, signal);
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      if (signal.aborted) {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`web_fetch failed to reach ${logical.hostname}.`);
+}
+
 async function fetchWithRedirects(
   url: URL,
+  addresses: string[],
   signal: AbortSignal
 ): Promise<{ response: Response; finalUrl: string }> {
   let current = url;
+  let currentAddresses = addresses;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const response = await fetch(
+    const response = await fetchFirstReachable(
       current,
-      withDisabledFetchIdle({
-        headers: {
-          accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
-          "user-agent":
-            "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
-        },
-        redirect: "manual",
-        signal,
-      })
+      currentAddresses,
+      signal
     );
 
     if (response.status >= 300 && response.status < 400) {
@@ -258,7 +335,7 @@ async function fetchWithRedirects(
           `web_fetch: redirect to unsupported protocol ${nextUrl.protocol}.`
         );
       }
-      await assertPublicHostname(nextUrl.hostname);
+      currentAddresses = await resolvePublicAddresses(nextUrl.hostname);
       current = nextUrl;
       continue;
     }
@@ -366,7 +443,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
 
     const raw = Boolean(parsed.raw);
     const url = parseUrl(parsed.url);
-    await assertPublicHostname(url.hostname);
+    const addresses = await resolvePublicAddresses(url.hostname);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -374,6 +451,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
     try {
       const { response, finalUrl } = await fetchWithRedirects(
         url,
+        addresses,
         controller.signal
       );
 
