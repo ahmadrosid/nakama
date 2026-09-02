@@ -1,6 +1,10 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { USER_CONTEXT_TEMPLATE } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "./index";
+import { createInMemoryDatabaseAdapter, createSqliteDatabase } from "./index";
 
 describe("user context storage", () => {
   test("init creates context and second init is a no-op", async () => {
@@ -86,5 +90,53 @@ describe("user context storage", () => {
     expect(await db.getUserContext("org_2", "user_1")).toBe(
       "# About Me\n\nAlice at Org 2"
     );
+  });
+
+  test("ignores legacy users.user_context when org_members has none", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nakama-user-context-"));
+    const databasePath = join(dir, "test.db");
+
+    try {
+      const database = await createSqliteDatabase(`file:${databasePath}`);
+      const now = "2026-06-21T10:00:00.000Z";
+
+      await database.adapter.createUser({
+        createdAt: now,
+        email: "alice@example.com",
+        id: "user_1",
+        isPlatformAdmin: false,
+        passwordHash: "hash",
+        updatedAt: now,
+      });
+      await database.adapter.upsertOrganization({
+        createdAt: now,
+        id: "org_1",
+        name: "Acme",
+        slug: "acme",
+        updatedAt: now,
+      });
+      await database.adapter.upsertOrgMember({
+        createdAt: now,
+        orgId: "org_1",
+        role: "admin",
+        userId: "user_1",
+      });
+      database.close();
+
+      const raw = new Database(databasePath);
+      raw.run("UPDATE users SET user_context = ? WHERE id = ?", [
+        "# Legacy user-level context",
+        "user_1",
+      ]);
+      raw.close();
+
+      const reopened = await createSqliteDatabase(`file:${databasePath}`);
+      expect(
+        await reopened.adapter.getUserContext("org_1", "user_1")
+      ).toBeNull();
+      reopened.close();
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
   });
 });

@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   phone TEXT,
   is_platform_admin INTEGER DEFAULT 0 NOT NULL,
+  -- Legacy unused: org-scoped context is org_members.user_context (#550).
   user_context TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

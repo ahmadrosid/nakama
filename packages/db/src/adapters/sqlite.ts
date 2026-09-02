@@ -1317,10 +1317,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET password_hash = ?, updated_at = ?
     WHERE id = ?
   `);
+  // Per-org context lives on org_members only. users.user_context is a legacy
+  // column left in place for existing installs; it is never written and must
+  // not be read (see #550).
   const getUserContextStmt = db.prepare(`
-    SELECT COALESCE(om.user_context, u.user_context) AS user_context
+    SELECT om.user_context AS user_context
     FROM org_members om
-    INNER JOIN users u ON u.id = om.user_id
     WHERE om.org_id = ? AND om.user_id = ?
   `);
   const setUserContextStmt = db.prepare(`
