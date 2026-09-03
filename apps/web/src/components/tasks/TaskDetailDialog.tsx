@@ -46,14 +46,19 @@ type TaskDetailFormState = {
   prompt: string;
   profileId: string;
   generateError: string | null;
+  /** Delete asks once before it runs; a task and its run history do not come back. */
+  confirmingDelete: boolean;
 };
 
 type TaskDetailFormAction =
   | { type: "sync"; task: StoredTask }
-  | { type: "patch"; values: Partial<TaskDetailFormState> };
+  | { type: "patch"; values: Partial<TaskDetailFormState> }
+  | { type: "askDelete" }
+  | { type: "cancelDelete" };
 
-function createFormStateFromTask(task: StoredTask): TaskDetailFormState {
+export function createFormStateFromTask(task: StoredTask): TaskDetailFormState {
   return {
+    confirmingDelete: false,
     description: task.description,
     generateError: null,
     profileId: task.profileId,
@@ -62,7 +67,24 @@ function createFormStateFromTask(task: StoredTask): TaskDetailFormState {
   };
 }
 
-function taskDetailFormReducer(
+/**
+ * Which controls the footer offers. While the delete confirmation is open the
+ * dialog offers nothing else, so a mis-click cannot run or save the task while
+ * that decision is still on screen.
+ */
+export function taskDetailFooterActions(state: { confirmingDelete: boolean }): {
+  showConfirmDelete: boolean;
+  showDelete: boolean;
+  showRunAndSave: boolean;
+} {
+  return {
+    showConfirmDelete: state.confirmingDelete,
+    showDelete: !state.confirmingDelete,
+    showRunAndSave: !state.confirmingDelete,
+  };
+}
+
+export function taskDetailFormReducer(
   state: TaskDetailFormState,
   action: TaskDetailFormAction
 ): TaskDetailFormState {
@@ -71,6 +93,10 @@ function taskDetailFormReducer(
       return createFormStateFromTask(action.task);
     case "patch":
       return { ...state, ...action.values };
+    case "askDelete":
+      return { ...state, confirmingDelete: true };
+    case "cancelDelete":
+      return { ...state, confirmingDelete: false };
     default:
       return state;
   }
@@ -127,6 +153,17 @@ function TaskDetailDialogContent({
   const draftPromptMutation = useDraftTaskPromptMutation();
   const generating = draftPromptMutation.isPending;
   const actionsBusy = busy || generating;
+  const footer = taskDetailFooterActions(form);
+
+  async function handleDelete() {
+    try {
+      await onDelete();
+    } catch {
+      // The page surfaces the failure. Leave the confirmation up so the delete
+      // can be retried or dismissed, and never settle state on a dialog that a
+      // successful delete has already unmounted.
+    }
+  }
 
   async function handleGeneratePrompt() {
     const trimmedTitle = form.title.trim();
@@ -272,45 +309,75 @@ function TaskDetailDialogContent({
       </div>
 
       <DialogFooter className="gap-2 sm:justify-between">
-        <Button
-          disabled={actionsBusy}
-          onClick={() => void onDelete()}
-          type="button"
-          variant="destructive"
-        >
-          <Delete02Icon aria-hidden className="size-4" />
-          Delete
-        </Button>
+        {footer.showDelete ? (
+          <Button
+            disabled={actionsBusy}
+            onClick={() => dispatch({ type: "askDelete" })}
+            type="button"
+            variant="destructive"
+          >
+            <Delete02Icon aria-hidden className="size-4" />
+            Delete
+          </Button>
+        ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={actionsBusy}
-            onClick={() => void onRun()}
-            type="button"
-            variant="outline"
-          >
-            {busy ? (
-              <Spinner className="size-4" />
-            ) : (
-              <PlayIcon aria-hidden className="size-4" />
-            )}
-            Run agent
-          </Button>
-          <Button
-            disabled={actionsBusy}
-            onClick={() =>
-              void onSave({
-                description: form.description,
-                profileId: form.profileId,
-                prompt: form.prompt,
-                title: form.title,
-              })
-            }
-            type="button"
-          >
-            Save changes
-          </Button>
-        </div>
+        {footer.showConfirmDelete ? (
+          <>
+            <Button
+              disabled={actionsBusy}
+              onClick={() => dispatch({ type: "cancelDelete" })}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={actionsBusy}
+              onClick={() => void handleDelete()}
+              type="button"
+              variant="destructive"
+            >
+              {busy ? (
+                <Spinner className="size-4" />
+              ) : (
+                <Delete02Icon aria-hidden className="size-4" />
+              )}
+              Delete task
+            </Button>
+          </>
+        ) : null}
+
+        {footer.showRunAndSave ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={actionsBusy}
+              onClick={() => void onRun()}
+              type="button"
+              variant="outline"
+            >
+              {busy ? (
+                <Spinner className="size-4" />
+              ) : (
+                <PlayIcon aria-hidden className="size-4" />
+              )}
+              Run agent
+            </Button>
+            <Button
+              disabled={actionsBusy}
+              onClick={() =>
+                void onSave({
+                  description: form.description,
+                  profileId: form.profileId,
+                  prompt: form.prompt,
+                  title: form.title,
+                })
+              }
+              type="button"
+            >
+              Save changes
+            </Button>
+          </div>
+        ) : null}
       </DialogFooter>
     </DialogContent>
   );
