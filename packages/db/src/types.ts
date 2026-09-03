@@ -561,6 +561,16 @@ export interface DatabaseAdapter {
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
+  /**
+   * First-admin claim. Writes the org, the admin and the membership in one
+   * transaction, and returns false without writing anything when a human user
+   * already exists, so two concurrent setups cannot leave a memberless org.
+   */
+  bootstrapInitialSetup(input: {
+    member: StoredOrgMemberRecord;
+    organization: StoredOrganizationRecord;
+    user: StoredUserRecord;
+  }): Promise<boolean>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(

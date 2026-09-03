@@ -1691,6 +1691,63 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ON CONFLICT(org_id, user_id) DO UPDATE SET
       role = excluded.role
   `);
+  const runCreateUserStmt = (record: StoredUserRecord) => {
+    createUserStmt.run(
+      record.id,
+      record.email,
+      record.passwordHash,
+      record.name ?? null,
+      record.phone ?? null,
+      record.isPlatformAdmin ? 1 : 0,
+      record.createdAt,
+      record.updatedAt
+    );
+  };
+  const runUpsertOrganizationStmt = (record: StoredOrganizationRecord) => {
+    upsertOrganizationStmt.run(
+      record.id,
+      record.name,
+      record.slug,
+      record.skillsWriteApproval ? 1 : 0,
+      record.skillsPostTurnReview ? 1 : 0,
+      record.skillsCuratorEnabled ? 1 : 0,
+      record.skillsCuratorStaleAfterDays ?? 30,
+      record.skillsCuratorArchiveAfterDays ?? 90,
+      record.skillsCuratorConsolidateEnabled ? 1 : 0,
+      record.skillsCuratorLastRunAt ?? null,
+      record.archivedAt ?? null,
+      record.createdAt,
+      record.updatedAt
+    );
+  };
+  const runUpsertOrgMemberStmt = (record: StoredOrgMemberRecord) => {
+    upsertOrgMemberStmt.run(
+      record.orgId,
+      record.userId,
+      record.role,
+      record.userContext ?? null,
+      record.createdAt
+    );
+  };
+  const bootstrapInitialSetupTransaction = db.transaction(
+    (input: {
+      member: StoredOrgMemberRecord;
+      organization: StoredOrganizationRecord;
+      user: StoredUserRecord;
+    }) => {
+      const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID) as {
+        count: number;
+      };
+      if (row.count > 0) {
+        return false;
+      }
+
+      runUpsertOrganizationStmt(input.organization);
+      runCreateUserStmt(input.user);
+      runUpsertOrgMemberStmt(input.member);
+      return true;
+    }
+  );
   const listOrgMembersStmt = db.prepare(`
     SELECT org_id, user_id, role, user_context, created_at
     FROM org_members
@@ -1750,6 +1807,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async assignToolToProfile(profileId, toolId) {
       assignToolStmt.run(profileId, toolId);
+    },
+
+    async bootstrapInitialSetup(input) {
+      return bootstrapInitialSetupTransaction.immediate(input);
     },
 
     async countHumanUsers() {
@@ -1914,16 +1975,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async createUser(record) {
-      createUserStmt.run(
-        record.id,
-        record.email,
-        record.passwordHash,
-        record.name ?? null,
-        record.phone ?? null,
-        record.isPlatformAdmin ? 1 : 0,
-        record.createdAt,
-        record.updatedAt
-      );
+      runCreateUserStmt(record);
     },
 
     async deleteAttachment(id) {
@@ -3014,31 +3066,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async upsertOrganization(record) {
-      upsertOrganizationStmt.run(
-        record.id,
-        record.name,
-        record.slug,
-        record.skillsWriteApproval ? 1 : 0,
-        record.skillsPostTurnReview ? 1 : 0,
-        record.skillsCuratorEnabled ? 1 : 0,
-        record.skillsCuratorStaleAfterDays ?? 30,
-        record.skillsCuratorArchiveAfterDays ?? 90,
-        record.skillsCuratorConsolidateEnabled ? 1 : 0,
-        record.skillsCuratorLastRunAt ?? null,
-        record.archivedAt ?? null,
-        record.createdAt,
-        record.updatedAt
-      );
+      runUpsertOrganizationStmt(record);
     },
 
     async upsertOrgMember(record) {
-      upsertOrgMemberStmt.run(
-        record.orgId,
-        record.userId,
-        record.role,
-        record.userContext ?? null,
-        record.createdAt
-      );
+      runUpsertOrgMemberStmt(record);
     },
 
     async upsertProfile(record) {
