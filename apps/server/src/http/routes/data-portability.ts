@@ -95,6 +95,10 @@ export function registerDataPortabilityRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -129,6 +133,10 @@ export function registerDataPortabilityRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -153,11 +161,11 @@ export function registerDataPortabilityRoutes(
   app.post("/v1/platform/data/import/preview", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
+    // Decoded outside the catch so an oversized archive keeps its 413.
+    const archive = decodeArchiveRequestData(body.data);
 
     try {
-      const preview = await previewNakamaDataImport(
-        decodeArchiveRequestData(body.data)
-      );
+      const preview = await previewNakamaDataImport(archive);
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
@@ -167,15 +175,13 @@ export function registerDataPortabilityRoutes(
   app.post("/v1/platform/data/import/restore", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<RestoreDataImportRequest>(c.req.raw);
+    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
     try {
-      restore = await restoreNakamaDataImport(
-        decodeArchiveRequestData(body.data),
-        {
-          confirm: body.confirm,
-        }
-      );
+      restore = await restoreNakamaDataImport(archive, {
+        confirm: body.confirm,
+      });
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
     }

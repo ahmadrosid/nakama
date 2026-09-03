@@ -34,6 +34,15 @@ import { unzipSync, zipSync } from "fflate";
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
 
+// Setup import is unauthenticated until the first admin exists, so an archive
+// has to be capped on the way in rather than once it is already in memory.
+export const MAX_IMPORT_ARCHIVE_BYTES = 100 * 1024 * 1024;
+export const MAX_IMPORT_ENTRY_BYTES = 100 * 1024 * 1024;
+export const MAX_IMPORT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024;
+/** Base64 carries 3 bytes per 4 characters. */
+const MAX_IMPORT_ARCHIVE_BASE64_CHARS =
+  Math.ceil(MAX_IMPORT_ARCHIVE_BYTES / 3) * 4;
+
 export interface CreateDataExportOptions {
   databasePath?: string | null;
   now?: Date;
@@ -168,12 +177,25 @@ export async function previewNakamaDataImport(
 }
 
 export function decodeArchiveRequestData(data: string): Buffer {
+  // Checked before the trim, so an oversized payload is rejected without
+  // being copied and then decoded.
+  if (data.length > MAX_IMPORT_ARCHIVE_BASE64_CHARS) {
+    throw new NakamaApiError(
+      `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`,
+      413
+    );
+  }
+
   const trimmed = data.trim();
   if (!trimmed) {
     throw new NakamaApiError("Import archive data is required.", 400);
   }
 
   return Buffer.from(trimmed, "base64");
+}
+
+function megabytes(bytes: number): string {
+  return `${bytes / (1024 * 1024)} MB`;
 }
 
 export async function restoreNakamaDataImport(
@@ -351,8 +373,34 @@ async function writeRestoredEntry(
 }
 
 function readZip(buffer: Buffer): ZipEntry[] {
+  let uncompressedTotal = 0;
+  // fflate sizes each output buffer from the entry's declared uncompressed
+  // size, so refusing here is what stops a bomb from being inflated at all.
+  const admitEntry = (name: string, size: number): boolean => {
+    if (size > MAX_IMPORT_ENTRY_BYTES) {
+      throw new NakamaApiError(
+        `Archive entry ${name} exceeds the ${megabytes(MAX_IMPORT_ENTRY_BYTES)} limit.`,
+        400
+      );
+    }
+
+    uncompressedTotal += size;
+    if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
+      throw new NakamaApiError(
+        `Archive exceeds the ${megabytes(MAX_IMPORT_UNCOMPRESSED_BYTES)} uncompressed limit.`,
+        400
+      );
+    }
+
+    return true;
+  };
+
   try {
-    return Object.entries(unzipSync(buffer))
+    return Object.entries(
+      unzipSync(buffer, {
+        filter: (file) => admitEntry(file.name, file.originalSize),
+      })
+    )
       .filter(([name]) => !name.endsWith("/"))
       .map(([name, data]) => {
         validateArchivePath(name);

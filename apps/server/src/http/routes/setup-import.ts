@@ -69,6 +69,10 @@ export function registerSetupImportRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -103,6 +107,10 @@ export function registerSetupImportRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -121,11 +129,11 @@ export function registerSetupImportRoutes(
     await assertSetupImportAllowed(databaseAdapter);
 
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
+    // Decoded outside the catch so an oversized archive keeps its 413.
+    const archive = decodeArchiveRequestData(body.data);
 
     try {
-      const preview = await previewNakamaDataImport(
-        decodeArchiveRequestData(body.data)
-      );
+      const preview = await previewNakamaDataImport(archive);
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
@@ -140,15 +148,13 @@ export function registerSetupImportRoutes(
     await assertSetupImportAllowed(databaseAdapter);
 
     const body = await readJson<RestoreDataImportRequest>(c.req.raw);
+    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
     try {
-      restore = await restoreNakamaDataImport(
-        decodeArchiveRequestData(body.data),
-        {
-          confirm: body.confirm,
-        }
-      );
+      restore = await restoreNakamaDataImport(archive, {
+        confirm: body.confirm,
+      });
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
     }
