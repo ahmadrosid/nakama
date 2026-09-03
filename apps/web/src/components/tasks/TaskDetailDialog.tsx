@@ -67,23 +67,6 @@ export function createFormStateFromTask(task: StoredTask): TaskDetailFormState {
   };
 }
 
-/**
- * Which controls the footer offers. While the delete confirmation is open the
- * dialog offers nothing else, so a mis-click cannot run or save the task while
- * that decision is still on screen.
- */
-export function taskDetailFooterActions(state: { confirmingDelete: boolean }): {
-  showConfirmDelete: boolean;
-  showDelete: boolean;
-  showRunAndSave: boolean;
-} {
-  return {
-    showConfirmDelete: state.confirmingDelete,
-    showDelete: !state.confirmingDelete,
-    showRunAndSave: !state.confirmingDelete,
-  };
-}
-
 export function taskDetailFormReducer(
   state: TaskDetailFormState,
   action: TaskDetailFormAction
@@ -153,7 +136,6 @@ function TaskDetailDialogContent({
   const draftPromptMutation = useDraftTaskPromptMutation();
   const generating = draftPromptMutation.isPending;
   const actionsBusy = busy || generating;
-  const footer = taskDetailFooterActions(form);
 
   async function handleDelete() {
     try {
@@ -308,20 +290,14 @@ function TaskDetailDialogContent({
         </div>
       </div>
 
+      {/*
+        While the delete confirmation is open the dialog offers nothing else, so
+        a mis-click cannot run or save the task while that decision is on
+        screen. The two sides are branches of one condition, so they cannot both
+        be reachable.
+      */}
       <DialogFooter className="gap-2 sm:justify-between">
-        {footer.showDelete ? (
-          <Button
-            disabled={actionsBusy}
-            onClick={() => dispatch({ type: "askDelete" })}
-            type="button"
-            variant="destructive"
-          >
-            <Delete02Icon aria-hidden className="size-4" />
-            Delete
-          </Button>
-        ) : null}
-
-        {footer.showConfirmDelete ? (
+        {form.confirmingDelete ? (
           <>
             <Button
               disabled={actionsBusy}
@@ -345,39 +321,48 @@ function TaskDetailDialogContent({
               Delete task
             </Button>
           </>
-        ) : null}
-
-        {footer.showRunAndSave ? (
-          <div className="flex flex-wrap gap-2">
+        ) : (
+          <>
             <Button
               disabled={actionsBusy}
-              onClick={() => void onRun()}
+              onClick={() => dispatch({ type: "askDelete" })}
               type="button"
-              variant="outline"
+              variant="destructive"
             >
-              {busy ? (
-                <Spinner className="size-4" />
-              ) : (
-                <PlayIcon aria-hidden className="size-4" />
-              )}
-              Run agent
+              <Delete02Icon aria-hidden className="size-4" />
+              Delete
             </Button>
-            <Button
-              disabled={actionsBusy}
-              onClick={() =>
-                void onSave({
-                  description: form.description,
-                  profileId: form.profileId,
-                  prompt: form.prompt,
-                  title: form.title,
-                })
-              }
-              type="button"
-            >
-              Save changes
-            </Button>
-          </div>
-        ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={actionsBusy}
+                onClick={() => void onRun()}
+                type="button"
+                variant="outline"
+              >
+                {busy ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <PlayIcon aria-hidden className="size-4" />
+                )}
+                Run agent
+              </Button>
+              <Button
+                disabled={actionsBusy}
+                onClick={() =>
+                  void onSave({
+                    description: form.description,
+                    profileId: form.profileId,
+                    prompt: form.prompt,
+                    title: form.title,
+                  })
+                }
+                type="button"
+              >
+                Save changes
+              </Button>
+            </div>
+          </>
+        )}
       </DialogFooter>
     </DialogContent>
   );

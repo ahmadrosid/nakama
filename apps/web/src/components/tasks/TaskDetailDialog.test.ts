@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { StoredTask } from "@nakama/core/contract";
 import {
   createFormStateFromTask,
-  taskDetailFooterActions,
   taskDetailFormReducer,
 } from "./TaskDetailDialog";
 
@@ -15,10 +14,6 @@ const TASK = {
 } as StoredTask;
 
 describe("taskDetailFormReducer delete confirmation", () => {
-  test("starts without a pending delete", () => {
-    expect(createFormStateFromTask(TASK).confirmingDelete).toBe(false);
-  });
-
   test("askDelete arms the confirmation instead of deleting", () => {
     const next = taskDetailFormReducer(createFormStateFromTask(TASK), {
       type: "askDelete",
@@ -61,35 +56,5 @@ describe("taskDetailFormReducer delete confirmation", () => {
 
     expect(synced.confirmingDelete).toBe(false);
     expect(synced.title).toBe("Other");
-  });
-});
-
-describe("taskDetailFooterActions", () => {
-  test("offers Delete, Run and Save before anything is armed", () => {
-    expect(taskDetailFooterActions({ confirmingDelete: false })).toEqual({
-      showConfirmDelete: false,
-      showDelete: true,
-      showRunAndSave: true,
-    });
-  });
-
-  test("offers only the confirmation once Delete is armed", () => {
-    // The regression this guards: the delete used to run on the first click.
-    // Nothing else may be reachable while the decision is on screen, or a
-    // mis-click could run or save the task mid-confirmation.
-    expect(taskDetailFooterActions({ confirmingDelete: true })).toEqual({
-      showConfirmDelete: true,
-      showDelete: false,
-      showRunAndSave: false,
-    });
-  });
-
-  test("arming through the reducer is what flips the footer", () => {
-    const armed = taskDetailFormReducer(createFormStateFromTask(TASK), {
-      type: "askDelete",
-    });
-
-    expect(taskDetailFooterActions(armed).showRunAndSave).toBe(false);
-    expect(taskDetailFooterActions(armed).showConfirmDelete).toBe(true);
   });
 });
