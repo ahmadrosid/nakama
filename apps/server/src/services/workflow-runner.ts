@@ -3,8 +3,8 @@ import {
   buildReceiptBag,
   executeAssert,
   executeCompare,
-  executeTemplate,
   formatAutomationRunError,
+  resolveTemplateString,
   resolveWorkflowValue,
   type StoredWorkflow,
   type WorkflowStep,
@@ -211,7 +211,7 @@ export class WorkflowRunner {
     }
 
     if (step.kind === "template") {
-      const output = executeTemplate(step.template, bag);
+      const output = resolveTemplateString(step.template, bag);
       return { input: { template: step.template }, output };
     }
 

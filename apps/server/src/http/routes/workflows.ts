@@ -14,7 +14,7 @@ import {
   requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
 } from "../org-guards";
-import { errorResponse, getRequestAuth, json, readJson } from "../shared";
+import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerWorkflowRoutes(
@@ -22,17 +22,6 @@ export function registerWorkflowRoutes(
   options: ServerOptions
 ): void {
   const { agent, workflowService } = options;
-  const errorSchema = z
-    .object({ error: z.string() })
-    .openapi("WorkflowApiErrorResponse");
-  const workflowIdParam = z.object({
-    workflowId: z
-      .string()
-      .openapi({ param: { in: "path", name: "workflowId" } }),
-  });
-  const workflowRunParam = workflowIdParam.extend({
-    runId: z.string().openapi({ param: { in: "path", name: "runId" } }),
-  });
 
   app.get("/v1/workflows", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
@@ -212,11 +201,6 @@ export function registerWorkflowRoutes(
       tags: ["Workflows"],
     })
   );
-
-  void workflowRunParam;
-  void workflowIdParam;
-  void errorSchema;
-  void getRequestAuth;
 }
 
 async function resolveDefaultProfileId(

@@ -43,7 +43,7 @@ export class WorkflowService {
     if (!workflow) {
       return null;
     }
-    if (orgId && !workflowBelongsToOrg(workflow, orgId)) {
+    if (orgId && workflow.orgId !== orgId) {
       return null;
     }
 
@@ -76,7 +76,6 @@ export class WorkflowService {
       description: input.description?.trim() || input.name.trim(),
       enabled: input.enabled ?? true,
       id: createId("workflow"),
-      inputSchema: input.inputSchema,
       name: input.name.trim(),
       orgId,
       profileId,
@@ -122,10 +121,6 @@ export class WorkflowService {
       ...existing,
       description: input.description?.trim() ?? existing.description,
       enabled: input.enabled ?? existing.enabled,
-      inputSchema:
-        input.inputSchema === null
-          ? undefined
-          : (input.inputSchema ?? existing.inputSchema),
       name: input.name?.trim() || existing.name,
       profileId,
       steps,
@@ -294,11 +289,6 @@ export class WorkflowService {
     return toRunRecord(updated, steps);
   }
 
-  async getActiveRun(workflowId: string): Promise<WorkflowRunRecord | null> {
-    const run = await this.db.getActiveWorkflowRun(workflowId);
-    return run ? toRunRecord(run) : null;
-  }
-
   private async resolveProfileId(
     orgId: string,
     profileId?: string,
@@ -338,13 +328,6 @@ export class WorkflowService {
       lastRunAt: runs[0]?.startedAt ?? null,
     };
   }
-}
-
-function workflowBelongsToOrg(
-  workflow: StoredWorkflow,
-  orgId: string
-): boolean {
-  return workflow.orgId === orgId;
 }
 
 function normalizeWorkflowSteps(steps: WorkflowStep[]): WorkflowStep[] {

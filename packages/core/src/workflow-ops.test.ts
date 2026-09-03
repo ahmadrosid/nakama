@@ -4,8 +4,8 @@ import {
   buildReceiptBag,
   executeAssert,
   executeCompare,
-  executeTemplate,
   getPathValue,
+  resolveTemplateString,
   resolveWorkflowValue,
   validateWorkflowSteps,
 } from "./workflow-ops";
@@ -24,7 +24,7 @@ describe("workflow-ops", () => {
     expect(getPathValue(bag, "steps.fetch_a.revenue")).toBe(100);
     expect(resolveWorkflowValue("{{steps.fetch_a.revenue}}", bag)).toBe(100);
     expect(
-      executeTemplate(
+      resolveTemplateString(
         "Range={{input.range}} revenue={{steps.fetch_a.revenue}}",
         bag
       )

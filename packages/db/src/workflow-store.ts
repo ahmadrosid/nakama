@@ -4,11 +4,6 @@ import type { DatabaseAdapter, StoredWorkflowRecord } from "./types";
 export class DatabaseWorkflowStore {
   constructor(private readonly db: DatabaseAdapter) {}
 
-  async list(): Promise<StoredWorkflow[]> {
-    const records = await this.db.listWorkflows();
-    return records.map(fromRecord);
-  }
-
   async listForOrg(orgId: string): Promise<StoredWorkflow[]> {
     const records = await this.db.listWorkflowsForOrg(orgId);
     return records.map(fromRecord);
@@ -38,7 +33,6 @@ function fromRecord(record: StoredWorkflowRecord): StoredWorkflow {
     description: definition?.description ?? "",
     enabled: record.enabled,
     id: record.id,
-    inputSchema: definition?.inputSchema,
     name: record.name,
     orgId: record.orgId ?? null,
     profileId: record.profileId,
@@ -55,7 +49,6 @@ function toRecord(definition: StoredWorkflow): StoredWorkflowRecord {
     createdAt: definition.createdAt ?? now,
     definition: {
       description: definition.description,
-      inputSchema: definition.inputSchema,
       steps: definition.steps,
       version: definition.version,
     },

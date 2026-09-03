@@ -665,9 +665,6 @@ export interface DatabaseAdapter {
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
   getActiveTaskRun(taskId: string): Promise<StoredTaskRunRecord | null>;
-  getActiveWorkflowRun(
-    workflowId: string
-  ): Promise<StoredWorkflowRunRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
@@ -924,7 +921,6 @@ export interface DatabaseAdapter {
     workflowId: string,
     limit?: number
   ): Promise<StoredWorkflowRunRecord[]>;
-  listWorkflows(): Promise<StoredWorkflowRecord[]>;
   listWorkflowsForOrg(orgId: string): Promise<StoredWorkflowRecord[]>;
   markOrgInviteAccepted(id: string, acceptedAt: string): Promise<void>;
   markSkillSuggestionApplied(

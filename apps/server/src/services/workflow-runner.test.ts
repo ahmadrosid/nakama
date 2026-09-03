@@ -25,18 +25,7 @@ describe("WorkflowRunner", () => {
   ];
 
   test("runs data steps in order and summarizes from receipt bag only", async () => {
-    const workflow: StoredWorkflow = {
-      createdAt: "2026-01-01T00:00:00.000Z",
-      description: "Test workflow",
-      enabled: true,
-      id: "workflow_test",
-      name: "Test",
-      orgId: "org_1",
-      profileId: "profile_1",
-      steps,
-      updatedAt: "2026-01-01T00:00:00.000Z",
-      version: 1,
-    };
+    const workflow = { ...createBaseWorkflow(), steps };
 
     let summarizeBag: Record<string, unknown> | null = null;
     const service = createWorkflowServiceStub(workflow);

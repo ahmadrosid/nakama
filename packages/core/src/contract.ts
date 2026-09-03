@@ -1180,7 +1180,6 @@ export type WorkflowStep =
 export interface WorkflowDefinition {
   description: string;
   id: string;
-  inputSchema?: Record<string, unknown>;
   name: string;
   steps: WorkflowStep[];
   version: number;
@@ -1245,7 +1244,6 @@ export interface WorkflowResponse {
 export interface CreateWorkflowRequest {
   description: string;
   enabled?: boolean;
-  inputSchema?: Record<string, unknown>;
   name: string;
   profileId?: string;
   steps: WorkflowStep[];
@@ -1254,7 +1252,6 @@ export interface CreateWorkflowRequest {
 export interface UpdateWorkflowRequest {
   description?: string;
   enabled?: boolean;
-  inputSchema?: Record<string, unknown> | null;
   name?: string;
   profileId?: string;
   steps?: WorkflowStep[];

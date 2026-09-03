@@ -133,13 +133,6 @@ export function executeAssert(input: {
   return { actual, expected, ok };
 }
 
-export function executeTemplate(
-  template: string,
-  bag: WorkflowReceiptBag
-): string {
-  return resolveTemplateString(template, bag);
-}
-
 export function buildReceiptBag(
   input: Record<string, unknown>,
   stepOutputs: Record<string, unknown>

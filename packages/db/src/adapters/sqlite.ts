@@ -574,7 +574,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE automation_id = ? AND id = ?
   `);
 
-  const listWorkflowsStmt = db.prepare("SELECT * FROM workflows");
   const listWorkflowsForOrgStmt = db.prepare(
     "SELECT * FROM workflows WHERE org_id = ? ORDER BY updated_at DESC"
   );
@@ -598,12 +597,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE workflow_id = ?
     ORDER BY started_at DESC
     LIMIT ?
-  `);
-  const getActiveWorkflowRunStmt = db.prepare(`
-    SELECT * FROM workflow_runs
-    WHERE workflow_id = ? AND status = 'running'
-    ORDER BY started_at DESC
-    LIMIT 1
   `);
   const getWorkflowRunStmt = db.prepare(`
     SELECT * FROM workflow_runs
@@ -2186,13 +2179,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toTaskRunRecord(row) : null;
     },
 
-    async getActiveWorkflowRun(workflowId) {
-      const row = getActiveWorkflowRunStmt.get(
-        workflowId
-      ) as WorkflowRunRow | null;
-      return row ? toWorkflowRunRecord(row) : null;
-    },
-
     async getArtifactShareById(orgId, profileId, shareId) {
       const row = getArtifactShareByIdStmt.get(
         orgId,
@@ -2976,12 +2962,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listWorkflowRunsStmt
         .all(workflowId, limit)
         .map((row) => toWorkflowRunRecord(row as WorkflowRunRow));
-    },
-
-    async listWorkflows() {
-      return listWorkflowsStmt
-        .all()
-        .map((row) => toWorkflowRecord(row as WorkflowRow));
     },
 
     async listWorkflowsForOrg(orgId) {
