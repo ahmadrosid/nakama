@@ -14,6 +14,7 @@ import { registerTaskRoutes } from "./routes/tasks";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
+import { registerWorkflowRoutes } from "./routes/workflows";
 import type { HonoApp } from "./types";
 
 function buildNativeOpenApiApp(): HonoApp {
@@ -30,6 +31,7 @@ function buildNativeOpenApiApp(): HonoApp {
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
   registerAutomationRoutes(app, options);
+  registerWorkflowRoutes(app, options);
   registerTaskRoutes(app, options);
   registerOrgCuratorRoutes(app, options);
   return app;

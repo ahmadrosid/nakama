@@ -38,6 +38,7 @@ import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
+import { registerWorkflowRoutes } from "./routes/workflows";
 import { errorResponse, isSecureRequest } from "./shared";
 import type { HonoApp } from "./types";
 
@@ -130,6 +131,7 @@ export function createHonoApp(options: ServerOptions) {
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
   registerAutomationRoutes(app, options);
+  registerWorkflowRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
   registerTokenOptimizationRoutes(app, options);
   registerAutomationWorkerSettingsRoutes(app, options);

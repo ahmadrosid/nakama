@@ -1,0 +1,44 @@
+---
+title: "Workflows"
+description: "Run a declared recipe on demand with step receipts so summaries only use data that actually ran."
+---
+
+**Agent work** holds three related things:
+
+- **Automations** run a prompt on a schedule or at a set time.
+- **Workflows** run a declared recipe when you ask — each data step leaves a receipt; the summarize step may only use those receipts.
+- **Tasks** are a to-do list the agent works through manually.
+
+## Workflows
+
+A workflow is a name, a bound profile, ordered steps, and run history.
+
+| Step kind | What it does |
+| --- | --- |
+| `tool` | Calls an assigned builtin or MCP tool with fixed arguments (supports `{{input.*}}` and `{{steps.*}}` templates) |
+| `compare` | Checks two receipt values (`eq`, `near`, `contains`); fails the run when they do not match |
+| `assert` | Fails the run when a path in the receipt bag does not equal the expected value |
+| `template` | Renders text from receipts without the LLM |
+| `summarize` | One final LLM step with **no tools** — context is the receipt bag JSON plus your summarize prompt |
+
+Every workflow must end with exactly one `summarize` step.
+
+### Run a workflow
+
+1. Open **Agent work → Workflows**
+2. Select a workflow
+3. Press **Run now**
+
+Or ask in chat: "Run morning brief workflow". The agent uses `list_workflows` and `run_workflow`.
+
+Optional runtime `input` binds values like `{{input.range}}` when you run.
+
+### Trust the receipts
+
+Open a completed run and press **Show receipts**. Tool outputs, compare results, and assert outcomes are stored per step. If compare or assert fails, summarize is skipped and the run is `failed`.
+
+Create or edit workflows in chat (`create_workflow`, `update_workflow`) or inspect steps on the workflow detail panel.
+
+## Permissions
+
+Creating, editing, or running a workflow requires a non-viewer role. Members cannot bind Super Bot. See [Multi-tenancy](/multi-tenancy).

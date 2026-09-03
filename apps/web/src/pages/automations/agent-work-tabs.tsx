@@ -5,6 +5,8 @@ import {
   agentWorkTabFromSearchParams,
 } from "@/lib/navigation";
 
+const TAB_ORDER: AgentWorkTab[] = ["automations", "workflows", "tasks"];
+
 export function AgentWorkTabs() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = agentWorkTabFromSearchParams(searchParams);
@@ -25,36 +27,49 @@ export function AgentWorkTabs() {
       className="flex h-full min-w-0 items-stretch"
       role="tablist"
     >
-      <TabButton
-        active={activeTab === "automations"}
-        onClick={() => selectTab("automations")}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowRight") {
-            event.preventDefault();
-            selectTab("tasks");
-            document.getElementById("agent-work-tab-tasks")?.focus();
-          }
-        }}
-        tab="automations"
-      >
-        Automations
-      </TabButton>
-      <TabButton
-        active={activeTab === "tasks"}
-        onClick={() => selectTab("tasks")}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            selectTab("automations");
-            document.getElementById("agent-work-tab-automations")?.focus();
-          }
-        }}
-        tab="tasks"
-      >
-        Tasks
-      </TabButton>
+      {TAB_ORDER.map((tab) => (
+        <TabButton
+          active={activeTab === tab}
+          key={tab}
+          onClick={() => selectTab(tab)}
+          onKeyDown={(event) => handleArrowNavigation(event, tab, selectTab)}
+          tab={tab}
+        >
+          {tabLabel(tab)}
+        </TabButton>
+      ))}
     </div>
   );
+}
+
+function tabLabel(tab: AgentWorkTab): string {
+  if (tab === "workflows") {
+    return "Workflows";
+  }
+  if (tab === "tasks") {
+    return "Tasks";
+  }
+  return "Automations";
+}
+
+function handleArrowNavigation(
+  event: KeyboardEvent<HTMLButtonElement>,
+  tab: AgentWorkTab,
+  selectTab: (tab: AgentWorkTab) => void
+) {
+  const index = TAB_ORDER.indexOf(tab);
+  if (event.key === "ArrowRight" && index < TAB_ORDER.length - 1) {
+    event.preventDefault();
+    const next = TAB_ORDER[index + 1]!;
+    selectTab(next);
+    document.getElementById(`agent-work-tab-${next}`)?.focus();
+  }
+  if (event.key === "ArrowLeft" && index > 0) {
+    event.preventDefault();
+    const previous = TAB_ORDER[index - 1]!;
+    selectTab(previous);
+    document.getElementById(`agent-work-tab-${previous}`)?.focus();
+  }
 }
 
 function TabButton({

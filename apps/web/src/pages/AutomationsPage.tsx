@@ -5,6 +5,7 @@ import { agentWorkPanelClassName } from "@/pages/automations/automations-page.sh
 import { AutomationsPageLayout } from "@/pages/automations/automations-page-layout";
 import { useAutomationsPage } from "@/pages/automations/use-automations-page";
 import { TasksPage } from "@/pages/TasksPage";
+import { WorkflowsPage } from "@/pages/workflows/WorkflowsPage";
 
 export function AutomationsPage() {
   const state = useAutomationsPage();
@@ -21,6 +22,15 @@ export function AutomationsPage() {
           role="tabpanel"
         >
           <AutomationsPageLayout {...state} />
+        </div>
+      ) : activeTab === "workflows" ? (
+        <div
+          aria-labelledby="agent-work-tab-workflows"
+          className={agentWorkPanelClassName}
+          id="agent-work-panel-workflows"
+          role="tabpanel"
+        >
+          <WorkflowsPage />
         </div>
       ) : (
         <div

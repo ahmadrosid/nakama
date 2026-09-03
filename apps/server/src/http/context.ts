@@ -12,6 +12,7 @@ import type { SkillSuggestionService } from "../services/skill-suggestion-servic
 import type { SystemStatusService } from "../services/system-status-service";
 import type { TaskService } from "../services/task-service";
 import type { WorkerManagerService } from "../services/worker-manager-service";
+import type { WorkflowService } from "../services/workflow-service";
 
 export interface ServerOptions {
   agent: AgentService;
@@ -31,4 +32,5 @@ export interface ServerOptions {
   taskService: TaskService;
   webDistDir?: string | null;
   workerManager: WorkerManagerService;
+  workflowService: WorkflowService;
 }

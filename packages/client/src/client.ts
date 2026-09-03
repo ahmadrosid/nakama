@@ -48,6 +48,7 @@ import type {
   CreateSkillRequest,
   CreateTaskRequest,
   CreateToolRequest,
+  CreateWorkflowRequest,
   DataImportPreviewResponse,
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
@@ -61,6 +62,7 @@ import type {
   ErrorTrackingSettingsResponse,
   GenerateImageRequest,
   GenerateImageResponse,
+  GetWorkflowRunResponse,
   HealthResponse,
   ImageAttachment,
   ImageGenerationSettings,
@@ -95,6 +97,8 @@ import type {
   ListTimezonesResponse,
   ListToolsResponse,
   ListUserOrgsResponse,
+  ListWorkflowRunsResponse,
+  ListWorkflowsResponse,
   MarkAutomationRunsReadResponse,
   McpServerResponse,
   ModelsResponse,
@@ -129,6 +133,8 @@ import type {
   RunTaskResponse,
   RunToolRequest,
   RunToolResponse,
+  RunWorkflowRequest,
+  RunWorkflowResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
   SendErrorTrackingTestResponse,
@@ -146,6 +152,7 @@ import type {
   SoulStatusResponse,
   StoredAutomation,
   StoredTask,
+  StoredWorkflow,
   SuggestToolParamsRequest,
   SuggestToolParamsResponse,
   SyncSkillsResponse,
@@ -197,6 +204,7 @@ import type {
   UpdateVisionRequest,
   UpdateWebPublicUrlRequest,
   UpdateWhatsAppSettingsRequest,
+  UpdateWorkflowRequest,
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
   UserContextStatusResponse,
@@ -205,6 +213,7 @@ import type {
   WebPublicUrlSettingsResponse,
   WhatsAppSettingsResponse,
   WorkerLogsResponse,
+  WorkflowResponse,
 } from "@nakama/core/contract";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
@@ -1444,6 +1453,87 @@ export class NakamaClient {
       { method: "POST" }
     );
     return response.readThroughAt;
+  }
+
+  async listWorkflows(): Promise<ListWorkflowsResponse> {
+    return this.request<ListWorkflowsResponse>("/v1/workflows");
+  }
+
+  async getWorkflow(workflowId: string): Promise<StoredWorkflow> {
+    const response = await this.request<WorkflowResponse>(
+      `/v1/workflows/${encodeURIComponent(workflowId)}`
+    );
+    return response.workflow;
+  }
+
+  async createWorkflow(
+    request: CreateWorkflowRequest
+  ): Promise<StoredWorkflow> {
+    const response = await this.request<WorkflowResponse>("/v1/workflows", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+    return response.workflow;
+  }
+
+  async updateWorkflow(
+    workflowId: string,
+    request: UpdateWorkflowRequest
+  ): Promise<StoredWorkflow> {
+    const response = await this.request<WorkflowResponse>(
+      `/v1/workflows/${encodeURIComponent(workflowId)}`,
+      {
+        body: JSON.stringify(request),
+        method: "PUT",
+      }
+    );
+    return response.workflow;
+  }
+
+  async deleteWorkflow(workflowId: string): Promise<void> {
+    await this.request(`/v1/workflows/${encodeURIComponent(workflowId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async runWorkflow(
+    workflowId: string,
+    request: RunWorkflowRequest = {}
+  ): Promise<RunWorkflowResponse["run"]> {
+    const response = await this.request<RunWorkflowResponse>(
+      `/v1/workflows/${encodeURIComponent(workflowId)}/run`,
+      withStreamFetchIdle({
+        body: JSON.stringify(request),
+        method: "POST",
+      })
+    );
+    return response.run;
+  }
+
+  async listWorkflowRuns(
+    workflowId: string
+  ): Promise<ListWorkflowRunsResponse["runs"]> {
+    const response = await this.request<ListWorkflowRunsResponse>(
+      `/v1/workflows/${encodeURIComponent(workflowId)}/runs`
+    );
+    return response.runs;
+  }
+
+  async getWorkflowRun(
+    workflowId: string,
+    runId: string
+  ): Promise<GetWorkflowRunResponse["run"]> {
+    const response = await this.request<GetWorkflowRunResponse>(
+      `/v1/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}`
+    );
+    return response.run;
+  }
+
+  async deleteWorkflowRun(workflowId: string, runId: string): Promise<void> {
+    await this.request(
+      `/v1/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}`,
+      { method: "DELETE" }
+    );
   }
 
   async listTasks(): Promise<StoredTask[]> {

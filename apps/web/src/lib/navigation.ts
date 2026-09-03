@@ -312,12 +312,19 @@ const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
   [PAGE_PATHS.files, "files"],
 ];
 
-export type AgentWorkTab = "automations" | "tasks";
+export type AgentWorkTab = "automations" | "workflows" | "tasks";
 
 export function agentWorkTabFromSearchParams(
   searchParams: URLSearchParams
 ): AgentWorkTab {
-  return searchParams.get("tab") === "tasks" ? "tasks" : "automations";
+  const tab = searchParams.get("tab");
+  if (tab === "tasks") {
+    return "tasks";
+  }
+  if (tab === "workflows") {
+    return "workflows";
+  }
+  return "automations";
 }
 
 export function agentWorkTabPath(tab: AgentWorkTab): string {

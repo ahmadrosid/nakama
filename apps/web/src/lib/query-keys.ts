@@ -113,4 +113,8 @@ export const queryKeys = {
     settings: ["whatsapp", "settings"] as const,
   },
   workerLogs: ["workerLogs"] as const,
+  workflows: {
+    all: ["workflows"] as const,
+    runs: (workflowId: string) => ["workflows", workflowId, "runs"] as const,
+  },
 } as const;

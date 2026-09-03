@@ -76,6 +76,8 @@ import {
   registerSubAgentTool,
 } from "./services/tool-resolver";
 import { WorkerManagerService } from "./services/worker-manager-service";
+import { WorkflowRunner } from "./services/workflow-runner";
+import { WorkflowService } from "./services/workflow-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
 import {
@@ -85,6 +87,7 @@ import {
 import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
+import { createWorkflowTools } from "./tools/workflow-tools";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -173,6 +176,13 @@ agent.setAutomationRunHistoryTools(
   createAutomationRunHistoryTools(automationService)
 );
 agent.setAutomationRunner(automationRunner);
+
+const workflowService = new WorkflowService(database.adapter);
+const workflowRunner = new WorkflowRunner(workflowService, agent);
+agent.setWorkflowTools(
+  createWorkflowTools(workflowService, workflowRunner, agent)
+);
+agent.setWorkflowRunner(workflowRunner);
 
 const taskService = new TaskService(database.adapter);
 const taskRunner = new TaskRunner(taskService, agent);
@@ -270,6 +280,7 @@ const app = createHonoApp({
   taskService,
   webDistDir,
   workerManager,
+  workflowService,
 });
 
 const server = startServer({

@@ -189,8 +189,10 @@ function createServerOptions() {
         getContextUsage: () => null,
         send: async (input: { message: string }) => `reply:${input.message}`,
       }),
+      resolveWorkflowToolNames: async () => new Set<string>(),
       runAutomation: async (_automationId: string) => ({ skipped: false }),
       runTask: async (_taskId: string) => ({ skipped: false }),
+      runWorkflow: async (_workflowId: string) => ({ skipped: false }),
       schedulePostTurnSkillReview: (_sessionId: string) => {},
       scheduleSessionTitleGeneration: (_sessionId: string) => {},
       setImageGenerationSettings: async (_body: unknown) => ({
@@ -327,6 +329,16 @@ function createServerOptions() {
       restartWorker: async () => {},
       startWorker: async () => {},
       stopWorker: async () => {},
+    } as any,
+    workflowService: {
+      create: async () => ({ id: "workflow_1" }),
+      delete: async () => true,
+      deleteRun: async () => true,
+      get: async () => ({ id: "workflow_1", profileId: "default" }),
+      getRun: async () => ({ id: "run_1", steps: [] }),
+      listForOrg: async () => [{ id: "workflow_1" }],
+      listRuns: async () => [{ id: "run_1", steps: [] }],
+      update: async () => ({ id: "workflow_1" }),
     } as any,
   };
 }

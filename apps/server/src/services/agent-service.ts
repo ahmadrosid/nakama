@@ -70,6 +70,7 @@ import type {
   TelegramSettingsResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
+  ToolContext,
   ToolDefinition,
   ToolResponse,
   ToolSourceResponse,
@@ -301,6 +302,7 @@ import type { SkillsService } from "./skills-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
 import type { TaskRunner } from "./task-runner";
 import { resolveProfileStoredTools } from "./tool-resolver";
+import type { WorkflowRunner } from "./workflow-runner";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -328,10 +330,12 @@ export class AgentService {
   private readonly superBotTools: ToolDefinition[];
   private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
+  private workflowTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
   private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
+  private workflowRunner: WorkflowRunner | null = null;
   private taskRunner: TaskRunner | null = null;
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
@@ -467,12 +471,21 @@ export class AgentService {
     this.sessions.clear();
   }
 
+  setWorkflowTools(tools: ToolDefinition[]): void {
+    this.workflowTools = tools;
+    this.sessions.clear();
+  }
+
   setAutomationRunHistoryTools(tools: ToolDefinition[]): void {
     this.automationRunHistoryTools = tools;
   }
 
   setAutomationRunner(runner: AutomationRunner): void {
     this.automationRunner = runner;
+  }
+
+  setWorkflowRunner(runner: WorkflowRunner): void {
+    this.workflowRunner = runner;
   }
 
   setTaskRunner(runner: TaskRunner): void {
@@ -1333,6 +1346,95 @@ export class AgentService {
     return session.send(prompt);
   }
 
+  async resolveWorkflowExecutionTools(
+    orgId: string,
+    profileId: string
+  ): Promise<ToolDefinition[]> {
+    const profile = await this.requireProfile(orgId, profileId);
+    return this.resolveProfileTools(profile, {
+      includeAutomationTools: false,
+      includeSkillManageTools: false,
+      includeTodoTools: false,
+      includeWorkflowTools: false,
+    });
+  }
+
+  async resolveWorkflowToolNames(
+    orgId: string,
+    profileId: string
+  ): Promise<Set<string>> {
+    const tools = await this.resolveWorkflowExecutionTools(orgId, profileId);
+    return new Set(tools.map((tool) => tool.name));
+  }
+
+  buildWorkflowToolContext(
+    orgId: string,
+    context: {
+      profileId: string;
+      runId: string;
+      workflowId: string;
+    }
+  ): ToolContext {
+    return buildToolExecutionContext({
+      orgId,
+      orgRole: "member",
+      profileId: context.profileId,
+      recordToolOutputSavings: this.savingsRecorderFor(orgId),
+      recordTurnUsage: this.turnUsageRecorderFor(orgId),
+      workflowId: context.workflowId,
+      workflowRunId: context.runId,
+    });
+  }
+
+  async runWorkflowSummarize(
+    orgId: string,
+    profileId: string,
+    prompt: string,
+    receiptBag: Record<string, unknown>
+  ): Promise<string> {
+    if (!this._providerConfigured) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const profile = await this.requireProfile(orgId, profileId);
+    const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
+      orgId,
+      profileId,
+      profile.systemPrompt,
+      "member"
+    );
+    const userTimezone = await this.getUserTimezone();
+    const userContext = await this.loadUserContextForUser(orgId, undefined);
+    const harness = this.createHarnessForProfile(profile);
+    const userMessage = [
+      "Workflow receipts (only source of truth — do not invent values):",
+      "```json",
+      JSON.stringify(receiptBag, null, 2),
+      "```",
+      "",
+      prompt.trim(),
+    ].join("\n");
+
+    const session = harness.createChatSession({
+      channel: "automation",
+      enableToolLoop: false,
+      soul: soulActive,
+      systemPrompt,
+      toolContext: buildToolExecutionContext({
+        orgId,
+        orgRole: "member",
+        profileId,
+        recordToolOutputSavings: this.savingsRecorderFor(orgId),
+        recordTurnUsage: this.turnUsageRecorderFor(orgId),
+      }),
+      tools: [],
+      userContext,
+      userTimezone,
+    });
+
+    return session.send(userMessage);
+  }
+
   async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
     const startedAt = Date.now();
 
@@ -1604,6 +1706,14 @@ export class AgentService {
     }
 
     return this.automationRunner.run(automationId);
+  }
+
+  async runWorkflow(workflowId: string, input: Record<string, unknown> = {}) {
+    if (!this.workflowRunner) {
+      throw new Error("Workflow runner is not configured.");
+    }
+
+    return this.workflowRunner.run(workflowId, input);
   }
 
   async runTask(taskId: string) {
@@ -3220,6 +3330,7 @@ export class AgentService {
     profile: StoredProfileRecord,
     options: {
       includeAutomationTools?: boolean;
+      includeWorkflowTools?: boolean;
       includeTodoTools?: boolean;
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
@@ -3232,6 +3343,7 @@ export class AgentService {
       userConfig: this.userConfig,
     });
     const includeAutomationTools = options.includeAutomationTools ?? true;
+    const includeWorkflowTools = options.includeWorkflowTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
     const includeSubAgentTool = options.includeSubAgentTool ?? true;
@@ -3287,6 +3399,10 @@ export class AgentService {
 
     if (includeAutomationTools && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
+    }
+
+    if (includeWorkflowTools && this.workflowTools.length > 0) {
+      resolved = [...resolved, ...this.workflowTools];
     }
 
     if (includeTodoTools && this.todoTools.length > 0) {

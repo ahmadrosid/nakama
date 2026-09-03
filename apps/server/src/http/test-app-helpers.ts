@@ -21,6 +21,7 @@ export type CreateMinimalHonoAppOverrides = {
   agent?: ServerOptions["agent"] | object;
   authService?: AuthService;
   automationService?: ServerOptions["automationService"] | object;
+  workflowService?: ServerOptions["workflowService"] | object;
   composioService?: ServerOptions["composioService"];
   databaseAdapter?: DatabaseAdapter;
   mcpService?: ServerOptions["mcpService"] | object;
@@ -72,6 +73,8 @@ export function createMinimalHonoApp(
       overrides.webDistDir === undefined ? null : overrides.webDistDir,
     workerManager: (overrides.workerManager ??
       {}) as ServerOptions["workerManager"],
+    workflowService: (overrides.workflowService ??
+      {}) as ServerOptions["workflowService"],
   });
 
   return {
