@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
+import {
+  hasActiveStreams,
+  resetActiveStreamsForTests,
+} from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
@@ -28,6 +32,7 @@ import { ThreadStore } from "./thread-store";
 afterEach(() => {
   resetChatLocksForTests();
   chatLockOptions.waitMs = 15 * 60 * 1000;
+  resetActiveStreamsForTests();
 });
 
 /**
@@ -2013,6 +2018,24 @@ describe("createChatHandler session hot cache", () => {
       // 1 resolve validation + 1 artifact read per turn (hot path skips resolve getMessages)
       expect(calls.getMessages).toBe(3);
       expect(calls.sendStream).toBe(2);
+    });
+  });
+});
+
+describe("stream cleanup", () => {
+  test("clears active stream after sendStream fails", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage } = await createPairedHandler(homeDir, {
+        onSendStream: async () => {
+          throw new Error("provider down");
+        },
+      });
+
+      const dm = createDmMessage({ content: "hello agent" });
+      await handleMessage(dm.message);
+
+      expect(hasActiveStreams()).toBe(false);
+      expect(dm.sentMessages.some((m) => /provider down/i.test(m))).toBe(true);
     });
   });
 });
