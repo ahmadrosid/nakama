@@ -20,6 +20,14 @@ export class NakamaApiError extends Error {
   }
 }
 
+/** 401 after local-token reload did not yield a different token (or file missing). */
+export class NakamaAuthExpiredError extends NakamaApiError {
+  constructor(message: string, path?: string) {
+    super(message, 401, path);
+    this.name = "NakamaAuthExpiredError";
+  }
+}
+
 export async function readApiErrorMessage(response: Response): Promise<string> {
   const status = response.status;
   let bodyText = "";
@@ -137,22 +145,15 @@ export function formatAutomationRunError(error: unknown): string {
 }
 
 export function formatServerError(error: unknown): string {
+  if (error instanceof NakamaApiError) {
+    return error.message;
+  }
+
   if (error instanceof SyntaxError) {
     return "Invalid JSON in request body.";
   }
 
-  if (error instanceof Error) {
-    const message = error.message.trim();
-
-    if (message) {
-      return message;
-    }
-  }
-
-  if (typeof error === "string" && error.trim()) {
-    return error.trim();
-  }
-
+  console.error(error);
   return "An unexpected server error occurred.";
 }
 

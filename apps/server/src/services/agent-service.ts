@@ -101,7 +101,6 @@ import type {
   WhatsAppSettingsResponse,
 } from "@nakama/core";
 import {
-  AGENT_CHANNELS,
   apiKeyEnvVarForProvider,
   appendOrgMemorySection,
   buildErrorReport,
@@ -146,6 +145,7 @@ import {
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
+  parseAgentChannel,
   parseSentryDsn,
   persistInlineAttachmentsInContent,
   readArtifactFile,
@@ -203,7 +203,10 @@ import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createOrgMemoryTools } from "../tools/org-memory-tools";
 import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
-import { createSkillManageTools } from "../tools/skill-manage-tool";
+import {
+  createSkillManageTools,
+  SKILL_MANAGE_CHANNELS,
+} from "../tools/skill-manage-tool";
 import { formatToolActivityLabel } from "../tools/sub-agent-activity";
 import {
   buildSubAgentPrompt,
@@ -1786,13 +1789,16 @@ export class AgentService {
     }
 
     if (!Number.isInteger(messageIndex) || messageIndex < 0) {
-      throw new Error("messageIndex must be a non-negative integer.");
+      throw new NakamaApiError(
+        "messageIndex must be a non-negative integer.",
+        400
+      );
     }
 
     const sourceMessages = await loadSessionHistory(this.db, sessionId);
 
     if (messageIndex >= sourceMessages.length) {
-      throw new Error("messageIndex is out of bounds.");
+      throw new NakamaApiError("messageIndex is out of bounds.", 400);
     }
 
     const nextSessionId = nanoid();
@@ -2069,7 +2075,10 @@ export class AgentService {
       const apiKey = request.apiKey?.trim() ?? "";
 
       if (!apiKey) {
-        throw new Error("API key is required to discover Fireworks models.");
+        throw new NakamaApiError(
+          "API key is required to discover Fireworks models.",
+          400
+        );
       }
 
       const entries = await fetchFireworksGatewayModels(apiKey);
@@ -2105,7 +2114,7 @@ export class AgentService {
 
     const baseUrl = request.baseUrl?.trim();
     if (!baseUrl) {
-      throw new Error("baseUrl or providerId is required.");
+      throw new NakamaApiError("baseUrl or providerId is required.", 400);
     }
 
     const entries =
@@ -2154,7 +2163,7 @@ export class AgentService {
     );
 
     if (!instance) {
-      throw new Error("Provider not found.");
+      throw new NakamaApiError("Provider not found.", 404);
     }
 
     if (instance.type === "ollama" || instance.type === "openai_compatible") {
@@ -2177,8 +2186,9 @@ export class AgentService {
         ollamaRequiresApiKey(hostMode!) &&
         !apiKey.trim()
       ) {
-        throw new Error(
-          "Add an API key before discovering Ollama Cloud models."
+        throw new NakamaApiError(
+          "Add an API key before discovering Ollama Cloud models.",
+          400
         );
       }
 
@@ -2189,7 +2199,10 @@ export class AgentService {
         (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
 
       if (!baseUrl) {
-        throw new Error("A base URL is required to discover models.");
+        throw new NakamaApiError(
+          "A base URL is required to discover models.",
+          400
+        );
       }
 
       const entries =
@@ -2218,7 +2231,10 @@ export class AgentService {
         "";
 
       if (!apiKey.trim()) {
-        throw new Error("Add an API key before discovering Fireworks models.");
+        throw new NakamaApiError(
+          "Add an API key before discovering Fireworks models.",
+          400
+        );
       }
 
       const entries = await fetchFireworksGatewayModels(apiKey);
@@ -2237,13 +2253,17 @@ export class AgentService {
     }
 
     if (instance.type !== "openai") {
-      throw new Error(
-        `Remote model discovery is not supported for ${instance.type}.`
+      throw new NakamaApiError(
+        `Remote model discovery is not supported for ${instance.type}.`,
+        400
       );
     }
 
     if (!instance.apiKey.trim()) {
-      throw new Error("Add an API key before discovering models.");
+      throw new NakamaApiError(
+        "Add an API key before discovering models.",
+        400
+      );
     }
 
     const baseUrl = instance.baseUrl?.trim() || "https://api.openai.com/v1";
@@ -2616,7 +2636,7 @@ export class AgentService {
     const record = await this.db.getTool(toolId);
 
     if (!record) {
-      throw new Error("Tool not found.");
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     const profileId = await this.resolvePlaygroundProfileId(
@@ -2670,7 +2690,7 @@ export class AgentService {
     const record = await this.db.getTool(toolId);
 
     if (!record) {
-      throw new Error("Tool not found.");
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     const loaded = await handler.load(record);
@@ -3332,7 +3352,7 @@ export class AgentService {
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const includeSkillManageTools = channel === "web" || channel === "cli";
+    const includeSkillManageTools = SKILL_MANAGE_CHANNELS[channel];
     let tools = await this.resolveProfileTools(profile, {
       includeSkillManageTools,
       userId,
@@ -3340,10 +3360,12 @@ export class AgentService {
     if (channel === "discord") {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
-    const skillUsageContext =
-      channel === "web" || channel === "cli"
-        ? { seenCatalogSkillIds: new Set<string>(), sessionId }
-        : undefined;
+    // Same table as the tools above on purpose: a channel that can manage
+    // skills is a channel that needs the catalog to track what it has seen.
+    // Splitting them later means splitting the table, which is a visible edit.
+    const skillUsageContext = SKILL_MANAGE_CHANNELS[channel]
+      ? { seenCatalogSkillIds: new Set<string>(), sessionId }
+      : undefined;
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
       profileId,
@@ -3510,6 +3532,9 @@ export class AgentService {
         forbidProfileSkillMarkdownWrites: hasSkillManage,
         isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
+        onSkillCatalogChange: () => {
+          this.sessions.delete(sessionId);
+        },
         orgId,
         orgRole: orgRole ?? undefined,
         profileId,
@@ -3823,12 +3848,6 @@ export class AgentService {
       enabled: this.userConfig?.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
     };
   }
-}
-
-function parseAgentChannel(value: string): AgentChannel | null {
-  return AGENT_CHANNELS.includes(value as AgentChannel)
-    ? (value as AgentChannel)
-    : null;
 }
 
 function clampSubAgentTimeout(timeoutMs: number | undefined): number {

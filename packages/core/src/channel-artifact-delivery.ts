@@ -1,4 +1,8 @@
-import type { ChannelArtifactRef } from "./channel-artifacts";
+import {
+  type ChannelArtifactRef,
+  extractPairedTurnArtifacts,
+} from "./channel-artifacts";
+import type { ChatMessage } from "./contract";
 
 export interface DeliverableChannelArtifact extends ChannelArtifactRef {
   sharePath: string | null;
@@ -188,6 +192,78 @@ export async function mintDeliverableArtifacts(input: {
     } catch {
       // Skip failed publishes; text reply still goes out.
     }
+  }
+
+  return delivered;
+}
+
+/** Mint share links for this turn, update the session registry, send the footer. */
+export async function deliverTurnArtifactShares(input: {
+  conversationKey: string;
+  afterMinted?: (artifacts: DeliverableChannelArtifact[]) => Promise<void>;
+  publish: (relativePath: string) => Promise<PublishArtifactShareResult>;
+  sendFooter: (footer: string) => Promise<void>;
+  session: { getMessages(): Promise<ChatMessage[]> };
+  sessionStore: {
+    getArtifactShareUrls(key: string): Record<string, string>;
+    getDeliverableArtifacts(key: string): DeliverableChannelArtifact[];
+    save(): Promise<void>;
+    updateArtifactState(
+      key: string,
+      update: {
+        artifactShareUrls?: Record<string, string>;
+        deliverableArtifacts?: DeliverableChannelArtifact[];
+      }
+    ): void;
+  };
+}): Promise<DeliverableChannelArtifact[]> {
+  const messages = await input.session.getMessages();
+  const paired = extractPairedTurnArtifacts(messages);
+  if (paired.length === 0) {
+    return [];
+  }
+
+  const shareUrlCache = input.sessionStore.getArtifactShareUrls(
+    input.conversationKey
+  );
+  let webPublicUrlConfigured = true;
+  const delivered = await mintDeliverableArtifacts({
+    artifacts: paired,
+    publish: async (path) => {
+      const response = await input.publish(path);
+      webPublicUrlConfigured = response.webPublicUrlConfigured;
+      return response;
+    },
+    shareUrlCache,
+  });
+
+  if (delivered.length === 0) {
+    return [];
+  }
+
+  let registry = input.sessionStore.getDeliverableArtifacts(
+    input.conversationKey
+  );
+  for (const artifact of delivered) {
+    registry = pushDeliverableArtifact(registry, artifact);
+  }
+
+  input.sessionStore.updateArtifactState(input.conversationKey, {
+    artifactShareUrls: shareUrlCache,
+    deliverableArtifacts: registry,
+  });
+  await input.sessionStore.save();
+
+  if (input.afterMinted) {
+    await input.afterMinted(delivered);
+  }
+
+  const footer = formatArtifactShareFooter(delivered, {
+    webPublicUrlConfigured,
+  });
+
+  if (footer.trim()) {
+    await input.sendFooter(footer);
   }
 
   return delivered;

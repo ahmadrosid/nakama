@@ -1,5 +1,4 @@
-import type { AgentBrowserInstallEvent } from "@nakama/core";
-import { formatServerError } from "@nakama/core";
+import { type AgentBrowserInstallEvent, formatServerError } from "@nakama/core";
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 

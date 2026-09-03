@@ -122,6 +122,24 @@ describe("skill_manage tool", () => {
     expect(matched).toContain("Active Skill: research-paper");
   });
 
+  test("invalidates the current session catalog after live create and delete", async () => {
+    const { tool } = await setup();
+    let invalidations = 0;
+    const context = memberContext({
+      onSkillCatalogChange: () => {
+        invalidations += 1;
+      },
+    });
+
+    await tool.run(
+      { action: "create", content: researchSkillMarkdown },
+      context
+    );
+    await tool.run({ action: "delete", name: "research-paper" }, context);
+
+    expect(invalidations).toBe(2);
+  });
+
   test("create adopts an existing unassigned profile skill directory", async () => {
     const { db, tool } = await setup();
     const leftoverDir = join(
@@ -380,15 +398,42 @@ Profile body.
     ).rejects.toThrow("not available during automation runs");
   });
 
-  test("refuses non-interactive channel context", async () => {
+  // The whole of SKILL_MANAGE_CHANNELS, so flipping any one value fails here
+  // instead of only changing behaviour. The two allowed channels create; the
+  // six others are refused before anything touches disk.
+  test("lets the skill-management channels through the gate", async () => {
+    for (const channel of ["web", "cli"] as const) {
+      const { tool } = await setup();
+
+      const result = await tool.run(
+        { action: "create", content: researchSkillMarkdown },
+        memberContext({ channel })
+      );
+
+      expect(result).toMatchObject({ created: true, name: "research-paper" });
+      // Each pass needs its own config dir; afterEach only removes the last.
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("refuses every channel outside the skill-management table", async () => {
     const { tool } = await setup();
 
-    await expect(
-      tool.run(
-        { action: "create", content: researchSkillMarkdown },
-        memberContext({ channel: "telegram" })
-      )
-    ).rejects.toThrow(/interactive web or CLI/);
+    for (const channel of [
+      "automation",
+      "discord",
+      "subagent",
+      "task",
+      "telegram",
+      "whatsapp",
+    ] as const) {
+      await expect(
+        tool.run(
+          { action: "create", content: researchSkillMarkdown },
+          memberContext({ channel })
+        )
+      ).rejects.toThrow(/interactive web or CLI/);
+    }
   });
 
   test("gate off creates immediately (AE1 regression)", async () => {
@@ -416,10 +461,16 @@ Profile body.
     const service = new SkillsService(db);
     const proposalService = new SkillProposalService(db, service);
     const tool = skillManageTool(service, proposalService);
+    let invalidations = 0;
 
     const result = await tool.run(
       { action: "create", content: researchSkillMarkdown },
-      memberContext({ profileId: profile.id })
+      memberContext({
+        onSkillCatalogChange: () => {
+          invalidations += 1;
+        },
+        profileId: profile.id,
+      })
     );
 
     expect(result).toMatchObject({
@@ -429,6 +480,7 @@ Profile body.
       staged: true,
     });
     expect(await db.listSkillsForProfile(profile.id)).toHaveLength(0);
+    expect(invalidations).toBe(0);
   });
 
   test("write_file refuses skills/*/SKILL.md when forbidProfileSkillMarkdownWrites is set", async () => {

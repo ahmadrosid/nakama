@@ -51,6 +51,31 @@ describe("classifySkillFreshness", () => {
     ).toBe("stale");
   });
 
+  test("uses organization stale and archive day overrides", () => {
+    const staleAfterDays = 7;
+    const archiveAfterDays = 21;
+
+    expect(
+      classifySkillFreshness({
+        archiveAfterDays,
+        createdAt: "2025-01-01T00:00:00.000Z",
+        lastUsedAt: new Date(now.getTime() - 8 * DAY_MS).toISOString(),
+        now,
+        staleAfterDays,
+      })
+    ).toBe("stale");
+
+    expect(
+      classifySkillFreshness({
+        archiveAfterDays,
+        createdAt: "2025-01-01T00:00:00.000Z",
+        lastUsedAt: new Date(now.getTime() - 22 * DAY_MS).toISOString(),
+        now,
+        staleAfterDays,
+      })
+    ).toBe("archive_due");
+  });
+
   test("marks unused at the 90-day threshold as archive_due", () => {
     expect(
       classifySkillFreshness({

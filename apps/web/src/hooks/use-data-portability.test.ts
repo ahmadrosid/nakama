@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatDataPortabilityBytes,
+  shouldClearInitialPreviewDedupe,
   shouldStartInitialFilePreview,
 } from "./use-data-portability";
 
@@ -22,5 +23,13 @@ describe("shouldStartInitialFilePreview", () => {
     expect(shouldStartInitialFilePreview(file, file)).toBe(false);
     expect(shouldStartInitialFilePreview(other, file)).toBe(true);
     expect(shouldStartInitialFilePreview(null, file)).toBe(false);
+  });
+});
+
+describe("shouldClearInitialPreviewDedupe", () => {
+  test("only the current generation clears the dedupe key", () => {
+    expect(shouldClearInitialPreviewDedupe(1, 1)).toBe(true);
+    expect(shouldClearInitialPreviewDedupe(1, 2)).toBe(false);
+    expect(shouldClearInitialPreviewDedupe(2, 2)).toBe(true);
   });
 });

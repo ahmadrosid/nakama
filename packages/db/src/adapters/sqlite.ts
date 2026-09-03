@@ -190,6 +190,7 @@ interface LlmUsageModelStatsRow {
 }
 
 interface WorkspaceSettingsRow {
+  automation_worker_poll_interval_ms: number;
   coding_agent_harnesses: string;
   coding_agent_provider_passthrough: number | null;
   id: string;
@@ -317,9 +318,11 @@ interface OrganizationRow {
   created_at: string;
   id: string;
   name: string;
+  skills_curator_archive_after_days: number;
   skills_curator_consolidate_enabled: number;
   skills_curator_enabled: number;
   skills_curator_last_run_at: string | null;
+  skills_curator_stale_after_days: number;
   skills_post_turn_review: number;
   skills_write_approval: number;
   slug: string;
@@ -670,6 +673,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     DELETE FROM profile_tools
     WHERE profile_id = ? AND tool_id = ?
   `);
+  const unassignToolFromAllProfilesStmt = db.prepare(`
+    DELETE FROM profile_tools
+    WHERE tool_id = ?
+  `);
+  const deleteToolEverywhereTransaction = db.transaction((toolId: string) => {
+    unassignToolFromAllProfilesStmt.run(toolId);
+    return deleteToolStmt.run(toolId);
+  });
 
   const listSessionsStmt = db.prepare("SELECT * FROM sessions");
   const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
@@ -1047,9 +1058,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       selected_coding_agent_harness,
       token_optimizer_enabled,
       coding_agent_provider_passthrough,
+      automation_worker_poll_interval_ms,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
@@ -1058,6 +1070,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
       token_optimizer_enabled = excluded.token_optimizer_enabled,
       coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
+      automation_worker_poll_interval_ms = excluded.automation_worker_poll_interval_ms,
       updated_at = excluded.updated_at
   `);
   const listNotificationDestinationsForOrgStmt = db.prepare(`
@@ -1304,10 +1317,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET password_hash = ?, updated_at = ?
     WHERE id = ?
   `);
+  // Per-org context lives on org_members only. users.user_context is a legacy
+  // column left in place for existing installs; migrateLegacyUserContextToOrgMembers
+  // copies any remaining values once, and this read path must not use it (#550).
   const getUserContextStmt = db.prepare(`
-    SELECT COALESCE(om.user_context, u.user_context) AS user_context
+    SELECT om.user_context AS user_context
     FROM org_members om
-    INNER JOIN users u ON u.id = om.user_id
     WHERE om.org_id = ? AND om.user_id = ?
   `);
   const setUserContextStmt = db.prepare(`
@@ -1367,14 +1382,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
   `);
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_enabled = excluded.skills_curator_enabled,
+      skills_curator_stale_after_days = excluded.skills_curator_stale_after_days,
+      skills_curator_archive_after_days = excluded.skills_curator_archive_after_days,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
       skills_curator_last_run_at = excluded.skills_curator_last_run_at,
       archived_at = excluded.archived_at,
@@ -1612,6 +1629,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET status = 'applied', applied_at = ?
     WHERE org_id = ? AND id = ?
   `);
+  const listSkillSuggestionsStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      action, skill_name, content, patch_old_string, patch_new_string,
+      status, source, warnings, created_at, applied_at
+    FROM skill_suggestions
+    WHERE org_id = ?
+      AND (? IS NULL OR session_id = ?)
+      AND (? IS NULL OR status = ?)
+      AND (? IS NULL OR profile_id = ?)
+    ORDER BY created_at DESC
+  `);
   const createArtifactShareStmt = db.prepare(`
     INSERT INTO artifact_shares (
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
@@ -1691,9 +1720,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND o.archived_at IS NULL
     ORDER BY o.name ASC
   `);
+  // The last-admin guard lives in the statement so two concurrent removals
+  // cannot both pass a read-then-write check and leave the org with no admin.
   const deleteOrgMemberStmt = db.prepare(`
     DELETE FROM org_members
     WHERE org_id = ? AND user_id = ?
+      AND (role != 'admin'
+        OR (SELECT COUNT(*) FROM org_members
+            WHERE org_id = ? AND role = 'admin') > 1)
+  `);
+  const updateOrgMemberRoleStmt = db.prepare(`
+    UPDATE org_members SET role = ?
+    WHERE org_id = ? AND user_id = ?
+      AND (? = 'admin' OR role != 'admin'
+        OR (SELECT COUNT(*) FROM org_members
+            WHERE org_id = ? AND role = 'admin') > 1)
   `);
 
   return {
@@ -1927,7 +1968,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteOrgMember(orgId, userId) {
-      const result = deleteOrgMemberStmt.run(orgId, userId);
+      const result = deleteOrgMemberStmt.run(orgId, userId, orgId);
       return result.changes > 0;
     },
 
@@ -1952,7 +1993,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteTool(id) {
-      const result = deleteToolStmt.run(id);
+      // FK cascade is off (PRAGMA foreign_keys = OFF), so unassign + delete
+      // must be one transaction or seed/admin delete can leave partial state.
+      const result = deleteToolEverywhereTransaction(id);
       return result.changes > 0;
     },
 
@@ -2610,32 +2653,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listSkillSuggestions(orgId, options = {}) {
       const { sessionId, status, profileId } = options;
-      const conditions = ["org_id = ?"];
-      const params: string[] = [orgId];
-
-      if (sessionId) {
-        conditions.push("session_id = ?");
-        params.push(sessionId);
-      }
-      if (status) {
-        conditions.push("status = ?");
-        params.push(status);
-      }
-      if (profileId) {
-        conditions.push("profile_id = ?");
-        params.push(profileId);
-      }
-
-      const sql = `
-        SELECT
-          id, org_id, profile_id, session_id, proposed_by_user_id,
-          action, skill_name, content, patch_old_string, patch_new_string,
-          status, source, warnings, created_at, applied_at
-        FROM skill_suggestions
-        WHERE ${conditions.join(" AND ")}
-        ORDER BY created_at DESC
-      `;
-      const rows = db.query(sql).all(...params) as SkillSuggestionRow[];
+      const sessionFilter = sessionId ?? null;
+      const statusFilter = status ?? null;
+      const profileFilter = profileId ?? null;
+      const rows = listSkillSuggestionsStmt.all(
+        orgId,
+        sessionFilter,
+        sessionFilter,
+        statusFilter,
+        statusFilter,
+        profileFilter,
+        profileFilter
+      ) as SkillSuggestionRow[];
       return rows.map(toSkillSuggestionRecord);
     },
 
@@ -2816,6 +2845,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updateBrowserSessionLastUsedAtStmt.run(lastUsedAt, id);
     },
 
+    async updateOrgMemberRole(orgId, userId, role) {
+      const result = updateOrgMemberRoleStmt.run(
+        role,
+        orgId,
+        userId,
+        role,
+        orgId
+      );
+      return result.changes > 0;
+    },
+
     async updateOrgMemoryProposalStatus(orgId, id, update) {
       const result = updateOrgMemoryProposalStatusStmt.run(
         update.status,
@@ -2983,6 +3023,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.skillsWriteApproval ? 1 : 0,
         record.skillsPostTurnReview ? 1 : 0,
         record.skillsCuratorEnabled ? 1 : 0,
+        record.skillsCuratorStaleAfterDays ?? 30,
+        record.skillsCuratorArchiveAfterDays ?? 90,
         record.skillsCuratorConsolidateEnabled ? 1 : 0,
         record.skillsCuratorLastRunAt ?? null,
         record.archivedAt ?? null,
@@ -3080,6 +3122,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ? null
           : Number(record.tokenOptimizerEnabled),
         record.codingAgentProviderPassthrough === false ? 0 : 1,
+        record.automationWorkerPollIntervalMs ?? 5 * 60 * 1000,
         record.updatedAt
       );
     },
@@ -3441,6 +3484,7 @@ function toWorkspaceSettingsRecord(
   row: WorkspaceSettingsRow
 ): StoredWorkspaceSettingsRecord {
   return {
+    automationWorkerPollIntervalMs: row.automation_worker_poll_interval_ms,
     codingAgentHarnesses: parseCodingAgentHarnesses(row.coding_agent_harnesses),
     codingAgentProviderPassthrough: row.coding_agent_provider_passthrough !== 0,
     id: row.id,
@@ -3658,10 +3702,12 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     createdAt: row.created_at,
     id: row.id,
     name: row.name,
+    skillsCuratorArchiveAfterDays: row.skills_curator_archive_after_days,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled !== 0,
     skillsCuratorEnabled: row.skills_curator_enabled !== 0,
     skillsCuratorLastRunAt: row.skills_curator_last_run_at,
+    skillsCuratorStaleAfterDays: row.skills_curator_stale_after_days,
     skillsPostTurnReview: row.skills_post_turn_review !== 0,
     skillsWriteApproval: row.skills_write_approval !== 0,
     slug: row.slug,

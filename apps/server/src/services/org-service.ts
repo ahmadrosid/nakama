@@ -130,9 +130,22 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
+    const skillsCuratorStaleAfterDays =
+      request.skillsCuratorStaleAfterDays === undefined
+        ? (org.skillsCuratorStaleAfterDays ?? 30)
+        : request.skillsCuratorStaleAfterDays;
+    const skillsCuratorArchiveAfterDays =
+      request.skillsCuratorArchiveAfterDays === undefined
+        ? (org.skillsCuratorArchiveAfterDays ?? 90)
+        : request.skillsCuratorArchiveAfterDays;
+    assertSkillCuratorFreshnessClocks(
+      skillsCuratorStaleAfterDays,
+      skillsCuratorArchiveAfterDays
+    );
     const updated: StoredOrganizationRecord = {
       ...org,
       name,
+      skillsCuratorArchiveAfterDays,
       skillsCuratorConsolidateEnabled:
         request.skillsCuratorConsolidateEnabled === undefined
           ? (org.skillsCuratorConsolidateEnabled ?? false)
@@ -142,6 +155,7 @@ export class OrgService {
           ? (org.skillsCuratorEnabled ?? false)
           : request.skillsCuratorEnabled,
       skillsCuratorLastRunAt: org.skillsCuratorLastRunAt ?? null,
+      skillsCuratorStaleAfterDays,
       skillsPostTurnReview:
         request.skillsPostTurnReview === undefined
           ? (org.skillsPostTurnReview ?? false)
@@ -471,11 +485,8 @@ export class OrgService {
       passwordHash: string;
     };
   }): Promise<{ user: StoredUserRecord; organization: OrganizationSummary }> {
-    const organization = await this.insertOrganization({
-      name: input.organization.name,
-      slug: input.organization.slug,
-    });
-
+    // Validate before the insert: a rejected admin used to leave the org behind,
+    // and the retry then failed on the slug it had just taken.
     const name = input.admin.name.trim();
     const email = normalizeEmail(input.admin.email);
     const phone = normalizeOptionalPhone(input.admin.phone);
@@ -487,6 +498,11 @@ export class OrgService {
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
+
+    const organization = await this.insertOrganization({
+      name: input.organization.name,
+      slug: input.organization.slug,
+    });
 
     const now = new Date().toISOString();
     const user: StoredUserRecord = {
@@ -543,8 +559,20 @@ export class OrgService {
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
     if (!deleted) {
+      // The delete carries the last-admin guard, so a concurrent change between
+      // the check above and here lands here rather than emptying the org.
+      await this.assertCanChangeAdminMembership(orgId, userId);
       throw new NakamaApiError("Not found", 404);
     }
+
+    // The org middleware stops org routes for a non-member, but the cookie stays
+    // valid on /v1/auth/* until it expires. Revoke like changePassword does: all
+    // of the user's sessions, so a multi-org user re-authenticates rather than
+    // keeping a session whose active org they were just removed from.
+    await this.databaseAdapter.revokeBrowserSessionsForUser(
+      userId,
+      new Date().toISOString()
+    );
   }
 
   async updateMember(
@@ -589,12 +617,15 @@ export class OrgService {
     }
 
     if (member.role !== role) {
-      await this.databaseAdapter.upsertOrgMember({
-        createdAt: member.createdAt,
+      const updated = await this.databaseAdapter.updateOrgMemberRole(
         orgId,
-        role,
         userId,
-      });
+        role
+      );
+      if (!updated) {
+        await this.assertCanChangeAdminMembership(orgId, userId, role);
+        throw new NakamaApiError("Not found", 404);
+      }
     }
 
     return {
@@ -856,6 +887,8 @@ export class OrgService {
       createdAt: now,
       id: `org_${crypto.randomUUID().replace(/-/g, "")}`,
       name,
+      skillsCuratorArchiveAfterDays: 90,
+      skillsCuratorStaleAfterDays: 30,
       slug,
       updatedAt: now,
     };
@@ -937,6 +970,24 @@ function assertInviteUsable(invite: StoredOrgInviteRecord): void {
   }
 }
 
+function assertSkillCuratorFreshnessClocks(
+  staleAfterDays: number,
+  archiveAfterDays: number
+): void {
+  if (
+    !(Number.isInteger(staleAfterDays) && Number.isInteger(archiveAfterDays)) ||
+    staleAfterDays <= 0 ||
+    archiveAfterDays <= 0 ||
+    staleAfterDays >= archiveAfterDays ||
+    archiveAfterDays > 3650
+  ) {
+    throw new NakamaApiError(
+      "Skill curator days must be positive integers with stale before archive and archive at most 3650 days.",
+      400
+    );
+  }
+}
+
 function assertNewPassword(password: string): void {
   if (password.length < 8) {
     throw new NakamaApiError("Password must be at least 8 characters.", 400);
@@ -951,10 +1002,12 @@ function toOrganizationSummary(
     createdAt: record.createdAt,
     id: record.id,
     name: record.name,
+    skillsCuratorArchiveAfterDays: record.skillsCuratorArchiveAfterDays ?? 90,
     skillsCuratorConsolidateEnabled:
       record.skillsCuratorConsolidateEnabled ?? false,
     skillsCuratorEnabled: record.skillsCuratorEnabled ?? false,
     skillsCuratorLastRunAt: record.skillsCuratorLastRunAt ?? null,
+    skillsCuratorStaleAfterDays: record.skillsCuratorStaleAfterDays ?? 30,
     skillsPostTurnReview: record.skillsPostTurnReview ?? false,
     skillsWriteApproval: record.skillsWriteApproval ?? false,
     slug: record.slug,

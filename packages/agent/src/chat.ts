@@ -42,6 +42,7 @@ import {
   type CompactionConfig,
   compactHistory,
   estimateHistoryTokens,
+  providerReplaysThinking,
   usableContextTokens,
 } from "./history-compaction";
 import {
@@ -225,7 +226,10 @@ export function createAgentChatSession(
     const usedTokens = estimateHistoryTokens(
       history,
       `${systemPrompt}\n\n${dateLine}`,
-      llmToolsForEstimate()
+      llmToolsForEstimate(),
+      dependencies.provider
+        ? providerReplaysThinking(dependencies.provider.name)
+        : true
     );
 
     return buildContextUsage(usedTokens, "estimate");
@@ -521,7 +525,8 @@ async function runConversation(
       estimateHistoryTokens(
         history,
         `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
-        llmTools
+        llmTools,
+        providerReplaysThinking(provider.name)
       );
     onContextUsage?.(
       usedTokens,

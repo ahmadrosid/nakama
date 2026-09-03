@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   phone TEXT,
   is_platform_admin INTEGER DEFAULT 0 NOT NULL,
+  -- Legacy: pre-org USER.md; migrateLegacyUserContextToOrgMembers copies into org_members (#550).
   user_context TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -261,6 +262,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   skills_write_approval INTEGER NOT NULL DEFAULT 0,
   skills_post_turn_review INTEGER NOT NULL DEFAULT 0,
   skills_curator_enabled INTEGER NOT NULL DEFAULT 0,
+  skills_curator_stale_after_days INTEGER NOT NULL DEFAULT 30,
+  skills_curator_archive_after_days INTEGER NOT NULL DEFAULT 90,
   skills_curator_consolidate_enabled INTEGER NOT NULL DEFAULT 0,
   skills_curator_last_run_at TEXT,
   archived_at TEXT,

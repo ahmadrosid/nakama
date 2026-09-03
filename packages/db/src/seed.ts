@@ -58,7 +58,6 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
 export async function removeLegacyBuiltinTools(
   db: DatabaseAdapter
 ): Promise<void> {
-  const profiles = await db.listProfiles();
   const tools = await db.listTools();
 
   for (const tool of tools) {
@@ -69,10 +68,7 @@ export async function removeLegacyBuiltinTools(
       continue;
     }
 
-    for (const profile of profiles) {
-      await db.unassignToolFromProfile(profile.id, tool.id);
-    }
-
+    // deleteTool unassigns every profile + deletes in one SQLite transaction.
     await db.deleteTool(tool.id);
   }
 }
@@ -80,7 +76,6 @@ export async function removeLegacyBuiltinTools(
 export async function removeDeprecatedBuiltinTools(
   db: DatabaseAdapter
 ): Promise<void> {
-  const profiles = await db.listProfiles();
   const tools = await db.listTools();
 
   for (const tool of tools) {
@@ -91,10 +86,6 @@ export async function removeDeprecatedBuiltinTools(
       continue;
     }
 
-    for (const profile of profiles) {
-      await db.unassignToolFromProfile(profile.id, tool.id);
-    }
-
     await db.deleteTool(tool.id);
   }
 }
@@ -102,16 +93,11 @@ export async function removeDeprecatedBuiltinTools(
 export async function removeDeprecatedServerTools(
   db: DatabaseAdapter
 ): Promise<void> {
-  const profiles = await db.listProfiles();
   const tools = await db.listTools();
 
   for (const tool of tools) {
     if (!DEPRECATED_SERVER_TOOL_NAMES.has(tool.name)) {
       continue;
-    }
-
-    for (const profile of profiles) {
-      await db.unassignToolFromProfile(profile.id, tool.id);
     }
 
     await db.deleteTool(tool.id);
@@ -121,16 +107,11 @@ export async function removeDeprecatedServerTools(
 export async function removeUnsupportedTools(
   db: DatabaseAdapter
 ): Promise<void> {
-  const profiles = await db.listProfiles();
   const tools = await db.listTools();
 
   for (const tool of tools) {
     if (SUPPORTED_TOOL_HANDLER_TYPES.has(tool.handlerType)) {
       continue;
-    }
-
-    for (const profile of profiles) {
-      await db.unassignToolFromProfile(profile.id, tool.id);
     }
 
     await db.deleteTool(tool.id);

@@ -24,6 +24,7 @@ import {
 } from "../org-guards";
 import {
   assertBrowserCsrf,
+  assertJsonRequest,
   authenticateRequest,
   clearBrowserSessionCookies,
   createBrowserSessionResponse,
@@ -444,6 +445,8 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     if (!(authService && databaseAdapter && orgService)) {
       return errorResponse("Authentication not configured", 500);
     }
+
+    assertJsonRequest(c.req.raw);
 
     const body = await readJson<{ email: string; password: string }>(c.req.raw);
     const user = await databaseAdapter.getUserByEmail(body.email);

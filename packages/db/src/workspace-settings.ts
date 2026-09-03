@@ -20,6 +20,10 @@ export function mergeWorkspaceSettings(
   patch: Partial<StoredWorkspaceSettingsRecord> = {}
 ): StoredWorkspaceSettingsRecord {
   return {
+    automationWorkerPollIntervalMs: pickDefined(
+      patch.automationWorkerPollIntervalMs,
+      existing?.automationWorkerPollIntervalMs ?? 5 * 60 * 1000
+    ),
     codingAgentHarnesses: pickDefined(
       patch.codingAgentHarnesses,
       existing?.codingAgentHarnesses ?? []
@@ -30,7 +34,6 @@ export function mergeWorkspaceSettings(
     ),
     id: pickDefined(patch.id, existing?.id ?? WORKSPACE_SETTINGS_ID),
     imageModel: pickDefined(patch.imageModel, existing?.imageModel ?? null),
-    orgId: "orgId" in patch ? patch.orgId : existing?.orgId,
     selectedCodingAgentHarness: pickDefined(
       patch.selectedCodingAgentHarness,
       existing?.selectedCodingAgentHarness ?? null

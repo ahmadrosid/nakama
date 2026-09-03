@@ -1,3 +1,4 @@
+import { NakamaApiError } from "./api-error";
 import type {
   CreateNotificationDestinationRequest,
   NotificationWebhookLevel,
@@ -66,19 +67,22 @@ export function normalizeNotificationWebhookRequest(
   value: unknown
 ): NotificationWebhookRequest {
   if (typeof value !== "object" || value === null) {
-    throw new Error("notification payload must be an object.");
+    throw new NakamaApiError("notification payload must be an object.", 400);
   }
 
   const record = value as Record<string, unknown>;
   const body = record.body;
 
   if (typeof body !== "string" || !body.trim()) {
-    throw new Error("body must be a non-empty string.");
+    throw new NakamaApiError("body must be a non-empty string.", 400);
   }
 
   const title = record.title;
   if (title !== undefined && (typeof title !== "string" || !title.trim())) {
-    throw new Error("title must be a non-empty string when provided.");
+    throw new NakamaApiError(
+      "title must be a non-empty string when provided.",
+      400
+    );
   }
 
   return {

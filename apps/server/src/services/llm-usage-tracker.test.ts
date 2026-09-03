@@ -58,4 +58,81 @@ describe("LlmUsageTracker", () => {
       },
     ]);
   });
+
+  test("waits for an in-flight record before reloading", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const incrementStats = db.incrementLlmUsageStats.bind(db);
+    const persistGate = Promise.withResolvers<void>();
+    const persistStarted = Promise.withResolvers<void>();
+
+    db.incrementLlmUsageStats = async (delta, trackedSince) => {
+      persistStarted.resolve();
+      await persistGate.promise;
+      await incrementStats(delta, trackedSince);
+    };
+
+    const tracker = await LlmUsageTracker.create(db);
+    tracker.record("gpt-4o", 100, 50);
+    await persistStarted.promise;
+
+    const reload = tracker.reloadFromDatabase();
+    persistGate.resolve();
+    await reload;
+
+    expect(tracker.getStats().requestCount).toBe(1);
+    expect(tracker.getStatsByModel()).toHaveLength(1);
+  });
+
+  test("retries a reload when a record arrives during the database read", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.incrementLlmUsageStats(
+      {
+        estimatedCostUsd: 0.02,
+        inputTokens: 200,
+        outputTokens: 100,
+        requestCount: 2,
+      },
+      "2026-06-05T00:00:00.000Z"
+    );
+    const tracker = await LlmUsageTracker.create(db);
+    const getStats = db.getLlmUsageStats.bind(db);
+    const readGate = Promise.withResolvers<void>();
+    const readStarted = Promise.withResolvers<void>();
+    let readCount = 0;
+    let pauseNextRead = true;
+
+    db.getLlmUsageStats = async () => {
+      readCount += 1;
+      const snapshot = await getStats();
+      if (pauseNextRead) {
+        pauseNextRead = false;
+        readStarted.resolve();
+        await readGate.promise;
+      }
+      return snapshot;
+    };
+
+    const reload = tracker.reloadFromDatabase();
+    await readStarted.promise;
+    tracker.record("gpt-4o", 100, 50);
+    readGate.resolve();
+    await reload;
+
+    expect(tracker.getStats()).toMatchObject({
+      inputTokens: 300,
+      outputTokens: 150,
+      requestCount: 3,
+      totalTokens: 450,
+    });
+    expect(readCount).toBe(2);
+    expect(tracker.getStatsByModel()).toMatchObject([
+      {
+        inputTokens: 100,
+        modelId: "gpt-4o",
+        outputTokens: 50,
+        requestCount: 1,
+        totalTokens: 150,
+      },
+    ]);
+  });
 });

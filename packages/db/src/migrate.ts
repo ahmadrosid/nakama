@@ -26,6 +26,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillsTables);
   atomic(migrateUsersTable);
   atomic(migrateOrgTables);
+  atomic(migrateLegacyUserContextToOrgMembers);
   atomic(migrateOrgMemoryProposalsTable);
   atomic(migrateSkillProposalsTable);
   atomic(migrateSkillSuggestionsTable);
@@ -422,6 +423,38 @@ function migrateOrgTables(db: Database): void {
   }
 }
 
+/**
+ * Pre-org installs stored USER.md on users.user_context. Writes moved to
+ * org_members (#550); copy any remaining legacy values into memberships that
+ * still lack per-org context so getUserContext can stop reading users.
+ */
+function migrateLegacyUserContextToOrgMembers(db: Database): void {
+  const usersColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{
+    name: string;
+  }>;
+  const membersColumns = db
+    .prepare("PRAGMA table_info(org_members)")
+    .all() as Array<{ name: string }>;
+  const userNames = new Set(usersColumns.map((column) => column.name));
+  const memberNames = new Set(membersColumns.map((column) => column.name));
+
+  if (!(userNames.has("user_context") && memberNames.has("user_context"))) {
+    return;
+  }
+
+  db.exec(`
+    UPDATE org_members
+    SET user_context = (
+      SELECT users.user_context
+      FROM users
+      WHERE users.id = org_members.user_id
+        AND users.user_context IS NOT NULL
+        AND TRIM(users.user_context) != ''
+    )
+    WHERE user_context IS NULL;
+  `);
+}
+
 function migrateOrgMemoryProposalsTable(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS org_memory_proposals (
@@ -567,6 +600,18 @@ function migrateSkillsCuratorColumns(db: Database): void {
   if (!names.has("skills_curator_enabled")) {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN skills_curator_enabled INTEGER NOT NULL DEFAULT 0;"
+    );
+  }
+
+  if (!names.has("skills_curator_stale_after_days")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN skills_curator_stale_after_days INTEGER NOT NULL DEFAULT 30;"
+    );
+  }
+
+  if (!names.has("skills_curator_archive_after_days")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN skills_curator_archive_after_days INTEGER NOT NULL DEFAULT 90;"
     );
   }
 
@@ -1217,6 +1262,12 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   if (!columnNames.has("coding_agent_provider_passthrough")) {
     db.exec(`
       ALTER TABLE workspace_settings ADD COLUMN coding_agent_provider_passthrough INTEGER NOT NULL DEFAULT 1;
+    `);
+  }
+
+  if (!columnNames.has("automation_worker_poll_interval_ms")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN automation_worker_poll_interval_ms INTEGER NOT NULL DEFAULT 300000;
     `);
   }
 }

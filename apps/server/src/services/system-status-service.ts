@@ -7,6 +7,7 @@ import type {
 import {
   getAutomationWorkerHeartbeatStatus,
   getDiscordWorkerStatus,
+  getNakamaVersion,
   getTelegramWorkerStatus,
   getWhatsAppWorkerStatus,
   isComposioConfiguredAsync,
@@ -160,6 +161,7 @@ export class SystemStatusService {
       ok: true,
       providerConfigured: this.agent.providerConfigured,
       userConfigured: humanUserCount > 0,
+      version: getNakamaVersion(),
     };
   }
 }

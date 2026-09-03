@@ -34,6 +34,7 @@ import {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 30 * 60_000;
 const MAX_OUTPUT_CHARS = 32_000;
+const SIGKILL_GRACE_MS = 5000;
 /** In-memory capture for coding-agent runs before summarize / keep-tail. */
 const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
 /** Keep the newest N coding-agent logs; prune the rest after each write. */
@@ -222,9 +223,6 @@ function runShellCommand(
     const child = spawn("/bin/bash", ["-lc", command], {
       cwd,
       env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
-      // SIGTERMs the shell when the turn is cancelled, so a stopped chat does not
-      // leave an ffmpeg or coding-agent run holding the session turn open.
-      signal: options.signal,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -233,10 +231,44 @@ function runShellCommand(
     let timedOut = false;
     let stdoutOverflow = false;
     let stderrOverflow = false;
+    let killTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let abortHandled = false;
+
+    const scheduleForcedKill = () => {
+      if (killTimeoutId) {
+        return;
+      }
+
+      killTimeoutId = setTimeout(() => {
+        killTimeoutId = null;
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // already exited
+        }
+      }, SIGKILL_GRACE_MS);
+      killTimeoutId.unref();
+    };
+
+    const onAbort = () => {
+      if (abortHandled) {
+        return;
+      }
+      abortHandled = true;
+      child.kill("SIGTERM");
+      scheduleForcedKill();
+      reject(new DOMException("The operation was aborted", "AbortError"));
+    };
+
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (options.signal?.aborted) {
+      onAbort();
+    }
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
+      scheduleForcedKill();
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk: Buffer | string) => {
@@ -263,11 +295,17 @@ function runShellCommand(
 
     child.on("error", (error) => {
       clearTimeout(timeoutId);
+      options.signal?.removeEventListener("abort", onAbort);
       reject(error);
     });
 
     child.on("close", (exitCode) => {
       clearTimeout(timeoutId);
+      if (killTimeoutId) {
+        clearTimeout(killTimeoutId);
+        killTimeoutId = null;
+      }
+      options.signal?.removeEventListener("abort", onAbort);
 
       void finalizeCodingAgentOutput({
         codingAgentMode: options.codingAgentMode,

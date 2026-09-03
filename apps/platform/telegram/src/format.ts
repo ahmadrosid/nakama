@@ -1,13 +1,6 @@
-import { formatClientError } from "@nakama/core/api-error";
 import type { AgentTodo } from "@nakama/core/contract";
 
 const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
-
-type TelegramTodoRunState = "working" | "completed" | "stopped" | "failed";
-
-export function formatError(error: unknown): string {
-  return formatClientError(error);
-}
 
 export function stripMarkdownForTelegram(text: string): string {
   const protectedUrls = protectBareUrls(text.trim());
@@ -60,7 +53,7 @@ function restoreBareUrls(text: string, urls: string[]): string {
   let result = text;
 
   for (let index = 0; index < urls.length; index++) {
-    result = result.replace(`@@TCURL${index}@@`, urls[index]!);
+    result = result.replace(`@@TCURL${index}@@`, () => urls[index]!);
   }
 
   return result;
@@ -106,7 +99,7 @@ function restoreProtectedBlocks(text: string, blocks: string[]): string {
   let result = text;
 
   for (let index = 0; index < blocks.length; index++) {
-    result = result.replace(`@@TCTOKEN${index}@@`, blocks[index]!);
+    result = result.replace(`@@TCTOKEN${index}@@`, () => blocks[index]!);
   }
 
   return result;
@@ -227,6 +220,12 @@ export function splitTelegramMessage(text: string): string[] {
 
   return chunks;
 }
+
+export type TelegramTodoRunState =
+  | "working"
+  | "completed"
+  | "stopped"
+  | "failed";
 
 export function renderTelegramTodoStatus(
   todos: AgentTodo[],

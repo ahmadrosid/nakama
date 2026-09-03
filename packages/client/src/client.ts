@@ -1,4 +1,8 @@
-import { NakamaApiError, readApiErrorMessage } from "@nakama/core/api-error";
+import {
+  NakamaApiError,
+  NakamaAuthExpiredError,
+  readApiErrorMessage,
+} from "@nakama/core/api-error";
 import type {
   AddOrgMemberRequest,
   AddOrgMemberResponse,
@@ -18,6 +22,7 @@ import type {
   AutomationResponse,
   AutomationRunRecord,
   AutomationSchedule,
+  AutomationWorkerSettingsResponse,
   BranchSessionRequest,
   BranchSessionResponse,
   ChangePasswordRequest,
@@ -166,6 +171,7 @@ import type {
   UpdateArtifactResponse,
   UpdateAuthProfileRequest,
   UpdateAutomationRequest,
+  UpdateAutomationWorkerSettingsRequest,
   UpdateComposioSettingsRequest,
   UpdateDiscordSettingsRequest,
   UpdateEmailSettingsRequest,
@@ -272,6 +278,26 @@ export class NakamaClient {
       "/v1/token-optimization",
       {
         body: JSON.stringify({ enabled }),
+        method: "PUT",
+      }
+    );
+  }
+
+  async getAutomationWorkerSettings(): Promise<AutomationWorkerSettingsResponse> {
+    return this.request<AutomationWorkerSettingsResponse>(
+      "/v1/settings/automation-worker"
+    );
+  }
+
+  async setAutomationWorkerSettings(
+    pollIntervalMinutes: number
+  ): Promise<AutomationWorkerSettingsResponse> {
+    return this.request<AutomationWorkerSettingsResponse>(
+      "/v1/settings/automation-worker",
+      {
+        body: JSON.stringify({
+          pollIntervalMinutes,
+        } satisfies UpdateAutomationWorkerSettingsRequest),
         method: "PUT",
       }
     );
@@ -2433,14 +2459,19 @@ export class NakamaClient {
       if (
         response.status === 401 &&
         this.authToken &&
-        !retried &&
-        path !== "/v1/auth/local-token/rotate"
+        (retried || path !== "/v1/auth/local-token/rotate")
       ) {
-        const freshToken = await loadLocalAuthToken();
-        if (freshToken && freshToken !== this.authToken) {
-          this.authToken = freshToken;
-          return this.request(path, init, true);
+        if (!retried) {
+          const freshToken = await loadLocalAuthToken();
+          if (freshToken && freshToken !== this.authToken) {
+            this.authToken = freshToken;
+            return this.request(path, init, true);
+          }
         }
+        throw new NakamaAuthExpiredError(
+          await readApiErrorMessage(response),
+          path
+        );
       }
 
       throw await createApiError(response, path);
@@ -2470,12 +2501,22 @@ export class NakamaClient {
     });
 
     if (!response.ok) {
-      if (response.status === 401 && this.authToken && !retried) {
-        const freshToken = await loadLocalAuthToken();
-        if (freshToken && freshToken !== this.authToken) {
-          this.authToken = freshToken;
-          return this.fetchRaw(path, init, true);
+      if (
+        response.status === 401 &&
+        this.authToken &&
+        (retried || path !== "/v1/auth/local-token/rotate")
+      ) {
+        if (!retried) {
+          const freshToken = await loadLocalAuthToken();
+          if (freshToken && freshToken !== this.authToken) {
+            this.authToken = freshToken;
+            return this.fetchRaw(path, init, true);
+          }
         }
+        throw new NakamaAuthExpiredError(
+          await readApiErrorMessage(response),
+          path
+        );
       }
 
       throw await createApiError(response, path);

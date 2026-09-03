@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   SessionMessageMeta,
 } from "@nakama/core/contract";
+import { AGENT_CHANNELS } from "@nakama/core/contract";
 import { extractThinkingFromAssistantMessage } from "@nakama/core/thinking-content";
 import {
   stripImageDescriptionsFromDisplayText,
@@ -393,17 +394,42 @@ export function sessionStorageKey(profileId: string): string {
   return `nakama:session:${profileId}`;
 }
 
-export const HISTORY_SESSION_CHANNELS = [
-  "web",
-  "telegram",
-  "whatsapp",
-  "discord",
-] as const satisfies readonly AgentChannel[];
+/**
+ * Which channels the history panel lists. Total over `AgentChannel`, so a new
+ * channel fails the typecheck here rather than dropping out of the list in
+ * silence, and the list itself is derived so the two cannot disagree.
+ */
+const HISTORY_SESSION_CHANNEL = {
+  automation: false,
+  cli: false,
+  discord: true,
+  subagent: false,
+  task: false,
+  telegram: true,
+  web: true,
+  whatsapp: true,
+} as const satisfies Record<AgentChannel, boolean>;
+
+export const HISTORY_SESSION_CHANNELS: readonly AgentChannel[] =
+  AGENT_CHANNELS.filter((channel) => HISTORY_SESSION_CHANNEL[channel]);
+
+/**
+ * Which listed channels are read only in the web UI. Separate from the list
+ * above because it is a separate decision: `web` is listed and writable.
+ */
+const READ_ONLY_SESSION_CHANNEL = {
+  automation: false,
+  cli: false,
+  discord: true,
+  subagent: false,
+  task: false,
+  telegram: true,
+  web: false,
+  whatsapp: true,
+} as const satisfies Record<AgentChannel, boolean>;
 
 export function isReadOnlySessionChannel(channel: AgentChannel): boolean {
-  return (
-    channel === "telegram" || channel === "whatsapp" || channel === "discord"
-  );
+  return READ_ONLY_SESSION_CHANNEL[channel];
 }
 
 export function formatSessionChannelLabel(channel: AgentChannel): string {

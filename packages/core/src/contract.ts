@@ -87,6 +87,17 @@ export const AGENT_CHANNELS = [
 
 export type AgentChannel = (typeof AGENT_CHANNELS)[number];
 
+/**
+ * Narrow a stored channel string to `AgentChannel`. Session rows keep the
+ * column as `string`, so this is the one place that decides what an unknown
+ * value means: `null`, never a silent pass.
+ */
+export function parseAgentChannel(value: string): AgentChannel | null {
+  return AGENT_CHANNELS.includes(value as AgentChannel)
+    ? (value as AgentChannel)
+    : null;
+}
+
 export const NAKAMA_API_VERSION = 1;
 
 export interface HealthResponse {
@@ -102,6 +113,8 @@ export interface HealthResponse {
   ok: true;
   providerConfigured: boolean;
   userConfigured: boolean;
+  /** App version (`NAKAMA_VERSION` or package.json). Not `apiVersion`. */
+  version: string;
 }
 
 export interface AutomationSchedule {
@@ -266,6 +279,14 @@ export interface TokenOptimizationUpdateResponse {
 export interface CodingHarnessLoginCommand {
   command: string;
   name: string;
+}
+
+export interface AutomationWorkerSettingsResponse {
+  pollIntervalMinutes: number;
+}
+
+export interface UpdateAutomationWorkerSettingsRequest {
+  pollIntervalMinutes: number;
 }
 
 export interface CodingHarnessSettingsResponse {
@@ -467,9 +488,11 @@ export interface OrganizationSummary {
   createdAt: string;
   id: string;
   name: string;
+  skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
   skillsCuratorLastRunAt?: string | null;
+  skillsCuratorStaleAfterDays?: number;
   skillsPostTurnReview?: boolean;
   skillsWriteApproval?: boolean;
   slug: string;
@@ -488,8 +511,10 @@ export interface CreateOrganizationRequest {
 
 export interface UpdateOrganizationRequest {
   name?: string;
+  skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
+  skillsCuratorStaleAfterDays?: number;
   skillsPostTurnReview?: boolean;
   skillsWriteApproval?: boolean;
 }
@@ -2246,6 +2271,8 @@ export interface ToolContext {
   isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
+  /** Invalidates the cached skills catalog after a live skill mutation. */
+  onSkillCatalogChange?: () => void;
   orgId?: string;
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;

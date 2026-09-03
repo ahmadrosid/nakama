@@ -168,6 +168,8 @@ export interface StoredLlmUsageModelStatsRecord {
 }
 
 export interface StoredWorkspaceSettingsRecord {
+  /** Workspace-global interval for refreshing automation schedules and curator work. */
+  automationWorkerPollIntervalMs: number;
   codingAgentHarnesses: StoredCodingAgentHarnessRecord[];
   /**
    * When true (default), coding CLIs get Nakama provider credentials at spawn.
@@ -176,7 +178,6 @@ export interface StoredWorkspaceSettingsRecord {
   codingAgentProviderPassthrough: boolean;
   id: string;
   imageModel: string | null;
-  orgId?: string | null;
   selectedCodingAgentHarness: string | null;
   /** null = inherit the NAKAMA_OMNI env var; true/false = set explicitly here. */
   tokenOptimizerEnabled?: boolean | null;
@@ -385,9 +386,11 @@ export interface StoredOrganizationRecord {
   createdAt: string;
   id: string;
   name: string;
+  skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
   skillsCuratorLastRunAt?: string | null;
+  skillsCuratorStaleAfterDays?: number;
   skillsPostTurnReview?: boolean;
   skillsWriteApproval?: boolean;
   slug: string;
@@ -913,6 +916,12 @@ export interface DatabaseAdapter {
     activeOrgId: string | null
   ): Promise<void>;
   updateBrowserSessionLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
+  /** False when the change would leave the org without an admin. */
+  updateOrgMemberRole(
+    orgId: string,
+    userId: string,
+    role: OrgRole
+  ): Promise<boolean>;
   updateOrgMemoryProposalStatus(
     orgId: string,
     id: string,
