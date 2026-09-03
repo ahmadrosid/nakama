@@ -273,7 +273,7 @@ describe("artifact share routes", () => {
     );
   });
 
-  test("publish prefers clientOrigin over loopback request URL", async () => {
+  test("publish refuses a clientOrigin off the request host", async () => {
     const { app, databaseAdapter } = createApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);
     const orgId = session.orgId!;
@@ -301,13 +301,12 @@ describe("artifact share routes", () => {
       })
     );
 
-    expect(publishResponse.status).toBe(201);
-    const published = (await publishResponse.json()) as {
-      shareUrl: string | null;
-      webPublicUrlConfigured: boolean;
-    };
-    expect(published.shareUrl).toMatch(/^https:\/\/nakama\.example\.com\/s\//);
-    expect(published.webPublicUrlConfigured).toBe(true);
+    // The origin ends up in the share link, so an unconfigured install takes
+    // it only from loopback or the host the request arrived on.
+    expect(publishResponse.status).toBe(400);
+    await expect(publishResponse.json()).resolves.toEqual({
+      error: "Origin is not allowed.",
+    });
   });
 
   test("publish prefers configured web public URL over loopback request URL", async () => {
