@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
@@ -825,6 +826,40 @@ describe("createHonoApp", () => {
     // The org used to be committed before the admin was validated, so the
     // retry lost the slug it had just taken.
     expect((await setup("admin@example.com")).status).toBe(201);
+  });
+
+  test("concurrent setup creates exactly one org and one admin", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const setup = (slug: string) =>
+      app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify(
+            buildSetupAuthBody(`${slug}@example.com`, {
+              organization: { name: slug, slug },
+            })
+          ),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+    // Distinct slugs, so nothing but the human-user check can stop the loser.
+    const statuses = (await Promise.all([setup("alpha"), setup("beta")])).map(
+      (response) => response.status
+    );
+
+    expect(statuses.toSorted()).toEqual([201, 409]);
+    expect(await options.databaseAdapter.countHumanUsers()).toBe(1);
+
+    const organizations = await options.databaseAdapter.listOrganizations();
+    expect(organizations).toHaveLength(1);
+    const members = await options.databaseAdapter.listOrgMembers(
+      organizations[0]?.id ?? ""
+    );
+    expect(
+      members.filter((member) => member.userId !== LOCAL_CLIENT_USER_ID)
+    ).toHaveLength(1);
   });
 
   test("sends HSTS behind a TLS terminator", async () => {
