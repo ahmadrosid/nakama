@@ -57,6 +57,11 @@ const GLOBAL_WRITES: Array<{ body?: unknown; method: string; path: string }> = [
   },
   { body: { apiKey: "c" }, method: "PUT", path: "/v1/settings/composio" },
   {
+    body: { apiKey: "exa-key", provider: "exa" },
+    method: "PUT",
+    path: "/v1/settings/web-search",
+  },
+  {
     body: { dsn: "https://publickey@errors.example.com/42" },
     method: "PUT",
     path: "/v1/settings/error-tracking",
@@ -96,6 +101,7 @@ function createApp() {
       setTranscriptionSettings: record("setTranscriptionSettings"),
       setUserTimezone: record("setUserTimezone"),
       setVisionSettings: record("setVisionSettings"),
+      setWebSearchSettings: record("setWebSearchSettings"),
       setWhatsAppSettings: record("setWhatsAppSettings"),
       testDiscordSettings: record("testDiscordSettings"),
       testTelegramSettings: record("testTelegramSettings"),

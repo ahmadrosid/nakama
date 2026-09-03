@@ -109,6 +109,7 @@ export const queryKeys = {
   userContext: ["userContext"] as const,
   visionSettings: ["vision", "settings"] as const,
   webPublicUrl: ["system", "webPublicUrl"] as const,
+  webSearchSettings: ["webSearch", "settings"] as const,
   whatsapp: {
     settings: ["whatsapp", "settings"] as const,
   },

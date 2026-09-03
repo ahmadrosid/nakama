@@ -196,6 +196,7 @@ import type {
   UpdateUserContextRequest,
   UpdateVisionRequest,
   UpdateWebPublicUrlRequest,
+  UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
@@ -203,6 +204,7 @@ import type {
   VisionSettings,
   VisionSettingsResponse,
   WebPublicUrlSettingsResponse,
+  WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
   WorkerLogsResponse,
 } from "@nakama/core/contract";
@@ -1839,6 +1841,19 @@ export class NakamaClient {
         method: "PUT",
       }
     );
+  }
+
+  async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
+    return this.request<WebSearchSettingsResponse>("/v1/settings/web-search");
+  }
+
+  async setWebSearchSettings(
+    request: UpdateWebSearchSettingsRequest
+  ): Promise<WebSearchSettingsResponse> {
+    return this.request<WebSearchSettingsResponse>("/v1/settings/web-search", {
+      body: JSON.stringify(request),
+      method: "PUT",
+    });
   }
 
   async getEmailSettings(): Promise<EmailSettingsResponse> {

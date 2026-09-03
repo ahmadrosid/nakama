@@ -15,6 +15,7 @@ export type WebSearchInput = z.infer<typeof webSearchInputSchema>;
 export const webSearchTool: ToolDefinition<WebSearchInput> = {
   description:
     "Search the web for current information. Requires an OpenAI or Anthropic provider; search runs natively on the provider with citations.",
+  hosted: true,
   name: WEB_SEARCH_TOOL_NAME,
   parallelSafe: true,
   parameters: jsonSchemaFromZod(webSearchInputSchema),
@@ -30,11 +31,20 @@ export interface PartitionedTools {
   localTools: ToolDefinition[];
 }
 
+/**
+ * A `web_search` backed by a configured search endpoint carries `hosted: false`
+ * and runs locally like any other tool; only the provider-hosted stub is split
+ * out here.
+ */
+function isHostedWebSearchTool(tool: ToolDefinition): boolean {
+  return tool.name === WEB_SEARCH_TOOL_NAME && tool.hosted !== false;
+}
+
 export function partitionTools(tools: ToolDefinition[]): PartitionedTools {
-  const localTools = tools.filter((tool) => tool.name !== WEB_SEARCH_TOOL_NAME);
+  const localTools = tools.filter((tool) => !isHostedWebSearchTool(tool));
 
   return {
-    hasWebSearch: tools.some((tool) => tool.name === WEB_SEARCH_TOOL_NAME),
+    hasWebSearch: tools.some(isHostedWebSearchTool),
     localTools,
   };
 }
