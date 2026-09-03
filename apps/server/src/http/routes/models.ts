@@ -178,7 +178,6 @@ export function registerModelRoutes(
     .object({
       apiKey: z.string().optional(),
       endpoint: z.string().optional(),
-      maxResults: z.number().optional(),
       provider: z.enum(["exa", "firecrawl", "custom"]).nullable().optional(),
     })
     .openapi("UpdateWebSearchSettingsRequest");

@@ -39,7 +39,6 @@ function config(patch: Partial<WebSearchConfigFile>): WebSearchConfigFile {
   return {
     apiKey: "test-key",
     endpoint: "https://api.exa.ai/search",
-    maxResults: 5,
     provider: "exa",
     ...patch,
   };
@@ -75,13 +74,13 @@ describe("createCustomWebSearchTool", () => {
       captured
     );
 
-    const tool = createCustomWebSearchTool(config({ maxResults: 3 }));
+    const tool = createCustomWebSearchTool(config({}));
     const output = await tool?.run({ query: "bun release" }, {});
 
     expect(captured[0]?.url).toBe("https://api.exa.ai/search");
     expect(captured[0]?.headers["x-api-key"]).toBe("test-key");
     expect(captured[0]?.body).toMatchObject({
-      numResults: 3,
+      numResults: 5,
       query: "bun release",
     });
     expect(output).toEqual({
@@ -167,32 +166,32 @@ describe("createCustomWebSearchTool", () => {
 });
 
 describe("parseCustomWebSearchResults", () => {
-  test("drops entries without a URL, dedupes and caps at maxResults", () => {
-    const results = parseCustomWebSearchResults(
-      {
-        results: [
-          { title: "One", url: "https://a.example" },
-          { title: "No URL" },
-          { title: "One again", url: "https://a.example" },
-          { title: "Two", url: "https://b.example" },
-          { title: "Three", url: "https://c.example" },
-        ],
-      },
-      2
-    );
+  test("drops entries without a URL, dedupes and caps at five", () => {
+    const results = parseCustomWebSearchResults({
+      results: [
+        { title: "One", url: "https://a.example" },
+        { title: "No URL" },
+        { title: "One again", url: "https://a.example" },
+        { title: "Two", url: "https://b.example" },
+        { title: "Three", url: "https://c.example" },
+        { title: "Four", url: "https://d.example" },
+        { title: "Five", url: "https://e.example" },
+        { title: "Six", url: "https://f.example" },
+      ],
+    });
 
-    expect(results).toEqual([
-      { title: "One", url: "https://a.example" },
-      { title: "Two", url: "https://b.example" },
+    expect(results.map((result) => result.title)).toEqual([
+      "One",
+      "Two",
+      "Three",
+      "Four",
+      "Five",
     ]);
   });
 
   test("reads a bare array response", () => {
     expect(
-      parseCustomWebSearchResults(
-        [{ name: "Item", uri: "https://x.example" }],
-        5
-      )
+      parseCustomWebSearchResults([{ name: "Item", uri: "https://x.example" }])
     ).toEqual([{ title: "Item", url: "https://x.example" }]);
   });
 });

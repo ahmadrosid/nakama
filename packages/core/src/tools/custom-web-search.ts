@@ -17,6 +17,8 @@ import {
 } from "./web-search";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+/** Fixed until a settings control needs to vary it; five hits is Exa's own default. */
+const MAX_RESULTS = 5;
 /** Snippets are context, not documents; web_fetch is the escape hatch for full text. */
 const MAX_SNIPPET_CHARS = 800;
 const MAX_ERROR_BODY_CHARS = 300;
@@ -63,7 +65,7 @@ function buildRequest(
     return {
       body: JSON.stringify({
         contents: { text: { maxCharacters: MAX_SNIPPET_CHARS } },
-        numResults: config.maxResults,
+        numResults: MAX_RESULTS,
         query,
       }),
       headers,
@@ -75,7 +77,7 @@ function buildRequest(
   }
 
   return {
-    body: JSON.stringify({ limit: config.maxResults, query }),
+    body: JSON.stringify({ limit: MAX_RESULTS, query }),
     headers,
   };
 }
@@ -140,8 +142,7 @@ function toResult(entry: unknown): CustomWebSearchResult | null {
 }
 
 export function parseCustomWebSearchResults(
-  payload: unknown,
-  maxResults: number
+  payload: unknown
 ): CustomWebSearchResult[] {
   const results: CustomWebSearchResult[] = [];
   const seen = new Set<string>();
@@ -156,7 +157,7 @@ export function parseCustomWebSearchResults(
     seen.add(result.url);
     results.push(result);
 
-    if (results.length >= maxResults) {
+    if (results.length >= MAX_RESULTS) {
       break;
     }
   }
@@ -211,7 +212,7 @@ export async function runCustomWebSearch(
   return {
     provider: config.provider,
     query,
-    results: parseCustomWebSearchResults(payload, config.maxResults),
+    results: parseCustomWebSearchResults(payload),
   };
 }
 

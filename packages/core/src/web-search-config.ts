@@ -21,10 +21,6 @@ export const WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
   "custom",
 ];
 
-export const DEFAULT_WEB_SEARCH_MAX_RESULTS = 5;
-export const MIN_WEB_SEARCH_MAX_RESULTS = 1;
-export const MAX_WEB_SEARCH_MAX_RESULTS = 20;
-
 export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
   {
     custom: "",
@@ -41,7 +37,6 @@ export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
 export interface WebSearchConfigFile {
   apiKey: string;
   endpoint: string;
-  maxResults: number;
   provider: WebSearchProvider;
 }
 
@@ -50,14 +45,12 @@ export interface WebSearchSettingsPublic {
   /** false means the active LLM provider's own hosted web search is used. */
   configured: boolean;
   endpoint: string | null;
-  maxResults: number;
   provider: WebSearchProvider | null;
 }
 
 export interface UpdateWebSearchSettingsInput {
   apiKey?: string;
   endpoint?: string;
-  maxResults?: number;
   /** null clears the override and restores the built-in hosted search. */
   provider?: WebSearchProvider | null;
 }
@@ -74,36 +67,6 @@ export function parseWebSearchProvider(
   const trimmed = value?.trim().toLowerCase();
 
   return isWebSearchProvider(trimmed) ? trimmed : null;
-}
-
-export function validateWebSearchMaxResults(value: number): number {
-  if (
-    !Number.isInteger(value) ||
-    value < MIN_WEB_SEARCH_MAX_RESULTS ||
-    value > MAX_WEB_SEARCH_MAX_RESULTS
-  ) {
-    throw new Error(
-      `Result count must be an integer between ${MIN_WEB_SEARCH_MAX_RESULTS} and ${MAX_WEB_SEARCH_MAX_RESULTS}.`
-    );
-  }
-
-  return value;
-}
-
-function parseMaxResults(value: string | undefined): number {
-  const trimmed = value?.trim();
-
-  if (!trimmed) {
-    return DEFAULT_WEB_SEARCH_MAX_RESULTS;
-  }
-
-  const parsed = Number(trimmed);
-
-  return Number.isInteger(parsed) &&
-    parsed >= MIN_WEB_SEARCH_MAX_RESULTS &&
-    parsed <= MAX_WEB_SEARCH_MAX_RESULTS
-    ? parsed
-    : DEFAULT_WEB_SEARCH_MAX_RESULTS;
 }
 
 export function resolveWebSearchEndpoint(
@@ -143,7 +106,6 @@ function parseWebSearchSection(
   return {
     apiKey: values.api_key?.trim() ?? "",
     endpoint: resolveWebSearchEndpoint(provider, values.endpoint),
-    maxResults: parseMaxResults(values.max_results),
     provider,
   };
 }
@@ -154,7 +116,6 @@ function buildWebSearchSectionValues(
   return {
     api_key: config.apiKey,
     endpoint: config.endpoint,
-    max_results: String(config.maxResults),
     provider: config.provider,
   };
 }
@@ -179,7 +140,6 @@ export function toWebSearchSettingsPublic(
       apiKeyMasked: null,
       configured: false,
       endpoint: null,
-      maxResults: DEFAULT_WEB_SEARCH_MAX_RESULTS,
       provider: null,
     };
   }
@@ -188,7 +148,6 @@ export function toWebSearchSettingsPublic(
     apiKeyMasked: maskTrailingSecret(file.apiKey),
     configured: isWebSearchConfigComplete(file),
     endpoint: file.endpoint || null,
-    maxResults: file.maxResults,
     provider: file.provider,
   };
 }
@@ -257,10 +216,6 @@ function buildSavedWebSearchConfig(
   return {
     apiKey,
     endpoint: endpoint.trim(),
-    maxResults:
-      input.maxResults === undefined
-        ? (existing?.maxResults ?? DEFAULT_WEB_SEARCH_MAX_RESULTS)
-        : validateWebSearchMaxResults(input.maxResults),
     provider,
   };
 }

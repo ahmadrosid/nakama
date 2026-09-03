@@ -38,7 +38,6 @@ describe("web search config", () => {
       apiKeyMasked: null,
       configured: false,
       endpoint: null,
-      maxResults: 5,
       provider: null,
     });
   });
@@ -59,7 +58,6 @@ describe("web search config", () => {
     expect(await loadWebSearchConfig()).toEqual({
       apiKey: "exa-secret-key-1234",
       endpoint: "https://api.exa.ai/search",
-      maxResults: 5,
       provider: "exa",
     });
   });
@@ -70,13 +68,11 @@ describe("web search config", () => {
 
     await saveWebSearchConfig({
       apiKey: REDACTED_SECRET_VALUE,
-      maxResults: 8,
       provider: "exa",
     });
 
     const config = await loadWebSearchConfig();
     expect(config?.apiKey).toBe("exa-secret-key");
-    expect(config?.maxResults).toBe(8);
   });
 
   test("does not carry an endpoint or key across providers", async () => {
@@ -88,7 +84,6 @@ describe("web search config", () => {
     expect(await loadWebSearchConfig()).toEqual({
       apiKey: "fc-key",
       endpoint: "https://api.firecrawl.dev/v2/search",
-      maxResults: 5,
       provider: "firecrawl",
     });
   });
@@ -116,7 +111,6 @@ describe("web search config", () => {
       apiKeyMasked: null,
       configured: true,
       endpoint: "https://search.internal/api",
-      maxResults: 5,
       provider: "custom",
     });
   });
@@ -143,7 +137,6 @@ describe("web search config", () => {
       isWebSearchConfigComplete({
         apiKey: "",
         endpoint: "https://api.exa.ai/search",
-        maxResults: 5,
         provider: "exa",
       })
     ).toBe(false);

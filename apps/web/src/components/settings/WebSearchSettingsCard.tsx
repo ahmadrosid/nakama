@@ -146,11 +146,6 @@ export function WebSearchSettingsCard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
           <p className="font-medium text-foreground text-sm">Web search</p>
-          <p className="text-muted-foreground text-xs [text-wrap:pretty]">
-            {provider
-              ? "Nakama calls this endpoint for web_search instead of the model provider."
-              : "Leave unset to use the model provider's own hosted web search."}
-          </p>
           {savedHint ? (
             <p
               className="text-emerald-700 text-xs dark:text-emerald-300"
@@ -258,13 +253,6 @@ export function WebSearchSettingsCard() {
               {saveMutation.isPending ? <Spinner className="size-4" /> : "Save"}
             </Button>
           </div>
-
-          {provider === "custom" ? (
-            <p className="text-muted-foreground text-xs [text-wrap:pretty]">
-              The endpoint receives POST {"{ query, limit }"} and may return
-              results under results, data.web, organic or items.
-            </p>
-          ) : null}
         </div>
       ) : null}
 

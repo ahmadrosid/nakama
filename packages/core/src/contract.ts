@@ -1286,14 +1286,12 @@ export interface WebSearchSettingsResponse {
   /** false means the active LLM provider's own hosted web search is used. */
   configured: boolean;
   endpoint: string | null;
-  maxResults: number;
   provider: WebSearchProvider | null;
 }
 
 export interface UpdateWebSearchSettingsRequest {
   apiKey?: string;
   endpoint?: string;
-  maxResults?: number;
   /** null clears the override and restores the built-in hosted search. */
   provider?: WebSearchProvider | null;
 }
