@@ -720,18 +720,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       isThread
     );
 
-    const signal = registerActiveStream(conversationKey);
     const typingLoop = createTypingLoop(messenger);
     const todoStatus = new DiscordTodoStatusMessage(messenger);
     const questionnaireStatus = new DiscordQuestionnaireMessage(messenger);
-    typingLoop.start();
 
     let reply = "";
     let earlyAck: Promise<void> | undefined;
     let postedQuestionnaire = false;
     const pendingArtifactUploads: Promise<unknown>[] = [];
+    const signal = registerActiveStream(conversationKey);
 
     try {
+      typingLoop.start();
+
       reply = await session.sendStream(
         streamInput,
         {
