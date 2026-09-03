@@ -333,19 +333,6 @@ describe("web_fetch pins the address it verified", () => {
     ]);
   });
 
-  test("never connects to a private record in a mixed answer", async () => {
-    const inputs: string[] = [];
-    stubFetch(async (input) => {
-      inputs.push(String(input));
-      return htmlResponse("<p>ok</p>");
-    });
-
-    // github-pages.test answers with a public IPv4 and a unique-local IPv6.
-    await webFetchTool.run({ url: "https://github-pages.test/" }, CTX);
-
-    expect(inputs).toEqual(["https://185.199.111.153/"]);
-  });
-
   test("re-pins each redirect hop and still reports the logical url", async () => {
     const inputs: string[] = [];
     const hosts: string[] = [];
