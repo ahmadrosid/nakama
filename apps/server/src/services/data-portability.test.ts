@@ -9,8 +9,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { NakamaApiError } from "@nakama/core";
 import {
   createNakamaDataExport,
+  decodeArchiveRequestData,
+  MAX_IMPORT_ARCHIVE_BYTES,
+  MAX_IMPORT_ENTRY_BYTES,
+  MAX_IMPORT_UNCOMPRESSED_BYTES,
   NAKAMA_EXPORT_MANIFEST,
   previewNakamaDataImport,
   restoreNakamaDataImport,
@@ -196,46 +201,107 @@ describe("Nakama data portability", () => {
       renameMock.mockRestore();
     }
   });
+
+  test("rejects a base64 payload over the archive cap before decoding", () => {
+    const oversized = "A".repeat(
+      Math.ceil(MAX_IMPORT_ARCHIVE_BYTES / 3) * 4 + 1
+    );
+
+    let status = 0;
+    try {
+      decodeArchiveRequestData(oversized);
+    } catch (error) {
+      status = (error as NakamaApiError).status;
+    }
+
+    expect(status).toBe(413);
+  });
+
+  test("rejects an archive entry declaring more than the entry cap", async () => {
+    const archive = buildZipWithEntries([
+      {
+        content: "{}",
+        declaredSize: MAX_IMPORT_ENTRY_BYTES + 1,
+        name: "big.bin",
+      },
+    ]);
+
+    await expect(previewNakamaDataImport(archive, { rootDir })).rejects.toThrow(
+      /big\.bin exceeds/
+    );
+  });
+
+  test("rejects an archive whose entries add up past the total cap", async () => {
+    const count =
+      Math.ceil(MAX_IMPORT_UNCOMPRESSED_BYTES / MAX_IMPORT_ENTRY_BYTES) + 1;
+    const archive = buildZipWithEntries(
+      Array.from({ length: count }, (_, index) => ({
+        content: "{}",
+        declaredSize: MAX_IMPORT_ENTRY_BYTES,
+        name: `part-${index}.bin`,
+      }))
+    );
+
+    await expect(previewNakamaDataImport(archive, { rootDir })).rejects.toThrow(
+      /uncompressed limit/
+    );
+  });
 });
 
 function buildZipWithEntry(name: string, content: string): Buffer {
-  const safe = Buffer.from(content, "utf8");
-  const localHeader = Buffer.alloc(30);
-  localHeader.writeUInt32LE(0x04_03_4b_50, 0);
-  localHeader.writeUInt16LE(20, 4);
-  localHeader.writeUInt16LE(0x08_00, 6);
-  localHeader.writeUInt16LE(0, 8);
-  localHeader.writeUInt32LE(safe.length, 18);
-  localHeader.writeUInt32LE(safe.length, 22);
-  localHeader.writeUInt16LE(Buffer.byteLength(name), 26);
+  return buildZipWithEntries([{ content, name }]);
+}
 
-  const centralHeader = Buffer.alloc(46);
-  centralHeader.writeUInt32LE(0x02_01_4b_50, 0);
-  centralHeader.writeUInt16LE(20, 4);
-  centralHeader.writeUInt16LE(20, 6);
-  centralHeader.writeUInt16LE(0x08_00, 8);
-  centralHeader.writeUInt16LE(0, 10);
-  centralHeader.writeUInt32LE(safe.length, 20);
-  centralHeader.writeUInt32LE(safe.length, 24);
-  centralHeader.writeUInt16LE(Buffer.byteLength(name), 28);
+/**
+ * Hand-rolled so an entry can declare an uncompressed size it does not have,
+ * which is the shape the import size caps have to refuse.
+ */
+function buildZipWithEntries(
+  entries: Array<{ content: string; declaredSize?: number; name: string }>
+): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
 
-  const centralOffset =
-    localHeader.length + Buffer.byteLength(name) + safe.length;
+  for (const entry of entries) {
+    const safe = Buffer.from(entry.content, "utf8");
+    const declared = entry.declaredSize ?? safe.length;
+    const nameBytes = Buffer.from(entry.name);
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04_03_4b_50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x08_00, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt32LE(safe.length, 18);
+    localHeader.writeUInt32LE(declared, 22);
+    localHeader.writeUInt16LE(nameBytes.length, 26);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02_01_4b_50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x08_00, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt32LE(safe.length, 20);
+    centralHeader.writeUInt32LE(declared, 24);
+    centralHeader.writeUInt16LE(nameBytes.length, 28);
+    centralHeader.writeUInt32LE(offset, 42);
+
+    locals.push(localHeader, nameBytes, safe);
+    centrals.push(centralHeader, nameBytes);
+    offset += localHeader.length + nameBytes.length + safe.length;
+  }
+
+  const central = Buffer.concat(centrals);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06_05_4b_50, 0);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(centralHeader.length + Buffer.byteLength(name), 12);
-  end.writeUInt32LE(centralOffset, 16);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(central.length, 12);
+  end.writeUInt32LE(offset, 16);
 
-  return Buffer.concat([
-    localHeader,
-    Buffer.from(name),
-    safe,
-    centralHeader,
-    Buffer.from(name),
-    end,
-  ]);
+  return Buffer.concat([...locals, central, end]);
 }
 
 function buildUnsafeZip(): Buffer {

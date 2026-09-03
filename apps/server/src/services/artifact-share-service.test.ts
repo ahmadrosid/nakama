@@ -56,13 +56,15 @@ async function withFreshConfigDir<T>(run: () => T | Promise<T>): Promise<T> {
 }
 
 describe("resolveArtifactShareBaseUrl", () => {
-  test("prefers explicit clientOrigin over loopback request URL", () => {
-    expect(
+  test("refuses a clientOrigin off the request host", () => {
+    // The origin ends up in the share link, so an unconfigured install takes
+    // it only from loopback or the host the request arrived on.
+    expect(() =>
       resolveArtifactShareBaseUrl({
         clientOrigin: "https://nakama.example.com/",
         request: sharePublishRequest(),
       })
-    ).toBe("https://nakama.example.com");
+    ).toThrow("Origin is not allowed.");
   });
 
   test("prefers configured web public URL when request host is loopback", async () => {
@@ -88,9 +90,9 @@ describe("resolveArtifactShareBaseUrl", () => {
     expect(
       resolveArtifactShareBaseUrl({
         request: sharePublishRequest({
-          headers: { Origin: "https://app.example.com" },
+          headers: { Origin: "http://localhost:3003" },
         }),
       })
-    ).toBe("https://app.example.com");
+    ).toBe("http://localhost:3003");
   });
 });

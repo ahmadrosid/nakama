@@ -12,7 +12,7 @@ import {
 describe("composio-callback-url", () => {
   test("resolveRequestClientOrigin prefers explicit origin", () => {
     const request = new Request(
-      "http://api.example.com/v1/composio/toolkits/gmail/connect",
+      "http://app.example.com/v1/composio/toolkits/gmail/connect",
       {
         headers: { Origin: "http://ignored.example.com" },
       }
@@ -21,6 +21,26 @@ describe("composio-callback-url", () => {
     expect(
       resolveRequestClientOrigin(request, "https://app.example.com/")
     ).toBe("https://app.example.com");
+  });
+
+  test("resolveRequestClientOrigin rejects an origin off the request host", () => {
+    const request = new Request(
+      "http://api.example.com/v1/composio/toolkits/gmail/connect"
+    );
+
+    expect(() =>
+      resolveRequestClientOrigin(request, "https://evil.example.com")
+    ).toThrow("Origin is not allowed.");
+  });
+
+  test("resolveRequestClientOrigin rejects a non-http scheme", () => {
+    const request = new Request(
+      "http://api.example.com/v1/composio/toolkits/gmail/connect"
+    );
+
+    expect(() =>
+      resolveRequestClientOrigin(request, "javascript:alert(1)")
+    ).toThrow("Origin must be an http or https URL.");
   });
 
   test("resolveRequestClientOrigin reads Origin header", () => {
@@ -63,7 +83,7 @@ describe("composio-callback-url", () => {
     }
   });
 
-  test("caller headers cannot move the callback off the configured URL", () => {
+  test("caller headers off the configured URL are refused", () => {
     const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
     process.env.NAKAMA_WEB_PUBLIC_URL = "https://deployed.example.com";
     const request = new Request(
@@ -79,12 +99,12 @@ describe("composio-callback-url", () => {
     );
 
     try {
-      expect(
+      expect(() =>
         resolveComposioCallbackBaseUrl({
           clientOrigin: "https://evil.example.com",
           request,
         })
-      ).toBe("https://deployed.example.com");
+      ).toThrow("Origin is not allowed.");
     } finally {
       if (previous === undefined) {
         delete process.env.NAKAMA_WEB_PUBLIC_URL;
@@ -94,7 +114,7 @@ describe("composio-callback-url", () => {
     }
   });
 
-  test("an unparseable clientOrigin does not become the callback base", () => {
+  test("an unparseable clientOrigin is refused, not silently dropped", () => {
     const configDir = join(tmpdir(), `nakama-callback-url-unset-${Date.now()}`);
     mkdirSync(configDir, { recursive: true });
     const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -107,12 +127,12 @@ describe("composio-callback-url", () => {
     );
 
     try {
-      expect(
+      expect(() =>
         resolveComposioCallbackBaseUrl({
           clientOrigin: "javascript:alert(1)",
           request,
         })
-      ).toBe("http://127.0.0.1:4310");
+      ).toThrow("Origin must be an http or https URL.");
     } finally {
       if (previousConfigDir === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;

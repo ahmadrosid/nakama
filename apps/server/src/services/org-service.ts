@@ -499,11 +499,7 @@ export class OrgService {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
 
-    const organization = await this.insertOrganization({
-      name: input.organization.name,
-      slug: input.organization.slug,
-    });
-
+    const organization = await this.buildOrganizationRecord(input.organization);
     const now = new Date().toISOString();
     const user: StoredUserRecord = {
       createdAt: now,
@@ -516,15 +512,27 @@ export class OrgService {
       updatedAt: now,
     };
 
-    await this.databaseAdapter.createUser(user);
-    await this.databaseAdapter.upsertOrgMember({
-      createdAt: now,
-      orgId: organization.id,
-      role: "admin",
-      userId: user.id,
+    // One transaction, so a second concurrent setup that also passed the
+    // route's human-user check loses here instead of committing an org it
+    // can never become a member of.
+    const claimed = await this.databaseAdapter.bootstrapInitialSetup({
+      member: {
+        createdAt: now,
+        orgId: organization.id,
+        role: "admin",
+        userId: user.id,
+      },
+      organization,
+      user,
     });
+    if (!claimed) {
+      throw new NakamaApiError("Admin user already exists", 409);
+    }
 
-    return { organization, user };
+    await this.seedOrgProfiles(organization.id);
+    await ensureLocalClientAccess(this.databaseAdapter);
+
+    return { organization: toOrganizationSummary(organization), user };
   }
 
   async listMembers(orgId: string): Promise<ListOrgMembersResponse> {
@@ -853,9 +861,10 @@ export class OrgService {
     return member;
   }
 
-  private async insertOrganization(
-    request: CreateOrganizationRequest
-  ): Promise<OrganizationSummary> {
+  private async buildOrganizationRecord(request: {
+    name: string;
+    slug: string;
+  }): Promise<StoredOrganizationRecord> {
     const name = request.name.trim();
     const slug = request.slug.trim().toLowerCase();
 
@@ -870,20 +879,13 @@ export class OrgService {
       );
     }
 
-    if (
-      request.admin &&
-      !(request.admin.name.trim() && request.admin.email.trim())
-    ) {
-      throw new NakamaApiError("Admin name and email are required.", 400);
-    }
-
     const existing = await this.databaseAdapter.getOrganizationBySlug(slug);
     if (existing) {
       throw new NakamaApiError("Organization slug already exists.", 409);
     }
 
     const now = new Date().toISOString();
-    const record: StoredOrganizationRecord = {
+    return {
       createdAt: now,
       id: `org_${crypto.randomUUID().replace(/-/g, "")}`,
       name,
@@ -892,7 +894,19 @@ export class OrgService {
       slug,
       updatedAt: now,
     };
+  }
 
+  private async insertOrganization(
+    request: CreateOrganizationRequest
+  ): Promise<OrganizationSummary> {
+    if (
+      request.admin &&
+      !(request.admin.name.trim() && request.admin.email.trim())
+    ) {
+      throw new NakamaApiError("Admin name and email are required.", 400);
+    }
+
+    const record = await this.buildOrganizationRecord(request);
     await this.databaseAdapter.upsertOrganization(record);
     await this.seedOrgProfiles(record.id);
     await ensureLocalClientAccess(this.databaseAdapter);
