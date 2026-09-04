@@ -7,6 +7,7 @@ import {
   hasOpenCodeZenProvider,
   isOpenCodeZenBaseUrl,
   isProviderTypeAlreadyConfigured,
+  knownModelSelection,
   PROVIDER_OPTIONS,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
@@ -349,6 +350,36 @@ describe("profileModelSelectionValue", () => {
     expect(profileModelSelectionValue("openai-1::gpt-5.6-luna", groups)).toBe(
       "openai-1::gpt-5.6-luna"
     );
+  });
+});
+
+describe("knownModelSelection", () => {
+  const groups = group("openai-1", "openai");
+
+  test("keeps a remembered pick that still exists", () => {
+    expect(knownModelSelection("openai-1::model-1", groups)).toBe(
+      "openai-1::model-1"
+    );
+  });
+
+  test("re-encodes a bare model id onto its provider", () => {
+    expect(knownModelSelection("model-1", groups)).toBe("openai-1::model-1");
+  });
+
+  test("drops a pick whose provider or model is gone", () => {
+    expect(knownModelSelection("openai-1::retired-model", groups)).toBeNull();
+    expect(knownModelSelection("deleted-provider::model-9", groups)).toBeNull();
+  });
+
+  test("keeps the pick while the catalog has not loaded", () => {
+    expect(knownModelSelection("openai-1::model-1", [])).toBe(
+      "openai-1::model-1"
+    );
+  });
+
+  test("returns null for an empty selection", () => {
+    expect(knownModelSelection(null, groups)).toBeNull();
+    expect(knownModelSelection("", groups)).toBeNull();
   });
 });
 

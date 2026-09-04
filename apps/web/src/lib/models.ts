@@ -763,6 +763,44 @@ export function profileModelSelectionValue(
   return encodeModelSelection("__unknown__", resolvedModelId);
 }
 
+/**
+ * Drop a remembered selection whose provider or model is gone, so a stale pick
+ * falls back to the profile default instead of a model nobody can pick. An
+ * explicit provider is never remapped onto another one offering the same model
+ * id; empty groups mean the catalog has not loaded yet, so keep the selection.
+ */
+export function knownModelSelection(
+  selection: string | null | undefined,
+  groups: ReturnType<typeof groupModelsByProvider>
+): string | null {
+  if (!selection) {
+    return null;
+  }
+
+  if (groups.length === 0) {
+    return selection;
+  }
+
+  const decoded = decodeModelSelection(selection);
+  const modelId = decoded?.modelId ?? selection;
+
+  if (decoded && decoded.providerId !== "__unknown__") {
+    const group = groups.find(
+      (entry) => entry.providerId === decoded.providerId
+    );
+
+    return group?.models.some((model) => model.id === modelId)
+      ? encodeModelSelection(group.providerId, modelId)
+      : null;
+  }
+
+  const match = groups.find((group) =>
+    group.models.some((model) => model.id === modelId)
+  );
+
+  return match ? encodeModelSelection(match.providerId, modelId) : null;
+}
+
 export function profileModelLabel(
   modelId: string | null,
   groups: ReturnType<typeof groupModelsByProvider>

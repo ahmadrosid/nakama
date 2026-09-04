@@ -43,18 +43,21 @@ import {
   type ChatListItem,
   chatMessagesToListItems,
   clearFailedChatTurn,
+  clearLastChatModel,
   consumeStoredChatDraft,
   isReadOnlySessionChannel,
   parseChatRouteParams,
   pickKnownProfileId,
   readFailedChatTurn,
   readInitialDraftChatProfileId,
+  readLastChatModel,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
   readStoredActiveChatProfileId,
   resolveDefaultProfileId,
   sessionStorageKey,
   storeFailedChatTurn,
+  writeLastChatModel,
 } from "@/lib/chat-history";
 import {
   filePartsToDisplayDocuments,
@@ -79,6 +82,7 @@ import {
   decodeModelSelection,
   effectiveProfileModelSelection,
   groupModelsByProvider,
+  knownModelSelection,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
@@ -217,6 +221,22 @@ export function useChatPage() {
     () => groupModelsByProvider(models?.models ?? []),
     [models?.models]
   );
+  const providerModelGroupsRef = useRef(providerModelGroups);
+
+  useEffect(() => {
+    providerModelGroupsRef.current = providerModelGroups;
+  }, [providerModelGroups]);
+
+  // A draft chat opens on the model the user picked last, not the profile
+  // default. Read through a ref so the draft-entry callbacks stay stable.
+  const restoreLastChatModel = useCallback(
+    (nextProfileId: string) =>
+      knownModelSelection(
+        readLastChatModel(nextProfileId),
+        providerModelGroupsRef.current
+      ),
+    []
+  );
 
   const currentModelSelection = useMemo(
     () =>
@@ -289,7 +309,9 @@ export function useChatPage() {
       }
 
       const previousModel = sessionModel;
+      const previousStoredModel = readLastChatModel(profileId);
       setSessionModel(selection);
+      writeLastChatModel(profileId, selection);
 
       if (!session) {
         return;
@@ -308,6 +330,11 @@ export function useChatPage() {
             return;
           }
           setSessionModel(previousModel);
+          if (previousStoredModel) {
+            writeLastChatModel(profileId, previousStoredModel);
+          } else {
+            clearLastChatModel(profileId);
+          }
           setError(formatError(err));
         });
     },
@@ -356,7 +383,7 @@ export function useChatPage() {
       activeSessionIdRef.current = null;
       setQueuedMessages([]);
       setSession(null);
-      setSessionModel(null);
+      setSessionModel(restoreLastChatModel(nextProfileId));
       setSessionChannel("web");
       setMessages([]);
       setError(null);
@@ -369,7 +396,7 @@ export function useChatPage() {
         navigate(buildNewChatPath(nextProfileId), { replace: true });
       }
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate, restoreLastChatModel]
   );
 
   const handleThinkingEffortChange = useCallback(
@@ -640,7 +667,9 @@ export function useChatPage() {
     activeSessionIdRef.current = null;
     setQueuedMessages([]);
     setSession(null);
-    setSessionModel(null);
+    setSessionModel(
+      targetProfileId ? restoreLastChatModel(targetProfileId) : null
+    );
     setSessionChannel("web");
     setMessages([]);
     setError(null);
@@ -657,7 +686,7 @@ export function useChatPage() {
     }
 
     navigate(buildChatBasePath(), { replace: true });
-  }, [searchParams, navigate, location.search]);
+  }, [searchParams, navigate, location.search, restoreLastChatModel]);
 
   useEffect(() => {
     if (!profileId || routeSession) {
