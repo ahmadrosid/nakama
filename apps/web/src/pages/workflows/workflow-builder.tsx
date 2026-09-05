@@ -19,7 +19,6 @@ import {
   PlayIcon,
 } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -413,11 +412,7 @@ function WorkflowBuilderHeader({
 }) {
   return (
     <header className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-4 py-3">
-      <p className="min-w-0 truncate text-muted-foreground text-sm">
-        Workflows
-        <span className="px-1.5">/</span>
-        <span className="text-foreground">{name}</span>
-      </p>
+      <p className="min-w-0 truncate font-medium text-sm">{name}</p>
       <div className="flex shrink-0 items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -514,19 +509,13 @@ function WorkflowBuilderMeta({
             className="max-w-[11rem] shrink-0"
           >
             <SelectValue>
-              <span className="flex min-w-0 items-center gap-2">
-                {profile ? <ProfileAvatar profile={profile} size="sm" /> : null}
-                <span className="truncate">{profile?.name ?? profileId}</span>
-              </span>
+              <span className="truncate">{profile?.name ?? profileId}</span>
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {profiles.map((entry) => (
               <SelectItem key={entry.id} value={entry.id}>
-                <span className="flex items-center gap-2">
-                  <ProfileAvatar profile={entry} size="sm" />
-                  <span>{entry.name}</span>
-                </span>
+                {entry.name}
               </SelectItem>
             ))}
           </SelectContent>
