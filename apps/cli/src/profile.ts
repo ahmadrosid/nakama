@@ -105,32 +105,6 @@ export function formatProfileLine(
   return `  ${index + 1}) ${profile.name} (${markers})`;
 }
 
-export function printProfiles(
-  profiles: ProfileSummary[],
-  options: { currentProfileId?: string } = {}
-): void {
-  const sorted = sortProfilesForPicker(profiles);
-
-  if (sorted.length === 0) {
-    printLine("No profiles available.\n");
-    return;
-  }
-
-  if (options.currentProfileId) {
-    const current = sorted.find(
-      (profile) => profile.id === options.currentProfileId
-    );
-    printLine(`Current: ${current?.name ?? options.currentProfileId}\n`);
-  }
-
-  for (const [index, profile] of sorted.entries()) {
-    const marker = profile.id === options.currentProfileId ? "*" : " ";
-    printLine(`${marker}${formatProfileLine(profile, index).trimStart()}`);
-  }
-
-  printLine("\nUse /profile <id or name> to switch.\n");
-}
-
 function findProfile(
   profiles: ProfileSummary[],
   profileId: string

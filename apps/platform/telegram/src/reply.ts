@@ -3,10 +3,6 @@ import type { TelegramRichMessenger } from "./rich-message";
 
 const DEFAULT_BUBBLE_DELAY_MS = 400;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export async function replyAsChat(
   messenger: TelegramRichMessenger,
   text: string,
@@ -25,7 +21,7 @@ export async function replyAsChat(
     await messenger.send(bubbles[index]!);
 
     if (index < bubbles.length - 1 && delayMs > 0) {
-      await sleep(delayMs);
+      await Bun.sleep(delayMs);
     }
   }
 }

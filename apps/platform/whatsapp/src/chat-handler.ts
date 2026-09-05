@@ -1,5 +1,5 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
-import { isAttachOnlyCommand } from "@nakama/core";
+import { deliverTurnArtifactShares, isAttachOnlyCommand } from "@nakama/core";
 import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
@@ -16,13 +16,13 @@ import {
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { SendMessageInput } from "@nakama/core/contract";
 import { pickProfileForOrg } from "@nakama/core/profiles";
 import { normalizePairingCode } from "@nakama/core/whatsapp-config";
 import type { WASocket } from "@whiskeysockets/baileys";
 import type { WhatsAppAuthStore } from "./auth-store";
 import {
-  deliverWhatsAppTurnArtifactShares,
   maybeSendRequestedWhatsAppArtifactAttachment,
   maybeSendWhatsAppAttachOnlyCommand,
 } from "./channel-artifact-flow";
@@ -41,7 +41,6 @@ import {
 import type { WhatsAppInboundChat } from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
 import { WhatsAppTodoStatusMessage } from "./todo-status-message";
-import { createTypingLoop } from "./typing-indicator";
 
 const chatLock = createChatLock();
 
@@ -385,8 +384,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
     }
 
-    const typingLoop = createTypingLoop(getSocket(), jid);
-    const todoStatus = new WhatsAppTodoStatusMessage(getSocket(), jid);
+    const typingLoop = createTypingLoop(async () => {
+      if (!socket) {
+        return;
+      }
+      await socket.sendPresenceUpdate("composing", jid);
+    });
+    const todoStatus = new WhatsAppTodoStatusMessage(socket, jid);
     let reply = "";
     const signal = registerActiveStream(conversationKey);
 
@@ -452,11 +456,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (profileId) {
-      await deliverWhatsAppTurnArtifactShares({
-        client,
+      await deliverTurnArtifactShares({
         conversationKey,
-        profileId,
-        sendRaw: (text) => sendText(jid, text, { raw: true }),
+        publish: (path) => client.publishProfileArtifactShare(profileId, path),
+        sendFooter: (footer) => sendText(jid, footer, { raw: true }),
         session,
         sessionStore,
       });
