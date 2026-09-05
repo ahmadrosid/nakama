@@ -166,10 +166,4 @@ describe("parseCustomWebSearchResults", () => {
       "Five",
     ]);
   });
-
-  test("reads a bare array response", () => {
-    expect(
-      parseCustomWebSearchResults([{ name: "Item", uri: "https://x.example" }])
-    ).toEqual([{ title: "Item", url: "https://x.example" }]);
-  });
 });

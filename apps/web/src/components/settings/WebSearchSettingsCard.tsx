@@ -2,7 +2,6 @@ import type { WebSearchProvider } from "@nakama/core/contract";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -25,35 +24,18 @@ import { formatError } from "@/lib/client";
 
 const BUILT_IN_VALUE = "__web_search_builtin__";
 
-/**
- * Mirrors WEB_SEARCH_PROVIDER_ENDPOINTS in packages/core/src/web-search-config.ts.
- * Duplicated because that module reads the config file and cannot be bundled
- * for the browser; the server re-derives the endpoint on save anyway.
- */
 const PROVIDER_PRESETS: Array<{
-  endpoint: string;
   label: string;
   value: WebSearchProvider;
 }> = [
-  { endpoint: "https://api.exa.ai/search", label: "Exa", value: "exa" },
-  {
-    endpoint: "https://api.firecrawl.dev/v2/search",
-    label: "Firecrawl",
-    value: "firecrawl",
-  },
+  { label: "Exa", value: "exa" },
+  { label: "Firecrawl", value: "firecrawl" },
 ];
-
-function presetEndpoint(provider: WebSearchProvider): string {
-  return (
-    PROVIDER_PRESETS.find((preset) => preset.value === provider)?.endpoint ?? ""
-  );
-}
 
 export function WebSearchSettingsCard() {
   const { data: settings } = useWebSearchSettings();
   const saveMutation = useSaveWebSearchSettings();
   const [provider, setProvider] = useState<WebSearchProvider | null>(null);
-  const [endpoint, setEndpoint] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -65,7 +47,6 @@ export function WebSearchSettingsCard() {
     }
 
     setProvider(settings.provider);
-    setEndpoint(settings.endpoint ?? "");
     setApiKey("");
   }, [settings]);
 
@@ -93,7 +74,6 @@ export function WebSearchSettingsCard() {
 
     if (value === BUILT_IN_VALUE) {
       setProvider(null);
-      setEndpoint("");
       setApiKey("");
 
       saveMutation.mutate(
@@ -106,11 +86,7 @@ export function WebSearchSettingsCard() {
       return;
     }
 
-    const next = value as WebSearchProvider;
-    setProvider(next);
-    setEndpoint(
-      savedProvider === next ? (settings?.endpoint ?? "") : presetEndpoint(next)
-    );
+    setProvider(value as WebSearchProvider);
     setApiKey("");
   }
 
@@ -125,14 +101,12 @@ export function WebSearchSettingsCard() {
 
     saveMutation.mutate(
       {
-        endpoint: endpoint.trim(),
         provider,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       },
       {
         onError: (error) => setFormError(formatError(error)),
-        onSuccess: (saved) => {
-          setEndpoint(saved.endpoint ?? "");
+        onSuccess: () => {
           setApiKey("");
           setSavedHint("Saved");
         },
@@ -183,26 +157,6 @@ export function WebSearchSettingsCard() {
         <div className="space-y-2">
           <label
             className="block font-medium text-foreground text-xs"
-            htmlFor="web-search-endpoint"
-          >
-            Endpoint
-          </label>
-          <Input
-            autoComplete="off"
-            className="h-9"
-            disabled={saveMutation.isPending}
-            id="web-search-endpoint"
-            onChange={(event) => {
-              setEndpoint(event.target.value);
-              setFormError(null);
-              setSavedHint(null);
-            }}
-            placeholder="https://api.exa.ai/search"
-            value={endpoint}
-          />
-
-          <label
-            className="block font-medium text-foreground text-xs"
             htmlFor="web-search-api-key"
           >
             API key
@@ -243,7 +197,9 @@ export function WebSearchSettingsCard() {
             </InputGroup>
             <Button
               className="min-w-[4.5rem] shrink-0"
-              disabled={saveMutation.isPending || !endpoint.trim()}
+              disabled={
+                saveMutation.isPending || !(apiKey.trim() || keyAlreadySaved)
+              }
               id="btn-web-search-save"
               onClick={handleSave}
               size="sm"
