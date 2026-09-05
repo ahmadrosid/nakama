@@ -31,7 +31,6 @@ function createServerOptions(overrides: Record<string, unknown> = {}) {
     mcpService: {} as any,
     orgService,
     systemStatus: {} as any,
-    taskService: {} as any,
     webDistDir: null,
     workerManager: {} as any,
     ...overrides,

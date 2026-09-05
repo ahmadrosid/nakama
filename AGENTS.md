@@ -77,13 +77,13 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 
 ## Multi-tenancy
 
-Orgs isolate profiles, sessions, automations, tasks, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
+Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
 
 | Role | Can |
 |---|---|
 | Platform admin | Orgs (`/v1/platform/orgs`), profiles/tools/MCP/skills |
 | Org admin | Members/invites (`/v1/orgs/{orgId}/members`); profile pack export/import for the active org (create/clone profiles → platform admin or Super Bot `create-profile`) |
-| Org member | Chat, agents, automations/tasks |
+| Org member | Chat, agents, automations |
 | Org viewer | Read chat only — no agent invoke / mutations |
 
 **Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or `active_org_id` cookie (`POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.

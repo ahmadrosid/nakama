@@ -22,7 +22,6 @@ function createServerOptions() {
     orgService: new OrgService(databaseAdapter, authService),
     skillCuratorService: {} as any,
     systemStatus: {} as any,
-    taskService: {} as any,
     webDistDir: null,
     workerManager: {} as any,
   };

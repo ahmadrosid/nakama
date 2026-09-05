@@ -10,7 +10,6 @@ import type { SkillCuratorService } from "../services/skill-curator-service";
 import type { SkillProposalService } from "../services/skill-proposal-service";
 import type { SkillSuggestionService } from "../services/skill-suggestion-service";
 import type { SystemStatusService } from "../services/system-status-service";
-import type { TaskService } from "../services/task-service";
 import type { WorkerManagerService } from "../services/worker-manager-service";
 
 export interface ServerOptions {
@@ -28,7 +27,6 @@ export interface ServerOptions {
   skillProposalService?: SkillProposalService | null;
   skillSuggestionService?: SkillSuggestionService | null;
   systemStatus: SystemStatusService;
-  taskService: TaskService;
   webDistDir?: string | null;
   workerManager: WorkerManagerService;
 }

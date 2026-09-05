@@ -54,7 +54,6 @@ function createService(
       providerConfigured: true,
     } as any,
     { getActiveRunCount: () => 2 } as any,
-    { getActiveRunCount: () => 1 } as any,
     {
       getAllWorkerStatuses: async () => ({
         automation: automationProcess,

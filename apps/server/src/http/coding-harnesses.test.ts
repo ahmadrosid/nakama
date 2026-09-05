@@ -24,7 +24,6 @@ function createHarnessApp() {
     mcpService: {} as never,
     orgService: new OrgService(databaseAdapter, authService),
     systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-    taskService: {} as never,
     webDistDir: null,
     workerManager: {} as never,
   });

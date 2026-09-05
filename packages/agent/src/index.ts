@@ -86,8 +86,6 @@ export {
   generateSkillPostTurnReview,
   parseSkillPostTurnReviewResponse,
 } from "./skill-post-turn-review";
-export type { DraftTaskPromptInput } from "./task-prompt";
-export { draftTaskPromptFromFields } from "./task-prompt";
 export { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 export {
   buildSuggestParamsUserPrompt,

@@ -88,10 +88,6 @@ export const queryKeys = {
     profile: (profileId: string) => ["soul", "profile", profileId] as const,
   },
   systemStatus: ["systemStatus"] as const,
-  tasks: {
-    all: ["tasks"] as const,
-    messages: (taskId: string) => ["tasks", taskId, "messages"] as const,
-  },
   telegram: {
     settings: ["telegram", "settings"] as const,
   },
