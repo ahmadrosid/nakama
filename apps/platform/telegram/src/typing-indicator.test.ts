@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { Context } from "grammy";
-import { createTypingLoop } from "./typing-indicator";
 
 /** Drain the serialized typing promise chain. */
 async function flushTypingChain(): Promise<void> {
@@ -45,7 +45,7 @@ function createBlockingContext() {
 describe("createTypingLoop", () => {
   test("stop prevents later ping from sending typing", async () => {
     const { calls, ctx } = createFakeContext();
-    const loop = createTypingLoop(ctx);
+    const loop = createTypingLoop(() => ctx.replyWithChatAction("typing"));
 
     loop.start();
     await flushTypingChain();
@@ -60,7 +60,7 @@ describe("createTypingLoop", () => {
 
   test("start replaces a previous interval without leaking", async () => {
     const { calls, ctx } = createFakeContext();
-    const loop = createTypingLoop(ctx);
+    const loop = createTypingLoop(() => ctx.replyWithChatAction("typing"));
 
     loop.start();
     await flushTypingChain();
@@ -76,7 +76,7 @@ describe("createTypingLoop", () => {
 
   test("stop drops queued typing sends that have not started yet", async () => {
     const { ctx, getSendCount, releaseAll } = createBlockingContext();
-    const loop = createTypingLoop(ctx);
+    const loop = createTypingLoop(() => ctx.replyWithChatAction("typing"));
 
     loop.start();
     await flushTypingChain();

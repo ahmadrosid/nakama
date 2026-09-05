@@ -1,14 +1,10 @@
 import type { NakamaClient } from "@nakama/client";
 import {
   AutomationScheduler,
-  type AutomationSchedulerDelegate,
   type AutomationSchedulerStatus,
 } from "@nakama/core/automation-scheduler";
 import type { AutomationSchedule } from "@nakama/core/contract";
 import { tickSkillCurator } from "./curator-tick";
-
-export interface AutomationWorkerSchedulerDelegate
-  extends AutomationSchedulerDelegate {}
 
 export class AutomationWorkerScheduler {
   private readonly scheduler: AutomationScheduler;
