@@ -303,7 +303,10 @@ import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
-import { resolveProfileStoredTools } from "./tool-resolver";
+import {
+  resolveProfileStoredTools,
+  type ServerToolOverrides,
+} from "./tool-resolver";
 import type { WorkflowRunner } from "./workflow-runner";
 
 interface StoredSession {
@@ -349,6 +352,7 @@ export class AgentService {
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
+  private serverTools: ServerToolOverrides = {};
   private _providerConfigured: boolean;
   private visionSettingsPromise: Promise<void> | null = null;
   private transcriptionSettingsPromise: Promise<void> | null = null;
@@ -476,6 +480,10 @@ export class AgentService {
   setWorkflowTools(tools: ToolDefinition[]): void {
     this.workflowTools = tools;
     this.sessions.clear();
+  }
+
+  setServerTools(tools: ServerToolOverrides): void {
+    this.serverTools = tools;
   }
 
   setAutomationRunHistoryTools(tools: ToolDefinition[]): void {
@@ -3201,6 +3209,7 @@ export class AgentService {
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      serverTools: this.serverTools,
       userConfig: this.userConfig,
     });
     const includeAutomationTools = options.includeAutomationTools ?? true;

@@ -6,13 +6,13 @@ import {
   TelegramAllowedUsersDialog,
 } from "@/components/TelegramAllowedUsersDialog";
 import { TelegramSettingsCardContent } from "@/components/telegram-settings-card-content";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
-import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
+  useProfilesQuery,
   useRegenerateTelegramHandshake,
   useSaveTelegramSettings,
   useTelegramSettings,
-} from "@/hooks/use-telegram-settings";
+} from "@/hooks/use-app-queries";
+import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 
 interface TelegramSettingsCardProps {

@@ -5,8 +5,8 @@ import {
   isPathWithinProfileSkillsDir,
   NakamaApiError,
   parseRawProfileSkillContent,
+  resolveProfileOrgBooleanOverride,
   resolveProfileSkillSupportingFilePath,
-  resolveSkillWriteApprovalRequired,
 } from "@nakama/core";
 import type { SkillProposal } from "@nakama/core/contract";
 import {
@@ -55,6 +55,25 @@ export interface StageSkillProposalResult {
   warnings?: string[];
 }
 
+export async function isSkillWriteApprovalRequired(
+  database: DatabaseAdapter,
+  orgId: string,
+  profileId: string
+): Promise<boolean> {
+  const org = await database.getOrganizationById(orgId);
+  if (!org) {
+    throw new NakamaApiError("Organization not found.", 404);
+  }
+  const profile = await database.getProfileForOrg(profileId, orgId);
+  if (!profile) {
+    throw new NakamaApiError("Profile not found.", 404);
+  }
+  return resolveProfileOrgBooleanOverride(
+    profile.skillsWriteApproval ?? null,
+    org.skillsWriteApproval ?? false
+  );
+}
+
 export class SkillProposalService {
   constructor(
     private readonly database: DatabaseAdapter | null = null,
@@ -65,19 +84,11 @@ export class SkillProposalService {
     orgId: string,
     profileId: string
   ): Promise<boolean> {
-    const db = this.requireDatabase();
-    const org = await db.getOrganizationById(orgId);
-    if (!org) {
-      throw new NakamaApiError("Organization not found.", 404);
-    }
-    const profile = await db.getProfileForOrg(profileId, orgId);
-    if (!profile) {
-      throw new NakamaApiError("Profile not found.", 404);
-    }
-    return resolveSkillWriteApprovalRequired({
-      orgSkillsWriteApproval: org.skillsWriteApproval ?? false,
-      profileSkillsWriteApproval: profile.skillsWriteApproval ?? null,
-    });
+    return isSkillWriteApprovalRequired(
+      this.requireDatabase(),
+      orgId,
+      profileId
+    );
   }
 
   async stageProposal(

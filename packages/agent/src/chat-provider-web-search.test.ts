@@ -6,7 +6,7 @@ import type {
   ToolDefinition,
 } from "@nakama/core";
 import { webSearchTool } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 
 function createCapturingProvider(
   response: ChatCompletionResult,
@@ -44,8 +44,10 @@ describe("provider-native web search", () => {
       toolCalls: [],
     });
 
-    const harness = createAgentHarness({ provider, tools: [webSearchTool] });
-    const session = harness.createChatSession({ tools: [webSearchTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [webSearchTool] },
+      { tools: [webSearchTool] }
+    );
     const reply = await session.send("What's new in AI?");
 
     expect(reply).toBe("Latest news summary.");
@@ -71,13 +73,15 @@ describe("provider-native web search", () => {
       toolCalls: [],
     });
 
-    const harness = createAgentHarness({
-      provider,
-      tools: [localTool, webSearchTool],
-    });
-    const session = harness.createChatSession({
-      tools: [localTool, webSearchTool],
-    });
+    const session = createAgentChatSession(
+      {
+        provider,
+        tools: [localTool, webSearchTool],
+      },
+      {
+        tools: [localTool, webSearchTool],
+      }
+    );
     await session.send("hello");
 
     expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
@@ -99,8 +103,10 @@ describe("provider-native web search", () => {
       "gemini"
     );
 
-    const harness = createAgentHarness({ provider, tools: [webSearchTool] });
-    const session = harness.createChatSession({ tools: [webSearchTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [webSearchTool] },
+      { tools: [webSearchTool] }
+    );
     await session.send("What's new in AI?");
 
     expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
@@ -117,8 +123,10 @@ describe("provider-native web search", () => {
       "openrouter"
     );
 
-    const harness = createAgentHarness({ provider, tools: [webSearchTool] });
-    const session = harness.createChatSession({ tools: [webSearchTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [webSearchTool] },
+      { tools: [webSearchTool] }
+    );
     await session.send("What's new in AI?");
 
     expect(provider.lastInput?.providerOptions).toBeUndefined();
@@ -145,13 +153,15 @@ describe("provider-native web search", () => {
       "openrouter"
     );
 
-    const harness = createAgentHarness({
-      provider,
-      tools: [webFetch, webSearchTool],
-    });
-    const session = harness.createChatSession({
-      tools: [webFetch, webSearchTool],
-    });
+    const session = createAgentChatSession(
+      {
+        provider,
+        tools: [webFetch, webSearchTool],
+      },
+      {
+        tools: [webFetch, webSearchTool],
+      }
+    );
     await session.send("hello");
 
     expect(provider.lastInput?.system).toContain("read it with web_fetch");
@@ -164,8 +174,10 @@ describe("provider-native web search", () => {
       toolCalls: [],
     });
 
-    const harness = createAgentHarness({ provider, tools: [webSearchTool] });
-    const session = harness.createChatSession({ tools: [webSearchTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [webSearchTool] },
+      { tools: [webSearchTool] }
+    );
     await session.send("hello");
 
     expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
@@ -193,11 +205,13 @@ describe("provider-native web search", () => {
       "openrouter"
     );
 
-    const harness = createAgentHarness({
-      provider,
-      tools: [customWebSearch],
-    });
-    const session = harness.createChatSession({ tools: [customWebSearch] });
+    const session = createAgentChatSession(
+      {
+        provider,
+        tools: [customWebSearch],
+      },
+      { tools: [customWebSearch] }
+    );
     await session.send("hello");
 
     expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual([
@@ -229,13 +243,15 @@ describe("provider-native web search", () => {
       "gemini"
     );
 
-    const harness = createAgentHarness({
-      provider,
-      tools: [localTool, webSearchTool],
-    });
-    const session = harness.createChatSession({
-      tools: [localTool, webSearchTool],
-    });
+    const session = createAgentChatSession(
+      {
+        provider,
+        tools: [localTool, webSearchTool],
+      },
+      {
+        tools: [localTool, webSearchTool],
+      }
+    );
     await session.send("hello");
 
     expect(provider.lastInput?.providerOptions).toBeUndefined();

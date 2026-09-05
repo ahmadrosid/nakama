@@ -1,4 +1,5 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import { deliverTurnArtifactShares } from "@nakama/core";
 import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
@@ -15,6 +16,7 @@ import {
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { SendMessageInput } from "@nakama/core/contract";
 import {
   filterProfilesForChatAccess,
@@ -40,10 +42,7 @@ import {
   hasTelegramAudio,
 } from "./audio";
 import type { TelegramAuthStore } from "./auth-store";
-import {
-  deliverTelegramTurnArtifactShares,
-  maybeSendRequestedTelegramArtifactAttachment,
-} from "./channel-artifact-flow";
+import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
 import type { TelegramBridgeConfig } from "./config";
 import { HELP_TEXT, splitTelegramMessage } from "./format";
 import {
@@ -63,7 +62,6 @@ import {
   type TelegramRichMessenger,
 } from "./rich-message";
 import { TelegramTodoStatusMessage } from "./todo-status-message";
-import { createTypingLoop } from "./typing-indicator";
 
 const chatLock = createChatLock();
 
@@ -458,7 +456,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       });
     }
 
-    const typingLoop = createTypingLoop(ctx);
+    const typingLoop = createTypingLoop(() =>
+      ctx.replyWithChatAction("typing")
+    );
     const todoStatus = new TelegramTodoStatusMessage(telegram);
     let reply = "";
     const signal = registerActiveStream(conversationKey);
@@ -525,11 +525,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (profileId) {
-      await deliverTelegramTurnArtifactShares({
-        client,
+      await deliverTurnArtifactShares({
         conversationKey,
-        messenger: telegram,
-        profileId,
+        publish: (path) => client.publishProfileArtifactShare(profileId, path),
+        sendFooter: (footer) => telegram.sendRaw(footer),
         session,
         sessionStore,
       });

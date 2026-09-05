@@ -46,11 +46,12 @@ import {
   providerReplaysThinking,
   usableContextTokens,
 } from "./history-compaction";
+import { parseAutomationResponse } from "./parse";
 import {
-  canRunToolCallsInParallel,
-  executeToolCall,
-  serializeToolResult,
-} from "./tool-loop";
+  buildAutomationSystemPrompt,
+  buildAutomationUserPrompt,
+} from "./prompt";
+import { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
 
@@ -127,14 +128,30 @@ export interface AgentChatSessionOptions {
   userTimezone?: string;
 }
 
+export async function createAutomationFromPrompt(
+  dependencies: AgentDependencies,
+  request: AgentRequest,
+  options?: { tools?: ToolDefinition[] }
+): Promise<AutomationDefinition> {
+  const tools = options?.tools ?? dependencies.tools ?? [];
+
+  if (!dependencies.provider) {
+    throw new Error("Provider is not configured.");
+  }
+
+  const result = await dependencies.provider.generateText({
+    prompt: buildAutomationUserPrompt(request.prompt, request.channel),
+    system: buildAutomationSystemPrompt(tools),
+  });
+
+  return parseAutomationResponse(result.content, {
+    prompt: request.prompt,
+    tools,
+  });
+}
+
 export function createAgentChatSession(
   dependencies: AgentDependencies,
-  harness: {
-    createAutomationFromPrompt(
-      request: AgentRequest,
-      options?: { tools?: ToolDefinition[] }
-    ): Promise<AutomationDefinition>;
-  },
   options: AgentChatSessionOptions = {}
 ): AgentChatSession {
   const channel = options.channel ?? "cli";
@@ -276,7 +293,11 @@ export function createAgentChatSession(
       return runCompaction(options?.force ?? false);
     },
     createAutomation(prompt) {
-      return harness.createAutomationFromPrompt({ channel, prompt }, { tools });
+      return createAutomationFromPrompt(
+        dependencies,
+        { channel, prompt },
+        { tools }
+      );
     },
     getContextUsage() {
       return lastContextUsage ?? estimateCurrentContextUsage();
@@ -639,7 +660,7 @@ async function executeToolCalls(
 
     for (const call of toolCalls) {
       history.push({
-        content: serializeToolResult(resultsByCallId.get(call.id)),
+        content: JSON.stringify(resultsByCallId.get(call.id)),
         name: call.name,
         role: "tool",
         toolCallId: call.id,
@@ -665,7 +686,7 @@ async function executeToolCalls(
     });
 
     history.push({
-      content: serializeToolResult(result),
+      content: JSON.stringify(result),
       name: call.name,
       role: "tool",
       toolCallId: call.id,

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
-import { useSaveDiscordSettings } from "@/hooks/use-discord-settings";
+import { useSaveDiscordSettings } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 export interface AllowedDiscordUser {

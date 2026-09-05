@@ -5,16 +5,12 @@ import type {
   ToolSourceResponse,
 } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
+import { resolveCustomToolModulePath } from "./custom-tool-shared";
 import {
   loadJavascriptTool,
-  resolveJavascriptModulePath,
   validateJavascriptToolModule,
 } from "./javascript-tool-loader";
-import {
-  loadPythonTool,
-  resolvePythonModulePath,
-  validatePythonToolModule,
-} from "./python-tool-loader";
+import { loadPythonTool, validatePythonToolModule } from "./python-tool-loader";
 
 // Registry of custom tool handler types. Adding a new handler type means
 // adding an entry here plus its loader module — no call-site edits.
@@ -33,14 +29,14 @@ export const CUSTOM_TOOL_HANDLERS = {
     extension: ".js",
     language: "javascript",
     load: loadJavascriptTool,
-    resolveModulePath: resolveJavascriptModulePath,
+    resolveModulePath: resolveCustomToolModulePath,
     validateModule: validateJavascriptToolModule,
   },
   python: {
     extension: ".py",
     language: "python",
     load: loadPythonTool,
-    resolveModulePath: resolvePythonModulePath,
+    resolveModulePath: resolveCustomToolModulePath,
     validateModule: validatePythonToolModule,
   },
 } satisfies Record<string, CustomToolHandler>;

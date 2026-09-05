@@ -15,7 +15,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { useSaveWhatsAppSettings } from "@/hooks/use-whatsapp-settings";
+import { useSaveWhatsAppSettings } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 function formatAllowedPhone(digits: string): string {

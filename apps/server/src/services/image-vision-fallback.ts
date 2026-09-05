@@ -5,7 +5,6 @@ import {
   type ProviderClient,
   type UserConfig,
 } from "@nakama/core";
-import { createProviderForInstance } from "../providers/create";
 import { modelSupportsVision } from "../providers/models";
 import {
   type ResolvedProfileProviderSelection,
@@ -75,12 +74,6 @@ export function resolvePrimaryModelVisionSupport(
     resolved.instance.type,
     resolved.instance.customModels
   );
-}
-
-export function createVisionFallbackProvider(
-  selection: ResolvedProfileProviderSelection
-): ProviderClient {
-  return createProviderForInstance(selection.instance, selection.model);
 }
 
 export async function describeImagesWithVisionModel(

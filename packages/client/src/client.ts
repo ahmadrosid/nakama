@@ -206,6 +206,7 @@ import type {
   WorkerLogsResponse,
   WorkflowResponse,
 } from "@nakama/core/contract";
+import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
@@ -215,11 +216,8 @@ import {
   readStreamEvents,
   resolveSendMessageBody,
   retryWhileTurnIsStopping,
-  withStreamFetchIdle,
 } from "./stream";
 import type {
-  BinaryBufferSource,
-  FetchCredentials,
   NakamaClientOptions,
   RemoteChatSession,
   SendMessageArg,
@@ -231,7 +229,7 @@ import type {
 export class NakamaClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
-  private readonly credentials: FetchCredentials;
+  private readonly credentials: RequestCredentials;
   private readonly clientOrigin: string | null;
   private authToken: string | null;
   private orgId: string | null;
@@ -351,7 +349,7 @@ export class NakamaClient {
   }
 
   async previewDataImport(
-    data: Blob | BinaryBufferSource | string
+    data: Blob | BufferSource | string
   ): Promise<DataImportPreviewResponse> {
     const request: PreviewDataImportRequest = {
       data: await encodeArchiveData(data),
@@ -366,7 +364,7 @@ export class NakamaClient {
   }
 
   async restoreDataImport(
-    data: Blob | BinaryBufferSource | string,
+    data: Blob | BufferSource | string,
     options: { confirm: boolean }
   ): Promise<RestoreDataImportResponse> {
     const request: RestoreDataImportRequest = {
@@ -383,7 +381,7 @@ export class NakamaClient {
   }
 
   async previewSetupDataImport(
-    data: Blob | BinaryBufferSource | string
+    data: Blob | BufferSource | string
   ): Promise<DataImportPreviewResponse> {
     const request: PreviewDataImportRequest = {
       data: await encodeArchiveData(data),
@@ -398,7 +396,7 @@ export class NakamaClient {
   }
 
   async restoreSetupDataImport(
-    data: Blob | BinaryBufferSource | string,
+    data: Blob | BufferSource | string,
     options: { confirm: boolean }
   ): Promise<SetupRestoreDataImportResponse> {
     const request: RestoreDataImportRequest = {
@@ -430,7 +428,7 @@ export class NakamaClient {
   }
 
   async previewProfilePackImport(
-    data: Blob | BinaryBufferSource | string,
+    data: Blob | BufferSource | string,
     options: { name?: string } = {}
   ): Promise<ProfilePackPreviewResponse> {
     const request: { data: string; name?: string } = {
@@ -449,7 +447,7 @@ export class NakamaClient {
   }
 
   async importProfilePack(
-    data: Blob | BinaryBufferSource | string,
+    data: Blob | BufferSource | string,
     options: { confirm: boolean; name?: string }
   ): Promise<ProfilePackImportResponse> {
     const request: ProfilePackImportRequest = {
@@ -628,7 +626,7 @@ export class NakamaClient {
     });
     const response = await this.fetchImpl(
       `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/stream`,
-      withStreamFetchIdle({
+      withDisabledFetchIdle({
         credentials: this.credentials,
         headers,
         method: "GET",
@@ -1303,7 +1301,7 @@ export class NakamaClient {
           async () => {
             const attempt = await this.fetchImpl(
               `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
-              withStreamFetchIdle({
+              withDisabledFetchIdle({
                 body: JSON.stringify(body),
                 credentials: this.credentials,
                 headers,
@@ -1396,7 +1394,7 @@ export class NakamaClient {
   async runAutomation(automationId: string): Promise<AutomationRunRecord> {
     const response = await this.request<RunAutomationResponse>(
       `/v1/automations/${encodeURIComponent(automationId)}/run`,
-      withStreamFetchIdle({ method: "POST" })
+      withDisabledFetchIdle({ method: "POST" })
     );
     return response.run;
   }
@@ -1413,7 +1411,7 @@ export class NakamaClient {
   ): Promise<void> {
     await this.request(
       `/v1/internal/automations/${encodeURIComponent(automationId)}/run?orgId=${encodeURIComponent(orgId)}`,
-      withStreamFetchIdle({
+      withDisabledFetchIdle({
         method: "POST",
       })
     );
@@ -1493,7 +1491,7 @@ export class NakamaClient {
   ): Promise<RunWorkflowResponse["run"]> {
     const response = await this.request<RunWorkflowResponse>(
       `/v1/workflows/${encodeURIComponent(workflowId)}/run`,
-      withStreamFetchIdle({
+      withDisabledFetchIdle({
         body: JSON.stringify(request),
         method: "POST",
       })
@@ -1900,7 +1898,7 @@ export class NakamaClient {
   ): Promise<AgentBrowserStatusResponse> {
     const response = await this.fetchImpl(
       `${this.baseUrl}/v1/settings/agent-browser/install`,
-      withStreamFetchIdle({
+      withDisabledFetchIdle({
         credentials: this.credentials,
         headers: this.buildHeaders("POST", {
           Accept: "text/event-stream",
@@ -2591,7 +2589,7 @@ function isMutatingMethod(method: string): boolean {
 }
 
 async function encodeArchiveData(
-  data: Blob | BinaryBufferSource | string
+  data: Blob | BufferSource | string
 ): Promise<string> {
   if (typeof data === "string") {
     return data;
@@ -2623,6 +2621,6 @@ function readContentDispositionFilename(headers: Headers): string | null {
   return match?.[1] ?? null;
 }
 
-function isBlobLike(value: Blob | BinaryBufferSource): value is Blob {
+function isBlobLike(value: Blob | BufferSource): value is Blob {
   return typeof Blob !== "undefined" && value instanceof Blob;
 }

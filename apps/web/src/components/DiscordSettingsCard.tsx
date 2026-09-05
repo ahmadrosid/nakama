@@ -6,12 +6,12 @@ import {
 } from "@/components/DiscordAllowedUsersDialog";
 import { DiscordSettingsCardContent } from "@/components/discord-settings-card-content";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useDiscordSettings,
+  useProfilesQuery,
   useRegenerateDiscordHandshake,
   useSaveDiscordSettings,
-} from "@/hooks/use-discord-settings";
+} from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 

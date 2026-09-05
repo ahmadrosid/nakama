@@ -27,6 +27,7 @@ import type {
 } from "@nakama/core";
 import {
   createId,
+  DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
   getKnowledgeBaseDir,
   getProfileSoulDir,
@@ -34,7 +35,6 @@ import {
   initSoulDirectory,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
-  listKnowledgeBaseSources,
   NakamaApiError,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
@@ -733,7 +733,7 @@ export class ProfileService {
   ): Promise<ListKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
     const documents = await listKnowledgeBaseDocuments(orgId, profileId);
-    const sources = await listKnowledgeBaseSources();
+    const sources = DEFAULT_KNOWLEDGE_SOURCES;
     return { documents, profileId, sources };
   }
 

@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   useSaveWebPublicUrl,
   useWebPublicUrlSettings,
-} from "@/hooks/use-web-public-url";
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 export function WebPublicUrlSettingsRow() {

@@ -1,5 +1,17 @@
+import type {
+  SendEmailTestRequest,
+  ThinkingEffort,
+  UpdateDiscordSettingsRequest,
+  UpdateEmailSettingsRequest,
+  UpdateErrorTrackingSettingsRequest,
+  UpdateTelegramSettingsRequest,
+  UpdateThinkingRequest,
+  UpdateWebSearchSettingsRequest,
+  UpdateWhatsAppSettingsRequest,
+} from "@nakama/core/contract";
 import {
   type QueryClient,
+  type QueryKey,
   queryOptions,
   useMutation,
   useQuery,
@@ -7,14 +19,221 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { useAuth } from "@/context/use-auth";
-import { telegramSettingsQueryOptions } from "@/hooks/use-telegram-settings";
-import { thinkingSettingsQueryOptions } from "@/hooks/use-thinking-settings";
 import { prefetchTimezoneData } from "@/hooks/use-timezones";
-import { whatsappSettingsQueryOptions } from "@/hooks/use-whatsapp-settings";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 const defaultStaleTime = 1000 * 30;
+
+function createSettingsHooks<TData, TRequest>(config: {
+  mutationFn: (request: TRequest) => Promise<TData>;
+  onSaveError?: (queryClient: QueryClient) => void;
+  onSaveSuccess?: (
+    queryClient: QueryClient,
+    saved: TData
+  ) => void | Promise<void>;
+  queryFn: () => Promise<TData>;
+  queryKey: QueryKey;
+}) {
+  const settingsQueryOptions = queryOptions({
+    queryFn: config.queryFn,
+    queryKey: config.queryKey,
+  });
+
+  function useSettings() {
+    return useQuery(settingsQueryOptions);
+  }
+
+  function useSave() {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: config.mutationFn,
+      onError: config.onSaveError
+        ? () => {
+            config.onSaveError?.(queryClient);
+          }
+        : undefined,
+      onSuccess: async (saved) => {
+        if (config.onSaveSuccess) {
+          await config.onSaveSuccess(queryClient, saved);
+          return;
+        }
+        queryClient.setQueryData(config.queryKey, saved);
+      },
+    });
+  }
+
+  function useSetQueryDataMutation<TVariables>(
+    mutationFn: (variables: TVariables) => Promise<TData>
+  ) {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn,
+      onSuccess: async (saved) => {
+        if (config.onSaveSuccess) {
+          await config.onSaveSuccess(queryClient, saved);
+          return;
+        }
+        queryClient.setQueryData(config.queryKey, saved);
+      },
+    });
+  }
+
+  return {
+    queryOptions: settingsQueryOptions,
+    useSave,
+    useSetQueryDataMutation,
+    useSettings,
+  };
+}
+
+const webSearchSettings = createSettingsHooks({
+  mutationFn: (request: UpdateWebSearchSettingsRequest) =>
+    client.setWebSearchSettings(request),
+  queryFn: () => client.getWebSearchSettings(),
+  queryKey: queryKeys.webSearchSettings,
+});
+export const useWebSearchSettings = webSearchSettings.useSettings;
+export const useSaveWebSearchSettings = webSearchSettings.useSave;
+
+const visionSettings = createSettingsHooks({
+  mutationFn: (model: string | null) => client.setVisionSettings(model),
+  queryFn: () => client.getVisionSettings(),
+  queryKey: queryKeys.visionSettings,
+});
+export const useVisionSettings = visionSettings.useSettings;
+export const useSaveVisionSettings = visionSettings.useSave;
+
+const imageGenerationSettings = createSettingsHooks({
+  mutationFn: (model: string | null) =>
+    client.setImageGenerationSettings(model),
+  queryFn: () => client.getImageGenerationSettings(),
+  queryKey: queryKeys.imageGenerationSettings,
+});
+export const useImageGenerationSettings = imageGenerationSettings.useSettings;
+export const useSaveImageGenerationSettings = imageGenerationSettings.useSave;
+
+const transcriptionSettings = createSettingsHooks({
+  mutationFn: (model: string | null) => client.setTranscriptionSettings(model),
+  queryFn: () => client.getTranscriptionSettings(),
+  queryKey: queryKeys.transcriptionSettings,
+});
+export const useTranscriptionSettings = transcriptionSettings.useSettings;
+export const useSaveTranscriptionSettings = transcriptionSettings.useSave;
+
+const telegramSettings = createSettingsHooks({
+  mutationFn: (request: UpdateTelegramSettingsRequest) =>
+    client.setTelegramSettings(request),
+  queryFn: () => client.getTelegramSettings(),
+  queryKey: queryKeys.telegram.settings,
+});
+export const telegramSettingsQueryOptions = telegramSettings.queryOptions;
+export const useTelegramSettings = telegramSettings.useSettings;
+export const useSaveTelegramSettings = telegramSettings.useSave;
+export function useRegenerateTelegramHandshake() {
+  return telegramSettings.useSetQueryDataMutation(() =>
+    client.regenerateTelegramHandshake()
+  );
+}
+
+const discordSettings = createSettingsHooks({
+  mutationFn: (request: UpdateDiscordSettingsRequest) =>
+    client.setDiscordSettings(request),
+  queryFn: () => client.getDiscordSettings(),
+  queryKey: queryKeys.discord.settings,
+});
+export const useDiscordSettings = discordSettings.useSettings;
+export const useSaveDiscordSettings = discordSettings.useSave;
+export function useRegenerateDiscordHandshake() {
+  return discordSettings.useSetQueryDataMutation(() =>
+    client.regenerateDiscordHandshake()
+  );
+}
+
+const emailSettings = createSettingsHooks({
+  mutationFn: (request: UpdateEmailSettingsRequest) =>
+    client.setEmailSettings(request),
+  queryFn: () => client.getEmailSettings(),
+  queryKey: queryKeys.email.settings,
+});
+export const emailSettingsQueryOptions = emailSettings.queryOptions;
+export const useSaveEmailSettings = emailSettings.useSave;
+export function useSendEmailTest() {
+  return useMutation({
+    mutationFn: (request: SendEmailTestRequest = {}) =>
+      client.sendEmailTest(request),
+  });
+}
+
+const whatsappSettings = createSettingsHooks({
+  mutationFn: (request: UpdateWhatsAppSettingsRequest) =>
+    client.setWhatsAppSettings(request),
+  onSaveSuccess: async (queryClient, saved) => {
+    queryClient.setQueryData(queryKeys.whatsapp.settings, saved);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus });
+  },
+  queryFn: () => client.getWhatsAppSettings(),
+  queryKey: queryKeys.whatsapp.settings,
+});
+export const whatsappSettingsQueryOptions = whatsappSettings.queryOptions;
+export const useWhatsAppSettings = whatsappSettings.useSettings;
+export const useSaveWhatsAppSettings = whatsappSettings.useSave;
+export function useRegenerateWhatsAppPairingCode() {
+  return whatsappSettings.useSetQueryDataMutation(() =>
+    client.regenerateWhatsAppPairingCode()
+  );
+}
+export function useReconnectWhatsApp() {
+  return whatsappSettings.useSetQueryDataMutation(() =>
+    client.reconnectWhatsApp()
+  );
+}
+
+const thinkingSettings = createSettingsHooks({
+  mutationFn: (settings: UpdateThinkingRequest) =>
+    client.setThinkingSettings(settings),
+  onSaveError: (queryClient) => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.thinkingSettings,
+    });
+  },
+  queryFn: () => client.getThinkingSettings(),
+  queryKey: queryKeys.thinkingSettings,
+});
+export const thinkingSettingsQueryOptions = thinkingSettings.queryOptions;
+export const useThinkingSettings = thinkingSettings.useSettings;
+export const useSaveThinkingSettings = thinkingSettings.useSave;
+export function buildThinkingSettingsPayload(
+  effort: ThinkingEffort
+): UpdateThinkingRequest {
+  return {
+    effort,
+    enabled: true,
+  };
+}
+
+const webPublicUrlSettings = createSettingsHooks({
+  mutationFn: (webPublicUrl: string) => client.updateWebPublicUrl(webPublicUrl),
+  onSaveSuccess: (queryClient) => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.webPublicUrl });
+  },
+  queryFn: () => client.getWebPublicUrl(),
+  queryKey: queryKeys.webPublicUrl,
+});
+export const useWebPublicUrlSettings = webPublicUrlSettings.useSettings;
+export const useSaveWebPublicUrl = webPublicUrlSettings.useSave;
+
+const errorTrackingSettings = createSettingsHooks({
+  mutationFn: (request: UpdateErrorTrackingSettingsRequest) =>
+    client.setErrorTrackingSettings(request),
+  queryFn: () => client.getErrorTrackingSettings(),
+  queryKey: queryKeys.errorTracking.settings,
+});
+export const useErrorTrackingSettings = errorTrackingSettings.useSettings;
+export const useSaveErrorTrackingSettings = errorTrackingSettings.useSave;
+export function useSendErrorTrackingTest() {
+  return useMutation({ mutationFn: () => client.sendErrorTrackingTest() });
+}
 
 export const healthQueryOptions = queryOptions({
   queryFn: () => client.health(),

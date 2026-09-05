@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { StoredToolRecord } from "@nakama/db";
-import { loadPythonTool, resolvePythonModulePath } from "./python-tool-loader";
+import { resolveCustomToolModulePath } from "./custom-tool-shared";
+import { loadPythonTool } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -336,7 +337,7 @@ if __name__ == "__main__":
     const { configDir: dir } = await setupToolsDir();
     configDir = dir;
 
-    expect(() => resolvePythonModulePath("../escape.py")).toThrow(
+    expect(() => resolveCustomToolModulePath("../escape.py")).toThrow(
       /must stay inside/i
     );
   });
