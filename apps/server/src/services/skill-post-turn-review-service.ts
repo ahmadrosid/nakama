@@ -7,7 +7,7 @@ import {
   type ChatMessage,
   extractLatestTurnMessages,
   parseAgentChannel,
-  resolveSkillPostTurnReviewEnabled,
+  resolveProfileOrgBooleanOverride,
   type UserConfig,
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
@@ -230,10 +230,10 @@ export class SkillPostTurnReviewService {
         return "org_missing";
       }
 
-      const enabled = resolveSkillPostTurnReviewEnabled({
-        orgSkillsPostTurnReview: org.skillsPostTurnReview ?? false,
-        profileSkillsPostTurnReview: profile.skillsPostTurnReview ?? null,
-      });
+      const enabled = resolveProfileOrgBooleanOverride(
+        profile.skillsPostTurnReview ?? null,
+        org.skillsPostTurnReview ?? false
+      );
       if (!enabled) {
         return "flag_disabled";
       }

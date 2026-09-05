@@ -121,7 +121,7 @@ import {
   findProviderInstance,
   getActiveProviderInstance,
   getProfileSoulDir,
-  getResolvedSoulStatus,
+  getSoulStatus,
   initSoulDirectory,
   isEmailConfigComplete,
   isProviderConfigured,
@@ -2763,7 +2763,7 @@ export class AgentService {
     includeContents = false
   ): Promise<SoulStatusResponse> {
     const profile = await this.requireProfile(orgId, profileId);
-    const status = await getResolvedSoulStatus(orgId, profileId);
+    const status = await getSoulStatus(getProfileSoulDir(orgId, profileId));
 
     if (!includeContents) {
       return { ...status, profileId };
