@@ -67,8 +67,8 @@ export class WorkflowService {
       profileIdOverride ?? input.profileId,
       access
     );
+    validateWorkflowSteps(input.steps, allowedTools ?? new Set());
     const steps = normalizeWorkflowSteps(input.steps);
-    validateWorkflowSteps(steps, allowedTools ?? new Set());
 
     const now = new Date().toISOString();
     const workflow: StoredWorkflow = {
@@ -114,8 +114,11 @@ export class WorkflowService {
       profileId = await this.resolveProfileId(orgId, input.profileId, access);
     }
 
+    validateWorkflowSteps(
+      input.steps ?? existing.steps,
+      allowedTools ?? new Set()
+    );
     const steps = normalizeWorkflowSteps(input.steps ?? existing.steps);
-    validateWorkflowSteps(steps, allowedTools ?? new Set());
 
     const updated: StoredWorkflow = {
       ...existing,

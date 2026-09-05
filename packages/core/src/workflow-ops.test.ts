@@ -104,4 +104,68 @@ describe("workflow-ops", () => {
       )
     ).toThrow(/summarize step must be the last/i);
   });
+
+  test("validateWorkflowSteps names missing step fields instead of crashing", () => {
+    expect(() =>
+      validateWorkflowSteps(
+        [
+          {
+            id: "fetch",
+            input: { query: "news" },
+            tool: "web_search",
+            type: "tool",
+          },
+          { id: "summarize", instruction: "Brief.", type: "summarize" },
+        ] as never,
+        new Set(["web_search"])
+      )
+    ).toThrow(/use kind instead/i);
+
+    expect(() =>
+      validateWorkflowSteps(
+        [
+          {
+            id: "fetch",
+            input: { query: "news" },
+            kind: "tool",
+            tool: "web_search",
+          },
+          {
+            id: "compare",
+            inputs: ["fetch"],
+            instruction: "Rank items.",
+            kind: "compare",
+          },
+          { id: "summarize", kind: "summarize", prompt: "Brief." },
+        ] as never,
+        new Set(["web_search"])
+      )
+    ).toThrow(/invalid op: undefined\. Use eq \| near \| contains/i);
+
+    expect(() =>
+      validateWorkflowSteps(
+        [
+          {
+            id: "fetch",
+            input: { query: "news" },
+            kind: "tool",
+            tool: "web_search",
+          },
+          {
+            id: "compare",
+            kind: "compare",
+            left: "{{steps.fetch}}",
+            op: "contains",
+            right: "news",
+          },
+          {
+            id: "summarize",
+            instruction: "Write a brief.",
+            kind: "summarize",
+          },
+        ] as never,
+        new Set(["web_search"])
+      )
+    ).toThrow(/use prompt instead/i);
+  });
 });

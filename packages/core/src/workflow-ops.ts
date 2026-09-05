@@ -172,6 +172,16 @@ export function collectTemplateRefs(value: unknown): string[] {
   return refs.filter(Boolean);
 }
 
+const WORKFLOW_STEP_KINDS = [
+  "tool",
+  "compare",
+  "assert",
+  "template",
+  "summarize",
+] as const;
+
+const WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"] as const;
+
 export function validateWorkflowSteps(
   steps: WorkflowStep[],
   allowedTools: Set<string>
@@ -185,10 +195,9 @@ export function validateWorkflowSteps(
   let summarizeCount = 0;
 
   for (const [index, step] of steps.entries()) {
-    const id = step.id.trim();
-    if (!id) {
-      throw new Error(`Step ${index + 1} is missing an id.`);
-    }
+    const record = asStepRecord(step, index);
+    const id = readStepId(record, index);
+    const kind = readStepKind(record, id);
 
     if (seenStepIds.has(id)) {
       throw new Error(`Duplicate workflow step id: ${id}`);
@@ -196,38 +205,49 @@ export function validateWorkflowSteps(
 
     seenStepIds.add(id);
 
-    if (step.kind === "summarize") {
+    if (kind === "summarize") {
       summarizeCount += 1;
-      if (!step.prompt.trim()) {
-        throw new Error("Summarize step prompt is required.");
-      }
+      readRequiredStepString(record, "prompt", `Summarize step ${id}`, {
+        alias: "instruction",
+      });
       continue;
     }
 
-    if (step.kind === "tool") {
-      const tool = step.tool.trim();
-      if (!tool) {
-        throw new Error(`Tool step ${id} is missing a tool name.`);
-      }
-
+    if (kind === "tool") {
+      const tool = readRequiredStepString(record, "tool", `Tool step ${id}`, {
+        label: "a tool name",
+      });
       if (!allowedTools.has(tool)) {
         throw new Error(`Tool step ${id} references unknown tool: ${tool}`);
       }
     }
 
-    if (
-      step.kind === "compare" &&
-      !["eq", "near", "contains"].includes(step.op)
-    ) {
-      throw new Error(`Compare step ${id} has invalid op: ${step.op}`);
+    if (kind === "compare") {
+      const op = record.op;
+      if (
+        typeof op !== "string" ||
+        !WORKFLOW_COMPARE_OPS.includes(op as WorkflowCompareOp)
+      ) {
+        throw new Error(
+          `Compare step ${id} has invalid op: ${String(op)}. Use ${WORKFLOW_COMPARE_OPS.join(" | ")}.`
+        );
+      }
+      if (!("left" in record) || record.left === undefined) {
+        throw new Error(`Compare step ${id} is missing left.`);
+      }
+      if (!("right" in record) || record.right === undefined) {
+        throw new Error(`Compare step ${id} is missing right.`);
+      }
     }
 
-    if (step.kind === "assert" && !step.path.trim()) {
-      throw new Error(`Assert step ${id} is missing a path.`);
+    if (kind === "assert") {
+      readRequiredStepString(record, "path", `Assert step ${id}`);
     }
 
-    if (step.kind === "template" && !step.template.trim()) {
-      throw new Error(`Template step ${id} is missing template text.`);
+    if (kind === "template") {
+      readRequiredStepString(record, "template", `Template step ${id}`, {
+        label: "template text",
+      });
     }
 
     const refs = collectTemplateRefs(step);
@@ -249,6 +269,63 @@ export function validateWorkflowSteps(
   if (summarizeCount === 0) {
     throw new Error("Workflow must end with a summarize step.");
   }
+}
+
+function asStepRecord(step: unknown, index: number): Record<string, unknown> {
+  if (!step || typeof step !== "object" || Array.isArray(step)) {
+    throw new Error(`Step ${index + 1} must be an object.`);
+  }
+  return step as Record<string, unknown>;
+}
+
+function readStepId(step: Record<string, unknown>, index: number): string {
+  const id = typeof step.id === "string" ? step.id.trim() : "";
+  if (!id) {
+    throw new Error(`Step ${index + 1} is missing an id.`);
+  }
+  return id;
+}
+
+function readStepKind(
+  step: Record<string, unknown>,
+  id: string
+): (typeof WORKFLOW_STEP_KINDS)[number] {
+  const kind = typeof step.kind === "string" ? step.kind.trim() : "";
+  if (!kind) {
+    if (typeof step.type === "string" && step.type.trim()) {
+      throw new Error(
+        `Step ${id} uses type; use kind instead (${WORKFLOW_STEP_KINDS.join(" | ")}).`
+      );
+    }
+    throw new Error(
+      `Step ${id} is missing kind (${WORKFLOW_STEP_KINDS.join(" | ")}).`
+    );
+  }
+  if (
+    !WORKFLOW_STEP_KINDS.includes(kind as (typeof WORKFLOW_STEP_KINDS)[number])
+  ) {
+    throw new Error(
+      `Step ${id} has invalid kind: ${kind}. Use ${WORKFLOW_STEP_KINDS.join(" | ")}.`
+    );
+  }
+  return kind as (typeof WORKFLOW_STEP_KINDS)[number];
+}
+
+function readRequiredStepString(
+  step: Record<string, unknown>,
+  key: string,
+  prefix: string,
+  options?: { alias?: string; label?: string }
+): string {
+  const value = typeof step[key] === "string" ? step[key].trim() : "";
+  if (value) {
+    return value;
+  }
+  const alias = options?.alias;
+  if (alias && typeof step[alias] === "string" && step[alias].trim()) {
+    throw new Error(`${prefix} uses ${alias}; use ${key} instead.`);
+  }
+  throw new Error(`${prefix} is missing ${options?.label ?? key}.`);
 }
 
 function validateTemplateRef(

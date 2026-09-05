@@ -34,12 +34,7 @@ export function createWorkflowTools(
               "Optional org profile id to run as. Omit to use the current chat profile.",
             type: "string",
           },
-          steps: {
-            description:
-              "Ordered workflow steps. Must end with one summarize step.",
-            items: { type: "object" },
-            type: "array",
-          },
+          steps: workflowStepsParameter(),
         },
         required: ["name", "description", "steps"],
         type: "object",
@@ -90,10 +85,7 @@ export function createWorkflowTools(
           enabled: { type: "boolean" },
           name: { type: "string" },
           profileId: { type: "string" },
-          steps: {
-            items: { type: "object" },
-            type: "array",
-          },
+          steps: workflowStepsParameter(),
           workflowId: {
             description: "Workflow id to update.",
             type: "string",
@@ -237,6 +229,75 @@ function summarizeWorkflow(workflow: {
     name: workflow.name,
     profileId: workflow.profileId,
     stepCount: workflow.steps.length,
+  };
+}
+
+function workflowStepsParameter() {
+  return {
+    description:
+      "Ordered steps. Use kind (not type). Last step must be summarize with prompt (not instruction). Compare is a fail-closed check: op is eq | near | contains, with left/right (use {{steps.<id>}}).",
+    items: {
+      additionalProperties: false,
+      properties: {
+        expected: {
+          description:
+            "assert only. Expected value or {{steps.<id>}} template.",
+        },
+        id: {
+          description:
+            "Stable step id referenced by later {{steps.<id>}} templates.",
+          type: "string",
+        },
+        input: {
+          additionalProperties: true,
+          description:
+            "tool only. Arguments for that tool (must match the tool schema, e.g. web_search uses { query }).",
+          type: "object",
+        },
+        kind: {
+          description: "Step kind. Never use type.",
+          enum: ["tool", "compare", "assert", "template", "summarize"],
+          type: "string",
+        },
+        left: {
+          description:
+            "compare only. Left value or {{steps.<id>}} / {{input.*}} template.",
+        },
+        op: {
+          description: "compare only.",
+          enum: ["eq", "near", "contains"],
+          type: "string",
+        },
+        path: {
+          description: "assert only. Receipt path such as steps.fetch.revenue.",
+          type: "string",
+        },
+        prompt: {
+          description: "summarize only. Receipt-bound prose instructions.",
+          type: "string",
+        },
+        right: {
+          description:
+            "compare only. Right value or {{steps.<id>}} / {{input.*}} template.",
+        },
+        template: {
+          description:
+            "template only. String with {{steps.<id>}} or {{input.*}}.",
+          type: "string",
+        },
+        tolerance: {
+          description: "compare op near only.",
+          type: "number",
+        },
+        tool: {
+          description: "tool only. Assigned profile or MCP tool name.",
+          type: "string",
+        },
+      },
+      required: ["id", "kind"],
+      type: "object",
+    },
+    type: "array",
   };
 }
 
