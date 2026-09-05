@@ -79,6 +79,7 @@ export function WorkflowsPage() {
       });
     } catch (error) {
       setPageError(formatError(error));
+      throw error;
     }
   }
 
@@ -179,7 +180,7 @@ export function WorkflowsPage() {
             {selected ? (
               <WorkflowBuilder
                 busy={busy}
-                key={`${selected.id}:${selected.updatedAt}`}
+                key={selected.id}
                 onDelete={() => void handleDelete(selected)}
                 onProfileChange={(profileId) =>
                   handleProfileChange(selected, profileId)

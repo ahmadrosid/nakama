@@ -14,15 +14,11 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   Add01Icon,
   Cancel01Icon,
-  CheckmarkCircle01Icon,
   Delete02Icon,
-  File01Icon,
-  Link01Icon,
   MoreHorizontalIcon,
   PlayIcon,
-  Search01Icon,
 } from "hugeicons-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -107,11 +103,32 @@ export function WorkflowBuilder({
     steps,
     workflowProfileId: workflow.profileId,
   });
-
-  const dirty =
-    name !== workflow.name ||
-    description !== workflow.description ||
-    JSON.stringify(steps) !== JSON.stringify(workflow.steps);
+  const saveRef = useRef(onSave);
+  useEffect(() => {
+    saveRef.current = onSave;
+  }, [onSave]);
+  useEffect(() => {
+    if (
+      name === workflow.name &&
+      description === workflow.description &&
+      JSON.stringify(steps) === JSON.stringify(workflow.steps)
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      void saveRef.current({ description, name, steps }).catch(() => undefined);
+    }, 700);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [
+    description,
+    name,
+    steps,
+    workflow.description,
+    workflow.name,
+    workflow.steps,
+  ]);
 
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null;
   const selectedIndex = selectedStep
@@ -157,12 +174,10 @@ export function WorkflowBuilder({
     <div className="flex min-h-0 flex-1 flex-col">
       <WorkflowBuilderHeader
         busy={busy}
-        dirty={dirty}
         enabled={workflow.enabled}
         name={name}
         onDelete={onDelete}
         onRun={onRun}
-        onSave={() => void onSave({ description, name, steps })}
       />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="h-full min-h-0 overflow-y-auto p-5">
@@ -385,20 +400,16 @@ function useWorkflowProfileSwitch({
 
 function WorkflowBuilderHeader({
   busy,
-  dirty,
   enabled,
   name,
   onDelete,
   onRun,
-  onSave,
 }: {
   busy: boolean;
-  dirty: boolean;
   enabled: boolean;
   name: string;
   onDelete: () => void;
   onRun: () => void;
-  onSave: () => void;
 }) {
   return (
     <header className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-4 py-3">
@@ -443,14 +454,6 @@ function WorkflowBuilderHeader({
         >
           <PlayIcon aria-hidden className="ml-0.5 size-4" strokeWidth={1.5} />
           Test run
-        </Button>
-        <Button
-          disabled={busy || !dirty}
-          onClick={onSave}
-          size="sm"
-          type="button"
-        >
-          Save
         </Button>
       </div>
     </header>
@@ -750,17 +753,9 @@ function WorkflowStepPanel({
 
   return (
     <aside className="absolute inset-y-0 right-0 z-10 flex min-h-0 w-[min(22rem,calc(100%-1.5rem))] flex-col bg-background shadow-lg ring-1 ring-border/80 dark:shadow-none">
-      <div className="flex items-start gap-3 border-border border-b px-4 py-3">
-        <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums">
+      <div className="flex items-center gap-3 border-border border-b px-4 py-3">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums">
           {stepNumber}
-        </span>
-        <span
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-full",
-            meta.iconClass
-          )}
-        >
-          <meta.icon aria-hidden className="size-4" strokeWidth={1.5} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-medium text-sm">{meta.title}</div>
@@ -1068,50 +1063,23 @@ function PanelTab({
 }
 
 function stepMeta(step: WorkflowStep): {
-  icon: typeof Link01Icon;
-  iconClass: string;
   kindLabel: string;
   title: string;
 } {
   const title = humanizeId(step.id);
   if (step.kind === "tool") {
-    return {
-      icon: step.tool === "web_fetch" ? Link01Icon : Search01Icon,
-      iconClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-      kindLabel: toolLabel(step.tool),
-      title,
-    };
+    return { kindLabel: toolLabel(step.tool), title };
   }
   if (step.kind === "compare") {
-    return {
-      icon: Search01Icon,
-      iconClass: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
-      kindLabel: "Compare",
-      title,
-    };
+    return { kindLabel: "Compare", title };
   }
   if (step.kind === "assert") {
-    return {
-      icon: CheckmarkCircle01Icon,
-      iconClass: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-      kindLabel: "Assert",
-      title,
-    };
+    return { kindLabel: "Assert", title };
   }
   if (step.kind === "template") {
-    return {
-      icon: File01Icon,
-      iconClass: "bg-muted text-muted-foreground",
-      kindLabel: "Template",
-      title,
-    };
+    return { kindLabel: "Template", title };
   }
-  return {
-    icon: File01Icon,
-    iconClass: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
-    kindLabel: "Summarize",
-    title,
-  };
+  return { kindLabel: "Summarize", title };
 }
 
 function humanizeId(id: string): string {
