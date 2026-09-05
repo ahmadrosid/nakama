@@ -177,42 +177,42 @@ export function WorkflowListToolRow({ message }: { message: ChatListItem }) {
     : [];
 
   return (
-    <section className={cardSurface}>
-      <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="min-w-0 truncate text-balance font-medium text-foreground text-sm">
-          Workflows
-        </h3>
-        <p className="shrink-0 text-muted-foreground text-xs tabular-nums">
-          {isRunning ? "Loading…" : workflows.length || "None"}
-        </p>
-      </header>
+    <section>
+      <h3 className="mb-1 text-balance text-muted-foreground text-xs">
+        Workflows
+        <span className="ml-1.5 tabular-nums">
+          {isRunning ? "…" : workflows.length || "None"}
+        </span>
+      </h3>
       {isRunning || workflows.length === 0 ? null : (
-        <ol className="flex flex-col gap-3">
-          {workflows.map((workflow) => (
-            <li
-              className="flex items-start justify-between gap-3"
-              key={workflow.id}
-            >
-              <div className="min-w-0 flex-1">
+        <ol>
+          {workflows.map((workflow) => {
+            const meta = listedWorkflowMeta(
+              workflow.stepCount,
+              workflow.lastRunAt
+            );
+            return (
+              <li
+                className="flex items-baseline justify-between gap-3 py-1"
+                key={workflow.id}
+                title={workflow.description || undefined}
+              >
                 <p className="min-w-0 truncate text-pretty text-foreground text-sm">
                   {workflow.name}
                   {workflow.enabled ? null : (
-                    <span className="ml-1.5 font-normal text-muted-foreground text-xs">
+                    <span className="ml-1.5 text-muted-foreground text-xs">
                       Off
                     </span>
                   )}
                 </p>
-                {workflow.description ? (
-                  <p className="truncate text-pretty text-muted-foreground text-xs">
-                    {workflow.description}
+                {meta ? (
+                  <p className="shrink-0 text-muted-foreground text-xs tabular-nums">
+                    {meta}
                   </p>
                 ) : null}
-              </div>
-              <p className="max-w-[40%] shrink-0 text-right text-muted-foreground text-xs tabular-nums">
-                {listedWorkflowMeta(workflow.stepCount, workflow.lastRunAt)}
-              </p>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
