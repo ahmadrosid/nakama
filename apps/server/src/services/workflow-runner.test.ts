@@ -110,6 +110,52 @@ describe("WorkflowRunner", () => {
     expect(result.error).toMatch(/compare/i);
     expect(summarizeCalled).toBe(false);
   });
+
+  test("stops before summarize when a tool step returns an error envelope", async () => {
+    const failingSteps: WorkflowStep[] = [
+      {
+        id: "fetch",
+        input: {},
+        kind: "tool",
+        tool: "web_search",
+      },
+      {
+        id: "summary",
+        kind: "summarize",
+        prompt: "Never reached",
+      },
+    ];
+    const workflow = {
+      ...createBaseWorkflow(),
+      steps: failingSteps,
+    };
+
+    let summarizeCalled = false;
+    const service = createWorkflowServiceStub(workflow);
+    const agent = {
+      buildWorkflowToolContext: () => ({}),
+      resolveWorkflowExecutionTools: async () => [
+        {
+          name: "web_search",
+          async run() {
+            throw new Error(
+              "web_search runs on the configured OpenAI or Anthropic provider and cannot be executed locally."
+            );
+          },
+        },
+      ],
+      runWorkflowSummarize: async () => {
+        summarizeCalled = true;
+        return "nope";
+      },
+    };
+
+    const runner = new WorkflowRunner(service as never, agent as never);
+    const result = await runner.run("workflow_test");
+
+    expect(result.error).toMatch(/cannot be executed locally/i);
+    expect(summarizeCalled).toBe(false);
+  });
 });
 
 function createBaseWorkflow(): StoredWorkflow {

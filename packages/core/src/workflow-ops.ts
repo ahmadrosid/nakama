@@ -182,6 +182,31 @@ const WORKFLOW_STEP_KINDS = [
 
 const WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"] as const;
 
+const SKIP_WORKFLOW_TOOLS = new Set(["web_search"]);
+
+export function missingWorkflowTools(
+  steps: WorkflowStep[],
+  allowedTools: Set<string>
+): string[] {
+  const missing = new Set<string>();
+  for (const step of steps) {
+    if (step.kind !== "tool") {
+      continue;
+    }
+    const tool = step.tool.trim();
+    if (!tool || SKIP_WORKFLOW_TOOLS.has(tool) || allowedTools.has(tool)) {
+      continue;
+    }
+    missing.add(tool);
+  }
+  return [...missing].sort((left, right) => left.localeCompare(right));
+}
+
+export function parseUnknownWorkflowToolError(message: string): string | null {
+  const match = message.match(/unknown tool:\s+(\S+)/i);
+  return match?.[1] ?? null;
+}
+
 export function validateWorkflowSteps(
   steps: WorkflowStep[],
   allowedTools: Set<string>

@@ -251,7 +251,7 @@ function workflowStepsParameter() {
         input: {
           additionalProperties: true,
           description:
-            "tool only. Arguments for that tool (must match the tool schema, e.g. web_search uses { query }).",
+            "tool only. Arguments for that tool (must match the tool schema, e.g. web_fetch uses { url }). Do not use web_search.",
           type: "object",
         },
         kind: {

@@ -172,6 +172,10 @@ export class WorkflowRunner {
         { arguments: input, name: step.tool },
         this.agentService.buildWorkflowToolContext(orgId, context)
       );
+      const toolError = readToolError(output);
+      if (toolError) {
+        throw new Error(toolError);
+      }
       return { input, output };
     }
 
@@ -219,4 +223,17 @@ export class WorkflowRunner {
       `Unsupported workflow step kind: ${(step as WorkflowStep).kind}`
     );
   }
+}
+
+function readToolError(output: unknown): string | null {
+  if (!output || typeof output !== "object" || Array.isArray(output)) {
+    return null;
+  }
+
+  const record = output as Record<string, unknown>;
+  if (typeof record.error !== "string" || !record.error.trim()) {
+    return null;
+  }
+
+  return Object.keys(record).length === 1 ? record.error : null;
 }

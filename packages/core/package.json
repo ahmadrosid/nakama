@@ -54,6 +54,7 @@
     "./skills/write": "./src/skills/write.ts",
     "./soul/org-memory": "./src/soul/org-memory.ts",
     "./tools/protected": "./src/tools/protected.ts",
+    "./workflow-ops": "./src/workflow-ops.ts",
     "./tools/email": "./src/tools/email.ts",
     "./mcp/preinstalled": "./src/mcp/preinstalled.ts"
   },

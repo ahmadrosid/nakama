@@ -5,6 +5,8 @@ import {
   executeAssert,
   executeCompare,
   getPathValue,
+  missingWorkflowTools,
+  parseUnknownWorkflowToolError,
   resolveTemplateString,
   resolveWorkflowValue,
   validateWorkflowSteps,
@@ -59,6 +61,33 @@ describe("workflow-ops", () => {
         path: "steps.fetch_a.revenue",
       }).ok
     ).toBe(false);
+  });
+
+  test("missingWorkflowTools lists unique tool steps the profile cannot run", () => {
+    const steps: WorkflowStep[] = [
+      {
+        id: "news",
+        input: { url: "https://example.com" },
+        kind: "tool",
+        tool: "web_fetch",
+      },
+      {
+        id: "tech",
+        input: { url: "https://example.com" },
+        kind: "tool",
+        tool: "web_fetch",
+      },
+      { id: "search", input: {}, kind: "tool", tool: "web_search" },
+      { id: "summary", kind: "summarize", prompt: "Summarize" },
+    ];
+
+    expect(missingWorkflowTools(steps, new Set(["web_fetch"]))).toEqual([]);
+    expect(missingWorkflowTools(steps, new Set())).toEqual(["web_fetch"]);
+    expect(
+      parseUnknownWorkflowToolError(
+        "Tool step news references unknown tool: web_fetch"
+      )
+    ).toBe("web_fetch");
   });
 
   test("validateWorkflowSteps enforces summarize last and tool names", () => {

@@ -10,13 +10,12 @@ Use `create_workflow` with `kind` (never `type`). Last step must be `summarize` 
 
 ```json
 [
-  { "id": "fetch", "kind": "tool", "tool": "web_search", "input": { "query": "latest news" } },
-  { "id": "check", "kind": "compare", "op": "contains", "left": "{{steps.fetch}}", "right": "ok" },
+  { "id": "news", "kind": "tool", "tool": "web_fetch", "input": { "url": "https://news.ycombinator.com" } },
   { "id": "summary", "kind": "summarize", "prompt": "Write a brief from the receipts only." }
 ]
 ```
 
-- `tool` — assigned profile or MCP tool; `input` must match that tool's schema
+- `tool` — assigned profile or MCP tool that can run locally; `input` must match that tool's schema. Use `web_fetch` for URLs. Do not use `web_search` — it only runs inside a provider chat turn.
 - `compare` / `assert` / `template` — deterministic on prior receipts, fail closed. `compare.op` is `eq` | `near` | `contains`. Do not use compare as free-text analysis
 - exactly one final `summarize` — turns the receipt bag into prose (no tools)
 

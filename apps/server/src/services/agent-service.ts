@@ -148,6 +148,7 @@ import {
   ollamaRequiresApiKey,
   parseAgentChannel,
   parseSentryDsn,
+  partitionTools,
   persistInlineAttachmentsInContent,
   readArtifactFile,
   readBundledSkillBody,
@@ -1351,12 +1352,13 @@ export class AgentService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const profile = await this.requireProfile(orgId, profileId);
-    return this.resolveProfileTools(profile, {
+    const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
       includeSkillManageTools: false,
       includeTodoTools: false,
       includeWorkflowTools: false,
     });
+    return partitionTools(tools).localTools;
   }
 
   async resolveWorkflowToolNames(
