@@ -10,7 +10,7 @@ import {
   missingWorkflowTools,
   parseUnknownWorkflowToolError,
 } from "@nakama/core/workflow-ops";
-import { useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   Add01Icon,
   Cancel01Icon,
@@ -22,7 +22,7 @@ import {
   PlayIcon,
   Search01Icon,
 } from "hugeicons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,51 +93,25 @@ export function WorkflowBuilder({
   runs: WorkflowRunRecord[];
   workflow: StoredWorkflow;
 }) {
-  const [name, setName] = useState(workflow.name);
-  const [description, setDescription] = useState(workflow.description);
-  const [steps, setSteps] = useState(workflow.steps);
+  const [name, setName] = useState(() => workflow.name);
+  const [description, setDescription] = useState(() => workflow.description);
+  const [steps, setSteps] = useState(() => workflow.steps);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [panelTab, setPanelTab] = useState<"configure" | "test">("configure");
   const [inputError, setInputError] = useState<string | null>(null);
-  const [toolGap, setToolGap] = useState<{
-    missing: string[];
-    profileId: string;
-    profileName: string;
-  } | null>(null);
-  const [checkingProfile, setCheckingProfile] = useState(false);
-
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const isPlatformAdmin = user?.isPlatformAdmin === true;
-  const { data: catalog = [] } = useToolsQuery();
-  const assignTool = useAssignToolMutation();
   const { data: profile } = useProfileQuery(workflow.profileId);
   const tools = profile?.tools ?? [];
+  const profileSwitch = useWorkflowProfileSwitch({
+    onProfileChange,
+    profileById,
+    steps,
+    workflowProfileId: workflow.profileId,
+  });
 
-  useEffect(() => {
-    setName(workflow.name);
-    setDescription(workflow.description);
-    setSteps(workflow.steps);
-    setSelectedStepId(null);
-    setPanelTab("configure");
-    setInputError(null);
-    setToolGap(null);
-  }, [workflow.id, workflow.updatedAt]);
-
-  const dirty = useMemo(
-    () =>
-      name !== workflow.name ||
-      description !== workflow.description ||
-      JSON.stringify(steps) !== JSON.stringify(workflow.steps),
-    [
-      description,
-      name,
-      steps,
-      workflow.description,
-      workflow.name,
-      workflow.steps,
-    ]
-  );
+  const dirty =
+    name !== workflow.name ||
+    description !== workflow.description ||
+    JSON.stringify(steps) !== JSON.stringify(workflow.steps);
 
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null;
   const selectedIndex = selectedStep
@@ -162,36 +136,15 @@ export function WorkflowBuilder({
   }
 
   function addStep() {
-    const id = `step_${crypto.randomUUID().slice(0, 8)}`;
-    const next: WorkflowStep = {
-      id,
-      input: { url: "" },
-      kind: "tool",
-      tool: "web_fetch",
-    };
-    setSteps((current) => {
-      const summarizeAt = current.findIndex(
-        (step) => step.kind === "summarize"
-      );
-      if (summarizeAt === -1) {
-        return [...current, next];
-      }
-      return [
-        ...current.slice(0, summarizeAt),
-        next,
-        ...current.slice(summarizeAt),
-      ];
-    });
-    setSelectedStepId(id);
+    const inserted = insertToolStep(steps);
+    setSteps(inserted.steps);
+    setSelectedStepId(inserted.id);
     setPanelTab("configure");
   }
 
   function deleteStep(stepId: string) {
-    const remaining = steps.filter((step) => step.id !== stepId);
-    const summarizeCount = remaining.filter(
-      (step) => step.kind === "summarize"
-    ).length;
-    if (summarizeCount === 0) {
+    const remaining = removeWorkflowStep(steps, stepId);
+    if (!remaining) {
       return;
     }
     setSteps(remaining);
@@ -200,230 +153,52 @@ export function WorkflowBuilder({
     }
   }
 
-  const latestRun = runs[0] ?? null;
-  const activeProfile = profileById.get(workflow.profileId);
-  const assignBusy = assignTool.isPending;
-  const assignableIds = toolGap
-    ? toolGap.missing
-        .map((name) => catalog.find((entry) => entry.name === name)?.id ?? null)
-        .filter((id): id is string => Boolean(id))
-    : [];
-  const canAssignMissing =
-    isPlatformAdmin &&
-    toolGap !== null &&
-    assignableIds.length === toolGap.missing.length &&
-    assignableIds.length > 0;
-
-  async function selectProfile(nextProfileId: string) {
-    if (!nextProfileId || nextProfileId === workflow.profileId) {
-      return;
-    }
-    setCheckingProfile(true);
-    try {
-      const detail = await queryClient.fetchQuery(
-        profileQueryOptions(nextProfileId)
-      );
-      const missing = missingWorkflowTools(
-        steps,
-        new Set(detail.tools.map((entry) => entry.name))
-      );
-      if (missing.length === 0) {
-        await onProfileChange(nextProfileId);
-        return;
-      }
-      setToolGap({
-        missing,
-        profileId: nextProfileId,
-        profileName: detail.name,
-      });
-    } catch {
-      try {
-        await onProfileChange(nextProfileId);
-      } catch (error) {
-        const parsed = parseUnknownWorkflowToolError(formatError(error));
-        if (parsed) {
-          setToolGap({
-            missing: [parsed],
-            profileId: nextProfileId,
-            profileName: profileById.get(nextProfileId)?.name ?? nextProfileId,
-          });
-        }
-      }
-    } finally {
-      setCheckingProfile(false);
-    }
-  }
-
-  async function assignMissingTools() {
-    if (!(toolGap && canAssignMissing)) {
-      return;
-    }
-    try {
-      for (const toolId of assignableIds) {
-        await assignTool.mutateAsync({
-          profileId: toolGap.profileId,
-          toolId,
-        });
-      }
-      await onProfileChange(toolGap.profileId);
-      setToolGap(null);
-    } catch {}
-  }
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-4 py-3">
-        <p className="min-w-0 truncate text-muted-foreground text-sm">
-          Workflows
-          <span className="px-1.5">/</span>
-          <span className="text-foreground">{name}</span>
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  aria-label="Workflow actions"
-                  className={iconHitArea}
-                  size="icon-sm"
-                  type="button"
-                  variant="outline"
-                />
-              }
-            >
-              <MoreHorizontalIcon className="size-4" strokeWidth={1.5} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-36">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                disabled={busy}
-                onClick={onDelete}
-                variant="destructive"
-              >
-                <Delete02Icon strokeWidth={1.5} />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            disabled={busy || !workflow.enabled}
-            onClick={onRun}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <PlayIcon aria-hidden className="ml-0.5 size-4" strokeWidth={1.5} />
-            Test run
-          </Button>
-          <Button
-            disabled={busy || !dirty}
-            onClick={() => void onSave({ description, name, steps })}
-            size="sm"
-            type="button"
-          >
-            Save
-          </Button>
-        </div>
-      </header>
-
+      <WorkflowBuilderHeader
+        busy={busy}
+        dirty={dirty}
+        enabled={workflow.enabled}
+        name={name}
+        onDelete={onDelete}
+        onRun={onRun}
+        onSave={() => void onSave({ description, name, steps })}
+      />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="h-full min-h-0 overflow-y-auto p-5">
-          <div className="mx-auto mb-6 max-w-xl">
-            <div className="flex items-center gap-2">
-              <Input
-                aria-label="Workflow name"
-                className="h-8 min-w-0 flex-1 border-transparent bg-transparent px-0 font-medium shadow-none focus-visible:border-input focus-visible:bg-background"
-                onChange={(event) => setName(event.target.value)}
-                value={name}
-              />
-              <label className="flex h-10 shrink-0 items-center gap-2 text-sm">
-                <Switch
-                  checked={workflow.enabled}
-                  disabled={busy}
-                  onCheckedChange={onToggleEnabled}
-                />
-                Enabled
-              </label>
-              <Select
-                disabled={busy || checkingProfile || assignBusy}
-                onValueChange={(value) => void selectProfile(String(value))}
-                value={workflow.profileId}
-              >
-                <SelectTrigger
-                  aria-label="Profile"
-                  className="max-w-[11rem] shrink-0"
-                >
-                  <SelectValue>
-                    <span className="flex min-w-0 items-center gap-2">
-                      {activeProfile ? (
-                        <ProfileAvatar profile={activeProfile} size="sm" />
-                      ) : null}
-                      <span className="truncate">
-                        {activeProfile?.name ?? workflow.profileId}
-                      </span>
-                    </span>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles.map((entry) => (
-                    <SelectItem key={entry.id} value={entry.id}>
-                      <span className="flex items-center gap-2">
-                        <ProfileAvatar profile={entry} size="sm" />
-                        <span>{entry.name}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Input
-              aria-label="Workflow description"
-              className="mt-1 h-8 border-transparent bg-transparent px-0 text-muted-foreground shadow-none focus-visible:border-input focus-visible:bg-background"
-              onChange={(event) => setDescription(event.target.value)}
-              value={description}
-            />
-          </div>
-
-          <ol className="mx-auto max-w-xl">
-            {steps.map((step, index) => (
-              <li key={step.id}>
-                <WorkflowStepCard
-                  index={index}
-                  onDelete={() => deleteStep(step.id)}
-                  onSelect={() => {
-                    setSelectedStepId(step.id);
-                    setPanelTab("configure");
-                    setInputError(null);
-                  }}
-                  selected={step.id === selectedStepId}
-                  step={step}
-                />
-                {index < steps.length - 1 ? (
-                  <div aria-hidden className="mx-auto h-5 w-px bg-border" />
-                ) : null}
-              </li>
-            ))}
-          </ol>
-
-          <div className="mt-4 flex justify-center">
-            <Button
-              disabled={busy}
-              onClick={addStep}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Add01Icon aria-hidden className="size-4" strokeWidth={1.5} />
-              Add step
-            </Button>
-          </div>
+          <WorkflowBuilderMeta
+            busy={busy}
+            description={description}
+            enabled={workflow.enabled}
+            name={name}
+            onDescriptionChange={setDescription}
+            onNameChange={setName}
+            onProfileChange={profileSwitch.selectProfile}
+            onToggleEnabled={onToggleEnabled}
+            profile={profileById.get(workflow.profileId)}
+            profileDisabled={profileSwitch.busy}
+            profileId={workflow.profileId}
+            profiles={profiles}
+          />
+          <WorkflowStepList
+            busy={busy}
+            onAdd={addStep}
+            onDelete={deleteStep}
+            onSelect={(stepId) => {
+              setSelectedStepId(stepId);
+              setPanelTab("configure");
+              setInputError(null);
+            }}
+            selectedStepId={selectedStepId}
+            steps={steps}
+          />
         </div>
-
         {selectedStep ? (
           <WorkflowStepPanel
             busy={busy}
             inputError={inputError}
-            latestRun={latestRun}
+            key={selectedStep.id}
+            latestRun={runs[0] ?? null}
             onClose={() => setSelectedStepId(null)}
             onInputError={setInputError}
             onPatch={(next) => patchStep(selectedStep.id, next)}
@@ -436,48 +211,441 @@ export function WorkflowBuilder({
           />
         ) : null}
       </div>
+      <WorkflowMissingToolsDialog
+        assignBusy={profileSwitch.assignBusy}
+        canAssign={profileSwitch.canAssign}
+        onAssign={profileSwitch.assignMissing}
+        onClose={profileSwitch.clear}
+        toolGap={profileSwitch.toolGap}
+      />
+    </div>
+  );
+}
 
-      <Dialog
-        onOpenChange={(open) => {
-          if (!open) {
-            setToolGap(null);
-          }
-        }}
-        open={toolGap !== null}
-      >
-        {toolGap ? (
-          <DialogContent className="gap-6 p-6 sm:max-w-md">
-            <DialogHeader className="gap-3">
-              <DialogTitle>{toolGap.profileName} needs tools</DialogTitle>
-              <ul className="list-disc pl-5 text-sm">
-                {toolGap.missing.map((name) => (
-                  <li key={name}>{name}</li>
-                ))}
-              </ul>
-            </DialogHeader>
-            <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+function insertToolStep(steps: WorkflowStep[]): {
+  id: string;
+  steps: WorkflowStep[];
+} {
+  const id = `step_${crypto.randomUUID().slice(0, 8)}`;
+  const next: WorkflowStep = {
+    id,
+    input: { url: "" },
+    kind: "tool",
+    tool: "web_fetch",
+  };
+  const summarizeAt = steps.findIndex((step) => step.kind === "summarize");
+  if (summarizeAt === -1) {
+    return { id, steps: [...steps, next] };
+  }
+  return {
+    id,
+    steps: [...steps.slice(0, summarizeAt), next, ...steps.slice(summarizeAt)],
+  };
+}
+
+function removeWorkflowStep(
+  steps: WorkflowStep[],
+  stepId: string
+): WorkflowStep[] | null {
+  const remaining = steps.filter((step) => step.id !== stepId);
+  if (remaining.filter((step) => step.kind === "summarize").length === 0) {
+    return null;
+  }
+  return remaining;
+}
+
+async function findWorkflowToolGap({
+  nextProfileId,
+  onProfileChange,
+  profileById,
+  queryClient,
+  steps,
+}: {
+  nextProfileId: string;
+  onProfileChange: (profileId: string) => Promise<void>;
+  profileById: Map<string, ProfileSummary>;
+  queryClient: QueryClient;
+  steps: WorkflowStep[];
+}): Promise<{
+  missing: string[];
+  profileId: string;
+  profileName: string;
+} | null> {
+  try {
+    const detail = await queryClient.fetchQuery(
+      profileQueryOptions(nextProfileId)
+    );
+    const missing = missingWorkflowTools(
+      steps,
+      new Set(detail.tools.map((entry) => entry.name))
+    );
+    if (missing.length === 0) {
+      await onProfileChange(nextProfileId);
+      return null;
+    }
+    return {
+      missing,
+      profileId: nextProfileId,
+      profileName: detail.name,
+    };
+  } catch {
+    try {
+      await onProfileChange(nextProfileId);
+      return null;
+    } catch (error) {
+      const parsed = parseUnknownWorkflowToolError(formatError(error));
+      if (!parsed) {
+        return null;
+      }
+      return {
+        missing: [parsed],
+        profileId: nextProfileId,
+        profileName: profileById.get(nextProfileId)?.name ?? nextProfileId,
+      };
+    }
+  }
+}
+
+function useWorkflowProfileSwitch({
+  onProfileChange,
+  profileById,
+  steps,
+  workflowProfileId,
+}: {
+  onProfileChange: (profileId: string) => Promise<void>;
+  profileById: Map<string, ProfileSummary>;
+  steps: WorkflowStep[];
+  workflowProfileId: string;
+}) {
+  const [toolGap, setToolGap] = useState<{
+    missing: string[];
+    profileId: string;
+    profileName: string;
+  } | null>(null);
+  const [checkingProfile, setCheckingProfile] = useState(false);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { data: catalog = [] } = useToolsQuery();
+  const assignTool = useAssignToolMutation();
+  const assignableIds = (toolGap?.missing ?? [])
+    .map((name) => catalog.find((entry) => entry.name === name)?.id ?? null)
+    .filter((id): id is string => Boolean(id));
+  const canAssign =
+    user?.isPlatformAdmin === true &&
+    toolGap !== null &&
+    assignableIds.length === toolGap.missing.length &&
+    assignableIds.length > 0;
+
+  async function selectProfile(nextProfileId: string) {
+    if (!nextProfileId || nextProfileId === workflowProfileId) {
+      return;
+    }
+    setCheckingProfile(true);
+    const gap = await findWorkflowToolGap({
+      nextProfileId,
+      onProfileChange,
+      profileById,
+      queryClient,
+      steps,
+    });
+    if (gap) {
+      setToolGap(gap);
+    }
+    setCheckingProfile(false);
+  }
+
+  async function assignMissing() {
+    if (!(toolGap && canAssign)) {
+      return;
+    }
+    try {
+      await Promise.all(
+        assignableIds.map((toolId) =>
+          assignTool.mutateAsync({
+            profileId: toolGap.profileId,
+            toolId,
+          })
+        )
+      );
+      await onProfileChange(toolGap.profileId);
+      setToolGap(null);
+    } catch {}
+  }
+
+  return {
+    assignBusy: assignTool.isPending,
+    assignMissing,
+    busy: checkingProfile || assignTool.isPending,
+    canAssign,
+    clear: () => setToolGap(null),
+    selectProfile,
+    toolGap,
+  };
+}
+
+function WorkflowBuilderHeader({
+  busy,
+  dirty,
+  enabled,
+  name,
+  onDelete,
+  onRun,
+  onSave,
+}: {
+  busy: boolean;
+  dirty: boolean;
+  enabled: boolean;
+  name: string;
+  onDelete: () => void;
+  onRun: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <header className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-4 py-3">
+      <p className="min-w-0 truncate text-muted-foreground text-sm">
+        Workflows
+        <span className="px-1.5">/</span>
+        <span className="text-foreground">{name}</span>
+      </p>
+      <div className="flex shrink-0 items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
               <Button
-                disabled={assignBusy}
-                onClick={() => setToolGap(null)}
+                aria-label="Workflow actions"
+                className={iconHitArea}
+                size="icon-sm"
                 type="button"
                 variant="outline"
-              >
-                Close
-              </Button>
-              {canAssignMissing ? (
-                <Button
-                  disabled={assignBusy}
-                  onClick={() => void assignMissingTools()}
-                  type="button"
-                >
-                  {assignBusy ? <Spinner className="size-4" /> : "Assign"}
-                </Button>
-              ) : null}
-            </DialogFooter>
-          </DialogContent>
-        ) : null}
-      </Dialog>
+              />
+            }
+          >
+            <MoreHorizontalIcon className="size-4" strokeWidth={1.5} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            <DropdownMenuItem
+              className="cursor-pointer"
+              disabled={busy}
+              onClick={onDelete}
+              variant="destructive"
+            >
+              <Delete02Icon strokeWidth={1.5} />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          disabled={busy || !enabled}
+          onClick={onRun}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <PlayIcon aria-hidden className="ml-0.5 size-4" strokeWidth={1.5} />
+          Test run
+        </Button>
+        <Button
+          disabled={busy || !dirty}
+          onClick={onSave}
+          size="sm"
+          type="button"
+        >
+          Save
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+function WorkflowBuilderMeta({
+  busy,
+  description,
+  enabled,
+  name,
+  onDescriptionChange,
+  onNameChange,
+  onProfileChange,
+  onToggleEnabled,
+  profile,
+  profileDisabled,
+  profileId,
+  profiles,
+}: {
+  busy: boolean;
+  description: string;
+  enabled: boolean;
+  name: string;
+  onDescriptionChange: (value: string) => void;
+  onNameChange: (value: string) => void;
+  onProfileChange: (profileId: string) => Promise<void>;
+  onToggleEnabled: (enabled: boolean) => void;
+  profile: ProfileSummary | undefined;
+  profileDisabled: boolean;
+  profileId: string;
+  profiles: ProfileSummary[];
+}) {
+  return (
+    <div className="mx-auto mb-6 max-w-xl">
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="Workflow name"
+          className="h-8 min-w-0 flex-1 border-transparent bg-transparent px-0 font-medium shadow-none focus-visible:border-input focus-visible:bg-background"
+          onChange={(event) => onNameChange(event.target.value)}
+          value={name}
+        />
+        <label className="flex h-10 shrink-0 items-center gap-2 text-sm">
+          <Switch
+            checked={enabled}
+            disabled={busy}
+            onCheckedChange={onToggleEnabled}
+          />
+          Enabled
+        </label>
+        <Select
+          disabled={busy || profileDisabled}
+          onValueChange={(value) => void onProfileChange(String(value))}
+          value={profileId}
+        >
+          <SelectTrigger
+            aria-label="Profile"
+            className="max-w-[11rem] shrink-0"
+          >
+            <SelectValue>
+              <span className="flex min-w-0 items-center gap-2">
+                {profile ? <ProfileAvatar profile={profile} size="sm" /> : null}
+                <span className="truncate">{profile?.name ?? profileId}</span>
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {profiles.map((entry) => (
+              <SelectItem key={entry.id} value={entry.id}>
+                <span className="flex items-center gap-2">
+                  <ProfileAvatar profile={entry} size="sm" />
+                  <span>{entry.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Input
+        aria-label="Workflow description"
+        className="mt-1 h-8 border-transparent bg-transparent px-0 text-muted-foreground shadow-none focus-visible:border-input focus-visible:bg-background"
+        onChange={(event) => onDescriptionChange(event.target.value)}
+        value={description}
+      />
     </div>
+  );
+}
+
+function WorkflowStepList({
+  busy,
+  onAdd,
+  onDelete,
+  onSelect,
+  selectedStepId,
+  steps,
+}: {
+  busy: boolean;
+  onAdd: () => void;
+  onDelete: (stepId: string) => void;
+  onSelect: (stepId: string) => void;
+  selectedStepId: string | null;
+  steps: WorkflowStep[];
+}) {
+  return (
+    <>
+      <ol className="mx-auto max-w-xl">
+        {steps.map((step, index) => (
+          <li key={step.id}>
+            <WorkflowStepCard
+              index={index}
+              onDelete={() => onDelete(step.id)}
+              onSelect={() => onSelect(step.id)}
+              selected={step.id === selectedStepId}
+              step={step}
+            />
+            {index < steps.length - 1 ? (
+              <div aria-hidden className="mx-auto h-5 w-px bg-border" />
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      <div className="mt-4 flex justify-center">
+        <Button
+          disabled={busy}
+          onClick={onAdd}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Add01Icon aria-hidden className="size-4" strokeWidth={1.5} />
+          Add step
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function WorkflowMissingToolsDialog({
+  assignBusy,
+  canAssign,
+  onAssign,
+  onClose,
+  toolGap,
+}: {
+  assignBusy: boolean;
+  canAssign: boolean;
+  onAssign: () => Promise<void>;
+  onClose: () => void;
+  toolGap: {
+    missing: string[];
+    profileId: string;
+    profileName: string;
+  } | null;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      open={toolGap !== null}
+    >
+      {toolGap ? (
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>{toolGap.profileName} needs tools</DialogTitle>
+            <ul className="list-disc pl-5 text-sm">
+              {toolGap.missing.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          </DialogHeader>
+          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+            <Button
+              disabled={assignBusy}
+              onClick={onClose}
+              type="button"
+              variant="outline"
+            >
+              Close
+            </Button>
+            {canAssign ? (
+              <Button
+                disabled={assignBusy}
+                onClick={() => void onAssign()}
+                type="button"
+              >
+                {assignBusy ? <Spinner className="size-4" /> : "Assign"}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      ) : null}
+    </Dialog>
   );
 }
 
@@ -579,12 +747,6 @@ function WorkflowStepPanel({
   const [inputDraft, setInputDraft] = useState(() =>
     step.kind === "tool" ? JSON.stringify(step.input, null, 2) : ""
   );
-
-  useEffect(() => {
-    if (step.kind === "tool") {
-      setInputDraft(JSON.stringify(step.input, null, 2));
-    }
-  }, [step.id]);
 
   return (
     <aside className="absolute inset-y-0 right-0 z-10 flex min-h-0 w-[min(22rem,calc(100%-1.5rem))] flex-col bg-background shadow-lg ring-1 ring-border/80 dark:shadow-none">

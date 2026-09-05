@@ -179,6 +179,7 @@ export function WorkflowsPage() {
             {selected ? (
               <WorkflowBuilder
                 busy={busy}
+                key={`${selected.id}:${selected.updatedAt}`}
                 onDelete={() => void handleDelete(selected)}
                 onProfileChange={(profileId) =>
                   handleProfileChange(selected, profileId)

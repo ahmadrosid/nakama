@@ -79,22 +79,3 @@ export function useDeleteWorkflowMutation() {
     },
   });
 }
-
-export function useDeleteWorkflowRunMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      runId,
-      workflowId,
-    }: {
-      workflowId: string;
-      runId: string;
-    }) => client.deleteWorkflowRun(workflowId, runId),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.workflows.runs(variables.workflowId),
-      });
-    },
-  });
-}
