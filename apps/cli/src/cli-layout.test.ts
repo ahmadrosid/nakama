@@ -288,6 +288,34 @@ describe("TerminalLayout frame pipeline", () => {
     expect(output).toContain(" line-05 ");
   });
 
+  test("scrolls within retained history and returns to live output after eviction", () => {
+    captureStdout();
+    setTerminalSize(80, 8);
+    const layout = new TerminalLayout(null);
+    Object.assign(layout, { anchored: true, anchorRow: 1, enabled: true });
+    layout.setReservedRows(1, [plainLine("> ")]);
+    for (let index = 0; index < 1001; index++) {
+      layout.writelnScroll(`retained-${index}`);
+    }
+
+    writes = [];
+    layout.scrollLines(10_000);
+    expect(writes.join("")).toContain(" retained-1 ");
+    expect(writes.join("")).not.toContain(" retained-0 ");
+
+    writes = [];
+    layout.writelnScroll("retained-1001");
+    expect(writes.join("")).toContain("retained-7");
+    expect(layout.getLastOutputLine()).toBe(1000);
+
+    writes = [];
+    layout.scrollToLatest();
+    expect(writes.join("")).toContain(" retained-1001 ");
+    writes = [];
+    layout.writelnScroll("retained-1002");
+    expect(writes.join("")).toContain(" retained-1002 ");
+  });
+
   test("grows viewport upward as transcript gets longer", () => {
     captureStdout();
     setTerminalSize(80, 12);
