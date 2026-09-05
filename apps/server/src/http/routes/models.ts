@@ -178,7 +178,7 @@ export function registerModelRoutes(
     .object({
       apiKey: z.string().optional(),
       endpoint: z.string().optional(),
-      provider: z.enum(["exa", "firecrawl", "custom"]).nullable().optional(),
+      provider: z.enum(["exa", "firecrawl"]).nullable().optional(),
     })
     .openapi("UpdateWebSearchSettingsRequest");
   const agentBrowserStatusSchema = z

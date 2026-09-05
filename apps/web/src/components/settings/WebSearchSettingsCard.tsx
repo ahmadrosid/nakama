@@ -2,7 +2,6 @@ import type { WebSearchProvider } from "@nakama/core/contract";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -25,50 +24,16 @@ import { formatError } from "@/lib/client";
 
 const BUILT_IN_VALUE = "__web_search_builtin__";
 
-/**
- * Mirrors WEB_SEARCH_PROVIDER_ENDPOINTS in packages/core/src/web-search-config.ts.
- * Duplicated because that module reads the config file and cannot be bundled
- * for the browser; the server re-derives the endpoint on save anyway.
- */
 const PROVIDER_PRESETS: Array<{
-  endpoint: string;
   label: string;
   value: WebSearchProvider;
 }> = [
-  { endpoint: "https://api.exa.ai/search", label: "Exa", value: "exa" },
-  {
-    endpoint: "https://api.firecrawl.dev/v2/search",
-    label: "Firecrawl",
-    value: "firecrawl",
-  },
-  { endpoint: "", label: "Custom endpoint", value: "custom" },
+  { label: "Exa", value: "exa" },
+  { label: "Firecrawl", value: "firecrawl" },
 ];
 
-function presetEndpoint(provider: WebSearchProvider): string {
-  return (
-    PROVIDER_PRESETS.find((preset) => preset.value === provider)?.endpoint ?? ""
-  );
-}
-
-export function WebSearchSettingsCard() {
-  const { data: settings } = useWebSearchSettings();
-  const saveMutation = useSaveWebSearchSettings();
-  const [provider, setProvider] = useState<WebSearchProvider | null>(null);
-  const [endpoint, setEndpoint] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+function useSavedHint() {
   const [savedHint, setSavedHint] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!settings) {
-      return;
-    }
-
-    setProvider(settings.provider);
-    setEndpoint(settings.endpoint ?? "");
-    setApiKey("");
-  }, [settings]);
 
   useEffect(() => {
     if (!savedHint) {
@@ -79,24 +44,45 @@ export function WebSearchSettingsCard() {
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 
-  const savedProvider = settings?.provider ?? null;
-  const keyAlreadySaved =
-    savedProvider === provider && Boolean(settings?.apiKeyMasked);
+  return [savedHint, setSavedHint] as const;
+}
 
-  function handleProviderChange(value: string | null) {
+function useWebSearchSettingsForm() {
+  const { data: settings } = useWebSearchSettings();
+  const saveMutation = useSaveWebSearchSettings();
+  const [provider, setProvider] = useState<WebSearchProvider | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [savedHint, setSavedHint] = useSavedHint();
+
+  useEffect(() => {
+    if (!settings) {
+      return;
+    }
+
+    setProvider(settings.provider);
+    setApiKey("");
+  }, [settings]);
+
+  const keyAlreadySaved =
+    settings?.provider === provider && Boolean(settings?.apiKeyMasked);
+
+  function resetMessages() {
+    setFormError(null);
+    setSavedHint(null);
+    saveMutation.reset();
+  }
+
+  function selectProvider(value: string | null) {
     if (!value) {
       return;
     }
 
-    setFormError(null);
-    setSavedHint(null);
-    saveMutation.reset();
+    resetMessages();
 
     if (value === BUILT_IN_VALUE) {
       setProvider(null);
-      setEndpoint("");
       setApiKey("");
-
       saveMutation.mutate(
         { provider: null },
         {
@@ -107,33 +93,24 @@ export function WebSearchSettingsCard() {
       return;
     }
 
-    const next = value as WebSearchProvider;
-    setProvider(next);
-    setEndpoint(
-      savedProvider === next ? (settings?.endpoint ?? "") : presetEndpoint(next)
-    );
+    setProvider(value as WebSearchProvider);
     setApiKey("");
   }
 
-  function handleSave() {
+  function saveKey() {
     if (!provider) {
       return;
     }
 
-    setFormError(null);
-    setSavedHint(null);
-    saveMutation.reset();
-
+    resetMessages();
     saveMutation.mutate(
       {
-        endpoint: endpoint.trim(),
         provider,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       },
       {
         onError: (error) => setFormError(formatError(error)),
-        onSuccess: (saved) => {
-          setEndpoint(saved.endpoint ?? "");
+        onSuccess: () => {
           setApiKey("");
           setSavedHint("Saved");
         },
@@ -141,25 +118,112 @@ export function WebSearchSettingsCard() {
     );
   }
 
+  return {
+    apiKey,
+    formError,
+    keyAlreadySaved,
+    maskedKey: settings?.apiKeyMasked,
+    pending: saveMutation.isPending,
+    provider,
+    savedHint,
+    saveKey,
+    selectProvider,
+    setApiKey,
+    setFormError,
+    setSavedHint,
+  };
+}
+
+function WebSearchApiKeyFields({
+  apiKey,
+  keyAlreadySaved,
+  maskedKey,
+  pending,
+  onApiKeyChange,
+  onSave,
+}: {
+  apiKey: string;
+  keyAlreadySaved: boolean;
+  maskedKey: string | null | undefined;
+  pending: boolean;
+  onApiKeyChange: (value: string) => void;
+  onSave: () => void;
+}) {
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <label
+        className="block font-medium text-foreground text-xs"
+        htmlFor="web-search-api-key"
+      >
+        API key
+      </label>
+      <div className="flex items-center gap-2">
+        <InputGroup className="h-9 min-w-0 flex-1">
+          <InputGroupInput
+            autoComplete="off"
+            disabled={pending}
+            id="web-search-api-key"
+            onChange={(event) => onApiKeyChange(event.target.value)}
+            placeholder={
+              keyAlreadySaved ? `Saved (${maskedKey})` : "Paste API key"
+            }
+            type={showApiKey ? "text" : "password"}
+            value={apiKey}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label={showApiKey ? "Hide API key" : "Show API key"}
+              onClick={() => setShowApiKey((current) => !current)}
+              size="icon-xs"
+              type="button"
+            >
+              {showApiKey ? (
+                <ViewOffIcon className="size-4" />
+              ) : (
+                <ViewIcon className="size-4" />
+              )}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <Button
+          className="min-w-[4.5rem] shrink-0"
+          disabled={pending || !(apiKey.trim() || keyAlreadySaved)}
+          id="btn-web-search-save"
+          onClick={onSave}
+          size="sm"
+          type="button"
+        >
+          {pending ? <Spinner className="size-4" /> : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function WebSearchSettingsCard() {
+  const form = useWebSearchSettingsForm();
+
   return (
     <div className="space-y-3 px-4 py-3" id="web-search-settings">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
           <p className="font-medium text-foreground text-sm">Web search</p>
-          {savedHint ? (
+          {form.savedHint ? (
             <p
               className="text-emerald-700 text-xs dark:text-emerald-300"
               role="status"
             >
-              {savedHint}
+              {form.savedHint}
             </p>
           ) : null}
         </div>
         <div className="w-full min-w-0 sm:w-56">
           <Select
-            disabled={saveMutation.isPending}
-            onValueChange={handleProviderChange}
-            value={provider ?? BUILT_IN_VALUE}
+            disabled={form.pending}
+            onValueChange={form.selectProvider}
+            value={form.provider ?? BUILT_IN_VALUE}
           >
             <SelectTrigger
               aria-label="Web search provider"
@@ -180,85 +244,24 @@ export function WebSearchSettingsCard() {
         </div>
       </div>
 
-      {provider ? (
-        <div className="space-y-2">
-          <label
-            className="block font-medium text-foreground text-xs"
-            htmlFor="web-search-endpoint"
-          >
-            Endpoint
-          </label>
-          <Input
-            autoComplete="off"
-            className="h-9"
-            disabled={saveMutation.isPending}
-            id="web-search-endpoint"
-            onChange={(event) => {
-              setEndpoint(event.target.value);
-              setFormError(null);
-              setSavedHint(null);
-            }}
-            placeholder="https://api.exa.ai/search"
-            value={endpoint}
-          />
-
-          <label
-            className="block font-medium text-foreground text-xs"
-            htmlFor="web-search-api-key"
-          >
-            API key
-          </label>
-          <div className="flex items-center gap-2">
-            <InputGroup className="h-9 min-w-0 flex-1">
-              <InputGroupInput
-                autoComplete="off"
-                disabled={saveMutation.isPending}
-                id="web-search-api-key"
-                onChange={(event) => {
-                  setApiKey(event.target.value);
-                  setFormError(null);
-                  setSavedHint(null);
-                }}
-                placeholder={
-                  keyAlreadySaved
-                    ? `Saved (${settings?.apiKeyMasked})`
-                    : "Paste API key"
-                }
-                type={showApiKey ? "text" : "password"}
-                value={apiKey}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                  onClick={() => setShowApiKey((current) => !current)}
-                  size="icon-xs"
-                  type="button"
-                >
-                  {showApiKey ? (
-                    <ViewOffIcon className="size-4" />
-                  ) : (
-                    <ViewIcon className="size-4" />
-                  )}
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-            <Button
-              className="min-w-[4.5rem] shrink-0"
-              disabled={saveMutation.isPending || !endpoint.trim()}
-              id="btn-web-search-save"
-              onClick={handleSave}
-              size="sm"
-              type="button"
-            >
-              {saveMutation.isPending ? <Spinner className="size-4" /> : "Save"}
-            </Button>
-          </div>
-        </div>
+      {form.provider ? (
+        <WebSearchApiKeyFields
+          apiKey={form.apiKey}
+          keyAlreadySaved={form.keyAlreadySaved}
+          maskedKey={form.maskedKey}
+          onApiKeyChange={(value) => {
+            form.setApiKey(value);
+            form.setFormError(null);
+            form.setSavedHint(null);
+          }}
+          onSave={form.saveKey}
+          pending={form.pending}
+        />
       ) : null}
 
-      {formError ? (
+      {form.formError ? (
         <p className="text-destructive text-xs" role="alert">
-          {formError}
+          {form.formError}
         </p>
       ) : null}
     </div>

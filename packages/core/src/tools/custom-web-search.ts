@@ -72,9 +72,7 @@ function buildRequest(
     };
   }
 
-  if (config.apiKey) {
-    headers.authorization = `Bearer ${config.apiKey}`;
-  }
+  headers.authorization = `Bearer ${config.apiKey}`;
 
   return {
     body: JSON.stringify({ limit: MAX_RESULTS, query }),
@@ -82,22 +80,15 @@ function buildRequest(
   };
 }
 
-/**
- * Search APIs disagree on where the hit list lives: Exa uses `results`,
- * Firecrawl `data.web`, and self-hosted engines commonly `organic` or `items`.
- */
+/** Exa puts hits on `results`; Firecrawl on `data.web`. */
 function findResultArray(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
   const record = readRecord(payload);
 
   if (!record) {
     return [];
   }
 
-  for (const key of ["results", "web", "organic", "organic_results", "items"]) {
+  for (const key of ["results", "web"]) {
     const candidate = record[key];
 
     if (Array.isArray(candidate) && candidate.length > 0) {

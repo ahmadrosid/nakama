@@ -95,24 +95,12 @@ describe("web search config", () => {
       "API key"
     );
     await expect(
-      saveWebSearchConfig({ endpoint: "not-a-url", provider: "custom" })
+      saveWebSearchConfig({
+        apiKey: "k",
+        endpoint: "not-a-url",
+        provider: "exa",
+      })
     ).rejects.toThrow("http or https");
-  });
-
-  test("allows a custom endpoint without a key", async () => {
-    await useTempConfigDir();
-
-    const saved = await saveWebSearchConfig({
-      endpoint: "https://search.internal/api",
-      provider: "custom",
-    });
-
-    expect(saved).toEqual({
-      apiKeyMasked: null,
-      configured: true,
-      endpoint: "https://search.internal/api",
-      provider: "custom",
-    });
   });
 
   test("clearing the provider removes the section and other config survives", async () => {

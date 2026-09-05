@@ -416,9 +416,9 @@ Org admins configure these from the web **System → Tools** page.
 
 ### Web search
 
-Requires an OpenAI or Anthropic provider with a configured API key, or a custom search back-end.
+Requires an OpenAI or Anthropic provider with a configured API key, or an Exa or Firecrawl search back-end.
 
-Org admins can point `web_search` at an external search API from the web **Settings → Web search** panel: pick **Exa**, **Firecrawl**, or **Custom endpoint**, then supply the endpoint and API key. The endpoint is pre-filled for the two named vendors, and a custom endpoint receives `POST { query, limit }` and may return its hits under `results`, `data.web`, `organic`, or `items`. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
+Org admins can point `web_search` at an external search API from the web **Settings → Web search** panel: pick **Exa** or **Firecrawl**, then supply the API key. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
 
 Leave the provider on **Built-in** to keep using the model provider's own hosted search.
 
