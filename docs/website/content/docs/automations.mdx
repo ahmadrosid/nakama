@@ -1,12 +1,9 @@
 ---
-title: "Automations and tasks"
+title: "Automations"
 description: "Run a prompt on a cron schedule or at a set time, deliver the result to a channel, and track runs from Agent work."
 ---
 
-**Agent work** in the dashboard holds two things that look similar and are not.
-
-- **Automations** are a saved prompt plus a trigger. They run themselves, on a schedule or at a time you name, and can deliver the result to a channel.
-- **Tasks** are a to-do list the agent works through. They have a status you move, not a schedule that fires.
+**Automations** are a saved prompt plus a trigger. They run themselves, on a schedule or at a time you name, and can deliver the result to a channel.
 
 ## Automations
 
@@ -58,15 +55,9 @@ An automation can post its result to a channel instead of leaving it in the run 
 
 Delivery config is validated on save against what the instance actually has. Pointing an automation at Discord on an instance with no Discord bridge fails at save time, not at 3am on the first scheduled run.
 
-## Tasks
-
-A task is a title, a description, a prompt, and a status: `todo`, `in_progress`, `done`, or `failed`. Tasks keep an explicit position, so the list is ordered by you rather than by timestamp. Running one binds it to a chat session, and the messages from that session are readable from the task.
-
-`POST /v1/tasks/draft-prompt` turns a title and description into a first draft of the prompt, which is the fastest way to get from "chase the invoice" to something an agent can act on.
-
 ## Permissions
 
-Creating or changing an automation or a task requires a non-viewer role. A caller-supplied `profileId` on create or update is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Bot profile. See [Multi-tenancy](/multi-tenancy) for the role model.
+Creating or changing an automation requires a non-viewer role. A caller-supplied `profileId` on create or update is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Bot profile. See [Multi-tenancy](/multi-tenancy) for the role model.
 
 ## API
 
@@ -79,11 +70,5 @@ Creating or changing an automation or a task requires a non-viewer role. A calle
 | `DELETE` | `/v1/automations/:automationId/runs/:runId` |
 | `POST` | `/v1/automations/:automationId/runs/mark-read` |
 | `POST` | `/v1/automations/draft` |
-| `GET` `POST` | `/v1/tasks` |
-| `GET` `PUT` `DELETE` | `/v1/tasks/:taskId` |
-| `POST` | `/v1/tasks/:taskId/run` |
-| `GET` | `/v1/tasks/:taskId/runs` |
-| `GET` | `/v1/tasks/:taskId/messages` |
-| `POST` | `/v1/tasks/draft-prompt` |
 
 Automation runs carry a run id rather than a session id. Anything scoped per conversation, such as the [token optimiser](/token-optimiser) ledger, scopes to that run.

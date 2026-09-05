@@ -31,7 +31,6 @@ export type CreateMinimalHonoAppOverrides = {
   skillProposalService?: ServerOptions["skillProposalService"];
   skillSuggestionService?: ServerOptions["skillSuggestionService"];
   systemStatus?: ServerOptions["systemStatus"] | object;
-  taskService?: ServerOptions["taskService"] | object;
   webDistDir?: ServerOptions["webDistDir"];
   workerManager?: ServerOptions["workerManager"] | object;
 };
@@ -67,7 +66,6 @@ export function createMinimalHonoApp(
     skillSuggestionService: overrides.skillSuggestionService,
     systemStatus: (overrides.systemStatus ??
       defaultSystemStatus) as ServerOptions["systemStatus"],
-    taskService: (overrides.taskService ?? {}) as ServerOptions["taskService"],
     webDistDir:
       overrides.webDistDir === undefined ? null : overrides.webDistDir,
     workerManager: (overrides.workerManager ??

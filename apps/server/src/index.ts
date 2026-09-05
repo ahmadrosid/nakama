@@ -33,7 +33,6 @@ import {
   NAKAMA_API_VERSION,
   writeRuntimeServerUrl,
 } from "@nakama/core";
-import { serverHasTaskChat } from "@nakama/core/ensure-server";
 import {
   createDatabase,
   type Database,
@@ -68,8 +67,6 @@ import { SkillProposalService } from "./services/skill-proposal-service";
 import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import { SkillsService } from "./services/skills-service";
 import { SystemStatusService } from "./services/system-status-service";
-import { TaskRunner } from "./services/task-runner";
-import { TaskService } from "./services/task-service";
 import {
   registerGenerateImageTool,
   registerSessionTools,
@@ -174,11 +171,6 @@ agent.setAutomationRunHistoryTools(
 );
 agent.setAutomationRunner(automationRunner);
 
-const taskService = new TaskService(database.adapter);
-const taskRunner = new TaskRunner(taskService, agent);
-taskService.setTaskRunner(taskRunner);
-agent.setTaskRunner(taskRunner);
-
 const workerManager = new WorkerManagerService(projectRoot);
 
 const orgService = new OrgService(database.adapter, authService);
@@ -242,7 +234,6 @@ if (seedResult.providerWritten) {
 const systemStatus = new SystemStatusService(
   agent,
   automationRunner,
-  taskRunner,
   workerManager,
   mcpService,
   composioService,
@@ -267,7 +258,6 @@ const app = createHonoApp({
   skillProposalService,
   skillSuggestionService,
   systemStatus,
-  taskService,
   webDistDir,
   workerManager,
 });
@@ -459,10 +449,7 @@ async function findRunningNakamaServerUrl(
       ok?: boolean;
       apiVersion?: number;
     };
-    const hasTaskChat = await serverHasTaskChat(serverUrl, controller.signal);
-    return payload.ok === true &&
-      payload.apiVersion === NAKAMA_API_VERSION &&
-      hasTaskChat
+    return payload.ok === true && payload.apiVersion === NAKAMA_API_VERSION
       ? serverUrl
       : null;
   } catch {

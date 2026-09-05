@@ -116,21 +116,6 @@ describe("legacy profile id migration", () => {
           ('session_default', 'profile_default', 'cli', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z', NULL, '[]'),
           ('session_super', 'profile_super_bot', 'cli', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z', NULL, '[]');
 
-        INSERT INTO tasks (
-          id,
-          title,
-          description,
-          prompt,
-          profile_id,
-          status,
-          position,
-          session_id,
-          created_at,
-          updated_at
-        ) VALUES
-          ('task_default', 'Task', '', 'prompt', 'profile_default', 'backlog', 0, 'session_default', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
-          ('task_super', 'Task', '', 'prompt', 'profile_super_bot', 'backlog', 0, 'session_super', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
-
         INSERT INTO automations (
           id,
           name,
@@ -173,9 +158,6 @@ describe("legacy profile id migration", () => {
       const sessions = db
         .prepare("SELECT profile_id FROM sessions ORDER BY id")
         .all() as Array<{ profile_id: string }>;
-      const tasks = db
-        .prepare("SELECT profile_id FROM tasks ORDER BY id")
-        .all() as Array<{ profile_id: string }>;
       const automations = db
         .prepare("SELECT profile_id FROM automations ORDER BY id")
         .all() as Array<{ profile_id: string }>;
@@ -195,10 +177,6 @@ describe("legacy profile id migration", () => {
         "super_bot",
       ]);
       expect(sessions.map((row) => row.profile_id)).toEqual([
-        "default",
-        "super_bot",
-      ]);
-      expect(tasks.map((row) => row.profile_id)).toEqual([
         "default",
         "super_bot",
       ]);
@@ -694,16 +672,8 @@ describe("organization schema migration", () => {
           '2026-01-01', '2026-01-01'
         );
 
-        INSERT INTO tasks (
-          id, title, description, prompt, profile_id, org_id, status, position,
-          created_at, updated_at
-        ) VALUES (
-          'task_legacy', 'Legacy', '', 'prompt', 'default', NULL, 'backlog', 0,
-          '2026-01-01', '2026-01-01'
-        );
-
-        CREATE TRIGGER fail_task_org_backfill
-        BEFORE UPDATE OF org_id ON tasks
+        CREATE TRIGGER fail_automation_org_backfill
+        BEFORE UPDATE OF org_id ON automations
         BEGIN
           SELECT RAISE(ABORT, 'forced migration failure');
         END;
@@ -719,9 +689,6 @@ describe("organization schema migration", () => {
         db
           .prepare("SELECT org_id FROM automations WHERE id = ?")
           .get("automation_legacy")
-      ).toEqual({ org_id: null });
-      expect(
-        db.prepare("SELECT org_id FROM tasks WHERE id = ?").get("task_legacy")
       ).toEqual({ org_id: null });
     } finally {
       db.close();
@@ -876,7 +843,6 @@ describe("organization schema migration", () => {
         "profiles",
         "sessions",
         "automations",
-        "tasks",
         "tools",
         "mcp_servers",
         "skills",

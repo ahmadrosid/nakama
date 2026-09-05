@@ -137,12 +137,6 @@ export interface AutomationWorkerStatus {
   scheduledJobs: number;
 }
 
-export interface TaskWorkerStatus {
-  activeRuns: number;
-  ok: boolean;
-  providerConfigured: boolean;
-}
-
 export interface WorkerProcessInfo {
   cpuPercent: number | null;
   managed: boolean;
@@ -321,7 +315,6 @@ export interface SystemStatusResponse {
   llmUsage: LlmUsageStatus;
   mcp: McpStatus;
   server: HealthResponse;
-  taskWorker: TaskWorkerStatus;
   telegramWorker: TelegramWorkerStatus;
   whatsappWorker: WhatsAppWorkerStatus;
 }
@@ -1124,88 +1117,6 @@ export interface ListAutomationRunsResponse {
 
 export interface MarkAutomationRunsReadResponse {
   readThroughAt: string;
-}
-
-export const TASK_STATUSES = [
-  "backlog",
-  "todo",
-  "in_progress",
-  "done",
-  "failed",
-] as const;
-
-export type TaskStatus = (typeof TASK_STATUSES)[number];
-
-export interface StoredTask {
-  createdAt: string;
-  description: string;
-  id: string;
-  position: number;
-  profileId: string;
-  prompt: string;
-  sessionId: string | null;
-  status: TaskStatus;
-  title: string;
-  updatedAt: string;
-}
-
-export interface DraftTaskPromptRequest {
-  description?: string;
-  title: string;
-}
-
-export interface DraftTaskPromptResponse {
-  prompt: string;
-}
-
-export interface CreateTaskRequest {
-  description?: string;
-  profileId?: string;
-  prompt: string;
-  status?: TaskStatus;
-  title: string;
-}
-
-export interface UpdateTaskRequest {
-  description?: string;
-  position?: number;
-  profileId?: string;
-  prompt?: string;
-  status?: TaskStatus;
-  title?: string;
-}
-
-export interface ListTasksResponse {
-  tasks: StoredTask[];
-}
-
-export interface TaskResponse {
-  task: StoredTask;
-}
-
-export type TaskRunStatus = "running" | "completed" | "failed";
-
-export interface TaskRunRecord {
-  completedAt: string | null;
-  error: string | null;
-  id: string;
-  output: string | null;
-  startedAt: string;
-  status: TaskRunStatus;
-  taskId: string;
-}
-
-export interface RunTaskResponse {
-  run: TaskRunRecord;
-}
-
-export interface ListTaskRunsResponse {
-  runs: TaskRunRecord[];
-}
-
-export interface TaskMessagesResponse {
-  messages: ChatMessage[];
-  sessionId: string;
 }
 
 export interface TimezoneSettingsResponse {

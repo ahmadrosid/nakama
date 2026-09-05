@@ -36,7 +36,6 @@ import {
   visibleNavGroups,
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
-import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
 
 export function Layout() {
   const location = useLocation();
@@ -165,9 +164,7 @@ export function Layout() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {page === "chat" ? null : (
               <header className="app-shell-header gap-4 bg-card px-6">
-                {page === "automations" ? (
-                  <AgentWorkTabs />
-                ) : page === "soul" || page === "profiles" ? null : (
+                {page === "soul" || page === "profiles" ? null : (
                   <h1 className="type-brand min-w-0 truncate">
                     {activeNav?.label}
                   </h1>
@@ -192,7 +189,6 @@ export function Layout() {
               className={cn(
                 "min-h-0 flex-1",
                 page === "chat" ||
-                  page === "tasks" ||
                   page === "automations" ||
                   page === "files" ||
                   location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
@@ -202,7 +198,6 @@ export function Layout() {
                   `${PAGE_PATHS.profiles}/skills/`
                 ) &&
                   page !== "chat" &&
-                  page !== "tasks" &&
                   page !== "automations" &&
                   page !== "files" &&
                   !location.pathname.startsWith(

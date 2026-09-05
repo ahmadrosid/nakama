@@ -6,15 +6,6 @@ import type {
 
 export const sectionClass = "rounded-md border border-border bg-card";
 
-/**
- * Agent work tabpanels sit under a flex column shell with overflow-hidden.
- * They must themselves be flex columns with min-h-0 so children that use
- * flex-1 + overflow-y-auto (run history, tasks board) stay viewport-bound
- * when expanded run output grows tall.
- */
-export const agentWorkPanelClassName =
-  "flex min-h-0 flex-1 flex-col overflow-hidden";
-
 export function formatTrigger(trigger: AutomationTrigger): string {
   if (trigger.type === "manual") {
     return "Manual trigger";

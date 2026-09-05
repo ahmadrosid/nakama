@@ -51,7 +51,6 @@ function createMockApp(webDistDir: string | null) {
     systemStatus: {
       getStatus: async () => ({ ok: true }),
     } as any,
-    taskService: {} as any,
     webDistDir,
     workerManager: {} as any,
   });
@@ -70,7 +69,6 @@ function createBrowserAuthApp() {
     systemStatus: {
       getStatus: async () => ({ ok: true }),
     } as any,
-    taskService: {} as any,
     webDistDir: null,
     workerManager: {
       isValidWorker: () => true,
@@ -376,7 +374,6 @@ describe("GET /v1/workers/{name}/logs", () => {
       systemStatus: {
         getStatus: async () => ({ ok: true }),
       } as any,
-      taskService: {} as any,
       webDistDir: null,
       workerManager,
     });
@@ -508,7 +505,6 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
       systemStatus: {
         getStatus: async () => ({ ok: true }),
       } as any,
-      taskService: {} as any,
       webDistDir: null,
       workerManager,
     });
