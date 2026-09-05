@@ -83,6 +83,29 @@ export function parseRunWorkflowResult(result: unknown): {
   };
 }
 
+export function pickRunningWorkflowRun(
+  runs: WorkflowRunRecord[]
+): WorkflowRunRecord | null {
+  return runs.find((run) => run.status === "running") ?? null;
+}
+
+export function formatWorkflowRunStatusLabel(
+  status: "running" | "completed" | "failed",
+  isRunning: boolean,
+  activeIndex: number,
+  total: number
+): string {
+  if (status === "failed") {
+    return total ? `Failed · step ${activeIndex + 1} of ${total}` : "Failed";
+  }
+
+  if (status === "running" || isRunning) {
+    return total ? `Running · step ${activeIndex + 1} of ${total}` : "Running";
+  }
+
+  return total ? `Done · ${total} of ${total}` : "Done";
+}
+
 export interface WorkflowStepView {
   detail: string;
   id: string;

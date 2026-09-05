@@ -7,11 +7,13 @@ import {
 import {
   activeWorkflowStepIndex,
   buildWorkflowStepViews,
+  formatWorkflowRunStatusLabel,
   isListWorkflowsTool,
   isRunWorkflowTool,
   parseListWorkflowsResult,
   parseRunWorkflowResult,
   parseWorkflowId,
+  pickRunningWorkflowRun,
   type WorkflowStepView,
 } from "@/lib/chat-stream-workflow";
 import { client } from "@/lib/client";
@@ -22,6 +24,24 @@ const cardSurface =
   "rounded-xl bg-card px-4 py-3 shadow-sm ring-1 ring-border/80 dark:shadow-none";
 
 export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
+  const { statusLabel, title, views } = useWorkflowRunCard(message);
+
+  return (
+    <section className={cardSurface}>
+      <header className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 className="min-w-0 truncate text-balance font-medium text-foreground text-sm">
+          {title}
+        </h3>
+        <p className="shrink-0 text-muted-foreground text-xs tabular-nums">
+          {statusLabel}
+        </p>
+      </header>
+      <WorkflowChecklist views={views} />
+    </section>
+  );
+}
+
+function useWorkflowRunCard(message: ChatListItem) {
   const workflowId = parseWorkflowId(message.toolInput);
   const parsed = parseRunWorkflowResult(message.toolResult);
   const isRunning = message.toolStatus === "running";
@@ -39,52 +59,38 @@ export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
     refetchInterval: isRunning ? 800 : false,
   });
 
-  const workflow = workflowQuery.data;
   const run =
     parsed?.run ??
-    (isRunning
-      ? ((runsQuery.data ?? []).find((entry) => entry.status === "running") ??
-        null)
-      : null);
-  const views = buildWorkflowStepViews(workflow?.steps ?? [], run);
-  const activeIndex = activeWorkflowStepIndex(views);
-  const title = workflow?.name ?? parsed?.name ?? "Workflow";
+    (isRunning ? pickRunningWorkflowRun(runsQuery.data ?? []) : null);
+  const views = buildWorkflowStepViews(workflowQuery.data?.steps ?? [], run);
   const status =
     parsed?.status ?? run?.status ?? (isRunning ? "running" : "completed");
-  const total = views.length;
-  const statusLabel =
-    status === "failed"
-      ? total
-        ? `Failed · step ${activeIndex + 1} of ${total}`
-        : "Failed"
-      : status === "running" || isRunning
-        ? total
-          ? `Running · step ${activeIndex + 1} of ${total}`
-          : "Running"
-        : total
-          ? `Done · ${total} of ${total}`
-          : "Done";
+
+  return {
+    statusLabel: formatWorkflowRunStatusLabel(
+      status,
+      isRunning,
+      activeWorkflowStepIndex(views),
+      views.length
+    ),
+    title: workflowQuery.data?.name ?? parsed?.name ?? "Workflow",
+    views,
+  };
+}
+
+function WorkflowChecklist({ views }: { views: WorkflowStepView[] }) {
+  if (views.length === 0) {
+    return (
+      <p className="text-pretty text-muted-foreground text-sm">Starting…</p>
+    );
+  }
 
   return (
-    <section className={cardSurface}>
-      <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="min-w-0 truncate text-balance font-medium text-foreground text-sm">
-          {title}
-        </h3>
-        <p className="shrink-0 text-muted-foreground text-xs tabular-nums">
-          {statusLabel}
-        </p>
-      </header>
-      {views.length === 0 ? (
-        <p className="text-pretty text-muted-foreground text-sm">Starting…</p>
-      ) : (
-        <ol className="flex flex-col gap-3">
-          {views.map((step) => (
-            <WorkflowChecklistItem key={step.id} step={step} />
-          ))}
-        </ol>
-      )}
-    </section>
+    <ol className="flex flex-col gap-3">
+      {views.map((step) => (
+        <WorkflowChecklistItem key={step.id} step={step} />
+      ))}
+    </ol>
   );
 }
 
@@ -203,18 +209,7 @@ export function WorkflowListToolRow({ message }: { message: ChatListItem }) {
                 ) : null}
               </div>
               <p className="max-w-[40%] shrink-0 text-right text-muted-foreground text-xs tabular-nums">
-                {[
-                  workflow.stepCount == null
-                    ? null
-                    : workflow.stepCount === 1
-                      ? "1 step"
-                      : `${workflow.stepCount} steps`,
-                  workflow.lastRunAt
-                    ? formatSessionRelativeTime(workflow.lastRunAt)
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {listedWorkflowMeta(workflow.stepCount, workflow.lastRunAt)}
               </p>
             </li>
           ))}
@@ -222,4 +217,18 @@ export function WorkflowListToolRow({ message }: { message: ChatListItem }) {
       )}
     </section>
   );
+}
+
+function listedWorkflowMeta(
+  stepCount: number | null,
+  lastRunAt: string | null
+): string {
+  const steps =
+    stepCount == null
+      ? null
+      : stepCount === 1
+        ? "1 step"
+        : `${stepCount} steps`;
+  const when = lastRunAt ? formatSessionRelativeTime(lastRunAt) : null;
+  return [steps, when].filter(Boolean).join(" · ");
 }

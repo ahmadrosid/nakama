@@ -4,6 +4,7 @@ import {
   activeWorkflowStepIndex,
   buildWorkflowStepViews,
   describeWorkflowStep,
+  formatWorkflowRunStatusLabel,
   humanizeWorkflowStepId,
   isListWorkflowsTool,
   isRunWorkflowTool,
@@ -157,6 +158,18 @@ describe("chat-stream-workflow", () => {
 
     expect(views[0]?.meta).toBe("369 KB");
     expect(views[2]?.meta).toBe("Morning Brief — 5 September 2026");
+  });
+
+  test("formatWorkflowRunStatusLabel covers run states", () => {
+    expect(formatWorkflowRunStatusLabel("failed", false, 1, 4)).toBe(
+      "Failed · step 2 of 4"
+    );
+    expect(formatWorkflowRunStatusLabel("running", true, 0, 4)).toBe(
+      "Running · step 1 of 4"
+    );
+    expect(formatWorkflowRunStatusLabel("completed", false, 3, 4)).toBe(
+      "Done · 4 of 4"
+    );
   });
 
   test("describeWorkflowStep and titles stay human", () => {
