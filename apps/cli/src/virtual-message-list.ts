@@ -27,6 +27,9 @@ export interface VirtualMessage {
 export class VirtualMessageList {
   private static readonly HORIZONTAL_PADDING = 1;
   private static readonly MESSAGE_GAP_LINES = 1;
+  // Display-only history: persisted conversations are unaffected. The open
+  // message stays separate and is never truncated while it is being written.
+  private static readonly MAX_RETAINED_MESSAGES = 1000;
   private messages: VirtualMessage[] = [];
   private currentText: string[] = [];
   private currentKind: MessageKind = "output";
@@ -97,6 +100,22 @@ export class VirtualMessageList {
   // ── Internal offset management ────────────────────────────────────
 
   private invalidateOffsets(): void {
+    const excess =
+      this.messages.length - VirtualMessageList.MAX_RETAINED_MESSAGES;
+    if (excess > 0) {
+      this.messages.splice(0, excess);
+      const retainedCache = new Map<number, string[]>();
+      for (const [index, lines] of this.wrappedCache) {
+        // Rewrap the new first message to remove its former leading gap.
+        if (index > excess) {
+          retainedCache.set(index - excess, lines);
+        }
+      }
+      this.wrappedCache = retainedCache;
+      this.offsets = [0];
+      return;
+    }
+
     // Keep offsets up to the last known message count so incremental
     // recompute can pick up from there.
     if (this.offsets.length > this.messages.length + 1) {
