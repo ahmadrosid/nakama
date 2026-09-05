@@ -1,5 +1,5 @@
 import type { AgentChannel, ProfileSummary } from "@nakama/core/contract";
-import { resolveSkillPostTurnReviewEnabled } from "@nakama/core/skills/profile-org-override";
+import { resolveProfileOrgBooleanOverride } from "@nakama/core/skills/profile-org-override";
 import { useEffect, useMemo, useState } from "react";
 import {
   SkillPostTurnReviewBanner,
@@ -40,10 +40,10 @@ export function usePostTurnSkillReviewOverlay({
     Record<string, string | undefined>
   >({});
 
-  const reviewEnabled = resolveSkillPostTurnReviewEnabled({
-    orgSkillsPostTurnReview: activeOrg?.skillsPostTurnReview ?? false,
-    profileSkillsPostTurnReview: profile?.skillsPostTurnReview ?? null,
-  });
+  const reviewEnabled = resolveProfileOrgBooleanOverride(
+    profile?.skillsPostTurnReview ?? null,
+    activeOrg?.skillsPostTurnReview ?? false
+  );
 
   const canPoll =
     reviewEnabled &&

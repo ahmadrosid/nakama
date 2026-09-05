@@ -4,7 +4,7 @@ import {
   isPathWithinProfileSkillsDir,
   NakamaApiError,
   parseRawProfileSkillContent,
-  resolveSkillWriteApprovalRequired,
+  resolveProfileOrgBooleanOverride,
 } from "@nakama/core";
 import type {
   ApplySkillSuggestionOutcome,
@@ -67,10 +67,10 @@ export class SkillSuggestionService {
     if (!profile) {
       throw new NakamaApiError("Profile not found.", 404);
     }
-    return resolveSkillWriteApprovalRequired({
-      orgSkillsWriteApproval: org.skillsWriteApproval ?? false,
-      profileSkillsWriteApproval: profile.skillsWriteApproval ?? null,
-    });
+    return resolveProfileOrgBooleanOverride(
+      profile.skillsWriteApproval ?? null,
+      org.skillsWriteApproval ?? false
+    );
   }
 
   async createSuggestion(

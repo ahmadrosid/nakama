@@ -1,27 +1,9 @@
-/** Shared with email body truncation (`MAX_EMAIL_BODY_BYTES`) — keep in sync. */
+import { truncateMailBody } from "./mail/types";
+
+/** Shared with email body truncation (`MAX_EMAIL_BODY_BYTES`). */
 export const ANYDOC_MAX_OUTPUT_BYTES = 256 * 1024;
 export const ANYDOC_TIMEOUT_MS = 10_000;
 export const ANYDOC_MAX_CONCURRENT = 2;
-
-function truncateUtf8(
-  value: string,
-  maxBytes = ANYDOC_MAX_OUTPUT_BYTES
-): { text: string; truncated: boolean } {
-  const bytes = Buffer.byteLength(value, "utf8");
-  if (bytes <= maxBytes) {
-    return { text: value, truncated: false };
-  }
-
-  let end = value.length;
-  while (end > 0 && Buffer.byteLength(value.slice(0, end), "utf8") > maxBytes) {
-    end -= 1;
-  }
-
-  return {
-    text: `${value.slice(0, end)}…`,
-    truncated: true,
-  };
-}
 
 export type AnydocFormat =
   | "doc"
@@ -183,7 +165,7 @@ export async function convertDocumentBytes(
         return { text: "", truncated: false };
       }
 
-      return truncateUtf8(trimmed, maxOutputBytes);
+      return truncateMailBody(trimmed, maxOutputBytes);
     } finally {
       if (timeout) {
         clearTimeout(timeout);

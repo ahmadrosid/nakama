@@ -1,5 +1,3 @@
-import { realpath } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
 import {
@@ -12,6 +10,7 @@ import {
   listKnowledgeBaseDocuments,
 } from "../knowledge-base/store";
 import { getProfileSoulDir } from "../soul/resolve";
+import { resolveWorkspaceRoot } from "./paths";
 import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
@@ -35,11 +34,9 @@ export type KnowledgeBaseSearchInput = z.infer<
   typeof knowledgeBaseSearchInputSchema
 >;
 
-export interface KnowledgeBaseSearchMatch extends RipgrepMatch {}
-
 export interface KnowledgeBaseSearchOutput {
   matchCount: number;
-  matches: KnowledgeBaseSearchMatch[];
+  matches: RipgrepMatch[];
   query: string;
   root: string;
   truncated: boolean;
@@ -157,17 +154,4 @@ async function resolveSearchTarget(
     kind: "file",
     root: getKnowledgeBaseExtractedPath(orgId, profileId, document.id),
   };
-}
-
-async function resolveWorkspaceRoot(rawWorkspaceRoot: string): Promise<string> {
-  if (!path.isAbsolute(rawWorkspaceRoot)) {
-    throw new Error(
-      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
-    );
-  }
-  try {
-    return await realpath(rawWorkspaceRoot);
-  } catch {
-    return path.resolve(rawWorkspaceRoot);
-  }
 }

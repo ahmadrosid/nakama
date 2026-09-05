@@ -5,8 +5,8 @@ import {
   isPathWithinProfileSkillsDir,
   NakamaApiError,
   parseRawProfileSkillContent,
+  resolveProfileOrgBooleanOverride,
   resolveProfileSkillSupportingFilePath,
-  resolveSkillWriteApprovalRequired,
 } from "@nakama/core";
 import type { SkillProposal } from "@nakama/core/contract";
 import {
@@ -74,10 +74,10 @@ export class SkillProposalService {
     if (!profile) {
       throw new NakamaApiError("Profile not found.", 404);
     }
-    return resolveSkillWriteApprovalRequired({
-      orgSkillsWriteApproval: org.skillsWriteApproval ?? false,
-      profileSkillsWriteApproval: profile.skillsWriteApproval ?? null,
-    });
+    return resolveProfileOrgBooleanOverride(
+      profile.skillsWriteApproval ?? null,
+      org.skillsWriteApproval ?? false
+    );
   }
 
   async stageProposal(

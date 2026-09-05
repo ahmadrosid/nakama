@@ -7,7 +7,7 @@ import {
 } from "../fs";
 import type { LoadedSoulStack, SoulFileStatus, SoulStatus } from "./types";
 
-const SOUL_FILES = {
+export const SOUL_FILES = {
   instructions: "INSTRUCTIONS.md",
   memory: "MEMORY.md",
   soul: "SOUL.md",
