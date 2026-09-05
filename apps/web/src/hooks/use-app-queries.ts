@@ -8,6 +8,7 @@ import type {
   UpdateThinkingRequest,
   UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
+  WebPublicUrlSettingsResponse,
 } from "@nakama/core/contract";
 import {
   type QueryClient,
@@ -212,8 +213,14 @@ export function buildThinkingSettingsPayload(
   };
 }
 
-const webPublicUrlSettings = createSettingsHooks({
-  mutationFn: (webPublicUrl: string) => client.updateWebPublicUrl(webPublicUrl),
+const webPublicUrlSettings = createSettingsHooks<
+  WebPublicUrlSettingsResponse,
+  string
+>({
+  mutationFn: async (webPublicUrl: string) => {
+    const saved = await client.updateWebPublicUrl(webPublicUrl);
+    return { envOverride: null, webPublicUrl: saved.webPublicUrl };
+  },
   onSaveSuccess: (queryClient) => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.webPublicUrl });
   },
