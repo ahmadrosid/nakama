@@ -11,6 +11,7 @@ import {
   normalizeProviderInstanceLabel,
   type OllamaHostMode,
   ollamaRequiresApiKey,
+  type ProviderClient,
   type ProviderInstance,
   parseWireApi,
   resolveOllamaHostMode,
@@ -26,6 +27,7 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
+import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,
   getModelById,
@@ -40,6 +42,7 @@ import {
   validateOpenCodeGoCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
+import { createProviderForInstance } from "../providers/create";
 
 export function toProviderInstanceSummary(
   instance: ProviderInstance,
@@ -571,4 +574,32 @@ export function resolveProfileProviderSelection(options: {
     instance: fallbackInstance,
     model: resolveDefaultModelForInstance(fallbackInstance),
   };
+}
+
+export async function createProviderForProfile(
+  db: DatabaseAdapter,
+  profileId: string,
+  userConfig: UserConfig | null
+): Promise<ProviderClient | null> {
+  if (!userConfig) {
+    return null;
+  }
+
+  const profile = await db.getProfile(profileId);
+
+  if (!profile) {
+    return null;
+  }
+
+  const selection = resolveProfileProviderSelection({
+    defaultProviderId: userConfig.defaultProviderId,
+    profileModel: profile.model,
+    providers: userConfig.providers,
+  });
+
+  if (!selection) {
+    return null;
+  }
+
+  return createProviderForInstance(selection.instance, selection.model);
 }

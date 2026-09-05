@@ -261,7 +261,6 @@ import {
   resolveImageGenerationSelection,
 } from "./image-generation";
 import {
-  createVisionFallbackProvider,
   describeImagesWithVisionModel,
   resolvePrimaryModelVisionSupport,
   resolveVisionProviderSelection,
@@ -302,7 +301,10 @@ import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
-import { resolveProfileStoredTools } from "./tool-resolver";
+import {
+  resolveProfileStoredTools,
+  type ServerToolOverrides,
+} from "./tool-resolver";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -344,6 +346,7 @@ export class AgentService {
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
+  private serverTools: ServerToolOverrides = {};
   private _providerConfigured: boolean;
   private visionSettingsPromise: Promise<void> | null = null;
   private transcriptionSettingsPromise: Promise<void> | null = null;
@@ -466,6 +469,10 @@ export class AgentService {
   setAutomationTools(tools: ToolDefinition[]): void {
     this.automationTools = tools;
     this.sessions.clear();
+  }
+
+  setServerTools(tools: ServerToolOverrides): void {
+    this.serverTools = tools;
   }
 
   setAutomationRunHistoryTools(tools: ToolDefinition[]): void {
@@ -3088,6 +3095,7 @@ export class AgentService {
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      serverTools: this.serverTools,
       userConfig: this.userConfig,
     });
     const includeAutomationTools = options.includeAutomationTools ?? true;
@@ -3295,7 +3303,10 @@ export class AgentService {
           throw new NakamaApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
         }
 
-        let visionProvider = createVisionFallbackProvider(visionSelection);
+        let visionProvider = createProviderForInstance(
+          visionSelection.instance,
+          visionSelection.model
+        );
 
         if (this.llmUsageTracker) {
           visionProvider = wrapProviderWithUsageTracking(

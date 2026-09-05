@@ -145,13 +145,10 @@ describe("SkillPostTurnReviewService", () => {
       await seedEligibleTurn(db, channel);
 
       let ran = 0;
-      const service = new SkillPostTurnReviewService(
-        db,
-        () => null,
-        async () => {
-          ran += 1;
-        }
-      );
+      const service = new SkillPostTurnReviewService(db, () => null);
+      service.setRunner(async () => {
+        ran += 1;
+      });
 
       expect(await service.runPostTurnSkillReview("session_1")).toBe("ran");
       expect(ran).toBe(1);
@@ -167,13 +164,10 @@ describe("SkillPostTurnReviewService", () => {
       await seedEligibleTurn(db, channel);
 
       let ran = 0;
-      const service = new SkillPostTurnReviewService(
-        db,
-        () => null,
-        async () => {
-          ran += 1;
-        }
-      );
+      const service = new SkillPostTurnReviewService(db, () => null);
+      service.setRunner(async () => {
+        ran += 1;
+      });
 
       expect(await service.runPostTurnSkillReview("session_1")).toBe(
         "channel_not_interactive"
@@ -187,13 +181,10 @@ describe("SkillPostTurnReviewService", () => {
     await seedEligibleTurn(db, "sms");
 
     let ran = 0;
-    const service = new SkillPostTurnReviewService(
-      db,
-      () => null,
-      async () => {
-        ran += 1;
-      }
-    );
+    const service = new SkillPostTurnReviewService(db, () => null);
+    service.setRunner(async () => {
+      ran += 1;
+    });
 
     expect(await service.runPostTurnSkillReview("session_1")).toBe(
       "channel_not_interactive"
@@ -240,13 +231,10 @@ describe("SkillPostTurnReviewService", () => {
     });
 
     let ran = 0;
-    const service = new SkillPostTurnReviewService(
-      db,
-      () => null,
-      async () => {
-        ran += 1;
-      }
-    );
+    const service = new SkillPostTurnReviewService(db, () => null);
+    service.setRunner(async () => {
+      ran += 1;
+    });
 
     expect(await service.runPostTurnSkillReview("session_1")).toBe(
       "channel_not_interactive"
@@ -289,13 +277,10 @@ describe("SkillPostTurnReviewService", () => {
     });
 
     let ran = 0;
-    const service = new SkillPostTurnReviewService(
-      db,
-      () => null,
-      async () => {
-        ran += 1;
-      }
-    );
+    const service = new SkillPostTurnReviewService(db, () => null);
+    service.setRunner(async () => {
+      ran += 1;
+    });
     expect(await service.runPostTurnSkillReview("session_1")).toBe(
       "flag_disabled"
     );
@@ -311,14 +296,11 @@ describe("SkillPostTurnReviewService", () => {
       release = resolve;
     });
     let ran = 0;
-    const service = new SkillPostTurnReviewService(
-      db,
-      () => null,
-      async () => {
-        ran += 1;
-        await gate;
-      }
-    );
+    const service = new SkillPostTurnReviewService(db, () => null);
+    service.setRunner(async () => {
+      ran += 1;
+      await gate;
+    });
 
     const first = service.runPostTurnSkillReview("session_1");
     await Promise.resolve();

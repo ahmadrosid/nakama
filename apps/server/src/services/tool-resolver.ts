@@ -16,21 +16,11 @@ import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 
-let registeredSubAgentTool: ToolDefinition | null = null;
-let registeredGenerateImageTool: ToolDefinition | null = null;
-let registeredSessionTools: ToolDefinition[] = [];
-
-export function registerSubAgentTool(tool: ToolDefinition): void {
-  registeredSubAgentTool = tool;
-}
-
-export function registerGenerateImageTool(tool: ToolDefinition | null): void {
-  registeredGenerateImageTool = tool;
-}
-
-export function registerSessionTools(tools: ToolDefinition[]): void {
-  registeredSessionTools = tools;
-}
+export type ServerToolOverrides = {
+  generateImage?: ToolDefinition | null;
+  session?: ToolDefinition[];
+  subAgent?: ToolDefinition | null;
+};
 
 export function omitUnavailableBuiltinTools(
   tools: ToolDefinition[],
@@ -47,7 +37,10 @@ export async function resolveProfileStoredTools(
   records: StoredToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
-  options: { userConfig?: UserConfig | null } = {}
+  options: {
+    serverTools?: ServerToolOverrides;
+    userConfig?: UserConfig | null;
+  } = {}
 ): Promise<ToolDefinition[]> {
   // A configured search back-end replaces the provider-hosted web_search stub
   // for every caller; without one the stub stays and the provider searches.
@@ -70,12 +63,19 @@ export async function resolveToolsFromStorage(
   records: StoredToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
-  options: { userConfig?: UserConfig | null } = {}
+  options: {
+    serverTools?: ServerToolOverrides;
+    userConfig?: UserConfig | null;
+  } = {}
 ): Promise<ToolDefinition[]> {
   const builtinMap = new Map(
     [...builtinTools, ...builtinOverrides].map((tool) => [tool.name, tool])
   );
-  const serverTools = buildServerTools(db, options.userConfig);
+  const serverTools = buildServerTools(
+    db,
+    options.userConfig,
+    options.serverTools
+  );
   const resolved: ToolDefinition[] = [];
 
   for (const record of records) {
@@ -118,20 +118,21 @@ async function resolveStoredTool(
 
 function buildServerTools(
   db?: DatabaseAdapter,
-  userConfig?: UserConfig | null
+  userConfig?: UserConfig | null,
+  overrides: ServerToolOverrides = {}
 ): Map<string, ToolDefinition> {
   const bash = db ? createCodingAgentAwareBashTool(db, userConfig) : bashTool;
   const map = new Map<string, ToolDefinition>([[bash.name, bash]]);
 
-  if (registeredSubAgentTool) {
-    map.set(registeredSubAgentTool.name, registeredSubAgentTool);
+  if (overrides.subAgent) {
+    map.set(overrides.subAgent.name, overrides.subAgent);
   }
 
-  if (registeredGenerateImageTool) {
-    map.set(registeredGenerateImageTool.name, registeredGenerateImageTool);
+  if (overrides.generateImage) {
+    map.set(overrides.generateImage.name, overrides.generateImage);
   }
 
-  for (const tool of registeredSessionTools) {
+  for (const tool of overrides.session ?? []) {
     map.set(tool.name, tool);
   }
 
