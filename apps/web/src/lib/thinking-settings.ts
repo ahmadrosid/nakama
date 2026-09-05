@@ -24,9 +24,6 @@ export function shouldShowThinkingEffort(
   return activeModelSupportsThinking === true;
 }
 
-/** Same gate as effort picker — thinking UI only when model explicitly supports reasoning. */
-export const shouldShowThinkingBlocks = shouldShowThinkingEffort;
-
 export function buildAutoEnableThinkingPayload(
   settings: Pick<ThinkingSettings, "effort">
 ): ThinkingSettings {
@@ -61,8 +58,4 @@ export function shouldAutoEnableThinking(
   }
 
   return activeModelSupportsThinking === true;
-}
-
-export function shouldBlockThinkingEffortChange(busy: boolean): boolean {
-  return busy;
 }

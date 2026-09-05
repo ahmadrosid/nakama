@@ -103,13 +103,8 @@
     "apps/web/src/components/ui/dialog.tsx": ["exports"],
     "apps/web/src/pages/automations/automations-page.shared.ts": ["exports"],
     "apps/web/src/hooks/use-composio.ts": ["exports"],
-    "apps/web/src/hooks/use-discord-settings.ts": ["exports"],
     "apps/web/src/hooks/use-system-status.ts": ["exports"],
     "apps/web/src/hooks/use-notification-destinations.ts": ["exports"],
-    "apps/web/src/hooks/use-image-generation-settings.ts": ["exports"],
-    "apps/web/src/hooks/use-transcription-settings.ts": ["exports"],
-    "apps/web/src/hooks/use-vision-settings.ts": ["exports"],
-    "apps/web/src/hooks/use-web-public-url.ts": ["exports"],
     "apps/web/src/hooks/use-org-members.ts": ["exports"],
     "apps/web/src/hooks/use-models-dev.ts": ["exports"],
     "apps/web/src/components/catalog-provider-model-fields.shared.ts": [

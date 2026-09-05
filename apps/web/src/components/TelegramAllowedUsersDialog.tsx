@@ -16,7 +16,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Textarea } from "@/components/ui/textarea";
-import { useSaveTelegramSettings } from "@/hooks/use-telegram-settings";
+import { useSaveTelegramSettings } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 export interface AllowedTelegramUser {

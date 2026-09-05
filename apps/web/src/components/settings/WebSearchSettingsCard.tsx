@@ -19,7 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   useSaveWebSearchSettings,
   useWebSearchSettings,
-} from "@/hooks/use-web-search-settings";
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 const BUILT_IN_VALUE = "__web_search_builtin__";
