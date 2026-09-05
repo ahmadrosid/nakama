@@ -1,9 +1,10 @@
 import { join } from "node:path";
 import {
   type AgentChatSession,
-  type AgentHarness,
+  type AgentDependencies,
   type CompactionConfig,
-  createAgentHarness,
+  createAgentChatSession,
+  createAutomationFromPrompt,
   executeToolCall,
   expandLearnInLastUserMessage,
   suggestToolParamsFromPrompt,
@@ -319,7 +320,7 @@ export interface CreateSessionOptions {
 }
 
 export class AgentService {
-  private harness: AgentHarness;
+  private harness: AgentDependencies;
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
@@ -1323,7 +1324,7 @@ export class AgentService {
     const userContext = await this.loadUserContextForUser(orgId, undefined);
     const harness = this.createHarnessForProfile(profile);
 
-    const session = harness.createChatSession({
+    const session = createAgentChatSession(harness, {
       channel: "automation",
       enableToolLoop: true,
       soul: soulActive,
@@ -1388,7 +1389,7 @@ export class AgentService {
     const harness = this.createHarnessForProfile(profile);
     const prompt = buildSubAgentPrompt(task, input.context);
 
-    const session = harness.createChatSession({
+    const session = createAgentChatSession(harness, {
       channel: "subagent",
       enableToolLoop: true,
       soul: soulActive,
@@ -1914,7 +1915,7 @@ export class AgentService {
       throw new Error("Provider is not configured.");
     }
 
-    return this.harness.createAutomationFromPrompt({ channel, prompt });
+    return createAutomationFromPrompt(this.harness, { channel, prompt });
   }
 
   async discoverModels(
@@ -2951,7 +2952,7 @@ export class AgentService {
     providerInstance?: ReturnType<typeof getActiveProviderInstance>;
     modelId?: string | null;
     thinking: ThinkingSettings;
-  }): AgentHarness {
+  }): AgentDependencies {
     const providerInstance = options.providerInstance ?? null;
 
     this.syncUsagePricingContext(providerInstance);
@@ -2965,13 +2966,13 @@ export class AgentService {
           )
         : options.provider;
 
-    return createAgentHarness({
+    return {
       chatOptions: this.resolveChatProviderOptions(
         providerInstance,
         options.thinking
       ),
       provider: trackedProvider ?? undefined,
-    });
+    };
   }
 
   private syncUsagePricingContext(
@@ -3259,7 +3260,7 @@ export class AgentService {
     });
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
-    const session = harness.createChatSession({
+    const session = createAgentChatSession(harness, {
       channel,
       compaction,
       enableToolLoop: true,
@@ -3588,7 +3589,7 @@ export class AgentService {
   private createHarnessForProfile(
     profile: StoredProfileRecord,
     selectedModel: string | null = profile.model
-  ): AgentHarness {
+  ): AgentDependencies {
     const resolved = resolveProfileProviderSelection({
       defaultProviderId: this.userConfig?.defaultProviderId,
       profileModel: selectedModel,
