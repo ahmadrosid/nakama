@@ -12,6 +12,7 @@ import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
+import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
 import { Button } from "@/components/ui/button";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
@@ -39,6 +40,7 @@ import {
   isWebSearchTool,
   shouldRenderWebSearchToolRow,
 } from "@/lib/chat-stream-web-search";
+import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
 import { cn } from "@/lib/utils";
@@ -175,13 +177,48 @@ function AssistantWorkGroup({
   profileId?: string | null;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
-  const isThinkingStreaming = Boolean(thinking?.thinkingStreaming);
-  const hasRunningTools = visibleTools.some(
-    (tool) => tool.toolStatus === "running"
+  const workflowRunTools = visibleTools.filter((tool) =>
+    isRunWorkflowTool(tool.tool)
   );
+  const otherTools = visibleTools.filter(
+    (tool) => !isRunWorkflowTool(tool.tool)
+  );
+
+  if (workflowRunTools.length === 0 && otherTools.length === 0 && !thinking) {
+    return null;
+  }
+
+  return (
+    <div className="flex w-full max-w-full flex-col gap-3">
+      <OtherWorkGroup
+        modelLabel={modelLabel}
+        profileId={profileId}
+        thinking={thinking}
+        tools={otherTools}
+      />
+      {workflowRunTools.map((tool) => (
+        <WorkflowRunToolRow key={tool.id} message={tool} />
+      ))}
+    </div>
+  );
+}
+
+function OtherWorkGroup({
+  thinking,
+  tools,
+  modelLabel,
+  profileId,
+}: {
+  thinking?: ChatListItem;
+  tools: ChatListItem[];
+  modelLabel?: string | null;
+  profileId?: string | null;
+}) {
+  const isThinkingStreaming = Boolean(thinking?.thinkingStreaming);
+  const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
   const isWorkActive = isThinkingStreaming || hasRunningTools;
 
-  if (visibleTools.length === 0) {
+  if (tools.length === 0) {
     return thinking ? <ThinkingBlock message={thinking} /> : null;
   }
 
@@ -190,7 +227,7 @@ function AssistantWorkGroup({
       <ToolOnlyWorkGroup
         modelLabel={modelLabel}
         profileId={profileId}
-        tools={visibleTools}
+        tools={tools}
       />
     );
   }
@@ -203,8 +240,8 @@ function AssistantWorkGroup({
       startedAt={thinking.createdAt}
       text={thinking.thinking ?? ""}
     >
-      {visibleTools.map((tool, index) => (
-        <TimelineStep isLast={index === visibleTools.length - 1} key={tool.id}>
+      {tools.map((tool, index) => (
+        <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
           {isDedicatedTool(tool) ? (
             <DedicatedToolRow
               message={tool}
@@ -213,7 +250,7 @@ function AssistantWorkGroup({
             />
           ) : (
             <ToolTimelineItem
-              defaultDetailsOpen={visibleTools.length === 1}
+              defaultDetailsOpen={tools.length === 1}
               message={tool}
             />
           )}

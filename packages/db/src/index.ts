@@ -17,6 +17,7 @@ export * from "./local-client";
 export * from "./org-profiles";
 export * from "./seed";
 export * from "./types";
+export * from "./workflow-store";
 export * from "./workspace-settings";
 
 export type Database = SqliteDatabase;

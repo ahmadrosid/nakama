@@ -19,6 +19,39 @@ test("buildChatSystemPrompt includes automation skill pointer when create_automa
   expect(prompt).not.toContain("runAt");
 });
 
+test("buildChatSystemPrompt includes workflow tool pointer when list_workflows is available", () => {
+  const prompt = buildChatSystemPrompt(
+    [
+      {
+        description: "List workflows",
+        name: "list_workflows",
+        parameters: { properties: {}, type: "object" },
+      },
+    ],
+    { enableToolLoop: true }
+  );
+
+  expect(prompt).toContain("list_workflows");
+  expect(prompt).toContain("create-workflow skill");
+  expect(prompt).toContain("Never invent or edit a workflow id");
+});
+
+test("buildChatSystemPrompt omits workflow guidance when list_workflows is unavailable", () => {
+  const prompt = buildChatSystemPrompt(
+    [
+      {
+        description: "Write",
+        name: "write_file",
+        parameters: { properties: {}, type: "object" },
+      },
+    ],
+    { enableToolLoop: true }
+  );
+
+  expect(prompt).not.toContain("list_workflows");
+  expect(prompt).not.toContain("create-workflow skill");
+});
+
 test("buildChatSystemPrompt omits automation guidance when create_automation is unavailable", () => {
   const prompt = buildChatSystemPrompt(
     [

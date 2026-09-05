@@ -1119,6 +1119,153 @@ export interface MarkAutomationRunsReadResponse {
   readThroughAt: string;
 }
 
+export type WorkflowStepKind =
+  | "tool"
+  | "compare"
+  | "assert"
+  | "template"
+  | "summarize";
+
+export type WorkflowCompareOp = "eq" | "near" | "contains";
+
+export interface WorkflowToolStep {
+  id: string;
+  input: Record<string, unknown>;
+  kind: "tool";
+  tool: string;
+}
+
+export interface WorkflowCompareStep {
+  id: string;
+  kind: "compare";
+  left: unknown;
+  op: WorkflowCompareOp;
+  right: unknown;
+  tolerance?: number;
+}
+
+export interface WorkflowAssertStep {
+  expected: unknown;
+  id: string;
+  kind: "assert";
+  path: string;
+}
+
+export interface WorkflowTemplateStep {
+  id: string;
+  kind: "template";
+  template: string;
+}
+
+export interface WorkflowSummarizeStep {
+  id: string;
+  kind: "summarize";
+  prompt: string;
+}
+
+export type WorkflowStep =
+  | WorkflowToolStep
+  | WorkflowCompareStep
+  | WorkflowAssertStep
+  | WorkflowTemplateStep
+  | WorkflowSummarizeStep;
+
+export interface WorkflowDefinition {
+  description: string;
+  id: string;
+  name: string;
+  steps: WorkflowStep[];
+  version: number;
+}
+
+export interface StoredWorkflow extends WorkflowDefinition {
+  createdAt: string;
+  enabled: boolean;
+  lastRunAt?: string | null;
+  orgId?: string | null;
+  profileId: string;
+  updatedAt: string;
+}
+
+export type WorkflowRunStatus = "running" | "completed" | "failed";
+
+export type WorkflowRunStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface WorkflowReceiptBag {
+  input: Record<string, unknown>;
+  steps: Record<string, unknown>;
+}
+
+export interface WorkflowRunStepRecord {
+  completedAt: string | null;
+  error: string | null;
+  id: string;
+  input: unknown;
+  kind: WorkflowStepKind;
+  output: unknown;
+  runId: string;
+  startedAt: string;
+  status: WorkflowRunStepStatus;
+  stepId: string;
+}
+
+export interface WorkflowRunRecord {
+  completedAt: string | null;
+  error: string | null;
+  id: string;
+  input: Record<string, unknown> | null;
+  output: string | null;
+  startedAt: string;
+  status: WorkflowRunStatus;
+  steps?: WorkflowRunStepRecord[];
+  workflowId: string;
+}
+
+export interface ListWorkflowsResponse {
+  workflows: StoredWorkflow[];
+}
+
+export interface WorkflowResponse {
+  workflow: StoredWorkflow;
+}
+
+export interface CreateWorkflowRequest {
+  description: string;
+  enabled?: boolean;
+  name: string;
+  profileId?: string;
+  steps: WorkflowStep[];
+}
+
+export interface UpdateWorkflowRequest {
+  description?: string;
+  enabled?: boolean;
+  name?: string;
+  profileId?: string;
+  steps?: WorkflowStep[];
+}
+
+export interface RunWorkflowRequest {
+  input?: Record<string, unknown>;
+}
+
+export interface RunWorkflowResponse {
+  run: WorkflowRunRecord;
+}
+
+export interface ListWorkflowRunsResponse {
+  runs: WorkflowRunRecord[];
+}
+
+export interface GetWorkflowRunResponse {
+  run: WorkflowRunRecord;
+}
+
 export interface TimezoneSettingsResponse {
   timezone: string;
 }
@@ -2238,6 +2385,8 @@ export interface ToolContext {
    */
   tokenOptimizerEnabled?: boolean | null;
   userId?: string;
+  workflowId?: string;
+  workflowRunId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;
 }

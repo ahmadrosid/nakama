@@ -68,6 +68,8 @@ import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import { SkillsService } from "./services/skills-service";
 import { SystemStatusService } from "./services/system-status-service";
 import { WorkerManagerService } from "./services/worker-manager-service";
+import { WorkflowRunner } from "./services/workflow-runner";
+import { WorkflowService } from "./services/workflow-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
 import {
@@ -77,6 +79,7 @@ import {
 import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
+import { createWorkflowTools } from "./tools/workflow-tools";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -165,6 +168,13 @@ agent.setAutomationRunHistoryTools(
   createAutomationRunHistoryTools(automationService)
 );
 agent.setAutomationRunner(automationRunner);
+
+const workflowService = new WorkflowService(database.adapter);
+const workflowRunner = new WorkflowRunner(workflowService, agent);
+agent.setWorkflowTools(
+  createWorkflowTools(workflowService, workflowRunner, agent)
+);
+agent.setWorkflowRunner(workflowRunner);
 
 const workerManager = new WorkerManagerService(projectRoot);
 
@@ -255,6 +265,7 @@ const app = createHonoApp({
   systemStatus,
   webDistDir,
   workerManager,
+  workflowService,
 });
 
 const server = startServer({

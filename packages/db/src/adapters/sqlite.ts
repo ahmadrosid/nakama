@@ -37,6 +37,9 @@ import type {
   StoredToolRecord,
   StoredUserOrganizationRecord,
   StoredUserRecord,
+  StoredWorkflowRecord,
+  StoredWorkflowRunRecord,
+  StoredWorkflowRunStepRecord,
   StoredWorkspaceSettingsRecord,
 } from "../types";
 
@@ -68,6 +71,43 @@ interface AutomationRunRow {
   output: string | null;
   started_at: string;
   status: string;
+}
+
+interface WorkflowRow {
+  created_at: string;
+  definition: string;
+  enabled: number;
+  id: string;
+  name: string;
+  org_id: string | null;
+  profile_id: string;
+  updated_at: string;
+  version: number;
+}
+
+interface WorkflowRunRow {
+  completed_at: string | null;
+  error: string | null;
+  id: string;
+  input: string | null;
+  output: string | null;
+  started_at: string;
+  status: string;
+  workflow_id: string;
+}
+
+interface WorkflowRunStepRow {
+  completed_at: string | null;
+  error: string | null;
+  id: string;
+  input: string | null;
+  kind: string;
+  output: string | null;
+  position: number;
+  run_id: string;
+  started_at: string;
+  status: string;
+  step_id: string;
 }
 
 interface ProfileRow {
@@ -506,6 +546,63 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteAutomationRunStmt = db.prepare(`
     DELETE FROM automation_runs
     WHERE automation_id = ? AND id = ?
+  `);
+
+  const listWorkflowsForOrgStmt = db.prepare(
+    "SELECT * FROM workflows WHERE org_id = ? ORDER BY updated_at DESC"
+  );
+  const getWorkflowStmt = db.prepare("SELECT * FROM workflows WHERE id = ?");
+  const upsertWorkflowStmt = db.prepare(`
+    INSERT INTO workflows (id, name, version, definition, profile_id, org_id, enabled, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      version = excluded.version,
+      definition = excluded.definition,
+      profile_id = excluded.profile_id,
+      org_id = excluded.org_id,
+      enabled = excluded.enabled,
+      updated_at = excluded.updated_at
+  `);
+  const deleteWorkflowStmt = db.prepare("DELETE FROM workflows WHERE id = ?");
+
+  const listWorkflowRunsStmt = db.prepare(`
+    SELECT * FROM workflow_runs
+    WHERE workflow_id = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `);
+  const getWorkflowRunStmt = db.prepare(`
+    SELECT * FROM workflow_runs
+    WHERE workflow_id = ? AND id = ?
+  `);
+  const insertWorkflowRunStmt = db.prepare(`
+    INSERT INTO workflow_runs (id, workflow_id, status, input, started_at, completed_at, output, error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateWorkflowRunStmt = db.prepare(`
+    UPDATE workflow_runs
+    SET status = ?, input = ?, completed_at = ?, output = ?, error = ?
+    WHERE id = ?
+  `);
+  const deleteWorkflowRunStmt = db.prepare(`
+    DELETE FROM workflow_runs
+    WHERE workflow_id = ? AND id = ?
+  `);
+
+  const listWorkflowRunStepsStmt = db.prepare(`
+    SELECT * FROM workflow_run_steps
+    WHERE run_id = ?
+    ORDER BY position ASC
+  `);
+  const insertWorkflowRunStepStmt = db.prepare(`
+    INSERT INTO workflow_run_steps (id, run_id, step_id, kind, status, input, output, error, started_at, completed_at, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateWorkflowRunStepStmt = db.prepare(`
+    UPDATE workflow_run_steps
+    SET status = ?, input = ?, output = ?, error = ?, completed_at = ?
+    WHERE id = ?
   `);
 
   const getAutomationRunReadThroughStmt = db.prepare(`
@@ -1973,6 +2070,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async deleteWorkflow(id) {
+      const result = deleteWorkflowStmt.run(id);
+      return result.changes > 0;
+    },
+
+    async deleteWorkflowRun(workflowId, runId) {
+      const result = deleteWorkflowRunStmt.run(workflowId, runId);
+      return result.changes > 0;
+    },
+
     async getActiveArtifactShareByPath(orgId, profileId, sourcePath) {
       const row = getActiveArtifactShareByPathStmt.get(
         orgId,
@@ -2283,6 +2390,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row?.user_context ?? null;
     },
 
+    async getWorkflow(id) {
+      const row = getWorkflowStmt.get(id) as WorkflowRow | null;
+      return row ? toWorkflowRecord(row) : null;
+    },
+
+    async getWorkflowRun(workflowId, runId) {
+      const row = getWorkflowRunStmt.get(
+        workflowId,
+        runId
+      ) as WorkflowRunRow | null;
+      return row ? toWorkflowRunRecord(row) : null;
+    },
+
     async getWorkspaceSettings() {
       const row = getWorkspaceSettingsStmt.get(
         WORKSPACE_SETTINGS_ID
@@ -2387,6 +2507,35 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.deliveryStatus ?? null,
         record.deliveryError ?? null
+      );
+    },
+
+    async insertWorkflowRun(record) {
+      insertWorkflowRunStmt.run(
+        record.id,
+        record.workflowId,
+        record.status,
+        record.input,
+        record.startedAt,
+        record.completedAt,
+        record.output,
+        record.error
+      );
+    },
+
+    async insertWorkflowRunStep(record) {
+      insertWorkflowRunStepStmt.run(
+        record.id,
+        record.runId,
+        record.stepId,
+        record.kind,
+        record.status,
+        record.input,
+        record.output,
+        record.error,
+        record.startedAt,
+        record.completedAt,
+        record.position
       );
     },
 
@@ -2687,6 +2836,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       });
     },
 
+    async listWorkflowRunSteps(runId) {
+      return listWorkflowRunStepsStmt
+        .all(runId)
+        .map((row) => toWorkflowRunStepRecord(row as WorkflowRunStepRow));
+    },
+
+    async listWorkflowRuns(workflowId, limit = 20) {
+      return listWorkflowRunsStmt
+        .all(workflowId, limit)
+        .map((row) => toWorkflowRunRecord(row as WorkflowRunRow));
+    },
+
+    async listWorkflowsForOrg(orgId) {
+      return listWorkflowsForOrgStmt
+        .all(orgId)
+        .map((row) => toWorkflowRecord(row as WorkflowRow));
+    },
+
     async markOrgInviteAccepted(id, acceptedAt) {
       markOrgInviteAcceptedStmt.run(acceptedAt, id);
     },
@@ -2850,6 +3017,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async updateWorkflowRun(record) {
+      updateWorkflowRunStmt.run(
+        record.status,
+        record.input,
+        record.completedAt,
+        record.output,
+        record.error,
+        record.id
+      );
+    },
+
+    async updateWorkflowRunStep(record) {
+      updateWorkflowRunStepStmt.run(
+        record.status,
+        record.input,
+        record.output,
+        record.error,
+        record.completedAt,
+        record.id
+      );
+    },
+
     async upsertAutomation(record) {
       const existing = await this.getAutomation(record.id);
 
@@ -2997,6 +3186,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async upsertWorkflow(record) {
+      const existing = await this.getWorkflow(record.id);
+
+      upsertWorkflowStmt.run(
+        record.id,
+        record.name,
+        record.version,
+        JSON.stringify(record.definition),
+        record.profileId,
+        record.orgId ?? null,
+        record.enabled ? 1 : 0,
+        existing?.createdAt ?? record.createdAt,
+        record.updatedAt
+      );
+    },
+
     async upsertWorkspaceSettings(record) {
       upsertWorkspaceSettingsStmt.run(
         WORKSPACE_SETTINGS_ID,
@@ -3044,6 +3249,51 @@ function toAutomationRunRecord(
     output: row.output,
     startedAt: row.started_at,
     status: row.status as StoredAutomationRunRecord["status"],
+  };
+}
+
+function toWorkflowRecord(row: WorkflowRow): StoredWorkflowRecord {
+  return {
+    createdAt: row.created_at,
+    definition: parseJson(row.definition),
+    enabled: row.enabled !== 0,
+    id: row.id,
+    name: row.name,
+    orgId: row.org_id ?? null,
+    profileId: row.profile_id,
+    updatedAt: row.updated_at,
+    version: row.version,
+  };
+}
+
+function toWorkflowRunRecord(row: WorkflowRunRow): StoredWorkflowRunRecord {
+  return {
+    completedAt: row.completed_at,
+    error: row.error,
+    id: row.id,
+    input: row.input,
+    output: row.output,
+    startedAt: row.started_at,
+    status: row.status as StoredWorkflowRunRecord["status"],
+    workflowId: row.workflow_id,
+  };
+}
+
+function toWorkflowRunStepRecord(
+  row: WorkflowRunStepRow
+): StoredWorkflowRunStepRecord {
+  return {
+    completedAt: row.completed_at,
+    error: row.error,
+    id: row.id,
+    input: row.input,
+    kind: row.kind,
+    output: row.output,
+    position: row.position,
+    runId: row.run_id,
+    startedAt: row.started_at,
+    status: row.status,
+    stepId: row.step_id,
   };
 }
 

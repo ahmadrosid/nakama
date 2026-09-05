@@ -125,6 +125,53 @@ CREATE TABLE IF NOT EXISTS automation_run_read_state (
   FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS workflows (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  definition TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  org_id TEXT,
+  enabled INTEGER DEFAULT 1 NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  id TEXT PRIMARY KEY NOT NULL,
+  workflow_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  input TEXT,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  output TEXT,
+  error TEXT,
+  FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS workflow_runs_workflow_started
+  ON workflow_runs (workflow_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS workflow_run_steps (
+  id TEXT PRIMARY KEY NOT NULL,
+  run_id TEXT NOT NULL,
+  step_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  input TEXT,
+  output TEXT,
+  error TEXT,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  position INTEGER NOT NULL,
+  FOREIGN KEY (run_id) REFERENCES workflow_runs (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS workflow_run_steps_run_position
+  ON workflow_run_steps (run_id, position);
+
 CREATE TABLE IF NOT EXISTS notification_destinations (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
