@@ -359,35 +359,7 @@ function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
   );
 }
 
-function sidebarNavAriaLabel(item: NavItem, badge?: number): string {
-  if (!(badge && badge > 0)) {
-    return item.label;
-  }
-  return `${item.label}, ${badge} unread automation run${badge === 1 ? "" : "s"}`;
-}
-
-function SidebarNavUnreadBadge({
-  collapsed,
-  label,
-}: {
-  collapsed: boolean;
-  label: string;
-}) {
-  return (
-    <span
-      aria-hidden
-      className={
-        collapsed
-          ? "absolute top-0 right-0 inline-flex h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1.5 font-bold text-2xs text-primary-foreground tabular-nums leading-none shadow-sm"
-          : "sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
-      }
-    >
-      {label}
-    </span>
-  );
-}
-
-function SidebarNavLink({
+function SidebarNavButton({
   item,
   icon: Icon,
   active,
@@ -409,10 +381,14 @@ function SidebarNavLink({
   const showBadge = Boolean(badge && badge > 0);
   const badgeLabel = badge && badge > 99 ? "99+" : String(badge ?? "");
 
-  return (
+  const link = (
     <Link
       aria-current={active ? "page" : undefined}
-      aria-label={sidebarNavAriaLabel(item, badge)}
+      aria-label={
+        showBadge
+          ? `${item.label}, ${badge} unread automation run${badge === 1 ? "" : "s"}`
+          : item.label
+      }
       className={cn(
         "sidebar-nav-link",
         collapsed && "sidebar-nav-link--collapsed",
@@ -431,47 +407,24 @@ function SidebarNavLink({
           strokeWidth={1.75}
         />
         {showBadge && collapsed ? (
-          <SidebarNavUnreadBadge collapsed label={badgeLabel} />
+          <span
+            aria-hidden
+            className="absolute top-0 right-0 inline-flex h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1.5 font-bold text-2xs text-primary-foreground tabular-nums leading-none shadow-sm"
+          >
+            {badgeLabel}
+          </span>
         ) : null}
       </span>
       <span className="sidebar-nav-label truncate">{item.label}</span>
       {showBadge && !collapsed ? (
-        <SidebarNavUnreadBadge collapsed={false} label={badgeLabel} />
+        <span
+          aria-hidden
+          className="sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
+        >
+          {badgeLabel}
+        </span>
       ) : null}
     </Link>
-  );
-}
-
-function SidebarNavButton({
-  item,
-  icon,
-  active,
-  collapsed,
-  to,
-  onPrefetch,
-  badge,
-  className,
-}: {
-  item: NavItem;
-  icon: ElementType;
-  active: boolean;
-  collapsed: boolean;
-  to: string;
-  onPrefetch?: () => void;
-  badge?: number;
-  className?: string;
-}) {
-  const link = (
-    <SidebarNavLink
-      active={active}
-      badge={badge}
-      className={className}
-      collapsed={collapsed}
-      icon={icon}
-      item={item}
-      onPrefetch={onPrefetch}
-      to={to}
-    />
   );
 
   if (!collapsed) {
@@ -482,7 +435,7 @@ function SidebarNavButton({
     <Tooltip>
       <TooltipTrigger render={link} />
       <TooltipContent side="right" sideOffset={8}>
-        {badge && badge > 0 ? `${item.label} (${badge} unread)` : item.label}
+        {showBadge ? `${item.label} (${badge} unread)` : item.label}
       </TooltipContent>
     </Tooltip>
   );
