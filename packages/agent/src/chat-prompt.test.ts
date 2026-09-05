@@ -33,6 +33,7 @@ test("buildChatSystemPrompt includes workflow tool pointer when list_workflows i
 
   expect(prompt).toContain("list_workflows");
   expect(prompt).toContain("create-workflow skill");
+  expect(prompt).toContain("Never invent or edit a workflow id");
 });
 
 test("buildChatSystemPrompt omits workflow guidance when list_workflows is unavailable", () => {

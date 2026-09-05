@@ -152,7 +152,8 @@ export function buildChatSystemPrompt(
     tools.some((tool) => tool.name === "list_workflows")
   ) {
     sections.push(
-      "When the user asks what workflows they have, or wants a recipe they can run on demand, use list_workflows / run_workflow / create_workflow. Follow the create-workflow skill when it is active."
+      "When the user asks what workflows they have, or wants a recipe they can run on demand, use list_workflows / run_workflow / create_workflow. Follow the create-workflow skill when it is active.",
+      "Never invent or edit a workflow id. Reuse the id from list_workflows."
     );
   }
 
