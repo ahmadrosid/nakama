@@ -143,7 +143,7 @@ function AppShell() {
                   </Route>
                   <Route element={<AutomationsPage />} path="/automations" />
                   <Route
-                    element={<Navigate replace to="/automations?tab=tasks" />}
+                    element={<Navigate replace to="/automations" />}
                     path="/tasks"
                   />
                   <Route element={<IntegrationsPage />} path="/integrations" />

@@ -172,40 +172,6 @@ CREATE TABLE IF NOT EXISTS workflow_run_steps (
 CREATE INDEX IF NOT EXISTS workflow_run_steps_run_position
   ON workflow_run_steps (run_id, position);
 
-CREATE TABLE IF NOT EXISTS tasks (
-  id TEXT PRIMARY KEY NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT DEFAULT '' NOT NULL,
-  prompt TEXT NOT NULL,
-  profile_id TEXT NOT NULL,
-  org_id TEXT,
-  status TEXT NOT NULL DEFAULT 'backlog',
-  position INTEGER NOT NULL DEFAULT 0,
-  session_id TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
-  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
-  FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL
-);
-
-CREATE INDEX IF NOT EXISTS tasks_status_position
-  ON tasks (status, position);
-
-CREATE TABLE IF NOT EXISTS task_runs (
-  id TEXT PRIMARY KEY NOT NULL,
-  task_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  started_at TEXT NOT NULL,
-  completed_at TEXT,
-  output TEXT,
-  error TEXT,
-  FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS task_runs_task_started
-  ON task_runs (task_id, started_at DESC);
-
 CREATE TABLE IF NOT EXISTS notification_destinations (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,

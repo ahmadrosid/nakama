@@ -5,7 +5,7 @@ import {
   agentWorkTabFromSearchParams,
 } from "@/lib/navigation";
 
-const TAB_ORDER: AgentWorkTab[] = ["automations", "workflows", "tasks"];
+const TAB_ORDER: AgentWorkTab[] = ["automations", "workflows"];
 
 export function AgentWorkTabs() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,13 +43,7 @@ export function AgentWorkTabs() {
 }
 
 function tabLabel(tab: AgentWorkTab): string {
-  if (tab === "workflows") {
-    return "Workflows";
-  }
-  if (tab === "tasks") {
-    return "Tasks";
-  }
-  return "Automations";
+  return tab === "workflows" ? "Workflows" : "Automations";
 }
 
 function handleArrowNavigation(

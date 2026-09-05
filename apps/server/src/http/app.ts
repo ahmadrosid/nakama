@@ -33,7 +33,6 @@ import { registerSkillProposalRoutes } from "./routes/skill-proposals";
 import { registerSkillSuggestionRoutes } from "./routes/skill-suggestions";
 import { registerSkillRoutes } from "./routes/skills";
 import { registerSystemRoutes } from "./routes/system";
-import { registerTaskRoutes } from "./routes/tasks";
 import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
@@ -137,7 +136,6 @@ export function createHonoApp(options: ServerOptions) {
   registerAutomationWorkerSettingsRoutes(app, options);
   registerCodingHarnessSettingsRoutes(app, options);
   registerComposioRoutes(app, options);
-  registerTaskRoutes(app, options);
   registerPlatformOrgRoutes(app, options);
   registerDataPortabilityRoutes(app, options);
   registerOrgMemberRoutes(app, options);

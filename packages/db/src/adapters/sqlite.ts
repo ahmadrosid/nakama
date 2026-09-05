@@ -34,8 +34,6 @@ import type {
   StoredSkillRecord,
   StoredSkillSuggestion,
   StoredSkillUsageRecord,
-  StoredTaskRecord,
-  StoredTaskRunRecord,
   StoredToolRecord,
   StoredUserOrganizationRecord,
   StoredUserRecord,
@@ -172,30 +170,6 @@ interface AttachmentRow {
   session_id: string | null;
   size_bytes: number;
   storage_path: string;
-}
-
-interface TaskRow {
-  created_at: string;
-  description: string;
-  id: string;
-  org_id: string | null;
-  position: number;
-  profile_id: string;
-  prompt: string;
-  session_id: string | null;
-  status: string;
-  title: string;
-  updated_at: string;
-}
-
-interface TaskRunRow {
-  completed_at: string | null;
-  error: string | null;
-  id: string;
-  output: string | null;
-  started_at: string;
-  status: string;
-  task_id: string;
 }
 
 interface SessionSummaryRow {
@@ -892,53 +866,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     GROUP BY s.id
     HAVING COUNT(m.id) > 0
     ORDER BY updated_at DESC, s.created_at DESC
-  `);
-
-  const listTasksStmt = db.prepare(
-    "SELECT * FROM tasks ORDER BY status ASC, position ASC"
-  );
-  const listTasksForOrgStmt = db.prepare(`
-    SELECT * FROM tasks
-    WHERE org_id = ?
-    ORDER BY status ASC, position ASC
-  `);
-  const getTaskStmt = db.prepare("SELECT * FROM tasks WHERE id = ?");
-  const upsertTaskStmt = db.prepare(`
-    INSERT INTO tasks (id, title, description, prompt, profile_id, org_id, status, position, session_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      title = excluded.title,
-      description = excluded.description,
-      prompt = excluded.prompt,
-      profile_id = excluded.profile_id,
-      org_id = excluded.org_id,
-      status = excluded.status,
-      position = excluded.position,
-      session_id = excluded.session_id,
-      updated_at = excluded.updated_at
-  `);
-  const deleteTaskStmt = db.prepare("DELETE FROM tasks WHERE id = ?");
-
-  const listTaskRunsStmt = db.prepare(`
-    SELECT * FROM task_runs
-    WHERE task_id = ?
-    ORDER BY started_at DESC
-    LIMIT ?
-  `);
-  const getActiveTaskRunStmt = db.prepare(`
-    SELECT * FROM task_runs
-    WHERE task_id = ? AND status = 'running'
-    ORDER BY started_at DESC
-    LIMIT 1
-  `);
-  const insertTaskRunStmt = db.prepare(`
-    INSERT INTO task_runs (id, task_id, status, started_at, completed_at, output, error)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  const updateTaskRunStmt = db.prepare(`
-    UPDATE task_runs
-    SET status = ?, completed_at = ?, output = ?, error = ?
-    WHERE id = ?
   `);
 
   const getLlmUsageStatsStmt = db.prepare(
@@ -2136,11 +2063,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
-    async deleteTask(id) {
-      const result = deleteTaskStmt.run(id);
-      return result.changes > 0;
-    },
-
     async deleteTool(id) {
       // FK cascade is off (PRAGMA foreign_keys = OFF), so unassign + delete
       // must be one transaction or seed/admin delete can leave partial state.
@@ -2172,11 +2094,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         automationId
       ) as AutomationRunRow | null;
       return row ? toAutomationRunRecord(row) : null;
-    },
-
-    async getActiveTaskRun(taskId) {
-      const row = getActiveTaskRunStmt.get(taskId) as TaskRunRow | null;
-      return row ? toTaskRunRecord(row) : null;
     },
 
     async getArtifactShareById(orgId, profileId, shareId) {
@@ -2447,11 +2364,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toSkillUsageRecord(row) : null;
     },
 
-    async getTask(id) {
-      const row = getTaskStmt.get(id) as TaskRow | null;
-      return row ? toTaskRecord(row) : null;
-    },
-
     async getTool(id) {
       const row = getToolStmt.get(id) as ToolRow | null;
       return row ? toToolRecord(row) : null;
@@ -2595,18 +2507,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.deliveryStatus ?? null,
         record.deliveryError ?? null
-      );
-    },
-
-    async insertTaskRun(record) {
-      insertTaskRunStmt.run(
-        record.id,
-        record.taskId,
-        record.status,
-        record.startedAt,
-        record.completedAt,
-        record.output,
-        record.error
       );
     },
 
@@ -2885,22 +2785,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toSkillUsageRecord(row as SkillUsageRow));
     },
 
-    async listTaskRuns(taskId, limit = 20) {
-      return listTaskRunsStmt
-        .all(taskId, limit)
-        .map((row) => toTaskRunRecord(row as TaskRunRow));
-    },
-
-    async listTasks() {
-      return listTasksStmt.all().map((row) => toTaskRecord(row as TaskRow));
-    },
-
-    async listTasksForOrg(orgId) {
-      return listTasksForOrgStmt
-        .all(orgId)
-        .map((row) => toTaskRecord(row as TaskRow));
-    },
-
     async listToolOutputSavings(orgId) {
       return (
         listToolOutputSavingsStmt.all(orgId) as {
@@ -3119,16 +3003,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
-    async updateTaskRun(record) {
-      updateTaskRunStmt.run(
-        record.status,
-        record.completedAt,
-        record.output,
-        record.error,
-        record.id
-      );
-    },
-
     async updateUserPassword(id, passwordHash, updatedAt) {
       updateUserPasswordStmt.run(passwordHash, updatedAt, id);
     },
@@ -3296,24 +3170,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdBy,
         record.orgId ?? null,
         record.createdAt,
-        record.updatedAt
-      );
-    },
-
-    async upsertTask(record) {
-      const existing = await this.getTask(record.id);
-
-      upsertTaskStmt.run(
-        record.id,
-        record.title,
-        record.description,
-        record.prompt,
-        record.profileId,
-        record.orgId ?? null,
-        record.status,
-        record.position,
-        record.sessionId ?? null,
-        existing?.createdAt ?? record.createdAt,
         record.updatedAt
       );
     },
@@ -3667,34 +3523,6 @@ function toAttachmentRecord(row: AttachmentRow): StoredAttachmentRecord {
     sessionId: row.session_id,
     sizeBytes: row.size_bytes,
     storagePath: row.storage_path,
-  };
-}
-
-function toTaskRecord(row: TaskRow): StoredTaskRecord {
-  return {
-    createdAt: row.created_at,
-    description: row.description,
-    id: row.id,
-    orgId: row.org_id ?? null,
-    position: row.position,
-    profileId: row.profile_id,
-    prompt: row.prompt,
-    sessionId: row.session_id,
-    status: row.status,
-    title: row.title,
-    updatedAt: row.updated_at,
-  };
-}
-
-function toTaskRunRecord(row: TaskRunRow): StoredTaskRunRecord {
-  return {
-    completedAt: row.completed_at,
-    error: row.error,
-    id: row.id,
-    output: row.output,
-    startedAt: row.started_at,
-    status: row.status as StoredTaskRunRecord["status"],
-    taskId: row.task_id,
   };
 }
 

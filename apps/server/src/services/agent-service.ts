@@ -4,7 +4,6 @@ import {
   type AgentHarness,
   type CompactionConfig,
   createAgentHarness,
-  draftTaskPromptFromFields,
   executeToolCall,
   expandLearnInLastUserMessage,
   suggestToolParamsFromPrompt,
@@ -93,12 +92,14 @@ import type {
   UpdateTranscriptionRequest,
   UpdateUserContextRequest,
   UpdateVisionRequest,
+  UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UploadKnowledgeBaseResponse,
   UserConfig,
   UserContextStatusResponse,
   VisionSettings,
   VisionSettingsResponse,
+  WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
 } from "@nakama/core";
 import {
@@ -139,6 +140,7 @@ import {
   loadUserTimezone,
   loadUserTranscriptionSettings,
   loadUserVisionSettings,
+  loadWebSearchSettingsPublic,
   loadWhatsAppSettingsPublic,
   messageContentHasImages,
   NakamaApiError,
@@ -171,6 +173,7 @@ import {
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
+  saveWebSearchConfig,
   saveWhatsAppConfig,
   USER_CONTEXT_TEMPLATE,
   WRITABLE_SOUL_FILES,
@@ -184,7 +187,6 @@ import {
   mergeWorkspaceSettings,
   type StoredProfileRecord,
   type StoredSessionRecord,
-  type StoredTaskRunRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import {
@@ -301,7 +303,6 @@ import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
-import type { TaskRunner } from "./task-runner";
 import { resolveProfileStoredTools } from "./tool-resolver";
 import type { WorkflowRunner } from "./workflow-runner";
 
@@ -337,7 +338,7 @@ export class AgentService {
   private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
   private workflowRunner: WorkflowRunner | null = null;
-  private taskRunner: TaskRunner | null = null;
+
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
   private composioService: ComposioService | null = null;
@@ -487,10 +488,6 @@ export class AgentService {
 
   setWorkflowRunner(runner: WorkflowRunner): void {
     this.workflowRunner = runner;
-  }
-
-  setTaskRunner(runner: TaskRunner): void {
-    this.taskRunner = runner;
   }
 
   setMcpClientManager(manager: McpClientManager): void {
@@ -1246,6 +1243,22 @@ export class AgentService {
     return saveEmailConfig(input);
   }
 
+  async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
+    return loadWebSearchSettingsPublic();
+  }
+
+  async setWebSearchSettings(
+    input: UpdateWebSearchSettingsRequest
+  ): Promise<WebSearchSettingsResponse> {
+    const settings = await saveWebSearchConfig(input);
+
+    // Sessions cache their resolved tool list, so the swap between hosted and
+    // custom search only takes effect once they are rebuilt.
+    this.sessions.clear();
+
+    return settings;
+  }
+
   async sendEmailTest(recipient: string): Promise<SendEmailTestResponse> {
     const config = await loadEmailConfig();
 
@@ -1568,140 +1581,6 @@ export class AgentService {
     return buildSubAgentResult("success", outcome.reply);
   }
 
-  async runTaskPrompt(
-    taskId: string,
-    profileId: string,
-    prompt: string
-  ): Promise<string> {
-    if (!this._providerConfigured) {
-      throw new Error("Provider is not configured.");
-    }
-
-    const task = await this.db.getTask(taskId);
-
-    if (!task?.orgId) {
-      throw new Error("Task not found.");
-    }
-
-    const sessionId = await this.ensureTaskSession(
-      taskId,
-      profileId,
-      task.orgId
-    );
-    const session = await this.resolveSession(sessionId, task.orgId);
-
-    if (!session) {
-      throw new Error("Session not found.");
-    }
-
-    return session.send(prompt);
-  }
-
-  async ensureTaskSession(
-    taskId: string,
-    profileId: string,
-    orgId: string
-  ): Promise<string> {
-    const record = await this.db.getTask(taskId);
-
-    if (!record) {
-      throw new Error("Task not found.");
-    }
-
-    if (record.sessionId) {
-      const existing = await this.db.getSession(record.sessionId);
-
-      if (existing) {
-        return record.sessionId;
-      }
-    }
-
-    const sessionId = await this.createSession(
-      orgId,
-      "task",
-      profileId,
-      undefined,
-      {
-        orgRole: "member",
-      }
-    );
-
-    await this.db.upsertTask({
-      ...record,
-      sessionId,
-      updatedAt: new Date().toISOString(),
-    });
-
-    return sessionId;
-  }
-
-  async getTaskChatMessages(
-    taskId: string,
-    orgId?: string
-  ): Promise<{ sessionId: string; messages: ChatMessage[] } | null> {
-    const record = await this.db.getTask(taskId);
-
-    if (!record || (orgId && record.orgId !== orgId)) {
-      return null;
-    }
-
-    let sessionId = record.sessionId;
-
-    if (sessionId) {
-      const existing = await this.db.getSession(sessionId);
-
-      if (!existing) {
-        sessionId = null;
-      }
-    }
-
-    if (!sessionId) {
-      const orgId = record.orgId?.trim();
-
-      if (!orgId) {
-        throw new Error("Task organization is missing.");
-      }
-
-      sessionId = await this.ensureTaskSession(taskId, record.profileId, orgId);
-    }
-
-    let messages = await loadSessionHistory(this.db, sessionId);
-
-    if (messages.length === 0) {
-      const runs = await this.db.listTaskRuns(taskId, 1);
-      const latestRun = runs[0];
-
-      if (latestRun && latestRun.status !== "running") {
-        await this.seedTaskSessionFromRun(record.prompt, latestRun, sessionId);
-        messages = await loadSessionHistory(this.db, sessionId);
-      }
-    }
-
-    return { messages, sessionId };
-  }
-
-  private async seedTaskSessionFromRun(
-    prompt: string,
-    run: StoredTaskRunRecord,
-    sessionId: string
-  ): Promise<void> {
-    const history: ChatMessage[] = [{ content: prompt, role: "user" }];
-
-    if (run.status === "failed") {
-      history.push({
-        content: run.error ?? "Task run failed.",
-        role: "assistant",
-      });
-    } else if (run.output) {
-      history.push({
-        content: run.output,
-        role: "assistant",
-      });
-    }
-
-    await replaceSessionHistory(this.db, sessionId, history);
-  }
-
   async runAutomation(automationId: string) {
     if (!this.automationRunner) {
       throw new Error("Automation runner is not configured.");
@@ -1716,14 +1595,6 @@ export class AgentService {
     }
 
     return this.workflowRunner.run(workflowId, input);
-  }
-
-  async runTask(taskId: string) {
-    if (!this.taskRunner) {
-      throw new Error("Task runner is not configured.");
-    }
-
-    return this.taskRunner.run(taskId);
   }
 
   get providerConfigured(): boolean {
@@ -2157,18 +2028,6 @@ export class AgentService {
     }
 
     return this.harness.createAutomationFromPrompt({ channel, prompt });
-  }
-
-  async draftTaskPrompt(title: string, description?: string): Promise<string> {
-    const provider = createProviderFromActiveConfig(
-      this.userConfig,
-      process.env
-    );
-
-    return draftTaskPromptFromFields(
-      { description, title },
-      { provider: provider ?? undefined }
-    );
   }
 
   async discoverModels(

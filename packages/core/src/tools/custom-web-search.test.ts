@@ -1,0 +1,169 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import type { WebSearchConfigFile } from "../web-search-config";
+import {
+  createCustomWebSearchTool,
+  parseCustomWebSearchResults,
+} from "./custom-web-search";
+
+const originalFetch = globalThis.fetch;
+
+interface CapturedRequest {
+  body: unknown;
+  headers: Record<string, string>;
+  url: string;
+}
+
+function stubFetch(
+  response: { body: unknown; status?: number },
+  captured: CapturedRequest[]
+): void {
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    captured.push({
+      body: JSON.parse(String(init?.body ?? "{}")),
+      headers: (init?.headers ?? {}) as Record<string, string>,
+      url: String(input),
+    });
+
+    return Promise.resolve(
+      new Response(
+        typeof response.body === "string"
+          ? response.body
+          : JSON.stringify(response.body),
+        { status: response.status ?? 200 }
+      )
+    );
+  }) as typeof fetch;
+}
+
+function config(patch: Partial<WebSearchConfigFile>): WebSearchConfigFile {
+  return {
+    apiKey: "test-key",
+    endpoint: "https://api.exa.ai/search",
+    provider: "exa",
+    ...patch,
+  };
+}
+
+describe("createCustomWebSearchTool", () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("returns null when no search back-end is configured", () => {
+    expect(createCustomWebSearchTool(null)).toBeNull();
+    expect(createCustomWebSearchTool(config({ apiKey: "" }))).toBeNull();
+  });
+
+  test("runs locally instead of on the LLM provider", () => {
+    const tool = createCustomWebSearchTool(config({}));
+
+    expect(tool?.name).toBe("web_search");
+    expect(tool?.hosted).toBe(false);
+  });
+
+  test("sends the Exa request shape and reads results", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch(
+      {
+        body: {
+          results: [
+            { text: "Release notes", title: "Bun 1.4", url: "https://bun.sh" },
+          ],
+        },
+      },
+      captured
+    );
+
+    const tool = createCustomWebSearchTool(config({}));
+    const output = await tool?.run({ query: "bun release" }, {});
+
+    expect(captured[0]?.url).toBe("https://api.exa.ai/search");
+    expect(captured[0]?.headers["x-api-key"]).toBe("test-key");
+    expect(captured[0]?.body).toMatchObject({
+      numResults: 5,
+      query: "bun release",
+    });
+    expect(output).toEqual({
+      provider: "exa",
+      query: "bun release",
+      results: [
+        { snippet: "Release notes", title: "Bun 1.4", url: "https://bun.sh" },
+      ],
+    });
+  });
+
+  test("sends a bearer token and reads Firecrawl's data.web list", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch(
+      {
+        body: {
+          data: {
+            web: [
+              {
+                description: "Docs",
+                title: "Firecrawl",
+                url: "https://docs.firecrawl.dev",
+              },
+            ],
+          },
+          success: true,
+        },
+      },
+      captured
+    );
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "fc-key",
+        endpoint: "https://api.firecrawl.dev/v2/search",
+        provider: "firecrawl",
+      })
+    );
+    const output = await tool?.run({ query: "scraping" }, {});
+
+    expect(captured[0]?.headers.authorization).toBe("Bearer fc-key");
+    expect(captured[0]?.body).toEqual({ limit: 5, query: "scraping" });
+    expect(output?.results).toEqual([
+      {
+        snippet: "Docs",
+        title: "Firecrawl",
+        url: "https://docs.firecrawl.dev",
+      },
+    ]);
+  });
+
+  test("surfaces the endpoint status on failure", async () => {
+    stubFetch({ body: "quota exceeded", status: 402 }, []);
+
+    const tool = createCustomWebSearchTool(config({}));
+
+    await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
+      "Exa returned 402"
+    );
+  });
+});
+
+describe("parseCustomWebSearchResults", () => {
+  test("drops entries without a URL, dedupes and caps at five", () => {
+    const results = parseCustomWebSearchResults({
+      results: [
+        { title: "One", url: "https://a.example" },
+        { title: "No URL" },
+        { title: "One again", url: "https://a.example" },
+        { title: "Two", url: "https://b.example" },
+        { title: "Three", url: "https://c.example" },
+        { title: "Four", url: "https://d.example" },
+        { title: "Five", url: "https://e.example" },
+        { title: "Six", url: "https://f.example" },
+      ],
+    });
+
+    expect(results.map((result) => result.title)).toEqual([
+      "One",
+      "Two",
+      "Three",
+      "Four",
+      "Five",
+    ]);
+  });
+});

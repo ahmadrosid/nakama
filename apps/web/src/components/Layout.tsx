@@ -29,9 +29,11 @@ import {
 import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
   findNavItem,
+  type NavGroup,
   type NavItem,
   navHrefForPage,
   PAGE_PATHS,
+  type PageId,
   pageIdFromPath,
   visibleNavGroups,
 } from "@/lib/navigation";
@@ -39,9 +41,34 @@ import { cn } from "@/lib/utils";
 import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
 
 export function Layout() {
+  const shell = useAppShell();
+
+  return (
+    <TooltipProvider delay={0}>
+      <ActiveChatProfileProvider>
+        <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
+          <ProfileRail />
+          <AppShellSidebar shell={shell} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
+            <AppShellError error={shell.error} />
+            <main className={appShellMainClassName(shell.page, shell.pathname)}>
+              <RouteBoundary resetKey={shell.pathname}>
+                <Outlet />
+              </RouteBoundary>
+            </main>
+          </div>
+        </div>
+        <NarrowViewportNotice />
+        <CommandPalette />
+      </ActiveChatProfileProvider>
+    </TooltipProvider>
+  );
+}
+
+function useAppShell() {
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
-  const chatProfileId = chatProfileIdFromPath(location.pathname);
   const { error } = useAppContext();
   const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
@@ -49,7 +76,6 @@ export function Layout() {
   const { collapsed, toggle } = useSidebarCollapsed();
   const { collapsed: systemNavCollapsed, toggle: toggleSystemNav } =
     useSystemNavCollapsed();
-  const activeNav = findNavItem(page);
   const navGroups = useMemo(
     () =>
       visibleNavGroups({
@@ -59,170 +85,217 @@ export function Layout() {
     [activeOrg?.role, user?.isPlatformAdmin]
   );
 
+  return {
+    activeNav: findNavItem(page),
+    automationUnreadTotal,
+    chatProfileId: chatProfileIdFromPath(location.pathname),
+    collapsed,
+    error,
+    navGroups,
+    page,
+    pathname: location.pathname,
+    prefetchAppData,
+    systemNavCollapsed,
+    toggle,
+    toggleSystemNav,
+  };
+}
+
+type AppShellState = ReturnType<typeof useAppShell>;
+
+function isFlushContentPage(page: PageId, pathname: string): boolean {
   return (
-    <TooltipProvider delay={0}>
-      <ActiveChatProfileProvider>
-        <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
-          <ProfileRail />
+    page === "chat" ||
+    page === "automations" ||
+    page === "files" ||
+    pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
+  );
+}
 
-          <aside
-            aria-label="Main navigation"
-            className="sidebar-shell flex h-full shrink-0 flex-col overflow-hidden border-border/50 border-r"
-            data-collapsed={collapsed || undefined}
-          >
-            <div className="app-shell-header">
-              {collapsed ? (
-                <CollapsedOrgExpandControl onExpand={toggle} />
-              ) : (
-                <>
-                  <div className="flex min-w-0 flex-1">
-                    <OrgSwitcher collapsed={false} />
-                  </div>
-                  <SidebarCollapseButton onToggle={toggle} />
-                </>
-              )}
-            </div>
+function appShellMainClassName(page: PageId, pathname: string): string {
+  const flush = isFlushContentPage(page, pathname);
+  const skillDetail = pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`);
+  return cn(
+    "min-h-0 flex-1",
+    flush ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+    flush || skillDetail ? null : "p-6"
+  );
+}
 
-            <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
-              {navGroups.map((group) => {
-                const containsActive =
-                  group.collapsible === true &&
-                  group.items.some((item) => item.id === page);
-                const groupExpanded = !systemNavCollapsed || containsActive;
-                // Icon rail always shows every destination; tree collapse only
-                // applies when labels are visible.
-                const itemsVisible =
-                  !group.collapsible || collapsed || groupExpanded;
+function AppShellSidebar({ shell }: { shell: AppShellState }) {
+  return (
+    <aside
+      aria-label="Main navigation"
+      className="sidebar-shell flex h-full shrink-0 flex-col overflow-hidden border-border/50 border-r"
+      data-collapsed={shell.collapsed || undefined}
+    >
+      <SidebarHeader collapsed={shell.collapsed} onToggle={shell.toggle} />
+      <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {shell.navGroups.map((group) => (
+          <SidebarNavGroup
+            chatProfileId={shell.chatProfileId}
+            collapsed={shell.collapsed}
+            group={group}
+            key={group.id}
+            page={shell.page}
+            prefetchAppData={shell.prefetchAppData}
+            systemNavCollapsed={shell.systemNavCollapsed}
+            toggleSystemNav={shell.toggleSystemNav}
+            unreadTotal={shell.automationUnreadTotal}
+          />
+        ))}
+      </nav>
+    </aside>
+  );
+}
 
-                return (
-                  <div
-                    aria-label={group.label}
-                    className="sidebar-nav-group"
-                    data-items-hidden={itemsVisible ? undefined : true}
-                    data-tree={group.collapsible || undefined}
-                    key={group.id}
-                    role="group"
-                  >
-                    {group.collapsible && !collapsed ? (
-                      <button
-                        aria-expanded={groupExpanded}
-                        className="sidebar-nav-group-label"
-                        onClick={() => {
-                          if (groupExpanded && containsActive) {
-                            return;
-                          }
-                          toggleSystemNav();
-                        }}
-                        type="button"
-                      >
-                        <ArrowDown01Icon
-                          aria-hidden="true"
-                          className={cn(
-                            "sidebar-nav-group-chevron",
-                            !groupExpanded && "-rotate-90"
-                          )}
-                          strokeWidth={1.75}
-                        />
-                        <span className="truncate">{group.label}</span>
-                      </button>
-                    ) : null}
-                    <div
-                      aria-hidden={!itemsVisible}
-                      className="sidebar-nav-group-items"
-                      inert={itemsVisible ? undefined : true}
-                    >
-                      {group.items.map((item) => (
-                        <SidebarNavButton
-                          active={item.id === page}
-                          badge={
-                            item.id === "automations"
-                              ? automationUnreadTotal
-                              : undefined
-                          }
-                          collapsed={collapsed}
-                          icon={item.icon}
-                          item={item}
-                          key={item.id}
-                          onPrefetch={
-                            item.id === "automations"
-                              ? prefetchAppData
-                              : undefined
-                          }
-                          to={
-                            item.id === "soul"
-                              ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
-                              : navHrefForPage(item.id, chatProfileId)
-                          }
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </nav>
-          </aside>
+function SidebarHeader({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  if (collapsed) {
+    return (
+      <div className="app-shell-header">
+        <CollapsedOrgExpandControl onExpand={onToggle} />
+      </div>
+    );
+  }
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {page === "chat" ? null : (
-              <header className="app-shell-header gap-4 bg-card px-6">
-                {page === "automations" ? (
-                  <AgentWorkTabs />
-                ) : page === "soul" || page === "profiles" ? null : (
-                  <h1 className="type-brand min-w-0 truncate">
-                    {activeNav?.label}
-                  </h1>
-                )}
-                <div
-                  className={cn(
-                    "flex h-full shrink-0 items-stretch gap-2",
-                    page !== "soul" && page !== "profiles" && "ml-auto"
-                  )}
-                  data-page-header-actions
-                />
-              </header>
+  return (
+    <div className="app-shell-header">
+      <div className="flex min-w-0 flex-1">
+        <OrgSwitcher collapsed={false} />
+      </div>
+      <SidebarCollapseButton onToggle={onToggle} />
+    </div>
+  );
+}
+
+function SidebarNavGroup({
+  chatProfileId,
+  collapsed,
+  group,
+  page,
+  prefetchAppData,
+  systemNavCollapsed,
+  toggleSystemNav,
+  unreadTotal,
+}: {
+  chatProfileId: string | null;
+  collapsed: boolean;
+  group: NavGroup;
+  page: PageId;
+  prefetchAppData: () => void;
+  systemNavCollapsed: boolean;
+  toggleSystemNav: () => void;
+  unreadTotal: number;
+}) {
+  const containsActive =
+    group.collapsible === true && group.items.some((item) => item.id === page);
+  const groupExpanded = !systemNavCollapsed || containsActive;
+  // Icon rail always shows every destination; tree collapse only
+  // applies when labels are visible.
+  const itemsVisible = !group.collapsible || collapsed || groupExpanded;
+
+  return (
+    <div
+      aria-label={group.label}
+      className="sidebar-nav-group"
+      data-items-hidden={itemsVisible ? undefined : true}
+      data-tree={group.collapsible || undefined}
+      role="group"
+    >
+      {group.collapsible && !collapsed ? (
+        <button
+          aria-expanded={groupExpanded}
+          className="sidebar-nav-group-label"
+          onClick={() => {
+            if (groupExpanded && containsActive) {
+              return;
+            }
+            toggleSystemNav();
+          }}
+          type="button"
+        >
+          <ArrowDown01Icon
+            aria-hidden="true"
+            className={cn(
+              "sidebar-nav-group-chevron",
+              !groupExpanded && "-rotate-90"
             )}
+            strokeWidth={1.75}
+          />
+          <span className="truncate">{group.label}</span>
+        </button>
+      ) : null}
+      <div
+        aria-hidden={!itemsVisible}
+        className="sidebar-nav-group-items"
+        inert={itemsVisible ? undefined : true}
+      >
+        {group.items.map((item) => (
+          <SidebarNavButton
+            active={item.id === page}
+            badge={item.id === "automations" ? unreadTotal : undefined}
+            collapsed={collapsed}
+            icon={item.icon}
+            item={item}
+            key={item.id}
+            onPrefetch={item.id === "automations" ? prefetchAppData : undefined}
+            to={
+              item.id === "soul"
+                ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
+                : navHrefForPage(item.id, chatProfileId)
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-            {error ? (
-              <div className="shrink-0 border-red-200 border-b bg-red-50 px-6 py-3 text-red-800 text-sm dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-                {error}
-              </div>
-            ) : null}
+function AppShellHeader({
+  label,
+  page,
+}: {
+  label: string | undefined;
+  page: PageId;
+}) {
+  if (page === "chat") {
+    return null;
+  }
 
-            <main
-              className={cn(
-                "min-h-0 flex-1",
-                page === "chat" ||
-                  page === "tasks" ||
-                  page === "automations" ||
-                  page === "files" ||
-                  location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
-                  ? "flex flex-col overflow-hidden"
-                  : "overflow-y-auto",
-                !location.pathname.startsWith(
-                  `${PAGE_PATHS.profiles}/skills/`
-                ) &&
-                  page !== "chat" &&
-                  page !== "tasks" &&
-                  page !== "automations" &&
-                  page !== "files" &&
-                  !location.pathname.startsWith(
-                    `${PAGE_PATHS.soul}/playground/`
-                  )
-                  ? "p-6"
-                  : null
-              )}
-            >
-              <RouteBoundary resetKey={location.pathname}>
-                <Outlet />
-              </RouteBoundary>
-            </main>
-          </div>
-        </div>
+  const hideTitle = page === "soul" || page === "profiles";
+  return (
+    <header className="app-shell-header gap-4 bg-card px-6">
+      {page === "automations" ? (
+        <AgentWorkTabs />
+      ) : hideTitle ? null : (
+        <h1 className="type-brand min-w-0 truncate">{label}</h1>
+      )}
+      <div
+        className={cn(
+          "flex h-full shrink-0 items-stretch gap-2",
+          !hideTitle && "ml-auto"
+        )}
+        data-page-header-actions
+      />
+    </header>
+  );
+}
 
-        <NarrowViewportNotice />
-        <CommandPalette />
-      </ActiveChatProfileProvider>
-    </TooltipProvider>
+function AppShellError({ error }: { error: string | null | undefined }) {
+  if (!error) {
+    return null;
+  }
+
+  return (
+    <div className="shrink-0 border-red-200 border-b bg-red-50 px-6 py-3 text-red-800 text-sm dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+      {error}
+    </div>
   );
 }
 

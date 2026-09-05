@@ -26,16 +26,11 @@ function createApp() {
       compactSession: record("agent.compactSession"),
       createSession: record("agent.createSession"),
       draftAutomation: record("agent.draftAutomation"),
-      draftTaskPrompt: record("agent.draftTaskPrompt"),
       generateImage: record("agent.generateImage"),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       purgeSession: record("agent.purgeSession"),
       runAutomation: async () => {
         calls.push("agent.runAutomation");
-        return { skipped: false };
-      },
-      runTask: async () => {
-        calls.push("agent.runTask");
         return { skipped: false };
       },
       transcribeAudio: record("agent.transcribeAudio"),
@@ -47,13 +42,6 @@ function createApp() {
       get: async () => ({ id: "a", name: "a", prompt: "x" }),
       listRuns: async () => [{ id: "r", status: "ok" }],
       update: record("automationService.update"),
-    },
-    taskService: {
-      create: record("taskService.create"),
-      delete: record("taskService.delete"),
-      get: async () => ({ id: "t", status: "todo" }),
-      listRuns: async () => [{ id: "r", status: "ok" }],
-      update: record("taskService.update"),
     },
   });
 
@@ -108,15 +96,6 @@ const MUTATING_ROUTES: Array<{ method: string; path: string; body?: unknown }> =
     { method: "POST", path: "/v1/automations/a1/run" },
     { method: "DELETE", path: "/v1/automations/a1/runs/r1" },
     {
-      body: { description: "x", title: "x" },
-      method: "POST",
-      path: "/v1/tasks/draft-prompt",
-    },
-    { body: { prompt: "x", title: "x" }, method: "POST", path: "/v1/tasks" },
-    { body: { title: "x" }, method: "PUT", path: "/v1/tasks/t1" },
-    { method: "DELETE", path: "/v1/tasks/t1" },
-    { method: "POST", path: "/v1/tasks/t1/run" },
-    {
       body: { channel: "web", profileId: "default" },
       method: "POST",
       path: "/v1/sessions",
@@ -141,7 +120,7 @@ const MUTATING_ROUTES: Array<{ method: string; path: string; body?: unknown }> =
     },
   ];
 
-describe("RBAC: viewer cannot reach state-changing automation/task/session routes", () => {
+describe("RBAC: viewer cannot reach state-changing automation/session routes", () => {
   for (const route of MUTATING_ROUTES) {
     test(`${route.method} ${route.path} -> 403 for viewer`, async () => {
       const { app, databaseAdapter, authService, calls } = createApp();

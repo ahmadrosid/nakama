@@ -46,7 +46,6 @@ import type {
   CreateSessionRequest,
   CreateSessionResponse,
   CreateSkillRequest,
-  CreateTaskRequest,
   CreateToolRequest,
   CreateWorkflowRequest,
   DataImportPreviewResponse,
@@ -56,8 +55,6 @@ import type {
   DiscordSettingsResponse,
   DocumentAttachment,
   DraftAutomationResponse,
-  DraftTaskPromptRequest,
-  DraftTaskPromptResponse,
   EmailSettingsResponse,
   ErrorTrackingSettingsResponse,
   GenerateImageRequest,
@@ -92,8 +89,6 @@ import type {
   ListSkillProposalsResponse,
   ListSkillSuggestionsResponse,
   ListSkillsResponse,
-  ListTaskRunsResponse,
-  ListTasksResponse,
   ListTimezonesResponse,
   ListToolsResponse,
   ListUserOrgsResponse,
@@ -130,7 +125,6 @@ import type {
   RunAutomationResponse,
   RunSkillCuratorInternalRequest,
   RunSkillCuratorRequest,
-  RunTaskResponse,
   RunToolRequest,
   RunToolResponse,
   RunWorkflowRequest,
@@ -151,15 +145,11 @@ import type {
   SoulStackResponse,
   SoulStatusResponse,
   StoredAutomation,
-  StoredTask,
   StoredWorkflow,
   SuggestToolParamsRequest,
   SuggestToolParamsResponse,
   SyncSkillsResponse,
   SystemStatusResponse,
-  TaskMessagesResponse,
-  TaskResponse,
-  TaskRunRecord,
   TelegramSettingsResponse,
   TestMcpServerResponse,
   ThinkingSettings,
@@ -195,7 +185,6 @@ import type {
   UpdateProviderResponse,
   UpdateSessionRequest,
   UpdateSoulFileRequest,
-  UpdateTaskRequest,
   UpdateTelegramSettingsRequest,
   UpdateThinkingRequest,
   UpdateTimezoneRequest,
@@ -203,6 +192,7 @@ import type {
   UpdateUserContextRequest,
   UpdateVisionRequest,
   UpdateWebPublicUrlRequest,
+  UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateWorkflowRequest,
   UploadKnowledgeBaseRequest,
@@ -211,6 +201,7 @@ import type {
   VisionSettings,
   VisionSettingsResponse,
   WebPublicUrlSettingsResponse,
+  WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
   WorkerLogsResponse,
   WorkflowResponse,
@@ -1536,78 +1527,6 @@ export class NakamaClient {
     );
   }
 
-  async listTasks(): Promise<StoredTask[]> {
-    const response = await this.request<ListTasksResponse>("/v1/tasks");
-    return response.tasks;
-  }
-
-  async getTask(taskId: string): Promise<StoredTask> {
-    const response = await this.request<TaskResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}`
-    );
-    return response.task;
-  }
-
-  async draftTaskPrompt(request: DraftTaskPromptRequest): Promise<string> {
-    const response = await this.request<DraftTaskPromptResponse>(
-      "/v1/tasks/draft-prompt",
-      {
-        body: JSON.stringify(request),
-        method: "POST",
-      }
-    );
-    return response.prompt;
-  }
-
-  async createTask(request: CreateTaskRequest): Promise<StoredTask> {
-    const response = await this.request<TaskResponse>("/v1/tasks", {
-      body: JSON.stringify(request),
-      method: "POST",
-    });
-    return response.task;
-  }
-
-  async updateTask(
-    taskId: string,
-    request: UpdateTaskRequest
-  ): Promise<StoredTask> {
-    const response = await this.request<TaskResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}`,
-      {
-        body: JSON.stringify(request),
-        method: "PUT",
-      }
-    );
-    return response.task;
-  }
-
-  async deleteTask(taskId: string): Promise<void> {
-    await this.request(`/v1/tasks/${encodeURIComponent(taskId)}`, {
-      method: "DELETE",
-    });
-  }
-
-  async runTask(taskId: string): Promise<TaskRunRecord> {
-    const response = await this.request<RunTaskResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}/run`,
-      { method: "POST" }
-    );
-    return response.run;
-  }
-
-  async listTaskRuns(taskId: string): Promise<TaskRunRecord[]> {
-    const response = await this.request<ListTaskRunsResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}/runs`
-    );
-    return response.runs;
-  }
-
-  async getTaskMessages(taskId: string): Promise<TaskMessagesResponse> {
-    return this.request<TaskMessagesResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}/messages`
-    );
-  }
-
   async getTimezone(): Promise<string> {
     const response = await this.request<TimezoneSettingsResponse>(
       "/v1/settings/timezone"
@@ -1929,6 +1848,19 @@ export class NakamaClient {
         method: "PUT",
       }
     );
+  }
+
+  async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
+    return this.request<WebSearchSettingsResponse>("/v1/settings/web-search");
+  }
+
+  async setWebSearchSettings(
+    request: UpdateWebSearchSettingsRequest
+  ): Promise<WebSearchSettingsResponse> {
+    return this.request<WebSearchSettingsResponse>("/v1/settings/web-search", {
+      body: JSON.stringify(request),
+      method: "PUT",
+    });
   }
 
   async getEmailSettings(): Promise<EmailSettingsResponse> {

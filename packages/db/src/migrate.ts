@@ -20,7 +20,7 @@ export function migrateDatabase(db: Database): void {
   db.exec(sql);
   atomic(migrateProfilesTable);
   atomic(migrateAutomationsTable);
-  atomic(migrateTasksTable);
+  atomic(migrateDropTasksTables);
   atomic(migrateSessionsTable);
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
@@ -235,17 +235,11 @@ function normalizeSqlDefaultLiteral(
   return value.replace(/^'+|'+$/g, "");
 }
 
-function migrateTasksTable(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(tasks)").all() as Array<{
-    name: string;
-  }>;
-  const columnNames = new Set(columns.map((column) => column.name));
-
-  if (!columnNames.has("session_id")) {
-    db.exec(`
-      ALTER TABLE tasks ADD COLUMN session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL;
-    `);
-  }
+function migrateDropTasksTables(db: Database): void {
+  db.exec(`
+    DROP TABLE IF EXISTS task_runs;
+    DROP TABLE IF EXISTS tasks;
+  `);
 }
 
 function migrateUsersTable(db: Database): void {
@@ -703,7 +697,6 @@ const TENANT_ORG_ID_TABLES = [
   "profiles",
   "sessions",
   "automations",
-  "tasks",
   "tools",
   "mcp_servers",
   "skills",
@@ -894,14 +887,6 @@ function migrateProfileOrgColumns(db: Database): void {
     UPDATE automations
     SET org_id = (
       SELECT org_id FROM profiles WHERE profiles.id = automations.profile_id
-    )
-    WHERE org_id IS NULL
-  `).run();
-
-    db.prepare(`
-    UPDATE tasks
-    SET org_id = (
-      SELECT org_id FROM profiles WHERE profiles.id = tasks.profile_id
     )
     WHERE org_id IS NULL
   `).run();
@@ -1104,11 +1089,6 @@ function moveProfileReferences(
     canonicalId,
     legacyId
   );
-  db.prepare("UPDATE tasks SET profile_id = ? WHERE profile_id = ?").run(
-    canonicalId,
-    legacyId
-  );
-
   moveProfileJoinReferences(
     db,
     "profile_tools",

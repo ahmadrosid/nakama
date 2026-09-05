@@ -10,7 +10,6 @@ import { registerProfileRoutes } from "./routes/profiles";
 import { registerSessionRoutes } from "./routes/sessions";
 import { registerSkillRoutes } from "./routes/skills";
 import { registerSystemRoutes } from "./routes/system";
-import { registerTaskRoutes } from "./routes/tasks";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
@@ -32,7 +31,6 @@ function buildNativeOpenApiApp(): HonoApp {
   registerToolRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerWorkflowRoutes(app, options);
-  registerTaskRoutes(app, options);
   registerOrgCuratorRoutes(app, options);
   return app;
 }

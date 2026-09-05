@@ -241,6 +241,8 @@ Search the web for current information.
 
 **Availability:** When assigned **and** the configured provider is OpenAI or Anthropic with a valid API key. Not available on OpenRouter. On Gemini, web search is disabled when other local tools are present on the same turn.
 
+**Custom search back-end:** Set a provider under **Settings → Web search** (Exa, Firecrawl, or any endpoint that answers with JSON search results) to run the search on Nakama instead of the model provider. This removes the provider restriction above and returns `{ provider, query, results: [{ title, url, snippet }] }`. Leave it on **Built-in** to keep the provider-hosted search.
+
 ### `web_fetch`
 
 Fetch a single public HTTP(S) URL and return its content. HTML pages are converted to Markdown. Use for retrieving a known URL; use `web_search` when you need to discover sources.
@@ -414,7 +416,11 @@ Org admins configure these from the web **System → Tools** page.
 
 ### Web search
 
-Requires an OpenAI or Anthropic provider with a configured API key.
+Requires an OpenAI or Anthropic provider with a configured API key, or an Exa or Firecrawl search back-end.
+
+Org admins can point `web_search` at an external search API from the web **Settings → Web search** panel: pick **Exa** or **Firecrawl**, then supply the API key. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
+
+Leave the provider on **Built-in** to keep using the model provider's own hosted search.
 
 ### Knowledge base
 

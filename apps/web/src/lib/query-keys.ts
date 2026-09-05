@@ -88,10 +88,6 @@ export const queryKeys = {
     profile: (profileId: string) => ["soul", "profile", profileId] as const,
   },
   systemStatus: ["systemStatus"] as const,
-  tasks: {
-    all: ["tasks"] as const,
-    messages: (taskId: string) => ["tasks", taskId, "messages"] as const,
-  },
   telegram: {
     settings: ["telegram", "settings"] as const,
   },
@@ -109,6 +105,7 @@ export const queryKeys = {
   userContext: ["userContext"] as const,
   visionSettings: ["vision", "settings"] as const,
   webPublicUrl: ["system", "webPublicUrl"] as const,
+  webSearchSettings: ["webSearch", "settings"] as const,
   whatsapp: {
     settings: ["whatsapp", "settings"] as const,
   },

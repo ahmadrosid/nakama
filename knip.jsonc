@@ -69,7 +69,6 @@
     "apps/web/src/components/soul-tools/artifacts-tab-filters.ts": ["exports"],
     "apps/web/src/pages/files/files-artifact-folders.ts": ["exports"],
     "packages/client/src/stream.ts": ["exports"],
-    "packages/agent/src/task-prompt.ts": ["exports"],
     "packages/agent/src/tool-loop.ts": ["exports"],
     "packages/agent/src/chat-prompt.ts": ["exports"],
     "packages/core/src/mail/imap-reader.ts": ["exports"],
