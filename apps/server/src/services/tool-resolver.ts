@@ -8,7 +8,9 @@ import {
   isEmailConfigComplete,
   loadEmailConfig,
 } from "@nakama/core/email-config";
+import { createCustomWebSearchTool } from "@nakama/core/tools/custom-web-search";
 import { emailTool } from "@nakama/core/tools/email";
+import { loadWebSearchConfig } from "@nakama/core/web-search-config";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
@@ -47,10 +49,15 @@ export async function resolveProfileStoredTools(
   builtinOverrides: ToolDefinition[] = [],
   options: { userConfig?: UserConfig | null } = {}
 ): Promise<ToolDefinition[]> {
+  // A configured search back-end replaces the provider-hosted web_search stub
+  // for every caller; without one the stub stays and the provider searches.
+  const customWebSearch = createCustomWebSearchTool(
+    await loadWebSearchConfig()
+  );
   const tools = await resolveToolsFromStorage(
     records,
     db,
-    builtinOverrides,
+    customWebSearch ? [...builtinOverrides, customWebSearch] : builtinOverrides,
     options
   );
   return omitUnavailableBuiltinTools(

@@ -100,6 +100,7 @@ export * from "./thinking-content";
 export * from "./tools";
 export * from "./user-config";
 export * from "./user-context";
+export * from "./web-search-config";
 export * from "./whatsapp-config";
 export * from "./whatsapp-worker";
 export * from "./worker-desired-state";

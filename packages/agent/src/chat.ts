@@ -36,6 +36,7 @@ import {
 } from "@nakama/core";
 import {
   buildChatSystemPrompt,
+  buildWebSearchUnavailableGuidance,
   UNTRUSTED_DOCUMENT_GUIDANCE,
 } from "./chat-prompt";
 import {
@@ -400,14 +401,20 @@ async function sendMessage(
     enableTools && localTools.length > 0
       ? toLlmToolDefinitions(localTools)
       : undefined;
+  // Hosted search is dropped wherever the provider cannot serve it: OpenRouter
+  // has no hosted-search path, Gemini rejects googleSearch grounding beside
+  // function declarations, and no provider accepts it beside attachments. The
+  // model is told when that happens, otherwise the capability disappears from
+  // the turn without a word.
+  const hostedWebSearch =
+    enableTools &&
+    hasWebSearch &&
+    dependencies.provider.name !== "openrouter" &&
+    !(dependencies.provider.name === "gemini" && localTools.length > 0) &&
+    !multimodalTurn;
   const providerOptions = buildProviderOptions(dependencies, {
     multimodalTurn,
-    webSearch:
-      enableTools &&
-      hasWebSearch &&
-      dependencies.provider.name !== "openrouter" &&
-      !(dependencies.provider.name === "gemini" && localTools.length > 0) &&
-      !multimodalTurn,
+    webSearch: hostedWebSearch,
   });
 
   if (options.runCompaction) {
@@ -428,6 +435,9 @@ async function sendMessage(
     !effectiveSystemPrompt.includes("untrusted document data")
   ) {
     effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${UNTRUSTED_DOCUMENT_GUIDANCE}`;
+  }
+  if (enableTools && hasWebSearch && !hostedWebSearch) {
+    effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${buildWebSearchUnavailableGuidance(localTools)}`;
   }
   const baseToolContext =
     input.clientOrigin?.trim() && options.toolContext

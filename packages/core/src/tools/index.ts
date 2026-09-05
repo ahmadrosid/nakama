@@ -1,5 +1,6 @@
 export * from "./builtin";
 export * from "./context";
+export * from "./custom-web-search";
 export * from "./email";
 export * from "./extract-document-text";
 export * from "./knowledge-base-search";

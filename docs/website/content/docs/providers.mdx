@@ -43,7 +43,7 @@ Most built-in types allow one configured instance each. **Ollama** and **Custom 
 
 Some capabilities depend on the active provider:
 
-- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter
+- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter. Configure a custom back-end (Exa, Firecrawl, or any JSON search endpoint) in **Settings → Web search** to lift this restriction
 - **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Settings → Audio transcription model**
 - **Image parsing** — used when the chat model cannot see images. Set **Settings → Image parsing model**. The list only includes models marked as vision-capable. For a custom endpoint, turn **Vision** on for that model under **Settings → LLM providers**
 - **Responses API endpoints**: a custom endpoint that serves `/responses` rather than `/chat/completions`. Set **API** to Responses under **Settings → LLM providers**, or answer `responses` in the CLI setup wizard. Required for endpoints that do not serve chat/completions at all, and it keeps reasoning available alongside tools on models that reject the pair on chat/completions

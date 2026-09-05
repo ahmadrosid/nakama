@@ -40,6 +40,7 @@
     "./automation-worker": "./src/automation-worker.ts",
     "./telegram-config": "./src/telegram-config.ts",
     "./email-config": "./src/email-config.ts",
+    "./web-search-config": "./src/web-search-config.ts",
     "./telegram-worker": "./src/telegram-worker.ts",
     "./discord-config": "./src/discord-config.ts",
     "./discord-attachment": "./src/discord-attachment.ts",
@@ -55,6 +56,7 @@
     "./soul/org-memory": "./src/soul/org-memory.ts",
     "./tools/protected": "./src/tools/protected.ts",
     "./tools/email": "./src/tools/email.ts",
+    "./tools/custom-web-search": "./src/tools/custom-web-search.ts",
     "./mcp/preinstalled": "./src/mcp/preinstalled.ts"
   },
   "scripts": {

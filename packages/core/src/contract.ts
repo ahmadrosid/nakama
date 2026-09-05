@@ -1278,6 +1278,24 @@ export interface UpdateImageGenerationRequest {
   model: string | null;
 }
 
+/** Search back-end that replaces the provider-hosted `web_search` tool. */
+export type WebSearchProvider = "exa" | "firecrawl" | "custom";
+
+export interface WebSearchSettingsResponse {
+  apiKeyMasked: string | null;
+  /** false means the active LLM provider's own hosted web search is used. */
+  configured: boolean;
+  endpoint: string | null;
+  provider: WebSearchProvider | null;
+}
+
+export interface UpdateWebSearchSettingsRequest {
+  apiKey?: string;
+  endpoint?: string;
+  /** null clears the override and restores the built-in hosted search. */
+  provider?: WebSearchProvider | null;
+}
+
 export interface GenerateImageRequest {
   prompt: string;
   size?: string;
@@ -2315,6 +2333,12 @@ export interface ToolContext {
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
+  /**
+   * When true, the LLM provider runs this tool itself and `run` is never
+   * called. Only `web_search` uses it today: the built-in stub is hosted, a
+   * custom search back-end is not. Undefined is treated as local.
+   */
+  hosted?: boolean;
   name: string;
   /** When true, this tool may run concurrently with other parallelSafe tools in the same turn. */
   parallelSafe?: boolean;

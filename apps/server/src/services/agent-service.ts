@@ -92,12 +92,14 @@ import type {
   UpdateTranscriptionRequest,
   UpdateUserContextRequest,
   UpdateVisionRequest,
+  UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UploadKnowledgeBaseResponse,
   UserConfig,
   UserContextStatusResponse,
   VisionSettings,
   VisionSettingsResponse,
+  WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
 } from "@nakama/core";
 import {
@@ -138,6 +140,7 @@ import {
   loadUserTimezone,
   loadUserTranscriptionSettings,
   loadUserVisionSettings,
+  loadWebSearchSettingsPublic,
   loadWhatsAppSettingsPublic,
   messageContentHasImages,
   NakamaApiError,
@@ -169,6 +172,7 @@ import {
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
+  saveWebSearchConfig,
   saveWhatsAppConfig,
   USER_CONTEXT_TEMPLATE,
   WRITABLE_SOUL_FILES,
@@ -1230,6 +1234,22 @@ export class AgentService {
     input: UpdateEmailSettingsRequest
   ): Promise<EmailSettingsResponse> {
     return saveEmailConfig(input);
+  }
+
+  async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
+    return loadWebSearchSettingsPublic();
+  }
+
+  async setWebSearchSettings(
+    input: UpdateWebSearchSettingsRequest
+  ): Promise<WebSearchSettingsResponse> {
+    const settings = await saveWebSearchConfig(input);
+
+    // Sessions cache their resolved tool list, so the swap between hosted and
+    // custom search only takes effect once they are rebuilt.
+    this.sessions.clear();
+
+    return settings;
   }
 
   async sendEmailTest(recipient: string): Promise<SendEmailTestResponse> {
