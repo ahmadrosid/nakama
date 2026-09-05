@@ -132,28 +132,6 @@ describe("createCustomWebSearchTool", () => {
     ]);
   });
 
-  test("omits the auth header for a keyless custom endpoint", async () => {
-    const captured: CapturedRequest[] = [];
-    stubFetch(
-      { body: { organic: [{ link: "https://example.com" }] } },
-      captured
-    );
-
-    const tool = createCustomWebSearchTool(
-      config({
-        apiKey: "",
-        endpoint: "https://search.internal/api",
-        provider: "custom",
-      })
-    );
-    const output = await tool?.run({ query: "internal" }, {});
-
-    expect(captured[0]?.headers.authorization).toBeUndefined();
-    expect(output?.results).toEqual([
-      { title: "https://example.com", url: "https://example.com" },
-    ]);
-  });
-
   test("surfaces the endpoint status on failure", async () => {
     stubFetch({ body: "quota exceeded", status: 402 }, []);
 

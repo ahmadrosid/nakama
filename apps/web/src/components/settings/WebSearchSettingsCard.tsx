@@ -41,7 +41,6 @@ const PROVIDER_PRESETS: Array<{
     label: "Firecrawl",
     value: "firecrawl",
   },
-  { endpoint: "", label: "Custom endpoint", value: "custom" },
 ];
 
 function presetEndpoint(provider: WebSearchProvider): string {

@@ -10,26 +10,19 @@ import {
 
 export const WEB_SEARCH_SECTION = "web_search";
 
-/**
- * Search back-ends that can replace the provider-hosted `web_search` tool.
- * `custom` is any endpoint that speaks a JSON search response; the two named
- * entries only pre-fill the endpoint and pick the vendor's request shape.
- */
+/** Search back-ends that can replace the provider-hosted `web_search` tool. */
 export const WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
   "exa",
   "firecrawl",
-  "custom",
 ];
 
 export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
   {
-    custom: "",
     exa: "https://api.exa.ai/search",
     firecrawl: "https://api.firecrawl.dev/v2/search",
   };
 
 export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
-  custom: "Custom endpoint",
   exa: "Exa",
   firecrawl: "Firecrawl",
 };
@@ -76,10 +69,6 @@ export function resolveWebSearchEndpoint(
   return endpoint?.trim() || WEB_SEARCH_PROVIDER_ENDPOINTS[provider];
 }
 
-/**
- * `custom` may point at a self-hosted search service with no auth, so only the
- * hosted vendors require a key.
- */
 export function isWebSearchConfigComplete(
   config: WebSearchConfigFile | null
 ): config is WebSearchConfigFile {
@@ -91,7 +80,7 @@ export function isWebSearchConfigComplete(
     return false;
   }
 
-  return config.provider === "custom" || Boolean(config.apiKey.trim());
+  return Boolean(config.apiKey.trim());
 }
 
 function parseWebSearchSection(
@@ -207,7 +196,7 @@ function buildSavedWebSearchConfig(
     existing?.provider === provider ? existing : null
   );
 
-  if (provider !== "custom" && !apiKey) {
+  if (!apiKey) {
     throw new Error(
       `An API key is required for ${WEB_SEARCH_PROVIDER_LABELS[provider]}.`
     );

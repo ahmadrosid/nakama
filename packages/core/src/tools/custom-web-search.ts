@@ -84,7 +84,7 @@ function buildRequest(
 
 /**
  * Search APIs disagree on where the hit list lives: Exa uses `results`,
- * Firecrawl `data.web`, and self-hosted engines commonly `organic` or `items`.
+ * Firecrawl `data.web`.
  */
 function findResultArray(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
