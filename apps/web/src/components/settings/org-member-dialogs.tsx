@@ -24,7 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { emailSettingsQueryOptions } from "@/hooks/use-email-settings";
+import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
 
 export type OrgMemberAddCredentials = {
   email: string;

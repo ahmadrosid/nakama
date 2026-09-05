@@ -1,14 +1,14 @@
 import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
-import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
+  useProfilesQuery,
   useReconnectWhatsApp,
   useRegenerateWhatsAppPairingCode,
   useSaveWhatsAppSettings,
   useWhatsAppSettings,
-} from "@/hooks/use-whatsapp-settings";
+} from "@/hooks/use-app-queries";
+import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
