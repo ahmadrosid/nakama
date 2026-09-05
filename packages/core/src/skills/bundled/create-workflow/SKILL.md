@@ -21,7 +21,7 @@ Use `create_workflow` with `kind` (never `type`). Last step must be `summarize` 
 
 When the user names a profile to run as, confirm that profile and pass its `profileId`. Omit `profileId` to use the current chat profile.
 
-When the user asks to run a saved workflow, use `list_workflows` to find it, then `run_workflow`. Never invent or edit a workflow id. Reuse the id from `list_workflows`. Pass `input` when the recipe uses `{{input.*}}` bindings.
+When the user asks to run a saved workflow, use `list_workflows` to find it, then `run_workflow`. Pass `input` when the recipe uses `{{input.*}}` bindings.
 
 When the user wants to change an existing workflow, use `update_workflow`.
 
