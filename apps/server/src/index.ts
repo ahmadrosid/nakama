@@ -67,11 +67,6 @@ import { SkillProposalService } from "./services/skill-proposal-service";
 import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import { SkillsService } from "./services/skills-service";
 import { SystemStatusService } from "./services/system-status-service";
-import {
-  registerGenerateImageTool,
-  registerSessionTools,
-  registerSubAgentTool,
-} from "./services/tool-resolver";
 import { WorkerManagerService } from "./services/worker-manager-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
@@ -118,18 +113,18 @@ const agent = new AgentService(
   database.adapter,
   llmUsageTracker
 );
-registerSubAgentTool(createSubAgentTool(agent));
-registerSessionTools(createSessionTools(agent));
-registerGenerateImageTool(
-  createGenerateImageTool({
+agent.setServerTools({
+  generateImage: createGenerateImageTool({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
     recordUsage: (modelId, inputTokens, outputTokens) => {
       llmUsageTracker.record(modelId, inputTokens, outputTokens);
     },
-  })
-);
+  }),
+  session: createSessionTools(agent),
+  subAgent: createSubAgentTool(agent),
+});
 await agent.ensureVisionSettingsLoaded();
 await agent.ensureTranscriptionSettingsLoaded();
 await agent.ensureImageGenerationSettingsLoaded();

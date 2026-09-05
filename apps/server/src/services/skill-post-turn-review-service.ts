@@ -11,8 +11,7 @@ import {
   type UserConfig,
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
-import { createProviderForInstance } from "../providers/create";
-import { resolveProfileProviderSelection } from "./provider-instance-helpers";
+import { createProviderForProfile } from "./provider-instance-helpers";
 
 /**
  * Which channels run the post-turn skill review. Total over `AgentChannel`, so
@@ -160,10 +159,9 @@ export class SkillPostTurnReviewService {
 
   constructor(
     private readonly db: DatabaseAdapter,
-    private readonly getUserConfig: () => UserConfig | null,
-    runner?: PostTurnReviewRunner
+    private readonly getUserConfig: () => UserConfig | null
   ) {
-    this.runner = runner ?? ((context) => this.reviewTurnWithLlm(context));
+    this.runner = (context) => this.reviewTurnWithLlm(context);
   }
 
   /** Test/injection hook — U4 wraps this to stage/suggest after the LLM outcome. */
@@ -268,27 +266,7 @@ export class SkillPostTurnReviewService {
     }
   }
 
-  async resolveProviderForProfile(profileId: string) {
-    const userConfig = this.getUserConfig();
-    if (!userConfig) {
-      return null;
-    }
-
-    const profile = await this.db.getProfile(profileId);
-    if (!profile) {
-      return null;
-    }
-
-    const selection = resolveProfileProviderSelection({
-      defaultProviderId: userConfig.defaultProviderId,
-      profileModel: profile.model,
-      providers: userConfig.providers,
-    });
-
-    if (!selection) {
-      return null;
-    }
-
-    return createProviderForInstance(selection.instance, selection.model);
+  resolveProviderForProfile(profileId: string) {
+    return createProviderForProfile(this.db, profileId, this.getUserConfig());
   }
 }

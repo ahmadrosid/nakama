@@ -4,10 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { StoredToolRecord } from "@nakama/db";
-import {
-  loadJavascriptTool,
-  resolveJavascriptModulePath,
-} from "./javascript-tool-loader";
+import { resolveCustomToolModulePath } from "./custom-tool-shared";
+import { loadJavascriptTool } from "./javascript-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -107,7 +105,7 @@ describe("javascript tool loader", () => {
     const { configDir: dir } = await setupToolsDir();
     configDir = dir;
 
-    expect(() => resolveJavascriptModulePath("../escape.js")).toThrow(
+    expect(() => resolveCustomToolModulePath("../escape.js")).toThrow(
       /must stay inside/i
     );
   });
