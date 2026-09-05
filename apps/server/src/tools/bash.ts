@@ -16,9 +16,20 @@ import {
 } from "@nakama/core";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
 import {
+  type BashBackendKind,
+  resolveBashBackend,
+  resolveBashSandboxImage,
+  resolveBashSandboxNetwork,
+} from "./bash-config";
+import { buildBashSandboxEnv } from "./bash-sandbox-env";
+import {
   commandLooksLikeCursorAgent,
   formatCodingAgentBashStdout,
 } from "./cursor-agent-output";
+import {
+  BASH_SANDBOX_GUEST_WORKSPACE,
+  ProfileSandboxManager,
+} from "./profile-sandbox-manager";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 30 * 60_000;
@@ -45,6 +56,10 @@ export interface BashOutput {
 }
 
 interface BashRunOptions {
+  /** Override backend for tests. */
+  backend?: BashBackendKind;
+  /** Reuse a manager across calls (tests). */
+  sandboxManager?: ProfileSandboxManager;
   workspaceRoot?: string;
 }
 
@@ -54,9 +69,43 @@ interface ShellRunOptions {
   workspaceRoot: string;
 }
 
+let sharedSandboxManager: ProfileSandboxManager | null = null;
+
+async function getSandboxManager(): Promise<ProfileSandboxManager> {
+  if (sharedSandboxManager) {
+    return sharedSandboxManager;
+  }
+
+  const { MicrosandboxBashRuntime } = await import(
+    "./bash-microsandbox-runtime"
+  );
+  sharedSandboxManager = new ProfileSandboxManager(
+    new MicrosandboxBashRuntime()
+  );
+  return sharedSandboxManager;
+}
+
+/** Test helper to clear the process-wide warm-sandbox manager. */
+export function resetBashSandboxManagerForTests(): void {
+  sharedSandboxManager = null;
+}
+
+const BASH_TOOL_DESCRIPTION_BASE =
+  "Run a one-off shell command in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
+
+function bashToolDescription(): string {
+  try {
+    if (resolveBashBackend() === "microsandbox") {
+      return `${BASH_TOOL_DESCRIPTION_BASE} Commands run under /bin/sh (POSIX ash on alpine — not bash; no [[ ]], arrays, or pipefail). Public network is denied by default. codingAgent harness runs are unsupported on this backend.`;
+    }
+  } catch {
+    // Invalid backend config — keep the host description.
+  }
+  return BASH_TOOL_DESCRIPTION_BASE;
+}
+
 export const bashTool: ToolDefinition<BashInput, BashOutput> = {
-  description:
-    "Run a one-off shell command in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.",
+  description: bashToolDescription(),
   name: "bash",
   parameters: {
     additionalProperties: false,
@@ -128,6 +177,33 @@ export async function runBash(
   const codingAgentMode =
     readOptionalBoolean(input, "codingAgent") === true ||
     commandLooksLikeCursorAgent(command);
+
+  const backend = options.backend ?? resolveBashBackend();
+
+  if (backend === "microsandbox" && codingAgentMode) {
+    throw new Error(
+      "codingAgent is unsupported when NAKAMA_BASH_BACKEND=microsandbox. Use NAKAMA_BASH_BACKEND=host for coding-agent harness runs."
+    );
+  }
+
+  if (backend === "microsandbox") {
+    const manager = options.sandboxManager ?? (await getSandboxManager());
+    return manager.run({
+      command,
+      env: buildBashSandboxEnv({
+        overrides: env,
+        workspaceRoot: BASH_SANDBOX_GUEST_WORKSPACE,
+      }),
+      hostCwd: cwd,
+      hostWorkspace: workspaceRoot,
+      image: resolveBashSandboxImage(),
+      network: resolveBashSandboxNetwork(),
+      orgId,
+      profileId,
+      signal: context.signal,
+      timeoutMs,
+    });
+  }
 
   return runShellCommand(command, cwd, timeoutMs, env, {
     codingAgentMode,
