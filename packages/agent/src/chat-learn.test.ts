@@ -4,7 +4,7 @@ import type {
   GenerateChatInput,
   ProviderClient,
 } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 import { expandLearnInLastUserMessage } from "./learn-prompt";
 
 function createCapturingProvider(
@@ -39,11 +39,13 @@ describe("/learn provider expansion", () => {
       toolCalls: [],
     });
 
-    const harness = createAgentHarness({ provider });
-    const session = harness.createChatSession({
-      rehydrateMessagesForProvider: (messages) =>
-        Promise.resolve(expandLearnInLastUserMessage([...messages])),
-    });
+    const session = createAgentChatSession(
+      { provider },
+      {
+        rehydrateMessagesForProvider: (messages) =>
+          Promise.resolve(expandLearnInLastUserMessage([...messages])),
+      }
+    );
 
     const typed = "/learn filing an expense";
     await session.send(typed);

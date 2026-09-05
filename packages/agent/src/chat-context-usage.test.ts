@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatCompletionResult, ProviderClient } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 
 const REASONING = "r".repeat(400);
 
@@ -29,13 +29,15 @@ function providerReplayingThinking(
 }
 
 async function usedTokensFor(name: ProviderClient["name"]): Promise<number> {
-  const harness = createAgentHarness({
-    provider: providerReplayingThinking(name),
-  });
-  const session = harness.createChatSession({
-    compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
-    enableToolLoop: false,
-  });
+  const session = createAgentChatSession(
+    {
+      provider: providerReplayingThinking(name),
+    },
+    {
+      compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
+      enableToolLoop: false,
+    }
+  );
 
   // The estimate for a turn is taken before its own reply lands, so the trace
   // only reaches the history the turn after it was produced.
@@ -46,17 +48,19 @@ async function usedTokensFor(name: ProviderClient["name"]): Promise<number> {
 }
 
 function usedTokensFromInitialHistory(name: ProviderClient["name"]): number {
-  const harness = createAgentHarness({
-    provider: providerReplayingThinking(name),
-  });
-  const session = harness.createChatSession({
-    compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
-    enableToolLoop: false,
-    initialHistory: [
-      { content: "hi", role: "user" },
-      { content: "Hello", role: "assistant", thinking: REASONING },
-    ],
-  });
+  const session = createAgentChatSession(
+    {
+      provider: providerReplayingThinking(name),
+    },
+    {
+      compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
+      enableToolLoop: false,
+      initialHistory: [
+        { content: "hi", role: "user" },
+        { content: "Hello", role: "assistant", thinking: REASONING },
+      ],
+    }
+  );
 
   return session.getContextUsage()?.usedTokens ?? 0;
 }
@@ -91,17 +95,19 @@ function providerReturning(
 
 describe("chat context usage", () => {
   test("tracks provider usage against usable context", async () => {
-    const harness = createAgentHarness({
-      provider: providerReturning({
-        inputTokens: 12_000,
-        outputTokens: 40,
-        totalTokens: 12_040,
-      }),
-    });
-    const session = harness.createChatSession({
-      compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
-      enableToolLoop: false,
-    });
+    const session = createAgentChatSession(
+      {
+        provider: providerReturning({
+          inputTokens: 12_000,
+          outputTokens: 40,
+          totalTokens: 12_040,
+        }),
+      },
+      {
+        compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
+        enableToolLoop: false,
+      }
+    );
 
     await session.send("hi");
 
@@ -114,13 +120,15 @@ describe("chat context usage", () => {
   });
 
   test("falls back to an estimate when provider omits usage", async () => {
-    const harness = createAgentHarness({
-      provider: providerReturning(undefined),
-    });
-    const session = harness.createChatSession({
-      compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
-      enableToolLoop: false,
-    });
+    const session = createAgentChatSession(
+      {
+        provider: providerReturning(undefined),
+      },
+      {
+        compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
+        enableToolLoop: false,
+      }
+    );
 
     await session.send("hello world");
 
@@ -131,14 +139,16 @@ describe("chat context usage", () => {
   });
 
   test("estimates from history before any turn when compaction is configured", () => {
-    const harness = createAgentHarness({
-      provider: providerReturning(undefined),
-    });
-    const session = harness.createChatSession({
-      compaction: { contextWindow: 100_000, maxOutputTokens: 20_000 },
-      enableToolLoop: false,
-      initialHistory: [{ content: "a".repeat(400), role: "user" }],
-    });
+    const session = createAgentChatSession(
+      {
+        provider: providerReturning(undefined),
+      },
+      {
+        compaction: { contextWindow: 100_000, maxOutputTokens: 20_000 },
+        enableToolLoop: false,
+        initialHistory: [{ content: "a".repeat(400), role: "user" }],
+      }
+    );
 
     const usage = session.getContextUsage();
     expect(usage?.source).toBe("estimate");

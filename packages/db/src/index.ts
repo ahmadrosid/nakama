@@ -3,7 +3,6 @@ import {
   type ResolveDatabasePathOptions,
   resolveDatabasePath,
 } from "./database-url";
-import type { DatabaseAdapter } from "./types";
 
 /** Same as `createSqliteMemoryAdapter` — kept for existing test imports. */
 export {
@@ -20,12 +19,7 @@ export * from "./seed";
 export * from "./types";
 export * from "./workspace-settings";
 
-export interface Database {
-  adapter: DatabaseAdapter;
-  close(): void;
-  /** Re-open the on-disk database after files under the data root were replaced. */
-  reopen(): Promise<void>;
-}
+export type Database = SqliteDatabase;
 
 export async function createDatabase(
   databaseUrl: string,
