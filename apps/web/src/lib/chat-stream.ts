@@ -9,6 +9,10 @@ import type { Dispatch, SetStateAction } from "react";
 import type { ChatStatus } from "@/lib/ai-ui-types";
 import type { ChatListItem } from "@/lib/chat-history";
 import { upsertStreamingToolMessage } from "@/lib/chat-stream-artifact";
+import {
+  formatListWorkflowsToolResult,
+  isListWorkflowsTool,
+} from "@/lib/chat-stream-workflow";
 import { createClientId } from "@/lib/client-id";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +82,10 @@ export function formatToolResult(
 
   if (isSubAgentTool(tool)) {
     return formatSubAgentToolResult(result);
+  }
+
+  if (isListWorkflowsTool(tool)) {
+    return formatListWorkflowsToolResult(result);
   }
 
   return formatDefaultToolResult(result);
@@ -314,6 +322,10 @@ export function formatToolActionLabel(
 
   if (isSubAgentTool(tool)) {
     return formatSubAgentTitle(input);
+  }
+
+  if (isListWorkflowsTool(tool)) {
+    return "Listed workflows";
   }
 
   if (tool === "bash" && summary) {

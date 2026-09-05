@@ -12,10 +12,7 @@ import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
-import {
-  WorkflowListToolRow,
-  WorkflowRunToolRow,
-} from "@/components/chat/WorkflowRunToolRow";
+import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
 import { Button } from "@/components/ui/button";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
@@ -43,7 +40,7 @@ import {
   isWebSearchTool,
   shouldRenderWebSearchToolRow,
 } from "@/lib/chat-stream-web-search";
-import { isListWorkflowsTool } from "@/lib/chat-stream-workflow";
+import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
 import { cn } from "@/lib/utils";
@@ -180,14 +177,14 @@ function AssistantWorkGroup({
   profileId?: string | null;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
-  const workflowTools = visibleTools.filter(
-    (tool) => tool.tool === "run_workflow" || tool.tool === "list_workflows"
+  const workflowRunTools = visibleTools.filter((tool) =>
+    isRunWorkflowTool(tool.tool)
   );
   const otherTools = visibleTools.filter(
-    (tool) => tool.tool !== "run_workflow" && tool.tool !== "list_workflows"
+    (tool) => !isRunWorkflowTool(tool.tool)
   );
 
-  if (workflowTools.length === 0 && otherTools.length === 0 && !thinking) {
+  if (workflowRunTools.length === 0 && otherTools.length === 0 && !thinking) {
     return null;
   }
 
@@ -199,13 +196,9 @@ function AssistantWorkGroup({
         thinking={thinking}
         tools={otherTools}
       />
-      {workflowTools.map((tool) =>
-        isListWorkflowsTool(tool.tool) ? (
-          <WorkflowListToolRow key={tool.id} message={tool} />
-        ) : (
-          <WorkflowRunToolRow key={tool.id} message={tool} />
-        )
-      )}
+      {workflowRunTools.map((tool) => (
+        <WorkflowRunToolRow key={tool.id} message={tool} />
+      ))}
     </div>
   );
 }

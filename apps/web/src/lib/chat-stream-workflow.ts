@@ -4,6 +4,7 @@ import type {
   WorkflowRunStepStatus,
   WorkflowStep,
 } from "@nakama/core/contract";
+import { formatSessionRelativeTime } from "@/lib/chat-history";
 
 export function isRunWorkflowTool(tool: string | undefined): boolean {
   return tool === "run_workflow";
@@ -53,6 +54,41 @@ export function parseListWorkflowsResult(result: unknown): ListedWorkflow[] {
   });
 }
 
+export function formatListWorkflowsToolResult(result: unknown): string | null {
+  if (!Array.isArray(result)) {
+    return null;
+  }
+
+  const workflows = parseListWorkflowsResult(result);
+  if (workflows.length === 0) {
+    return "None";
+  }
+
+  return workflows
+    .map((workflow) => {
+      const meta = listedWorkflowMeta(workflow.stepCount, workflow.lastRunAt);
+      const off = workflow.enabled ? "" : " · Off";
+      return meta
+        ? `${workflow.name}${off} · ${meta}`
+        : `${workflow.name}${off}`;
+    })
+    .join("\n");
+}
+
+function listedWorkflowMeta(
+  stepCount: number | null,
+  lastRunAt: string | null
+): string {
+  const steps =
+    stepCount == null
+      ? null
+      : stepCount === 1
+        ? "1 step"
+        : `${stepCount} steps`;
+  const when = lastRunAt ? formatSessionRelativeTime(lastRunAt) : null;
+  return [steps, when].filter(Boolean).join(" · ");
+}
+
 export function parseWorkflowId(
   input?: Record<string, unknown>
 ): string | null {
@@ -90,13 +126,17 @@ export function pickRunningWorkflowRun(
 }
 
 export function formatWorkflowRunStatusLabel(
-  status: "running" | "completed" | "failed",
+  status: "running" | "completed" | "failed" | "off",
   isRunning: boolean,
   activeIndex: number,
   total: number
 ): string {
   if (status === "failed") {
     return total ? `Failed · step ${activeIndex + 1} of ${total}` : "Failed";
+  }
+
+  if (status === "off") {
+    return "Off";
   }
 
   if (status === "running" || isRunning) {
@@ -109,10 +149,12 @@ export function formatWorkflowRunStatusLabel(
 export interface WorkflowStepView {
   detail: string;
   id: string;
+  kind: WorkflowStep["kind"];
   meta: string | null;
   status: WorkflowRunStepStatus;
   tag: string | null;
   title: string;
+  tool: string | null;
 }
 
 export function buildWorkflowStepViews(
@@ -123,28 +165,51 @@ export function buildWorkflowStepViews(
     (run?.steps ?? []).map((step) => [step.stepId, step])
   );
 
-  if (steps.length > 0) {
-    return steps.map((step) => {
-      const receipt = receipts.get(step.id);
-      return {
-        detail: describeWorkflowStep(step),
-        id: step.id,
-        meta: formatWorkflowStepMeta(step.kind, receipt),
-        status: receipt?.status ?? "pending",
-        tag: step.kind === "tool" ? firstStringValue(step.input) : null,
-        title: humanizeWorkflowStepId(step.id),
-      };
-    });
+  const views =
+    steps.length > 0
+      ? steps.map((step) => {
+          const receipt = receipts.get(step.id);
+          return {
+            detail: describeWorkflowStep(step),
+            id: step.id,
+            kind: step.kind,
+            meta: formatWorkflowStepMeta(step.kind, receipt),
+            status: receipt?.status ?? "pending",
+            tag: step.kind === "tool" ? firstStringValue(step.input) : null,
+            title: humanizeWorkflowStepId(step.id),
+            tool: step.kind === "tool" ? step.tool : null,
+          };
+        })
+      : (run?.steps ?? []).map((receipt) => ({
+          detail: receipt.kind,
+          id: receipt.stepId,
+          kind: receipt.kind,
+          meta: formatWorkflowStepMeta(receipt.kind, receipt),
+          status: receipt.status,
+          tag: null,
+          title: humanizeWorkflowStepId(receipt.stepId),
+          tool: null,
+        }));
+
+  return markLivePendingStepRunning(views, run?.status === "running");
+}
+
+function markLivePendingStepRunning(
+  views: WorkflowStepView[],
+  runIsLive: boolean
+): WorkflowStepView[] {
+  if (!runIsLive || views.some((step) => step.status === "running")) {
+    return views;
   }
 
-  return (run?.steps ?? []).map((receipt) => ({
-    detail: receipt.kind,
-    id: receipt.stepId,
-    meta: formatWorkflowStepMeta(receipt.kind, receipt),
-    status: receipt.status,
-    tag: null,
-    title: humanizeWorkflowStepId(receipt.stepId),
-  }));
+  const pendingIndex = views.findIndex((step) => step.status === "pending");
+  if (pendingIndex < 0) {
+    return views;
+  }
+
+  return views.map((step, index) =>
+    index === pendingIndex ? { ...step, status: "running" } : step
+  );
 }
 
 export function activeWorkflowStepIndex(views: WorkflowStepView[]): number {

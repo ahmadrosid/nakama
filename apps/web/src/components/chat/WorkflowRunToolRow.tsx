@@ -1,16 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { Cancel01Icon, CheckmarkCircle01Icon } from "hugeicons-react";
 import {
-  type ChatListItem,
-  formatSessionRelativeTime,
-} from "@/lib/chat-history";
+  CancelCircleIcon,
+  CheckmarkCircle01Icon,
+  CircleIcon,
+  Loading03Icon,
+} from "hugeicons-react";
+import type { ChatListItem } from "@/lib/chat-history";
 import {
   activeWorkflowStepIndex,
   buildWorkflowStepViews,
   formatWorkflowRunStatusLabel,
-  isListWorkflowsTool,
   isRunWorkflowTool,
-  parseListWorkflowsResult,
   parseRunWorkflowResult,
   parseWorkflowId,
   pickRunningWorkflowRun,
@@ -23,9 +23,15 @@ import { cn } from "@/lib/utils";
 const cardSurface =
   "rounded-xl bg-card px-4 py-3 shadow-sm ring-1 ring-border/80 dark:shadow-none";
 
-export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
-  const { statusLabel, title, views } = useWorkflowRunCard(message);
-
+export function WorkflowRunCard({
+  statusLabel,
+  title,
+  views,
+}: {
+  statusLabel: string;
+  title: string;
+  views: WorkflowStepView[];
+}) {
   return (
     <section className={cardSurface}>
       <header className="mb-3 flex items-baseline justify-between gap-3">
@@ -39,6 +45,10 @@ export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
       <WorkflowChecklist views={views} />
     </section>
   );
+}
+
+export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
+  return <WorkflowRunCard {...useWorkflowRunCard(message)} />;
 }
 
 function useWorkflowRunCard(message: ChatListItem) {
@@ -63,8 +73,10 @@ function useWorkflowRunCard(message: ChatListItem) {
     parsed?.run ??
     (isRunning ? pickRunningWorkflowRun(runsQuery.data ?? []) : null);
   const views = buildWorkflowStepViews(workflowQuery.data?.steps ?? [], run);
-  const status =
-    parsed?.status ?? run?.status ?? (isRunning ? "running" : "completed");
+  const workflowOff = workflowQuery.data?.enabled === false;
+  const status = isRunning
+    ? "running"
+    : (parsed?.status ?? run?.status ?? (workflowOff ? "off" : "completed"));
 
   return {
     statusLabel: formatWorkflowRunStatusLabel(
@@ -95,7 +107,8 @@ function WorkflowChecklist({ views }: { views: WorkflowStepView[] }) {
 }
 
 function WorkflowChecklistItem({ step }: { step: WorkflowStepView }) {
-  const pending = step.status === "pending" || step.status === "running";
+  const running = step.status === "running";
+  const pending = step.status === "pending" || step.status === "skipped";
 
   return (
     <li className="flex items-start gap-2.5">
@@ -104,7 +117,11 @@ function WorkflowChecklistItem({ step }: { step: WorkflowStepView }) {
         <p
           className={cn(
             "min-w-0 truncate text-pretty text-sm",
-            pending ? "text-muted-foreground" : "text-foreground"
+            running
+              ? "todo-shimmer-text text-foreground"
+              : pending
+                ? "text-muted-foreground"
+                : "text-foreground"
           )}
         >
           {step.title}
@@ -152,83 +169,29 @@ function StepMark({
 
   if (status === "failed") {
     return (
-      <Cancel01Icon
+      <CancelCircleIcon
         aria-hidden
         className={cn("size-4 shrink-0 text-red-500", className)}
       />
     );
   }
 
+  if (status === "running") {
+    return (
+      <Loading03Icon
+        aria-hidden
+        className={cn(
+          "size-4 shrink-0 animate-spin text-muted-foreground",
+          className
+        )}
+      />
+    );
+  }
+
   return (
-    <span
+    <CircleIcon
       aria-hidden
-      className={cn(
-        "size-4 shrink-0 rounded-full border border-border",
-        className
-      )}
+      className={cn("size-4 shrink-0 text-muted-foreground", className)}
     />
   );
-}
-
-export function WorkflowListToolRow({ message }: { message: ChatListItem }) {
-  const isRunning = message.toolStatus === "running";
-  const workflows = isListWorkflowsTool(message.tool)
-    ? parseListWorkflowsResult(message.toolResult)
-    : [];
-
-  return (
-    <section>
-      <h3 className="mb-1 text-balance text-muted-foreground text-xs">
-        Workflows
-        <span className="ml-1.5 tabular-nums">
-          {isRunning ? "…" : workflows.length || "None"}
-        </span>
-      </h3>
-      {isRunning || workflows.length === 0 ? null : (
-        <ol>
-          {workflows.map((workflow) => {
-            const meta = listedWorkflowMeta(
-              workflow.stepCount,
-              workflow.lastRunAt
-            );
-            return (
-              <li
-                className="flex items-baseline justify-between gap-3 py-1"
-                key={workflow.id}
-                title={workflow.description || undefined}
-              >
-                <p className="min-w-0 truncate text-pretty text-foreground text-sm">
-                  {workflow.name}
-                  {workflow.enabled ? null : (
-                    <span className="ml-1.5 text-muted-foreground text-xs">
-                      Off
-                    </span>
-                  )}
-                </p>
-                {meta ? (
-                  <p className="shrink-0 text-muted-foreground text-xs tabular-nums">
-                    {meta}
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-    </section>
-  );
-}
-
-function listedWorkflowMeta(
-  stepCount: number | null,
-  lastRunAt: string | null
-): string {
-  const steps =
-    stepCount == null
-      ? null
-      : stepCount === 1
-        ? "1 step"
-        : `${stepCount} steps`;
-  const when = lastRunAt ? formatSessionRelativeTime(lastRunAt) : null;
-  return [steps, when].filter(Boolean).join(" · ");
 }

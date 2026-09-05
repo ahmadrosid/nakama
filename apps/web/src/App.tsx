@@ -66,6 +66,10 @@ const ToolPlaygroundPage = lazyPage(
   () => import("@/pages/ToolPlaygroundPage"),
   "ToolPlaygroundPage"
 );
+const WorkflowUiGalleryPage = lazyPage(
+  () => import("@/pages/dev/WorkflowUiGalleryPage"),
+  "WorkflowUiGalleryPage"
+);
 
 function QueryCacheListener() {
   useEffect(() => {
@@ -158,6 +162,12 @@ function AppShell() {
                     path="/notifications"
                   />
                   <Route element={<SettingsPage />} path="/settings" />
+                  {import.meta.env.DEV ? (
+                    <Route
+                      element={<WorkflowUiGalleryPage />}
+                      path="/dev/ui/workflow"
+                    />
+                  ) : null}
                   <Route element={<Navigate replace to="/chat" />} path="*" />
                 </Route>
               </Route>

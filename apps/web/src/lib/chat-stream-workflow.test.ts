@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowRunRecord, WorkflowStep } from "@nakama/core/contract";
+import { formatToolActionLabel, formatToolResult } from "./chat-stream";
 import {
   activeWorkflowStepIndex,
   buildWorkflowStepViews,
   describeWorkflowStep,
+  formatListWorkflowsToolResult,
   formatWorkflowRunStatusLabel,
   humanizeWorkflowStepId,
   isListWorkflowsTool,
@@ -53,6 +55,33 @@ describe("chat-stream-workflow", () => {
         stepCount: 4,
       },
     ]);
+  });
+
+  test("formatListWorkflowsToolResult is one line per workflow", () => {
+    expect(
+      formatListWorkflowsToolResult([
+        {
+          enabled: true,
+          id: "workflow_1",
+          lastRunAt: null,
+          name: "Morning Brief",
+          stepCount: 4,
+        },
+      ])
+    ).toBe("Morning Brief · 4 steps");
+    expect(formatListWorkflowsToolResult([])).toBe("None");
+    expect(formatListWorkflowsToolResult({ error: "nope" })).toBeNull();
+    expect(formatToolActionLabel("list_workflows")).toBe("Listed workflows");
+    expect(
+      formatToolResult("list_workflows", [
+        {
+          enabled: true,
+          id: "workflow_1",
+          name: "Morning Brief",
+          stepCount: 1,
+        },
+      ])
+    ).toBe("Morning Brief · 1 step");
   });
 
   test("parseWorkflowId reads input", () => {
@@ -118,7 +147,36 @@ describe("chat-stream-workflow", () => {
     ]);
     expect(views[0]?.meta).toBe("1,284 GL");
     expect(views[0]?.tag).toBe("books.example");
+    expect(views[0]?.kind).toBe("tool");
+    expect(views[0]?.tool).toBe("web_fetch");
+    expect(views[2]?.kind).toBe("summarize");
     expect(activeWorkflowStepIndex(views)).toBe(1);
+  });
+
+  test("buildWorkflowStepViews marks the next pending step running on a live run", () => {
+    const views = buildWorkflowStepViews(steps, {
+      ...runRecord("live", "running", "2026-09-05T01:00:00.000Z"),
+      steps: [
+        {
+          completedAt: "2026-09-05T01:00:01.000Z",
+          error: null,
+          id: "s1",
+          input: null,
+          kind: "tool",
+          output: { output: "ok" },
+          runId: "live",
+          startedAt: "2026-09-05T01:00:00.000Z",
+          status: "completed",
+          stepId: "prep_work",
+        },
+      ],
+    });
+
+    expect(views.map((step) => step.status)).toEqual([
+      "completed",
+      "running",
+      "pending",
+    ]);
   });
 
   test("fetch receipts show size instead of body", () => {
@@ -170,6 +228,7 @@ describe("chat-stream-workflow", () => {
     expect(formatWorkflowRunStatusLabel("completed", false, 3, 4)).toBe(
       "Done · 4 of 4"
     );
+    expect(formatWorkflowRunStatusLabel("off", false, 0, 4)).toBe("Off");
   });
 
   test("describeWorkflowStep and titles stay human", () => {

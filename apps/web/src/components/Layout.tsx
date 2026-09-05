@@ -50,7 +50,11 @@ export function Layout() {
           <ProfileRail />
           <AppShellSidebar shell={shell} />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
+            <AppShellHeader
+              label={shell.activeNav?.label}
+              page={shell.page}
+              pathname={shell.pathname}
+            />
             <AppShellError error={shell.error} />
             <main className={appShellMainClassName(shell.page, shell.pathname)}>
               <RouteBoundary resetKey={shell.pathname}>
@@ -104,6 +108,10 @@ function useAppShell() {
 type AppShellState = ReturnType<typeof useAppShell>;
 
 function isFlushContentPage(page: PageId, pathname: string): boolean {
+  if (pathname.startsWith("/dev/")) {
+    return false;
+  }
+
   return (
     page === "chat" ||
     page === "automations" ||
@@ -260,10 +268,20 @@ function SidebarNavGroup({
 function AppShellHeader({
   label,
   page,
+  pathname,
 }: {
   label: string | undefined;
   page: PageId;
+  pathname: string;
 }) {
+  if (pathname.startsWith("/dev/ui/workflow")) {
+    return (
+      <header className="app-shell-header gap-4 bg-card px-6">
+        <h1 className="type-brand min-w-0 truncate">Workflow UI</h1>
+      </header>
+    );
+  }
+
   if (page === "chat") {
     return null;
   }
