@@ -287,7 +287,7 @@ function ShortlistModelFields({
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
-  if (!canPickModels) {
+  if (!(canPickModels && isShortlistBrowseProvider(form.selectedProvider))) {
     return null;
   }
 
