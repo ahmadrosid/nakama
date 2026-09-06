@@ -18,9 +18,6 @@ import { PluginService, resetPluginAdmissionForTests } from "./plugin-service";
 const NOTES_DIR = fileURLToPath(
   new URL("../../../../examples/plugins/notes", import.meta.url)
 );
-const NOTES_V2_DIR = fileURLToPath(
-  new URL("../../../../examples/plugins/notes-v2", import.meta.url)
-);
 
 const ACTOR = { id: "admin_1", role: "admin" as const };
 const ORG_A = "org_a";
@@ -28,7 +25,9 @@ const ORG_B = "org_b";
 
 const SKIP_ZIP_DIRS = new Set(["node_modules", "ui-src"]);
 
-async function zipPluginDir(dir: string): Promise<Uint8Array> {
+async function collectPluginDir(
+  dir: string
+): Promise<Record<string, Uint8Array>> {
   const entries: Record<string, Uint8Array> = {};
 
   async function walk(current: string, relative: string): Promise<void> {
@@ -47,6 +46,29 @@ async function zipPluginDir(dir: string): Promise<Uint8Array> {
   }
 
   await walk(dir, "");
+  return entries;
+}
+
+async function zipPluginDir(dir: string): Promise<Uint8Array> {
+  return zipSync(await collectPluginDir(dir));
+}
+
+async function zipNotesV2(): Promise<Uint8Array> {
+  const entries = await collectPluginDir(NOTES_DIR);
+  const manifest = JSON.parse(
+    new TextDecoder().decode(entries["nakama.plugin.json"])
+  ) as {
+    database: { migrations: Array<{ id: string; path: string }> };
+    version: string;
+  };
+  manifest.version = "1.1.0";
+  manifest.database.migrations.push({
+    id: "002-add-pinned",
+    path: "migrations/002-add-pinned.sql",
+  });
+  entries["nakama.plugin.json"] = new TextEncoder().encode(
+    JSON.stringify(manifest)
+  );
   return zipSync(entries);
 }
 
@@ -166,7 +188,7 @@ describe("Notes plugin example", () => {
       enabled.revision,
       ACTOR
     );
-    await service.installPluginPackage(await zipPluginDir(NOTES_V2_DIR));
+    await service.installPluginPackage(await zipNotesV2());
     await service.updateOrgPlugin(
       ORG_A,
       "notes",
@@ -191,7 +213,7 @@ describe("Notes plugin example", () => {
       pluginId: "notes",
     });
     expect(listed.result).toMatchObject({
-      notes: [expect.objectContaining({ pinned: 0, title: "Old" })],
+      notes: [expect.objectContaining({ title: "Old" })],
     });
 
     const pluginDb = new Database(

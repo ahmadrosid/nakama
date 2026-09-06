@@ -66,13 +66,25 @@ export type PluginPackageErrorCode =
   | "unsupported_entry"
   | "version_conflict";
 
-export class PluginPackageError extends Error {
-  readonly code: PluginPackageErrorCode;
+class PluginHostError extends Error {
+  readonly retryable: boolean;
+
+  constructor(
+    readonly code: string,
+    retryable = false,
+    message = code
+  ) {
+    super(message);
+    this.retryable = retryable;
+  }
+}
+
+export class PluginPackageError extends PluginHostError {
+  declare readonly code: PluginPackageErrorCode;
 
   constructor(code: PluginPackageErrorCode) {
     super(code);
     this.name = "PluginPackageError";
-    this.code = code;
   }
 }
 
@@ -154,15 +166,12 @@ export type PluginInvocationErrorCode =
   | "unknown_action"
   | "unknown_hook";
 
-export class PluginInvocationError extends Error {
-  readonly code: PluginInvocationErrorCode;
-  readonly retryable: boolean;
+export class PluginInvocationError extends PluginHostError {
+  declare readonly code: PluginInvocationErrorCode;
 
   constructor(code: PluginInvocationErrorCode, retryable = code === "busy") {
-    super(code);
+    super(code, retryable);
     this.name = "PluginInvocationError";
-    this.code = code;
-    this.retryable = retryable;
   }
 }
 
@@ -176,21 +185,29 @@ export type PluginLifecycleErrorCode =
   | "package_unavailable"
   | "stale_revision";
 
-export class PluginLifecycleError extends Error {
-  readonly code: PluginLifecycleErrorCode;
+export class PluginLifecycleError extends PluginHostError {
+  declare readonly code: PluginLifecycleErrorCode;
 
   constructor(code: PluginLifecycleErrorCode, message = code) {
-    super(message);
+    super(code, false, message);
     this.name = "PluginLifecycleError";
-    this.code = code;
   }
 }
 
 export interface PluginServiceOptions {
-  afterMigrationBeforePublish?: () => Promise<void>;
-  afterPublishBeforeFinalize?: () => Promise<void>;
   drainTimeoutMs?: number;
   hookTimeoutMs?: number;
+}
+
+let pluginLifecycleTestHooks: {
+  afterMigrationBeforePublish?: () => Promise<void>;
+  afterPublishBeforeFinalize?: () => Promise<void>;
+} = {};
+
+export function setPluginLifecycleTestHooks(
+  hooks: typeof pluginLifecycleTestHooks | null
+): void {
+  pluginLifecycleTestHooks = hooks ?? {};
 }
 
 interface PendingPluginOperation {
@@ -243,6 +260,7 @@ const DEFAULT_HOOK_TIMEOUT_MS = 2000;
 
 export function resetPluginAdmissionForTests(): void {
   admissionGates.clear();
+  pluginLifecycleTestHooks = {};
 }
 
 export class PluginExportBarrierError extends Error {
@@ -727,7 +745,7 @@ export class PluginService {
         targetGeneration,
         version: install.selectedVersion,
       });
-      await this.options.afterMigrationBeforePublish?.();
+      await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
       if (release.manifest.hooks?.activate) {
         await this.invokePluginHook({
           actor,
@@ -752,7 +770,7 @@ export class PluginService {
         selectedVersion: install.selectedVersion,
       });
       published = true;
-      await this.options.afterPublishBeforeFinalize?.();
+      await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
       const enabled = await this.writeOrgPluginState({
         databaseGeneration: targetGeneration,
         expectedRevision: enabling.revision + 1,
@@ -921,7 +939,7 @@ export class PluginService {
         targetGeneration,
         version: targetVersion,
       });
-      await this.options.afterMigrationBeforePublish?.();
+      await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
       await this.publishInstallation({
         databaseGeneration: targetGeneration,
         expectedRevision: updating.revision,
@@ -934,7 +952,7 @@ export class PluginService {
         selectedVersion: targetVersion,
       });
       published = true;
-      await this.options.afterPublishBeforeFinalize?.();
+      await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
       return this.writeOrgPluginState({
         databaseGeneration: targetGeneration,
         expectedRevision: updating.revision + 1,
@@ -1038,7 +1056,7 @@ export class PluginService {
   async listApprovedPluginReleases(
     pluginId?: string
   ): Promise<PluginReleaseSummary[]> {
-    return (await this.db.listPluginReleases(pluginId)).map(toReleaseSummary);
+    return this.db.listPluginReleases(pluginId);
   }
 
   async listOrgPluginDetails(orgId: string): Promise<OrgPluginDetail[]> {
@@ -1889,22 +1907,6 @@ export class PluginService {
       throw error;
     }
   }
-}
-
-function toReleaseSummary(release: {
-  createdAt: string;
-  digest: string;
-  manifest: PluginManifest;
-  pluginId: string;
-  version: string;
-}): PluginReleaseSummary {
-  return {
-    createdAt: release.createdAt,
-    digest: release.digest,
-    manifest: release.manifest,
-    pluginId: release.pluginId,
-    version: release.version,
-  };
 }
 
 function actionDescriptions(

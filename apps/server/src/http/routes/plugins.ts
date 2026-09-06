@@ -78,23 +78,12 @@ export function registerPluginRoutes(
       expectedDigest: z.string().optional(),
     })
     .openapi("InstallPluginPackageRequest");
-  const previewResponseSchema = z
-    .object({})
-    .passthrough()
-    .openapi("PluginPackagePreviewResponse");
-  const installResponseSchema = z
-    .object({})
-    .passthrough()
-    .openapi("InstallPluginPackageResponse");
-  const listReleasesSchema = z
-    .object({})
-    .passthrough()
-    .openapi("ListPluginReleasesResponse");
-  const listOrgPluginsSchema = z
-    .object({})
-    .passthrough()
-    .openapi("ListOrgPluginsResponse");
-  const orgPluginSchema = z.object({}).passthrough().openapi("OrgPluginDetail");
+  const openapiBag = (name: string) => z.object({}).passthrough().openapi(name);
+  const previewResponseSchema = openapiBag("PluginPackagePreviewResponse");
+  const installResponseSchema = openapiBag("InstallPluginPackageResponse");
+  const listReleasesSchema = openapiBag("ListPluginReleasesResponse");
+  const listOrgPluginsSchema = openapiBag("ListOrgPluginsResponse");
+  const orgPluginSchema = openapiBag("OrgPluginDetail");
   const revisionRequestSchema = z
     .object({ expectedRevision: z.number() })
     .openapi("PluginRevisionRequest");
@@ -107,10 +96,9 @@ export function registerPluginRoutes(
       targetVersion: z.string(),
     })
     .openapi("UpdateOrgPluginRequest");
-  const contributionPreviewSchema = z
-    .object({})
-    .passthrough()
-    .openapi("PluginContributionChangePreview");
+  const contributionPreviewSchema = openapiBag(
+    "PluginContributionChangePreview"
+  );
   const deleteRetainedSchema = z
     .object({
       confirm: z.literal(true),
@@ -122,423 +110,261 @@ export function registerPluginRoutes(
   const invokeRequestSchema = z
     .object({ input: z.unknown().optional() })
     .openapi("InvokePluginActionRequest");
-  const invokeResponseSchema = z
-    .object({})
-    .passthrough()
-    .openapi("InvokePluginActionResponse");
-  const bootstrapSchema = z
-    .object({})
-    .passthrough()
-    .openapi("PluginUiBootstrap");
-
-  const register = (
-    route: Parameters<typeof app.openAPIRegistry.registerPath>[0]
-  ) => {
-    app.openAPIRegistry.registerPath(route);
+  const invokeResponseSchema = openapiBag("InvokePluginActionResponse");
+  const bootstrapSchema = openapiBag("PluginUiBootstrap");
+  const errorResponse = {
+    content: { "application/json": { schema: errorSchema } },
+    description: "Error",
   };
 
-  register(
-    createRoute({
-      method: "post",
-      operationId: "previewPluginPackage",
-      path: "/v1/platform/plugins/releases/preview",
-      request: {
-        body: {
-          content: { "application/json": { schema: archiveRequestSchema } },
-          required: true,
+  function pluginPath(spec: {
+    extra?: Record<string, typeof errorResponse | { description: string }>;
+    method: "delete" | "get" | "post";
+    ok?: {
+      content?: Record<string, { schema: z.ZodTypeAny }>;
+      description: string;
+      status?: 200 | 204;
+    };
+    operationId: string;
+    path: string;
+    request?: {
+      body?: z.ZodTypeAny;
+      params?: z.ZodTypeAny;
+      query?: z.ZodTypeAny;
+    };
+    summary: string;
+    tags: string[];
+  }) {
+    const okStatus = spec.ok?.status ?? 200;
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: spec.method,
+        operationId: spec.operationId,
+        path: spec.path,
+        request: spec.request
+          ? {
+              ...(spec.request.body
+                ? {
+                    body: {
+                      content: {
+                        "application/json": { schema: spec.request.body },
+                      },
+                      required: true,
+                    },
+                  }
+                : {}),
+              ...(spec.request.params ? { params: spec.request.params } : {}),
+              ...(spec.request.query ? { query: spec.request.query } : {}),
+            }
+          : undefined,
+        responses: {
+          ...(spec.ok
+            ? {
+                [okStatus]: spec.ok.content
+                  ? {
+                      content: spec.ok.content,
+                      description: spec.ok.description,
+                    }
+                  : { description: spec.ok.description },
+              }
+            : {}),
+          ...spec.extra,
         },
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: previewResponseSchema } },
-          description: "Plugin package preview",
-        },
-        400: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Inspect an uploaded plugin archive without executing it",
-      tags: ["Platform", "Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "installPluginPackage",
-      path: "/v1/platform/plugins/releases",
-      request: {
-        body: {
-          content: { "application/json": { schema: archiveRequestSchema } },
-          required: true,
-        },
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: installResponseSchema } },
-          description: "Installed plugin release",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Install an uploaded plugin archive without executing it",
-      tags: ["Platform", "Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "listPluginReleases",
-      path: "/v1/platform/plugins/releases",
-      responses: {
-        200: {
-          content: { "application/json": { schema: listReleasesSchema } },
-          description: "Approved plugin releases",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "List approved plugin releases",
-      tags: ["Platform", "Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "delete",
-      operationId: "removePluginRelease",
-      path: "/v1/platform/plugins/releases/{pluginId}/{version}",
-      request: { params: pluginVersionParams },
-      responses: {
-        204: { description: "Release removed" },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-        409: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Remove a plugin release that no installation depends on",
-      tags: ["Platform", "Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "listOrgPlugins",
-      path: "/v1/plugins",
-      responses: {
-        200: {
-          content: { "application/json": { schema: listOrgPluginsSchema } },
-          description: "Organization plugin catalog",
-        },
-      },
-      summary: "List plugins available to the active organization",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "getOrgPlugin",
-      path: "/v1/plugins/{pluginId}",
-      request: { params: pluginIdParam },
-      responses: {
-        200: {
-          content: { "application/json": { schema: orgPluginSchema } },
-          description: "Organization plugin detail",
-        },
-        404: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Get one organization plugin",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "installOrgPlugin",
-      path: "/v1/plugins/{pluginId}/install",
-      request: {
-        body: {
-          content: { "application/json": { schema: installOrgRequestSchema } },
-          required: true,
-        },
-        params: pluginIdParam,
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: orgPluginSchema } },
-          description: "Organization plugin added",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Add an approved release to the active organization",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "enableOrgPlugin",
-      path: "/v1/plugins/{pluginId}/enable",
-      request: {
-        body: {
-          content: { "application/json": { schema: revisionRequestSchema } },
-          required: true,
-        },
-        params: pluginIdParam,
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: orgPluginSchema } },
-          description: "Plugin enabled",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Enable an organization plugin",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "disableOrgPlugin",
-      path: "/v1/plugins/{pluginId}/disable",
-      request: {
-        body: {
-          content: { "application/json": { schema: revisionRequestSchema } },
-          required: true,
-        },
-        params: pluginIdParam,
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: orgPluginSchema } },
-          description: "Plugin disabled",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Disable an organization plugin",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "previewOrgPluginUpdate",
-      path: "/v1/plugins/{pluginId}/update/preview",
-      request: {
-        params: pluginIdParam,
-        query: z.object({ targetVersion: z.string() }),
-      },
-      responses: {
-        200: {
-          content: {
-            "application/json": { schema: contributionPreviewSchema },
-          },
-          description: "Update contribution preview",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Preview contribution removals for an update",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "updateOrgPlugin",
-      path: "/v1/plugins/{pluginId}/update",
-      request: {
-        body: {
-          content: { "application/json": { schema: updateRequestSchema } },
-          required: true,
-        },
-        params: pluginIdParam,
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: orgPluginSchema } },
-          description: "Plugin updated",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Update a disabled organization plugin to another release",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "uninstallOrgPlugin",
-      path: "/v1/plugins/{pluginId}/uninstall",
-      request: {
-        body: {
-          content: { "application/json": { schema: revisionRequestSchema } },
-          required: true,
-        },
-        params: pluginIdParam,
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: orgPluginSchema } },
-          description: "Plugin uninstalled",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Uninstall an organization plugin and retain its data",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "deleteRetainedPluginData",
-      path: "/v1/plugins/{pluginId}/retained-data/delete",
-      request: {
-        body: {
-          content: { "application/json": { schema: deleteRetainedSchema } },
-          required: true,
-        },
-        params: pluginIdParam,
-      },
-      responses: {
-        204: { description: "Retained data deleted" },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Delete retained plugin data after confirmation",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "post",
-      operationId: "invokePluginAction",
-      path: "/v1/plugins/{pluginId}/actions/{actionKey}",
-      request: {
-        body: {
-          content: { "application/json": { schema: invokeRequestSchema } },
-          required: true,
-        },
-        params: pluginActionParams,
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: invokeResponseSchema } },
-          description: "Action result",
-        },
-        403: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-        404: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Invoke a declared plugin UI action",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "getPluginUiBootstrap",
-      path: "/v1/plugins/ui/{orgId}/{pluginId}/__nakama/bootstrap.json",
-      request: { params: pluginUiParams },
-      responses: {
-        200: {
-          content: { "application/json": { schema: bootstrapSchema } },
-          description: "Plugin page bootstrap",
-        },
-        404: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Non-secret bootstrap for an enabled plugin page",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "getPluginUiDocument",
-      path: "/v1/plugins/ui/{orgId}/{pluginId}",
-      request: { params: pluginUiParams },
-      responses: {
-        200: {
-          content: { "text/html": { schema: z.string() } },
-          description: "Plugin UI document",
-        },
-        404: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Serve the enabled plugin UI entry document",
-      tags: ["Plugins"],
-    })
-  );
-  register(
-    createRoute({
-      method: "get",
-      operationId: "getPluginUiAsset",
-      path: "/v1/plugins/ui/{orgId}/{pluginId}/{path}",
-      request: {
-        params: z.object({
-          orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
-          path: z.string().openapi({ param: { in: "path", name: "path" } }),
-          pluginId: z
-            .string()
-            .openapi({ param: { in: "path", name: "pluginId" } }),
-        }),
-      },
-      responses: {
-        200: { description: "Plugin UI asset" },
-        404: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Serve a file from the enabled plugin UI directory",
-      tags: ["Plugins"],
-    })
-  );
+        summary: spec.summary,
+        tags: spec.tags,
+      })
+    );
+  }
+
+  const jsonOk = (schema: z.ZodTypeAny, description: string) => ({
+    content: { "application/json": { schema } },
+    description,
+    status: 200 as const,
+  });
+  const platform = ["Platform", "Plugins"] as string[];
+  const plugins = ["Plugins"];
+
+  pluginPath({
+    extra: { 400: errorResponse, 403: errorResponse },
+    method: "post",
+    ok: jsonOk(previewResponseSchema, "Plugin package preview"),
+    operationId: "previewPluginPackage",
+    path: "/v1/platform/plugins/releases/preview",
+    request: { body: archiveRequestSchema },
+    summary: "Inspect an uploaded plugin archive without executing it",
+    tags: platform,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: jsonOk(installResponseSchema, "Installed plugin release"),
+    operationId: "installPluginPackage",
+    path: "/v1/platform/plugins/releases",
+    request: { body: archiveRequestSchema },
+    summary: "Install an uploaded plugin archive without executing it",
+    tags: platform,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "get",
+    ok: jsonOk(listReleasesSchema, "Approved plugin releases"),
+    operationId: "listPluginReleases",
+    path: "/v1/platform/plugins/releases",
+    summary: "List approved plugin releases",
+    tags: platform,
+  });
+  pluginPath({
+    extra: { 403: errorResponse, 409: errorResponse },
+    method: "delete",
+    ok: { description: "Release removed", status: 204 },
+    operationId: "removePluginRelease",
+    path: "/v1/platform/plugins/releases/{pluginId}/{version}",
+    request: { params: pluginVersionParams },
+    summary: "Remove a plugin release that no installation depends on",
+    tags: platform,
+  });
+  pluginPath({
+    method: "get",
+    ok: jsonOk(listOrgPluginsSchema, "Organization plugin catalog"),
+    operationId: "listOrgPlugins",
+    path: "/v1/plugins",
+    summary: "List plugins available to the active organization",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 404: errorResponse },
+    method: "get",
+    ok: jsonOk(orgPluginSchema, "Organization plugin detail"),
+    operationId: "getOrgPlugin",
+    path: "/v1/plugins/{pluginId}",
+    request: { params: pluginIdParam },
+    summary: "Get one organization plugin",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: jsonOk(orgPluginSchema, "Organization plugin added"),
+    operationId: "installOrgPlugin",
+    path: "/v1/plugins/{pluginId}/install",
+    request: { body: installOrgRequestSchema, params: pluginIdParam },
+    summary: "Add an approved release to the active organization",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: jsonOk(orgPluginSchema, "Plugin enabled"),
+    operationId: "enableOrgPlugin",
+    path: "/v1/plugins/{pluginId}/enable",
+    request: { body: revisionRequestSchema, params: pluginIdParam },
+    summary: "Enable an organization plugin",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: jsonOk(orgPluginSchema, "Plugin disabled"),
+    operationId: "disableOrgPlugin",
+    path: "/v1/plugins/{pluginId}/disable",
+    request: { body: revisionRequestSchema, params: pluginIdParam },
+    summary: "Disable an organization plugin",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "get",
+    ok: jsonOk(contributionPreviewSchema, "Update contribution preview"),
+    operationId: "previewOrgPluginUpdate",
+    path: "/v1/plugins/{pluginId}/update/preview",
+    request: {
+      params: pluginIdParam,
+      query: z.object({ targetVersion: z.string() }),
+    },
+    summary: "Preview contribution removals for an update",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: jsonOk(orgPluginSchema, "Plugin updated"),
+    operationId: "updateOrgPlugin",
+    path: "/v1/plugins/{pluginId}/update",
+    request: { body: updateRequestSchema, params: pluginIdParam },
+    summary: "Update a disabled organization plugin to another release",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: jsonOk(orgPluginSchema, "Plugin uninstalled"),
+    operationId: "uninstallOrgPlugin",
+    path: "/v1/plugins/{pluginId}/uninstall",
+    request: { body: revisionRequestSchema, params: pluginIdParam },
+    summary: "Uninstall an organization plugin and retain its data",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "post",
+    ok: { description: "Retained data deleted", status: 204 },
+    operationId: "deleteRetainedPluginData",
+    path: "/v1/plugins/{pluginId}/retained-data/delete",
+    request: { body: deleteRetainedSchema, params: pluginIdParam },
+    summary: "Delete retained plugin data after confirmation",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 403: errorResponse, 404: errorResponse },
+    method: "post",
+    ok: jsonOk(invokeResponseSchema, "Action result"),
+    operationId: "invokePluginAction",
+    path: "/v1/plugins/{pluginId}/actions/{actionKey}",
+    request: { body: invokeRequestSchema, params: pluginActionParams },
+    summary: "Invoke a declared plugin UI action",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 404: errorResponse },
+    method: "get",
+    ok: jsonOk(bootstrapSchema, "Plugin page bootstrap"),
+    operationId: "getPluginUiBootstrap",
+    path: "/v1/plugins/ui/{orgId}/{pluginId}/__nakama/bootstrap.json",
+    request: { params: pluginUiParams },
+    summary: "Non-secret bootstrap for an enabled plugin page",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 404: errorResponse },
+    method: "get",
+    ok: {
+      content: { "text/html": { schema: z.string() } },
+      description: "Plugin UI document",
+    },
+    operationId: "getPluginUiDocument",
+    path: "/v1/plugins/ui/{orgId}/{pluginId}",
+    request: { params: pluginUiParams },
+    summary: "Serve the enabled plugin UI entry document",
+    tags: plugins,
+  });
+  pluginPath({
+    extra: { 404: errorResponse },
+    method: "get",
+    ok: { description: "Plugin UI asset" },
+    operationId: "getPluginUiAsset",
+    path: "/v1/plugins/ui/{orgId}/{pluginId}/{path}",
+    request: {
+      params: z.object({
+        orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+        path: z.string().openapi({ param: { in: "path", name: "path" } }),
+        pluginId: z
+          .string()
+          .openapi({ param: { in: "path", name: "pluginId" } }),
+      }),
+    },
+    summary: "Serve a file from the enabled plugin UI directory",
+    tags: plugins,
+  });
 
   app.post("/v1/platform/plugins/releases/preview", async (c) => {
     requirePlatformAdminFromContext(c);

@@ -2107,22 +2107,31 @@ export class NakamaClient {
     );
   }
 
-  async previewPluginPackage(
+  private async postPluginArchive<T>(
+    path: string,
     data: Blob | BufferSource | string,
     options: { expectedDigest?: string } = {}
-  ): Promise<PluginPackagePreviewResponse> {
+  ): Promise<T> {
     const request: InstallPluginPackageRequest = {
       data: await encodeArchiveData(data),
     };
     if (options.expectedDigest) {
       request.expectedDigest = options.expectedDigest;
     }
-    return this.request<PluginPackagePreviewResponse>(
+    return this.request<T>(path, {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async previewPluginPackage(
+    data: Blob | BufferSource | string,
+    options: { expectedDigest?: string } = {}
+  ): Promise<PluginPackagePreviewResponse> {
+    return this.postPluginArchive(
       "/v1/platform/plugins/releases/preview",
-      {
-        body: JSON.stringify(request),
-        method: "POST",
-      }
+      data,
+      options
     );
   }
 
@@ -2130,18 +2139,10 @@ export class NakamaClient {
     data: Blob | BufferSource | string,
     options: { expectedDigest?: string } = {}
   ): Promise<InstallPluginPackageResponse> {
-    const request: InstallPluginPackageRequest = {
-      data: await encodeArchiveData(data),
-    };
-    if (options.expectedDigest) {
-      request.expectedDigest = options.expectedDigest;
-    }
-    return this.request<InstallPluginPackageResponse>(
+    return this.postPluginArchive(
       "/v1/platform/plugins/releases",
-      {
-        body: JSON.stringify(request),
-        method: "POST",
-      }
+      data,
+      options
     );
   }
 

@@ -2,7 +2,7 @@
 
 Nakama plugins are trusted ZIP packages. A platform admin installs the bytes. An organization admin activates them. Plugin code runs as ordinary Bun and browser JavaScript — there is no sandbox.
 
-The Notes example at `examples/plugins/notes/` is the starter: skill, React page, tools, SQLite, and an upgrade migration in `examples/plugins/notes-v2/`.
+The Notes example at `examples/plugins/notes/` is the starter: skill, React page, tools, SQLite, and `migrations/002-add-pinned.sql` for the upgrade zip tests build from that tree.
 
 ## Package layout
 

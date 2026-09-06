@@ -16,6 +16,7 @@ import {
   PluginLifecycleError,
   PluginService,
   resetPluginAdmissionForTests,
+  setPluginLifecycleTestHooks,
 } from "./plugin-service";
 
 const MIGRATION_001 = `
@@ -378,7 +379,8 @@ describe("plugin lifecycle", () => {
     const db = createInMemoryDatabaseAdapter();
     let interrupted = false;
     let armInterrupt = false;
-    const service = new PluginService(db, configDir, {
+    const service = new PluginService(db, configDir);
+    setPluginLifecycleTestHooks({
       afterMigrationBeforePublish: async () => {
         if (!armInterrupt) {
           return;
@@ -413,6 +415,7 @@ describe("plugin lifecycle", () => {
       )
     ).rejects.toMatchObject({ code: "interrupted" });
     expect(interrupted).toBe(true);
+    setPluginLifecycleTestHooks(null);
 
     const mid = await db.getOrgPlugin("org_a", "notes");
     expect(mid?.lifecycleState).toBe("updating");
@@ -434,7 +437,8 @@ describe("plugin lifecycle", () => {
 
   test("after publication, code-only update, and missing bytes recover without enabling incompatible code", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const service = new PluginService(db, configDir, {
+    const service = new PluginService(db, configDir);
+    setPluginLifecycleTestHooks({
       afterPublishBeforeFinalize: async () => {
         throw new PluginLifecycleError("interrupted");
       },
@@ -444,6 +448,7 @@ describe("plugin lifecycle", () => {
     await expect(
       service.enableOrgPlugin("org_a", "notes", addedRow.revision, actor)
     ).rejects.toMatchObject({ code: "interrupted" });
+    setPluginLifecycleTestHooks(null);
     const published = await db.getOrgPlugin("org_a", "notes");
     expect(published?.lifecycleState).toBe("enabling");
     expect(published?.databaseGeneration).toBeTruthy();

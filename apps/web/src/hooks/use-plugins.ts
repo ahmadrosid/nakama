@@ -103,178 +103,154 @@ function invalidateOrgPlugins(
   return Promise.all(tasks);
 }
 
-export function usePreviewPluginPackage() {
+function usePluginMutation<TVariables, TData>(
+  mutationFn: (variables: TVariables, orgId: string) => Promise<TData>,
+  onSuccess?: (input: {
+    data: TData;
+    orgId: string;
+    queryClient: ReturnType<typeof useQueryClient>;
+    variables: TVariables;
+  }) => Promise<void>
+) {
+  const queryClient = useQueryClient();
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+
   return useMutation({
-    mutationFn: (file: Blob) => client.previewPluginPackage(file),
+    mutationFn: (variables: TVariables) => mutationFn(variables, orgId),
+    onSuccess: onSuccess
+      ? async (data, variables) => {
+          await onSuccess({ data, orgId, queryClient, variables });
+        }
+      : undefined,
   });
+}
+
+export function usePreviewPluginPackage() {
+  return usePluginMutation((file: Blob) => client.previewPluginPackage(file));
 }
 
 export function useInstallPluginPackage() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-
-  return useMutation({
-    mutationFn: ({
-      file,
-      expectedDigest,
-    }: {
-      expectedDigest?: string;
-      file: Blob;
-    }) => client.installPluginPackage(file, { expectedDigest }),
-    onSuccess: async () => {
+  return usePluginMutation(
+    ({ expectedDigest, file }: { expectedDigest?: string; file: Blob }) =>
+      client.installPluginPackage(file, { expectedDigest }),
+    async ({ orgId, queryClient }) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.plugins.releases,
       });
-      if (activeOrg?.id) {
-        await invalidateOrgPlugins(queryClient, activeOrg.id);
+      if (orgId) {
+        await invalidateOrgPlugins(queryClient, orgId);
       }
-    },
-  });
+    }
+  );
 }
 
 export function useRemovePluginRelease() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      version,
-    }: {
-      pluginId: string;
-      version: string;
-    }) => client.removePluginRelease(pluginId, version),
-    onSuccess: async () => {
+  return usePluginMutation(
+    ({ pluginId, version }: { pluginId: string; version: string }) =>
+      client.removePluginRelease(pluginId, version),
+    async ({ orgId, queryClient }) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.plugins.releases,
       });
-      if (activeOrg?.id) {
-        await invalidateOrgPlugins(queryClient, activeOrg.id);
+      if (orgId) {
+        await invalidateOrgPlugins(queryClient, orgId);
       }
-    },
-  });
+    }
+  );
 }
 
 export function useInstallOrgPlugin() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      version,
-    }: {
-      pluginId: string;
-      version?: string;
-    }) => client.installOrgPlugin(pluginId, version ? { version } : {}, orgId),
-    onSuccess: async (detail) => {
-      await invalidateOrgPlugins(queryClient, orgId, detail.pluginId);
-    },
-  });
+  return usePluginMutation(
+    ({ pluginId, version }: { pluginId: string; version?: string }, orgId) =>
+      client.installOrgPlugin(pluginId, version ? { version } : {}, orgId),
+    async ({ data, orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    }
+  );
 }
 
 export function useEnableOrgPlugin() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      expectedRevision,
-    }: {
-      expectedRevision: number;
-      pluginId: string;
-    }) => client.enableOrgPlugin(pluginId, expectedRevision, orgId),
-    onSuccess: async (detail) => {
-      await invalidateOrgPlugins(queryClient, orgId, detail.pluginId);
-    },
-  });
+  return usePluginMutation(
+    (
+      {
+        expectedRevision,
+        pluginId,
+      }: { expectedRevision: number; pluginId: string },
+      orgId
+    ) => client.enableOrgPlugin(pluginId, expectedRevision, orgId),
+    async ({ data, orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    }
+  );
 }
 
 export function useDisableOrgPlugin() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      expectedRevision,
-    }: {
-      expectedRevision: number;
-      pluginId: string;
-    }) => client.disableOrgPlugin(pluginId, expectedRevision, orgId),
-    onSuccess: async (detail) => {
-      await invalidateOrgPlugins(queryClient, orgId, detail.pluginId);
-    },
-  });
+  return usePluginMutation(
+    (
+      {
+        expectedRevision,
+        pluginId,
+      }: { expectedRevision: number; pluginId: string },
+      orgId
+    ) => client.disableOrgPlugin(pluginId, expectedRevision, orgId),
+    async ({ data, orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    }
+  );
 }
 
 export function usePreviewOrgPluginUpdate() {
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      targetVersion,
-    }: {
-      pluginId: string;
-      targetVersion: string;
-    }) => client.previewOrgPluginUpdate(pluginId, targetVersion, orgId),
-  });
+  return usePluginMutation(
+    (
+      { pluginId, targetVersion }: { pluginId: string; targetVersion: string },
+      orgId
+    ) => client.previewOrgPluginUpdate(pluginId, targetVersion, orgId)
+  );
 }
 
 export function useUpdateOrgPlugin() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      request,
-    }: {
-      pluginId: string;
-      request: UpdateOrgPluginRequest;
-    }) => client.updateOrgPlugin(pluginId, request, orgId),
-    onSuccess: async (detail) => {
-      await invalidateOrgPlugins(queryClient, orgId, detail.pluginId);
-    },
-  });
+  return usePluginMutation(
+    (
+      {
+        pluginId,
+        request,
+      }: { pluginId: string; request: UpdateOrgPluginRequest },
+      orgId
+    ) => client.updateOrgPlugin(pluginId, request, orgId),
+    async ({ data, orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    }
+  );
 }
 
 export function useUninstallOrgPlugin() {
-  const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
-
-  return useMutation({
-    mutationFn: ({
-      pluginId,
-      expectedRevision,
-    }: {
-      expectedRevision: number;
-      pluginId: string;
-    }) => client.uninstallOrgPlugin(pluginId, expectedRevision, orgId),
-    onSuccess: async (detail) => {
-      await invalidateOrgPlugins(queryClient, orgId, detail.pluginId);
-    },
-  });
+  return usePluginMutation(
+    (
+      {
+        expectedRevision,
+        pluginId,
+      }: { expectedRevision: number; pluginId: string },
+      orgId
+    ) => client.uninstallOrgPlugin(pluginId, expectedRevision, orgId),
+    async ({ data, orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    }
+  );
 }
 
 export function useDeleteRetainedPluginData() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (request: DeleteRetainedPluginDataRequest) =>
+  return usePluginMutation(
+    (request: DeleteRetainedPluginDataRequest) =>
       client.deleteRetainedPluginData(request),
-    onSuccess: async (_data, request) => {
-      await invalidateOrgPlugins(queryClient, request.orgId, request.pluginId);
-    },
-  });
+    async ({ queryClient, variables }) => {
+      await invalidateOrgPlugins(
+        queryClient,
+        variables.orgId,
+        variables.pluginId
+      );
+    }
+  );
 }
 
 export function cancelOrgPluginQueries(
