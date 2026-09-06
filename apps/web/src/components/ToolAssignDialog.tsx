@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { isPluginOwned } from "@/hooks/use-plugins";
 
 interface ToolAssignDialogProps {
   disabled?: boolean;
@@ -81,7 +82,11 @@ export function ToolAssignDialog({
                   >
                     <div className="min-w-0">
                       <p>{tool.name}</p>
-                      {tool.description ? (
+                      {isPluginOwned(tool) ? (
+                        <p className="truncate text-muted-foreground text-xs">
+                          {tool.pluginId}
+                        </p>
+                      ) : tool.description ? (
                         <p className="truncate text-muted-foreground text-xs">
                           {tool.description}
                         </p>

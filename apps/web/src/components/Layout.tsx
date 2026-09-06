@@ -2,6 +2,7 @@ import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  CubeIcon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
@@ -22,12 +23,14 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
+import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
   useSidebarCollapsed,
   useSystemNavCollapsed,
 } from "@/hooks/use-sidebar-collapsed";
 import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
+  enabledPluginNavEntries,
   findNavItem,
   type NavGroup,
   type NavItem,
@@ -35,6 +38,7 @@ import {
   PAGE_PATHS,
   type PageId,
   pageIdFromPath,
+  pluginIdFromPath,
   visibleNavGroups,
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
@@ -53,7 +57,11 @@ export function Layout() {
             className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             data-app-shell-content=""
           >
-            <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
+            <AppShellHeader
+              label={shell.headerLabel}
+              page={shell.page}
+              pluginId={shell.activePluginId}
+            />
             <AppShellError error={shell.error} />
             <main className={appShellMainClassName(shell.page, shell.pathname)}>
               <RouteBoundary resetKey={shell.pathname}>
@@ -76,6 +84,7 @@ function useAppShell() {
   const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
+  const { data: orgPlugins = [] } = useOrgPlugins();
   const { collapsed, toggle } = useSidebarCollapsed();
   const { collapsed: systemNavCollapsed, toggle: toggleSystemNav } =
     useSystemNavCollapsed();
@@ -87,16 +96,27 @@ function useAppShell() {
       }),
     [activeOrg?.role, user?.isPlatformAdmin]
   );
+  const pluginNav = useMemo(
+    () => enabledPluginNavEntries(orgPlugins),
+    [orgPlugins]
+  );
+  const activePluginId = pluginIdFromPath(location.pathname);
+  const activePlugin = pluginNav.find(
+    (entry) => entry.pluginId === activePluginId
+  );
 
   return {
     activeNav: findNavItem(page),
+    activePluginId,
     automationUnreadTotal,
     chatProfileId: chatProfileIdFromPath(location.pathname),
     collapsed,
     error,
+    headerLabel: activePlugin?.label ?? findNavItem(page)?.label,
     navGroups,
     page,
     pathname: location.pathname,
+    pluginNav,
     prefetchAppData,
     systemNavCollapsed,
     toggle,
@@ -111,6 +131,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
     page === "chat" ||
     page === "automations" ||
     page === "files" ||
+    page === "plugins" ||
     pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
   );
 }
@@ -147,6 +168,11 @@ function AppShellSidebar({ shell }: { shell: AppShellState }) {
             unreadTotal={shell.automationUnreadTotal}
           />
         ))}
+        <PluginsNavGroup
+          activePluginId={shell.activePluginId}
+          collapsed={shell.collapsed}
+          entries={shell.pluginNav}
+        />
       </nav>
     </aside>
   );
@@ -260,24 +286,64 @@ function SidebarNavGroup({
   );
 }
 
+function PluginsNavGroup({
+  entries,
+  collapsed,
+  activePluginId,
+}: {
+  entries: { href: string; label: string; pluginId: string }[];
+  collapsed: boolean;
+  activePluginId: string | null;
+}) {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return (
+    <div aria-label="Plugins" className="sidebar-nav-group" role="group">
+      {collapsed ? null : <p className="sidebar-nav-group-label">Plugins</p>}
+      <div className="sidebar-nav-group-items">
+        {entries.map((entry) => (
+          <SidebarNavButton
+            active={entry.pluginId === activePluginId}
+            collapsed={collapsed}
+            icon={CubeIcon}
+            item={{
+              description: entry.pluginId,
+              icon: CubeIcon,
+              id: "plugins",
+              label: entry.label,
+            }}
+            key={entry.pluginId}
+            to={entry.href}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AppShellHeader({
   label,
   page,
+  pluginId,
 }: {
   label: string | undefined;
   page: PageId;
+  pluginId: string | null;
 }) {
   if (page === "chat") {
     return null;
   }
 
   const hideTitle = page === "soul" || page === "profiles";
+  const title = label ?? pluginId;
   return (
     <header className="app-shell-header gap-4 bg-card px-6">
       {page === "automations" ? (
         <AgentWorkTabs />
       ) : hideTitle ? null : (
-        <h1 className="type-brand min-w-0 truncate">{label}</h1>
+        <h1 className="type-brand min-w-0 truncate">{title}</h1>
       )}
       <div
         className={cn(

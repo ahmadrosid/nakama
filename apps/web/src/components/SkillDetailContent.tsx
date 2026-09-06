@@ -4,11 +4,14 @@ import type {
   SkillUsageSummary,
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
+import { Link } from "react-router-dom";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { isPluginOwned } from "@/hooks/use-plugins";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
+import { pluginsSystemPath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
@@ -34,9 +37,13 @@ function formatUsageTimestamp(value: string | null | undefined): string {
 }
 
 function formatSkillMeta(
-  skill: Pick<SkillDetail, "hasTool" | "disableModelInvocation">
+  skill: Pick<SkillDetail, "disableModelInvocation" | "hasTool" | "pluginId">
 ): string[] {
   const parts: string[] = [];
+
+  if (isPluginOwned(skill) && skill.pluginId) {
+    parts.push(skill.pluginId);
+  }
 
   if (skill.hasTool) {
     parts.push("includes tool");
@@ -54,7 +61,7 @@ function formatInlineMetaLine({
   createdBy,
   usageSummary,
 }: {
-  skill: Pick<SkillDetail, "hasTool" | "disableModelInvocation">;
+  skill: Pick<SkillDetail, "disableModelInvocation" | "hasTool" | "pluginId">;
   createdBy?: SkillCreatedBy | null;
   usageSummary?: SkillUsageSummary | null;
 }): string | null {
@@ -86,7 +93,7 @@ function formatInlineMetaLine({
 }
 
 function canEditSkill(skill: SkillDetail): boolean {
-  return !bundledSkillNames.has(skill.name);
+  return !(bundledSkillNames.has(skill.name) || isPluginOwned(skill));
 }
 
 const skillBodyScrollClass = "max-h-[min(calc(100dvh-13rem),48rem)]";
@@ -133,6 +140,14 @@ export function SkillDetailContent({
         ) : null}
         {inlineMeta ? (
           <p className="text-muted-foreground text-xs">{inlineMeta}</p>
+        ) : null}
+        {skill.pluginId ? (
+          <Link
+            className="inline-block text-xs underline underline-offset-2"
+            to={pluginsSystemPath()}
+          >
+            Edit in {skill.pluginId}
+          </Link>
         ) : null}
       </header>
 

@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
+  canManageOrgPlugins,
+  canManagePluginReleases,
+  canOpenPluginPage,
+  enabledPluginNavEntries,
   orgSkillProposalsPath,
   pageIdFromPath,
+  pluginIdFromPath,
+  pluginPagePath,
+  pluginsSystemPath,
   visibleNavGroups,
 } from "./navigation";
 
@@ -72,6 +79,55 @@ describe("automations navigation", () => {
 describe("workers navigation", () => {
   test("maps the workers path", () => {
     expect(pageIdFromPath("/workers")).toBe("workers");
+  });
+});
+
+describe("plugin navigation", () => {
+  test("maps plugin page paths and the System plugins tab", () => {
+    expect(pluginPagePath("notes")).toBe("/plugins/notes");
+    expect(pluginIdFromPath("/plugins/notes")).toBe("notes");
+    expect(pluginIdFromPath("/plugins")).toBeNull();
+    expect(pageIdFromPath("/plugins/notes")).toBe("plugins");
+    expect(pluginsSystemPath()).toBe("/system?tab=plugins");
+  });
+
+  test("lists enabled pages only, sorted by label then plugin id", () => {
+    const entries = enabledPluginNavEntries([
+      {
+        lifecycleState: "enabled",
+        pluginId: "zeta",
+        ui: { pageLabel: "Notes" },
+      },
+      {
+        lifecycleState: "enabled",
+        pluginId: "alpha",
+        ui: { pageLabel: "Notes" },
+      },
+      {
+        lifecycleState: "disabled",
+        pluginId: "off",
+        ui: { pageLabel: "Off" },
+      },
+      {
+        lifecycleState: "enabled",
+        pluginId: "headless",
+        ui: null,
+      },
+    ]);
+
+    expect(entries.map((entry) => entry.pluginId)).toEqual(["alpha", "zeta"]);
+    expect(entries[0]?.label).toBe("Notes (alpha)");
+    expect(entries[1]?.label).toBe("Notes (zeta)");
+  });
+
+  test("members can open pages; viewers cannot; org admins manage", () => {
+    expect(canOpenPluginPage("member")).toBe(true);
+    expect(canOpenPluginPage("admin")).toBe(true);
+    expect(canOpenPluginPage("viewer")).toBe(false);
+    expect(canManageOrgPlugins(false, "admin")).toBe(true);
+    expect(canManageOrgPlugins(false, "member")).toBe(false);
+    expect(canManagePluginReleases(true)).toBe(true);
+    expect(canManagePluginReleases(false)).toBe(false);
   });
 });
 

@@ -7,6 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { PluginsPage } from "@/pages/PluginsPage";
 import { LlmUsageTab } from "@/pages/StatusPage";
 import {
   resolveSystemTab,
@@ -106,6 +107,8 @@ export function SystemPage() {
         >
           {tab === "tools" ? (
             <ToolsTab embedded />
+          ) : tab === "plugins" ? (
+            <PluginsPage />
           ) : tab === "usage" ? (
             <LlmUsageTab />
           ) : (

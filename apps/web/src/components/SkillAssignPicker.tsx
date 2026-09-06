@@ -32,6 +32,7 @@ import {
   useAgentBrowserSettings,
   useInstallAgentBrowser,
 } from "@/hooks/use-agent-browser-settings";
+import { isPluginOwned } from "@/hooks/use-plugins";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,10 @@ interface SkillAssignPickerProps {
 
 function formatSkillMeta(skill: SkillSummary): string {
   const parts: string[] = [];
+
+  if (isPluginOwned(skill) && skill.pluginId) {
+    parts.push(skill.pluginId);
+  }
 
   if (skill.hasTool) {
     parts.push("includes tool");
@@ -292,7 +297,13 @@ function SkillLibraryDeleteButton({
       onClick={(event) => onRequestDelete(skill, event)}
       onPointerDown={stopCommandItemSelect}
       size="icon-sm"
-      title={canDelete ? undefined : "Bundled system skills cannot be deleted"}
+      title={
+        canDelete
+          ? undefined
+          : isPluginOwned(skill)
+            ? "Edit this skill in the plugin"
+            : "Bundled system skills cannot be deleted"
+      }
       type="button"
       variant="ghost"
     >
@@ -651,7 +662,9 @@ function SkillAssignManageList({
                   assigningBash={assigningBash}
                   bashAssigned={bashAssigned}
                   canDelete={
-                    canDeleteLibrarySkills && isUserLibrarySkill(skill)
+                    canDeleteLibrarySkills &&
+                    isUserLibrarySkill(skill) &&
+                    !isPluginOwned(skill)
                   }
                   commandItemDisabled={disabled}
                   disabled={disabled}
@@ -811,7 +824,9 @@ function SkillAssignDialogBody({
             event,
             onDelete,
             disabled,
-            canDeleteLibrarySkills && isUserLibrarySkill(skill),
+            canDeleteLibrarySkills &&
+              isUserLibrarySkill(skill) &&
+              !isPluginOwned(skill),
             setPendingDelete
           )
         }

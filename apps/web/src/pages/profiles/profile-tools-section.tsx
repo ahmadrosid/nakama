@@ -7,6 +7,7 @@ import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/use-auth";
+import { isPluginOwned } from "@/hooks/use-plugins";
 import { canUseToolPlayground, toolPlaygroundPath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
@@ -56,9 +57,16 @@ export function ProfileToolsSection({
         <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
           {detail.tools.map((tool) => {
             const name = (
-              <p className="truncate font-medium text-foreground text-sm leading-tight">
-                {tool.name}
-              </p>
+              <div className="min-w-0">
+                <p className="truncate font-medium text-foreground text-sm leading-tight">
+                  {tool.name}
+                </p>
+                {isPluginOwned(tool) ? (
+                  <p className="truncate text-muted-foreground text-xs">
+                    {tool.pluginId}
+                  </p>
+                ) : null}
+              </div>
             );
             const onConfigure =
               isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email

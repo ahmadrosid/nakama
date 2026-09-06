@@ -1,0 +1,379 @@
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
+import type { OrgPluginDetail } from "@nakama/core/contract";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
+import {
+  formatPluginTrustLines,
+  isNakamaPluginReadyMessage,
+  isPluginOwned,
+  NAKAMA_PLUGIN_READY_TYPE,
+  nextPluginVersions,
+  orgPluginQueryOptions,
+  orgPluginsQueryOptions,
+  pluginHasRetainedData,
+  pluginUiBootstrapUrl,
+  pluginUiDocumentUrl,
+  resolvePluginPageView,
+  useEnableOrgPlugin,
+  useInstallPluginPackage,
+} from "@/hooks/use-plugins";
+import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
+import { PluginPageState } from "@/pages/PluginPage";
+import { pluginRowIdentity } from "@/pages/PluginsPage";
+
+const enable = spyOn(client, "enableOrgPlugin");
+const installPackage = spyOn(client, "installPluginPackage");
+const queryClient = new QueryClient({
+  defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+});
+
+afterEach(() => {
+  enable.mockReset();
+  installPackage.mockReset();
+  queryClient.clear();
+});
+
+afterAll(() => {
+  enable.mockRestore();
+  installPackage.mockRestore();
+});
+
+function plugin(overrides: Partial<OrgPluginDetail> = {}): OrgPluginDetail {
+  return {
+    actions: [],
+    availableVersions: ["1.0.0"],
+    databaseGeneration: null,
+    description: "",
+    installed: true,
+    lastLifecycleError: null,
+    lifecycleState: "disabled",
+    name: "Notes",
+    pendingOperation: null,
+    pluginId: "notes",
+    revision: 3,
+    selectedVersion: "1.0.0",
+    ui: {
+      assetsDir: "ui",
+      entryHtml: "index.html",
+      pageLabel: "Notes",
+    },
+    updatedAt: "2026-09-07T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const authValue = {
+  activeOrg: { id: "org-a", name: "A", role: "admin", slug: "a" },
+  archiveOrg: async () => undefined,
+  createOrg: async () => undefined,
+  isAuthenticated: true,
+  isLoading: false,
+  login: async () => undefined,
+  logout: async () => undefined,
+  orgs: [],
+  refreshSession: async () => undefined,
+  setup: async () => undefined,
+  switchOrg: async () => undefined,
+  updateOrg: async () => undefined,
+  user: { email: "a@b.c", id: "u1", isPlatformAdmin: true, name: "A" },
+} as unknown as AuthContextValue;
+
+function renderEnable() {
+  let mutation: ReturnType<typeof useEnableOrgPlugin>;
+  function Probe() {
+    mutation = useEnableOrgPlugin();
+    return null;
+  }
+  renderToString(
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(
+        AuthContext.Provider,
+        { value: authValue },
+        createElement(Probe)
+      )
+    )
+  );
+  return () => mutation.mutateAsync({ expectedRevision: 3, pluginId: "notes" });
+}
+
+describe("plugin management authority and mutations", () => {
+  test("enable sends expectedRevision and invalidates org-scoped keys", async () => {
+    const enabled = plugin({ lifecycleState: "enabled", revision: 4 });
+    enable.mockResolvedValue(enabled);
+    queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
+      plugins: [plugin()],
+    });
+    queryClient.setQueryData(
+      queryKeys.plugins.detail("org-a", "notes"),
+      plugin()
+    );
+
+    await renderEnable()();
+
+    expect(enable).toHaveBeenCalledWith("notes", 3, "org-a");
+    expect(
+      queryClient.getQueryState(queryKeys.plugins.all("org-a"))?.isInvalidated
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(queryKeys.plugins.detail("org-a", "notes"))
+        ?.isInvalidated
+    ).toBe(true);
+  });
+
+  test("upload install is a platform package call", async () => {
+    installPackage.mockResolvedValue({
+      createdAt: "2026-09-07T00:00:00.000Z",
+      digest: "abc",
+      manifest: {
+        actions: [],
+        apiVersion: 1,
+        author: "Ada",
+        description: "",
+        id: "notes",
+        license: "MIT",
+        minNakamaVersion: "0.1.0",
+        name: "Notes",
+        skills: [],
+        version: "1.0.0",
+      },
+      pluginId: "notes",
+      reused: false,
+      version: "1.0.0",
+    });
+
+    let mutate: ReturnType<typeof useInstallPluginPackage>["mutateAsync"];
+    function Probe() {
+      mutate = useInstallPluginPackage().mutateAsync;
+      return null;
+    }
+    renderToString(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          AuthContext.Provider,
+          { value: authValue },
+          createElement(Probe)
+        )
+      )
+    );
+
+    await mutate!({
+      expectedDigest: "abc",
+      file: new Blob(["zip"]),
+    });
+    expect(installPackage).toHaveBeenCalled();
+  });
+
+  test("management list identity keeps duplicate labels distinct", () => {
+    expect(pluginRowIdentity(plugin({ pluginId: "alpha" }))).toBe(
+      "Notes alpha"
+    );
+    expect(pluginRowIdentity(plugin({ pluginId: "zeta" }))).toBe("Notes zeta");
+  });
+});
+
+describe("plugin page states and iframe contract", () => {
+  test("query keys include orgId so org switches drop stale work", () => {
+    expect(queryKeys.plugins.all("org-a")).toEqual(["plugins", "org-a"]);
+    expect(queryKeys.plugins.detail("org-b", "notes")).toEqual([
+      "plugins",
+      "org-b",
+      "notes",
+    ]);
+    expect([...orgPluginsQueryOptions("org-a").queryKey]).toEqual([
+      "plugins",
+      "org-a",
+    ]);
+    expect(orgPluginQueryOptions("org-a", "notes").queryKey).not.toEqual(
+      orgPluginQueryOptions("org-b", "notes").queryKey
+    );
+  });
+
+  test("theme is on iframe and bootstrap URLs", () => {
+    expect(pluginUiDocumentUrl("org-a", "notes", "dark")).toBe(
+      "/v1/plugins/ui/org-a/notes?theme=dark"
+    );
+    expect(pluginUiBootstrapUrl("org-a", "notes", "light")).toBe(
+      "/v1/plugins/ui/org-a/notes/__nakama/bootstrap.json?theme=light"
+    );
+  });
+
+  test("ready signal requires type and matching pluginId", () => {
+    expect(
+      isNakamaPluginReadyMessage(
+        { pluginId: "notes", type: NAKAMA_PLUGIN_READY_TYPE },
+        "notes"
+      )
+    ).toBe(true);
+    expect(
+      isNakamaPluginReadyMessage(
+        { pluginId: "other", type: NAKAMA_PLUGIN_READY_TYPE },
+        "notes"
+      )
+    ).toBe(false);
+    expect(isNakamaPluginReadyMessage({ type: "load" }, "notes")).toBe(false);
+  });
+
+  test("disabled, unavailable, failed, and unauthorized are named states", () => {
+    expect(
+      resolvePluginPageView({
+        iframeReady: false,
+        loadTimedOut: false,
+        orgRole: "viewer",
+        queryStatus: "pending",
+      })
+    ).toBe("unauthorized");
+    expect(
+      resolvePluginPageView({
+        errorStatus: 403,
+        iframeReady: false,
+        loadTimedOut: false,
+        orgRole: "member",
+        queryStatus: "error",
+      })
+    ).toBe("unauthorized");
+    expect(
+      resolvePluginPageView({
+        iframeReady: false,
+        loadTimedOut: false,
+        orgRole: "member",
+        plugin: plugin({ lifecycleState: "disabled" }),
+        queryStatus: "success",
+      })
+    ).toBe("disabled");
+    expect(
+      resolvePluginPageView({
+        iframeReady: false,
+        loadTimedOut: false,
+        orgRole: "member",
+        plugin: plugin({
+          lastLifecycleError: "package_unavailable",
+          lifecycleState: "enabled",
+        }),
+        queryStatus: "success",
+      })
+    ).toBe("unavailable");
+    expect(
+      resolvePluginPageView({
+        iframeReady: false,
+        loadTimedOut: false,
+        orgRole: "member",
+        plugin: plugin({ lifecycleState: "enabled", ui: null }),
+        queryStatus: "success",
+      })
+    ).toBe("unavailable");
+    expect(
+      resolvePluginPageView({
+        iframeReady: false,
+        loadTimedOut: true,
+        orgRole: "member",
+        plugin: plugin({ lifecycleState: "enabled" }),
+        queryStatus: "success",
+      })
+    ).toBe("failed");
+    expect(
+      resolvePluginPageView({
+        iframeReady: false,
+        loadTimedOut: false,
+        orgRole: "member",
+        plugin: plugin({ lifecycleState: "enabled" }),
+        queryStatus: "success",
+      })
+    ).toBe("frame");
+  });
+
+  test("state view is a heading plus a route, not an empty frame", () => {
+    const html = renderToString(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(PluginPageState, {
+          canManage: true,
+          kind: "failed",
+          viewer: false,
+        })
+      )
+    );
+    expect(html).toContain("This plugin didn");
+    expect(html).toContain("/system?tab=plugins");
+    expect(html).not.toContain("<iframe");
+  });
+
+  test("viewer deep link points to chat, not management", () => {
+    const html = renderToString(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(PluginPageState, {
+          canManage: false,
+          kind: "unauthorized",
+          viewer: true,
+        })
+      )
+    );
+    expect(html).toContain("You can");
+    expect(html).toContain("open this plugin");
+    expect(html).toContain("/chat");
+  });
+});
+
+describe("plugin ownership and update helpers", () => {
+  test("owned tools and skills are marked by pluginId", () => {
+    expect(isPluginOwned({ pluginId: "notes" })).toBe(true);
+    expect(isPluginOwned({ pluginId: null })).toBe(false);
+  });
+
+  test("update versions and retained data follow server fields", () => {
+    expect(
+      nextPluginVersions(
+        plugin({
+          availableVersions: ["1.0.0", "1.1.0"],
+          selectedVersion: "1.0.0",
+        })
+      )
+    ).toEqual(["1.1.0"]);
+    expect(
+      pluginHasRetainedData(
+        plugin({ databaseGeneration: "gen-1", lifecycleState: "retained" })
+      )
+    ).toBe(true);
+  });
+
+  test("install trust lines include identity and digest", () => {
+    const lines = formatPluginTrustLines({
+      contributions: {
+        actionKeys: ["list"],
+        hasDatabase: true,
+        hasHooks: false,
+        hasUi: true,
+        skillKeys: [],
+      },
+      digest: "deadbeef",
+      manifest: {
+        actions: [],
+        apiVersion: 1,
+        author: "Ada",
+        description: "",
+        id: "notes",
+        license: "MIT",
+        minNakamaVersion: "0.1.0",
+        name: "Notes",
+        skills: [],
+        version: "1.0.0",
+      },
+    });
+    expect(lines.join(" ")).toContain("Ada");
+    expect(lines.join(" ")).toContain("deadbeef");
+    expect(lines.join(" ")).toContain("notes");
+  });
+});

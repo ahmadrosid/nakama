@@ -123,6 +123,11 @@ function ProfileSkillRow({
           <p className="truncate font-medium text-foreground text-sm leading-tight">
             {skill.name}
           </p>
+          {skill.pluginId ? (
+            <span className="shrink-0 text-muted-foreground text-xs">
+              {skill.pluginId}
+            </span>
+          ) : null}
           <SkillStatusBadge skill={skill} staleAfterDays={staleAfterDays} />
         </div>
         {usageHint ? (
