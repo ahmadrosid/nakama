@@ -43,6 +43,7 @@ import {
 } from "./audio";
 import type { TelegramAuthStore } from "./auth-store";
 import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
+import { isChannelDebugEnabled } from "./channel-log";
 import type { TelegramBridgeConfig } from "./config";
 import { HELP_TEXT, splitTelegramMessage } from "./format";
 import {
@@ -128,15 +129,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         `messageId=${ctx.message?.message_id ?? "unknown"}`,
         `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
       ];
-      if (process.env.NAKAMA_CH_DEBUG === "1") {
-        parts.splice(
-          3,
-          0,
-          `botId=${botInfo?.id ?? "unknown"}`,
-          `chatId=${chatId}`,
-          `userId=${userId}`
-        );
+      if (!isChannelDebugEnabled()) {
+        return;
       }
+      parts.splice(
+        3,
+        0,
+        `botId=${botInfo?.id ?? "unknown"}`,
+        `chatId=${chatId}`,
+        `userId=${userId}`
+      );
       console.log(parts.join(" "));
       return;
     }

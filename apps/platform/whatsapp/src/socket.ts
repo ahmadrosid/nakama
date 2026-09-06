@@ -9,6 +9,7 @@ import {
 } from "@whiskeysockets/baileys";
 import { usePrivateMultiFileAuthState } from "./auth-state";
 import { createBaileysLogger } from "./baileys-logger";
+import { isChannelDebugEnabled } from "./channel-log";
 import {
   extractInboundText,
   isPrivateWhatsAppChat,
@@ -145,9 +146,11 @@ export async function createWhatsAppSocket(
           return;
         }
 
-        console.log(
-          `WhatsApp messages.upsert type=${m.type} count=${m.messages.length}`
-        );
+        if (isChannelDebugEnabled()) {
+          console.log(
+            `WhatsApp messages.upsert type=${m.type} count=${m.messages.length}`
+          );
+        }
 
         if (!isSupportedUpsertType(m.type)) {
           return;
@@ -163,7 +166,7 @@ export async function createWhatsAppSocket(
             requireGroupMention: false,
           });
 
-          if (remoteJid) {
+          if (remoteJid && isChannelDebugEnabled()) {
             console.log(
               `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} participantPn=${maskWhatsAppJid(msg.key.participantPn)} textBytes=${Buffer.byteLength(text, "utf8")} handle=${inbound ? "yes" : "no"}`
             );
@@ -176,10 +179,12 @@ export async function createWhatsAppSocket(
             isPrivateWhatsAppChat(remoteJid)
           ) {
             loggedMissingTextPayload = true;
-            console.log(
-              "WhatsApp missing-text payload:",
-              summarizeMissingTextPayload(msg)
-            );
+            if (isChannelDebugEnabled()) {
+              console.log(
+                "WhatsApp missing-text payload:",
+                summarizeMissingTextPayload(msg)
+              );
+            }
           }
 
           if (
@@ -198,9 +203,11 @@ export async function createWhatsAppSocket(
             return;
           }
 
-          console.log(
-            `WhatsApp message received id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(inbound.jid)} textBytes=${Buffer.byteLength(inbound.text, "utf8")}`
-          );
+          if (isChannelDebugEnabled()) {
+            console.log(
+              `WhatsApp message received id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(inbound.jid)} textBytes=${Buffer.byteLength(inbound.text, "utf8")}`
+            );
+          }
 
           try {
             await deps.onMessage(inbound);

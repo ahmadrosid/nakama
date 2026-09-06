@@ -50,7 +50,9 @@ export async function createBot(
   });
 
   client.on(Events.MessageCreate, async (message: Message) => {
-    console.log(formatDiscordInboundMessageLog(message));
+    if (isChannelDebugEnabled()) {
+      console.log(formatDiscordInboundMessageLog(message));
+    }
     try {
       await handler.handleMessage(message);
     } catch (error) {
@@ -75,8 +77,6 @@ export async function createBot(
         interaction.commandName,
         interaction.user.id
       );
-    } else {
-      console.log("[discord] slash", interaction.commandName);
     }
 
     // Acknowledge immediately — Discord expires interactions after ~3s.
