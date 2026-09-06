@@ -24,6 +24,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
+import { SpreadsheetGrid } from "@/components/chat/artifact-spreadsheet-editor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,8 +59,10 @@ import {
 } from "@/hooks/use-app-queries";
 import { useAssignToolMutation } from "@/hooks/use-resource-mutations";
 import { useWorkflowSqliteQuery } from "@/hooks/use-workflows";
+import { formatSessionRelativeTime } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { formatRunDuration } from "@/pages/automations/automations-page.shared";
 
 const iconHitArea =
   "relative after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2";
@@ -271,6 +274,7 @@ export function WorkflowBuilder({
             selectedStepId={selectedStepId}
             steps={steps}
           />
+          <WorkflowRunHistory runs={runs} />
         </div>
         {selectedStep ? (
           <WorkflowStepPanel
@@ -642,6 +646,131 @@ function WorkflowStepList({
       </div>
     </>
   );
+}
+
+function WorkflowRunHistory({ runs }: { runs: WorkflowRunRecord[] }) {
+  const latestId = runs[0]?.id ?? null;
+  const [expandedId, setExpandedId] = useState<string | null>(latestId);
+
+  useEffect(() => {
+    if (latestId) {
+      setExpandedId(latestId);
+    }
+  }, [latestId]);
+
+  return (
+    <div className="mx-auto mt-10 max-w-xl">
+      <h3 className="mb-3 font-medium text-sm">Runs</h3>
+      {runs.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No runs yet.</p>
+      ) : (
+        <ul className="divide-y divide-border border-border border-y">
+          {runs.map((run) => (
+            <WorkflowRunHistoryItem
+              expanded={expandedId === run.id}
+              key={run.id}
+              onToggle={() =>
+                setExpandedId((current) => (current === run.id ? null : run.id))
+              }
+              run={run}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function WorkflowRunHistoryItem({
+  expanded,
+  onToggle,
+  run,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  run: WorkflowRunRecord;
+}) {
+  const duration = formatRunDuration(run.startedAt, run.completedAt);
+  const label = runStatusLabel(run.status);
+  const meta = [
+    label,
+    formatSessionRelativeTime(run.startedAt),
+    duration,
+  ].filter(Boolean);
+
+  return (
+    <li>
+      <button
+        aria-expanded={expanded}
+        className="flex w-full py-3 text-left"
+        onClick={onToggle}
+        type="button"
+      >
+        <span
+          className={cn(
+            "min-w-0 truncate text-sm",
+            run.status === "failed" && "text-destructive"
+          )}
+        >
+          {meta.join(" · ")}
+        </span>
+      </button>
+      {expanded ? <WorkflowRunHistoryDetail run={run} /> : null}
+    </li>
+  );
+}
+
+function WorkflowRunHistoryDetail({ run }: { run: WorkflowRunRecord }) {
+  const steps = run.steps ?? [];
+
+  return (
+    <div className="space-y-3 pb-3 text-sm">
+      {run.error ? <p className="text-destructive">{run.error}</p> : null}
+      {run.output ? (
+        <pre className="overflow-x-auto whitespace-pre-wrap text-xs">
+          {run.output}
+        </pre>
+      ) : null}
+      {steps.length > 0 ? (
+        <ol className="space-y-2">
+          {steps.map((step) => (
+            <li key={step.id}>
+              <div
+                className={cn(
+                  "text-xs",
+                  step.status === "failed" && "text-destructive"
+                )}
+              >
+                {humanizeId(step.stepId)} · {runStatusLabel(step.status)}
+              </div>
+              {step.error ? (
+                <p className="mt-1 text-destructive">{step.error}</p>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
+  );
+}
+
+function runStatusLabel(status: string): string {
+  if (status === "completed") {
+    return "Completed";
+  }
+  if (status === "failed") {
+    return "Failed";
+  }
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "skipped") {
+    return "Skipped";
+  }
+  if (status === "pending") {
+    return "Pending";
+  }
+  return status;
 }
 
 function WorkflowMissingToolsDialog({
@@ -1435,21 +1564,23 @@ function WorkflowDatabaseExplorer({ layout }: { layout: "split" | "stack" }) {
       <div
         className={cn(
           "min-h-0 min-w-0",
-          layout === "split" && "flex-1 overflow-auto"
+          layout === "split" && "flex flex-1 flex-col overflow-hidden"
         )}
       >
-        {preview ? <SqliteRowsTable preview={preview} wide /> : null}
+        {preview ? (
+          <SqliteRowsTable fill={layout === "split"} preview={preview} />
+        ) : null}
       </div>
     </div>
   );
 }
 
 function SqliteRowsTable({
+  fill = false,
   preview,
-  wide = false,
 }: {
+  fill?: boolean;
   preview: WorkflowSqlitePreview;
-  wide?: boolean;
 }) {
   if (preview.columns.length === 0) {
     return (
@@ -1457,41 +1588,23 @@ function SqliteRowsTable({
     );
   }
 
+  const rows = preview.rows.map((row) =>
+    preview.columns.map((column) => stringifyCell(row[column]))
+  );
+
   return (
-    <div className="h-full overflow-auto rounded-md border border-border">
-      <table className="w-full min-w-max text-left text-xs">
-        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-          <tr>
-            {preview.columns.map((column) => (
-              <th className="px-2 py-1.5 font-medium" key={column} scope="col">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {preview.rows.map((row) => (
-            <tr
-              className="border-border border-t"
-              key={preview.columns
-                .map((column) => stringifyCell(row[column]))
-                .join("\u0001")}
-            >
-              {preview.columns.map((column) => (
-                <td
-                  className={cn(
-                    "px-2 py-1.5 tabular-nums",
-                    wide ? "max-w-80 truncate" : "max-w-48 truncate"
-                  )}
-                  key={column}
-                >
-                  {stringifyCell(row[column])}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div
+      className={cn(
+        "overflow-hidden rounded-md border border-border",
+        fill && "flex h-full min-h-0 flex-col"
+      )}
+    >
+      <SpreadsheetGrid
+        className={fill ? undefined : "flex-none"}
+        columnHeaders={preview.columns}
+        editable={false}
+        rows={rows}
+      />
     </div>
   );
 }
