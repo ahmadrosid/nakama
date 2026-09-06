@@ -48,30 +48,36 @@ export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
   return <WorkflowRunCard {...useWorkflowRunCard(message)} />;
 }
 
-function useWorkflowRunCard(message: ChatListItem) {
-  const workflowId = parseWorkflowId(message.toolInput);
-  const parsed = parseRunWorkflowResult(message.toolResult);
-  const isRunning = message.toolStatus === "running";
-  const canLoad = Boolean(workflowId) && isRunWorkflowTool(message.tool);
-
-  const workflowQuery = useQuery({
-    enabled: canLoad,
+function useWorkflowDefinition(
+  workflowId: string | null,
+  tool: string | undefined
+) {
+  return useQuery({
+    enabled: Boolean(workflowId) && isRunWorkflowTool(tool),
     queryFn: () => client.getWorkflow(workflowId!),
     queryKey: queryKeys.workflows.detail(workflowId ?? ""),
-  });
+  }).data;
+}
 
-  const runsQuery = useQuery({
-    enabled: Boolean(workflowId) && isRunning,
-    queryFn: () => client.listWorkflowRuns(workflowId!),
-    queryKey: queryKeys.workflows.runs(workflowId ?? ""),
-    refetchInterval: isRunning ? 800 : false,
-  });
+function useLiveWorkflowRuns(workflowId: string | null, isRunning: boolean) {
+  return (
+    useQuery({
+      enabled: Boolean(workflowId) && isRunning,
+      queryFn: () => client.listWorkflowRuns(workflowId!),
+      queryKey: queryKeys.workflows.runs(workflowId ?? ""),
+      refetchInterval: isRunning ? 800 : false,
+    }).data ?? []
+  );
+}
 
+function useWorkflowRunCard(message: ChatListItem) {
+  const workflowId = parseWorkflowId(message.toolInput);
+  const isRunning = message.toolStatus === "running";
   return buildWorkflowRunCard({
     isRunning,
-    parsed,
-    runs: runsQuery.data ?? [],
-    workflow: workflowQuery.data,
+    parsed: parseRunWorkflowResult(message.toolResult),
+    runs: useLiveWorkflowRuns(workflowId, isRunning),
+    workflow: useWorkflowDefinition(workflowId, message.tool),
   });
 }
 
