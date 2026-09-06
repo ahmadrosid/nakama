@@ -7,6 +7,7 @@ import { errorResponse, type RequestAuthContext } from "./shared";
 import type { AppEnv } from "./types";
 
 export const ORG_ID_HEADER = "x-org-id";
+const PLUGIN_UI_PATH = /^\/v1\/plugins\/ui\/([^/]+)(?:\/|$)/;
 
 function isPlatformRoute(pathname: string): boolean {
   return pathname === "/v1/platform" || pathname.startsWith("/v1/platform/");
@@ -22,17 +23,32 @@ function assertOrgRole(role: string): asserts role is OrgRole {
   }
 }
 
+function pluginUiPathOrgId(pathname: string): string | null {
+  const match = pathname.match(PLUGIN_UI_PATH);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 function resolveOrgId(
   request: Request,
-  auth: RequestAuthContext
-): string | null {
-  const headerOrgId = request.headers.get(ORG_ID_HEADER)?.trim();
+  auth: RequestAuthContext,
+  pathname: string
+): { conflict: true } | { orgId: string | null } {
+  const headerOrgId = request.headers.get(ORG_ID_HEADER)?.trim() || null;
+  const pathOrgId = pluginUiPathOrgId(pathname);
+
+  if (headerOrgId && pathOrgId && headerOrgId !== pathOrgId) {
+    return { conflict: true };
+  }
+
   if (headerOrgId) {
-    return headerOrgId;
+    return { orgId: headerOrgId };
+  }
+  if (pathOrgId) {
+    return { orgId: pathOrgId };
   }
 
   const sessionOrgId = auth.session?.activeOrgId?.trim();
-  return sessionOrgId || null;
+  return { orgId: sessionOrgId || null };
 }
 
 export function createOrgContextMiddleware(
@@ -62,7 +78,13 @@ export function createOrgContextMiddleware(
       return;
     }
 
-    let orgId = resolveOrgId(c.req.raw, auth);
+    const resolved = resolveOrgId(c.req.raw, auth, c.req.path);
+    if ("conflict" in resolved) {
+      c.res = errorResponse("Organization context conflict", 400);
+      return;
+    }
+
+    let orgId = resolved.orgId;
     if (!orgId && auth.mode === "local-token") {
       const memberships = await databaseAdapter.listUserOrganizations(
         auth.user.id

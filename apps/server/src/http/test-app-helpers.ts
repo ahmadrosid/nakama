@@ -28,6 +28,7 @@ export type CreateMinimalHonoAppOverrides = {
   onDataRestored?: ServerOptions["onDataRestored"];
   orgMemoryService?: ServerOptions["orgMemoryService"];
   orgService?: ServerOptions["orgService"];
+  pluginService?: ServerOptions["pluginService"];
   skillCuratorService?: ServerOptions["skillCuratorService"];
   skillProposalService?: ServerOptions["skillProposalService"];
   skillSuggestionService?: ServerOptions["skillSuggestionService"];
@@ -62,6 +63,7 @@ export function createMinimalHonoApp(
     onDataRestored: overrides.onDataRestored,
     orgMemoryService: overrides.orgMemoryService,
     orgService,
+    pluginService: overrides.pluginService,
     skillCuratorService,
     skillProposalService: overrides.skillProposalService,
     skillSuggestionService: overrides.skillSuggestionService,

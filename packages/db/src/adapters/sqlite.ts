@@ -1007,6 +1007,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteOrgPluginStmt = db.prepare(
     "DELETE FROM org_plugins WHERE org_id = ? AND plugin_id = ? AND revision = ?"
   );
+  const deletePluginReleaseStmt = db.prepare(
+    "DELETE FROM plugin_releases WHERE plugin_id = ? AND version = ?"
+  );
   const insertOrgPluginStmt = db.prepare(`
     INSERT INTO org_plugins (
       org_id, plugin_id, selected_version, database_generation, lifecycle_state,
@@ -2403,6 +2406,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
       return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
+    },
+
+    async deletePluginRelease(pluginId, version) {
+      const result = deletePluginReleaseStmt.run(pluginId, version);
+      return result.changes > 0;
     },
 
     async deleteProfile(id) {

@@ -25,6 +25,7 @@ import { registerOrgCuratorRoutes } from "./routes/org-curator";
 import { registerOrgMemberRoutes } from "./routes/org-members";
 import { registerOrgMemoryRoutes } from "./routes/org-memory";
 import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
+import { registerPluginRoutes } from "./routes/plugins";
 import { registerProfilePortabilityRoutes } from "./routes/profile-portability";
 import { registerProfileRoutes } from "./routes/profiles";
 import { registerSessionRoutes } from "./routes/sessions";
@@ -73,14 +74,24 @@ export function createHonoApp(options: ServerOptions) {
     const applySecurityHeaders = (response: Response) => {
       const headers = new Headers(response.headers);
       headers.set("X-Content-Type-Options", "nosniff");
-      headers.set("X-Frame-Options", "DENY");
+      const contentType = headers.get("Content-Type") ?? "";
+      const pluginDocument =
+        new URL(c.req.url).pathname.startsWith("/v1/plugins/ui/") &&
+        contentType.includes("text/html");
+      if (pluginDocument) {
+        headers.set("X-Frame-Options", "SAMEORIGIN");
+      } else {
+        headers.set("X-Frame-Options", "DENY");
+      }
       // Only set Referrer-Policy if it's not already set
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       }
       headers.set(
         "Content-Security-Policy",
-        `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
+        pluginDocument
+          ? `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
       );
       // Also true behind a TLS terminator, which is where HSTS matters most.
       if (isSecureRequest(c.req.raw)) {
@@ -129,6 +140,7 @@ export function createHonoApp(options: ServerOptions) {
   registerMcpRoutes(app, options);
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
+  registerPluginRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerWorkflowRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);

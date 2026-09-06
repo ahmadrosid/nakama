@@ -55,6 +55,7 @@ import type {
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
   DeleteProviderResponse,
+  DeleteRetainedPluginDataRequest,
   DiscordSettingsResponse,
   DocumentAttachment,
   DraftAutomationResponse,
@@ -69,8 +70,13 @@ import type {
   ImageGenerationSettingsResponse,
   InitSoulResponse,
   InitUserContextResponse,
+  InstallOrgPluginRequest,
+  InstallPluginPackageRequest,
+  InstallPluginPackageResponse,
   InstallSkillRequest,
   InviteOrgMemberRequest,
+  InvokePluginActionRequest,
+  InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
@@ -83,6 +89,8 @@ import type {
   ListOrgMembersResponse,
   ListOrgMemoryHistoryResponse,
   ListOrgMemoryProposalsResponse,
+  ListOrgPluginsResponse,
+  ListPluginReleasesResponse,
   ListProfileChangeHistoryResponse,
   ListProfileComposioToolkitsResponse,
   ListProfilesResponse,
@@ -110,8 +118,12 @@ import type {
   OrgMemoryResponse,
   OrgMemorySearchRequest,
   OrgMemorySearchResponse,
+  OrgPluginDetail,
   PatchSkillRequest,
   PinOrgMemoryRequest,
+  PluginContributionChangePreview,
+  PluginPackagePreviewResponse,
+  PluginRevisionRequest,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
   ProfilePackImportResponse,
@@ -182,6 +194,7 @@ import type {
   UpdateOrganizationRequest,
   UpdateOrgMemberRequest,
   UpdateOrgMemoryRequest,
+  UpdateOrgPluginRequest,
   UpdateProfileComposioToolkitsRequest,
   UpdateProfileRequest,
   UpdateProviderRequest,
@@ -2090,6 +2103,193 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "POST",
+      }
+    );
+  }
+
+  async previewPluginPackage(
+    data: Blob | BufferSource | string,
+    options: { expectedDigest?: string } = {}
+  ): Promise<PluginPackagePreviewResponse> {
+    const request: InstallPluginPackageRequest = {
+      data: await encodeArchiveData(data),
+    };
+    if (options.expectedDigest) {
+      request.expectedDigest = options.expectedDigest;
+    }
+    return this.request<PluginPackagePreviewResponse>(
+      "/v1/platform/plugins/releases/preview",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+  }
+
+  async installPluginPackage(
+    data: Blob | BufferSource | string,
+    options: { expectedDigest?: string } = {}
+  ): Promise<InstallPluginPackageResponse> {
+    const request: InstallPluginPackageRequest = {
+      data: await encodeArchiveData(data),
+    };
+    if (options.expectedDigest) {
+      request.expectedDigest = options.expectedDigest;
+    }
+    return this.request<InstallPluginPackageResponse>(
+      "/v1/platform/plugins/releases",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+  }
+
+  async listPluginReleases(): Promise<ListPluginReleasesResponse> {
+    return this.request<ListPluginReleasesResponse>(
+      "/v1/platform/plugins/releases"
+    );
+  }
+
+  async removePluginRelease(pluginId: string, version: string): Promise<void> {
+    await this.request(
+      `/v1/platform/plugins/releases/${encodeURIComponent(pluginId)}/${encodeURIComponent(version)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async listOrgPlugins(orgId?: string): Promise<ListOrgPluginsResponse> {
+    return this.request<ListOrgPluginsResponse>(
+      "/v1/plugins",
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
+  }
+
+  async getOrgPlugin(
+    pluginId: string,
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    return this.request<OrgPluginDetail>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}`,
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
+  }
+
+  async installOrgPlugin(
+    pluginId: string,
+    request: InstallOrgPluginRequest = {},
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    return this.request<OrgPluginDetail>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/install`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
+      }
+    );
+  }
+
+  async enableOrgPlugin(
+    pluginId: string,
+    expectedRevision: number,
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    const request: PluginRevisionRequest = { expectedRevision };
+    return this.request<OrgPluginDetail>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/enable`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
+      }
+    );
+  }
+
+  async disableOrgPlugin(
+    pluginId: string,
+    expectedRevision: number,
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    const request: PluginRevisionRequest = { expectedRevision };
+    return this.request<OrgPluginDetail>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/disable`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
+      }
+    );
+  }
+
+  async previewOrgPluginUpdate(
+    pluginId: string,
+    targetVersion: string,
+    orgId?: string
+  ): Promise<PluginContributionChangePreview> {
+    const query = new URLSearchParams({ targetVersion });
+    return this.request<PluginContributionChangePreview>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/update/preview?${query}`,
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
+  }
+
+  async updateOrgPlugin(
+    pluginId: string,
+    request: UpdateOrgPluginRequest,
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    return this.request<OrgPluginDetail>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/update`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
+      }
+    );
+  }
+
+  async uninstallOrgPlugin(
+    pluginId: string,
+    expectedRevision: number,
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    const request: PluginRevisionRequest = { expectedRevision };
+    return this.request<OrgPluginDetail>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/uninstall`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
+      }
+    );
+  }
+
+  async deleteRetainedPluginData(
+    request: DeleteRetainedPluginDataRequest
+  ): Promise<void> {
+    await this.request(
+      `/v1/plugins/${encodeURIComponent(request.pluginId)}/retained-data/delete`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": request.orgId },
+        method: "POST",
+      }
+    );
+  }
+
+  async invokePluginAction(
+    pluginId: string,
+    actionKey: string,
+    request: InvokePluginActionRequest = {},
+    orgId?: string
+  ): Promise<InvokePluginActionResponse> {
+    return this.request<InvokePluginActionResponse>(
+      `/v1/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(actionKey)}`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
   }

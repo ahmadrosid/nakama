@@ -1,5 +1,10 @@
 import type { LoadAttachmentBytes } from "./attachments/content";
-import type { OrgPluginLifecycleState, PluginManifest } from "./plugins";
+import type {
+  OrgPluginLifecycleState,
+  PluginActionAccess,
+  PluginActionEffect,
+  PluginManifest,
+} from "./plugins";
 
 export type AutomationTrigger =
   | { type: "manual" }
@@ -2569,4 +2574,105 @@ export interface OrgPluginSummary {
   revision: number;
   selectedVersion: string | null;
   updatedAt: string;
+}
+
+export interface PluginActionDescription {
+  access: PluginActionAccess;
+  description: string;
+  effect: PluginActionEffect;
+  key: string;
+}
+
+export interface PluginUiSummary {
+  assetsDir: string;
+  entryHtml: string;
+  pageLabel: string;
+}
+
+export interface OrgPluginDetail extends OrgPluginSummary {
+  actions: PluginActionDescription[];
+  availableVersions: string[];
+  description: string;
+  installed: boolean;
+  name: string;
+  ui: PluginUiSummary | null;
+}
+
+export interface ListOrgPluginsResponse {
+  plugins: OrgPluginDetail[];
+}
+
+export interface ListPluginReleasesResponse {
+  releases: PluginReleaseSummary[];
+}
+
+export interface PluginPackagePreviewResponse {
+  contributions: {
+    actionKeys: string[];
+    hasDatabase: boolean;
+    hasHooks: boolean;
+    hasUi: boolean;
+    skillKeys: string[];
+  };
+  digest: string;
+  manifest: PluginManifest;
+}
+
+export interface InstallPluginPackageRequest {
+  data: string;
+  expectedDigest?: string;
+}
+
+export interface InstallPluginPackageResponse {
+  createdAt: string;
+  digest: string;
+  manifest: PluginManifest;
+  pluginId: string;
+  reused: boolean;
+  version: string;
+}
+
+export interface InstallOrgPluginRequest {
+  version?: string;
+}
+
+export interface PluginRevisionRequest {
+  expectedRevision: number;
+}
+
+export interface UpdateOrgPluginRequest {
+  expectedRevision: number;
+  targetVersion: string;
+}
+
+export interface PluginContributionChangePreview {
+  lastLifecycleError: string | null;
+  removedActionKeys: string[];
+  removedSkillKeys: string[];
+  retainedSkillIds: string[];
+  retainedToolIds: string[];
+}
+
+export interface DeleteRetainedPluginDataRequest {
+  confirm: true;
+  expectedRevision: number;
+  orgId: string;
+  pluginId: string;
+}
+
+export interface InvokePluginActionRequest {
+  input?: unknown;
+}
+
+export interface InvokePluginActionResponse {
+  invocationId: string;
+  result: unknown;
+}
+
+export interface PluginUiBootstrap {
+  actionBaseUrl: string;
+  orgId: string;
+  pluginId: string;
+  pluginVersion: string;
+  theme: "dark" | "light";
 }

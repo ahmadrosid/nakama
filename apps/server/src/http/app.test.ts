@@ -448,6 +448,8 @@ describe("createHonoApp", () => {
     const csp = response.headers.get("Content-Security-Policy") ?? "";
     expect(csp).toContain("img-src 'self' data: blob:");
     expect(csp).toContain("media-src 'self' blob:");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(csp).not.toContain("frame-ancestors");
   });
 
   test("allows the theme bootstrap by hash instead of every inline script", async () => {

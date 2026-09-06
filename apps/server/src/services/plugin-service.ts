@@ -12,13 +12,18 @@ import {
   getOrgPluginDataDir,
   getPluginReleaseDir,
   getPluginStagingRootDir,
+  type OrgPluginDetail,
   PLUGIN_MANIFEST_API_VERSION,
   PLUGIN_MANIFEST_FILENAME,
   type PluginActionAccess,
+  type PluginActionDescription,
   type PluginActorRole,
   type PluginExecutionActor,
   type PluginExecutionContext,
   type PluginManifest,
+  type PluginReleaseSummary,
+  type PluginUiBootstrap,
+  type PluginUiContribution,
   pathExists,
   resolvePluginReleaseEntry,
   validatePluginJsonInstance,
@@ -165,6 +170,7 @@ export type PluginLifecycleErrorCode =
   | "interrupted"
   | "invalid_state"
   | "migration_failed"
+  | "in_use"
   | "not_found"
   | "package_unavailable"
   | "stale_revision";
@@ -952,6 +958,177 @@ export class PluginService {
     });
   }
 
+  async listApprovedPluginReleases(
+    pluginId?: string
+  ): Promise<PluginReleaseSummary[]> {
+    return (await this.db.listPluginReleases(pluginId)).map(toReleaseSummary);
+  }
+
+  async listOrgPluginDetails(orgId: string): Promise<OrgPluginDetail[]> {
+    const releases = await this.db.listPluginReleases();
+    const installs = (await this.db.listOrgPlugins()).filter(
+      (install) => install.orgId === orgId
+    );
+    const pluginIds = [
+      ...new Set([
+        ...releases.map((release) => release.pluginId),
+        ...installs.map((install) => install.pluginId),
+      ]),
+    ].sort();
+    const details: OrgPluginDetail[] = [];
+    for (const pluginId of pluginIds) {
+      const detail = await this.getOrgPluginDetail(orgId, pluginId);
+      if (detail) {
+        details.push(detail);
+      }
+    }
+    return details;
+  }
+
+  async getOrgPluginDetail(
+    orgId: string,
+    pluginId: string
+  ): Promise<OrgPluginDetail | null> {
+    const releases = await this.db.listPluginReleases(pluginId);
+    const install = await this.db.getOrgPlugin(orgId, pluginId);
+    if (releases.length === 0 && !install) {
+      return null;
+    }
+
+    const selected =
+      (install?.selectedVersion
+        ? releases.find(
+            (release) => release.version === install.selectedVersion
+          )
+        : null) ??
+      releases.at(-1) ??
+      null;
+    const manifest = selected?.manifest ?? null;
+
+    return {
+      actions: actionDescriptions(manifest),
+      availableVersions: releases.map((release) => release.version),
+      databaseGeneration: install?.databaseGeneration ?? null,
+      description: manifest?.description ?? "",
+      installed: Boolean(install),
+      lastLifecycleError: install?.lastLifecycleError ?? null,
+      lifecycleState: install?.lifecycleState ?? "disabled",
+      name: manifest?.name ?? pluginId,
+      pendingOperation: install?.pendingOperation ?? null,
+      pluginId,
+      revision: install?.revision ?? 0,
+      selectedVersion: install?.selectedVersion ?? selected?.version ?? null,
+      ui: manifest?.ui
+        ? {
+            assetsDir: manifest.ui.assetsDir,
+            entryHtml: manifest.ui.entryHtml,
+            pageLabel: manifest.ui.pageLabel,
+          }
+        : null,
+      updatedAt: install?.updatedAt ?? selected?.createdAt ?? "",
+    };
+  }
+
+  async removePluginRelease(pluginId: string, version: string): Promise<void> {
+    const release = await this.db.getPluginRelease(pluginId, version);
+    if (!release) {
+      throw new PluginLifecycleError("not_found");
+    }
+
+    const dependents = (await this.db.listOrgPlugins()).filter(
+      (install) =>
+        install.pluginId === pluginId && install.selectedVersion === version
+    );
+    if (dependents.length > 0) {
+      throw new PluginLifecycleError("in_use");
+    }
+
+    const deleted = await this.db.deletePluginRelease(pluginId, version);
+    if (!deleted) {
+      throw new PluginLifecycleError("not_found");
+    }
+
+    await rm(getPluginReleaseDir(pluginId, version, this.configDir), {
+      force: true,
+      recursive: true,
+    });
+  }
+
+  async resolveEnabledUiAsset(
+    orgId: string,
+    pluginId: string,
+    assetPath: string
+  ): Promise<{ isDocument: boolean; path: string } | null> {
+    const install = await this.db.getOrgPlugin(orgId, pluginId);
+    if (
+      !(
+        install &&
+        install.lifecycleState === "enabled" &&
+        install.selectedVersion
+      )
+    ) {
+      return null;
+    }
+
+    const release = await this.db.getPluginRelease(
+      pluginId,
+      install.selectedVersion
+    );
+    const ui = release?.manifest.ui;
+    if (!ui) {
+      return null;
+    }
+
+    const relativePath = assetPath.trim() === "" ? ui.entryHtml : assetPath;
+    if (!isUiReleasePath(ui, relativePath)) {
+      return null;
+    }
+
+    const releaseDir = getPluginReleaseDir(
+      pluginId,
+      install.selectedVersion,
+      this.configDir
+    );
+    try {
+      const resolved = resolvePluginReleaseEntry(releaseDir, relativePath);
+      if (!(await pathExists(resolved))) {
+        return null;
+      }
+      return {
+        isDocument:
+          relativePath === ui.entryHtml || relativePath.endsWith(".html"),
+        path: resolved,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async getEnabledUiBootstrap(
+    orgId: string,
+    pluginId: string,
+    theme: "dark" | "light"
+  ): Promise<PluginUiBootstrap | null> {
+    const install = await this.db.getOrgPlugin(orgId, pluginId);
+    if (
+      !(
+        install &&
+        install.lifecycleState === "enabled" &&
+        install.selectedVersion
+      )
+    ) {
+      return null;
+    }
+
+    return {
+      actionBaseUrl: `/v1/plugins/${pluginId}/actions`,
+      orgId,
+      pluginId,
+      pluginVersion: install.selectedVersion,
+      theme,
+    };
+  }
+
   async recoverInterruptedPluginOperations(): Promise<void> {
     const installs = await this.db.listOrgPlugins();
     for (const install of installs) {
@@ -1615,6 +1792,46 @@ export class PluginService {
       throw error;
     }
   }
+}
+
+function toReleaseSummary(release: {
+  createdAt: string;
+  digest: string;
+  manifest: PluginManifest;
+  pluginId: string;
+  version: string;
+}): PluginReleaseSummary {
+  return {
+    createdAt: release.createdAt,
+    digest: release.digest,
+    manifest: release.manifest,
+    pluginId: release.pluginId,
+    version: release.version,
+  };
+}
+
+function actionDescriptions(
+  manifest: PluginManifest | null
+): PluginActionDescription[] {
+  return (
+    manifest?.actions.map((action) => ({
+      access: action.access,
+      description: action.description,
+      effect: action.effect,
+      key: action.key,
+    })) ?? []
+  );
+}
+
+function isUiReleasePath(
+  ui: PluginUiContribution,
+  relativePath: string
+): boolean {
+  if (relativePath === ui.entryHtml) {
+    return true;
+  }
+  const assetsDir = ui.assetsDir.replace(/\/+$/, "");
+  return relativePath === assetsDir || relativePath.startsWith(`${assetsDir}/`);
 }
 
 function toPreview(inspected: InspectedPackage): PluginPackagePreview {
