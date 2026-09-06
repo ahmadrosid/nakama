@@ -13,15 +13,16 @@ interface RouteBoundaryProps {
   resetKey?: string;
 }
 
-// biome-ignore lint/style/useReactFunctionComponents: React error boundaries require a class component.
 class RouteErrorBoundary extends Component<
   RouteBoundaryProps,
   RouteErrorState
 > {
   state: RouteErrorState = { failed: false };
 
-  static getDerivedStateFromError(): Pick<RouteErrorState, "failed"> {
-    return { failed: true };
+  static getDerivedStateFromError(
+    error: Error
+  ): Pick<RouteErrorState, "failed" | "error"> {
+    return { error: error?.message ?? String(error), failed: true };
   }
 
   static getDerivedStateFromProps(
@@ -31,9 +32,22 @@ class RouteErrorBoundary extends Component<
     return routeErrorStateFromResetKey(props.resetKey, state);
   }
 
+  componentDidCatch(error: Error, errorInfo: { componentStack?: string }) {
+    console.error(
+      "RouteErrorBoundary caught error:",
+      error?.message,
+      errorInfo?.componentStack
+    );
+  }
+
   render() {
     if (this.state.failed) {
-      return <RouteLoadError fullScreen={this.props.fullScreen} />;
+      return (
+        <RouteLoadError
+          error={this.state.error}
+          fullScreen={this.props.fullScreen}
+        />
+      );
     }
 
     return this.props.children;
@@ -53,7 +67,13 @@ function RouteLoading({ fullScreen }: { fullScreen?: boolean }) {
   );
 }
 
-function RouteLoadError({ fullScreen }: { fullScreen?: boolean }) {
+function RouteLoadError({
+  fullScreen,
+  error,
+}: {
+  fullScreen?: boolean;
+  error?: string;
+}) {
   return (
     <div
       className={cn(
@@ -62,8 +82,13 @@ function RouteLoadError({ fullScreen }: { fullScreen?: boolean }) {
       )}
       role="alert"
     >
-      <div className="flex flex-col items-center gap-3 text-center">
+      <div className="flex flex-col items-center gap-3 px-4 text-center">
         <p className="font-medium">This page couldn’t be loaded.</p>
+        {error ? (
+          <p className="max-w-md rounded bg-destructive/10 p-2 font-mono text-destructive text-xs">
+            {error}
+          </p>
+        ) : null}
         <Button onClick={() => window.location.reload()} type="button">
           Reload
         </Button>
