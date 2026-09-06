@@ -3,19 +3,18 @@ import type { ChatgptOAuthCredentials } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import type { ChatgptOAuthDeviceStartResponse } from "@nakama/core/contract";
 
-export const CHATGPT_CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CHATGPT_CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 export const CHATGPT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
-export const CHATGPT_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token";
-export const CHATGPT_DEVICE_USER_CODE_URL =
+const CHATGPT_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token";
+const CHATGPT_DEVICE_USER_CODE_URL =
   "https://auth.openai.com/api/accounts/deviceauth/usercode";
-export const CHATGPT_DEVICE_TOKEN_URL =
+const CHATGPT_DEVICE_TOKEN_URL =
   "https://auth.openai.com/api/accounts/deviceauth/token";
-export const CHATGPT_DEVICE_VERIFICATION_URI =
-  "https://auth.openai.com/codex/device";
-export const CHATGPT_DEVICE_REDIRECT_URI =
+const CHATGPT_DEVICE_VERIFICATION_URI = "https://auth.openai.com/codex/device";
+const CHATGPT_DEVICE_REDIRECT_URI =
   "https://auth.openai.com/deviceauth/callback";
 export const CHATGPT_JWT_CLAIM_PATH = "https://api.openai.com/auth";
-export const CHATGPT_DEVICE_CODE_TIMEOUT_MS = 15 * 60 * 1000;
+const CHATGPT_DEVICE_CODE_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface ChatgptDeviceAuthSession {
   deviceAuthId: string;
@@ -109,7 +108,7 @@ async function readTokenResponse(
   };
 }
 
-export async function startChatgptDeviceAuth(): Promise<ChatgptDeviceAuthSession> {
+async function startChatgptDeviceAuth(): Promise<ChatgptDeviceAuthSession> {
   const response = await fetch(CHATGPT_DEVICE_USER_CODE_URL, {
     body: JSON.stringify({ client_id: CHATGPT_CODEX_CLIENT_ID }),
     headers: { "Content-Type": "application/json" },
@@ -223,7 +222,7 @@ async function pollChatgptDeviceAuthOnce(
   };
 }
 
-export async function exchangeChatgptAuthorizationCode(
+async function exchangeChatgptAuthorizationCode(
   authorizationCode: string,
   codeVerifier: string,
   redirectUri: string
