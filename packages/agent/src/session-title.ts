@@ -2,6 +2,7 @@ import type { ChatMessage, ProviderClient } from "@nakama/core";
 import { getUserMessageText } from "@nakama/core";
 
 const SNIPPET_MAX_LENGTH = 500;
+const FALLBACK_TITLE_MAX_LENGTH = 60;
 
 const SESSION_TITLE_SYSTEM = [
   "You write short titles for chat conversations.",
@@ -83,6 +84,30 @@ export function buildSessionTitlePrompt(
   return lines.join("\n");
 }
 
+function fallbackSessionTitleFromMessages(
+  messages: readonly ChatMessage[]
+): string | null {
+  const firstUser = messages.find(
+    (message): message is Extract<ChatMessage, { role: "user" }> =>
+      message.role === "user"
+  );
+
+  if (!firstUser) {
+    return null;
+  }
+
+  const text =
+    getUserMessageText(firstUser.content).trim().split("\n")[0] ?? "";
+
+  if (!text.trim()) {
+    return Array.isArray(firstUser.content) ? "Image" : null;
+  }
+
+  return normalizeSessionTitle(
+    truncateSnippet(text, FALLBACK_TITLE_MAX_LENGTH)
+  );
+}
+
 export function normalizeSessionTitle(raw: string): string | null {
   let value = raw.trim();
 
@@ -107,9 +132,10 @@ export async function generateSessionTitleFromMessages(
   options: { provider?: ProviderClient }
 ): Promise<string | null> {
   const prompt = buildSessionTitlePrompt(messages);
+  const fallback = fallbackSessionTitleFromMessages(messages);
 
   if (!(prompt && options.provider)) {
-    return null;
+    return fallback;
   }
 
   try {
@@ -119,9 +145,8 @@ export async function generateSessionTitleFromMessages(
       system: SESSION_TITLE_SYSTEM,
     });
 
-    return normalizeSessionTitle(result.content);
-  } catch (error) {
-    console.error("Failed to generate session title from provider:", error);
-    return null;
+    return normalizeSessionTitle(result.content) ?? fallback;
+  } catch {
+    return fallback;
   }
 }

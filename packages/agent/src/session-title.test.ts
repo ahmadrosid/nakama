@@ -30,15 +30,15 @@ describe("session title generation", () => {
     expect(normalizeSessionTitle("   ")).toBeNull();
   });
 
-  test("generateSessionTitleFromMessages returns null without provider", async () => {
+  test("generateSessionTitleFromMessages uses the first user line without a provider", async () => {
     const messages: ChatMessage[] = [
       { content: "Plan a database migration", role: "user" },
       { content: "Let's review the schema first.", role: "assistant" },
     ];
 
-    await expect(
-      generateSessionTitleFromMessages(messages, {})
-    ).resolves.toBeNull();
+    await expect(generateSessionTitleFromMessages(messages, {})).resolves.toBe(
+      "Plan a database migration"
+    );
   });
 
   test("generateSessionTitleFromMessages returns normalized provider output", async () => {
@@ -65,7 +65,7 @@ describe("session title generation", () => {
     ).resolves.toBe("Database Migration Plan");
   });
 
-  test("generateSessionTitleFromMessages returns null when provider fails", async () => {
+  test("generateSessionTitleFromMessages uses the first user line when the provider fails", async () => {
     const provider: ProviderClient = {
       async generateChat() {
         throw new Error("unused");
@@ -86,6 +86,6 @@ describe("session title generation", () => {
 
     await expect(
       generateSessionTitleFromMessages(messages, { provider })
-    ).resolves.toBeNull();
+    ).resolves.toBe("Plan a database migration");
   });
 });

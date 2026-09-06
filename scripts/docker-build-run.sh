@@ -12,9 +12,9 @@ echo "Building ${IMAGE_NAME}..."
 # when forcing linux/amd64. Custom DOCKER_CONFIG disables the buildx CLI plugin.
 # Build before stopping the running container so a failed build leaves the old service up.
 if [[ "${IMAGE_NAME}" == "nakama" && "$#" -eq 0 ]]; then
-  docker buildx build --load --platform=linux/amd64 -t nakama "${ROOT}"
+  docker buildx build --load --network=host --allow network.host --platform=linux/amd64 -t nakama "${ROOT}"
 else
-  docker buildx build --load --platform=linux/amd64 -t "${IMAGE_NAME}" "$@" "${ROOT}"
+  docker buildx build --load --network=host --allow network.host --platform=linux/amd64 -t "${IMAGE_NAME}" "$@" "${ROOT}"
 fi
 
 echo "Stopping ${CONTAINER_NAME}..."
