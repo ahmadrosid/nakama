@@ -45,6 +45,8 @@ export async function generateOpenAIResponsesChat(options: {
    * ids the heuristic has never seen, and it answers false for those.
    */
   supportsThinking?: boolean;
+  /** ChatGPT Codex requires `false`. Omit for the OpenAI API default. */
+  store?: boolean;
 }): Promise<ChatCompletionResult> {
   const label = options.label ?? "OpenAI";
   const baseUrl = options.baseUrl ?? DEFAULT_OPENAI_RESPONSES_BASE_URL;
@@ -54,7 +56,8 @@ export async function generateOpenAIResponsesChat(options: {
     options.stream,
     options.customModels,
     options.supportsThinking,
-    options.jsonOutput
+    options.jsonOutput,
+    options.store
   );
   const response = await fetchWithoutIdleTimeout(`${baseUrl}/responses`, {
     body: JSON.stringify(body),
@@ -102,7 +105,8 @@ async function buildResponsesRequestBody(
   stream: boolean,
   customModels?: CustomModelEntry[],
   supportsThinking?: boolean,
-  jsonOutput?: boolean
+  jsonOutput?: boolean,
+  store?: boolean
 ) {
   const tools = buildResponsesTools(
     input.tools,
@@ -122,6 +126,7 @@ async function buildResponsesRequestBody(
     ),
     ...(jsonOutput ? { text: { format: { type: "json_object" } } } : {}),
     ...(stream ? { stream: true } : {}),
+    ...(store === undefined ? {} : { store }),
   };
 }
 

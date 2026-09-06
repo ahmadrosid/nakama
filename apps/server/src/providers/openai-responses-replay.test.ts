@@ -88,4 +88,31 @@ describe("OpenAI Responses assistant replay", () => {
       type: "message",
     });
   });
+
+  test("includes store when set", async () => {
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/responses") && init?.body) {
+          const body = JSON.parse(String(init.body)) as { store?: boolean };
+          expect(body.store).toBe(false);
+        }
+        return new Response(JSON.stringify(RESPONSE_PAYLOAD), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await generateOpenAIResponsesChat({
+      apiKey: "sk-test",
+      input: { messages: [{ content: "hi", role: "user" }], system: "s" },
+      model: "gpt-5.4",
+      store: false,
+      stream: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalled();
+  });
 });

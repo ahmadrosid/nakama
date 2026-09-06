@@ -61,6 +61,7 @@ export function createChatgptProvider(
       input,
       label: "ChatGPT",
       model,
+      store: false,
       stream,
       ...(handlers ? { handlers } : {}),
       supportsThinking: true,
