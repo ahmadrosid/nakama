@@ -48,6 +48,7 @@ const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   a
 
 /** Debounce bare ESC so alt-prefix / slow paste chunks do not abort. */
 const ESC_ABORT_DEBOUNCE_MS = 50;
+const MAX_PENDING_MESSAGES = 20;
 
 interface RunChatOptions {
   channel: AgentChannel;
@@ -292,7 +293,6 @@ async function runStickyChat(
   }
 
   async function runOneSend(message: PendingMessage): Promise<void> {
-    isStreaming = true;
     abortController = new AbortController();
 
     let aborted = false;
@@ -312,7 +312,6 @@ async function runStickyChat(
         caught = error;
       }
     } finally {
-      isStreaming = false;
       abortController = null;
       thinkingIndicator.stop();
       renderer.endStream();
@@ -328,24 +327,34 @@ async function runStickyChat(
   }
 
   async function startSend(message: PendingMessage): Promise<void> {
+    if (chatExit.exiting) {
+      return;
+    }
+    if (isStreaming) {
+      writeOutput("Wait for the current response to finish.");
+      return;
+    }
+
+    // Reserve the whole drain before yielding, including async /paste arrivals.
+    isStreaming = true;
+    lastUserMessage = message.sendInput.message || message.line;
     await sendQueue.enqueue(async () => {
-      if (chatExit.exiting) {
-        return;
-      }
+      try {
+        let current: PendingMessage | undefined = message;
 
-      let current: PendingMessage | undefined = message;
+        while (current && !chatExit.exiting) {
+          try {
+            await runOneSend(current);
+          } catch (error) {
+            abortController = null;
+            writeError(error);
+          }
 
-      while (current && !chatExit.exiting) {
-        try {
-          await runOneSend(current);
-        } catch (error) {
-          isStreaming = false;
-          abortController = null;
-          writeError(error);
+          current = queue.shift();
+          syncPendingMessages();
         }
-
-        current = queue.shift();
-        syncPendingMessages();
+      } finally {
+        isStreaming = false;
       }
     });
   }
@@ -370,6 +379,13 @@ async function runStickyChat(
       });
     } catch (error) {
       writeError(error);
+      return;
+    }
+
+    if (isStreaming && queue.length >= MAX_PENDING_MESSAGES) {
+      writeOutput(
+        "Pending queue is full. Wait for a response before sending again."
+      );
       return;
     }
 
@@ -463,7 +479,6 @@ async function runStickyChat(
           return "handled";
         }
 
-        lastUserMessage = "";
         await startSend({
           images: [image],
           line: "",
