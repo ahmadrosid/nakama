@@ -785,6 +785,6 @@ describe("plugin HTTP API", () => {
     expect(
       spec.paths["/v1/plugins/{pluginId}/actions/{actionKey}"]
     ).toBeTruthy();
-    expect(spec.paths["/v1/plugins/ui/{orgId}/{pluginId}"]).toBeTruthy();
+    expect(spec.paths["/v1/plugins/ui/{orgId}/{pluginId}/{path}"]).toBeTruthy();
   });
 });

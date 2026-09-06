@@ -178,17 +178,6 @@ export function canAccessIntegrationsPage(
   return orgRole === "admin" || orgRole === "member";
 }
 
-export function canOpenPluginPage(orgRole: string | undefined): boolean {
-  return orgRole === "admin" || orgRole === "member";
-}
-
-export function canManageOrgPlugins(
-  isPlatformAdmin: boolean,
-  orgRole: string | undefined
-): boolean {
-  return canAccessSystemPage(isPlatformAdmin, orgRole);
-}
-
 export function canManagePluginReleases(isPlatformAdmin: boolean): boolean {
   return isPlatformAdmin;
 }
@@ -284,16 +273,10 @@ export function enabledPluginNavEntries(
     ui: { pageLabel: string } | null;
   }>
 ): PluginNavEntry[] {
-  const enabled = plugins.filter(
-    (plugin) => plugin.lifecycleState === "enabled" && plugin.ui !== null
-  );
-  const labelCounts = new Map<string, number>();
-  for (const plugin of enabled) {
-    const label = plugin.ui?.pageLabel ?? plugin.pluginId;
-    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-  }
-
-  return enabled
+  return plugins
+    .filter(
+      (plugin) => plugin.lifecycleState === "enabled" && plugin.ui !== null
+    )
     .toSorted((left, right) => {
       const leftLabel = left.ui?.pageLabel ?? left.pluginId;
       const rightLabel = right.ui?.pageLabel ?? right.pluginId;
@@ -303,18 +286,11 @@ export function enabledPluginNavEntries(
       }
       return left.pluginId.localeCompare(right.pluginId);
     })
-    .map((plugin) => {
-      const pageLabel = plugin.ui?.pageLabel ?? plugin.pluginId;
-      const label =
-        (labelCounts.get(pageLabel) ?? 0) > 1
-          ? `${pageLabel} (${plugin.pluginId})`
-          : pageLabel;
-      return {
-        href: pluginPagePath(plugin.pluginId),
-        label,
-        pluginId: plugin.pluginId,
-      };
-    });
+    .map((plugin) => ({
+      href: pluginPagePath(plugin.pluginId),
+      label: plugin.ui?.pageLabel ?? plugin.pluginId,
+      pluginId: plugin.pluginId,
+    }));
 }
 
 export const profilePath = (profileId: string): string =>

@@ -2191,14 +2191,15 @@ export class NakamaClient {
     );
   }
 
-  async enableOrgPlugin(
+  private async postPluginRevision(
     pluginId: string,
+    action: "disable" | "enable" | "uninstall",
     expectedRevision: number,
     orgId?: string
   ): Promise<OrgPluginDetail> {
     const request: PluginRevisionRequest = { expectedRevision };
     return this.request<OrgPluginDetail>(
-      `/v1/plugins/${encodeURIComponent(pluginId)}/enable`,
+      `/v1/plugins/${encodeURIComponent(pluginId)}/${action}`,
       {
         body: JSON.stringify(request),
         method: "POST",
@@ -2207,19 +2208,24 @@ export class NakamaClient {
     );
   }
 
+  async enableOrgPlugin(
+    pluginId: string,
+    expectedRevision: number,
+    orgId?: string
+  ): Promise<OrgPluginDetail> {
+    return this.postPluginRevision(pluginId, "enable", expectedRevision, orgId);
+  }
+
   async disableOrgPlugin(
     pluginId: string,
     expectedRevision: number,
     orgId?: string
   ): Promise<OrgPluginDetail> {
-    const request: PluginRevisionRequest = { expectedRevision };
-    return this.request<OrgPluginDetail>(
-      `/v1/plugins/${encodeURIComponent(pluginId)}/disable`,
-      {
-        body: JSON.stringify(request),
-        method: "POST",
-        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
-      }
+    return this.postPluginRevision(
+      pluginId,
+      "disable",
+      expectedRevision,
+      orgId
     );
   }
 
@@ -2255,14 +2261,11 @@ export class NakamaClient {
     expectedRevision: number,
     orgId?: string
   ): Promise<OrgPluginDetail> {
-    const request: PluginRevisionRequest = { expectedRevision };
-    return this.request<OrgPluginDetail>(
-      `/v1/plugins/${encodeURIComponent(pluginId)}/uninstall`,
-      {
-        body: JSON.stringify(request),
-        method: "POST",
-        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
-      }
+    return this.postPluginRevision(
+      pluginId,
+      "uninstall",
+      expectedRevision,
+      orgId
     );
   }
 

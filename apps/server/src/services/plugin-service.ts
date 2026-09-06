@@ -66,7 +66,7 @@ export type PluginPackageErrorCode =
   | "unsupported_entry"
   | "version_conflict";
 
-class PluginHostError extends Error {
+export class PluginHostError extends Error {
   readonly retryable: boolean;
 
   constructor(
@@ -79,14 +79,8 @@ class PluginHostError extends Error {
   }
 }
 
-export class PluginPackageError extends PluginHostError {
-  declare readonly code: PluginPackageErrorCode;
-
-  constructor(code: PluginPackageErrorCode) {
-    super(code);
-    this.name = "PluginPackageError";
-  }
-}
+export const PluginPackageError = PluginHostError;
+export type PluginPackageError = PluginHostError;
 
 export interface PluginPackagePreview {
   contributions: PluginContributionSummary;
@@ -166,14 +160,8 @@ export type PluginInvocationErrorCode =
   | "unknown_action"
   | "unknown_hook";
 
-export class PluginInvocationError extends PluginHostError {
-  declare readonly code: PluginInvocationErrorCode;
-
-  constructor(code: PluginInvocationErrorCode, retryable = code === "busy") {
-    super(code, retryable);
-    this.name = "PluginInvocationError";
-  }
-}
+export const PluginInvocationError = PluginHostError;
+export type PluginInvocationError = PluginHostError;
 
 export type PluginLifecycleErrorCode =
   | "incompatible"
@@ -185,14 +173,8 @@ export type PluginLifecycleErrorCode =
   | "package_unavailable"
   | "stale_revision";
 
-export class PluginLifecycleError extends PluginHostError {
-  declare readonly code: PluginLifecycleErrorCode;
-
-  constructor(code: PluginLifecycleErrorCode, message = code) {
-    super(code, false, message);
-    this.name = "PluginLifecycleError";
-  }
-}
+export const PluginLifecycleError = PluginHostError;
+export type PluginLifecycleError = PluginHostError;
 
 export interface PluginServiceOptions {
   drainTimeoutMs?: number;
@@ -383,8 +365,8 @@ export class PluginService {
     }
 
     const { id, version } = inspected.manifest;
-    return withInstallLock(`${id}@${version}`, async () =>
-      withStagingLock(async () => {
+    return withKeyedLock(installLocks, `${id}@${version}`, async () =>
+      withKeyedLock(stagingLocks, "staging", async () => {
         await cleanupAbandonedStaging(this.configDir);
         try {
           return await this.publishInspectedPackage(inspected);
@@ -402,92 +384,86 @@ export class PluginService {
       await this.assertToolAssignment(input);
     }
 
-    const { handle, install, manifest, releaseDir } =
-      await this.admitInvocation(input.orgId, input.pluginId, "action");
-    try {
-      const action = manifest.actions.find(
-        (item) => item.key === input.actionKey
-      );
-      if (!action) {
-        throw new PluginInvocationError("unknown_action");
-      }
-      if (!actorMayInvoke(action.access, input.actor.role)) {
-        throw new PluginInvocationError("forbidden");
-      }
+    return this.runAdmitted(
+      input.orgId,
+      input.pluginId,
+      "action",
+      input.signal,
+      ({ handle, install, manifest, releaseDir }) => {
+        const action = manifest.actions.find(
+          (item) => item.key === input.actionKey
+        );
+        if (!action) {
+          throw new PluginInvocationError("unknown_action");
+        }
+        if (!actorMayInvoke(action.access, input.actor.role)) {
+          throw new PluginInvocationError("forbidden");
+        }
 
-      const cleanedInput = stripSpoofedInput(input.input);
-      if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
-        throw new PluginInvocationError("invalid_input");
-      }
+        const cleanedInput = stripSpoofedInput(input.input);
+        if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
+          throw new PluginInvocationError("invalid_input");
+        }
 
-      const context = this.buildInvocationContext({
-        actor: input.actor,
-        install,
-        invocationId: handle.invocationId,
-        manifest,
-        orgId: input.orgId,
-        pluginId: input.pluginId,
-        profileId: input.access === "tool" ? input.profileId : undefined,
-        sessionId: input.access === "tool" ? input.sessionId : undefined,
-      });
-      if (input.access === "tool" && !context.profileId) {
-        throw new PluginInvocationError("invalid_input");
-      }
+        const context = this.buildInvocationContext({
+          actor: input.actor,
+          install,
+          invocationId: handle.invocationId,
+          manifest,
+          orgId: input.orgId,
+          pluginId: input.pluginId,
+          profileId: input.access === "tool" ? input.profileId : undefined,
+          sessionId: input.access === "tool" ? input.sessionId : undefined,
+        });
+        if (input.access === "tool" && !context.profileId) {
+          throw new PluginInvocationError("invalid_input");
+        }
 
-      return {
-        invocationId: handle.invocationId,
-        result: await this.spawnPluginModule({
+        return {
           context,
           entry: action.entry,
           input: cleanedInput,
           label: "Plugin action",
           releaseDir,
-          signal: mergeAbortSignals(input.signal, handle.abort.signal),
-        }),
-      };
-    } finally {
-      handle.release();
-    }
+        };
+      }
+    );
   }
 
   async invokePluginHook(
     input: InvokePluginHookInput
   ): Promise<PluginInvocationResult> {
-    const { handle, install, manifest, releaseDir } =
-      await this.admitInvocation(input.orgId, input.pluginId, "hook");
-    try {
-      const entry =
-        input.kind === "activate"
-          ? manifest.hooks?.activate
-          : manifest.hooks?.deactivate;
-      if (!entry) {
-        throw new PluginInvocationError("unknown_hook");
-      }
+    return this.runAdmitted(
+      input.orgId,
+      input.pluginId,
+      "hook",
+      input.signal,
+      ({ handle, install, manifest, releaseDir }) => {
+        const entry =
+          input.kind === "activate"
+            ? manifest.hooks?.activate
+            : manifest.hooks?.deactivate;
+        if (!entry) {
+          throw new PluginInvocationError("unknown_hook");
+        }
 
-      const context = this.buildInvocationContext({
-        actor: input.actor,
-        databaseGeneration: input.databaseGeneration,
-        install,
-        invocationId: handle.invocationId,
-        manifest,
-        orgId: input.orgId,
-        pluginId: input.pluginId,
-      });
-
-      return {
-        invocationId: handle.invocationId,
-        result: await this.spawnPluginModule({
-          context,
+        return {
+          context: this.buildInvocationContext({
+            actor: input.actor,
+            databaseGeneration: input.databaseGeneration,
+            install,
+            invocationId: handle.invocationId,
+            manifest,
+            orgId: input.orgId,
+            pluginId: input.pluginId,
+          }),
           entry,
           input: {},
           label: "Plugin hook",
           releaseDir,
-          signal: mergeAbortSignals(input.signal, handle.abort.signal),
-        }),
-      };
-    } finally {
-      handle.release();
-    }
+        };
+      }
+    );
   }
 
   async capabilityRevisionForOrg(orgId: string): Promise<string> {
@@ -1267,6 +1243,34 @@ export class PluginService {
     );
     if (!ok) {
       throw new PluginInvocationError("forbidden");
+    }
+  }
+
+  private async runAdmitted(
+    orgId: string,
+    pluginId: string,
+    kind: "action" | "hook",
+    signal: AbortSignal | undefined,
+    work: (admitted: Awaited<ReturnType<PluginService["admitInvocation"]>>) => {
+      context: PluginExecutionContext;
+      entry: string;
+      input: unknown;
+      label: string;
+      releaseDir: string;
+    }
+  ): Promise<PluginInvocationResult> {
+    const admitted = await this.admitInvocation(orgId, pluginId, kind);
+    try {
+      const job = work(admitted);
+      return {
+        invocationId: admitted.handle.invocationId,
+        result: await this.spawnPluginModule({
+          ...job,
+          signal: mergeAbortSignals(signal, admitted.handle.abort.signal),
+        }),
+      };
+    } finally {
+      admitted.handle.release();
     }
   }
 
@@ -2699,41 +2703,27 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-let stagingLock: Promise<unknown> = Promise.resolve();
+const stagingLocks = new Map<string, Promise<unknown>>();
 
-async function withStagingLock<T>(work: () => Promise<T>): Promise<T> {
-  const previous = stagingLock;
-  let releaseLock = () => {};
-  const current = new Promise<void>((resolveLock) => {
-    releaseLock = resolveLock;
-  });
-  stagingLock = previous.then(() => current);
-  await previous;
-  try {
-    return await work();
-  } finally {
-    releaseLock();
-  }
-}
-
-async function withInstallLock<T>(
+async function withKeyedLock<T>(
+  locks: Map<string, Promise<unknown>>,
   key: string,
   work: () => Promise<T>
 ): Promise<T> {
-  const previous = installLocks.get(key) ?? Promise.resolve();
+  const previous = locks.get(key) ?? Promise.resolve();
   let releaseLock = () => {};
   const current = new Promise<void>((resolveLock) => {
     releaseLock = resolveLock;
   });
   const chained = previous.then(() => current);
-  installLocks.set(key, chained);
+  locks.set(key, chained);
   await previous;
   try {
     return await work();
   } finally {
     releaseLock();
-    if (installLocks.get(key) === chained) {
-      installLocks.delete(key);
+    if (locks.get(key) === chained) {
+      locks.delete(key);
     }
   }
 }

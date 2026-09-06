@@ -19,9 +19,7 @@ import {
 } from "@nakama/core";
 import type { Context } from "hono";
 import {
-  PluginInvocationError,
-  PluginLifecycleError,
-  PluginPackageError,
+  PluginHostError,
   type PluginService,
 } from "../../services/plugin-service";
 import type { ServerOptions } from "../context";
@@ -68,10 +66,6 @@ export function registerPluginRoutes(
     actionKey: z.string().openapi({ param: { in: "path", name: "actionKey" } }),
     pluginId: z.string().openapi({ param: { in: "path", name: "pluginId" } }),
   });
-  const pluginUiParams = z.object({
-    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
-    pluginId: z.string().openapi({ param: { in: "path", name: "pluginId" } }),
-  });
   const archiveRequestSchema = z
     .object({
       data: z.string(),
@@ -111,7 +105,6 @@ export function registerPluginRoutes(
     .object({ input: z.unknown().optional() })
     .openapi("InvokePluginActionRequest");
   const invokeResponseSchema = openapiBag("InvokePluginActionResponse");
-  const bootstrapSchema = openapiBag("PluginUiBootstrap");
   const errorResponse = {
     content: { "application/json": { schema: errorSchema } },
     description: "Error",
@@ -327,30 +320,7 @@ export function registerPluginRoutes(
   pluginPath({
     extra: { 404: errorResponse },
     method: "get",
-    ok: jsonOk(bootstrapSchema, "Plugin page bootstrap"),
-    operationId: "getPluginUiBootstrap",
-    path: "/v1/plugins/ui/{orgId}/{pluginId}/__nakama/bootstrap.json",
-    request: { params: pluginUiParams },
-    summary: "Non-secret bootstrap for an enabled plugin page",
-    tags: plugins,
-  });
-  pluginPath({
-    extra: { 404: errorResponse },
-    method: "get",
-    ok: {
-      content: { "text/html": { schema: z.string() } },
-      description: "Plugin UI document",
-    },
-    operationId: "getPluginUiDocument",
-    path: "/v1/plugins/ui/{orgId}/{pluginId}",
-    request: { params: pluginUiParams },
-    summary: "Serve the enabled plugin UI entry document",
-    tags: plugins,
-  });
-  pluginPath({
-    extra: { 404: errorResponse },
-    method: "get",
-    ok: { description: "Plugin UI asset" },
+    ok: { description: "Plugin UI document or asset" },
     operationId: "getPluginUiAsset",
     path: "/v1/plugins/ui/{orgId}/{pluginId}/{path}",
     request: {
@@ -739,51 +709,34 @@ function contentTypeFor(filePath: string, isDocument: boolean): string {
   return UI_MIME_TYPES[extension] ?? "application/octet-stream";
 }
 
+const PLUGIN_ERROR_STATUS: Record<string, number> = {
+  archive_too_large: 413,
+  busy: 429,
+  digest_mismatch: 400,
+  duplicate_entry: 400,
+  expansion_limit: 413,
+  forbidden: 403,
+  interrupted: 503,
+  invalid_archive: 400,
+  invalid_entry: 400,
+  invalid_input: 400,
+  invalid_manifest: 400,
+  missing_manifest: 400,
+  missing_referenced_file: 400,
+  not_found: 404,
+  package_unavailable: 404,
+  unknown_action: 404,
+  unknown_hook: 404,
+  unsafe_path: 400,
+  unsupported_entry: 400,
+};
+
 function throwPluginHttpError(error: unknown): never {
-  if (error instanceof PluginPackageError) {
-    throw new NakamaApiError(error.code, statusForPackageError(error.code));
-  }
-  if (error instanceof PluginLifecycleError) {
-    throw new NakamaApiError(error.code, statusForLifecycleError(error.code));
-  }
-  if (error instanceof PluginInvocationError) {
-    throw new NakamaApiError(error.code, statusForInvocationError(error.code));
+  if (error instanceof PluginHostError) {
+    throw new NakamaApiError(
+      error.code,
+      PLUGIN_ERROR_STATUS[error.code] ?? 409
+    );
   }
   throw error;
-}
-
-function statusForPackageError(code: PluginPackageError["code"]): number {
-  if (code === "archive_too_large" || code === "expansion_limit") {
-    return 413;
-  }
-  if (code === "version_conflict") {
-    return 409;
-  }
-  return 400;
-}
-
-function statusForLifecycleError(code: PluginLifecycleError["code"]): number {
-  if (code === "not_found" || code === "package_unavailable") {
-    return 404;
-  }
-  if (code === "interrupted") {
-    return 503;
-  }
-  return 409;
-}
-
-function statusForInvocationError(code: PluginInvocationError["code"]): number {
-  if (code === "forbidden") {
-    return 403;
-  }
-  if (code === "unknown_action" || code === "unknown_hook") {
-    return 404;
-  }
-  if (code === "busy") {
-    return 429;
-  }
-  if (code === "invalid_input" || code === "invalid_entry") {
-    return 400;
-  }
-  return 409;
 }

@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
@@ -6,7 +5,6 @@ import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import {
   apiErrorStatus,
-  cancelOrgPluginQueries,
   isNakamaPluginReadyMessage,
   PLUGIN_READY_TIMEOUT_MS,
   pluginPageStateMessage,
@@ -16,7 +14,6 @@ import {
 } from "@/hooks/use-plugins";
 import {
   canAccessSystemPage,
-  canOpenPluginPage,
   PAGE_PATHS,
   pluginsSystemPath,
 } from "@/lib/navigation";
@@ -25,7 +22,6 @@ export function PluginPage() {
   const { pluginId } = useParams<{ pluginId: string }>();
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
-  const queryClient = useQueryClient();
   const orgId = activeOrg?.id ?? "";
   const orgRole = activeOrg?.role;
   const canManage = canAccessSystemPage(
@@ -36,15 +32,6 @@ export function PluginPage() {
   const [iframeReady, setIframeReady] = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  useEffect(
-    () => () => {
-      if (orgId) {
-        void cancelOrgPluginQueries(queryClient, orgId);
-      }
-    },
-    [orgId, queryClient]
-  );
 
   useEffect(() => {
     setIframeReady(false);
@@ -94,22 +81,11 @@ export function PluginPage() {
     };
   }, [iframeReady, pluginId, view]);
 
-  if (!pluginId) {
+  if (!pluginId || view !== "frame") {
     return (
       <PluginPageState
         canManage={canManage}
-        kind="unavailable"
-        viewer={orgRole === "viewer"}
-      />
-    );
-  }
-
-  if (view !== "frame") {
-    return (
-      <PluginPageState
-        canManage={canManage}
-        kind={view}
-        viewer={!canOpenPluginPage(orgRole)}
+        kind={pluginId ? view : "unavailable"}
       />
     );
   }
@@ -139,20 +115,18 @@ export function PluginPage() {
 export function PluginPageState({
   kind,
   canManage,
-  viewer,
 }: {
   kind: ReturnType<typeof resolvePluginPageView>;
   canManage: boolean;
-  viewer: boolean;
 }) {
-  const href = canManage ? pluginsSystemPath() : PAGE_PATHS.chat;
-  const linkLabel = canManage ? "Plugins" : viewer ? "Chat" : "Chat";
-
   return (
     <div className="flex min-h-64 flex-col items-start justify-center gap-3 p-6">
       <p className="type-page-title">{pluginPageStateMessage(kind)}</p>
-      <Link className="text-sm underline underline-offset-2" to={href}>
-        {linkLabel}
+      <Link
+        className="text-sm underline underline-offset-2"
+        to={canManage ? pluginsSystemPath() : PAGE_PATHS.chat}
+      >
+        {canManage ? "Plugins" : "Chat"}
       </Link>
     </div>
   );

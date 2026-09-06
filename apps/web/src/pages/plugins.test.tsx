@@ -19,7 +19,6 @@ import {
   pluginHasRetainedData,
   pluginRowActions,
   pluginRowIdentity,
-  pluginUiBootstrapUrl,
   pluginUiDocumentUrl,
   resolvePluginPageView,
   useEnableOrgPlugin,
@@ -289,12 +288,9 @@ describe("plugin page states and iframe contract", () => {
     );
   });
 
-  test("theme is on iframe and bootstrap URLs", () => {
+  test("theme is on the iframe URL", () => {
     expect(pluginUiDocumentUrl("org-a", "notes", "dark")).toBe(
       "/v1/plugins/ui/org-a/notes?theme=dark"
-    );
-    expect(pluginUiBootstrapUrl("org-a", "notes", "light")).toBe(
-      "/v1/plugins/ui/org-a/notes/__nakama/bootstrap.json?theme=light"
     );
   });
 
@@ -390,7 +386,6 @@ describe("plugin page states and iframe contract", () => {
         createElement(PluginPageState, {
           canManage: true,
           kind: "failed",
-          viewer: false,
         })
       )
     );
@@ -407,7 +402,6 @@ describe("plugin page states and iframe contract", () => {
         createElement(PluginPageState, {
           canManage: false,
           kind: "unauthorized",
-          viewer: true,
         })
       )
     );

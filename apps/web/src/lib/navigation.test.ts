@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  canManageOrgPlugins,
+  canAccessIntegrationsPage,
+  canAccessSystemPage,
   canManagePluginReleases,
-  canOpenPluginPage,
   enabledPluginNavEntries,
   orgSkillProposalsPath,
   pageIdFromPath,
@@ -116,16 +116,16 @@ describe("plugin navigation", () => {
     ]);
 
     expect(entries.map((entry) => entry.pluginId)).toEqual(["alpha", "zeta"]);
-    expect(entries[0]?.label).toBe("Notes (alpha)");
-    expect(entries[1]?.label).toBe("Notes (zeta)");
+    expect(entries[0]?.label).toBe("Notes");
+    expect(entries[1]?.label).toBe("Notes");
   });
 
   test("members can open pages; viewers cannot; org admins manage", () => {
-    expect(canOpenPluginPage("member")).toBe(true);
-    expect(canOpenPluginPage("admin")).toBe(true);
-    expect(canOpenPluginPage("viewer")).toBe(false);
-    expect(canManageOrgPlugins(false, "admin")).toBe(true);
-    expect(canManageOrgPlugins(false, "member")).toBe(false);
+    expect(canAccessIntegrationsPage("member")).toBe(true);
+    expect(canAccessIntegrationsPage("admin")).toBe(true);
+    expect(canAccessIntegrationsPage("viewer")).toBe(false);
+    expect(canAccessSystemPage(false, "admin")).toBe(true);
+    expect(canAccessSystemPage(false, "member")).toBe(false);
     expect(canManagePluginReleases(true)).toBe(true);
     expect(canManagePluginReleases(false)).toBe(false);
   });

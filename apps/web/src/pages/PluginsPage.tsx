@@ -37,7 +37,7 @@ import {
 } from "@/hooks/use-plugins";
 import { formatError } from "@/lib/client";
 import {
-  canManageOrgPlugins,
+  canAccessSystemPage,
   canManagePluginReleases,
   PAGE_PATHS,
   pluginPagePath,
@@ -65,7 +65,7 @@ type PluginDialog =
 export function PluginsPage() {
   const { user, activeOrg } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
-  const canManage = canManageOrgPlugins(isPlatformAdmin, activeOrg?.role);
+  const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
   const canUpload = canManagePluginReleases(isPlatformAdmin);
   const orgId = activeOrg?.id ?? "";
   const { data: plugins = [], isLoading, error } = useOrgPlugins();

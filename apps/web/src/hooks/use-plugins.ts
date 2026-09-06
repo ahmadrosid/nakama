@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
-import { canOpenPluginPage } from "@/lib/navigation";
+import { canAccessIntegrationsPage } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 
 export const NAKAMA_PLUGIN_READY_TYPE = "nakama-plugin-ready";
@@ -55,7 +55,7 @@ function pluginReleasesQueryOptions() {
 export function useOrgPlugins() {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
-  const allowed = canOpenPluginPage(activeOrg?.role);
+  const allowed = canAccessIntegrationsPage(activeOrg?.role);
 
   return useQuery({
     ...orgPluginsQueryOptions(orgId),
@@ -67,7 +67,7 @@ export function useOrgPlugins() {
 export function useOrgPlugin(pluginId: string | undefined) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
-  const allowed = canOpenPluginPage(activeOrg?.role);
+  const allowed = canAccessIntegrationsPage(activeOrg?.role);
 
   return useQuery({
     ...orgPluginQueryOptions(orgId, pluginId ?? ""),
@@ -253,13 +253,6 @@ export function useDeleteRetainedPluginData() {
   );
 }
 
-export function cancelOrgPluginQueries(
-  queryClient: ReturnType<typeof useQueryClient>,
-  orgId: string
-) {
-  return queryClient.cancelQueries({ queryKey: ["plugins", orgId] });
-}
-
 export function pluginUiDocumentUrl(
   orgId: string,
   pluginId: string,
@@ -267,15 +260,6 @@ export function pluginUiDocumentUrl(
 ): string {
   const params = new URLSearchParams({ theme });
   return `/v1/plugins/ui/${encodeURIComponent(orgId)}/${encodeURIComponent(pluginId)}?${params}`;
-}
-
-export function pluginUiBootstrapUrl(
-  orgId: string,
-  pluginId: string,
-  theme: "dark" | "light"
-): string {
-  const params = new URLSearchParams({ theme });
-  return `/v1/plugins/ui/${encodeURIComponent(orgId)}/${encodeURIComponent(pluginId)}/__nakama/bootstrap.json?${params}`;
 }
 
 /**
@@ -352,7 +336,7 @@ export function resolvePluginPageView(input: {
   plugin?: OrgPluginDetail | null;
   queryStatus: "error" | "pending" | "success";
 }): PluginPageViewKind {
-  if (!canOpenPluginPage(input.orgRole) || input.errorStatus === 403) {
+  if (!canAccessIntegrationsPage(input.orgRole) || input.errorStatus === 403) {
     return "unauthorized";
   }
 
