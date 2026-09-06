@@ -5,7 +5,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
 import { client, formatError } from "@/lib/client";
 
-type ChatgptSignInPhase = "idle" | "waiting" | "connected" | "error";
+type ChatgptSignInFlow = "idle" | "waiting" | "error";
 
 interface ChatgptSignInPanelProps {
   density?: "default" | "compact";
@@ -20,22 +20,12 @@ export function ChatgptSignInPanel({
   oauth,
   onOAuthChange,
 }: ChatgptSignInPanelProps) {
-  const [phase, setPhase] = useState<ChatgptSignInPhase>(
-    oauth ? "connected" : "idle"
-  );
+  const [flow, setFlow] = useState<ChatgptSignInFlow>("idle");
   const [error, setError] = useState<string | null>(null);
   const [userCode, setUserCode] = useState<string | null>(null);
   const [verificationUri, setVerificationUri] = useState<string | null>(null);
   const signInAbortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (oauth) {
-      setPhase("connected");
-      return;
-    }
-
-    setPhase("idle");
-  }, [oauth]);
+  const connected = Boolean(oauth) && flow !== "waiting";
 
   useEffect(
     () => () => {
@@ -50,7 +40,7 @@ export function ChatgptSignInPanel({
     signInAbortRef.current = controller;
 
     setError(null);
-    setPhase("waiting");
+    setFlow("waiting");
     onOAuthChange(null);
     setUserCode(null);
     setVerificationUri(null);
@@ -72,21 +62,21 @@ export function ChatgptSignInPanel({
       }
 
       onOAuthChange(result.chatgptOAuth);
-      setPhase("connected");
+      setFlow("idle");
       setError(null);
     } catch (err) {
       if (controller.signal.aborted) {
         return;
       }
 
-      setPhase("error");
+      setFlow("error");
       setError(formatError(err));
     }
   };
 
   const cancelSignIn = () => {
     signInAbortRef.current?.abort();
-    setPhase(oauth ? "connected" : "idle");
+    setFlow("idle");
     setUserCode(null);
     setVerificationUri(null);
   };
@@ -108,7 +98,7 @@ export function ChatgptSignInPanel({
       }
       label="ChatGPT account"
     >
-      {phase === "connected" ? (
+      {connected ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm">Connected</p>
           <Button
@@ -123,7 +113,7 @@ export function ChatgptSignInPanel({
             Reconnect
           </Button>
         </div>
-      ) : phase === "waiting" ? (
+      ) : flow === "waiting" ? (
         <div className="space-y-3 rounded-md border p-3">
           <p className="text-sm">
             Open{" "}
