@@ -10,7 +10,7 @@ function isLocalHostname(hostname: string): boolean {
  * Empty / relative baseUrl stays same-origin. Absolute URLs must be http(s);
  * localhost is rejected in production builds.
  */
-export function resolvePublicArtifactShareOrigin(
+function resolvePublicArtifactShareOrigin(
   baseUrl: string,
   options?: { isProd?: boolean }
 ): string {
@@ -48,18 +48,4 @@ export function buildPublicArtifactShareUrl(
   const path = `/v1/public/artifact-shares/${encodeURIComponent(token)}`;
   const suffix = query ? `?${query}` : "";
   return `${origin}${path}${suffix}`;
-}
-
-/** Same as buildPublicArtifactShareUrl, or null when the origin is rejected. */
-export function tryBuildPublicArtifactShareUrl(
-  baseUrl: string,
-  token: string,
-  query?: string,
-  options?: { isProd?: boolean }
-): string | null {
-  try {
-    return buildPublicArtifactShareUrl(baseUrl, token, query, options);
-  } catch {
-    return null;
-  }
 }

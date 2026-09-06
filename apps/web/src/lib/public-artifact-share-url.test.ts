@@ -1,48 +1,45 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildPublicArtifactShareUrl,
-  resolvePublicArtifactShareOrigin,
-  tryBuildPublicArtifactShareUrl,
-} from "./public-artifact-share-url";
+import { buildPublicArtifactShareUrl } from "./public-artifact-share-url";
 
-describe("resolvePublicArtifactShareOrigin", () => {
-  test("allows empty baseUrl for same-origin relative fetches", () => {
-    expect(resolvePublicArtifactShareOrigin("")).toBe("");
-    expect(resolvePublicArtifactShareOrigin("  ")).toBe("");
-  });
-
-  test("allows http(s) absolute origins", () => {
-    expect(resolvePublicArtifactShareOrigin("https://app.example.com/")).toBe(
-      "https://app.example.com"
+describe("buildPublicArtifactShareUrl", () => {
+  test("builds relative and absolute share URLs", () => {
+    expect(buildPublicArtifactShareUrl("", "tok_1", "meta=1")).toBe(
+      "/v1/public/artifact-shares/tok_1?meta=1"
     );
-    expect(resolvePublicArtifactShareOrigin("http://app.example.com")).toBe(
-      "http://app.example.com"
+    expect(buildPublicArtifactShareUrl("  ", "tok_1")).toBe(
+      "/v1/public/artifact-shares/tok_1"
+    );
+    expect(
+      buildPublicArtifactShareUrl("https://app.example.com/", "tok/2")
+    ).toBe("https://app.example.com/v1/public/artifact-shares/tok%2F2");
+    expect(buildPublicArtifactShareUrl("http://app.example.com", "tok_1")).toBe(
+      "http://app.example.com/v1/public/artifact-shares/tok_1"
     );
   });
 
   test("rejects non-http protocols", () => {
     expect(() =>
-      resolvePublicArtifactShareOrigin("file:///etc/passwd")
+      buildPublicArtifactShareUrl("file:///etc/passwd", "tok_1")
     ).toThrow("unavailable");
     expect(() =>
-      resolvePublicArtifactShareOrigin("javascript:alert(1)")
+      buildPublicArtifactShareUrl("javascript:alert(1)", "tok_1")
     ).toThrow("unavailable");
   });
 
   test("rejects invalid URLs", () => {
-    expect(() => resolvePublicArtifactShareOrigin("not a url")).toThrow(
+    expect(() => buildPublicArtifactShareUrl("not a url", "tok_1")).toThrow(
       "unavailable"
     );
   });
 
   test("rejects localhost in production", () => {
     expect(() =>
-      resolvePublicArtifactShareOrigin("http://localhost:4310", {
+      buildPublicArtifactShareUrl("http://localhost:4310", "tok_1", undefined, {
         isProd: true,
       })
     ).toThrow("unavailable");
     expect(() =>
-      resolvePublicArtifactShareOrigin("http://127.0.0.1:4310", {
+      buildPublicArtifactShareUrl("http://127.0.0.1:4310", "tok_1", undefined, {
         isProd: true,
       })
     ).toThrow("unavailable");
@@ -50,33 +47,9 @@ describe("resolvePublicArtifactShareOrigin", () => {
 
   test("allows localhost outside production", () => {
     expect(
-      resolvePublicArtifactShareOrigin("http://localhost:4310", {
+      buildPublicArtifactShareUrl("http://localhost:4310", "tok_1", undefined, {
         isProd: false,
       })
-    ).toBe("http://localhost:4310");
-  });
-});
-
-describe("buildPublicArtifactShareUrl", () => {
-  test("builds relative and absolute share URLs", () => {
-    expect(buildPublicArtifactShareUrl("", "tok_1", "meta=1")).toBe(
-      "/v1/public/artifact-shares/tok_1?meta=1"
-    );
-    expect(
-      buildPublicArtifactShareUrl("https://app.example.com", "tok/2")
-    ).toBe("https://app.example.com/v1/public/artifact-shares/tok%2F2");
-  });
-});
-
-describe("tryBuildPublicArtifactShareUrl", () => {
-  test("returns null for rejected origins instead of throwing", () => {
-    expect(
-      tryBuildPublicArtifactShareUrl("file:///etc/passwd", "tok_1")
-    ).toBeNull();
-    expect(
-      tryBuildPublicArtifactShareUrl("http://localhost:4310", "tok_1", undefined, {
-        isProd: true,
-      })
-    ).toBeNull();
+    ).toBe("http://localhost:4310/v1/public/artifact-shares/tok_1");
   });
 });

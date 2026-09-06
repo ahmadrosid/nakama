@@ -18,7 +18,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
-import { tryBuildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
+import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
 import { cn } from "@/lib/utils";
 
 function publicShareError(token: string, loadError: unknown): string | null {
@@ -286,7 +286,12 @@ export function PublicArtifactSharePage() {
     };
   }, []);
 
-  const downloadUrl = tryBuildPublicArtifactShareUrl(client.baseUrl, token);
+  let downloadUrl: string | null = null;
+  try {
+    downloadUrl = buildPublicArtifactShareUrl(client.baseUrl, token);
+  } catch {
+    downloadUrl = null;
+  }
   const fillViewport = preview.isHtml || preview.isSpreadsheet;
 
   return (
