@@ -96,6 +96,7 @@ import {
   findRetryPrompt,
   markStreamingTurnFailed,
   messagesWithoutFailedTurn,
+  nextSuccessfulTurnAt,
 } from "@/pages/chat/chat-page.shared";
 
 interface SendMessageOptions {
@@ -537,7 +538,9 @@ export function useChatPage() {
             setSessionModel(refreshed.model);
 
             if (reconnected) {
-              setLastSuccessfulTurnAt(Date.now());
+              setLastSuccessfulTurnAt((previous) =>
+                nextSuccessfulTurnAt(previous)
+              );
             }
           }
         }
@@ -810,7 +813,7 @@ export function useChatPage() {
         setAgentQuestionnaire(questionnaire);
         setContextUsage(nextContextUsage ?? null);
         setSessionModel(nextSessionModel);
-        setLastSuccessfulTurnAt(Date.now());
+        setLastSuccessfulTurnAt((previous) => nextSuccessfulTurnAt(previous));
       } catch (err) {
         if (isAbortError(err)) {
           setMessages((current) => finalizeStreamingMessages(current));

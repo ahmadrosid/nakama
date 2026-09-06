@@ -10,6 +10,7 @@ import {
   findFailedRetryPrompt,
   markStreamingTurnFailed,
   messagesWithoutFailedTurn,
+  nextSuccessfulTurnAt,
 } from "@/pages/chat/chat-page.shared";
 
 function user(
@@ -174,5 +175,19 @@ describe("failed chat turn storage", () => {
 
       expect(readFailedChatTurn(sessionId)).toBeNull();
     });
+  });
+});
+
+describe("nextSuccessfulTurnAt", () => {
+  test("uses wall clock when there is no previous stamp", () => {
+    expect(nextSuccessfulTurnAt(null, 1000)).toBe(1000);
+  });
+
+  test("keeps wall clock when time advances", () => {
+    expect(nextSuccessfulTurnAt(1000, 1005)).toBe(1005);
+  });
+
+  test("bumps by 1ms when two turns finish in the same millisecond", () => {
+    expect(nextSuccessfulTurnAt(1000, 1000)).toBe(1001);
   });
 });
