@@ -18,6 +18,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
+import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
 import { cn } from "@/lib/utils";
 
 function publicShareError(token: string, loadError: unknown): string | null {
@@ -83,13 +84,13 @@ function PublicArtifactShareHeader({
 }: {
   filename: string;
   token: string;
-  downloadUrl: string;
+  downloadUrl: string | null;
 }) {
   return (
     <header className="border-border border-b px-3 py-1.5">
       <div className="flex items-center justify-between gap-3">
         <p className="truncate font-medium text-xs">{filename}</p>
-        {token ? (
+        {token && downloadUrl ? (
           <a
             className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 font-medium text-xs hover:bg-muted"
             href={downloadUrl}
@@ -119,7 +120,7 @@ function PublicArtifactPreview({
     sizeBytes: number;
   };
   content: string | null;
-  downloadUrl: string;
+  downloadUrl: string | null;
   preview: SharePreview;
 }) {
   const {
@@ -137,7 +138,7 @@ function PublicArtifactPreview({
         artifact={artifact}
         canPreview={canPreview}
         error={null}
-        imagePreviewUrl={downloadUrl}
+        imagePreviewUrl={downloadUrl ?? undefined}
         kind="image"
         loading={false}
       />
@@ -152,7 +153,7 @@ function PublicArtifactPreview({
         error={null}
         kind="video"
         loading={false}
-        videoPreviewUrl={downloadUrl}
+        videoPreviewUrl={downloadUrl ?? undefined}
       />
     );
   }
@@ -215,7 +216,7 @@ function PublicArtifactShareMain({
     sizeBytes: number;
   } | null;
   content: string | null;
-  downloadUrl: string;
+  downloadUrl: string | null;
   error: string | null;
   filename?: string;
   loading: boolean;
@@ -285,7 +286,12 @@ export function PublicArtifactSharePage() {
     };
   }, []);
 
-  const downloadUrl = `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`;
+  let downloadUrl: string | null = null;
+  try {
+    downloadUrl = buildPublicArtifactShareUrl(client.baseUrl, token);
+  } catch {
+    downloadUrl = null;
+  }
   const fillViewport = preview.isHtml || preview.isSpreadsheet;
 
   return (
