@@ -14,6 +14,7 @@ import type {
 import type { Fetcher } from "@openrouter/sdk";
 import { HTTPClient, OpenRouter } from "@openrouter/sdk";
 import type {
+  ChatContentItems,
   ChatFunctionTool,
   ChatMessages,
   ChatRequest,
@@ -107,7 +108,50 @@ function toSdkTools(
   }));
 }
 
+function toSdkUserContent(
+  content: Extract<OpenAIMessage, { role: "user" }>["content"]
+): string | ChatContentItems[] {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  return content.map((part): ChatContentItems => {
+    if (
+      part.type === "image_url" &&
+      typeof part.image_url === "object" &&
+      part.image_url !== null &&
+      typeof part.image_url.url === "string"
+    ) {
+      return {
+        imageUrl: { url: part.image_url.url },
+        type: "image_url",
+      };
+    }
+
+    if (part.type === "input_file" && typeof part.file_data === "string") {
+      return {
+        file: {
+          fileData: part.file_data,
+          ...(typeof part.filename === "string"
+            ? { filename: part.filename }
+            : {}),
+        },
+        type: "file",
+      };
+    }
+
+    return part as ChatContentItems;
+  });
+}
+
 function openAIMessageToSdkMessage(message: OpenAIMessage): ChatMessages {
+  if (message.role === "user") {
+    return {
+      content: toSdkUserContent(message.content),
+      role: "user",
+    };
+  }
+
   if (message.role === "assistant") {
     return {
       content: message.content,
