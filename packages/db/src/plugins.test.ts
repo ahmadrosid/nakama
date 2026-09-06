@@ -535,4 +535,108 @@ describe("plugin ownership adapter", () => {
       version: "1.0.0",
     });
   });
+
+  test("compare-and-set updates state without rewriting contributions", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertPluginRelease({
+      createdAt: now,
+      digest: "sha256:notes-1.0.0",
+      manifest: notesManifest(),
+      pluginId: "notes",
+      version: "1.0.0",
+    });
+    const created = await db.publishOrgPluginRelease({
+      contributions: {
+        skills: [skillContribution("org_a")],
+        tools: [toolContribution("org_a")],
+      },
+      databaseGeneration: "gen_1",
+      expectedRevision: 0,
+      lifecycleState: "enabled",
+      now,
+      orgId: "org_a",
+      pluginId: "notes",
+      selectedVersion: "1.0.0",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const cas = await db.compareAndSetOrgPluginState({
+      databaseGeneration: "gen_1",
+      expectedRevision: created.revision,
+      lastLifecycleError: "hook_timeout",
+      lifecycleState: "disabled",
+      now,
+      orgId: "org_a",
+      pluginId: "notes",
+      selectedVersion: "1.0.0",
+    });
+    const stale = await db.compareAndSetOrgPluginState({
+      databaseGeneration: "gen_1",
+      expectedRevision: created.revision,
+      lifecycleState: "enabled",
+      now,
+      orgId: "org_a",
+      pluginId: "notes",
+      selectedVersion: "1.0.0",
+    });
+
+    expect(cas).toEqual({ ok: true, revision: created.revision + 1 });
+    expect(stale).toEqual({ ok: false, reason: "stale_revision" });
+    expect(await db.getOrgPlugin("org_a", "notes")).toMatchObject({
+      lastLifecycleError: "hook_timeout",
+      lifecycleState: "disabled",
+    });
+    expect(
+      (await db.listTools()).filter(
+        (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
+      )
+    ).toHaveLength(1);
+    expect(await db.listOrgPlugins()).toHaveLength(1);
+    expect(await db.listPluginReleases("notes")).toHaveLength(1);
+  });
+
+  test("deletes an org plugin only at the matching revision", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertPluginRelease({
+      createdAt: now,
+      digest: "sha256:notes-1.0.0",
+      manifest: notesManifest(),
+      pluginId: "notes",
+      version: "1.0.0",
+    });
+    const created = await db.publishOrgPluginRelease({
+      contributions: {
+        skills: [skillContribution("org_a")],
+        tools: [toolContribution("org_a")],
+      },
+      databaseGeneration: "gen_1",
+      expectedRevision: 0,
+      lifecycleState: "retained",
+      now,
+      orgId: "org_a",
+      pluginId: "notes",
+      selectedVersion: "1.0.0",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    expect(
+      await db.deleteOrgPlugin("org_a", "notes", created.revision - 1)
+    ).toBe(false);
+    expect(await db.getOrgPlugin("org_a", "notes")).not.toBeNull();
+    expect(await db.deleteOrgPlugin("org_a", "notes", created.revision)).toBe(
+      true
+    );
+    expect(await db.getOrgPlugin("org_a", "notes")).toBeNull();
+    expect(
+      (await db.listSkills()).filter(
+        (skill) => skill.orgId === "org_a" && skill.pluginId === "notes"
+      )
+    ).toHaveLength(0);
+  });
 });

@@ -11,6 +11,7 @@ import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
 import { migrateDatabase } from "../migrate";
 import type {
+  CompareAndSetOrgPluginStateInput,
   DatabaseAdapter,
   OrgMemoryProposalStatus,
   PluginPublishResult,
@@ -993,6 +994,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const getOrgPluginStmt = db.prepare(
     "SELECT * FROM org_plugins WHERE org_id = ? AND plugin_id = ?"
+  );
+  const listOrgPluginsStmt = db.prepare(
+    "SELECT * FROM org_plugins ORDER BY org_id, plugin_id"
+  );
+  const listPluginReleasesStmt = db.prepare(
+    "SELECT * FROM plugin_releases WHERE plugin_id = ? ORDER BY created_at ASC"
+  );
+  const listAllPluginReleasesStmt = db.prepare(
+    "SELECT * FROM plugin_releases ORDER BY plugin_id, created_at ASC"
+  );
+  const deleteOrgPluginStmt = db.prepare(
+    "DELETE FROM org_plugins WHERE org_id = ? AND plugin_id = ? AND revision = ?"
   );
   const insertOrgPluginStmt = db.prepare(`
     INSERT INTO org_plugins (
@@ -2074,6 +2087,86 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }
   );
 
+  const compareAndSetOrgPluginStateTx = db.transaction(
+    (input: CompareAndSetOrgPluginStateInput): PluginPublishResult => {
+      const existing = getOrgPluginStmt.get(
+        input.orgId,
+        input.pluginId
+      ) as OrgPluginRow | null;
+
+      if (existing) {
+        if (existing.revision !== input.expectedRevision) {
+          return { ok: false, reason: "stale_revision" };
+        }
+        const updated = updateOrgPluginCasStmt.run(
+          input.selectedVersion,
+          input.databaseGeneration,
+          input.lifecycleState,
+          input.pendingOperation ?? null,
+          input.lastLifecycleError ?? null,
+          input.now,
+          input.orgId,
+          input.pluginId,
+          input.expectedRevision
+        );
+        if (updated.changes === 0) {
+          return { ok: false, reason: "stale_revision" };
+        }
+      } else {
+        if (input.expectedRevision !== 0) {
+          return { ok: false, reason: "stale_revision" };
+        }
+        insertOrgPluginStmt.run(
+          input.orgId,
+          input.pluginId,
+          input.selectedVersion,
+          input.databaseGeneration,
+          input.lifecycleState,
+          input.pendingOperation ?? null,
+          input.lastLifecycleError ?? null,
+          input.now,
+          input.now
+        );
+      }
+
+      const saved = getOrgPluginStmt.get(
+        input.orgId,
+        input.pluginId
+      ) as OrgPluginRow;
+      return { ok: true, revision: saved.revision };
+    }
+  );
+
+  const deleteOrgPluginTx = db.transaction(
+    (orgId: string, pluginId: string, expectedRevision: number): boolean => {
+      const existing = getOrgPluginStmt.get(
+        orgId,
+        pluginId
+      ) as OrgPluginRow | null;
+      if (!existing || existing.revision !== expectedRevision) {
+        return false;
+      }
+      for (const row of listOwnedSkillIdsStmt.all(orgId, pluginId) as Array<{
+        id: string;
+      }>) {
+        unassignSkillFromAllProfilesStmt.run(row.id);
+        deleteSkillStmt.run(row.id);
+      }
+      for (const row of listOwnedToolIdsStmt.all(orgId, pluginId) as Array<{
+        id: string;
+      }>) {
+        unassignToolFromAllProfilesStmt.run(row.id);
+        deleteToolStmt.run(row.id);
+      }
+      const deleted = deleteOrgPluginStmt.run(
+        orgId,
+        pluginId,
+        expectedRevision
+      );
+      return deleted.changes > 0;
+    }
+  );
+
   return {
     async appendMessagesForSession(sessionId, messages) {
       appendMessagesTransaction(sessionId, messages);
@@ -2093,6 +2186,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async bootstrapInitialSetup(input) {
       return bootstrapInitialSetupTransaction.immediate(input);
+    },
+
+    async compareAndSetOrgPluginState(input) {
+      return compareAndSetOrgPluginStateTx(input);
     },
 
     async countHumanUsers() {
@@ -2302,6 +2399,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteOrgMember(orgId, userId) {
       const result = deleteOrgMemberStmt.run(orgId, userId, orgId);
       return result.changes > 0;
+    },
+
+    async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
+      return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
     },
 
     async deleteProfile(id) {
@@ -2940,6 +3041,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : listAllOrgMemoryProposalsStmt.all(orgId)
       ) as OrgMemoryProposalRow[];
       return rows.map(toOrgMemoryProposalRecord);
+    },
+
+    async listOrgPlugins() {
+      return listOrgPluginsStmt
+        .all()
+        .map((row) => toOrgPluginRecord(row as OrgPluginRow));
+    },
+
+    async listPluginReleases(pluginId) {
+      const rows = pluginId
+        ? listPluginReleasesStmt.all(pluginId)
+        : listAllPluginReleasesStmt.all();
+      return rows.map((row) => toPluginReleaseRecord(row as PluginReleaseRow));
     },
 
     async listProfileChangeEvents(orgId, profileId, options = {}) {

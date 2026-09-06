@@ -421,6 +421,18 @@ export type PluginPublishResult =
   | { ok: true; revision: number }
   | { ok: false; reason: PluginPublishFailureReason };
 
+export interface CompareAndSetOrgPluginStateInput {
+  databaseGeneration: string | null;
+  expectedRevision: number;
+  lastLifecycleError?: string | null;
+  lifecycleState: OrgPluginLifecycleState;
+  now: string;
+  orgId: string;
+  pendingOperation?: string | null;
+  pluginId: string;
+  selectedVersion: string | null;
+}
+
 export interface PublishOrgPluginReleaseInput {
   contributions: {
     skills: StoredSkillRecord[];
@@ -627,6 +639,9 @@ export interface DatabaseAdapter {
     organization: StoredOrganizationRecord;
     user: StoredUserRecord;
   }): Promise<boolean>;
+  compareAndSetOrgPluginState(
+    input: CompareAndSetOrgPluginStateInput
+  ): Promise<PluginPublishResult>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(
@@ -668,6 +683,11 @@ export interface DatabaseAdapter {
   deleteMessagesForSession(sessionId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
+  deleteOrgPlugin(
+    orgId: string,
+    pluginId: string,
+    expectedRevision: number
+  ): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
   deleteSkill(id: string): Promise<boolean>;
@@ -880,6 +900,9 @@ export interface DatabaseAdapter {
     orgId: string,
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
+  listOrgPlugins(): Promise<StoredOrgPluginRecord[]>;
+
+  listPluginReleases(pluginId?: string): Promise<StoredPluginReleaseRecord[]>;
 
   listProfileChangeEvents(
     orgId: string,
@@ -890,7 +913,6 @@ export interface DatabaseAdapter {
   listProfileComposioToolkits(
     profileId: string
   ): Promise<StoredProfileComposioToolkitRecord[]>;
-
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForMcpServer(serverId: string): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;

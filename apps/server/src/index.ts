@@ -61,6 +61,10 @@ import {
 import { McpService } from "./services/mcp-service";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
+import {
+  PluginService,
+  shutdownPluginRuntime,
+} from "./services/plugin-service";
 import { resolveProfileProviderSelection } from "./services/provider-instance-helpers";
 import { SkillCuratorService } from "./services/skill-curator-service";
 import { SkillProposalService } from "./services/skill-proposal-service";
@@ -179,6 +183,12 @@ agent.setWorkflowRunner(workflowRunner);
 const workerManager = new WorkerManagerService(projectRoot);
 
 const orgService = new OrgService(database.adapter, authService);
+const pluginService = new PluginService(database.adapter, getUserConfigDir());
+try {
+  await pluginService.recoverInterruptedPluginOperations();
+} catch (error) {
+  console.warn("Could not recover plugin operations:", error);
+}
 const orgMemoryService = new OrgMemoryService(database.adapter);
 const skillProposalService = new SkillProposalService(
   database.adapter,
@@ -259,6 +269,7 @@ const app = createHonoApp({
   },
   orgMemoryService,
   orgService,
+  pluginService,
   skillCuratorService,
   skillProposalService,
   skillSuggestionService,
@@ -418,6 +429,7 @@ function registerRuntimeCleanup(
     }
 
     cleanedUp = true;
+    void shutdownPluginRuntime(1500);
     void mcpClientManager.disconnectAll();
     clearRuntimeServerUrl(serverUrl);
     database.close();

@@ -91,13 +91,38 @@ export async function spawnJsonTool(
         cwd,
         detached: false,
         env,
-        signal: context.signal,
         stdio: ["pipe", "pipe", "pipe"],
       });
 
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      let aborted = false;
+
+      const killChild = () => {
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // already exited
+        }
+        setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // already exited
+          }
+        }, SIGKILL_GRACE_MS).unref();
+      };
+
+      const onAbort = () => {
+        aborted = true;
+        killChild();
+      };
+      if (context.signal?.aborted) {
+        onAbort();
+      } else {
+        context.signal?.addEventListener("abort", onAbort, { once: true });
+      }
 
       const sigtermTimer = setTimeout(() => {
         try {
@@ -133,11 +158,17 @@ export async function spawnJsonTool(
       });
 
       child.once("close", (exitCode) => {
+        context.signal?.removeEventListener("abort", onAbort);
         clearTimeout(sigtermTimer);
         const tail = stderr.trim() || "(no stderr)";
 
         // A child that traps SIGTERM can still exit 0 after the deadline;
         // the budget is spent either way, so report the timeout.
+        if (aborted) {
+          reject(new Error(`${label} was cancelled`));
+          return;
+        }
+
         if (timedOut) {
           reject(
             new Error(
