@@ -2,6 +2,15 @@ import type { StoredWorkflow } from "@nakama/core/contract";
 import { parseUnknownWorkflowToolError } from "@nakama/core/workflow-ops";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
@@ -38,6 +47,7 @@ export function WorkflowsPage() {
   const updateMutation = useUpdateWorkflowMutation();
   const deleteMutation = useDeleteWorkflowMutation();
   const [pageError, setPageError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StoredWorkflow | null>(null);
 
   const busy =
     runMutation.isPending ||
@@ -82,10 +92,14 @@ export function WorkflowsPage() {
     }
   }
 
-  async function handleDelete(workflow: StoredWorkflow) {
+  async function handleDeleteConfirm() {
+    if (!deleteTarget || busy) {
+      return;
+    }
     setPageError(null);
     try {
-      await deleteMutation.mutateAsync(workflow.id);
+      await deleteMutation.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
       setSelectedId(null);
     } catch (error) {
       setPageError(formatError(error));
@@ -177,7 +191,7 @@ export function WorkflowsPage() {
             <WorkflowBuilder
               busy={busy}
               key={selected.id}
-              onDelete={() => void handleDelete(selected)}
+              onDelete={() => setDeleteTarget(selected)}
               onProfileChange={(profileId) =>
                 handleProfileChange(selected, profileId)
               }
@@ -198,6 +212,46 @@ export function WorkflowsPage() {
           )}
         </section>
       </div>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || busy)) {
+            setDeleteTarget(null);
+          }
+        }}
+        open={deleteTarget !== null}
+      >
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>Delete workflow?</DialogTitle>
+            <DialogDescription>
+              This removes{" "}
+              <span className="font-medium text-foreground">
+                {deleteTarget?.name}
+              </span>{" "}
+              and its run history permanently.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              disabled={busy}
+              onClick={() => setDeleteTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => void handleDeleteConfirm()}
+              type="button"
+              variant="destructive"
+            >
+              {busy ? <Spinner className="size-4" /> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
