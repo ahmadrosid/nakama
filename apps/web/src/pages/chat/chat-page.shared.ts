@@ -148,3 +148,14 @@ export function messagesWithoutFailedTurn(
 
   return [...messages.slice(0, start), ...messages.slice(failedIndex + 1)];
 }
+
+/**
+ * Wall-clock stamp for post-turn polling, bumped by 1ms when two turns finish
+ * in the same millisecond so consumers never see a duplicate key.
+ */
+export function nextSuccessfulTurnAt(
+  previous: number | null,
+  now = Date.now()
+): number {
+  return previous != null && now <= previous ? previous + 1 : now;
+}
