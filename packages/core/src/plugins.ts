@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import { assertConfigPathSegment } from "./soul/resolve";
 import { getUserConfigDir } from "./user-config";
 
@@ -112,6 +112,31 @@ export type PluginValidationResult =
 export type PluginSchemaValidationResult =
   | { ok: true }
   | { code: "unsupported_schema"; ok: false };
+
+export type PluginInstanceValidationResult =
+  | { ok: true }
+  | { code: "invalid_input"; ok: false };
+
+export type PluginActorRole = "admin" | "member" | "viewer";
+
+export interface PluginExecutionActor {
+  id: string;
+  role: PluginActorRole;
+}
+
+export interface PluginExecutionContext {
+  actor: PluginExecutionActor;
+  apiVersion: typeof PLUGIN_MANIFEST_API_VERSION;
+  databasePath?: string;
+  dataDir: string;
+  invocationId: string;
+  orgId: string;
+  pluginId: string;
+  pluginVersion: string;
+  profileId?: string;
+  sessionId?: string;
+  workspaceRoot?: string;
+}
 
 export function validatePluginManifest(value: unknown): PluginValidationResult {
   if (!isRecord(value)) {
@@ -283,6 +308,109 @@ export function validatePluginJsonSchema(
   return { ok: true };
 }
 
+export function validatePluginJsonInstance(
+  schema: unknown,
+  value: unknown
+): PluginInstanceValidationResult {
+  if (!(validatePluginJsonSchema(schema).ok && isRecord(schema))) {
+    return { code: "invalid_input", ok: false };
+  }
+
+  if (!matchesSchemaType(schema.type, value)) {
+    return { code: "invalid_input", ok: false };
+  }
+
+  if (schema.enum !== undefined) {
+    const allowed = schema.enum as unknown[];
+    if (!allowed.some((item) => Object.is(item, value))) {
+      return { code: "invalid_input", ok: false };
+    }
+  }
+
+  if (
+    typeof value === "string" &&
+    ((typeof schema.minLength === "number" &&
+      value.length < schema.minLength) ||
+      (typeof schema.maxLength === "number" && value.length > schema.maxLength))
+  ) {
+    return { code: "invalid_input", ok: false };
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (typeof schema.minimum === "number" && value < schema.minimum) {
+      return { code: "invalid_input", ok: false };
+    }
+    if (typeof schema.maximum === "number" && value > schema.maximum) {
+      return { code: "invalid_input", ok: false };
+    }
+    if (
+      typeof schema.exclusiveMinimum === "number" &&
+      value <= schema.exclusiveMinimum
+    ) {
+      return { code: "invalid_input", ok: false };
+    }
+    if (
+      typeof schema.exclusiveMaximum === "number" &&
+      value >= schema.exclusiveMaximum
+    ) {
+      return { code: "invalid_input", ok: false };
+    }
+  }
+
+  if (Array.isArray(value)) {
+    if (
+      (typeof schema.minItems === "number" && value.length < schema.minItems) ||
+      (typeof schema.maxItems === "number" && value.length > schema.maxItems)
+    ) {
+      return { code: "invalid_input", ok: false };
+    }
+    if (schema.items !== undefined) {
+      for (const item of value) {
+        if (!validatePluginJsonInstance(schema.items, item).ok) {
+          return { code: "invalid_input", ok: false };
+        }
+      }
+    }
+  }
+
+  if (isRecord(value) && matchesObjectType(schema.type)) {
+    if (schema.required !== undefined) {
+      for (const key of schema.required as string[]) {
+        if (!Object.hasOwn(value, key)) {
+          return { code: "invalid_input", ok: false };
+        }
+      }
+    }
+
+    const properties = isRecord(schema.properties) ? schema.properties : {};
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (!Object.hasOwn(value, key)) {
+        continue;
+      }
+      if (!validatePluginJsonInstance(propertySchema, value[key]).ok) {
+        return { code: "invalid_input", ok: false };
+      }
+    }
+
+    const extraKeys = Object.keys(value).filter((key) => !(key in properties));
+    if (schema.additionalProperties === false && extraKeys.length > 0) {
+      return { code: "invalid_input", ok: false };
+    }
+    if (isRecord(schema.additionalProperties)) {
+      for (const key of extraKeys) {
+        if (
+          !validatePluginJsonInstance(schema.additionalProperties, value[key])
+            .ok
+        ) {
+          return { code: "invalid_input", ok: false };
+        }
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
 export function getPluginsRootDir(configDir = getUserConfigDir()): string {
   return join(assertAbsoluteConfigDir(configDir), PLUGIN_PACKAGES_DIR_NAME);
 }
@@ -303,6 +431,53 @@ export function getPluginReleaseDir(
     assertConfigPathSegment(pluginId, "pluginId"),
     assertConfigPathSegment(version, "version")
   );
+}
+
+export function getOrgPluginDataDir(
+  orgId: string,
+  pluginId: string,
+  configDir = getUserConfigDir()
+): string {
+  return join(
+    assertAbsoluteConfigDir(configDir),
+    "orgs",
+    assertConfigPathSegment(orgId, "orgId"),
+    PLUGIN_PACKAGES_DIR_NAME,
+    assertConfigPathSegment(pluginId, "pluginId")
+  );
+}
+
+export function getOrgPluginDatabasePath(
+  orgId: string,
+  pluginId: string,
+  databaseGeneration: string,
+  configDir = getUserConfigDir()
+): string {
+  return join(
+    getOrgPluginDataDir(orgId, pluginId, configDir),
+    "db",
+    `${assertConfigPathSegment(databaseGeneration, "databaseGeneration")}.sqlite`
+  );
+}
+
+export function resolvePluginReleaseEntry(
+  releaseDir: string,
+  entry: string
+): string {
+  if (!isAbsolute(releaseDir)) {
+    throw new Error(
+      "releaseDir must be an absolute path; relative paths resolve against process.cwd() and break plugin isolation."
+    );
+  }
+  if (!isRelativePluginPath(entry)) {
+    throw new Error("plugin entry must stay inside the release root.");
+  }
+  const root = resolve(releaseDir);
+  const resolved = resolve(root, entry);
+  if (resolved !== root && !resolved.startsWith(`${root}${sep}`)) {
+    throw new Error("plugin entry must stay inside the release root.");
+  }
+  return resolved;
 }
 
 function assertAbsoluteConfigDir(configDir: string): string {
@@ -573,6 +748,49 @@ function isOptionalFiniteNumber(value: unknown): boolean {
   return (
     value === undefined || (typeof value === "number" && Number.isFinite(value))
   );
+}
+
+function schemaTypes(type: unknown): string[] | null {
+  if (type === undefined) {
+    return null;
+  }
+  return Array.isArray(type)
+    ? type.filter((item) => typeof item === "string")
+    : [String(type)];
+}
+
+function matchesSchemaType(type: unknown, value: unknown): boolean {
+  const types = schemaTypes(type);
+  if (!types) {
+    return true;
+  }
+  return types.some((item) => matchesSingleType(item, value));
+}
+
+function matchesSingleType(type: string, value: unknown): boolean {
+  switch (type) {
+    case "array":
+      return Array.isArray(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
+    case "null":
+      return value === null;
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "object":
+      return isRecord(value);
+    case "string":
+      return typeof value === "string";
+    default:
+      return false;
+  }
+}
+
+function matchesObjectType(type: unknown): boolean {
+  const types = schemaTypes(type);
+  return types === null || types.includes("object");
 }
 
 function isRelativePluginPath(value: string): boolean {

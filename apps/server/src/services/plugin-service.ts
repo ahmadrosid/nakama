@@ -1,17 +1,30 @@
 import { createHash, randomUUID } from "node:crypto";
 import { rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  assertConfigPathSegment,
+  buildToolExecutionContext,
   ensureDir,
+  getOrgPluginDatabasePath,
+  getOrgPluginDataDir,
   getPluginReleaseDir,
   getPluginStagingRootDir,
+  PLUGIN_MANIFEST_API_VERSION,
   PLUGIN_MANIFEST_FILENAME,
+  type PluginActionAccess,
+  type PluginActorRole,
+  type PluginExecutionActor,
+  type PluginExecutionContext,
   type PluginManifest,
   pathExists,
+  resolvePluginReleaseEntry,
+  validatePluginJsonInstance,
   validatePluginManifest,
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { Unzip, UnzipInflate, UnzipPassThrough } from "fflate";
+import { spawnJsonTool } from "./custom-tool-subprocess";
 
 const MAX_COMPRESSED_BYTES = 20 * 1024 * 1024;
 const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
@@ -92,6 +105,93 @@ interface InspectedPackage {
 }
 
 const installLocks = new Map<string, Promise<unknown>>();
+const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
+const PLUGIN_RUNNER_PATH = fileURLToPath(
+  new URL("./plugin-runner.js", import.meta.url)
+);
+const MAX_PLUGIN_INVOCATIONS = 4;
+const SPOOFABLE_INPUT_KEYS = new Set([
+  "actor",
+  "actorId",
+  "apiVersion",
+  "context",
+  "databasePath",
+  "dataDir",
+  "dataDirectory",
+  "invocationId",
+  "orgId",
+  "organizationId",
+  "orgRole",
+  "pluginId",
+  "pluginVersion",
+  "profileId",
+  "role",
+  "sessionId",
+  "workspaceRoot",
+]);
+
+export type PluginInvocationErrorCode =
+  | "admission_closed"
+  | "busy"
+  | "forbidden"
+  | "invalid_entry"
+  | "invalid_input"
+  | "not_enabled"
+  | "not_installed"
+  | "unknown_action"
+  | "unknown_hook";
+
+export class PluginInvocationError extends Error {
+  readonly code: PluginInvocationErrorCode;
+  readonly retryable: boolean;
+
+  constructor(code: PluginInvocationErrorCode, retryable = code === "busy") {
+    super(code);
+    this.name = "PluginInvocationError";
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
+export type PluginActionAccessKind = "tool" | "ui";
+export type PluginHookKind = "activate" | "deactivate";
+
+export interface InvokePluginActionInput {
+  access: PluginActionAccessKind;
+  actionKey: string;
+  actor: PluginExecutionActor;
+  input: unknown;
+  orgId: string;
+  pluginId: string;
+  profileId?: string;
+  sessionId?: string;
+  signal?: AbortSignal;
+}
+
+export interface InvokePluginHookInput {
+  actor: PluginExecutionActor;
+  kind: PluginHookKind;
+  orgId: string;
+  pluginId: string;
+  signal?: AbortSignal;
+}
+
+export interface PluginInvocationResult {
+  invocationId: string;
+  result: unknown;
+}
+
+interface AdmissionGate {
+  active: number;
+  closed: boolean;
+  tail: Promise<unknown>;
+}
+
+const admissionGates = new Map<string, AdmissionGate>();
+
+export function resetPluginAdmissionForTests(): void {
+  admissionGates.clear();
+}
 
 export class PluginService {
   private readonly configDir: string;
@@ -135,6 +235,260 @@ export class PluginService {
       } finally {
         await cleanupAbandonedStaging(this.configDir);
       }
+    });
+  }
+
+  async invokePluginAction(
+    input: InvokePluginActionInput
+  ): Promise<PluginInvocationResult> {
+    const { handle, install, manifest, releaseDir } =
+      await this.admitInvocation(input.orgId, input.pluginId, "action");
+    try {
+      const action = manifest.actions.find(
+        (item) => item.key === input.actionKey
+      );
+      if (!action) {
+        throw new PluginInvocationError("unknown_action");
+      }
+      if (!actorMayInvoke(action.access, input.actor.role)) {
+        throw new PluginInvocationError("forbidden");
+      }
+
+      const cleanedInput = stripSpoofedInput(input.input);
+      if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
+        throw new PluginInvocationError("invalid_input");
+      }
+
+      const context = this.buildInvocationContext({
+        actor: input.actor,
+        install,
+        invocationId: handle.invocationId,
+        manifest,
+        orgId: input.orgId,
+        pluginId: input.pluginId,
+        profileId: input.access === "tool" ? input.profileId : undefined,
+        sessionId: input.access === "tool" ? input.sessionId : undefined,
+      });
+      if (input.access === "tool" && !context.profileId) {
+        throw new PluginInvocationError("invalid_input");
+      }
+
+      return {
+        invocationId: handle.invocationId,
+        result: await this.spawnPluginModule({
+          context,
+          entry: action.entry,
+          input: cleanedInput,
+          label: "Plugin action",
+          releaseDir,
+          signal: input.signal,
+        }),
+      };
+    } finally {
+      handle.release();
+    }
+  }
+
+  async invokePluginHook(
+    input: InvokePluginHookInput
+  ): Promise<PluginInvocationResult> {
+    const { handle, install, manifest, releaseDir } =
+      await this.admitInvocation(input.orgId, input.pluginId, "hook");
+    try {
+      const entry =
+        input.kind === "activate"
+          ? manifest.hooks?.activate
+          : manifest.hooks?.deactivate;
+      if (!entry) {
+        throw new PluginInvocationError("unknown_hook");
+      }
+
+      const context = this.buildInvocationContext({
+        actor: input.actor,
+        install,
+        invocationId: handle.invocationId,
+        manifest,
+        orgId: input.orgId,
+        pluginId: input.pluginId,
+      });
+
+      return {
+        invocationId: handle.invocationId,
+        result: await this.spawnPluginModule({
+          context,
+          entry,
+          input: {},
+          label: "Plugin hook",
+          releaseDir,
+          signal: input.signal,
+        }),
+      };
+    } finally {
+      handle.release();
+    }
+  }
+
+  async closePluginAdmission(orgId: string, pluginId: string): Promise<void> {
+    const gate = admissionGateFor(orgId, pluginId);
+    await withAdmissionGate(gate, () => {
+      gate.closed = true;
+    });
+  }
+
+  private async admitInvocation(
+    orgId: string,
+    pluginId: string,
+    kind: "action" | "hook"
+  ): Promise<{
+    handle: { invocationId: string; release: () => void };
+    install: NonNullable<Awaited<ReturnType<DatabaseAdapter["getOrgPlugin"]>>>;
+    manifest: PluginManifest;
+    releaseDir: string;
+  }> {
+    const gate = admissionGateFor(orgId, pluginId);
+    return withAdmissionGate(gate, async () => {
+      if (kind === "action" && gate.closed) {
+        throw new PluginInvocationError("admission_closed");
+      }
+
+      const install = await this.db.getOrgPlugin(orgId, pluginId);
+      if (!(install && install.selectedVersion)) {
+        throw new PluginInvocationError("not_installed");
+      }
+      if (kind === "action" && install.lifecycleState !== "enabled") {
+        throw new PluginInvocationError("not_enabled");
+      }
+      if (gate.active >= MAX_PLUGIN_INVOCATIONS) {
+        throw new PluginInvocationError("busy", true);
+      }
+
+      const release = await this.db.getPluginRelease(
+        pluginId,
+        install.selectedVersion
+      );
+      if (!release) {
+        throw new PluginInvocationError("not_installed");
+      }
+
+      const releaseDir = getPluginReleaseDir(
+        pluginId,
+        install.selectedVersion,
+        this.configDir
+      );
+      if (!(await pathExists(releaseDir))) {
+        throw new PluginInvocationError("not_installed");
+      }
+
+      gate.active += 1;
+      return {
+        handle: {
+          invocationId: randomUUID(),
+          release: () => {
+            gate.active = Math.max(0, gate.active - 1);
+          },
+        },
+        install,
+        manifest: release.manifest,
+        releaseDir,
+      };
+    });
+  }
+
+  private buildInvocationContext(input: {
+    actor: PluginExecutionActor;
+    install: NonNullable<Awaited<ReturnType<DatabaseAdapter["getOrgPlugin"]>>>;
+    invocationId: string;
+    manifest: PluginManifest;
+    orgId: string;
+    pluginId: string;
+    profileId?: string;
+    sessionId?: string;
+  }): PluginExecutionContext {
+    const dataDir = getOrgPluginDataDir(
+      input.orgId,
+      input.pluginId,
+      this.configDir
+    );
+    const context: PluginExecutionContext = {
+      actor: { id: input.actor.id, role: input.actor.role },
+      apiVersion: PLUGIN_MANIFEST_API_VERSION,
+      dataDir,
+      invocationId: input.invocationId,
+      orgId: input.orgId,
+      pluginId: input.pluginId,
+      pluginVersion: input.manifest.version,
+    };
+
+    if (input.install.databaseGeneration) {
+      context.databasePath = getOrgPluginDatabasePath(
+        input.orgId,
+        input.pluginId,
+        input.install.databaseGeneration,
+        this.configDir
+      );
+    }
+
+    if (input.profileId) {
+      const toolContext = buildToolExecutionContext({
+        orgId: input.orgId,
+        profileId: input.profileId,
+        sessionId: input.sessionId,
+        workspaceRoot: join(
+          this.configDir,
+          "orgs",
+          assertConfigPathSegment(input.orgId, "orgId"),
+          "profiles",
+          assertConfigPathSegment(input.profileId, "profileId")
+        ),
+      });
+      context.profileId = input.profileId;
+      if (input.sessionId) {
+        context.sessionId = input.sessionId;
+      }
+      if (toolContext.workspaceRoot) {
+        context.workspaceRoot = toolContext.workspaceRoot;
+      }
+    }
+
+    return context;
+  }
+
+  private async spawnPluginModule(input: {
+    context: PluginExecutionContext;
+    entry: string;
+    input: unknown;
+    label: string;
+    releaseDir: string;
+    signal?: AbortSignal;
+  }): Promise<unknown> {
+    let entryPath: string;
+    try {
+      entryPath = resolvePluginReleaseEntry(input.releaseDir, input.entry);
+    } catch {
+      throw new PluginInvocationError("invalid_entry");
+    }
+    if (!(await pathExists(entryPath))) {
+      throw new PluginInvocationError("invalid_entry");
+    }
+
+    await ensureDir(input.context.dataDir);
+
+    return spawnJsonTool({
+      args: [PLUGIN_RUNNER_PATH, entryPath],
+      bin: BUN_BIN,
+      context: { signal: input.signal },
+      cwd: input.releaseDir,
+      input: input.input,
+      label: input.label,
+      transport: {
+        extraArgs: ["--no-install"],
+        includeConfigDir: false,
+        stdin: {
+          context: input.context,
+          input: input.input,
+        },
+      },
+      workspaceRoot: input.context.workspaceRoot,
     });
   }
 
@@ -603,6 +957,69 @@ function readU32(buffer: Uint8Array, offset: number): number {
     0,
     true
   );
+}
+
+function admissionGateFor(orgId: string, pluginId: string): AdmissionGate {
+  const key = `${orgId}\0${pluginId}`;
+  const existing = admissionGates.get(key);
+  if (existing) {
+    return existing;
+  }
+  const created: AdmissionGate = {
+    active: 0,
+    closed: false,
+    tail: Promise.resolve(),
+  };
+  admissionGates.set(key, created);
+  return created;
+}
+
+async function withAdmissionGate<T>(
+  gate: AdmissionGate,
+  work: () => Promise<T> | T
+): Promise<T> {
+  let releaseLock = () => {};
+  const current = new Promise<void>((resolveLock) => {
+    releaseLock = resolveLock;
+  });
+  const previous = gate.tail;
+  gate.tail = previous.then(() => current);
+  await previous;
+  try {
+    return await work();
+  } finally {
+    releaseLock();
+  }
+}
+
+function actorMayInvoke(
+  access: PluginActionAccess,
+  role: PluginActorRole
+): boolean {
+  if (role === "viewer") {
+    return false;
+  }
+  if (access === "admin") {
+    return role === "admin";
+  }
+  return role === "admin" || role === "member";
+}
+
+function stripSpoofedInput(input: unknown): unknown {
+  if (!isPlainObject(input)) {
+    return input;
+  }
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (!SPOOFABLE_INPUT_KEYS.has(key)) {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 async function withInstallLock<T>(

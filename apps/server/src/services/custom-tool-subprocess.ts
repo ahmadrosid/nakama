@@ -18,7 +18,8 @@ function resolveCustomToolTimeoutMs(): number {
 }
 
 function buildAllowlistedSubprocessEnv(
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  includeConfigDir = true
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
 
@@ -26,7 +27,7 @@ function buildAllowlistedSubprocessEnv(
     env.PATH = process.env.PATH;
   }
 
-  if (process.env.NAKAMA_CONFIG_DIR) {
+  if (includeConfigDir && process.env.NAKAMA_CONFIG_DIR) {
     env.NAKAMA_CONFIG_DIR = process.env.NAKAMA_CONFIG_DIR;
   }
 
@@ -35,6 +36,14 @@ function buildAllowlistedSubprocessEnv(
   }
 
   return env;
+}
+
+export interface SpawnJsonToolTransport {
+  extraArgs?: string[];
+  extraEnv?: NodeJS.ProcessEnv;
+  includeConfigDir?: boolean;
+  /** When set, written to stdin instead of `input`. Legacy callers omit this. */
+  stdin?: unknown;
 }
 
 export interface SpawnJsonToolOptions {
@@ -47,6 +56,7 @@ export interface SpawnJsonToolOptions {
   input: unknown;
   /** Used in error messages, e.g. "Python tool", "JavaScript tool". */
   label: string;
+  transport?: SpawnJsonToolTransport;
   workspaceRoot?: string;
 }
 
@@ -59,16 +69,27 @@ export interface SpawnJsonToolOptions {
 export async function spawnJsonTool(
   options: SpawnJsonToolOptions
 ): Promise<unknown> {
-  const { args, bin, context, cwd, input, label, workspaceRoot } = options;
-  const env = buildAllowlistedSubprocessEnv(workspaceRoot);
+  const { args, bin, context, cwd, input, label, transport, workspaceRoot } =
+    options;
+  const env = {
+    ...buildAllowlistedSubprocessEnv(
+      workspaceRoot,
+      transport?.includeConfigDir ?? true
+    ),
+    ...transport?.extraEnv,
+  };
   const timeoutMs = resolveCustomToolTimeoutMs();
+  const childArgs = [...(transport?.extraArgs ?? []), ...args];
+  const stdinPayload =
+    transport && "stdin" in transport ? transport.stdin : input;
 
   const result = await new Promise<{ stderr: string; stdout: string }>(
     (resolve, reject) => {
       // Node SIGTERMs the child when the turn is cancelled, so a stopped chat
       // does not leave a tool process holding the session open.
-      const child = spawn(bin, args, {
+      const child = spawn(bin, childArgs, {
         cwd,
+        detached: false,
         env,
         signal: context.signal,
         stdio: ["pipe", "pipe", "pipe"],
@@ -137,7 +158,7 @@ export async function spawnJsonTool(
       // Write the input payload and close stdin so the child can finish
       // reading and proceed to run().
       try {
-        child.stdin?.end(JSON.stringify(input ?? {}));
+        child.stdin?.end(JSON.stringify(stdinPayload ?? {}));
       } catch (error) {
         clearTimeout(sigtermTimer);
         reject(error);

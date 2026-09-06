@@ -2,11 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   derivePluginToolName,
+  getOrgPluginDatabasePath,
+  getOrgPluginDataDir,
   getPluginReleaseDir,
   getPluginStagingRootDir,
   getPluginsRootDir,
   PLUGIN_MANIFEST_API_VERSION,
   PLUGIN_TOOL_NAME_MAX_LENGTH,
+  resolvePluginReleaseEntry,
+  validatePluginJsonInstance,
   validatePluginJsonSchema,
   validatePluginManifest,
 } from "./plugins";
@@ -304,6 +308,83 @@ describe("validatePluginJsonSchema", () => {
   });
 });
 
+describe("validatePluginJsonInstance", () => {
+  test("accepts supported types, enums, required, items, and bounds", () => {
+    const schema = {
+      additionalProperties: false,
+      properties: {
+        count: { exclusiveMaximum: 10, exclusiveMinimum: 0, type: "integer" },
+        empty: { type: "null" },
+        flag: { type: "boolean" },
+        name: {
+          enum: ["a", "b"],
+          maxLength: 20,
+          minLength: 1,
+          type: "string",
+        },
+        tags: {
+          items: { type: "string" },
+          maxItems: 3,
+          minItems: 1,
+          type: "array",
+        },
+      },
+      required: ["name"],
+      type: "object",
+    };
+
+    expect(
+      validatePluginJsonInstance(schema, {
+        count: 1,
+        empty: null,
+        flag: true,
+        name: "a",
+        tags: ["x"],
+      }).ok
+    ).toBe(true);
+  });
+
+  test("defaults additionalProperties to true and rejects extras when false", () => {
+    expect(
+      validatePluginJsonInstance(
+        { properties: { name: { type: "string" } }, type: "object" },
+        { extra: true, name: "a" }
+      ).ok
+    ).toBe(true);
+    expect(
+      validatePluginJsonInstance(
+        {
+          additionalProperties: false,
+          properties: { name: { type: "string" } },
+          type: "object",
+        },
+        { extra: true, name: "a" }
+      ).ok
+    ).toBe(false);
+  });
+
+  test("rejects missing required fields, wrong types, and out-of-range values", () => {
+    expect(
+      validatePluginJsonInstance(
+        {
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          type: "object",
+        },
+        {}
+      ).ok
+    ).toBe(false);
+    expect(validatePluginJsonInstance({ type: "integer" }, 1.5).ok).toBe(false);
+    expect(
+      validatePluginJsonInstance({ maximum: 3, minimum: 1, type: "number" }, 0)
+        .ok
+    ).toBe(false);
+    expect(
+      validatePluginJsonInstance({ enum: ["a"], type: "string" }, "b").ok
+    ).toBe(false);
+  });
+});
+
 describe("plugin package paths", () => {
   test("resolves release and staging dirs from the config root", () => {
     const configDir = "/tmp/nakama-config";
@@ -314,6 +395,18 @@ describe("plugin package paths", () => {
     expect(getPluginStagingRootDir(configDir)).toBe(
       join(configDir, "plugins", ".staging")
     );
+    expect(getOrgPluginDataDir("org_a", "notes", configDir)).toBe(
+      join(configDir, "orgs", "org_a", "plugins", "notes")
+    );
+    expect(getOrgPluginDatabasePath("org_a", "notes", "gen_1", configDir)).toBe(
+      join(configDir, "orgs", "org_a", "plugins", "notes", "db", "gen_1.sqlite")
+    );
+    expect(
+      resolvePluginReleaseEntry(
+        join(configDir, "plugins", "notes", "1.0.0"),
+        "actions/list.js"
+      )
+    ).toBe(join(configDir, "plugins", "notes", "1.0.0", "actions", "list.js"));
   });
 
   test("rejects relative config dirs and unsafe identity segments", () => {
@@ -323,6 +416,15 @@ describe("plugin package paths", () => {
     ).toThrow();
     expect(() =>
       getPluginReleaseDir("notes", "1.0.0/../2", "/tmp/nakama-config")
+    ).toThrow();
+    expect(() =>
+      getOrgPluginDataDir("../org", "notes", "/tmp/nakama-config")
+    ).toThrow();
+    expect(() =>
+      resolvePluginReleaseEntry(
+        "/tmp/nakama-config/plugins/notes/1.0.0",
+        "../x.js"
+      )
     ).toThrow();
   });
 });

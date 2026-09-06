@@ -62,6 +62,8 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
       --filter '@nakama/whatsapp' \
       --filter '@nakama/discord' \
   && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
+  && test -f apps/server/src/services/javascript-tool-runner.js \
+  && test -f apps/server/src/services/plugin-runner.js \
   && mkdir -p /nakama/data \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \

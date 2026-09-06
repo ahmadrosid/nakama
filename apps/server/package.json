@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "build": "bun build ./src/index.ts --outdir dist --target bun && cp src/services/javascript-tool-runner.js src/services/plugin-runner.js dist/",
     "dev": "bun run src/dev.ts",
     "start": "NODE_ENV=production bun run dist/index.js",
     "test": "bun test"
