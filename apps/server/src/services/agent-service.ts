@@ -1306,6 +1306,9 @@ export class AgentService {
     input: UpdateWhatsAppSettingsRequest
   ): Promise<WhatsAppSettingsResponse> {
     return saveWhatsAppConfig({
+      ...(input.allowedPhones === undefined
+        ? {}
+        : { allowedPhones: input.allowedPhones }),
       ...(input.phoneNumber === undefined
         ? {}
         : { phoneNumber: input.phoneNumber.trim() }),

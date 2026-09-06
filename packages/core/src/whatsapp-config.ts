@@ -344,6 +344,8 @@ function buildSavedWhatsAppConfig(
 
   return {
     allowedPhones: resolveAllowedPhones(input, existing),
+    outboundPort: existing?.outboundPort ?? null,
+    outboundToken: existing?.outboundToken ?? null,
     pairedJid,
     pairedLid: existing?.pairedLid ?? null,
     pairingCode: resolvePairingCode(existing, pairedJid),
