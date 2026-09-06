@@ -66,7 +66,6 @@ const ToolPlaygroundPage = lazyPage(
   () => import("@/pages/ToolPlaygroundPage"),
   "ToolPlaygroundPage"
 );
-
 function QueryCacheListener() {
   useEffect(() => {
     const unsub = queryClient.getQueryCache().subscribe(onGlobalQueryError);

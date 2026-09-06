@@ -1,5 +1,11 @@
 import { type ClassNameValue, twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassNameValue[]) {
-  return twMerge(inputs);
+type ClassNameInput =
+  | ClassNameValue
+  | ((state: never) => string | undefined | null);
+
+export function cn(...inputs: ClassNameInput[]) {
+  return twMerge(
+    inputs.map((input) => (typeof input === "function" ? undefined : input))
+  );
 }

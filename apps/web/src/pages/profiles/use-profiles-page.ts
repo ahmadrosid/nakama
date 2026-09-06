@@ -2,6 +2,7 @@ import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
   InstallSkillRequest,
+  ProfileDetail,
 } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -54,6 +55,84 @@ import {
   type RemoveAssignmentTarget,
   resolveProfileDetailTab,
 } from "@/pages/profiles/profiles-page.shared";
+
+function isProfilesPageBusy(flags: {
+  assignMcpPending: boolean;
+  assignPending: boolean;
+  assignSkillPending: boolean;
+  clonePending: boolean;
+  createMcpPending: boolean;
+  createSkillPending: boolean;
+  deletePending: boolean;
+  deleteSkillPending: boolean;
+  installSkillPending: boolean;
+  unassignMcpPending: boolean;
+  unassignPending: boolean;
+  unassignSkillPending: boolean;
+  updateComposioPending: boolean;
+  updatePending: boolean;
+}): boolean {
+  return (
+    flags.updatePending ||
+    flags.clonePending ||
+    flags.deletePending ||
+    flags.assignPending ||
+    flags.unassignPending ||
+    flags.assignMcpPending ||
+    flags.unassignMcpPending ||
+    flags.createMcpPending ||
+    flags.createSkillPending ||
+    flags.installSkillPending ||
+    flags.assignSkillPending ||
+    flags.unassignSkillPending ||
+    flags.deleteSkillPending ||
+    flags.updateComposioPending
+  );
+}
+
+function syncProfileEditFieldsFromDetail({
+  detail,
+  syncedDetailId,
+  setSyncedDetailId,
+  setEditName,
+  setEditPrompt,
+  setEditModel,
+  setSavedName,
+  setSavedPrompt,
+  setSavedModel,
+  setSaveStatus,
+}: {
+  detail: ProfileDetail | null | undefined;
+  syncedDetailId: string | null;
+  setSyncedDetailId: (id: string | null) => void;
+  setEditName: (value: string) => void;
+  setEditPrompt: (value: string) => void;
+  setEditModel: (value: string | null) => void;
+  setSavedName: (value: string) => void;
+  setSavedPrompt: (value: string) => void;
+  setSavedModel: (value: string | null) => void;
+  setSaveStatus: (value: ProfileSaveStatus) => void;
+}): string | null {
+  const detailId = detail?.id ?? null;
+
+  if (detailId === syncedDetailId) {
+    return detailId;
+  }
+
+  setSyncedDetailId(detailId);
+
+  if (detail) {
+    setEditName(detail.name);
+    setEditPrompt(detail.systemPrompt);
+    setEditModel(detail.model);
+    setSavedName(detail.name);
+    setSavedPrompt(detail.systemPrompt);
+    setSavedModel(detail.model);
+    setSaveStatus("idle");
+  }
+
+  return detailId;
+}
 
 export function useProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -159,21 +238,22 @@ export function useProfilesPage() {
     );
   }, [editModel, providerModelGroups]);
 
-  const busy =
-    updateMutation.isPending ||
-    cloneProfileMutation.isPending ||
-    deleteMutation.isPending ||
-    assignMutation.isPending ||
-    unassignMutation.isPending ||
-    assignMcpMutation.isPending ||
-    unassignMcpMutation.isPending ||
-    createMcpMutation.isPending ||
-    createSkillMutation.isPending ||
-    installSkillMutation.isPending ||
-    assignSkillMutation.isPending ||
-    unassignSkillMutation.isPending ||
-    deleteSkillMutation.isPending ||
-    updateComposioMutation.isPending;
+  const busy = isProfilesPageBusy({
+    assignMcpPending: assignMcpMutation.isPending,
+    assignPending: assignMutation.isPending,
+    assignSkillPending: assignSkillMutation.isPending,
+    clonePending: cloneProfileMutation.isPending,
+    createMcpPending: createMcpMutation.isPending,
+    createSkillPending: createSkillMutation.isPending,
+    deletePending: deleteMutation.isPending,
+    deleteSkillPending: deleteSkillMutation.isPending,
+    installSkillPending: installSkillMutation.isPending,
+    unassignMcpPending: unassignMcpMutation.isPending,
+    unassignPending: unassignMutation.isPending,
+    unassignSkillPending: unassignSkillMutation.isPending,
+    updateComposioPending: updateComposioMutation.isPending,
+    updatePending: updateMutation.isPending,
+  });
 
   const refreshing =
     profilesRefreshing || (detailLoading && Boolean(selectedId));
@@ -480,21 +560,18 @@ export function useProfilesPage() {
     }
   }, [liveChatProfileId, profiles, searchParams, setSelectedId]);
 
-  const detailId = detail?.id ?? null;
-
-  if (detailId !== syncedDetailId) {
-    setSyncedDetailId(detailId);
-
-    if (detail) {
-      setEditName(detail.name);
-      setEditPrompt(detail.systemPrompt);
-      setEditModel(detail.model);
-      setSavedName(detail.name);
-      setSavedPrompt(detail.systemPrompt);
-      setSavedModel(detail.model);
-      setSaveStatus("idle");
-    }
-  }
+  const detailId = syncProfileEditFieldsFromDetail({
+    detail,
+    setEditModel,
+    setEditName,
+    setEditPrompt,
+    setSavedModel,
+    setSavedName,
+    setSavedPrompt,
+    setSaveStatus,
+    setSyncedDetailId,
+    syncedDetailId,
+  });
 
   useEffect(() => {
     if (!detailId) {

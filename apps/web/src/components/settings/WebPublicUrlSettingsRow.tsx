@@ -46,7 +46,7 @@ export function WebPublicUrlSettingsRow() {
         setFormError(formatError(error));
       },
       onSuccess: (saved) => {
-        setValue(saved.webPublicUrl);
+        setValue(saved.webPublicUrl ?? trimmed);
         setSavedHint("Saved");
       },
     });
