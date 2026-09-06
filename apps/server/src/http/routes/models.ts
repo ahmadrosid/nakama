@@ -44,11 +44,12 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   completeChatgptOAuthDeviceSession,
   startChatgptOAuthDeviceSession,
-} from "../../providers/chatgpt/oauth";
-import { installAgentBrowser } from "../../services/agent-browser-service";
+} from "../../services/chatgpt-oauth-service";
+
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
