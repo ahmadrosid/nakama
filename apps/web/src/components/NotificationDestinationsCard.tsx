@@ -7,8 +7,10 @@ import {
   Copy01Icon,
   Delete02Icon,
   RefreshIcon,
+  ViewIcon,
+  ViewOffIcon,
 } from "hugeicons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -23,6 +25,8 @@ import { formatError } from "@/lib/client";
 import {
   buildNotificationWebhookUrl,
   formatTelegramDestinationLabel,
+  LATEST_WEBHOOK_SECRET_TTL_MS,
+  maskWebhookApiKey,
   parseTelegramTopicLink,
 } from "@/lib/notification-destinations";
 import { cn } from "@/lib/utils";
@@ -61,12 +65,14 @@ function LatestSecret({
 }) {
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [copiedApiKey, setCopiedApiKey] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   if (!latestSecret) {
     return null;
   }
 
   const apiKey = latestSecret.apiKey;
+  const displayApiKey = revealed ? apiKey : maskWebhookApiKey(apiKey);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const webhookUrl = buildNotificationWebhookUrl(
     origin,
@@ -82,6 +88,18 @@ function LatestSecret({
     `    "level": "info"`,
     `  }'`,
   ].join("\n");
+  const displayCurlExample = revealed
+    ? curlExample
+    : [
+        `curl -X POST '${webhookUrl}' \\`,
+        `  -H 'Content-Type: application/json' \\`,
+        `  -H 'X-API-Key: ${maskWebhookApiKey(apiKey)}' \\`,
+        `  -d '{`,
+        `    "title": "New notification",`,
+        `    "body": "Hello from Nakama",`,
+        `    "level": "info"`,
+        `  }'`,
+      ].join("\n");
 
   async function copyCurlExample() {
     try {
@@ -110,12 +128,23 @@ function LatestSecret({
           <p className="font-medium text-foreground text-sm">
             Latest webhook credentials ready
           </p>
-          <p className="text-muted-foreground text-xs [text-wrap:pretty]">
-            Copy the curl command, or expand details if you need the raw URL and
-            API key.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            aria-label={revealed ? "Hide API key" : "Reveal API key"}
+            className="min-w-[6.75rem] justify-center"
+            onClick={() => setRevealed((current) => !current)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {revealed ? (
+              <ViewOffIcon className="size-3.5" />
+            ) : (
+              <ViewIcon className="size-3.5" />
+            )}
+            {revealed ? "Hide" : "Reveal"}
+          </Button>
           <Button
             className="min-w-[6.75rem] justify-center"
             onClick={() => void copyCurlExample()}
@@ -153,13 +182,13 @@ function LatestSecret({
           <div>
             <p className="text-muted-foreground text-xs">API key</p>
             <code className="block break-all text-foreground text-xs">
-              {apiKey}
+              {displayApiKey}
             </code>
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Example curl</p>
             <pre className="mt-1 overflow-x-auto rounded-md border border-border bg-background p-3 text-foreground text-xs">
-              <code>{curlExample}</code>
+              <code>{displayCurlExample}</code>
             </pre>
           </div>
         </div>
@@ -185,6 +214,20 @@ export function NotificationDestinationsCard() {
   const [editingError, setEditingError] = useState<string | null>(null);
 
   const destinations = data?.destinations ?? [];
+
+  useEffect(() => {
+    if (!latestSecret) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setLatestSecret(null);
+    }, LATEST_WEBHOOK_SECRET_TTL_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [latestSecret]);
 
   function resetForm() {
     setName("");
