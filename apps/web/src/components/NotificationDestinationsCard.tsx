@@ -554,7 +554,12 @@ function NotificationDestinationItem({
       ) : null}
 
       {latestSecret?.destination.id === destination.id ? (
-        <LatestSecret latestSecret={latestSecret} />
+        {latestSecret ? (
+          <LatestSecret
+            key={latestSecret.apiKey}
+            latestSecret={latestSecret}
+          />
+        ) : null}
       ) : null}
     </div>
   );
