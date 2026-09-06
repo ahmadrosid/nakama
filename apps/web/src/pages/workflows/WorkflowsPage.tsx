@@ -12,7 +12,6 @@ import {
   useWorkflowsQuery,
 } from "@/hooks/use-workflows";
 import { formatError } from "@/lib/client";
-import { agentWorkPanelClassName } from "@/pages/automations/automations-page.shared";
 import { WorkflowBuilder } from "@/pages/workflows/workflow-builder";
 
 export function WorkflowsPage() {
@@ -116,8 +115,8 @@ export function WorkflowsPage() {
   }
 
   return (
-    <div className={agentWorkPanelClassName}>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+    <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-6">
         {(pageError || workflowsError) && (
           <p
             className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm"
@@ -203,6 +202,7 @@ export function WorkflowsPage() {
           </section>
         </div>
       </div>
+      <div className="flex min-h-0 shrink-0" data-workflow-step-host="" />
     </div>
   );
 }

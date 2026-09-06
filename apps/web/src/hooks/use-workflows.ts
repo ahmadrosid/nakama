@@ -15,6 +15,16 @@ export function useWorkflowsQuery() {
   });
 }
 
+export function useWorkflowSqliteQuery(table: string | null, enabled: boolean) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  return useQuery({
+    enabled: enabled && isAuthenticated && !isLoading,
+    queryFn: () => client.inspectWorkflowSqlite(table ?? undefined),
+    queryKey: queryKeys.workflows.database.table(table),
+  });
+}
+
 export function useWorkflowRunsQuery(workflowId: string | null) {
   return useQuery({
     enabled: Boolean(workflowId),
@@ -39,6 +49,9 @@ export function useRunWorkflowMutation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.workflows.all }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.workflows.runs(variables.workflowId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.workflows.database.all,
         }),
       ]);
     },

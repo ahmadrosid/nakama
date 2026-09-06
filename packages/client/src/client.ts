@@ -205,6 +205,7 @@ import type {
   WhatsAppSettingsResponse,
   WorkerLogsResponse,
   WorkflowResponse,
+  WorkflowSqliteInspectResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
@@ -1446,6 +1447,15 @@ export class NakamaClient {
 
   async listWorkflows(): Promise<ListWorkflowsResponse> {
     return this.request<ListWorkflowsResponse>("/v1/workflows");
+  }
+
+  async inspectWorkflowSqlite(
+    table?: string
+  ): Promise<WorkflowSqliteInspectResponse> {
+    const query = table ? `?table=${encodeURIComponent(table)}` : "";
+    return this.request<WorkflowSqliteInspectResponse>(
+      `/v1/workflows/database${query}`
+    );
   }
 
   async getWorkflow(workflowId: string): Promise<StoredWorkflow> {

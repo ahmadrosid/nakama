@@ -1,13 +1,15 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type {
-  CreateWorkflowRequest,
-  GetWorkflowRunResponse,
-  ListWorkflowRunsResponse,
-  ListWorkflowsResponse,
-  RunWorkflowRequest,
-  RunWorkflowResponse,
-  UpdateWorkflowRequest,
-  WorkflowResponse,
+import {
+  type CreateWorkflowRequest,
+  type GetWorkflowRunResponse,
+  inspectWorkflowSqlite,
+  type ListWorkflowRunsResponse,
+  type ListWorkflowsResponse,
+  type RunWorkflowRequest,
+  type RunWorkflowResponse,
+  type UpdateWorkflowRequest,
+  type WorkflowResponse,
+  type WorkflowSqliteInspectResponse,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
@@ -27,6 +29,21 @@ export function registerWorkflowRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
     const workflows = await workflowService.listForOrg(orgId);
     return json<ListWorkflowsResponse>({ workflows });
+  });
+
+  app.get("/v1/workflows/database", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const table = c.req.query("table")?.trim();
+    try {
+      return json<WorkflowSqliteInspectResponse>(
+        await inspectWorkflowSqlite(orgId, table ? { table } : {})
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "Table not found.") {
+        return errorResponse(error.message, 404);
+      }
+      throw error;
+    }
   });
 
   app.post("/v1/workflows", async (c) => {

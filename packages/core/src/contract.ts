@@ -1266,6 +1266,23 @@ export interface GetWorkflowRunResponse {
   run: WorkflowRunRecord;
 }
 
+export interface WorkflowSqliteTableInfo {
+  name: string;
+  rowCount: number;
+}
+
+export interface WorkflowSqlitePreview {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  table: string;
+  total: number;
+}
+
+export interface WorkflowSqliteInspectResponse {
+  preview: WorkflowSqlitePreview | null;
+  tables: WorkflowSqliteTableInfo[];
+}
+
 export interface TimezoneSettingsResponse {
   timezone: string;
 }

@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import { agentWorkTabFromSearchParams } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
 import { AutomationsDialogs } from "@/pages/automations/automations-dialogs";
 import { agentWorkPanelClassName } from "@/pages/automations/automations-page.shared";
 import { AutomationsPageLayout } from "@/pages/automations/automations-page-layout";
@@ -25,7 +26,7 @@ export function AutomationsPage() {
       ) : (
         <div
           aria-labelledby="agent-work-tab-workflows"
-          className={agentWorkPanelClassName}
+          className={cn("relative", agentWorkPanelClassName)}
           id="agent-work-panel-workflows"
           role="tabpanel"
         >

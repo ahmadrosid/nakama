@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getOrgWorkflowSqlitePath, runSqliteTool } from "./sqlite";
+import {
+  getOrgWorkflowSqlitePath,
+  inspectWorkflowSqlite,
+  runSqliteTool,
+} from "./sqlite";
 
 const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -65,6 +69,69 @@ describe("sqlite tool", () => {
     await expect(runSqliteTool({ sql: "SELECT 1" }, {})).rejects.toThrow(
       "orgId"
     );
+  });
+
+  test("inspects tables and preview rows", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-inspect-"));
+    const databasePath = join(dir, "workflow-data.sqlite");
+    try {
+      await runSqliteTool(
+        { sql: "CREATE TABLE items (name TEXT)" },
+        { orgId: "org_test" },
+        { databasePath }
+      );
+      await runSqliteTool(
+        { params: ["alpha"], sql: "INSERT INTO items (name) VALUES (?)" },
+        { orgId: "org_test" },
+        { databasePath }
+      );
+      const listed = await inspectWorkflowSqlite("org_test", { databasePath });
+      expect(listed).toEqual({
+        preview: null,
+        tables: [{ name: "items", rowCount: 1 }],
+      });
+      const previewed = await inspectWorkflowSqlite("org_test", {
+        databasePath,
+        table: "items",
+      });
+      expect(previewed.preview).toEqual({
+        columns: ["name"],
+        rows: [{ name: "alpha" }],
+        table: "items",
+        total: 1,
+      });
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("inspects a missing file as empty and rejects unknown tables", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-missing-"));
+    const databasePath = join(dir, "workflow-data.sqlite");
+    try {
+      await expect(
+        inspectWorkflowSqlite("org_test", { databasePath })
+      ).resolves.toEqual({
+        preview: null,
+        tables: [],
+      });
+      await expect(
+        inspectWorkflowSqlite("org_test", { databasePath, table: "items" })
+      ).rejects.toThrow("Table not found");
+      await runSqliteTool(
+        { sql: "CREATE TABLE items (name TEXT)" },
+        { orgId: "org_test" },
+        { databasePath }
+      );
+      await expect(
+        inspectWorkflowSqlite("org_test", {
+          databasePath,
+          table: "items; DROP TABLE items",
+        })
+      ).rejects.toThrow("Table not found");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 
   test("resolves a per-org file under the config dir", async () => {

@@ -1,8 +1,14 @@
 import { Database } from "bun:sqlite";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import type { ToolContext, ToolDefinition } from "../contract";
-import { ensureDir } from "../fs";
+import type {
+  ToolContext,
+  ToolDefinition,
+  WorkflowSqliteInspectResponse,
+  WorkflowSqlitePreview,
+  WorkflowSqliteTableInfo,
+} from "../contract";
+import { ensureDir, pathExists } from "../fs";
 import { assertConfigPathSegment } from "../soul/resolve";
 import { getUserConfigDir } from "../user-config";
 import {
@@ -91,4 +97,96 @@ function assertSafeSql(sql: string): string {
 
 function isRowsStatement(sql: string): boolean {
   return /^(WITH|SELECT|EXPLAIN|PRAGMA|VALUES)\b/i.test(sql);
+}
+
+const WORKFLOW_SQLITE_TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const WORKFLOW_SQLITE_PREVIEW_LIMIT = 50;
+
+export async function inspectWorkflowSqlite(
+  orgId: string,
+  options: { databasePath?: string; limit?: number; table?: string } = {}
+): Promise<WorkflowSqliteInspectResponse> {
+  const databasePath = options.databasePath ?? getOrgWorkflowSqlitePath(orgId);
+  if (databasePath !== ":memory:" && !(await pathExists(databasePath))) {
+    if (options.table) {
+      throw new Error("Table not found.");
+    }
+    return { preview: null, tables: [] };
+  }
+
+  const db =
+    databasePath === ":memory:"
+      ? new Database(databasePath)
+      : new Database(databasePath, { readonly: true });
+  try {
+    const tables = listWorkflowSqliteTables(db);
+    const requested = options.table?.trim();
+    if (!requested) {
+      return { preview: null, tables };
+    }
+    if (!tables.some((entry) => entry.name === requested)) {
+      throw new Error("Table not found.");
+    }
+    return {
+      preview: previewWorkflowSqliteTable(db, requested, options.limit),
+      tables,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+function listWorkflowSqliteTables(db: Database): WorkflowSqliteTableInfo[] {
+  const names = db
+    .query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    )
+    .all() as Array<{ name: string }>;
+  return names.map((entry) => ({
+    name: entry.name,
+    rowCount: Number(
+      (
+        db
+          .query(
+            `SELECT COUNT(*) AS count FROM ${quoteSqliteIdent(entry.name)}`
+          )
+          .get() as {
+          count: number;
+        }
+      ).count
+    ),
+  }));
+}
+
+function previewWorkflowSqliteTable(
+  db: Database,
+  table: string,
+  limit = WORKFLOW_SQLITE_PREVIEW_LIMIT
+): WorkflowSqlitePreview {
+  const ident = quoteSqliteIdent(table);
+  const total = Number(
+    (
+      db.query(`SELECT COUNT(*) AS count FROM ${ident}`).get() as {
+        count: number;
+      }
+    ).count
+  );
+  const capped = Math.min(
+    Math.max(1, Math.trunc(limit)),
+    WORKFLOW_SQLITE_PREVIEW_LIMIT
+  );
+  const statement = db.query(`SELECT * FROM ${ident} LIMIT ${capped}`);
+  return {
+    columns: statement.columnNames,
+    rows: statement.all() as Record<string, unknown>[],
+    table,
+    total,
+  };
+}
+
+function quoteSqliteIdent(name: string): string {
+  if (!WORKFLOW_SQLITE_TABLE_NAME.test(name)) {
+    throw new Error("Table not found.");
+  }
+  return `"${name}"`;
 }

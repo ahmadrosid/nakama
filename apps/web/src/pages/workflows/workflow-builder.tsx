@@ -4,6 +4,7 @@ import type {
   ToolSummary,
   WorkflowRunRecord,
   WorkflowRunStepRecord,
+  WorkflowSqlitePreview,
   WorkflowStep,
 } from "@nakama/core/contract";
 import {
@@ -13,12 +14,16 @@ import {
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   Add01Icon,
+  ArrowExpand01Icon,
+  ArrowShrink02Icon,
   Cancel01Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PlayIcon,
 } from "hugeicons-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { create } from "zustand";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,6 +57,7 @@ import {
   useToolsQuery,
 } from "@/hooks/use-app-queries";
 import { useAssignToolMutation } from "@/hooks/use-resource-mutations";
+import { useWorkflowSqliteQuery } from "@/hooks/use-workflows";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +66,34 @@ const iconHitArea =
 
 const stepCardSurface =
   "shadow-sm ring-1 ring-border/80 transition-[box-shadow,background-color] duration-150 ease-out dark:shadow-none";
+
+type WorkflowDatabaseUi = {
+  collapse: () => void;
+  expand: () => void;
+  expanded: boolean;
+  queueSql: (sql: string) => void;
+  setTable: (table: string | null) => void;
+  sqlDraft: string | null;
+  table: string | null;
+  takeSqlDraft: () => string | null;
+};
+
+const useWorkflowDatabaseUi = create<WorkflowDatabaseUi>((set, get) => ({
+  collapse: () => set({ expanded: false }),
+  expand: () => set({ expanded: true }),
+  expanded: false,
+  queueSql: (sql) => set({ sqlDraft: sql }),
+  setTable: (table) => set({ table }),
+  sqlDraft: null,
+  table: null,
+  takeSqlDraft: () => {
+    const sql = get().sqlDraft;
+    if (sql) {
+      set({ sqlDraft: null });
+    }
+    return sql;
+  },
+}));
 
 export function WorkflowBuilder({
   busy,
@@ -92,8 +126,13 @@ export function WorkflowBuilder({
   const [description, setDescription] = useState(() => workflow.description);
   const [steps, setSteps] = useState(() => workflow.steps);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [panelTab, setPanelTab] = useState<"configure" | "test">("configure");
+  const [panelTab, setPanelTab] = useState<"configure" | "database" | "test">(
+    "configure"
+  );
   const [inputError, setInputError] = useState<string | null>(null);
+  const sqlDraft = useWorkflowDatabaseUi((state) => state.sqlDraft);
+  const collapseDatabase = useWorkflowDatabaseUi((state) => state.collapse);
+  const takeSqlDraft = useWorkflowDatabaseUi((state) => state.takeSqlDraft);
   const { data: profile } = useProfileQuery(workflow.profileId);
   const tools = profile?.tools ?? [];
   const profileSwitch = useWorkflowProfileSwitch({
@@ -134,6 +173,26 @@ export function WorkflowBuilder({
     ? steps.findIndex((step) => step.id === selectedStep.id)
     : -1;
 
+  useEffect(() => () => collapseDatabase(), [collapseDatabase, workflow.id]);
+
+  useEffect(() => {
+    if (!sqlDraft) {
+      return;
+    }
+    const sql = takeSqlDraft();
+    if (!sql) {
+      return;
+    }
+    setSteps((current) =>
+      current.map((step) =>
+        step.id === selectedStepId && step.kind === "tool"
+          ? { ...step, input: { ...step.input, sql } }
+          : step
+      )
+    );
+    setPanelTab("configure");
+  }, [selectedStepId, sqlDraft, takeSqlDraft]);
+
   function patchStep(stepId: string, next: WorkflowStep) {
     setSteps((current) =>
       current.map((step) => (step.id === stepId ? next : step))
@@ -155,7 +214,7 @@ export function WorkflowBuilder({
     const inserted = insertDataStep(steps, input, tool);
     setSteps(inserted.steps);
     setSelectedStepId(inserted.id);
-    setPanelTab("configure");
+    setPanelTab(tool === "sqlite" ? "database" : "configure");
   }
 
   function deleteStep(stepId: string) {
@@ -200,8 +259,13 @@ export function WorkflowBuilder({
             onAddDatabase={() => addToolStep({ params: [], sql: "" }, "sqlite")}
             onDelete={deleteStep}
             onSelect={(stepId) => {
+              const step = steps.find((entry) => entry.id === stepId);
               setSelectedStepId(stepId);
-              setPanelTab("configure");
+              setPanelTab(
+                step?.kind === "tool" && step.tool === "sqlite"
+                  ? "database"
+                  : "configure"
+              );
               setInputError(null);
             }}
             selectedStepId={selectedStepId}
@@ -214,7 +278,10 @@ export function WorkflowBuilder({
             inputError={inputError}
             key={selectedStep.id}
             latestRun={runs[0] ?? null}
-            onClose={() => setSelectedStepId(null)}
+            onClose={() => {
+              collapseDatabase();
+              setSelectedStepId(null);
+            }}
             onInputError={setInputError}
             onPatch={(next) => patchStep(selectedStep.id, next)}
             onRename={(nextId) => renameStep(selectedStep, nextId)}
@@ -725,10 +792,10 @@ function WorkflowStepPanel({
   onInputError: (error: string | null) => void;
   onPatch: (step: WorkflowStep) => void;
   onRename: (id: string) => void;
-  onTabChange: (tab: "configure" | "test") => void;
+  onTabChange: (tab: "configure" | "database" | "test") => void;
   step: WorkflowStep;
   stepNumber: number;
-  tab: "configure" | "test";
+  tab: "configure" | "database" | "test";
   tools: ToolSummary[];
 }) {
   const meta = stepMeta(step);
@@ -736,9 +803,37 @@ function WorkflowStepPanel({
   const [inputDraft, setInputDraft] = useState(() =>
     step.kind === "tool" ? JSON.stringify(step.input, null, 2) : ""
   );
+  const isSqlite = step.kind === "tool" && step.tool === "sqlite";
+  const expanded = useWorkflowDatabaseUi((state) => state.expanded);
+  const expand = useWorkflowDatabaseUi((state) => state.expand);
+  const collapse = useWorkflowDatabaseUi((state) => state.collapse);
+  const host = useWorkflowStepHost(expanded);
 
-  return (
-    <aside className="absolute inset-y-0 right-0 z-10 flex min-h-0 w-[min(22rem,calc(100%-1.5rem))] flex-col bg-background shadow-lg ring-1 ring-border/80 dark:shadow-none">
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        collapse();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [collapse, expanded]);
+
+  const panel = (
+    <aside
+      className={cn(
+        "flex min-h-0 flex-col bg-background",
+        expanded
+          ? "absolute inset-0 z-20"
+          : cn(
+              "h-full w-[min(36rem,100vw)] shrink-0 border-border border-l",
+              !isSqlite && "w-[min(22rem,100vw)]"
+            )
+      )}
+    >
       <div className="flex items-center gap-3 border-border border-b px-4 py-3">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums">
           {stepNumber}
@@ -747,6 +842,20 @@ function WorkflowStepPanel({
           <div className="font-medium text-sm">{meta.title}</div>
           <div className="text-muted-foreground text-xs">{meta.kindLabel}</div>
         </div>
+        <Button
+          aria-label={expanded ? "Collapse step" : "Expand step"}
+          className={iconHitArea}
+          onClick={expanded ? collapse : expand}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          {expanded ? (
+            <ArrowShrink02Icon className="size-4" strokeWidth={1.5} />
+          ) : (
+            <ArrowExpand01Icon className="size-4" strokeWidth={1.5} />
+          )}
+        </Button>
         <Button
           aria-label="Close step"
           className={iconHitArea}
@@ -766,14 +875,27 @@ function WorkflowStepPanel({
         >
           Configure
         </PanelTab>
+        {isSqlite ? (
+          <PanelTab
+            active={tab === "database"}
+            onClick={() => onTabChange("database")}
+          >
+            Database
+          </PanelTab>
+        ) : null}
         <PanelTab active={tab === "test"} onClick={() => onTabChange("test")}>
           Test
         </PanelTab>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div
+        className={cn(
+          "min-h-0 flex-1 p-4",
+          expanded && tab === "database" ? "overflow-hidden" : "overflow-y-auto"
+        )}
+      >
         {tab === "configure" ? (
-          <div className="space-y-4">
+          <div className={cn("space-y-4", expanded && "mx-auto max-w-xl")}>
             <FormField id={`step-${step.id}-name`} label="Name">
               <Input
                 disabled={busy}
@@ -793,12 +915,34 @@ function WorkflowStepPanel({
               tools={tools}
             />
           </div>
+        ) : tab === "database" && isSqlite ? (
+          <WorkflowDatabaseExplorer layout={expanded ? "split" : "stack"} />
         ) : (
-          <StepTestReceipt latestRun={latestRun} receipt={receipt} />
+          <div className={cn(expanded && "mx-auto max-w-xl")}>
+            <StepTestReceipt latestRun={latestRun} receipt={receipt} />
+          </div>
         )}
       </div>
     </aside>
   );
+
+  if (!host) {
+    return null;
+  }
+
+  return createPortal(panel, host);
+}
+
+function useWorkflowStepHost(expanded: boolean): HTMLElement | null {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const root = document.getElementById("agent-work-panel-workflows");
+    const dock = root?.querySelector<HTMLElement>("[data-workflow-step-host]");
+    setHost(expanded ? (root ?? null) : (dock ?? null));
+  }, [expanded]);
+
+  return host;
 }
 
 function StepConfigureFields({
@@ -822,6 +966,7 @@ function StepConfigureFields({
 }) {
   if (step.kind === "tool") {
     const toolNames = uniqueToolNames(tools, step.tool);
+    const sql = typeof step.input.sql === "string" ? step.input.sql : "";
     return (
       <>
         <FormField id={`step-${step.id}-tool`} label="Tool">
@@ -842,45 +987,63 @@ function StepConfigureFields({
             </SelectContent>
           </Select>
         </FormField>
-        <FormField
-          footer={
-            inputError ? (
-              <p className="text-destructive text-xs">{inputError}</p>
-            ) : null
-          }
-          id={`step-${step.id}-input`}
-          label="Input"
-        >
-          <Textarea
-            className="min-h-40 font-mono text-xs"
-            disabled={busy}
-            id={`step-${step.id}-input`}
-            onChange={(event) => {
-              const text = event.target.value;
-              onInputDraft(text);
-              try {
-                const parsed = JSON.parse(text) as unknown;
-                if (
-                  !parsed ||
-                  typeof parsed !== "object" ||
-                  Array.isArray(parsed)
-                ) {
-                  onInputError("Input must be a JSON object.");
-                  return;
-                }
-                onInputError(null);
+        {step.tool === "sqlite" ? (
+          <FormField id={`step-${step.id}-sql`} label="SQL">
+            <Textarea
+              className="min-h-40 font-mono text-xs"
+              disabled={busy}
+              id={`step-${step.id}-sql`}
+              onChange={(event) =>
                 onPatch({
                   ...step,
-                  input: parsed as Record<string, unknown>,
-                });
-              } catch {
-                onInputError("Invalid JSON.");
+                  input: { ...step.input, sql: event.target.value },
+                })
               }
-            }}
-            spellCheck={false}
-            value={inputDraft}
-          />
-        </FormField>
+              spellCheck={false}
+              value={sql}
+            />
+          </FormField>
+        ) : (
+          <FormField
+            footer={
+              inputError ? (
+                <p className="text-destructive text-xs">{inputError}</p>
+              ) : null
+            }
+            id={`step-${step.id}-input`}
+            label="Input"
+          >
+            <Textarea
+              className="min-h-40 font-mono text-xs"
+              disabled={busy}
+              id={`step-${step.id}-input`}
+              onChange={(event) => {
+                const text = event.target.value;
+                onInputDraft(text);
+                try {
+                  const parsed = JSON.parse(text) as unknown;
+                  if (
+                    !parsed ||
+                    typeof parsed !== "object" ||
+                    Array.isArray(parsed)
+                  ) {
+                    onInputError("Input must be a JSON object.");
+                    return;
+                  }
+                  onInputError(null);
+                  onPatch({
+                    ...step,
+                    input: parsed as Record<string, unknown>,
+                  });
+                } catch {
+                  onInputError("Invalid JSON.");
+                }
+              }}
+              spellCheck={false}
+              value={inputDraft}
+            />
+          </FormField>
+        )}
       </>
     );
   }
@@ -994,6 +1157,8 @@ function StepTestReceipt({
     return <p className="text-muted-foreground text-sm">No runs yet.</p>;
   }
 
+  const sqlitePreview = asSqlitePreview(receipt?.output);
+
   return (
     <div className="space-y-3 text-sm">
       <div>
@@ -1010,7 +1175,11 @@ function StepTestReceipt({
           {receipt.error ? (
             <p className="mt-2 text-destructive">{receipt.error}</p>
           ) : null}
-          {receipt.output == null ? null : (
+          {receipt.output == null ? null : sqlitePreview ? (
+            <div className="mt-2">
+              <SqliteRowsTable preview={sqlitePreview} />
+            </div>
+          ) : (
             <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">
               {JSON.stringify(receipt.output, null, 2)}
             </pre>
@@ -1021,6 +1190,187 @@ function StepTestReceipt({
       )}
     </div>
   );
+}
+
+function WorkflowDatabaseExplorer({ layout }: { layout: "split" | "stack" }) {
+  const table = useWorkflowDatabaseUi((state) => state.table);
+  const setTable = useWorkflowDatabaseUi((state) => state.setTable);
+  const queueSql = useWorkflowDatabaseUi((state) => state.queueSql);
+  const inspect = useWorkflowSqliteQuery(table, true);
+  const tables = inspect.data?.tables ?? [];
+  const firstTable = inspect.data?.tables[0]?.name;
+
+  useEffect(() => {
+    if (table || !firstTable) {
+      return;
+    }
+    setTable(firstTable);
+  }, [firstTable, setTable, table]);
+
+  if (inspect.isLoading && !inspect.data) {
+    return <p className="text-muted-foreground text-sm">Loading…</p>;
+  }
+
+  if (inspect.error) {
+    return (
+      <p className="text-destructive text-sm">{formatError(inspect.error)}</p>
+    );
+  }
+
+  if (tables.length === 0) {
+    return <p className="text-muted-foreground text-sm">No tables yet.</p>;
+  }
+
+  const preview = inspect.data?.preview ?? null;
+  const tableList = (
+    <ul className="flex flex-col gap-1">
+      {tables.map((entry) => (
+        <li key={entry.name}>
+          <button
+            className={cn(
+              "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm",
+              entry.name === table ? "bg-muted" : "hover:bg-muted/50"
+            )}
+            onClick={() => setTable(entry.name)}
+            type="button"
+          >
+            <span className="min-w-0 truncate font-medium">{entry.name}</span>
+            <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+              {entry.rowCount}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0",
+        layout === "split" ? "h-full gap-4" : "flex-col gap-3"
+      )}
+    >
+      <div
+        className={cn(
+          layout === "split"
+            ? "flex w-56 shrink-0 flex-col gap-3 overflow-y-auto"
+            : "flex flex-col gap-3"
+        )}
+      >
+        {tableList}
+        {table ? (
+          <Button
+            onClick={() => queueSql(`SELECT * FROM ${table} LIMIT 50`)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Query {table}
+          </Button>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "min-h-0 min-w-0",
+          layout === "split" && "flex-1 overflow-auto"
+        )}
+      >
+        {preview ? <SqliteRowsTable preview={preview} wide /> : null}
+      </div>
+    </div>
+  );
+}
+
+function SqliteRowsTable({
+  preview,
+  wide = false,
+}: {
+  preview: WorkflowSqlitePreview;
+  wide?: boolean;
+}) {
+  if (preview.columns.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">{preview.total} rows</p>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-auto rounded-md border border-border">
+      <table className="w-full min-w-max text-left text-xs">
+        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+          <tr>
+            {preview.columns.map((column) => (
+              <th className="px-2 py-1.5 font-medium" key={column} scope="col">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {preview.rows.map((row) => (
+            <tr
+              className="border-border border-t"
+              key={preview.columns
+                .map((column) => stringifyCell(row[column]))
+                .join("\u0001")}
+            >
+              {preview.columns.map((column) => (
+                <td
+                  className={cn(
+                    "px-2 py-1.5 tabular-nums",
+                    wide ? "max-w-80 truncate" : "max-w-48 truncate"
+                  )}
+                  key={column}
+                >
+                  {stringifyCell(row[column])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function asSqlitePreview(output: unknown): WorkflowSqlitePreview | null {
+  if (!output || typeof output !== "object") {
+    return null;
+  }
+  const record = output as {
+    columns?: unknown;
+    rows?: unknown;
+    table?: unknown;
+    total?: unknown;
+  };
+  if (!(Array.isArray(record.columns) && Array.isArray(record.rows))) {
+    return null;
+  }
+  const columns = record.columns.map((column) => String(column));
+  const rows = record.rows.filter(
+    (row): row is Record<string, unknown> =>
+      Boolean(row) && typeof row === "object" && !Array.isArray(row)
+  );
+  return {
+    columns,
+    rows,
+    table: typeof record.table === "string" ? record.table : "",
+    total: typeof record.total === "number" ? record.total : rows.length,
+  };
+}
+
+function stringifyCell(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
 }
 
 function PanelTab({
