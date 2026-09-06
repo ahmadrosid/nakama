@@ -9,5 +9,6 @@ export * from "./protected";
 export * from "./ripgrep";
 export * from "./schema";
 export * from "./search-files";
+export * from "./sqlite";
 export * from "./web-fetch";
 export * from "./web-search";

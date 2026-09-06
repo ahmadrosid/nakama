@@ -151,8 +151,8 @@ export function WorkflowBuilder({
     }
   }
 
-  function addStep() {
-    const inserted = insertToolStep(steps);
+  function addToolStep(input: Record<string, unknown>, tool: string) {
+    const inserted = insertDataStep(steps, input, tool);
     setSteps(inserted.steps);
     setSelectedStepId(inserted.id);
     setPanelTab("configure");
@@ -196,7 +196,8 @@ export function WorkflowBuilder({
           />
           <WorkflowStepList
             busy={busy}
-            onAdd={addStep}
+            onAdd={() => addToolStep({ url: "" }, "web_fetch")}
+            onAddDatabase={() => addToolStep({ params: [], sql: "" }, "sqlite")}
             onDelete={deleteStep}
             onSelect={(stepId) => {
               setSelectedStepId(stepId);
@@ -236,17 +237,16 @@ export function WorkflowBuilder({
   );
 }
 
-function insertToolStep(steps: WorkflowStep[]): {
+function insertDataStep(
+  steps: WorkflowStep[],
+  input: Record<string, unknown>,
+  tool: string
+): {
   id: string;
   steps: WorkflowStep[];
 } {
   const id = `step_${crypto.randomUUID().slice(0, 8)}`;
-  const next: WorkflowStep = {
-    id,
-    input: { url: "" },
-    kind: "tool",
-    tool: "web_fetch",
-  };
+  const next: WorkflowStep = { id, input, kind: "tool", tool };
   const summarizeAt = steps.findIndex((step) => step.kind === "summarize");
   if (summarizeAt === -1) {
     return { id, steps: [...steps, next] };
@@ -414,32 +414,17 @@ function WorkflowBuilderHeader({
     <header className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-4 py-3">
       <p className="min-w-0 truncate font-medium text-sm">{name}</p>
       <div className="flex shrink-0 items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                aria-label="Workflow actions"
-                className={iconHitArea}
-                size="icon-sm"
-                type="button"
-                variant="outline"
-              />
-            }
-          >
-            <MoreHorizontalIcon className="size-4" strokeWidth={1.5} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-36">
-            <DropdownMenuItem
-              className="cursor-pointer"
-              disabled={busy}
-              onClick={onDelete}
-              variant="destructive"
-            >
-              <Delete02Icon strokeWidth={1.5} />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          aria-label="Delete"
+          className={iconHitArea}
+          disabled={busy}
+          onClick={onDelete}
+          size="icon-sm"
+          type="button"
+          variant="outline"
+        >
+          <Delete02Icon className="size-4" strokeWidth={1.5} />
+        </Button>
         <Button
           disabled={busy || !enabled}
           onClick={onRun}
@@ -534,6 +519,7 @@ function WorkflowBuilderMeta({
 function WorkflowStepList({
   busy,
   onAdd,
+  onAddDatabase,
   onDelete,
   onSelect,
   selectedStepId,
@@ -541,6 +527,7 @@ function WorkflowStepList({
 }: {
   busy: boolean;
   onAdd: () => void;
+  onAddDatabase: () => void;
   onDelete: (stepId: string) => void;
   onSelect: (stepId: string) => void;
   selectedStepId: string | null;
@@ -564,7 +551,7 @@ function WorkflowStepList({
           </li>
         ))}
       </ol>
-      <div className="mt-4 flex justify-center">
+      <div className="mt-4 flex justify-center gap-2">
         <Button
           disabled={busy}
           onClick={onAdd}
@@ -574,6 +561,16 @@ function WorkflowStepList({
         >
           <Add01Icon aria-hidden className="size-4" strokeWidth={1.5} />
           Add step
+        </Button>
+        <Button
+          disabled={busy}
+          onClick={onAddDatabase}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Add01Icon aria-hidden className="size-4" strokeWidth={1.5} />
+          Add database
         </Button>
       </div>
     </>
@@ -1083,6 +1080,9 @@ function toolLabel(tool: string): string {
   }
   if (tool === "web_search") {
     return "Web Search";
+  }
+  if (tool === "sqlite") {
+    return "SQLite";
   }
   return tool;
 }

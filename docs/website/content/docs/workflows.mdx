@@ -23,6 +23,10 @@ A workflow is a name, a bound profile, ordered steps, and run history.
 
 Every workflow must end with exactly one `summarize` step.
 
+### Store data in SQLite
+
+On **Agent work → Workflows**, press **Add database**. That inserts a `sqlite` tool step. Put one SQL statement in the step input (`sql`, optional `params`). The file is this organization's workflow database, not the product database. Use table names to keep recipes apart. Use `{{steps.*}}` to pass results into later steps.
+
 ### Run a workflow
 
 1. Open **Agent work → Workflows**
