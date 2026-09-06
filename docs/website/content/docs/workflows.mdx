@@ -25,7 +25,7 @@ Every workflow must end with exactly one `summarize` step.
 
 ### Store data in SQLite
 
-On **Agent work → Workflows**, press **Add database**. That inserts a `sqlite` tool step. Put one SQL statement in **SQL**. The file is this organization's workflow database, not the product database. Open the step and press **Database** to browse tables and rows. The step panel sits beside the workflow card. Expand it to fill the Workflows tab. **Query** writes a `SELECT` into the step. Use table names to keep recipes apart. Use `{{steps.*}}` to pass results into later steps.
+On **Agent work → Workflows**, press **Add database**. That inserts a `sqlite` tool step. Put one SQL statement in **SQL**. The file is this organization's workflow database, not the product database. Open the step and press **Database** to browse tables and rows. The step opens as a drawer over the workflow. Expand it to fill the Workflows tab. **Query** writes a `SELECT` into the step. Use table names to keep recipes apart. Use `{{steps.*}}` to pass results into later steps.
 
 ### Run a workflow
 

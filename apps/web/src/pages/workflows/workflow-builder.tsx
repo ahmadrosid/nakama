@@ -807,31 +807,33 @@ function WorkflowStepPanel({
   const expanded = useWorkflowDatabaseUi((state) => state.expanded);
   const expand = useWorkflowDatabaseUi((state) => state.expand);
   const collapse = useWorkflowDatabaseUi((state) => state.collapse);
-  const host = useWorkflowStepHost(expanded);
+  const host = useWorkflowStepHost();
 
   useEffect(() => {
-    if (!expanded) {
-      return;
-    }
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        collapse();
+      if (event.key !== "Escape") {
+        return;
       }
+      if (expanded) {
+        collapse();
+        return;
+      }
+      onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [collapse, expanded]);
+  }, [collapse, expanded, onClose]);
 
-  const panel = (
+  const drawer = (
     <aside
       className={cn(
-        "flex min-h-0 flex-col bg-background",
+        "absolute inset-y-0 right-0 z-30 flex min-h-0 flex-col border-border border-l bg-background shadow-xl",
+        "slide-in-from-right animate-in duration-200",
         expanded
-          ? "absolute inset-0 z-20"
-          : cn(
-              "h-full w-[min(36rem,100vw)] shrink-0 border-border border-l",
-              !isSqlite && "w-[min(22rem,100vw)]"
-            )
+          ? "inset-0 w-full"
+          : isSqlite
+            ? "w-[min(36rem,100%)]"
+            : "w-[min(22rem,100%)]"
       )}
     >
       <div className="flex items-center gap-3 border-border border-b px-4 py-3">
@@ -930,17 +932,26 @@ function WorkflowStepPanel({
     return null;
   }
 
-  return createPortal(panel, host);
+  return createPortal(
+    <>
+      <button
+        aria-label="Close step"
+        className="fade-in-0 absolute inset-0 z-20 animate-in bg-background/50 duration-200"
+        onClick={onClose}
+        type="button"
+      />
+      {drawer}
+    </>,
+    host
+  );
 }
 
-function useWorkflowStepHost(expanded: boolean): HTMLElement | null {
+function useWorkflowStepHost(): HTMLElement | null {
   const [host, setHost] = useState<HTMLElement | null>(null);
 
   useLayoutEffect(() => {
-    const root = document.getElementById("agent-work-panel-workflows");
-    const dock = root?.querySelector<HTMLElement>("[data-workflow-step-host]");
-    setHost(expanded ? (root ?? null) : (dock ?? null));
-  }, [expanded]);
+    setHost(document.getElementById("agent-work-panel-workflows"));
+  }, []);
 
   return host;
 }
