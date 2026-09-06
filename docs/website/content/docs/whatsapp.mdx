@@ -88,7 +88,7 @@ After linking succeeds, Nakama shows the linked account and the bridge can recei
 WhatsApp works in **private chats** and **groups**.
 
 - direct chats send every message to the agent
-- group chats reply only to a mention of the linked number, a reply to a Nakama message, or a `/command`
+- group chats reply to a mention of the linked number, a reply to a Nakama message, or a `/command`. Turn off **Require @mention in groups** in **Integrations → WhatsApp** if anyone in the group should talk without tagging the bot
 - each private chat and each group keeps its own Nakama session
 - `/org` in a group is stored for that group, not your private chat
 - pairing still happens in a private chat first
@@ -157,11 +157,13 @@ If QR linking does not finish:
 
 ### The bot does not reply in a group
 
-In a group, Nakama only answers when someone:
+By default, Nakama only answers in a group when someone:
 
 1. mentions the linked WhatsApp number
 2. replies to a Nakama message
 3. sends a `/command`
+
+Turn off **Require @mention in groups** in **Integrations → WhatsApp** to answer every group message without tagging the bot.
 
 The sender must be the linked WhatsApp number, or a number listed under **Integrations → WhatsApp → Allowed numbers**. Add country code, like `+62812…`. Reply to another person's message while mentioning Nakama if the agent should see that text.
 

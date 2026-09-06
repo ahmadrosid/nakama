@@ -133,6 +133,103 @@ function ShowMoreArtifactsButton({
   );
 }
 
+function FilesArtifactViewsBody({
+  viewMode,
+  isLoading,
+  error,
+  artifacts,
+  folders,
+  listingFiles,
+  emptyFilterMessage,
+  showFullPath,
+  profileId,
+  deletePending,
+  onDelete,
+  onOpenFolder,
+}: {
+  viewMode: FilesViewMode;
+  isLoading: boolean;
+  error: unknown;
+  artifacts: ArtifactFile[];
+  folders: ArtifactFolderEntry[];
+  listingFiles: ArtifactFile[];
+  emptyFilterMessage: string;
+  showFullPath: boolean;
+  profileId: string;
+  deletePending: boolean;
+  onDelete: (artifact: ArtifactFile) => void;
+  onOpenFolder: (prefix: string) => void;
+}) {
+  if (isLoading) {
+    if (viewMode === "grid") {
+      return <ArtifactGridSkeleton />;
+    }
+
+    return <ArtifactListSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-6 text-destructive text-sm">
+        {formatError(error)}
+      </div>
+    );
+  }
+
+  if (artifacts.length === 0) {
+    return (
+      <div className="px-4 py-10 text-center text-muted-foreground text-sm">
+        No artifacts yet.
+      </div>
+    );
+  }
+
+  if (folders.length === 0 && listingFiles.length === 0) {
+    return (
+      <div className="px-4 py-6 text-muted-foreground text-sm">
+        {emptyFilterMessage}
+      </div>
+    );
+  }
+
+  if (viewMode === "grid") {
+    return (
+      <div className="p-4">
+        <ArtifactGridView
+          artifacts={listingFiles}
+          deletePending={deletePending}
+          folders={folders}
+          onDelete={onDelete}
+          onOpenFolder={onOpenFolder}
+          profileId={profileId}
+          showFullPath={showFullPath}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ArtifactListView
+      artifacts={listingFiles}
+      deletePending={deletePending}
+      folders={folders}
+      onDelete={onDelete}
+      onOpenFolder={onOpenFolder}
+      profileId={profileId}
+      showFullPath={showFullPath}
+    />
+  );
+}
+
+function canShowArtifactPagination(
+  isLoading: boolean,
+  error: unknown,
+  artifacts: ArtifactFile[],
+  pagination: FilesArtifactPagination | null
+): pagination is FilesArtifactPagination {
+  return !(isLoading || error || artifacts.length === 0 || !pagination);
+}
+
 export function FilesArtifactViews({
   viewMode,
   isLoading,
@@ -162,58 +259,29 @@ export function FilesArtifactViews({
   onDelete: (artifact: ArtifactFile) => void;
   onOpenFolder: (prefix: string) => void;
 }) {
-  const listingEmpty = folders.length === 0 && listingFiles.length === 0;
-
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card">
-      {isLoading ? (
-        viewMode === "grid" ? (
-          <ArtifactGridSkeleton />
-        ) : (
-          <ArtifactListSkeleton />
-        )
-      ) : error ? (
-        <div className="px-4 py-6 text-destructive text-sm">
-          {formatError(error)}
-        </div>
-      ) : artifacts.length === 0 ? (
-        <div className="px-4 py-10 text-center text-muted-foreground text-sm">
-          No artifacts yet.
-        </div>
-      ) : listingEmpty ? (
-        <div className="px-4 py-6 text-muted-foreground text-sm">
-          {emptyFilterMessage}
-        </div>
-      ) : viewMode === "grid" ? (
-        <div className="p-4">
-          <ArtifactGridView
-            artifacts={listingFiles}
-            deletePending={deletePending}
-            folders={folders}
-            onDelete={onDelete}
-            onOpenFolder={onOpenFolder}
-            profileId={profileId}
-            showFullPath={showFullPath}
-          />
-        </div>
-      ) : (
-        <ArtifactListView
-          artifacts={listingFiles}
-          deletePending={deletePending}
-          folders={folders}
-          onDelete={onDelete}
-          onOpenFolder={onOpenFolder}
-          profileId={profileId}
-          showFullPath={showFullPath}
-        />
-      )}
-      {isLoading || error || artifacts.length === 0 || !pagination ? null : (
+      <FilesArtifactViewsBody
+        artifacts={artifacts}
+        deletePending={deletePending}
+        emptyFilterMessage={emptyFilterMessage}
+        error={error}
+        folders={folders}
+        isLoading={isLoading}
+        listingFiles={listingFiles}
+        onDelete={onDelete}
+        onOpenFolder={onOpenFolder}
+        profileId={profileId}
+        showFullPath={showFullPath}
+        viewMode={viewMode}
+      />
+      {canShowArtifactPagination(isLoading, error, artifacts, pagination) ? (
         <ShowMoreArtifactsButton
           loadingMore={pagination.loadingMore}
           onShowMore={pagination.onShowMore}
           remainingCount={pagination.remainingCount}
         />
-      )}
+      ) : null}
     </div>
   );
 }

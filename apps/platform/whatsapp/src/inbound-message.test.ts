@@ -3,7 +3,10 @@ import {
   extractInboundText,
   isPrivateWhatsAppChat,
   isSelfWhatsAppChat,
+  isWhatsAppOutboundEcho,
   parseInboundWhatsAppMessage,
+  rememberWhatsAppOutbound,
+  resetWhatsAppOutboundForTests,
   shouldHandleInboundMessage,
 } from "./inbound-message";
 
@@ -13,6 +16,39 @@ const ME = {
 };
 
 describe("inbound message routing", () => {
+  test("treats remembered fromMe group replies as outbound echoes", () => {
+    resetWhatsAppOutboundForTests();
+    rememberWhatsAppOutbound({
+      id: "out-1",
+      jid: "120363@g.us",
+      text: "Hi! Silakan kirim laporan well test yang ingin divalidasi.",
+    });
+
+    expect(
+      isWhatsAppOutboundEcho({
+        fromMe: true,
+        id: "out-1",
+        jid: "120363@g.us",
+        text: "Hi! Silakan kirim laporan well test yang ingin divalidasi.",
+      })
+    ).toBe(true);
+    expect(
+      isWhatsAppOutboundEcho({
+        fromMe: true,
+        jid: "120363@g.us",
+        text: "hi",
+      })
+    ).toBe(false);
+    expect(
+      isWhatsAppOutboundEcho({
+        fromMe: false,
+        id: "out-1",
+        jid: "120363@g.us",
+        text: "Hi! Silakan kirim laporan well test yang ingin divalidasi.",
+      })
+    ).toBe(false);
+  });
+
   test("accepts private phone and lid chats", () => {
     expect(isPrivateWhatsAppChat("6281379292556@s.whatsapp.net")).toBe(true);
     expect(isPrivateWhatsAppChat("236283431522503@lid")).toBe(true);
@@ -98,6 +134,22 @@ describe("inbound message routing", () => {
     ).toBe(false);
   });
 
+  test("handles plain group messages when mention is not required", () => {
+    expect(
+      shouldHandleInboundMessage(
+        {
+          key: {
+            participant: "9999999999@s.whatsapp.net",
+            remoteJid: "120363@g.us",
+          },
+          message: { conversation: "hello everyone" },
+        },
+        ME,
+        { requireGroupMention: false }
+      )
+    ).toBe(true);
+  });
+
   test("handles group mentions, replies, and slash commands", () => {
     expect(
       shouldHandleInboundMessage(
@@ -170,6 +222,7 @@ describe("inbound message routing", () => {
       jid: "120363@g.us",
       me: ME,
       mentionedJids: [ME.lid],
+      messageId: null,
       quotedParticipant: null,
       quotedText: null,
       senderJid: "9999999999@s.whatsapp.net",

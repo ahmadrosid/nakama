@@ -6,9 +6,41 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
+
+export type ModelCostFilter = "all" | "free";
+
+export function ModelCostFilterSelect({
+  value,
+  onValueChange,
+}: {
+  onValueChange: (value: ModelCostFilter) => void;
+  value: ModelCostFilter;
+}) {
+  return (
+    <Select
+      onValueChange={(next) => onValueChange(next as ModelCostFilter)}
+      value={value}
+    >
+      <SelectTrigger className="w-27.5">
+        <SelectValue>{value === "free" ? "Free only" : "All"}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All</SelectItem>
+        <SelectItem value="free">Free only</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
 
 const MODEL_ROW_HEIGHT = 73;
 const MODEL_ROW_OVERSCAN = 6;

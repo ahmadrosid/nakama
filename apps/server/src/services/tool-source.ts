@@ -41,6 +41,10 @@ const BUILTIN_SOURCE_BY_NAME: Record<
     displayPath: "packages/core/src/tools/search-files.ts",
     filePath: path.join(corePackageRoot, "src/tools/search-files.ts"),
   },
+  sqlite: {
+    displayPath: "packages/core/src/tools/sqlite.ts",
+    filePath: path.join(corePackageRoot, "src/tools/sqlite.ts"),
+  },
   web_search: {
     displayPath: "packages/core/src/tools/web-search.ts",
     filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),

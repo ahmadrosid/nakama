@@ -156,6 +156,177 @@ function SkillGroupHeader({ label }: { label: string }) {
   );
 }
 
+function ProfileSkillsToolbar({
+  assignedCount,
+  busy,
+  allSkills,
+  assignedSkillIds,
+  bashAssigned,
+  onCreateOpen,
+  onInstallOpen,
+  onAssign,
+  onDelete,
+  onAssignBash,
+}: {
+  assignedCount: number;
+  busy: boolean;
+  allSkills: SkillSummary[];
+  assignedSkillIds: ReadonlySet<string>;
+  bashAssigned: boolean;
+  onCreateOpen: () => void;
+  onInstallOpen: () => void;
+  onAssign: (skillId: string) => void;
+  onDelete: (skillId: string) => void;
+  onAssignBash: () => void | Promise<void>;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 className="type-section-title">Skills</h3>
+        {assignedCount > 0 ? (
+          <p className="type-body mt-1 text-xs">{assignedCount} assigned</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={busy}
+          onClick={onCreateOpen}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Create skill
+        </Button>
+        <Button
+          disabled={busy}
+          onClick={onInstallOpen}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Install from GitHub
+        </Button>
+        <SkillAssignPicker
+          assignedSkillIds={assignedSkillIds}
+          bashAssigned={bashAssigned}
+          buttonLabel="Add skills"
+          disabled={busy}
+          onAssign={onAssign}
+          onAssignBash={onAssignBash}
+          onDelete={onDelete}
+          skills={allSkills}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AssignedSkillsLists({
+  customSkills,
+  bundledSkills,
+  busy,
+  staleAfterDays,
+  onViewDetail,
+  onRemove,
+}: {
+  customSkills: SkillSummary[];
+  bundledSkills: SkillSummary[];
+  busy: boolean;
+  staleAfterDays: number;
+  onViewDetail: (skillId: string) => void;
+  onRemove: (target: RemoveAssignmentTarget) => void;
+}) {
+  const showGroupHeaders = customSkills.length > 0 && bundledSkills.length > 0;
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      {customSkills.length > 0 ? (
+        <ul className="divide-y divide-border">
+          {showGroupHeaders ? <SkillGroupHeader label="Your skills" /> : null}
+          {customSkills.map((skill) => (
+            <ProfileSkillRow
+              busy={busy}
+              key={skill.id}
+              onRemove={onRemove}
+              onViewDetail={onViewDetail}
+              skill={skill}
+              staleAfterDays={staleAfterDays}
+            />
+          ))}
+        </ul>
+      ) : null}
+      {bundledSkills.length > 0 ? (
+        <ul
+          className={
+            customSkills.length > 0
+              ? "divide-y divide-border border-border border-t"
+              : "divide-y divide-border"
+          }
+        >
+          {showGroupHeaders || customSkills.length === 0 ? (
+            <SkillGroupHeader label="Built-in skills" />
+          ) : null}
+          {bundledSkills.map((skill) => (
+            <ProfileSkillRow
+              busy={busy}
+              key={skill.id}
+              onRemove={onRemove}
+              onViewDetail={onViewDetail}
+              skill={skill}
+              staleAfterDays={staleAfterDays}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ProfileSkillsContent({
+  allSkillsEmpty,
+  assignedEmpty,
+  customSkills,
+  bundledSkills,
+  busy,
+  staleAfterDays,
+  onViewDetail,
+  onRemove,
+}: {
+  allSkillsEmpty: boolean;
+  assignedEmpty: boolean;
+  customSkills: SkillSummary[];
+  bundledSkills: SkillSummary[];
+  busy: boolean;
+  staleAfterDays: number;
+  onViewDetail: (skillId: string) => void;
+  onRemove: (target: RemoveAssignmentTarget) => void;
+}) {
+  if (allSkillsEmpty) {
+    return (
+      <p className="type-body text-muted-foreground text-xs">
+        Create one above, or add{" "}
+        <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> folders
+        to <code className="rounded bg-muted px-1 py-0.5">agent/skills</code>.
+      </p>
+    );
+  }
+
+  if (assignedEmpty) {
+    return null;
+  }
+
+  return (
+    <AssignedSkillsLists
+      bundledSkills={bundledSkills}
+      busy={busy}
+      customSkills={customSkills}
+      onRemove={onRemove}
+      onViewDetail={onViewDetail}
+      staleAfterDays={staleAfterDays}
+    />
+  );
+}
+
 export function ProfileSkillsSection({
   detail,
   busy,
@@ -195,101 +366,31 @@ export function ProfileSkillsSection({
     () => sortedSkills.filter((skill) => isBundledSkill(skill)),
     [sortedSkills]
   );
-  const showGroupHeaders = customSkills.length > 0 && bundledSkills.length > 0;
 
   return (
     <div className="pt-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="type-section-title">Skills</h3>
-          {detail.skills.length > 0 ? (
-            <p className="type-body mt-1 text-xs">
-              {detail.skills.length} assigned
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            disabled={busy}
-            onClick={onCreateOpen}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Create skill
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={onInstallOpen}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Install from GitHub
-          </Button>
-          <SkillAssignPicker
-            assignedSkillIds={assignedSkillIds}
-            bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
-            buttonLabel="Add skills"
-            disabled={busy}
-            onAssign={onAssign}
-            onAssignBash={onAssignBash}
-            onDelete={onDelete}
-            skills={allSkills}
-          />
-        </div>
-      </div>
-
-      {allSkills.length === 0 ? (
-        <p className="type-body text-muted-foreground text-xs">
-          Create one above, or add{" "}
-          <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> folders
-          to <code className="rounded bg-muted px-1 py-0.5">agent/skills</code>.
-        </p>
-      ) : detail.skills.length === 0 ? null : (
-        <div className="overflow-hidden rounded-md border border-border">
-          {customSkills.length > 0 ? (
-            <ul className="divide-y divide-border">
-              {showGroupHeaders ? (
-                <SkillGroupHeader label="Your skills" />
-              ) : null}
-              {customSkills.map((skill) => (
-                <ProfileSkillRow
-                  busy={busy}
-                  key={skill.id}
-                  onRemove={onRemove}
-                  onViewDetail={onViewDetail}
-                  skill={skill}
-                  staleAfterDays={staleAfterDays}
-                />
-              ))}
-            </ul>
-          ) : null}
-          {bundledSkills.length > 0 ? (
-            <ul
-              className={
-                customSkills.length > 0
-                  ? "divide-y divide-border border-border border-t"
-                  : "divide-y divide-border"
-              }
-            >
-              {showGroupHeaders || customSkills.length === 0 ? (
-                <SkillGroupHeader label="Built-in skills" />
-              ) : null}
-              {bundledSkills.map((skill) => (
-                <ProfileSkillRow
-                  busy={busy}
-                  key={skill.id}
-                  onRemove={onRemove}
-                  onViewDetail={onViewDetail}
-                  skill={skill}
-                  staleAfterDays={staleAfterDays}
-                />
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      )}
+      <ProfileSkillsToolbar
+        allSkills={allSkills}
+        assignedCount={detail.skills.length}
+        assignedSkillIds={assignedSkillIds}
+        bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
+        busy={busy}
+        onAssign={onAssign}
+        onAssignBash={onAssignBash}
+        onCreateOpen={onCreateOpen}
+        onDelete={onDelete}
+        onInstallOpen={onInstallOpen}
+      />
+      <ProfileSkillsContent
+        allSkillsEmpty={allSkills.length === 0}
+        assignedEmpty={detail.skills.length === 0}
+        bundledSkills={bundledSkills}
+        busy={busy}
+        customSkills={customSkills}
+        onRemove={onRemove}
+        onViewDetail={onViewDetail}
+        staleAfterDays={staleAfterDays}
+      />
     </div>
   );
 }

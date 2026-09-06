@@ -191,7 +191,7 @@ function DailyChart({ days }: { days: Day[] }) {
   );
 }
 
-export function TokenOptimizationCard() {
+function useTokenOptimization() {
   const [data, setData] = useState<TokenOptimizationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -212,9 +212,6 @@ export function TokenOptimizationCard() {
     try {
       const result = await client.setTokenOptimization(next);
       setData(await client.getTokenOptimization());
-      // Switching on fetches the binary when it is missing, and a failed fetch
-      // is the operator's to act on: without it the panel would only repeat that
-      // the binary is absent.
       setError(result.installError);
     } catch (cause) {
       setError(formatError(cause));
@@ -223,82 +220,228 @@ export function TokenOptimizationCard() {
     }
   }
 
-  if (error && !data) {
-    return <p className="text-destructive text-sm">{error}</p>;
+  return { data, error, saving, toggle };
+}
+
+function savedPercent(bytesIn: number, bytesRemoved: number): number {
+  if (bytesIn > 0) {
+    return (100 * bytesRemoved) / bytesIn;
   }
 
-  if (!data) {
+  return 0;
+}
+
+function TokenOptimizationHeader({
+  omni,
+  saving,
+  toggle,
+}: {
+  omni: TokenOptimizationResponse["optimizers"][number] | undefined;
+  saving: boolean;
+  toggle: (next: boolean) => Promise<void>;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
+          {omni && OPTIMIZER_HOMEPAGE[omni.id] ? (
+            <a
+              aria-label={`${omni.id} on GitHub`}
+              className="relative inline-flex items-center gap-1 text-muted-foreground text-xs transition-[color,transform,scale] duration-150 ease-out after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:text-foreground active:scale-[0.96]"
+              href={OPTIMIZER_HOMEPAGE[omni.id]}
+              rel="noreferrer noopener"
+              target="_blank"
+            >
+              <GithubIcon aria-hidden className="size-3.5" strokeWidth={1.5} />
+              GitHub
+            </a>
+          ) : null}
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {omni?.tools.map((tool) => (
+            <span
+              className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground leading-none"
+              key={tool}
+            >
+              {tool}
+            </span>
+          ))}
+        </div>
+      </div>
+      <Switch
+        aria-label={`Enable ${omni?.id ?? "omni"}`}
+        checked={Boolean(omni?.enabled)}
+        className="mt-0.5"
+        disabled={saving}
+        onCheckedChange={toggle}
+      />
+    </div>
+  );
+}
+
+function TokenInputComparison({
+  inputTokens,
+}: {
+  inputTokens: TokenOptimizationResponse["inputTokens"];
+}) {
+  if (
+    inputTokens.optimized.turns < MIN_TURNS ||
+    inputTokens.control.turns < MIN_TURNS
+  ) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground text-sm">
-        <Spinner /> Loading
+      <div className="rounded-md border border-border border-dashed px-4 py-3.5">
+        <p className="font-medium text-sm">Provider input tokens per turn</p>
+        <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+          Needs {MIN_TURNS} turns in each arm before the two are worth
+          comparing. So far {inputTokens.optimized.turns} optimised and{" "}
+          {inputTokens.control.turns} passthrough.
+        </p>
       </div>
     );
   }
 
-  // A server older than this page answers without `arms` or `days`. Saying so
-  // beats white-screening on a version skew.
-  if (!(data.arms?.optimized && data.days?.length)) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        The server is running an older build than this page. Restart it to see
-        this panel.
+  return (
+    <div className="rounded-md border border-border px-4 py-3.5">
+      <p className="mb-3 font-medium text-sm">Provider input tokens per turn</p>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="tabular-nums">
+            {inputTokens.optimized.inputTokensPerTurn.toLocaleString()}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            optimised, {inputTokens.optimized.turns} turns
+          </p>
+        </div>
+        <div>
+          <p className="tabular-nums">
+            {inputTokens.control.inputTokensPerTurn.toLocaleString()}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            passthrough, {inputTokens.control.turns} turns
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-muted-foreground text-xs leading-relaxed">
+        Counted by the provider, not estimated here. Turns fall into an arm by
+        what happened rather than by assignment, so a difference in the work
+        itself can explain part of any gap.
       </p>
-    );
-  }
+    </div>
+  );
+}
 
+function TokenOptimizationStats({
+  arms,
+  byTool,
+  days,
+  inputTokens,
+  totals,
+  windowDays,
+}: {
+  arms: TokenOptimizationResponse["arms"];
+  byTool: TokenOptimizationResponse["byTool"];
+  days: Day[];
+  inputTokens: TokenOptimizationResponse["inputTokens"];
+  totals: TokenOptimizationResponse["totals"];
+  windowDays: number;
+}) {
+  const percent = savedPercent(totals.bytesIn, totals.bytesRemoved);
+
+  return (
+    <>
+      <div>
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span
+            className="font-semibold text-4xl tabular-nums leading-none"
+            style={{ color: "var(--out)" }}
+          >
+            {percent.toFixed(0)}%
+          </span>
+          <span className="text-pretty text-muted-foreground text-sm">
+            of tool output saved
+          </span>
+        </p>
+        <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
+          {formatBytes(totals.bytesRemoved)} saved from{" "}
+          {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
+        </p>
+      </div>
+
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-4 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-2.5 rounded-[2px]"
+              style={{ background: "var(--out)" }}
+            />
+            <span className="text-muted-foreground">saved</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-2.5 rounded-[2px]"
+              style={{ background: "var(--in)" }}
+            />
+            <span className="text-muted-foreground">sent to the model</span>
+          </span>
+        </div>
+        <DailyChart days={days} />
+      </div>
+
+      <TokenInputComparison inputTokens={inputTokens} />
+
+      {byTool?.length ? (
+        <table className="w-full text-sm">
+          <tbody>
+            {byTool.map((row) => (
+              <tr className="border-border/60 border-t" key={row.tool}>
+                <td className="py-1.5">{row.tool}</td>
+                <td className="py-1.5 text-right text-muted-foreground tabular-nums">
+                  {row.calls} calls
+                </td>
+                <td className="py-1.5 text-right tabular-nums">
+                  {formatBytes(row.bytesIn - row.bytesOut)} saved
+                </td>
+              </tr>
+            ))}
+            <tr className="border-border/60 border-t text-muted-foreground">
+              <td className="py-1.5">passthrough</td>
+              <td className="py-1.5 text-right tabular-nums">
+                {arms.control.calls} calls
+              </td>
+              <td className="py-1.5 text-right tabular-nums">
+                {formatBytes(arms.control.bytesIn)} sent
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      ) : null}
+    </>
+  );
+}
+
+function TokenOptimizationBody({
+  data,
+  error,
+  saving,
+  toggle,
+}: {
+  data: TokenOptimizationResponse;
+  error: string | null;
+  saving: boolean;
+  toggle: (next: boolean) => Promise<void>;
+}) {
   const { arms, byTool, days, inputTokens, optimizers, totals, windowDays } =
     data;
   const omni = optimizers?.[0];
-  // Denominator is everything the handled tools produced, both arms. Dividing
-  // by the optimised calls alone would be a percentage of a set chosen after
-  // the fact, and it would not match the per-session figure on the chat chip.
-  const percent =
-    totals.bytesIn > 0 ? (100 * totals.bytesRemoved) / totals.bytesIn : 0;
 
   return (
     <div className="tokenopt space-y-5">
       <style dangerouslySetInnerHTML={{ __html: CHART_STYLE }} />
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
-            {omni && OPTIMIZER_HOMEPAGE[omni.id] ? (
-              <a
-                aria-label={`${omni.id} on GitHub`}
-                className="relative inline-flex items-center gap-1 text-muted-foreground text-xs transition-[color,transform,scale] duration-150 ease-out after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:text-foreground active:scale-[0.96]"
-                href={OPTIMIZER_HOMEPAGE[omni.id]}
-                rel="noreferrer noopener"
-                target="_blank"
-              >
-                <GithubIcon
-                  aria-hidden
-                  className="size-3.5"
-                  strokeWidth={1.5}
-                />
-                GitHub
-              </a>
-            ) : null}
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {omni?.tools.map((tool) => (
-              <span
-                className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground leading-none"
-                key={tool}
-              >
-                {tool}
-              </span>
-            ))}
-          </div>
-        </div>
-        <Switch
-          aria-label={`Enable ${omni?.id ?? "omni"}`}
-          checked={Boolean(omni?.enabled)}
-          className="mt-0.5"
-          disabled={saving}
-          onCheckedChange={toggle}
-        />
-      </div>
+      <TokenOptimizationHeader omni={omni} saving={saving} toggle={toggle} />
 
       {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
@@ -315,126 +458,14 @@ export function TokenOptimizationCard() {
           Nothing measured in the last {windowDays} days.
         </p>
       ) : (
-        <>
-          <div>
-            {/* A stat tile is read by its number, so the number leads. The
-                colour is the "saved" series colour, not a decorative one,
-                so colour still carries identity here. */}
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span
-                className="font-semibold text-4xl tabular-nums leading-none"
-                style={{ color: "var(--out)" }}
-              >
-                {percent.toFixed(0)}%
-              </span>
-              <span className="text-pretty text-muted-foreground text-sm">
-                of tool output saved
-              </span>
-            </p>
-            <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
-              {formatBytes(totals.bytesRemoved)} saved from{" "}
-              {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
-            </p>
-          </div>
-
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="size-2.5 rounded-[2px]"
-                  style={{ background: "var(--out)" }}
-                />
-                <span className="text-muted-foreground">saved</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="size-2.5 rounded-[2px]"
-                  style={{ background: "var(--in)" }}
-                />
-                <span className="text-muted-foreground">sent to the model</span>
-              </span>
-            </div>
-            <DailyChart days={days} />
-          </div>
-
-          {/* The only tokens on this card. Shown per turn because the arms
-              never have the same turn count, and only once both arms have
-              enough turns to be worth printing. */}
-          {inputTokens.optimized.turns < MIN_TURNS ||
-          inputTokens.control.turns < MIN_TURNS ? (
-            // Say the threshold rather than hide the block. An absent panel
-            // reads as unbuilt; a stated one reads as not enough data yet,
-            // which is what it is.
-            <div className="rounded-md border border-border border-dashed px-4 py-3.5">
-              <p className="font-medium text-sm">
-                Provider input tokens per turn
-              </p>
-              <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
-                Needs {MIN_TURNS} turns in each arm before the two are worth
-                comparing. So far {inputTokens.optimized.turns} optimised and{" "}
-                {inputTokens.control.turns} passthrough.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-md border border-border px-4 py-3.5">
-              <p className="mb-3 font-medium text-sm">
-                Provider input tokens per turn
-              </p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="tabular-nums">
-                    {inputTokens.optimized.inputTokensPerTurn.toLocaleString()}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    optimised, {inputTokens.optimized.turns} turns
-                  </p>
-                </div>
-                <div>
-                  <p className="tabular-nums">
-                    {inputTokens.control.inputTokensPerTurn.toLocaleString()}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    passthrough, {inputTokens.control.turns} turns
-                  </p>
-                </div>
-              </div>
-              <p className="mt-3 text-muted-foreground text-xs leading-relaxed">
-                Counted by the provider, not estimated here. Turns fall into an
-                arm by what happened rather than by assignment, so a difference
-                in the work itself can explain part of any gap.
-              </p>
-            </div>
-          )}
-
-          {byTool?.length ? (
-            <table className="w-full text-sm">
-              <tbody>
-                {byTool.map((row) => (
-                  <tr className="border-border/60 border-t" key={row.tool}>
-                    <td className="py-1.5">{row.tool}</td>
-                    <td className="py-1.5 text-right text-muted-foreground tabular-nums">
-                      {row.calls} calls
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums">
-                      {formatBytes(row.bytesIn - row.bytesOut)} saved
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-border/60 border-t text-muted-foreground">
-                  <td className="py-1.5">passthrough</td>
-                  <td className="py-1.5 text-right tabular-nums">
-                    {arms.control.calls} calls
-                  </td>
-                  <td className="py-1.5 text-right tabular-nums">
-                    {formatBytes(arms.control.bytesIn)} sent
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          ) : null}
-        </>
+        <TokenOptimizationStats
+          arms={arms}
+          byTool={byTool}
+          days={days}
+          inputTokens={inputTokens}
+          totals={totals}
+          windowDays={windowDays}
+        />
       )}
 
       <Tooltip>
@@ -456,5 +487,39 @@ export function TokenOptimizationCard() {
         </TooltipContent>
       </Tooltip>
     </div>
+  );
+}
+
+export function TokenOptimizationCard() {
+  const { data, error, saving, toggle } = useTokenOptimization();
+
+  if (error && !data) {
+    return <p className="text-destructive text-sm">{error}</p>;
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground text-sm">
+        <Spinner /> Loading
+      </div>
+    );
+  }
+
+  if (!(data.arms?.optimized && data.days?.length)) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        The server is running an older build than this page. Restart it to see
+        this panel.
+      </p>
+    );
+  }
+
+  return (
+    <TokenOptimizationBody
+      data={data}
+      error={error}
+      saving={saving}
+      toggle={toggle}
+    />
   );
 }

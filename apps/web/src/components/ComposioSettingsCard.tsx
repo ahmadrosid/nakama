@@ -99,11 +99,22 @@ function ComposioSettingsSkeleton({
   );
 }
 
-export function ComposioSettingsCard({
-  embedded = false,
-}: {
-  embedded?: boolean;
-}) {
+function composioSettingsError(
+  formError: string | null,
+  loadError: unknown
+): string | null {
+  if (formError) {
+    return formError;
+  }
+
+  if (loadError) {
+    return formatError(loadError);
+  }
+
+  return null;
+}
+
+function useComposioSettingsForm() {
   const { data: settings, isLoading, error: loadError } = useComposioSettings();
   const saveMutation = useSaveComposioSettings();
   const [apiKey, setApiKey] = useState("");
@@ -118,18 +129,6 @@ export function ComposioSettingsCard({
     setApiKey("");
   }, [settings]);
 
-  if (isLoading) {
-    return <ComposioSettingsSkeleton embedded={embedded} />;
-  }
-
-  const configured = settings?.configured === true;
-  const composioReachable = settings?.composioReachable === true;
-  const canSave = configured || apiKey.trim().length > 0;
-  const errorMessage = formError ?? (loadError ? formatError(loadError) : null);
-
-  const sectionPadding = embedded ? "pb-1.5" : "p-5";
-  const footerPadding = embedded ? "pt-1.5" : "px-5 py-3";
-
   async function handleSave() {
     setFormError(null);
 
@@ -143,110 +142,192 @@ export function ComposioSettingsCard({
     }
   }
 
+  return {
+    apiKey,
+    formError,
+    handleSave,
+    isLoading,
+    loadError,
+    savePending: saveMutation.isPending,
+    setApiKey,
+    setFormError,
+    setShowApiKey,
+    settings,
+    showApiKey,
+  };
+}
+
+function ComposioSettingsIntro({
+  composioReachable,
+  configured,
+  embedded,
+}: {
+  composioReachable: boolean;
+  configured: boolean;
+  embedded: boolean;
+}) {
+  if (embedded) {
+    return null;
+  }
+
   return (
-    <IntegrationCardShell embedded={embedded}>
-      {embedded ? null : (
-        <>
-          <div className="flex items-start justify-between gap-4 p-5 pb-4">
-            <div className="min-w-0 space-y-1">
-              <h2 className="font-semibold text-base text-foreground leading-tight [text-wrap:balance]">
-                Composio
-              </h2>
-              <p className="text-muted-foreground text-sm leading-snug [text-wrap:pretty]">
-                Enable toolkits, connect SaaS accounts with OAuth, and sync
-                tools for profile assignment.
-              </p>
-            </div>
-            <ComposioStatusBadge
-              composioReachable={composioReachable}
-              configured={configured}
-            />
-          </div>
-
-          <div className="border-border border-t" />
-        </>
-      )}
-
-      <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <p className="font-medium text-foreground text-sm">
-              Project API key
-            </p>
-            <p className="text-muted-foreground text-sm [text-wrap:pretty]">
-              Paste a Composio project API key, not the MCP consumer key.
-            </p>
-          </div>
-          {embedded ? (
-            <ComposioStatusBadge
-              composioReachable={composioReachable}
-              configured={configured}
-            />
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <InputGroup className="h-9 min-w-0 flex-1">
-            <InputGroupInput
-              autoComplete="off"
-              disabled={saveMutation.isPending}
-              onChange={(event) => {
-                setApiKey(event.target.value);
-                if (formError) {
-                  setFormError(null);
-                }
-              }}
-              placeholder={
-                configured && settings?.apiKeyMasked
-                  ? `Saved (${settings.apiKeyMasked})`
-                  : "Paste API key"
-              }
-              type={showApiKey ? "text" : "password"}
-              value={apiKey}
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                className="relative before:absolute before:-inset-2 before:content-['']"
-                onClick={() => setShowApiKey((current) => !current)}
-                size="icon-xs"
-                type="button"
-              >
-                {showApiKey ? (
-                  <ViewOffIcon className="size-4" />
-                ) : (
-                  <ViewIcon className="size-4" />
-                )}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-          <Button
-            className="min-w-[4.5rem] shrink-0"
-            disabled={!canSave || saveMutation.isPending}
-            onClick={() => void handleSave()}
-            size="sm"
-            type="button"
-          >
-            {saveMutation.isPending ? <Spinner className="size-4" /> : "Save"}
-          </Button>
-        </div>
-
-        {configured && !composioReachable ? (
-          <p
-            className="text-amber-800 text-sm dark:text-amber-200"
-            role="status"
-          >
-            The saved key could not reach Composio. Check that it is a project
-            API key from Settings → Project Settings → API Keys.
+    <>
+      <div className="flex items-start justify-between gap-4 p-5 pb-4">
+        <div className="min-w-0 space-y-1">
+          <h2 className="font-semibold text-base text-foreground leading-tight [text-wrap:balance]">
+            Composio
+          </h2>
+          <p className="text-muted-foreground text-sm leading-snug [text-wrap:pretty]">
+            Enable toolkits, connect SaaS accounts with OAuth, and sync tools
+            for profile assignment.
           </p>
-        ) : null}
+        </div>
+        <ComposioStatusBadge
+          composioReachable={composioReachable}
+          configured={configured}
+        />
+      </div>
 
-        {errorMessage ? (
-          <p className="text-destructive text-sm" role="alert">
-            {errorMessage}
+      <div className="border-border border-t" />
+    </>
+  );
+}
+
+function ComposioApiKeySection({
+  apiKey,
+  composioReachable,
+  configured,
+  embedded,
+  errorMessage,
+  maskedKey,
+  onApiKeyChange,
+  onSave,
+  onToggleShowApiKey,
+  savePending,
+  showApiKey,
+}: {
+  apiKey: string;
+  composioReachable: boolean;
+  configured: boolean;
+  embedded: boolean;
+  errorMessage: string | null;
+  maskedKey: string | null | undefined;
+  onApiKeyChange: (value: string) => void;
+  onSave: () => void;
+  onToggleShowApiKey: () => void;
+  savePending: boolean;
+  showApiKey: boolean;
+}) {
+  const sectionPadding = embedded ? "pb-1.5" : "p-5";
+  const canSave = configured || apiKey.trim().length > 0;
+
+  return (
+    <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <p className="font-medium text-foreground text-sm">Project API key</p>
+          <p className="text-muted-foreground text-sm [text-wrap:pretty]">
+            Paste a Composio project API key, not the MCP consumer key.
           </p>
+        </div>
+        {embedded ? (
+          <ComposioStatusBadge
+            composioReachable={composioReachable}
+            configured={configured}
+          />
         ) : null}
       </div>
+
+      <div className="flex items-center gap-2">
+        <InputGroup className="h-9 min-w-0 flex-1">
+          <InputGroupInput
+            autoComplete="off"
+            disabled={savePending}
+            onChange={(event) => onApiKeyChange(event.target.value)}
+            placeholder={
+              configured && maskedKey ? `Saved (${maskedKey})` : "Paste API key"
+            }
+            type={showApiKey ? "text" : "password"}
+            value={apiKey}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label={showApiKey ? "Hide API key" : "Show API key"}
+              className="relative before:absolute before:-inset-2 before:content-['']"
+              onClick={onToggleShowApiKey}
+              size="icon-xs"
+              type="button"
+            >
+              {showApiKey ? (
+                <ViewOffIcon className="size-4" />
+              ) : (
+                <ViewIcon className="size-4" />
+              )}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <Button
+          className="min-w-[4.5rem] shrink-0"
+          disabled={!canSave || savePending}
+          onClick={onSave}
+          size="sm"
+          type="button"
+        >
+          {savePending ? <Spinner className="size-4" /> : "Save"}
+        </Button>
+      </div>
+
+      {configured && !composioReachable ? (
+        <p className="text-amber-800 text-sm dark:text-amber-200" role="status">
+          The saved key could not reach Composio. Check that it is a project API
+          key from Settings → Project Settings → API Keys.
+        </p>
+      ) : null}
+
+      {errorMessage ? (
+        <p className="text-destructive text-sm" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ComposioSettingsFormBody({
+  embedded,
+  form,
+}: {
+  embedded: boolean;
+  form: ReturnType<typeof useComposioSettingsForm>;
+}) {
+  const configured = form.settings?.configured === true;
+  const composioReachable = form.settings?.composioReachable === true;
+  const footerPadding = embedded ? "pt-1.5" : "px-5 py-3";
+
+  return (
+    <IntegrationCardShell embedded={embedded}>
+      <ComposioSettingsIntro
+        composioReachable={composioReachable}
+        configured={configured}
+        embedded={embedded}
+      />
+
+      <ComposioApiKeySection
+        apiKey={form.apiKey}
+        composioReachable={composioReachable}
+        configured={configured}
+        embedded={embedded}
+        errorMessage={composioSettingsError(form.formError, form.loadError)}
+        maskedKey={form.settings?.apiKeyMasked}
+        onApiKeyChange={(value) => {
+          form.setApiKey(value);
+          form.setFormError(null);
+        }}
+        onSave={() => void form.handleSave()}
+        onToggleShowApiKey={() => form.setShowApiKey((current) => !current)}
+        savePending={form.savePending}
+        showApiKey={form.showApiKey}
+      />
 
       <div className={cn(footerPadding)}>
         <a
@@ -266,4 +347,18 @@ export function ComposioSettingsCard({
       </div>
     </IntegrationCardShell>
   );
+}
+
+export function ComposioSettingsCard({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
+  const form = useComposioSettingsForm();
+
+  if (form.isLoading) {
+    return <ComposioSettingsSkeleton embedded={embedded} />;
+  }
+
+  return <ComposioSettingsFormBody embedded={embedded} form={form} />;
 }

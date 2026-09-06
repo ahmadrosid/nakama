@@ -46,6 +46,9 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await removeDeprecatedServerTools(db);
   await removeUnsupportedTools(db);
   await ensureBuiltinToolDefinitions(db);
+  for (const profile of await db.listProfiles()) {
+    await db.assignToolToProfile(profile.id, BUILTIN_TOOL_IDS.sqlite);
+  }
   await ensureSubAgentToolDefinition(db);
   await ensureSessionToolDefinitions(db);
   await ensureBashToolDefinition(db);

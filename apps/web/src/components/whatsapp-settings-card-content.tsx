@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-linking-section";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ export function WhatsAppSettingsCardContent({
   actionLabel,
   allowedPhoneSummary,
   onManageAllowedPhones,
+  requireGroupMention,
+  onRequireGroupMentionChange,
   onSave,
 }: {
   embedded: boolean;
@@ -84,6 +87,8 @@ export function WhatsAppSettingsCardContent({
   actionLabel: string;
   allowedPhoneSummary: string;
   onManageAllowedPhones: () => void;
+  requireGroupMention: boolean;
+  onRequireGroupMentionChange: (value: boolean) => void;
   onSave: () => void;
 }) {
   const paneItemClass = embedded ? undefined : "px-0 py-0";
@@ -144,6 +149,20 @@ export function WhatsAppSettingsCardContent({
             ))}
           </SelectContent>
         </Select>
+      </SettingsRow>
+
+      <SettingsRow
+        className={paneItemClass}
+        description="Off: anyone in the group can talk without tagging the bot"
+        label="Require @mention in groups"
+      >
+        <Switch
+          aria-label="Require @mention in groups"
+          checked={requireGroupMention}
+          disabled={savePending}
+          id="whatsapp-require-group-mention"
+          onCheckedChange={onRequireGroupMentionChange}
+        />
       </SettingsRow>
 
       {configured ? (

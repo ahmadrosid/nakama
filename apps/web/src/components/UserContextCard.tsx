@@ -238,11 +238,165 @@ interface UserContextSettingsProps {
   onSaveSuccess?: () => void;
 }
 
-/** USER.md editor row for setup wizard — render inside a parent card. */
-export function UserContextSettings({
-  onSaveSuccess,
-  autoInit = false,
-}: UserContextSettingsProps = {}) {
+function shouldAutoInitUserContext(input: {
+  alreadyAttempted: boolean;
+  autoInit: boolean;
+  hasStatus: boolean;
+  isActive: boolean;
+  isLoading: boolean;
+}): boolean {
+  return (
+    input.autoInit &&
+    !input.alreadyAttempted &&
+    !input.isActive &&
+    !input.isLoading &&
+    input.hasStatus
+  );
+}
+
+function userContextInitHint(created: boolean): string {
+  if (created) {
+    return "Template created.";
+  }
+
+  return "USER.md already exists.";
+}
+
+function userContextStatusLine(
+  hint: string | null,
+  formError: string | null,
+  loadError: unknown
+): string | null {
+  if (hint) {
+    return hint;
+  }
+
+  if (formError) {
+    return formError;
+  }
+
+  if (loadError) {
+    return formatError(loadError);
+  }
+
+  return null;
+}
+
+function UserContextStatusCopy({
+  formError,
+  loadError,
+  statusLine,
+}: {
+  formError: string | null;
+  loadError: unknown;
+  statusLine: string | null;
+}) {
+  if (statusLine) {
+    return (
+      <p
+        className={cn(
+          "text-xs",
+          formError || loadError ? "text-destructive" : "text-emerald-200"
+        )}
+        role={formError || loadError ? "alert" : "status"}
+      >
+        {statusLine}
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-muted-foreground text-xs">
+      USER.md — personalisation for this org
+    </p>
+  );
+}
+
+function UserContextAction({
+  autoInit,
+  busy,
+  creating,
+  isActive,
+  isLoading,
+  loadError,
+  onEdit,
+  onInit,
+  onInitAndEdit,
+}: {
+  autoInit: boolean;
+  busy: boolean;
+  creating: boolean;
+  isActive: boolean;
+  isLoading: boolean;
+  loadError: unknown;
+  onEdit: () => void;
+  onInit: () => void;
+  onInitAndEdit: () => void;
+}) {
+  if (isLoading) {
+    return <Spinner />;
+  }
+
+  if (loadError) {
+    return null;
+  }
+
+  if (isActive) {
+    return (
+      <Button
+        disabled={busy}
+        onClick={onEdit}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Edit
+      </Button>
+    );
+  }
+
+  if (autoInit) {
+    return (
+      <Button
+        disabled={busy}
+        onClick={onInitAndEdit}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {creating ? (
+          <>
+            <Spinner className="mr-2" />
+            Creating…
+          </>
+        ) : (
+          "Edit"
+        )}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      disabled={busy}
+      onClick={onInit}
+      size="sm"
+      type="button"
+      variant="outline"
+    >
+      {creating ? (
+        <>
+          <Spinner className="mr-2" />
+          Creating…
+        </>
+      ) : (
+        "Create"
+      )}
+    </Button>
+  );
+}
+
+function useUserContextSettings(autoInit: boolean) {
   const { activeOrg } = useAuth();
   const {
     data: status,
@@ -260,17 +414,17 @@ export function UserContextSettings({
   const [formError, setFormError] = useState<string | null>(null);
   const autoInitAttemptedRef = useRef(false);
 
-  const busy = initMutation.isPending;
   const isActive = status?.active === true;
 
-  // Auto-create USER.md in wizard contexts so the user can immediately edit
   useEffect(() => {
     if (
-      !autoInit ||
-      autoInitAttemptedRef.current ||
-      isActive ||
-      isLoading ||
-      !status
+      !shouldAutoInitUserContext({
+        alreadyAttempted: autoInitAttemptedRef.current,
+        autoInit,
+        hasStatus: Boolean(status),
+        isActive,
+        isLoading,
+      })
     ) {
       return;
     }
@@ -296,9 +450,7 @@ export function UserContextSettings({
         if (result.created) {
           setEditorOpen(true);
         }
-        setHint(
-          result.created ? "Template created." : "USER.md already exists."
-        );
+        setHint(userContextInitHint(result.created));
       } catch (error) {
         if (!cancelled) {
           setFormError(formatUserContextError(error));
@@ -323,7 +475,7 @@ export function UserContextSettings({
       if (result.created) {
         setEditorOpen(true);
       }
-      setHint(result.created ? "Template created." : "USER.md already exists.");
+      setHint(userContextInitHint(result.created));
     } catch (error) {
       setFormError(formatUserContextError(error));
     }
@@ -342,86 +494,56 @@ export function UserContextSettings({
     }
   }
 
-  const statusLine =
-    hint ??
-    (formError ? formError : null) ??
-    (loadError ? formatError(loadError) : null);
+  return {
+    editorOpen,
+    formError,
+    handleInit,
+    handleInitAndEdit,
+    initPending: initMutation.isPending,
+    isActive,
+    isLoading,
+    loadError,
+    setEditorOpen,
+    statusLine: userContextStatusLine(hint, formError, loadError),
+  };
+}
+
+/** USER.md editor row for setup wizard — render inside a parent card. */
+export function UserContextSettings({
+  onSaveSuccess,
+  autoInit = false,
+}: UserContextSettingsProps = {}) {
+  const settings = useUserContextSettings(autoInit);
 
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0 space-y-0.5">
           <p className="font-medium text-foreground text-sm">Personalisation</p>
-          {statusLine ? (
-            <p
-              className={cn(
-                "text-xs",
-                formError || loadError ? "text-destructive" : "text-emerald-200"
-              )}
-              role={formError || loadError ? "alert" : "status"}
-            >
-              {statusLine}
-            </p>
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              USER.md — personalisation for this org
-            </p>
-          )}
+          <UserContextStatusCopy
+            formError={settings.formError}
+            loadError={settings.loadError}
+            statusLine={settings.statusLine}
+          />
         </div>
 
-        {isLoading ? (
-          <Spinner />
-        ) : loadError ? null : isActive ? (
-          <Button
-            disabled={busy}
-            onClick={() => setEditorOpen(true)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Edit
-          </Button>
-        ) : autoInit ? (
-          <Button
-            disabled={busy}
-            onClick={() => void handleInitAndEdit()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {initMutation.isPending ? (
-              <>
-                <Spinner className="mr-2" />
-                Creating…
-              </>
-            ) : (
-              "Edit"
-            )}
-          </Button>
-        ) : (
-          <Button
-            disabled={busy}
-            onClick={() => void handleInit()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {initMutation.isPending ? (
-              <>
-                <Spinner className="mr-2" />
-                Creating…
-              </>
-            ) : (
-              "Create"
-            )}
-          </Button>
-        )}
+        <UserContextAction
+          autoInit={autoInit}
+          busy={settings.initPending}
+          creating={settings.initPending}
+          isActive={settings.isActive}
+          isLoading={settings.isLoading}
+          loadError={settings.loadError}
+          onEdit={() => settings.setEditorOpen(true)}
+          onInit={() => void settings.handleInit()}
+          onInitAndEdit={() => void settings.handleInitAndEdit()}
+        />
       </div>
 
       <UserContextEditorDialog
-        onOpenChange={setEditorOpen}
+        onOpenChange={settings.setEditorOpen}
         onSaveSuccess={onSaveSuccess}
-        open={editorOpen}
+        open={settings.editorOpen}
       />
     </>
   );

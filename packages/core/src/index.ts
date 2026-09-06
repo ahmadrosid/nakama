@@ -103,3 +103,5 @@ export * from "./web-search-config";
 export * from "./whatsapp-config";
 export * from "./whatsapp-worker";
 export * from "./worker-desired-state";
+export * from "./workflow-ops";
+export * from "./workflow-validate";

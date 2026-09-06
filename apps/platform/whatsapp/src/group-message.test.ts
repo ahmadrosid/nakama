@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   explainGroupMessageHandling,
+  extraJidsFromGroupParticipants,
   isWhatsAppBotAddress,
   isWhatsAppGroupChat,
   resolveChannelOrgKey,
@@ -74,6 +75,17 @@ describe("group-message helpers", () => {
     ).toBe(true);
   });
 
+  test("explainGroupMessageHandling accepts plain text when mention is not required", () => {
+    expect(
+      explainGroupMessageHandling({
+        mentionedJids: [],
+        quotedParticipant: null,
+        requireMention: false,
+        text: "hello",
+      })
+    ).toEqual({ reason: "open-listen", shouldHandle: true });
+  });
+
   test("explainGroupMessageHandling ignores non-slash messages without bot info", () => {
     expect(
       explainGroupMessageHandling({
@@ -82,6 +94,20 @@ describe("group-message helpers", () => {
         text: "hello",
       })
     ).toEqual({ reason: "missing-bot-info", shouldHandle: false });
+  });
+
+  test("extraJidsFromGroupParticipants maps a group LID to the phone JID", () => {
+    expect(
+      extraJidsFromGroupParticipants(
+        [
+          {
+            id: "104784384290844@lid",
+            jid: "6281352311912@s.whatsapp.net",
+          },
+        ],
+        ["104784384290844@lid"]
+      )
+    ).toEqual(["104784384290844@lid", "6281352311912@s.whatsapp.net"]);
   });
 
   test("stripWhatsAppBotMention removes @mention tokens", () => {

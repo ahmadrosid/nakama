@@ -3,6 +3,7 @@
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
 import { ArrowDown01Icon } from "hugeicons-react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import styles from "./WebSearch.module.css";
 import type {
@@ -187,35 +188,38 @@ function formatWebSearchDisplayUrl(source: WebSearchSource): string {
   }
 }
 
-export function WebSourceCard({
-  mode,
-  headerText,
-  sources,
-  siteStates,
-  isComplete,
-  open,
-  onOpenChange,
-  formatDisplayUrl = formatWebSearchDisplayUrl,
-}: WebSourceCardProps) {
-  const headerLabel =
-    mode === "fetch"
-      ? isComplete
-        ? "Fetched"
-        : "Fetching"
-      : isComplete
-        ? "Searched"
-        : "Searching";
-  const quoteHeader = mode === "search" || !/^\d+ pages$/.test(headerText);
+function webSearchHeaderLabel(
+  mode: WebSourceCardMode,
+  isComplete: boolean
+): string {
+  if (mode === "fetch") {
+    return isComplete ? "Fetched" : "Fetching";
+  }
+  return isComplete ? "Searched" : "Searching";
+}
 
-  const canExpand = sources.length > 0;
-  const leadingIcon = (
-    <span className={styles.wsIcon}>
-      {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
-    </span>
-  );
-  const headerContent = (
+function WebSourceCardHeaderContent({
+  canExpand,
+  headerLabel,
+  headerText,
+  isComplete,
+  mode,
+  open,
+  quoteHeader,
+}: {
+  canExpand: boolean;
+  headerLabel: string;
+  headerText: string;
+  isComplete: boolean;
+  mode: WebSourceCardMode;
+  open: boolean;
+  quoteHeader: boolean;
+}) {
+  return (
     <>
-      {leadingIcon}
+      <span className={styles.wsIcon}>
+        {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
+      </span>
       <span className={styles.wsLabel}>
         <span
           className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}
@@ -239,86 +243,177 @@ export function WebSourceCard({
       ) : null}
     </>
   );
+}
+
+function WebSourceSiteRow({
+  displayUrl,
+  title,
+}: {
+  displayUrl: string;
+  title: string;
+}) {
+  return (
+    <>
+      <span className={styles.wsBullet}>
+        <span className={styles.wsDots}>
+          <DotsIcon />
+        </span>
+        <span className={styles.wsGlobe}>
+          <Globe />
+        </span>
+        <span className={styles.wsCheck}>
+          <CheckIcon />
+        </span>
+      </span>
+      <span className={styles.wsTitle}>{title}</span>
+      <span className={styles.wsSep}>·</span>
+      <span className={styles.wsUrl}>{displayUrl}</span>
+      <span className={styles.wsArrow}>
+        <ArrowUpIcon />
+      </span>
+    </>
+  );
+}
+
+function WebSourceSiteItem({
+  formatDisplayUrl,
+  index,
+  source,
+  state,
+}: {
+  formatDisplayUrl: (source: WebSearchSource) => string;
+  index: number;
+  source: WebSearchSource;
+  state: WebSearchSiteState;
+}) {
+  const href = source.href ?? source.url;
+  const displayUrl = formatDisplayUrl(source);
+  const row = <WebSourceSiteRow displayUrl={displayUrl} title={source.title} />;
+  const linkHref = href.startsWith("http") ? href : `https://${href}`;
+
+  return (
+    <li
+      className={styles.wsSite}
+      data-state={state}
+      style={{ animationDelay: `${index * 40}ms` }}
+    >
+      {state === "done" && href ? (
+        <a
+          className={styles.wsSiteLink}
+          href={linkHref}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {row}
+        </a>
+      ) : (
+        row
+      )}
+    </li>
+  );
+}
+
+function WebSourceCardToggle({
+  canExpand,
+  children,
+  onOpenChange,
+  open,
+}: {
+  canExpand: boolean;
+  children: ReactNode;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
+  if (canExpand) {
+    return (
+      <button
+        aria-expanded={open}
+        aria-label="Toggle results"
+        className={styles.wsRowButton}
+        onClick={() => onOpenChange(!open)}
+        type="button"
+      >
+        {children}
+      </button>
+    );
+  }
+
+  return <div className={styles.wsRow}>{children}</div>;
+}
+
+function WebSourceCardResults({
+  formatDisplayUrl,
+  open,
+  siteStates,
+  sources,
+}: {
+  formatDisplayUrl: (source: WebSearchSource) => string;
+  open: boolean;
+  siteStates: WebSearchSiteState[];
+  sources: WebSearchSource[];
+}) {
+  if (sources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`${styles.wsCollapsible}${open ? "" : ` ${styles.isCollapsed}`}`}
+    >
+      <div className={styles.wsCollapsibleInner}>
+        <div className={styles.wsResults}>
+          <ul className={styles.wsList}>
+            {sources.map((source, index) => (
+              <WebSourceSiteItem
+                formatDisplayUrl={formatDisplayUrl}
+                index={index}
+                key={source.url}
+                source={source}
+                state={siteStates[index] ?? "pending"}
+              />
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function WebSourceCard({
+  mode,
+  headerText,
+  sources,
+  siteStates,
+  isComplete,
+  open,
+  onOpenChange,
+  formatDisplayUrl = formatWebSearchDisplayUrl,
+}: WebSourceCardProps) {
+  const canExpand = sources.length > 0;
 
   return (
     <div className={styles.ws} data-state={isComplete ? "done" : "loading"}>
-      {canExpand ? (
-        <button
-          aria-expanded={open}
-          aria-label="Toggle results"
-          className={styles.wsRowButton}
-          onClick={() => onOpenChange(!open)}
-          type="button"
-        >
-          {headerContent}
-        </button>
-      ) : (
-        <div className={styles.wsRow}>{headerContent}</div>
-      )}
-
-      {canExpand ? (
-        <div
-          className={`${styles.wsCollapsible}${open ? "" : ` ${styles.isCollapsed}`}`}
-        >
-          <div className={styles.wsCollapsibleInner}>
-            <div className={styles.wsResults}>
-              <ul className={styles.wsList}>
-                {sources.map((source, index) => {
-                  const state = siteStates[index] ?? "pending";
-                  const href = source.href ?? source.url;
-                  const displayUrl = formatDisplayUrl(source);
-
-                  const row = (
-                    <>
-                      <span className={styles.wsBullet}>
-                        <span className={styles.wsDots}>
-                          <DotsIcon />
-                        </span>
-                        <span className={styles.wsGlobe}>
-                          <Globe />
-                        </span>
-                        <span className={styles.wsCheck}>
-                          <CheckIcon />
-                        </span>
-                      </span>
-                      <span className={styles.wsTitle}>{source.title}</span>
-                      <span className={styles.wsSep}>·</span>
-                      <span className={styles.wsUrl}>{displayUrl}</span>
-                      <span className={styles.wsArrow}>
-                        <ArrowUpIcon />
-                      </span>
-                    </>
-                  );
-
-                  return (
-                    <li
-                      className={styles.wsSite}
-                      data-state={state}
-                      key={source.url}
-                      style={{ animationDelay: `${index * 40}ms` }}
-                    >
-                      {state === "done" && href ? (
-                        <a
-                          className={styles.wsSiteLink}
-                          href={
-                            href.startsWith("http") ? href : `https://${href}`
-                          }
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          {row}
-                        </a>
-                      ) : (
-                        row
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <WebSourceCardToggle
+        canExpand={canExpand}
+        onOpenChange={onOpenChange}
+        open={open}
+      >
+        <WebSourceCardHeaderContent
+          canExpand={canExpand}
+          headerLabel={webSearchHeaderLabel(mode, isComplete)}
+          headerText={headerText}
+          isComplete={isComplete}
+          mode={mode}
+          open={open}
+          quoteHeader={mode === "search" || !/^\d+ pages$/.test(headerText)}
+        />
+      </WebSourceCardToggle>
+      <WebSourceCardResults
+        formatDisplayUrl={formatDisplayUrl}
+        open={open}
+        siteStates={siteStates}
+        sources={sources}
+      />
     </div>
   );
 }

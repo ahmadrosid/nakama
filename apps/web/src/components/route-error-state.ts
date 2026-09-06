@@ -1,4 +1,5 @@
 export interface RouteErrorState {
+  error?: string;
   failed: boolean;
   resetKey?: string;
 }
@@ -11,5 +12,5 @@ export function routeErrorStateFromResetKey(
     return null;
   }
 
-  return { failed: false, resetKey };
+  return { error: undefined, failed: false, resetKey };
 }

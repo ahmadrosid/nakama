@@ -6,6 +6,7 @@ import {
   ensureBundledSkillFiles,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
+  loadWhatsAppConfigFile,
 } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
@@ -1073,6 +1074,81 @@ describe("AgentService bot token validation", () => {
 
     expect(await loadTelegramConfigFile()).toBeNull();
     expect(await loadDiscordConfigFile()).toBeNull();
+  });
+});
+
+describe("AgentService WhatsApp allowed phones", () => {
+  let configDir = "";
+
+  beforeEach(async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-wa-allowed-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+  });
+
+  afterEach(async () => {
+    delete process.env.NAKAMA_CONFIG_DIR;
+    await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("writes allowed phones to WhatsApp config", async () => {
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const saved = await service.setWhatsAppSettings({
+      allowedPhones: "+62 813-5231-1912",
+      profileId: "well-test-report-validator",
+    });
+
+    expect(saved.allowedPhones).toEqual(["6281352311912"]);
+    expect((await service.getWhatsAppSettings()).allowedPhones).toEqual([
+      "6281352311912",
+    ]);
+    expect((await loadWhatsAppConfigFile())?.allowedPhones).toEqual([
+      "6281352311912",
+    ]);
+  });
+
+  test("keeps allowed phones when only the profile is saved", async () => {
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+    await service.setWhatsAppSettings({
+      allowedPhones: "6281352311912",
+      profileId: "well-test-report-validator",
+    });
+
+    const saved = await service.setWhatsAppSettings({
+      profileId: "well-test-report-validator",
+    });
+
+    expect(saved.allowedPhones).toEqual(["6281352311912"]);
+    expect((await loadWhatsAppConfigFile())?.allowedPhones).toEqual([
+      "6281352311912",
+    ]);
+  });
+
+  test("writes requireGroupMention to WhatsApp config", async () => {
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const saved = await service.setWhatsAppSettings({
+      profileId: "default",
+      requireGroupMention: false,
+    });
+
+    expect(saved.requireGroupMention).toBe(false);
+    expect((await service.getWhatsAppSettings()).requireGroupMention).toBe(
+      false
+    );
+    expect((await loadWhatsAppConfigFile())?.requireGroupMention).toBe(false);
   });
 });
 

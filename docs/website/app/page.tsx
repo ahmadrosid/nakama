@@ -8,9 +8,9 @@ import {
   SparklesIcon,
 } from "hugeicons-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { HeroPaperBackground } from "@/components/hero-paper-background";
-import { withBasePath } from "@/lib/base-path";
 import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site-meta";
 
 export const metadata: Metadata = {
@@ -159,19 +159,19 @@ export default function HomePage() {
                     nakama · dashboard
                   </span>
                 </div>
-                <img
+                <Image
                   alt="Nakama chat preview"
-                  className="block w-full dark:hidden"
+                  className="block h-auto w-full dark:hidden"
                   height={640}
-                  src={withBasePath("/screenshots/chat-light.png")}
+                  src="/screenshots/chat-light.png"
                   width={960}
                 />
-                <img
+                <Image
                   alt=""
                   aria-hidden
-                  className="hidden w-full dark:block"
+                  className="hidden h-auto w-full dark:block"
                   height={640}
-                  src={withBasePath("/screenshots/chat-dark.png")}
+                  src="/screenshots/chat-dark.png"
                   width={960}
                 />
               </div>

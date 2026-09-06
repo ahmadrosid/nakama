@@ -5,6 +5,7 @@ import {
   resolveWhatsAppOutboundPort,
   WHATSAPP_OUTBOUND_TOKEN_HEADER,
 } from "@nakama/core";
+import { rememberWhatsAppOutbound } from "./inbound-message";
 
 function tokenMatches(provided: string | null, expected: string): boolean {
   if (!provided) {
@@ -97,6 +98,7 @@ export async function startWhatsAppOutboundServer(
         }
 
         try {
+          rememberWhatsAppOutbound({ jid: pairedJid, text });
           await handle.sendMessage(pairedJid, { text });
           return Response.json({ ok: true });
         } catch (error) {

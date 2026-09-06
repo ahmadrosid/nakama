@@ -237,6 +237,7 @@ describe("seed built-in tools", () => {
 
     expect(profiles.map((profile) => profile.id)).toEqual(["profile_custom"]);
     expect(await db.getTool(BUILTIN_TOOL_IDS.web_search)).not.toBeNull();
+    expect(await db.getTool(BUILTIN_TOOL_IDS.sqlite)).not.toBeNull();
     expect(await db.getTool(GENERATE_IMAGE_TOOL_ID)).not.toBeNull();
   });
 

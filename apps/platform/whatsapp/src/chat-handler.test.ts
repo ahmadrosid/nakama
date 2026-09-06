@@ -11,6 +11,7 @@ import {
   resetChatLocksForTests,
   withChatLock,
 } from "./chat-handler";
+import { resetWhatsAppOutboundForTests } from "./inbound-message";
 import {
   createMockClient,
   createMultiTestOrgs,
@@ -57,6 +58,7 @@ function documentSendCount(
 beforeEach(() => {
   resetActiveStreamsForTests();
   resetChatLocksForTests();
+  resetWhatsAppOutboundForTests();
 });
 
 describe("createChatHandler", () => {
@@ -903,6 +905,124 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("plain group message reaches the agent when mention is not required", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket, sent } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(groupInbound({ text: "hello without mention" }));
+
+      expect(calls.createSession).toBe(1);
+      expect(calls.sendStream).toBe(1);
+      expect(calls.streamInputs[0]).toEqual({
+        message:
+          "[WhatsApp group — your reply is visible to everyone in this group.]\nhello without mention",
+      });
+      expect(sent.at(-1)?.jid).toBe(GROUP_JID);
+    });
+  });
+
+  test("does not treat the bot's own group reply as a new turn", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket, sent } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(groupInbound({ text: "hi" }));
+      const botReply = sent.at(-1)?.text ?? "";
+      expect(botReply).toBeTruthy();
+      expect(calls.sendStream).toBe(1);
+
+      await handleMessage(
+        groupInbound({
+          fromMe: true,
+          text: botReply,
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+      expect(calls.createSession).toBe(1);
+    });
+  });
+
+  test("unpaired plain group message reaches the agent when mention is not required", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairingCode: "ABCD1234",
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket, sent } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(
+        groupInbound({
+          senderJid: "9999999999@s.whatsapp.net",
+          text: "hello without mention",
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
   test("group @mention triggers agent when sender is paired", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
@@ -1281,6 +1401,89 @@ describe("createChatHandler group chats", () => {
           mentionedJids: [BOT_ME.id],
           senderJid: "628111111111@s.whatsapp.net",
           text: "@Nakama hello",
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
+  test("answers any group member when mention is not required", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(
+        groupInbound({
+          senderJid: "6281227900622@s.whatsapp.net",
+          text: "hi",
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
+  test("resolves a group LID to an allowlisted phone via group metadata", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        allowedPhones: ["6281352311912"],
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket } = createMockSocket();
+      socket.groupMetadata = async () => ({
+        participants: [
+          {
+            id: "104784384290844@lid",
+            jid: "6281352311912@s.whatsapp.net",
+          },
+        ],
+      });
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      await handleMessage(
+        groupInbound({
+          senderJid: "104784384290844@lid",
+          text: "hi from lid only",
         })
       );
 
