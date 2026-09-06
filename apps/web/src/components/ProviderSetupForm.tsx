@@ -72,7 +72,7 @@ export function ProviderSetupForm({
       className={formSpacing}
       onSubmit={(event) => void form.handleSubmit(event)}
     >
-      {showHeading && (
+      {showHeading ? (
         <div>
           <h3 className="font-medium text-foreground text-sm">
             Connect a provider
@@ -81,7 +81,7 @@ export function ProviderSetupForm({
             Choose a provider, paste your API key, and pick a default model.
           </p>
         </div>
-      )}
+      ) : null}
 
       <FormField density={density} id="provider" label="Provider">
         <ProviderSelect
@@ -109,208 +109,272 @@ export function ProviderSetupForm({
           openCodeZenConfigured={form.openCodeZenConfigured}
         />
       ) : (
-        <>
-          <FormField
-            density={density}
-            footer={
-              form.apiKeyError ? (
-                <p
-                  className="text-destructive text-sm"
-                  id="api-key-error"
-                  role="alert"
-                >
-                  {form.apiKeyError}
-                </p>
-              ) : (
-                <p className="text-muted-foreground text-xs" id="api-key-hint">
-                  Paste the API key from your{" "}
-                  {PROVIDER_OPTIONS.find(
-                    (option) => option.id === form.selectedProvider
-                  )?.label ?? "provider"}{" "}
-                  dashboard.
-                </p>
-              )
-            }
-            id="api-key"
-            label={apiKeyOptional ? "API key (optional)" : "API key"}
-          >
-            <InputGroup>
-              <InputGroupInput
-                aria-describedby={
-                  form.apiKeyError ? "api-key-error" : "api-key-hint"
-                }
-                aria-invalid={form.apiKeyError != null}
-                autoComplete="off"
-                disabled={form.busy}
-                id="api-key"
-                onBlur={form.handleApiKeyBlur}
-                onChange={(event) =>
-                  form.handleApiKeyChange(event.target.value)
-                }
-                placeholder={apiKeyPlaceholder(form.selectedProvider)}
-                type={form.showApiKey ? "text" : "password"}
-                value={form.apiKey}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  aria-label={form.showApiKey ? "Hide API key" : "Show API key"}
-                  onClick={() => form.setShowApiKey((current) => !current)}
-                  size="icon-sm"
-                >
-                  {form.showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-          </FormField>
-
-          {form.selectedProvider === "cloudflare" ? (
-            <FormField
-              density={density}
-              footer={
-                form.baseUrlError ? (
-                  <p
-                    className="text-destructive text-sm"
-                    id="cloudflare-account-id-error"
-                    role="alert"
-                  >
-                    {form.baseUrlError}
-                  </p>
-                ) : null
-              }
-              id="cloudflare-account-id"
-              label="Account ID"
-            >
-              <Input
-                aria-invalid={form.baseUrlError != null}
-                autoComplete="off"
-                disabled={form.busy}
-                id="cloudflare-account-id"
-                onChange={(event) => form.setBaseUrl(event.target.value)}
-                value={form.baseUrl}
-              />
-            </FormField>
-          ) : null}
-
-          {form.selectedProvider === "openai_compatible" ? (
-            <CustomProviderFields
-              apiKey={form.apiKey}
-              baseUrl={form.baseUrl}
-              baseUrlError={form.baseUrlError}
-              customModels={form.customModels}
-              density={density}
-              disabled={form.busy}
-              displayName={form.displayName}
-              displayNameError={form.displayNameError}
-              modelsError={form.modelsError}
-              onBaseUrlChange={form.setBaseUrl}
-              onCustomModelsChange={form.setCustomModels}
-              onDisplayNameChange={form.setDisplayName}
-              onWireApiChange={form.setWireApi}
-              showModelsEditor={canPickModels}
-              wireApi={form.wireApi}
-            />
-          ) : null}
-
-          {form.selectedProvider === "openrouter" && canPickModels ? (
-            <OpenRouterProviderModelFields
-              customModels={form.openRouterModels}
-              density={density}
-              disabled={form.busy}
-              modelsError={form.openRouterModelsError}
-              onCustomModelsChange={form.handleOpenRouterModelsChange}
-            />
-          ) : null}
-
-          {form.selectedProvider === "ollama" ? (
-            <>
-              <OllamaProviderSetupFields
-                baseUrl={form.baseUrl}
-                baseUrlError={form.baseUrlError}
-                density={density}
-                disabled={form.busy}
-                hostMode={form.ollamaHostMode}
-                onBaseUrlChange={form.setBaseUrl}
-                onHostModeChange={form.handleOllamaHostModeChange}
-              />
-              {canPickModels ? (
-                <OllamaProviderModelFields
-                  apiKey={form.apiKey}
-                  baseUrl={form.baseUrl}
-                  customModels={form.customModels}
-                  density={density}
-                  disabled={form.busy}
-                  hostMode={form.ollamaHostMode}
-                  modelsError={form.modelsError}
-                  onCustomModelsChange={form.setCustomModels}
-                />
-              ) : null}
-            </>
-          ) : null}
-
-          {isShortlistBrowseProvider(form.selectedProvider) && canPickModels ? (
-            <ShortlistBrowseProviderModelFields
-              apiKey={
-                form.selectedProvider === "fireworks" ? form.apiKey : undefined
-              }
-              customModels={form.shortlistModels}
-              density={density}
-              disabled={form.busy}
-              modelsError={form.shortlistModelsError}
-              onCustomModelsChange={form.handleShortlistModelsChange}
-              provider={form.selectedProvider}
-            />
-          ) : null}
-
-          {form.selectedProvider !== "openrouter" &&
-          !isShortlistBrowseProvider(form.selectedProvider) &&
-          form.selectedProvider !== "ollama" &&
-          form.selectedProvider !== "openai_compatible" ? (
-            <FormField density={density} id="model" label="Model">
-              <Select
-                disabled={form.busy || form.filteredModels.length === 0}
-                onValueChange={(value) =>
-                  form.setSelectedModel(value == null ? "" : String(value))
-                }
-                value={form.selectedModel}
-              >
-                <SelectTrigger className="w-full" id="model">
-                  <SelectValue placeholder="Select a model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {form.filteredModels.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name}
-                      {model.default ? " (default)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-          ) : null}
-
-          {form.formError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {form.formError}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button
-              disabled={form.busy || !(apiKeyOptional || form.apiKey.trim())}
-              type="submit"
-            >
-              {form.busy ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Saving…
-                </>
-              ) : (
-                submitLabel
-              )}
-            </Button>
-          </div>
-        </>
+        <ProviderSetupDetails
+          apiKeyOptional={apiKeyOptional}
+          canPickModels={canPickModels}
+          density={density}
+          form={form}
+          submitLabel={submitLabel}
+        />
       )}
     </form>
+  );
+}
+
+function ProviderSetupApiKeyField({
+  apiKeyOptional,
+  density,
+  form,
+}: {
+  apiKeyOptional: boolean;
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  return (
+    <FormField
+      density={density}
+      footer={
+        form.apiKeyError ? (
+          <p
+            className="text-destructive text-sm"
+            id="api-key-error"
+            role="alert"
+          >
+            {form.apiKeyError}
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs" id="api-key-hint">
+            Paste the API key from your{" "}
+            {PROVIDER_OPTIONS.find(
+              (option) => option.id === form.selectedProvider
+            )?.label ?? "provider"}{" "}
+            dashboard.
+          </p>
+        )
+      }
+      id="api-key"
+      label={apiKeyOptional ? "API key (optional)" : "API key"}
+    >
+      <InputGroup>
+        <InputGroupInput
+          aria-describedby={form.apiKeyError ? "api-key-error" : "api-key-hint"}
+          aria-invalid={form.apiKeyError != null}
+          autoComplete="off"
+          disabled={form.busy}
+          id="api-key"
+          onBlur={form.handleApiKeyBlur}
+          onChange={(event) => form.handleApiKeyChange(event.target.value)}
+          placeholder={apiKeyPlaceholder(form.selectedProvider)}
+          type={form.showApiKey ? "text" : "password"}
+          value={form.apiKey}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            aria-label={form.showApiKey ? "Hide API key" : "Show API key"}
+            onClick={() => form.setShowApiKey((current) => !current)}
+            size="icon-sm"
+          >
+            {form.showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </FormField>
+  );
+}
+
+function ProviderSetupExtraFields({
+  canPickModels,
+  density,
+  form,
+}: {
+  canPickModels: boolean;
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  if (form.selectedProvider === "cloudflare") {
+    return (
+      <FormField
+        density={density}
+        footer={
+          form.baseUrlError ? (
+            <p
+              className="text-destructive text-sm"
+              id="cloudflare-account-id-error"
+              role="alert"
+            >
+              {form.baseUrlError}
+            </p>
+          ) : null
+        }
+        id="cloudflare-account-id"
+        label="Account ID"
+      >
+        <Input
+          aria-invalid={form.baseUrlError != null}
+          autoComplete="off"
+          disabled={form.busy}
+          id="cloudflare-account-id"
+          onChange={(event) => form.setBaseUrl(event.target.value)}
+          value={form.baseUrl}
+        />
+      </FormField>
+    );
+  }
+
+  if (form.selectedProvider === "openai_compatible") {
+    return (
+      <CustomProviderFields
+        apiKey={form.apiKey}
+        baseUrl={form.baseUrl}
+        baseUrlError={form.baseUrlError}
+        customModels={form.customModels}
+        density={density}
+        disabled={form.busy}
+        displayName={form.displayName}
+        displayNameError={form.displayNameError}
+        modelsError={form.modelsError}
+        onBaseUrlChange={form.setBaseUrl}
+        onCustomModelsChange={form.setCustomModels}
+        onDisplayNameChange={form.setDisplayName}
+        onWireApiChange={form.setWireApi}
+        showModelsEditor={canPickModels}
+        wireApi={form.wireApi}
+      />
+    );
+  }
+
+  if (form.selectedProvider === "openrouter") {
+    if (!canPickModels) {
+      return null;
+    }
+
+    return (
+      <OpenRouterProviderModelFields
+        customModels={form.openRouterModels}
+        density={density}
+        disabled={form.busy}
+        modelsError={form.openRouterModelsError}
+        onCustomModelsChange={form.handleOpenRouterModelsChange}
+      />
+    );
+  }
+
+  if (form.selectedProvider === "ollama") {
+    return (
+      <>
+        <OllamaProviderSetupFields
+          baseUrl={form.baseUrl}
+          baseUrlError={form.baseUrlError}
+          density={density}
+          disabled={form.busy}
+          hostMode={form.ollamaHostMode}
+          onBaseUrlChange={form.setBaseUrl}
+          onHostModeChange={form.handleOllamaHostModeChange}
+        />
+        {canPickModels ? (
+          <OllamaProviderModelFields
+            apiKey={form.apiKey}
+            baseUrl={form.baseUrl}
+            customModels={form.customModels}
+            density={density}
+            disabled={form.busy}
+            hostMode={form.ollamaHostMode}
+            modelsError={form.modelsError}
+            onCustomModelsChange={form.setCustomModels}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  if (isShortlistBrowseProvider(form.selectedProvider)) {
+    if (!canPickModels) {
+      return null;
+    }
+
+    return (
+      <ShortlistBrowseProviderModelFields
+        apiKey={form.selectedProvider === "fireworks" ? form.apiKey : undefined}
+        customModels={form.shortlistModels}
+        density={density}
+        disabled={form.busy}
+        modelsError={form.shortlistModelsError}
+        onCustomModelsChange={form.handleShortlistModelsChange}
+        provider={form.selectedProvider}
+      />
+    );
+  }
+
+  return (
+    <FormField density={density} id="model" label="Model">
+      <Select
+        disabled={form.busy || form.filteredModels.length === 0}
+        onValueChange={(value) =>
+          form.setSelectedModel(value == null ? "" : String(value))
+        }
+        value={form.selectedModel}
+      >
+        <SelectTrigger className="w-full" id="model">
+          <SelectValue placeholder="Select a model" />
+        </SelectTrigger>
+        <SelectContent>
+          {form.filteredModels.map((model) => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.name}
+              {model.default ? " (default)" : ""}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </FormField>
+  );
+}
+
+function ProviderSetupDetails({
+  apiKeyOptional,
+  canPickModels,
+  density,
+  form,
+  submitLabel,
+}: {
+  apiKeyOptional: boolean;
+  canPickModels: boolean;
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+  submitLabel: string;
+}) {
+  return (
+    <>
+      <ProviderSetupApiKeyField
+        apiKeyOptional={apiKeyOptional}
+        density={density}
+        form={form}
+      />
+      <ProviderSetupExtraFields
+        canPickModels={canPickModels}
+        density={density}
+        form={form}
+      />
+      {form.formError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {form.formError}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button
+          disabled={form.busy || !(apiKeyOptional || form.apiKey.trim())}
+          type="submit"
+        >
+          {form.busy ? (
+            <>
+              <Spinner className="mr-2" />
+              Saving…
+            </>
+          ) : (
+            submitLabel
+          )}
+        </Button>
+      </div>
+    </>
   );
 }

@@ -12,97 +12,51 @@ import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export function useWhatsAppSettingsCard({
-  onSaveSuccess,
-  submitLabel,
+function formatAllowedPhoneSummary(count: number): string {
+  if (count === 0) {
+    return "None";
+  }
+  return `${count} number${count === 1 ? "" : "s"}`;
+}
+
+function resolveWhatsAppStatusLine(
+  hint: string | null,
+  formError: string | null,
+  loadError: unknown
+): string | null {
+  if (hint) {
+    return hint;
+  }
+  if (formError) {
+    return formError;
+  }
+  if (loadError) {
+    return formatError(loadError);
+  }
+  return null;
+}
+
+function resolveWhatsAppLinkingState({
+  configured,
+  connected,
+  paired,
+  pairingCode,
+  profileId,
+  qrCode,
+  qrWasVisible,
+  running,
+  settingsProfileId,
 }: {
-  onSaveSuccess?: () => void;
-  submitLabel?: string;
+  configured: boolean;
+  connected: boolean;
+  paired: boolean;
+  pairingCode: string | null;
+  profileId: string;
+  qrCode: string | null;
+  qrWasVisible: boolean;
+  running: boolean;
+  settingsProfileId?: string;
 }) {
-  const queryClient = useQueryClient();
-  const { data: settings, isLoading, error: loadError } = useWhatsAppSettings();
-  const { data: status } = useSystemStatusQuery();
-  const { data: profiles = [] } = useProfilesQuery();
-  const saveMutation = useSaveWhatsAppSettings();
-  const regenerateMutation = useRegenerateWhatsAppPairingCode();
-  const reconnectMutation = useReconnectWhatsApp();
-
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [profileId, setProfileId] = useState("default");
-  const [hint, setHint] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [qrWasVisible, setQrWasVisible] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [allowedPhones, setAllowedPhones] = useState<string[]>([]);
-  const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
-
-  const settingsProfileId = settings?.profileId;
-  const settingsAllowedPhones = settings?.allowedPhones;
-
-  useEffect(() => {
-    if (settingsProfileId !== undefined) {
-      setProfileId(settingsProfileId);
-    }
-  }, [settingsProfileId]);
-
-  useEffect(() => {
-    if (settingsAllowedPhones) {
-      setAllowedPhones(settingsAllowedPhones);
-    }
-  }, [settingsAllowedPhones]);
-
-  const configured = settings?.configured === true;
-  const worker = status?.whatsappWorker;
-  const running = worker?.running === true;
-  const connected = worker?.connected === true;
-  const qrCode = worker?.qrCode ?? null;
-  const paired = Boolean(worker?.paired || settings?.pairedJid);
-  const pairingCode = settings?.pairingCode ?? null;
-  const linkedNumber = settings?.phoneNumberMasked ?? null;
-
-  useEffect(() => {
-    if (qrCode) {
-      setQrWasVisible(true);
-    }
-    if (paired) {
-      setQrWasVisible(false);
-    }
-  }, [qrCode, paired]);
-
-  useEffect(() => {
-    if (worker?.paired && !settings?.pairedJid) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.whatsapp.settings,
-      });
-      return;
-    }
-
-    if (worker?.connected && !paired) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.whatsapp.settings,
-      });
-    }
-  }, [
-    worker?.paired,
-    worker?.connected,
-    settings?.pairedJid,
-    paired,
-    queryClient,
-  ]);
-
-  useEffect(() => {
-    setCopied(false);
-  }, [pairingCode]);
-
-  useEffect(
-    () => () => {
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current);
-      }
-    },
-    []
-  );
-
   const useQrLinking = !pairingCode;
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
   const awaitingQr =
@@ -122,19 +76,128 @@ export function useWhatsAppSettingsCard({
     !qrCode &&
     (qrWasVisible || connected) &&
     useQrLinking;
-  const showReconnect = configured && !showQr && !awaitingQr;
-  const canSave = !configured || profileId !== settings?.profileId;
-  const actionLabel = submitLabel ?? (configured ? "Save" : "Enable WhatsApp");
-  const { headerSubtitle, statusBadge } = resolveWhatsAppStatusCopy({
+
+  return {
     awaitingQr,
     bridgeStarting,
-    configured,
+    canSave: !configured || profileId !== settingsProfileId,
     linkingAfterScan,
-    paired,
-    pairingCode,
-    running,
     showQr,
-  });
+    showReconnect: configured && !showQr && !awaitingQr,
+  };
+}
+
+function hintForSavedSettings(
+  saved: { pairedJid?: string | null; pairingCode?: string | null },
+  configured: boolean
+): string {
+  if (saved.pairedJid) {
+    return "Saved.";
+  }
+  if (saved.pairingCode) {
+    return "Saved. Use the pairing code in WhatsApp.";
+  }
+  if (configured) {
+    return "Saved.";
+  }
+  return "Enabled. Start the bridge and scan the QR code.";
+}
+
+function useWhatsAppSettingsFormState(
+  settings:
+    | {
+        allowedPhones?: string[];
+        profileId?: string;
+      }
+    | null
+    | undefined
+) {
+  const [profileId, setProfileId] = useState("default");
+  const [allowedPhones, setAllowedPhones] = useState<string[]>([]);
+  const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
+  const settingsProfileId = settings?.profileId;
+  const settingsAllowedPhones = settings?.allowedPhones;
+
+  useEffect(() => {
+    if (settingsProfileId !== undefined) {
+      setProfileId(settingsProfileId);
+    }
+  }, [settingsProfileId]);
+
+  useEffect(() => {
+    if (settingsAllowedPhones) {
+      setAllowedPhones(settingsAllowedPhones);
+    }
+  }, [settingsAllowedPhones]);
+
+  return {
+    allowedPhones,
+    allowedPhonesOpen,
+    profileId,
+    setAllowedPhones,
+    setAllowedPhonesOpen,
+    setProfileId,
+    settingsProfileId,
+  };
+}
+
+function useWhatsAppQrVisibility(qrCode: string | null, paired: boolean) {
+  const [qrWasVisible, setQrWasVisible] = useState(false);
+
+  useEffect(() => {
+    if (qrCode) {
+      setQrWasVisible(true);
+    }
+    if (paired) {
+      setQrWasVisible(false);
+    }
+  }, [qrCode, paired]);
+
+  return { qrWasVisible, setQrWasVisible };
+}
+
+function useWhatsAppSettingsSync(
+  worker: { connected?: boolean; paired?: boolean } | undefined,
+  pairedJid: string | undefined,
+  paired: boolean
+) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (worker?.paired && !pairedJid) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.whatsapp.settings,
+      });
+      return;
+    }
+
+    if (worker?.connected && !paired) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.whatsapp.settings,
+      });
+    }
+  }, [worker?.paired, worker?.connected, pairedJid, paired, queryClient]);
+}
+
+function useWhatsAppPairingCopy(
+  pairingCode: string | null,
+  setHint: (hint: string | null) => void
+) {
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setCopied(false);
+  }, [pairingCode]);
+
+  useEffect(
+    () => () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   async function copyPairingCode() {
     if (!pairingCode) {
@@ -156,10 +219,42 @@ export function useWhatsAppSettingsCard({
     }
   }
 
-  function handleSave() {
+  return {
+    copied,
+    onCopyPairingCode: () => {
+      void copyPairingCode();
+    },
+  };
+}
+
+function useWhatsAppSettingsActions({
+  configured,
+  onSaveSuccess,
+  profileId,
+  setProfileId,
+  setQrWasVisible,
+  settingsProfileId,
+}: {
+  configured: boolean;
+  onSaveSuccess?: () => void;
+  profileId: string;
+  setProfileId: (profileId: string) => void;
+  setQrWasVisible: (value: boolean) => void;
+  settingsProfileId?: string;
+}) {
+  const saveMutation = useSaveWhatsAppSettings();
+  const regenerateMutation = useRegenerateWhatsAppPairingCode();
+  const reconnectMutation = useReconnectWhatsApp();
+  const [hint, setHint] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function clearMessages() {
     setFormError(null);
     setHint(null);
+  }
 
+  function handleSave() {
+    clearMessages();
     const request: UpdateWhatsAppSettingsRequest = {
       profileId: profileId.trim() || "default",
     };
@@ -169,24 +264,14 @@ export function useWhatsAppSettingsCard({
         setFormError(formatError(error));
       },
       onSuccess: (saved) => {
-        if (saved.pairedJid) {
-          setHint("Saved.");
-        } else if (saved.pairingCode) {
-          setHint("Saved. Use the pairing code in WhatsApp.");
-        } else if (configured) {
-          setHint("Saved.");
-        } else {
-          setHint("Enabled. Start the bridge and scan the QR code.");
-        }
+        setHint(hintForSavedSettings(saved, configured));
         onSaveSuccess?.();
       },
     });
   }
 
   function handleRegeneratePairingCode() {
-    setFormError(null);
-    setHint(null);
-
+    clearMessages();
     regenerateMutation.mutate(undefined, {
       onError: (error) => {
         setFormError(formatError(error));
@@ -198,10 +283,8 @@ export function useWhatsAppSettingsCard({
   }
 
   function handleReconnect() {
-    setFormError(null);
-    setHint(null);
+    clearMessages();
     setQrWasVisible(false);
-
     reconnectMutation.mutate(undefined, {
       onError: (error) => {
         setFormError(formatError(error));
@@ -214,10 +297,9 @@ export function useWhatsAppSettingsCard({
 
   function handleProfileChange(nextProfileId: string) {
     setProfileId(nextProfileId);
-    setHint(null);
-    setFormError(null);
+    clearMessages();
 
-    if (!configured || nextProfileId === settings?.profileId) {
+    if (!configured || nextProfileId === settingsProfileId) {
       return;
     }
 
@@ -235,55 +317,123 @@ export function useWhatsAppSettingsCard({
   }
 
   return {
-    actionLabel,
-    allowedPhoneSummary:
-      allowedPhones.length === 0
-        ? "None"
-        : `${allowedPhones.length} number${allowedPhones.length === 1 ? "" : "s"}`,
-    allowedPhones,
-    allowedPhonesOpen,
-    awaitingQr,
-    bridgeStarting,
-    canSave,
+    formError,
+    handleProfileChange,
+    handleReconnect,
+    handleRegeneratePairingCode,
+    handleSave,
+    hint,
+    reconnectPending: reconnectMutation.isPending,
+    regeneratePending: regenerateMutation.isPending,
+    savePending: saveMutation.isPending,
+    setFormError,
+    setHint,
+  };
+}
+
+export function useWhatsAppSettingsCard({
+  onSaveSuccess,
+  submitLabel,
+}: {
+  onSaveSuccess?: () => void;
+  submitLabel?: string;
+}) {
+  const { data: settings, isLoading, error: loadError } = useWhatsAppSettings();
+  const { data: status } = useSystemStatusQuery();
+  const { data: profiles = [] } = useProfilesQuery();
+  const form = useWhatsAppSettingsFormState(settings);
+  const configured = settings?.configured === true;
+  const worker = status?.whatsappWorker;
+  const running = worker?.running === true;
+  const connected = worker?.connected === true;
+  const qrCode = worker?.qrCode ?? null;
+  const paired = Boolean(worker?.paired || settings?.pairedJid);
+  const pairingCode = settings?.pairingCode ?? null;
+  const { qrWasVisible, setQrWasVisible } = useWhatsAppQrVisibility(
+    qrCode,
+    paired
+  );
+  const actions = useWhatsAppSettingsActions({
+    configured,
+    onSaveSuccess,
+    profileId: form.profileId,
+    setProfileId: form.setProfileId,
+    setQrWasVisible,
+    settingsProfileId: form.settingsProfileId,
+  });
+  useWhatsAppSettingsSync(worker, settings?.pairedJid ?? undefined, paired);
+  const { copied, onCopyPairingCode } = useWhatsAppPairingCopy(
+    pairingCode,
+    actions.setHint
+  );
+  const linking = resolveWhatsAppLinkingState({
+    configured,
+    connected,
+    paired,
+    pairingCode,
+    profileId: form.profileId,
+    qrCode,
+    qrWasVisible,
+    running,
+    settingsProfileId: form.settingsProfileId,
+  });
+  const { headerSubtitle, statusBadge } = resolveWhatsAppStatusCopy({
+    awaitingQr: linking.awaitingQr,
+    bridgeStarting: linking.bridgeStarting,
+    configured,
+    linkingAfterScan: linking.linkingAfterScan,
+    paired,
+    pairingCode,
+    running,
+    showQr: linking.showQr,
+  });
+
+  return {
+    actionLabel: submitLabel ?? (configured ? "Save" : "Enable WhatsApp"),
+    allowedPhoneSummary: formatAllowedPhoneSummary(form.allowedPhones.length),
+    allowedPhones: form.allowedPhones,
+    allowedPhonesOpen: form.allowedPhonesOpen,
+    awaitingQr: linking.awaitingQr,
+    bridgeStarting: linking.bridgeStarting,
+    canSave: linking.canSave,
     configured,
     copied,
-    formError,
+    formError: actions.formError,
     headerSubtitle,
     isLoading,
-    linkedNumber,
-    linkingAfterScan,
+    linkedNumber: settings?.phoneNumberMasked ?? null,
+    linkingAfterScan: linking.linkingAfterScan,
     loadError,
-    onAllowedPhonesChange: setAllowedPhones,
-    onAllowedPhonesOpenChange: setAllowedPhonesOpen,
-    onCopyPairingCode: () => {
-      void copyPairingCode();
-    },
-    onError: setFormError,
-    onManageAllowedPhones: () => setAllowedPhonesOpen(true),
-    onProfileChange: handleProfileChange,
-    onReconnect: handleReconnect,
-    onRegeneratePairingCode: handleRegeneratePairingCode,
-    onSave: handleSave,
+    onAllowedPhonesChange: form.setAllowedPhones,
+    onAllowedPhonesOpenChange: form.setAllowedPhonesOpen,
+    onCopyPairingCode,
+    onError: actions.setFormError,
+    onManageAllowedPhones: () => form.setAllowedPhonesOpen(true),
+    onProfileChange: actions.handleProfileChange,
+    onReconnect: actions.handleReconnect,
+    onRegeneratePairingCode: actions.handleRegeneratePairingCode,
+    onSave: actions.handleSave,
     onSavedAllowedPhones: () => {
-      setHint("Allowed numbers saved.");
-      setFormError(null);
+      actions.setHint("Allowed numbers saved.");
+      actions.setFormError(null);
     },
     paired,
     pairingCode,
-    profileId,
+    profileId: form.profileId,
     profiles,
     qrCode,
-    reconnectPending: reconnectMutation.isPending,
-    regeneratePending: regenerateMutation.isPending,
+    reconnectPending: actions.reconnectPending,
+    regeneratePending: actions.regeneratePending,
     running,
-    savePending: saveMutation.isPending,
-    showQr,
-    showReconnect,
+    savePending: actions.savePending,
+    showQr: linking.showQr,
+    showReconnect: linking.showReconnect,
     statusBadge,
-    statusLine:
-      hint ??
-      (formError ? formError : null) ??
-      (loadError ? formatError(loadError) : null),
+    statusLine: resolveWhatsAppStatusLine(
+      actions.hint,
+      actions.formError,
+      loadError
+    ),
     worker,
   };
 }

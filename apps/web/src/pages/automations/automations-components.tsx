@@ -744,6 +744,56 @@ function RunHistoryExpandedActions({
   );
 }
 
+function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
+  const isRunning = run.status === "running";
+  const hasOutput = Boolean(run.output?.trim());
+  const hasError = Boolean(run.error?.trim());
+
+  if (isRunning && !hasOutput && !hasError) {
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground text-sm">
+        <Loading03Icon aria-hidden className="size-4 animate-spin" />
+        Run in progress…
+      </div>
+    );
+  }
+
+  if (hasError && hasOutput) {
+    return (
+      <>
+        <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
+          {run.error}
+        </p>
+        <div className="max-h-[min(70vh,28rem)] overflow-auto">
+          <MessageResponse>{run.output ?? ""}</MessageResponse>
+        </div>
+      </>
+    );
+  }
+
+  if (hasOutput) {
+    return (
+      <div className="max-h-[min(70vh,28rem)] overflow-auto">
+        <MessageResponse>{run.output ?? ""}</MessageResponse>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <p className="whitespace-pre-wrap break-words text-destructive text-sm">
+        {run.error}
+      </p>
+    );
+  }
+
+  if (isRunning) {
+    return null;
+  }
+
+  return <p className="text-muted-foreground text-sm">No output returned.</p>;
+}
+
 function RunHistoryExpandedBody({
   run,
   busy,
@@ -755,9 +805,6 @@ function RunHistoryExpandedBody({
   running: boolean;
   onRerun: () => void;
 }) {
-  const isRunning = run.status === "running";
-  const hasOutput = Boolean(run.output?.trim());
-  const hasError = Boolean(run.error?.trim());
   const copyText = runCopyText(run);
 
   async function handleCopy() {
@@ -799,34 +846,7 @@ function RunHistoryExpandedBody({
         </p>
       ) : null}
 
-      {isRunning && !hasOutput && !hasError ? (
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <Loading03Icon aria-hidden className="size-4 animate-spin" />
-          Run in progress…
-        </div>
-      ) : null}
-
-      {hasError && hasOutput ? (
-        <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
-          {run.error}
-        </p>
-      ) : null}
-
-      {hasOutput ? (
-        <div className="max-h-[min(70vh,28rem)] overflow-auto">
-          <MessageResponse>{run.output ?? ""}</MessageResponse>
-        </div>
-      ) : null}
-
-      {hasOutput || !hasError ? null : (
-        <p className="whitespace-pre-wrap break-words text-destructive text-sm">
-          {run.error}
-        </p>
-      )}
-
-      {hasOutput || hasError || isRunning ? null : (
-        <p className="text-muted-foreground text-sm">No output returned.</p>
-      )}
+      <RunHistoryOutput run={run} />
     </div>
   );
 }

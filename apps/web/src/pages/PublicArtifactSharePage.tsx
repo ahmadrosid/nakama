@@ -103,17 +103,13 @@ function PublicArtifactShareHeader({
   );
 }
 
+type SharePreview = ReturnType<typeof deriveSharePreview>;
+
 function PublicArtifactPreview({
   artifact,
-  canPreview,
   content,
   downloadUrl,
-  isHtml,
-  isImage,
-  isMarkdown,
-  isSpreadsheet,
-  isVideo,
-  language,
+  preview,
 }: {
   artifact: {
     filename: string;
@@ -122,16 +118,19 @@ function PublicArtifactPreview({
     savedAt: string;
     sizeBytes: number;
   };
-  canPreview: boolean;
   content: string | null;
   downloadUrl: string;
-  isHtml: boolean;
-  isImage: boolean;
-  isMarkdown: boolean;
-  isSpreadsheet: boolean;
-  isVideo: boolean;
-  language: string | null;
+  preview: SharePreview;
 }) {
+  const {
+    canPreview,
+    isHtml,
+    isImage,
+    isMarkdown,
+    isSpreadsheet,
+    isVideo,
+    language,
+  } = preview;
   if (isImage) {
     return (
       <ArtifactAttachmentPanelBody
@@ -201,18 +200,12 @@ function PublicArtifactPreview({
 
 function PublicArtifactShareMain({
   artifact,
-  canPreview,
   content,
   downloadUrl,
   error,
   filename,
-  isHtml,
-  isImage,
-  isMarkdown,
-  isSpreadsheet,
-  isVideo,
-  language,
   loading,
+  preview,
 }: {
   artifact: {
     filename: string;
@@ -221,18 +214,12 @@ function PublicArtifactShareMain({
     savedAt: string;
     sizeBytes: number;
   } | null;
-  canPreview: boolean;
   content: string | null;
   downloadUrl: string;
   error: string | null;
   filename?: string;
-  isHtml: boolean;
-  isImage: boolean;
-  isMarkdown: boolean;
-  isSpreadsheet: boolean;
-  isVideo: boolean;
-  language: string | null;
   loading: boolean;
+  preview: SharePreview;
 }) {
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading…</p>;
@@ -242,19 +229,13 @@ function PublicArtifactShareMain({
     return <p className="text-destructive text-sm">{error}</p>;
   }
 
-  if (artifact && canPreview) {
+  if (artifact && preview.canPreview) {
     return (
       <PublicArtifactPreview
         artifact={artifact}
-        canPreview={canPreview}
         content={content}
         downloadUrl={downloadUrl}
-        isHtml={isHtml}
-        isImage={isImage}
-        isMarkdown={isMarkdown}
-        isSpreadsheet={isSpreadsheet}
-        isVideo={isVideo}
-        language={language}
+        preview={preview}
       />
     );
   }
@@ -331,18 +312,12 @@ export function PublicArtifactSharePage() {
       >
         <PublicArtifactShareMain
           artifact={artifact}
-          canPreview={preview.canPreview}
           content={content}
           downloadUrl={downloadUrl}
           error={error}
           filename={metadata?.filename}
-          isHtml={preview.isHtml}
-          isImage={preview.isImage}
-          isMarkdown={preview.isMarkdown}
-          isSpreadsheet={preview.isSpreadsheet}
-          isVideo={preview.isVideo}
-          language={preview.language}
           loading={loading}
+          preview={preview}
         />
       </main>
     </div>

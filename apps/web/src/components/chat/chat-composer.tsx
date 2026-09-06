@@ -426,93 +426,131 @@ function ChatComposerBarePrompt({
   );
 }
 
-export function ChatComposer(props: ChatComposerProps) {
-  const {
-    chatStatus,
-    busy,
-    canStop,
-    disabled = false,
-    error,
-    placeholder = "Do anything...",
-    onSubmit,
-    onStop,
-    className,
-    footerClassName,
-    todos = EMPTY_TODOS,
-    questionnaire = null,
-    queuedMessages = EMPTY_QUEUED_MESSAGES,
-    onSubmitQuestionnaire,
-  } = props;
+function isFullComposer(
+  props: ChatComposerProps
+): props is ChatComposerFullProps {
+  return props.variant !== "minimal";
+}
 
+function resolveChatComposerLayout(
+  props: ChatComposerProps,
+  displayError: string | null
+) {
   const isMinimal = props.variant === "minimal";
-  const showTips = !isMinimal && props.showTips === true;
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const displayError = error ?? attachmentError;
-  const hasTodos = hasActiveAgentTodos(todos);
+  const todos = props.todos ?? EMPTY_TODOS;
+  const questionnaire = props.questionnaire ?? null;
+  const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
-  const showTodos = hasTodos && !hasQuestionnaire && !displayError;
+  const showTodos =
+    hasActiveAgentTodos(todos) && !hasQuestionnaire && !displayError;
   const hasQueuedMessages = queuedMessages.length > 0;
-  const showStacked =
-    (hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal;
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
     : (props.availableSkills ?? EMPTY_SKILLS);
-  const skillPickerKey = availableSkills.map((skill) => skill.id).join("\0");
-  const promptProps = {
+
+  return {
     availableSkills,
-    busy,
-    canStop,
-    chatStatus,
-    disabled,
+    disabled: props.disabled ?? false,
+    hasQuestionnaire,
+    hasQueuedMessages,
+    isMinimal,
+    placeholder: props.placeholder ?? "Do anything...",
+    questionnaire,
+    queuedMessages,
+    queueStackEdge: (hasQuestionnaire || showTodos
+      ? "continue"
+      : "start") as ComposerStackEdge,
+    showOfflineHint: !isMinimal && props.showOfflineHint === true,
+    showStacked:
+      (hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal,
+    showTips: !isMinimal && props.showTips === true,
+    showTodos,
+    skillPickerKey: availableSkills.map((skill) => skill.id).join("\0"),
+    todos,
+  };
+}
+
+function ChatComposerMain({
+  displayError,
+  layout,
+  props,
+  setAttachmentError,
+}: {
+  displayError: string | null;
+  layout: ReturnType<typeof resolveChatComposerLayout>;
+  props: ChatComposerProps;
+  setAttachmentError: (message: string | null) => void;
+}) {
+  const promptProps = {
+    availableSkills: layout.availableSkills,
+    busy: props.busy,
+    canStop: props.canStop,
+    chatStatus: props.chatStatus,
+    disabled: layout.disabled,
     displayError,
-    footerClassName,
-    onStop,
-    onSubmit,
-    placeholder,
+    footerClassName: props.footerClassName,
+    onStop: props.onStop,
+    onSubmit: props.onSubmit,
+    placeholder: layout.placeholder,
     setAttachmentError,
-    showTips,
-    skillPickerKey,
+    showTips: layout.showTips,
+    skillPickerKey: layout.skillPickerKey,
   };
 
+  if (layout.showStacked && isFullComposer(props)) {
+    return (
+      <div className="relative flex w-full flex-col">
+        <ChatComposerWorkStack
+          busy={props.busy}
+          disabled={layout.disabled}
+          hasQuestionnaire={layout.hasQuestionnaire}
+          hasQueuedMessages={layout.hasQueuedMessages}
+          onSubmitQuestionnaire={props.onSubmitQuestionnaire}
+          questionnaire={layout.questionnaire}
+          queuedMessages={layout.queuedMessages}
+          queueStackEdge={layout.queueStackEdge}
+          showTodos={layout.showTodos}
+          todos={layout.todos}
+        />
+        <div className="relative z-10 -mt-2 w-full">
+          <ChatComposerStackedPrompt
+            {...promptProps}
+            primarySupportsVision={props.primarySupportsVision}
+            props={props}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("w-full shrink-0", className)}>
-      {!isMinimal && props.showOfflineHint ? (
+    <ChatComposerBarePrompt
+      {...promptProps}
+      fullProps={isFullComposer(props) ? props : undefined}
+      isMinimal={layout.isMinimal}
+      primarySupportsVision={
+        isFullComposer(props) ? props.primarySupportsVision : undefined
+      }
+    />
+  );
+}
+
+export function ChatComposer(props: ChatComposerProps) {
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const displayError = props.error ?? attachmentError;
+  const layout = resolveChatComposerLayout(props, displayError);
+
+  return (
+    <div className={cn("w-full shrink-0", props.className)}>
+      {layout.showOfflineHint && isFullComposer(props) ? (
         <ChatComposerOfflineHint onNavigateSetup={props.onNavigateSetup} />
       ) : null}
-      {showStacked ? (
-        <div className="relative flex w-full flex-col">
-          <ChatComposerWorkStack
-            busy={busy}
-            disabled={disabled}
-            hasQuestionnaire={hasQuestionnaire}
-            hasQueuedMessages={hasQueuedMessages}
-            onSubmitQuestionnaire={onSubmitQuestionnaire}
-            questionnaire={questionnaire}
-            queuedMessages={queuedMessages}
-            queueStackEdge={
-              hasQuestionnaire || showTodos ? "continue" : "start"
-            }
-            showTodos={showTodos}
-            todos={todos}
-          />
-          <div className="relative z-10 -mt-2 w-full">
-            <ChatComposerStackedPrompt
-              {...promptProps}
-              primarySupportsVision={props.primarySupportsVision}
-              props={props}
-            />
-          </div>
-        </div>
-      ) : (
-        <ChatComposerBarePrompt
-          {...promptProps}
-          fullProps={isMinimal ? undefined : props}
-          isMinimal={isMinimal}
-          primarySupportsVision={
-            isMinimal ? undefined : props.primarySupportsVision
-          }
-        />
-      )}
+      <ChatComposerMain
+        displayError={displayError}
+        layout={layout}
+        props={props}
+        setAttachmentError={setAttachmentError}
+      />
     </div>
   );
 }

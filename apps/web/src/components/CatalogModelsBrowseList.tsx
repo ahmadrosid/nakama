@@ -58,7 +58,7 @@ function filterCatalogRows<T extends { id: string; name: string }>(
   return filterRowsBySearch(visible, deferredSearch);
 }
 
-function resolveCatalogStatus<T>(
+function resolveCatalogStatus<T extends { id: string; name: string }>(
   status: CatalogModelsBrowseListProps<T>["status"],
   filtered: T[],
   canFetch: boolean,

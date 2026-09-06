@@ -360,7 +360,7 @@ function ArtifactAttachmentTextBody({
     >
       {loading ? <LoadingState compact /> : null}
       {error ? <ArtifactBodyError compact error={error} /> : null}
-      {showContent && rendered ? (
+      {showContent && content && rendered ? (
         <ArtifactTextRendered
           content={content}
           rendered={rendered}
