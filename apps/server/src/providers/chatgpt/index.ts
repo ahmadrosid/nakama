@@ -1,6 +1,8 @@
 import type {
   ChatCompletionResult,
   GenerateChatInput,
+  GenerateTextInput,
+  GenerateTextResult,
   ProviderClient,
   StreamChatHandlers,
 } from "@nakama/core";
@@ -44,7 +46,6 @@ export function createChatgptProvider(
 
   async function runChat(
     input: GenerateChatInput,
-    stream: boolean,
     handlers?: StreamChatHandlers
   ): Promise<ChatCompletionResult> {
     const oauth = await resolveAccessToken(options);
@@ -61,7 +62,8 @@ export function createChatgptProvider(
       input,
       label: "ChatGPT",
       model,
-      stream,
+      // Codex rejects non-streaming /responses calls.
+      stream: true,
       ...(handlers ? { handlers } : {}),
       supportsThinking: true,
     });
@@ -69,14 +71,32 @@ export function createChatgptProvider(
 
   return {
     generateChat(input) {
-      return runChat(input, false);
+      return runChat(input);
     },
-    generateText() {
-      throw new Error("ChatGPT provider does not support generateText.");
+    async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
+      const useJson = (input.format ?? "json") === "json";
+      const system = useJson
+        ? `${input.system}\n\nRespond with valid JSON only.`
+        : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
+
+      const result = await runChat({
+        messages: [{ content: input.prompt, role: "user" }],
+        system,
+      });
+      const content = result.content.trim();
+
+      if (!content) {
+        throw new Error("ChatGPT returned an empty response.");
+      }
+
+      return {
+        content,
+        ...(result.usage ? { usage: result.usage } : {}),
+      };
     },
     name: "chatgpt",
     streamChat(input, handlers) {
-      return runChat(input, true, handlers);
+      return runChat(input, handlers);
     },
   };
 }
