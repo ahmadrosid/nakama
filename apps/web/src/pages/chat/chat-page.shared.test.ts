@@ -190,4 +190,8 @@ describe("nextSuccessfulTurnAt", () => {
   test("bumps by 1ms when two turns finish in the same millisecond", () => {
     expect(nextSuccessfulTurnAt(1000, 1000)).toBe(1001);
   });
+
+  test("stays monotonic when wall clock moves backwards", () => {
+    expect(nextSuccessfulTurnAt(1000, 999)).toBe(1001);
+  });
 });
