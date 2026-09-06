@@ -112,6 +112,7 @@ import {
   buildThinkingProviderOptions,
   buildToolExecutionContext,
   buildUserContextStatus,
+  chatgptOAuthNeedsRefresh,
   composeKnowledgeBaseCatalog,
   composeSoulSystemPrompt,
   createErrorTrackingSink,
@@ -157,6 +158,7 @@ import {
   persistInlineAttachmentsInContent,
   readArtifactFile,
   readBundledSkillBody,
+  readChatgptOAuthFromInstance,
   readEnvValue,
   refreshErrorTrackingEnabled,
   regenerateDiscordHandshake,
@@ -204,6 +206,10 @@ import {
   getModelsForProviderInstance,
   isCostEstimated,
 } from "../providers";
+import {
+  fetchChatgptCodexModels,
+  refreshChatgptOAuthToken,
+} from "../providers/chatgpt/oauth";
 import { isAllowedImageGenerationSelection } from "../providers/models";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
@@ -2235,6 +2241,35 @@ export class AgentService {
         displayName: instance.label,
         models,
         provider: "fireworks",
+        providers: [],
+      };
+    }
+
+    if (instance.type === "chatgpt") {
+      let oauth = readChatgptOAuthFromInstance(instance);
+
+      if (!oauth) {
+        throw new NakamaApiError(
+          "Sign in with ChatGPT before discovering models.",
+          400
+        );
+      }
+
+      if (chatgptOAuthNeedsRefresh(oauth)) {
+        oauth = await refreshChatgptOAuthToken(oauth.refreshToken);
+        await this.persistChatgptOAuth(providerId, oauth);
+      }
+
+      const entries = await fetchChatgptCodexModels(oauth);
+      const models = catalogCustomModelsToCatalog(entries, [], "chatgpt");
+
+      return {
+        catalog: AVAILABLE_MODELS,
+        currentProviderId: providerId,
+        customModels: entries,
+        displayName: instance.label,
+        models,
+        provider: "chatgpt",
         providers: [],
       };
     }

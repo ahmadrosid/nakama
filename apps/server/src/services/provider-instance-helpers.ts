@@ -309,6 +309,7 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
     } else if (
       instance.type === "openai" ||
+      instance.type === "chatgpt" ||
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek"

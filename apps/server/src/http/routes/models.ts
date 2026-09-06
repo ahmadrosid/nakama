@@ -1349,7 +1349,9 @@ export function registerModelRoutes(
 
     try {
       const chatgptOAuth = await completeChatgptOAuthDeviceSession(sessionId);
-      const models = await fetchChatgptCodexModels(chatgptOAuth);
+      const models = await fetchChatgptCodexModels(chatgptOAuth).catch(
+        () => []
+      );
       return json({ chatgptOAuth, models });
     } catch (error) {
       if (error instanceof NakamaApiError) {

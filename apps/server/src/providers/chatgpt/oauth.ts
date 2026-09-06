@@ -293,29 +293,33 @@ export function parseChatgptCodexModelsPayload(
 export async function fetchChatgptCodexModels(
   oauth: ChatgptOAuthCredentials
 ): Promise<CustomModelEntry[]> {
-  try {
-    const response = await fetch(
-      `${CHATGPT_CODEX_BASE_URL}/models?client_version=1.0.0`,
-      {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${oauth.accessToken}`,
-          "ChatGPT-Account-ID": oauth.accountId,
-          "OpenAI-Beta": "responses=v1",
-          originator: "nakama",
-          version: "1.0.0",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      return [];
+  const response = await fetch(
+    `${CHATGPT_CODEX_BASE_URL}/models?client_version=1.0.0`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${oauth.accessToken}`,
+        "ChatGPT-Account-ID": oauth.accountId,
+        "OpenAI-Beta": "responses=v1",
+        originator: "codex_cli_rs",
+      },
     }
+  );
 
-    return parseChatgptCodexModelsPayload(await response.json());
-  } catch {
-    return [];
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `ChatGPT models failed (${response.status})${text ? `: ${text}` : ""}`
+    );
   }
+
+  const models = parseChatgptCodexModelsPayload(await response.json());
+
+  if (models.length === 0) {
+    throw new Error("ChatGPT returned no models for this account.");
+  }
+
+  return models;
 }
 
 export async function refreshChatgptOAuthToken(

@@ -2,6 +2,7 @@ import type { SelectedProvider } from "@/lib/models";
 
 export const CATALOG_SHORTLIST_PROVIDERS = [
   "openai",
+  "chatgpt",
   "anthropic",
   "gemini",
   "deepseek",

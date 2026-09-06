@@ -13,6 +13,30 @@ function buildJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.signature`;
 }
 
+describe("fetchChatgptCodexModels", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("throws when Codex returns an error status", async () => {
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 403 })) as typeof fetch;
+
+    const { fetchChatgptCodexModels } = await import("./oauth");
+
+    await expect(
+      fetchChatgptCodexModels({
+        accessToken: "token",
+        accountId: "acct_1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        refreshToken: "refresh",
+      })
+    ).rejects.toThrow("ChatGPT models failed (403)");
+  });
+});
+
 describe("parseChatgptCodexModelsPayload", () => {
   test("reads slug, display name, and skips unsupported models", () => {
     expect(
