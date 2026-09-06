@@ -7,11 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsQuery } from "@/hooks/use-app-queries";
 import {
+  useModelsQuery,
   useSaveTranscriptionSettings,
   useTranscriptionSettings,
-} from "@/hooks/use-transcription-settings";
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
   encodeModelSelection,

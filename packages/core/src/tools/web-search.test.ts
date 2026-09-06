@@ -32,4 +32,20 @@ describe("partitionTools", () => {
       localTools: [],
     });
   });
+
+  test("keeps a custom-backed web_search local so the provider does not search", () => {
+    const customWebSearch: ToolDefinition = {
+      description: "Search via a configured endpoint",
+      hosted: false,
+      name: "web_search",
+      run() {
+        return Promise.resolve({});
+      },
+    };
+
+    expect(partitionTools([writeFileTool, customWebSearch])).toEqual({
+      hasWebSearch: false,
+      localTools: [writeFileTool, customWebSearch],
+    });
+  });
 });

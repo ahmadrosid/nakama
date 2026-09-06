@@ -6,7 +6,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 
 function createCountingProvider(responses: ChatCompletionResult[]): {
   provider: ProviderClient;
@@ -80,8 +80,10 @@ describe("agent chat cancellation", () => {
     };
 
     const { provider, getCallCount } = createCountingProvider(callThenReply);
-    const harness = createAgentHarness({ provider, tools: [slowTool] });
-    const session = harness.createChatSession({ tools: [slowTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [slowTool] },
+      { tools: [slowTool] }
+    );
 
     const promise = session.sendStream(
       "run it",
@@ -117,8 +119,10 @@ describe("agent chat cancellation", () => {
       },
     };
 
-    const harness = createAgentHarness({ provider, tools: [] });
-    const session = harness.createChatSession({ tools: [] });
+    const session = createAgentChatSession(
+      { provider, tools: [] },
+      { tools: [] }
+    );
 
     await session.sendStream(
       "hello",
@@ -141,8 +145,10 @@ describe("agent chat cancellation", () => {
     };
 
     const { provider } = createCountingProvider(callThenReply);
-    const harness = createAgentHarness({ provider, tools: [tool] });
-    const session = harness.createChatSession({ tools: [tool] });
+    const session = createAgentChatSession(
+      { provider, tools: [tool] },
+      { tools: [tool] }
+    );
 
     const reply = await session.sendStream(
       "run it",

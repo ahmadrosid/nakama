@@ -18,14 +18,12 @@ import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
 import type { ComposioService } from "./composio-service";
 import type { McpService } from "./mcp-service";
-import type { TaskRunner } from "./task-runner";
 import type { WorkerManagerService } from "./worker-manager-service";
 
 export class SystemStatusService {
   constructor(
     private readonly agent: AgentService,
     private readonly automationRunner: AutomationRunner,
-    private readonly taskRunner: TaskRunner,
     private readonly workerManager: WorkerManagerService,
     private readonly mcpService: McpService | null = null,
     private readonly composioService: ComposioService | null = null,
@@ -75,11 +73,6 @@ export class SystemStatusService {
         ? await this.mcpService.getStatusSummary()
         : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
       server: await this.getServerStatus(),
-      taskWorker: {
-        activeRuns: this.taskRunner.getActiveRunCount(),
-        ok: true,
-        providerConfigured,
-      },
       telegramWorker: telegramStatus,
       whatsappWorker: whatsappStatus,
     };

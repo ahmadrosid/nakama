@@ -1,6 +1,7 @@
 import type { AgentTodo } from "@nakama/core/contract";
 import type { WASocket } from "@whiskeysockets/baileys";
 import { renderWhatsAppTodoStatus } from "./format";
+import { rememberWhatsAppOutbound } from "./inbound-message";
 
 type WhatsAppTodoRunState = "working" | "completed" | "stopped" | "failed";
 
@@ -68,6 +69,7 @@ export class WhatsAppTodoStatusMessage {
         return;
       }
 
+      rememberWhatsAppOutbound({ jid: this.jid, text: next });
       await this.socket.sendMessage(this.jid, { text: next });
       this.lastRendered = next;
     } catch {

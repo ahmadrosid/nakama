@@ -99,8 +99,6 @@ function createServerOptions() {
       draftAutomation: async (_prompt: string, _channel: string) => ({
         id: "automation_draft",
       }),
-      draftTaskPrompt: async (_title: string, _description?: string) =>
-        "prompt-1",
       generateImage: async (_body: unknown) => ({
         data: "AA==",
         mediaType: "image/png",
@@ -135,10 +133,6 @@ function createServerOptions() {
       }),
       getSessionTodos: async (_sessionId: string) => [],
       getSkill: async (_skillId: string) => ({ id: "skill_1" }),
-      getTaskChatMessages: async (_taskId: string) => ({
-        messages: [{ content: "task", role: "assistant" }],
-        sessionId: "session_1",
-      }),
       getTelegramSettings: async () => ({ enabled: false }),
       getThinkingSettings: async () => ({
         thinking: { effort: "medium", enabled: true },
@@ -189,8 +183,9 @@ function createServerOptions() {
         getContextUsage: () => null,
         send: async (input: { message: string }) => `reply:${input.message}`,
       }),
+      resolveWorkflowToolNames: async () => new Set<string>(),
       runAutomation: async (_automationId: string) => ({ skipped: false }),
-      runTask: async (_taskId: string) => ({ skipped: false }),
+      runWorkflow: async (_workflowId: string) => ({ skipped: false }),
       schedulePostTurnSkillReview: (_sessionId: string) => {},
       scheduleSessionTitleGeneration: (_sessionId: string) => {},
       setImageGenerationSettings: async (_body: unknown) => ({
@@ -291,31 +286,6 @@ function createServerOptions() {
     systemStatus: {
       getStatus: async () => ({ ok: true }),
     } as any,
-    taskService: {
-      create: async (_orgId: string, _body: unknown, _profileId?: string) => ({
-        id: "task_1",
-        status: "pending",
-      }),
-      delete: async (_taskId: string, _orgId: string) => true,
-      get: async (_taskId: string, _orgId?: string) => ({
-        id: "task_1",
-        status: "pending",
-      }),
-      listForOrg: async (_orgId: string) => [
-        { id: "task_1", status: "pending" },
-      ],
-      listRuns: async (_taskId: string, _orgId?: string, limit?: number) =>
-        limit ? [{ id: "task_run_1" }] : [{ id: "task_run_1" }],
-      update: async (
-        _taskId: string,
-        _orgId: string,
-        body: any,
-        _opts?: unknown
-      ) => ({
-        id: "task_1",
-        status: body.status ?? "pending",
-      }),
-    } as any,
     webDistDir: null,
     workerManager: {
       clearWorkerLogs: async () => {},
@@ -327,6 +297,16 @@ function createServerOptions() {
       restartWorker: async () => {},
       startWorker: async () => {},
       stopWorker: async () => {},
+    } as any,
+    workflowService: {
+      create: async () => ({ id: "workflow_1" }),
+      delete: async () => true,
+      deleteRun: async () => true,
+      get: async () => ({ id: "workflow_1", profileId: "default" }),
+      getRun: async () => ({ id: "run_1", steps: [] }),
+      listForOrg: async () => [{ id: "workflow_1" }],
+      listRuns: async () => [{ id: "run_1", steps: [] }],
+      update: async () => ({ id: "workflow_1" }),
     } as any,
   };
 }
@@ -951,21 +931,6 @@ describe("createHonoApp", () => {
     ).toBe(true);
   });
 
-  test("serves task chat capability probe without auth", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const response = await app.fetch(
-      new Request(
-        "http://localhost:4310/v1/tasks/__capability_probe__/messages"
-      )
-    );
-
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toEqual({
-      error: "Task not found.",
-    });
-  });
-
   test("requires platform admin to control messaging workers", async () => {
     const options = createServerOptions();
     const calls: string[] = [];
@@ -1163,18 +1128,6 @@ describe("createHonoApp", () => {
       method: "POST" as const,
       name: "runs automations through Hono routes",
       path: "/v1/automations/automation_1/run",
-    },
-    {
-      expected: { tasks: [{ id: "task_1", status: "pending" }] },
-      name: "serves tasks through Hono routes",
-      path: "/v1/tasks",
-    },
-    {
-      csrf: true,
-      expected: { run: { id: "task_run_1" } },
-      method: "POST" as const,
-      name: "runs tasks through Hono routes",
-      path: "/v1/tasks/task_1/run",
     },
   ] as const;
 

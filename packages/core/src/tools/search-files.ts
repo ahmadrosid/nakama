@@ -1,9 +1,7 @@
-import { realpath } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
 import { getProfileSoulDir } from "../soul/resolve";
-import { guardFilePath } from "./paths";
+import { guardFilePath, resolveWorkspaceRoot } from "./paths";
 import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
@@ -26,11 +24,9 @@ export const searchFilesInputSchema = z
 
 export type SearchFilesInput = z.infer<typeof searchFilesInputSchema>;
 
-export interface SearchFilesMatch extends RipgrepMatch {}
-
 export interface SearchFilesOutput {
   matchCount: number;
-  matches: SearchFilesMatch[];
+  matches: RipgrepMatch[];
   query: string;
   root: string;
   truncated: boolean;
@@ -110,17 +106,4 @@ async function resolveSearchRoot(
     cwd: workspaceRoot,
   });
   return guarded.resolved;
-}
-
-async function resolveWorkspaceRoot(rawWorkspaceRoot: string): Promise<string> {
-  if (!path.isAbsolute(rawWorkspaceRoot)) {
-    throw new Error(
-      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
-    );
-  }
-  try {
-    return await realpath(rawWorkspaceRoot);
-  } catch {
-    return path.resolve(rawWorkspaceRoot);
-  }
 }

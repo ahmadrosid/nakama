@@ -1,8 +1,7 @@
 import { generateSessionTitleFromMessages } from "@nakama/agent";
 import type { ChatMessage, UserConfig } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
-import { createProviderForInstance } from "../providers/create";
-import { resolveProfileProviderSelection } from "./provider-instance-helpers";
+import { createProviderForProfile } from "./provider-instance-helpers";
 
 export const SESSION_TITLE_FALLBACK = "Untitled";
 
@@ -46,10 +45,10 @@ export class SessionTitleService {
         return;
       }
 
-      const userConfig = this.getUserConfig();
-      const provider = await this.resolveProviderForProfile(
+      const provider = await createProviderForProfile(
+        this.db,
         session.profileId,
-        userConfig
+        this.getUserConfig()
       );
 
       if (!provider) {
@@ -68,37 +67,6 @@ export class SessionTitleService {
     } finally {
       this.inFlight.delete(sessionId);
     }
-  }
-
-  private async resolveProviderForProfile(
-    profileId: string,
-    userConfig: UserConfig | null
-  ) {
-    if (!userConfig) {
-      return null;
-    }
-
-    const profile = await this.db.getProfile(profileId);
-
-    if (!profile) {
-      return null;
-    }
-
-    const selection = resolveProfileProviderSelection({
-      defaultProviderId: userConfig.defaultProviderId,
-      profileModel: profile.model,
-      providers: userConfig.providers,
-    });
-
-    if (!selection) {
-      return null;
-    }
-
-    return createProviderForInstance(
-      selection.instance,
-      selection.model,
-      process.env
-    );
   }
 }
 

@@ -23,7 +23,7 @@ That profile is named **Default Bot** and gets a unique id (not a fixed string l
 
 | What | Behavior |
 |------|----------|
-| Default profile | Exactly one per org, marked with `isDefault` |
+| Default profile | Exactly one per org, marked with `isDefault`. You can delete it when the org has at least 3 profiles; another non-Super profile becomes the default. |
 | Super bot | Not auto-created; platform admin may add a profile with `isSuper: true` if needed |
 | Additional orgs | Each gets its own default profile and isolated on-disk data |
 

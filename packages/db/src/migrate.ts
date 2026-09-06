@@ -20,7 +20,7 @@ export function migrateDatabase(db: Database): void {
   db.exec(sql);
   atomic(migrateProfilesTable);
   atomic(migrateAutomationsTable);
-  atomic(migrateTasksTable);
+  atomic(migrateDropTasksTables);
   atomic(migrateSessionsTable);
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
@@ -49,6 +49,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAttachmentsTable);
   atomic(migrateAutomationRunsTable);
   atomic(migrateAutomationRunReadStateTable);
+  atomic(migrateWorkflowsTables);
   atomic(migrateComposioTables);
   atomic(migrateComposioUserConnections);
   atomic(migrateProfileChangeEventsTable);
@@ -234,17 +235,11 @@ function normalizeSqlDefaultLiteral(
   return value.replace(/^'+|'+$/g, "");
 }
 
-function migrateTasksTable(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(tasks)").all() as Array<{
-    name: string;
-  }>;
-  const columnNames = new Set(columns.map((column) => column.name));
-
-  if (!columnNames.has("session_id")) {
-    db.exec(`
-      ALTER TABLE tasks ADD COLUMN session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL;
-    `);
-  }
+function migrateDropTasksTables(db: Database): void {
+  db.exec(`
+    DROP TABLE IF EXISTS task_runs;
+    DROP TABLE IF EXISTS tasks;
+  `);
 }
 
 function migrateUsersTable(db: Database): void {
@@ -702,7 +697,6 @@ const TENANT_ORG_ID_TABLES = [
   "profiles",
   "sessions",
   "automations",
-  "tasks",
   "tools",
   "mcp_servers",
   "skills",
@@ -893,14 +887,6 @@ function migrateProfileOrgColumns(db: Database): void {
     UPDATE automations
     SET org_id = (
       SELECT org_id FROM profiles WHERE profiles.id = automations.profile_id
-    )
-    WHERE org_id IS NULL
-  `).run();
-
-    db.prepare(`
-    UPDATE tasks
-    SET org_id = (
-      SELECT org_id FROM profiles WHERE profiles.id = tasks.profile_id
     )
     WHERE org_id IS NULL
   `).run();
@@ -1103,11 +1089,6 @@ function moveProfileReferences(
     canonicalId,
     legacyId
   );
-  db.prepare("UPDATE tasks SET profile_id = ? WHERE profile_id = ?").run(
-    canonicalId,
-    legacyId
-  );
-
   moveProfileJoinReferences(
     db,
     "profile_tools",
@@ -1303,6 +1284,57 @@ function migrateAutomationRunReadStateTable(db: Database): void {
       FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
       FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
     );
+  `);
+}
+
+function migrateWorkflowsTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflows (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      definition TEXT NOT NULL,
+      profile_id TEXT NOT NULL,
+      org_id TEXT,
+      enabled INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      workflow_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      input TEXT,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      output TEXT,
+      error TEXT,
+      FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS workflow_runs_workflow_started
+      ON workflow_runs (workflow_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS workflow_run_steps (
+      id TEXT PRIMARY KEY NOT NULL,
+      run_id TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      input TEXT,
+      output TEXT,
+      error TEXT,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      position INTEGER NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES workflow_runs (id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS workflow_run_steps_run_position
+      ON workflow_run_steps (run_id, position);
   `);
 }
 

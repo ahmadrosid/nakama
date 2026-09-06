@@ -1,4 +1,4 @@
-import { listKnowledgeBaseSources, NAKAMA_DOCS_LLMS_URL } from "./sources";
+import { DEFAULT_KNOWLEDGE_SOURCES, NAKAMA_DOCS_LLMS_URL } from "./sources";
 import { listKnowledgeBaseDocuments } from "./store";
 
 export async function composeKnowledgeBaseCatalog(
@@ -6,7 +6,7 @@ export async function composeKnowledgeBaseCatalog(
   profileId: string
 ): Promise<string> {
   const documents = await listKnowledgeBaseDocuments(orgId, profileId);
-  const sources = await listKnowledgeBaseSources();
+  const sources = DEFAULT_KNOWLEDGE_SOURCES;
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
   );

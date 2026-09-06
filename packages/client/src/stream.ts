@@ -5,26 +5,10 @@ import type {
   SendMessageInput,
   StreamEvent,
 } from "@nakama/core/contract";
-import {
-  BUN_FETCH_DISABLE_IDLE_TIMEOUT_S,
-  withDisabledFetchIdle,
-} from "@nakama/core/fetch-idle";
 import { readBrowserOrigin } from "./browser";
 import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
 const DEFAULT_STREAM_IDLE_MS = DEFAULT_CHAT_STREAM_TIMEOUT_MS;
-
-/**
- * Bun fetch idleTimeout is in seconds (max 255). SSE tool runs can sit quiet
- * longer than that, so stream requests disable it.
- */
-export const STREAM_FETCH_IDLE_TIMEOUT_S = BUN_FETCH_DISABLE_IDLE_TIMEOUT_S;
-
-export type StreamFetchInit = RequestInit & { idleTimeout?: number };
-
-export function withStreamFetchIdle(init: RequestInit): StreamFetchInit {
-  return withDisabledFetchIdle(init);
-}
 
 /** How long a 409 is treated as a turn that is still stopping rather than a real conflict. */
 const TURN_CONFLICT_RETRY_MS = 3000;

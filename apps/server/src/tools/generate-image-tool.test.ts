@@ -19,10 +19,7 @@ import {
 } from "@nakama/db";
 import { IMAGE_GENERATION_SELECTION } from "../providers/models";
 import { IMAGE_MODEL_REQUIRED_MESSAGE } from "../services/image-generation";
-import {
-  registerGenerateImageTool,
-  resolveToolsFromStorage,
-} from "../services/tool-resolver";
+import { resolveToolsFromStorage } from "../services/tool-resolver";
 import {
   createGenerateImageTool,
   GENERATE_IMAGE_TOOL_NAME,
@@ -52,9 +49,15 @@ const openaiConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
   ...overrides,
 });
 
-afterEach(() => {
-  registerGenerateImageTool(null);
-});
+function generateImageTool(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
+) {
+  return createGenerateImageTool({
+    db,
+    ensureSettingsLoaded: async () => {},
+    getUserConfig: () => null,
+  });
+}
 
 describe("generate_image tool seed and resolver (U3)", () => {
   test("seed creates generate_image tool definition", async () => {
@@ -93,14 +96,6 @@ describe("generate_image tool seed and resolver (U3)", () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
 
-    registerGenerateImageTool(
-      createGenerateImageTool({
-        db,
-        ensureSettingsLoaded: async () => {},
-        getUserConfig: () => null,
-      })
-    );
-
     await ensureGenerateImageToolDefinition(db);
     await db.upsertProfile({
       createdAt: now,
@@ -117,7 +112,9 @@ describe("generate_image tool seed and resolver (U3)", () => {
 
     const assigned = await resolveToolsFromStorage(
       await db.listToolsForProfile("profile_assigned"),
-      db
+      db,
+      [],
+      { serverTools: { generateImage: generateImageTool(db) } }
     );
     const tool = assigned.find(
       (entry) => entry.name === GENERATE_IMAGE_TOOL_NAME
@@ -131,14 +128,6 @@ describe("generate_image tool seed and resolver (U3)", () => {
   test("unassigned profile session does not expose generate_image", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
-
-    registerGenerateImageTool(
-      createGenerateImageTool({
-        db,
-        ensureSettingsLoaded: async () => {},
-        getUserConfig: () => null,
-      })
-    );
 
     await ensureGenerateImageToolDefinition(db);
     await db.upsertProfile({

@@ -69,98 +69,172 @@ function ProviderActionButton({
   );
 }
 
-export function ProviderInstanceCard({
-  instance,
-  catalog,
-  onUpdate,
-  onDelete,
-  onError,
-  isSole = false,
-}: {
-  instance: ProviderInstanceSummary;
-  catalog: ProviderModelOption[];
-  onUpdate: (
-    providerId: string,
-    request: UpdateProviderRequest
-  ) => Promise<void>;
-  onDelete: (providerId: string) => Promise<void>;
-  onError: (error: string | null) => void;
-  isSole?: boolean;
-}) {
-  const card = useProviderInstanceCard({
-    catalog,
-    instance,
-    onDelete,
-    onError,
-    onUpdate,
-  });
-
-  const canManage =
+function canManageProviderModels(card: {
+  isCompatibleLike: boolean;
+  isOpenRouter: boolean;
+  isShortlistBrowse: boolean;
+  isCatalogShortlist: boolean;
+}): boolean {
+  return (
     card.isCompatibleLike ||
     card.isOpenRouter ||
     card.isShortlistBrowse ||
-    card.isCatalogShortlist;
+    card.isCatalogShortlist
+  );
+}
 
+function providerModelCountLabel(modelCount: number): string {
+  return modelCount === 1 ? "1 model" : `${modelCount} models`;
+}
+
+function ProviderInstanceTableRow({
+  instance,
+  card,
+  canManage,
+}: {
+  instance: ProviderInstanceSummary;
+  card: ReturnType<typeof useProviderInstanceCard>;
+  canManage: boolean;
+}) {
   const endpoint = instance.baseUrl?.trim() || null;
-  const modelLabel =
-    instance.modelCount === 1 ? "1 model" : `${instance.modelCount} models`;
 
   return (
-    <>
-      <tr>
-        <td className="px-3 py-2.5 align-middle">
-          <p className="truncate font-medium text-foreground text-sm">
-            {instance.label}
+    <tr>
+      <td className="px-3 py-2.5 align-middle">
+        <p className="truncate font-medium text-foreground text-sm">
+          {instance.label}
+        </p>
+      </td>
+      <td className="px-3 py-2.5 align-middle">
+        {endpoint ? (
+          <p
+            className="max-w-[18rem] truncate font-mono text-2xs text-foreground/80"
+            title={endpoint}
+          >
+            {endpoint}
           </p>
-        </td>
-        <td className="px-3 py-2.5 align-middle">
-          {endpoint ? (
-            <p
-              className="max-w-[18rem] truncate font-mono text-2xs text-foreground/80"
-              title={endpoint}
-            >
-              {endpoint}
-            </p>
-          ) : (
-            <span className="text-muted-foreground text-xs">—</span>
-          )}
-        </td>
-        <td className="whitespace-nowrap px-3 py-2.5 align-middle">
-          <span className="text-muted-foreground text-sm">{modelLabel}</span>
-        </td>
-        <td className="px-3 py-2.5 align-middle">
-          <div className="flex items-center justify-end gap-0.5">
-            {card.isCompatibleLike ? (
-              <ProviderActionButton label="Edit" onClick={card.openEdit}>
-                <Edit03Icon className="size-3.5" />
-              </ProviderActionButton>
-            ) : null}
-            {canManage ? (
-              <ProviderActionButton
-                label="Manage models"
-                onClick={card.openManage}
-              >
-                <ListViewIcon className="size-3.5" />
-              </ProviderActionButton>
-            ) : null}
-            <ProviderActionButton
-              label={instance.hasApiKey ? "Update key" : "Add key"}
-              onClick={() => card.setReplaceKeyOpen(true)}
-            >
-              <Key01Icon className="size-3.5" />
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2.5 align-middle">
+        <span className="text-muted-foreground text-sm">
+          {providerModelCountLabel(instance.modelCount)}
+        </span>
+      </td>
+      <td className="px-3 py-2.5 align-middle">
+        <div className="flex items-center justify-end gap-0.5">
+          {card.isCompatibleLike ? (
+            <ProviderActionButton label="Edit" onClick={card.openEdit}>
+              <Edit03Icon className="size-3.5" />
             </ProviderActionButton>
+          ) : null}
+          {canManage ? (
             <ProviderActionButton
-              destructive
-              disabled={card.busy}
-              label="Remove"
-              onClick={() => card.setDeleteOpen(true)}
+              label="Manage models"
+              onClick={card.openManage}
             >
-              <Delete02Icon className="size-3.5" />
+              <ListViewIcon className="size-3.5" />
             </ProviderActionButton>
-          </div>
-        </td>
-      </tr>
+          ) : null}
+          <ProviderActionButton
+            label={instance.hasApiKey ? "Update key" : "Add key"}
+            onClick={() => card.setReplaceKeyOpen(true)}
+          >
+            <Key01Icon className="size-3.5" />
+          </ProviderActionButton>
+          <ProviderActionButton
+            destructive
+            disabled={card.busy}
+            label="Remove"
+            onClick={() => card.setDeleteOpen(true)}
+          >
+            <Delete02Icon className="size-3.5" />
+          </ProviderActionButton>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
+function ProviderManageModelsFields({
+  card,
+  instance,
+}: {
+  card: ReturnType<typeof useProviderInstanceCard>;
+  instance: ProviderInstanceSummary;
+}) {
+  return (
+    <>
+      {card.isCompatibleLike ? (
+        <CustomProviderFields
+          apiKey=""
+          baseUrl={instance.baseUrl ?? ""}
+          baseUrlError={null}
+          browseLabel={card.isOllama ? "Ollama" : undefined}
+          browseSource="remote"
+          customModels={card.manageModels}
+          disabled={card.busy}
+          displayName={instance.label}
+          displayNameError={null}
+          hostMode={instance.hostMode ?? undefined}
+          identityReadOnly
+          modelsError={null}
+          onBaseUrlChange={() => {}}
+          onCustomModelsChange={card.handleManageModelsChange}
+          onDisplayNameChange={() => {}}
+          providerInstanceId={instance.id}
+          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+        />
+      ) : null}
+      {card.isOpenRouter ? (
+        <OpenRouterProviderModelFields
+          customModels={card.manageModels}
+          disabled={card.busy}
+          modelsError={card.dialogError}
+          onCustomModelsChange={card.handleManageModelsChange}
+        />
+      ) : null}
+      {isShortlistBrowseProvider(card.providerType) ? (
+        <ShortlistBrowseProviderModelFields
+          customModels={card.manageModels}
+          disabled={card.busy}
+          modelsError={card.dialogError}
+          onCustomModelsChange={card.handleManageModelsChange}
+          provider={card.providerType}
+          providerId={
+            card.providerType === "fireworks" ? instance.id : undefined
+          }
+        />
+      ) : null}
+      {card.isCatalogShortlist ? (
+        <CatalogProviderModelFields
+          catalogModels={card.catalogModelsForType}
+          customModels={card.manageModels}
+          disabled={card.busy}
+          modelsError={card.dialogError}
+          onCustomModelsChange={card.handleManageModelsChange}
+          provider={card.providerType as CatalogShortlistProvider}
+          providerInstanceId={instance.id}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ProviderInstanceCardDialogs({
+  card,
+  instance,
+  isSole,
+  canManage,
+}: {
+  card: ReturnType<typeof useProviderInstanceCard>;
+  instance: ProviderInstanceSummary;
+  isSole: boolean;
+  canManage: boolean;
+}) {
+  return (
+    <>
       <ProviderRemoveDialog
         busy={card.busy}
         isSole={isSole}
@@ -214,60 +288,53 @@ export function ProviderInstanceCard({
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
         >
-          {card.isCompatibleLike ? (
-            <CustomProviderFields
-              apiKey=""
-              baseUrl={instance.baseUrl ?? ""}
-              baseUrlError={null}
-              browseLabel={card.isOllama ? "Ollama" : undefined}
-              browseSource="remote"
-              customModels={card.manageModels}
-              disabled={card.busy}
-              displayName={instance.label}
-              displayNameError={null}
-              hostMode={instance.hostMode ?? undefined}
-              identityReadOnly
-              modelsError={null}
-              onBaseUrlChange={() => {}}
-              onCustomModelsChange={card.handleManageModelsChange}
-              onDisplayNameChange={() => {}}
-              providerInstanceId={instance.id}
-              remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
-            />
-          ) : null}
-          {card.isOpenRouter ? (
-            <OpenRouterProviderModelFields
-              customModels={card.manageModels}
-              disabled={card.busy}
-              modelsError={card.dialogError}
-              onCustomModelsChange={card.handleManageModelsChange}
-            />
-          ) : null}
-          {isShortlistBrowseProvider(card.providerType) ? (
-            <ShortlistBrowseProviderModelFields
-              customModels={card.manageModels}
-              disabled={card.busy}
-              modelsError={card.dialogError}
-              onCustomModelsChange={card.handleManageModelsChange}
-              provider={card.providerType}
-              providerId={
-                card.providerType === "fireworks" ? instance.id : undefined
-              }
-            />
-          ) : null}
-          {card.isCatalogShortlist ? (
-            <CatalogProviderModelFields
-              catalogModels={card.catalogModelsForType}
-              customModels={card.manageModels}
-              disabled={card.busy}
-              modelsError={card.dialogError}
-              onCustomModelsChange={card.handleManageModelsChange}
-              provider={card.providerType as CatalogShortlistProvider}
-              providerInstanceId={instance.id}
-            />
-          ) : null}
+          <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
       ) : null}
+    </>
+  );
+}
+
+export function ProviderInstanceCard({
+  instance,
+  catalog,
+  onUpdate,
+  onDelete,
+  onError,
+  isSole = false,
+}: {
+  instance: ProviderInstanceSummary;
+  catalog: ProviderModelOption[];
+  onUpdate: (
+    providerId: string,
+    request: UpdateProviderRequest
+  ) => Promise<void>;
+  onDelete: (providerId: string) => Promise<void>;
+  onError: (error: string | null) => void;
+  isSole?: boolean;
+}) {
+  const card = useProviderInstanceCard({
+    catalog,
+    instance,
+    onDelete,
+    onError,
+    onUpdate,
+  });
+  const canManage = canManageProviderModels(card);
+
+  return (
+    <>
+      <ProviderInstanceTableRow
+        canManage={canManage}
+        card={card}
+        instance={instance}
+      />
+      <ProviderInstanceCardDialogs
+        canManage={canManage}
+        card={card}
+        instance={instance}
+        isSole={isSole}
+      />
     </>
   );
 }

@@ -21,7 +21,6 @@ describe("user context routes", () => {
       mcpService: {} as any,
       orgService: new OrgService(databaseAdapter, authService),
       systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
       webDistDir: null,
       workerManager: {} as any,
     });

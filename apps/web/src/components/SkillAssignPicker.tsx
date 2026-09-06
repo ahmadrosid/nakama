@@ -192,6 +192,115 @@ function SkillDeleteConfirmActions({
   );
 }
 
+function SkillRowPrimaryAction({
+  rowAction,
+  disabled,
+  assigningBash,
+  installingAgentBrowser,
+  skillDisabled,
+  onAssignBash,
+  onInstall,
+  onAdd,
+}: {
+  rowAction: AgentBrowserRowAction;
+  disabled: boolean;
+  assigningBash: boolean;
+  installingAgentBrowser: boolean;
+  skillDisabled: boolean;
+  onAssignBash: (event: SyntheticEvent) => void;
+  onInstall: (event: SyntheticEvent) => void;
+  onAdd: (event: SyntheticEvent) => void;
+}) {
+  if (rowAction === "add-bash") {
+    return (
+      <Button
+        className="[&_svg]:pointer-events-auto"
+        disabled={disabled || assigningBash}
+        onClick={(event) => void onAssignBash(event)}
+        onPointerDown={stopCommandItemSelect}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        {assigningBash ? (
+          <Spinner className="size-3.5" />
+        ) : (
+          <Add01Icon aria-hidden />
+        )}
+        Add bash
+      </Button>
+    );
+  }
+
+  if (rowAction === "install") {
+    return (
+      <Button
+        className="[&_svg]:pointer-events-auto"
+        disabled={disabled || installingAgentBrowser}
+        onClick={onInstall}
+        onPointerDown={stopCommandItemSelect}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        {installingAgentBrowser ? (
+          <Spinner className="size-3.5" />
+        ) : (
+          <Download04Icon aria-hidden />
+        )}
+        Install
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      className="[&_svg]:pointer-events-auto"
+      disabled={disabled || skillDisabled}
+      onClick={onAdd}
+      onPointerDown={stopCommandItemSelect}
+      size="xs"
+      type="button"
+      variant="outline"
+    >
+      <Add01Icon aria-hidden />
+      Add
+    </Button>
+  );
+}
+
+function SkillLibraryDeleteButton({
+  skill,
+  disabled,
+  canDelete,
+  onRequestDelete,
+}: {
+  skill: SkillSummary;
+  disabled: boolean;
+  canDelete: boolean;
+  onRequestDelete: (skill: SkillSummary, event: SyntheticEvent) => void;
+}) {
+  return (
+    <Button
+      aria-label={
+        canDelete
+          ? `Delete ${skill.name} from library`
+          : `${skill.name} is a bundled skill and cannot be deleted`
+      }
+      className="text-muted-foreground hover:text-destructive [&_svg]:pointer-events-auto"
+      disabled={disabled || !canDelete}
+      onClick={(event) => onRequestDelete(skill, event)}
+      onPointerDown={stopCommandItemSelect}
+      size="icon-sm"
+      title={canDelete ? undefined : "Bundled system skills cannot be deleted"}
+      type="button"
+      variant="ghost"
+    >
+      <Delete02Icon aria-hidden className="size-4" />
+    </Button>
+  );
+}
+
 function AvailableSkillActions({
   skill,
   rowAction,
@@ -221,74 +330,23 @@ function AvailableSkillActions({
 }) {
   return (
     <div className="pointer-events-auto flex shrink-0 items-center gap-1">
-      {rowAction === "add-bash" ? (
-        <Button
-          className="[&_svg]:pointer-events-auto"
-          disabled={disabled || assigningBash}
-          onClick={(event) => void onAssignBash(event)}
-          onPointerDown={stopCommandItemSelect}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          {assigningBash ? (
-            <Spinner className="size-3.5" />
-          ) : (
-            <Add01Icon aria-hidden />
-          )}
-          Add bash
-        </Button>
-      ) : rowAction === "install" ? (
-        <Button
-          className="[&_svg]:pointer-events-auto"
-          disabled={disabled || installingAgentBrowser}
-          onClick={onInstall}
-          onPointerDown={stopCommandItemSelect}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          {installingAgentBrowser ? (
-            <Spinner className="size-3.5" />
-          ) : (
-            <Download04Icon aria-hidden />
-          )}
-          Install
-        </Button>
-      ) : (
-        <Button
-          className="[&_svg]:pointer-events-auto"
-          disabled={disabled || skillDisabled}
-          onClick={onAdd}
-          onPointerDown={stopCommandItemSelect}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          <Add01Icon aria-hidden />
-          Add
-        </Button>
-      )}
+      <SkillRowPrimaryAction
+        assigningBash={assigningBash}
+        disabled={disabled}
+        installingAgentBrowser={installingAgentBrowser}
+        onAdd={onAdd}
+        onAssignBash={onAssignBash}
+        onInstall={onInstall}
+        rowAction={rowAction}
+        skillDisabled={skillDisabled}
+      />
       {onDelete ? (
-        <Button
-          aria-label={
-            canDelete
-              ? `Delete ${skill.name} from library`
-              : `${skill.name} is a bundled skill and cannot be deleted`
-          }
-          className="text-muted-foreground hover:text-destructive [&_svg]:pointer-events-auto"
-          disabled={disabled || !canDelete}
-          onClick={(event) => onRequestDelete(skill, event)}
-          onPointerDown={stopCommandItemSelect}
-          size="icon-sm"
-          title={
-            canDelete ? undefined : "Bundled system skills cannot be deleted"
-          }
-          type="button"
-          variant="ghost"
-        >
-          <Delete02Icon aria-hidden className="size-4" />
-        </Button>
+        <SkillLibraryDeleteButton
+          canDelete={canDelete}
+          disabled={disabled}
+          onRequestDelete={onRequestDelete}
+          skill={skill}
+        />
       ) : null}
     </div>
   );
@@ -447,6 +505,322 @@ function OnProfileSkillCommandItem({
   );
 }
 
+function isAgentBrowserSkillDisabled(
+  skill: SkillSummary,
+  agentBrowserReady: boolean | undefined,
+  bashAssigned: boolean
+): boolean {
+  return (
+    skill.name === AGENT_BROWSER_SKILL_NAME &&
+    (agentBrowserReady === false || !bashAssigned)
+  );
+}
+
+function resolveAgentBrowserRowAction(
+  skill: SkillSummary,
+  bashNeedsAssign: boolean,
+  onAssignBash: (() => void | Promise<void>) | undefined,
+  agentBrowserNeedsInstall: boolean
+): AgentBrowserRowAction {
+  if (skill.name !== AGENT_BROWSER_SKILL_NAME) {
+    return "add";
+  }
+
+  if (bashNeedsAssign && onAssignBash) {
+    return "add-bash";
+  }
+
+  if (agentBrowserNeedsInstall) {
+    return "install";
+  }
+
+  return "add";
+}
+
+function requestSkillDelete(
+  skill: SkillSummary,
+  event: SyntheticEvent,
+  onDelete: ((skillId: string) => void | Promise<void>) | undefined,
+  disabled: boolean,
+  canDelete: boolean,
+  setPendingDelete: (value: { id: string; name: string } | null) => void
+) {
+  stopCommandItemSelect(event);
+  if (!onDelete || disabled || !canDelete) {
+    return;
+  }
+  setPendingDelete({ id: skill.id, name: skill.name });
+}
+
+async function confirmSkillDelete(
+  onDelete: ((skillId: string) => void | Promise<void>) | undefined,
+  pendingDelete: { id: string; name: string } | null,
+  deleting: boolean,
+  setDeleting: (value: boolean) => void,
+  setPendingDelete: (value: { id: string; name: string } | null) => void
+) {
+  if (!(onDelete && pendingDelete) || deleting) {
+    return;
+  }
+
+  setDeleting(true);
+  try {
+    await onDelete(pendingDelete.id);
+    setPendingDelete(null);
+  } finally {
+    setDeleting(false);
+  }
+}
+
+async function assignBashTool(
+  event: SyntheticEvent,
+  onAssignBash: (() => void | Promise<void>) | undefined,
+  disabled: boolean,
+  bashAssigned: boolean,
+  assigningBash: boolean,
+  setAssigningBash: (value: boolean) => void
+) {
+  stopCommandItemSelect(event);
+  if (!onAssignBash || disabled || bashAssigned || assigningBash) {
+    return;
+  }
+
+  setAssigningBash(true);
+  try {
+    await onAssignBash();
+  } finally {
+    setAssigningBash(false);
+  }
+}
+
+function SkillAssignManageList({
+  availableSkills,
+  onProfileSkills,
+  disabled,
+  bashAssigned,
+  assigningBash,
+  installingAgentBrowser,
+  agentBrowserReady,
+  bashNeedsAssign,
+  agentBrowserNeedsInstall,
+  canDeleteLibrarySkills,
+  onAssign,
+  onDelete,
+  onAssignBash,
+  onInstall,
+  onRequestDelete,
+  setOpen,
+}: {
+  availableSkills: SkillSummary[];
+  onProfileSkills: SkillSummary[];
+  disabled: boolean;
+  bashAssigned: boolean;
+  assigningBash: boolean;
+  installingAgentBrowser: boolean;
+  agentBrowserReady: boolean | undefined;
+  bashNeedsAssign: boolean;
+  agentBrowserNeedsInstall: boolean;
+  canDeleteLibrarySkills: boolean;
+  onAssign: (skillId: string) => void | Promise<void>;
+  onDelete?: (skillId: string) => void | Promise<void>;
+  onAssignBash?: () => void | Promise<void>;
+  onInstall: (event: SyntheticEvent) => void;
+  onRequestDelete: (skill: SkillSummary, event: SyntheticEvent) => void;
+  setOpen: (open: boolean) => void;
+}) {
+  return (
+    <Command className="min-w-0 rounded-none bg-transparent">
+      <div className="min-w-0 border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
+        <CommandInput placeholder="Search skills…" />
+      </div>
+      <CommandList className="max-h-72 min-w-0 p-2">
+        <CommandEmpty>No skills found.</CommandEmpty>
+
+        {availableSkills.length > 0 ? (
+          <CommandGroup className="space-y-1" heading="Add to profile">
+            {availableSkills.map((skill) => {
+              const skillDisabled = isAgentBrowserSkillDisabled(
+                skill,
+                agentBrowserReady,
+                bashAssigned
+              );
+
+              return (
+                <AvailableSkillCommandItem
+                  agentBrowserDisabled={skillDisabled}
+                  assigningBash={assigningBash}
+                  bashAssigned={bashAssigned}
+                  canDelete={
+                    canDeleteLibrarySkills && isUserLibrarySkill(skill)
+                  }
+                  commandItemDisabled={disabled}
+                  disabled={disabled}
+                  installingAgentBrowser={installingAgentBrowser}
+                  key={skill.id}
+                  onAdd={(event) => {
+                    stopCommandItemSelect(event);
+                    if (skillDisabled) {
+                      return;
+                    }
+                    assignSkill(skill.id, onAssign, setOpen);
+                  }}
+                  onAssignBash={onAssignBash ?? (() => {})}
+                  onDelete={onDelete}
+                  onInstall={onInstall}
+                  onRequestDelete={onRequestDelete}
+                  onSelect={() => {
+                    if (skillDisabled) {
+                      return;
+                    }
+                    assignSkill(skill.id, onAssign, setOpen);
+                  }}
+                  rowAction={resolveAgentBrowserRowAction(
+                    skill,
+                    bashNeedsAssign,
+                    onAssignBash,
+                    agentBrowserNeedsInstall
+                  )}
+                  skill={skill}
+                  skillDisabled={skillDisabled}
+                />
+              );
+            })}
+          </CommandGroup>
+        ) : null}
+
+        {availableSkills.length > 0 && onProfileSkills.length > 0 ? (
+          <CommandSeparator className="my-2" />
+        ) : null}
+
+        {onProfileSkills.length > 0 ? (
+          <CommandGroup className="space-y-1" heading="Already on this profile">
+            {onProfileSkills.map((skill) => (
+              <OnProfileSkillCommandItem
+                key={skill.id}
+                onDelete={onDelete}
+                skill={skill}
+              />
+            ))}
+          </CommandGroup>
+        ) : null}
+      </CommandList>
+    </Command>
+  );
+}
+
+function SkillAssignDialogBody({
+  pendingDelete,
+  deleting,
+  showAgentBrowserPrereqs,
+  agentBrowserNeedsInstall,
+  assigningBash,
+  bashNeedsAssign,
+  disabled,
+  agentBrowserInstallError,
+  agentBrowserInstallProgress,
+  onAssignBash,
+  onAssignBashClick,
+  availableSkills,
+  onProfileSkills,
+  bashAssigned,
+  installingAgentBrowser,
+  agentBrowserReady,
+  canDeleteLibrarySkills,
+  onAssign,
+  onDelete,
+  onInstall,
+  setOpen,
+  setPendingDelete,
+  setDeleting,
+}: {
+  pendingDelete: { id: string; name: string } | null;
+  deleting: boolean;
+  showAgentBrowserPrereqs: boolean;
+  agentBrowserNeedsInstall: boolean;
+  assigningBash: boolean;
+  bashNeedsAssign: boolean;
+  disabled: boolean;
+  agentBrowserInstallError: string | null;
+  agentBrowserInstallProgress: string | null;
+  onAssignBash?: () => void | Promise<void>;
+  onAssignBashClick: (event: SyntheticEvent) => void;
+  availableSkills: SkillSummary[];
+  onProfileSkills: SkillSummary[];
+  bashAssigned: boolean;
+  installingAgentBrowser: boolean;
+  agentBrowserReady: boolean | undefined;
+  canDeleteLibrarySkills: boolean;
+  onAssign: (skillId: string) => void | Promise<void>;
+  onDelete?: (skillId: string) => void | Promise<void>;
+  onInstall: (event: SyntheticEvent) => void;
+  setOpen: (open: boolean) => void;
+  setPendingDelete: (value: { id: string; name: string } | null) => void;
+  setDeleting: (value: boolean) => void;
+}) {
+  if (pendingDelete) {
+    return (
+      <SkillDeleteConfirmActions
+        deleting={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() =>
+          void confirmSkillDelete(
+            onDelete,
+            pendingDelete,
+            deleting,
+            setDeleting,
+            setPendingDelete
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <>
+      {showAgentBrowserPrereqs ? (
+        <AgentBrowserPrerequisitesNotice
+          agentBrowserNeedsInstall={agentBrowserNeedsInstall}
+          assigningBash={assigningBash}
+          bashNeedsAssign={bashNeedsAssign}
+          disabled={disabled}
+          installError={agentBrowserInstallError}
+          installProgress={agentBrowserInstallProgress}
+          onAssignBash={onAssignBash}
+          onAssignBashClick={onAssignBashClick}
+        />
+      ) : null}
+
+      <SkillAssignManageList
+        agentBrowserNeedsInstall={agentBrowserNeedsInstall}
+        agentBrowserReady={agentBrowserReady}
+        assigningBash={assigningBash}
+        availableSkills={availableSkills}
+        bashAssigned={bashAssigned}
+        bashNeedsAssign={bashNeedsAssign}
+        canDeleteLibrarySkills={canDeleteLibrarySkills}
+        disabled={disabled}
+        installingAgentBrowser={installingAgentBrowser}
+        onAssign={onAssign}
+        onAssignBash={onAssignBash}
+        onDelete={onDelete}
+        onInstall={onInstall}
+        onProfileSkills={onProfileSkills}
+        onRequestDelete={(skill, event) =>
+          requestSkillDelete(
+            skill,
+            event,
+            onDelete,
+            disabled,
+            canDeleteLibrarySkills && isUserLibrarySkill(skill),
+            setPendingDelete
+          )
+        }
+        setOpen={setOpen}
+      />
+    </>
+  );
+}
+
 export function SkillAssignPicker({
   skills,
   assignedSkillIds = new Set(),
@@ -496,68 +870,6 @@ export function SkillAssignPicker({
     hasAgentBrowserSkill && (agentBrowserNeedsInstall || bashNeedsAssign);
   const installingAgentBrowser = installAgentBrowserMutation.isPending;
 
-  function isAgentBrowserDisabled(skill: SkillSummary): boolean {
-    return (
-      skill.name === AGENT_BROWSER_SKILL_NAME &&
-      (agentBrowserSettings?.ready === false || !bashAssigned)
-    );
-  }
-
-  function isCommandItemDisabled(): boolean {
-    if (disabled) {
-      return true;
-    }
-
-    // Keep agent-browser rows interactive so Install / Add bash buttons stay clickable.
-    return false;
-  }
-
-  function isSkillDisabled(skill: SkillSummary): boolean {
-    return isAgentBrowserDisabled(skill);
-  }
-
-  function agentBrowserRowAction(skill: SkillSummary): AgentBrowserRowAction {
-    if (skill.name !== AGENT_BROWSER_SKILL_NAME) {
-      return "add";
-    }
-
-    if (bashNeedsAssign && onAssignBash) {
-      return "add-bash";
-    }
-
-    if (agentBrowserNeedsInstall) {
-      return "install";
-    }
-
-    return "add";
-  }
-
-  function canDeleteSkill(skill: SkillSummary): boolean {
-    return canDeleteLibrarySkills && isUserLibrarySkill(skill);
-  }
-
-  function requestDelete(skill: SkillSummary, event: SyntheticEvent) {
-    stopCommandItemSelect(event);
-    if (!onDelete || disabled || !canDeleteSkill(skill)) {
-      return;
-    }
-    setPendingDelete({ id: skill.id, name: skill.name });
-  }
-
-  async function confirmDelete() {
-    if (!(onDelete && pendingDelete) || deleting) {
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      await onDelete(pendingDelete.id);
-      setPendingDelete(null);
-    } finally {
-      setDeleting(false);
-    }
-  }
-
   function handleInstallAgentBrowser(event: SyntheticEvent) {
     stopCommandItemSelect(event);
     if (disabled || installingAgentBrowser || !bashAssigned) {
@@ -589,20 +901,6 @@ export function SkillAssignPicker({
         },
       }
     );
-  }
-
-  async function handleAssignBash(event: SyntheticEvent) {
-    stopCommandItemSelect(event);
-    if (!onAssignBash || disabled || bashAssigned || assigningBash) {
-      return;
-    }
-
-    setAssigningBash(true);
-    try {
-      await onAssignBash();
-    } finally {
-      setAssigningBash(false);
-    }
   }
 
   if (librarySkills.length === 0) {
@@ -646,96 +944,40 @@ export function SkillAssignPicker({
             </DialogDescription>
           </DialogHeader>
 
-          {pendingDelete ? (
-            <SkillDeleteConfirmActions
-              deleting={deleting}
-              onCancel={() => setPendingDelete(null)}
-              onConfirm={() => void confirmDelete()}
-            />
-          ) : (
-            <>
-              {showAgentBrowserPrereqs ? (
-                <AgentBrowserPrerequisitesNotice
-                  agentBrowserNeedsInstall={agentBrowserNeedsInstall}
-                  assigningBash={assigningBash}
-                  bashNeedsAssign={bashNeedsAssign}
-                  disabled={disabled}
-                  installError={agentBrowserInstallError}
-                  installProgress={agentBrowserInstallProgress}
-                  onAssignBash={onAssignBash}
-                  onAssignBashClick={handleAssignBash}
-                />
-              ) : null}
-
-              <Command className="min-w-0 rounded-none bg-transparent">
-                <div className="min-w-0 border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
-                  <CommandInput placeholder="Search skills…" />
-                </div>
-                <CommandList className="max-h-72 min-w-0 p-2">
-                  <CommandEmpty>No skills found.</CommandEmpty>
-
-                  {availableSkills.length > 0 ? (
-                    <CommandGroup
-                      className="space-y-1"
-                      heading="Add to profile"
-                    >
-                      {availableSkills.map((skill) => (
-                        <AvailableSkillCommandItem
-                          agentBrowserDisabled={isAgentBrowserDisabled(skill)}
-                          assigningBash={assigningBash}
-                          bashAssigned={bashAssigned}
-                          canDelete={canDeleteSkill(skill)}
-                          commandItemDisabled={isCommandItemDisabled()}
-                          disabled={disabled}
-                          installingAgentBrowser={installingAgentBrowser}
-                          key={skill.id}
-                          onAdd={(event) => {
-                            stopCommandItemSelect(event);
-                            if (isSkillDisabled(skill)) {
-                              return;
-                            }
-                            assignSkill(skill.id, onAssign, setOpen);
-                          }}
-                          onAssignBash={handleAssignBash}
-                          onDelete={onDelete}
-                          onInstall={handleInstallAgentBrowser}
-                          onRequestDelete={requestDelete}
-                          onSelect={() => {
-                            if (isSkillDisabled(skill)) {
-                              return;
-                            }
-                            assignSkill(skill.id, onAssign, setOpen);
-                          }}
-                          rowAction={agentBrowserRowAction(skill)}
-                          skill={skill}
-                          skillDisabled={isSkillDisabled(skill)}
-                        />
-                      ))}
-                    </CommandGroup>
-                  ) : null}
-
-                  {availableSkills.length > 0 && onProfileSkills.length > 0 ? (
-                    <CommandSeparator className="my-2" />
-                  ) : null}
-
-                  {onProfileSkills.length > 0 ? (
-                    <CommandGroup
-                      className="space-y-1"
-                      heading="Already on this profile"
-                    >
-                      {onProfileSkills.map((skill) => (
-                        <OnProfileSkillCommandItem
-                          key={skill.id}
-                          onDelete={onDelete}
-                          skill={skill}
-                        />
-                      ))}
-                    </CommandGroup>
-                  ) : null}
-                </CommandList>
-              </Command>
-            </>
-          )}
+          <SkillAssignDialogBody
+            agentBrowserInstallError={agentBrowserInstallError}
+            agentBrowserInstallProgress={agentBrowserInstallProgress}
+            agentBrowserNeedsInstall={agentBrowserNeedsInstall}
+            agentBrowserReady={agentBrowserSettings?.ready}
+            assigningBash={assigningBash}
+            availableSkills={availableSkills}
+            bashAssigned={bashAssigned}
+            bashNeedsAssign={bashNeedsAssign}
+            canDeleteLibrarySkills={canDeleteLibrarySkills}
+            deleting={deleting}
+            disabled={disabled}
+            installingAgentBrowser={installingAgentBrowser}
+            onAssign={onAssign}
+            onAssignBash={onAssignBash}
+            onAssignBashClick={(event) =>
+              void assignBashTool(
+                event,
+                onAssignBash,
+                disabled,
+                bashAssigned,
+                assigningBash,
+                setAssigningBash
+              )
+            }
+            onDelete={onDelete}
+            onInstall={handleInstallAgentBrowser}
+            onProfileSkills={onProfileSkills}
+            pendingDelete={pendingDelete}
+            setDeleting={setDeleting}
+            setOpen={setOpen}
+            setPendingDelete={setPendingDelete}
+            showAgentBrowserPrereqs={showAgentBrowserPrereqs}
+          />
         </DialogContent>
       </Dialog>
     </>

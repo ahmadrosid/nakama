@@ -152,6 +152,14 @@ export function buildJsonLd(
   };
 }
 
+/** JSON.stringify does not HTML-escape; unicode-escape markup so `</script>` cannot break out. */
+export function serializeJsonForHtml(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+}
+
 export function buildPageMetadata(
   relativePath: string,
   fallbackTitle?: string
@@ -351,6 +359,8 @@ export function buildLlmsTxt(pages: string[]) {
     },
   ] as const;
 
+  const pageSet = new Set(pages);
+
   const formatDocLine = (page: string) => {
     const title = page === "index.md" ? "Home" : getPageTitle(page);
     return `- [${title}](${getMarkdownUrl(page)}): ${getPageDescription(page)}`;
@@ -388,14 +398,16 @@ export function buildLlmsTxt(pages: string[]) {
         `- ${topics} → [${getPageTitle(page)}](${getMarkdownUrl(page)})`
     ),
     "",
-    ...docSections.flatMap((section) => [
-      `## Docs — ${section.heading}`,
-      "",
-      ...section.pages
-        .filter((page) => pages.includes(page))
-        .map(formatDocLine),
-      "",
-    ]),
+    ...docSections.flatMap((section) => {
+      const sectionLines = [`## Docs — ${section.heading}`, ""];
+      for (const page of section.pages) {
+        if (pageSet.has(page)) {
+          sectionLines.push(formatDocLine(page));
+        }
+      }
+      sectionLines.push("");
+      return sectionLines;
+    }),
     "## All pages",
     "",
     ...pages.map(formatDocLine),

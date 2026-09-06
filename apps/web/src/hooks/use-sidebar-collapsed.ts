@@ -6,36 +6,30 @@ import {
   SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY,
 } from "@/lib/sidebar";
 
-export function useSidebarCollapsed() {
-  const [collapsed, setCollapsedState] = useState(getInitialSidebarCollapsed);
+function useLocalStorageFlag(key: string, getInitial: () => boolean) {
+  const [collapsed, setCollapsed] = useState(getInitial);
 
   useEffect(() => {
     try {
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+      localStorage.setItem(key, String(collapsed));
     } catch {
       // Ignore storage failures (private browsing, etc.)
     }
-  }, [collapsed]);
-
-  return {
-    collapsed,
-    toggle: () => setCollapsedState((current) => !current),
-  };
-}
-
-export function useSystemNavCollapsed() {
-  const [collapsed, setCollapsed] = useState(getInitialSystemNavCollapsed);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY, String(collapsed));
-    } catch {
-      // Ignore storage failures (private browsing, etc.)
-    }
-  }, [collapsed]);
+  }, [collapsed, key]);
 
   return {
     collapsed,
     toggle: () => setCollapsed((current) => !current),
   };
+}
+
+export function useSidebarCollapsed() {
+  return useLocalStorageFlag(SIDEBAR_COLLAPSED_KEY, getInitialSidebarCollapsed);
+}
+
+export function useSystemNavCollapsed() {
+  return useLocalStorageFlag(
+    SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY,
+    getInitialSystemNavCollapsed
+  );
 }

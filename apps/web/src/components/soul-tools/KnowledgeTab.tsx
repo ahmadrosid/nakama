@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useDeleteKnowledgeBaseDocumentMutation,
@@ -181,24 +182,26 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   }
 
   return (
-    <>
-      {error ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
-          {error}
-        </p>
-      ) : null}
+    <ChatAttachmentPanelProvider presentation="overlay">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+        {error ? (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
+            {error}
+          </p>
+        ) : null}
 
-      <KnowledgeTabPanel
-        busy={busy}
-        documents={documents}
-        fileInputRef={fileInputRef}
-        onDeleteDocument={setDeleteTarget}
-        onUpload={(files) => void handleUpload(files)}
-        profileId={profileId}
-        readyCount={readyCount}
-        sources={sources}
-        uploadPending={uploadMutation.isPending}
-      />
+        <KnowledgeTabPanel
+          busy={busy}
+          documents={documents}
+          fileInputRef={fileInputRef}
+          onDeleteDocument={setDeleteTarget}
+          onUpload={(files) => void handleUpload(files)}
+          profileId={profileId}
+          readyCount={readyCount}
+          sources={sources}
+          uploadPending={uploadMutation.isPending}
+        />
+      </div>
 
       <Dialog
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -272,6 +275,6 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </ChatAttachmentPanelProvider>
   );
 }

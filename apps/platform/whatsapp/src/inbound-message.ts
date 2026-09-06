@@ -13,6 +13,7 @@ import {
 
 interface WhatsAppInboundKey {
   fromMe?: boolean | null;
+  id?: string | null;
   participant?: string | null;
   participantLid?: string | null;
   participantPn?: string | null;
@@ -27,11 +28,65 @@ export interface WhatsAppInboundChat {
   jid: string;
   me?: WhatsAppAccount;
   mentionedJids: string[];
+  messageId: string | null;
   quotedParticipant: string | null;
   quotedText: string | null;
   senderJid: string;
   senderJids: string[];
   text: string;
+}
+
+const OUTBOUND_TTL_MS = 120_000;
+const outboundSeenAt = new Map<string, number>();
+
+export function rememberWhatsAppOutbound(input: {
+  id?: string | null;
+  jid: string;
+  text?: string | null;
+}): void {
+  const now = Date.now();
+  pruneWhatsAppOutbound(now);
+  const id = input.id?.trim();
+  if (id) {
+    outboundSeenAt.set(`id:${input.jid}:${id}`, now);
+  }
+
+  const text = input.text?.trim();
+  if (text) {
+    outboundSeenAt.set(`text:${input.jid}:${text}`, now);
+  }
+}
+
+export function isWhatsAppOutboundEcho(input: {
+  fromMe: boolean;
+  id?: string | null;
+  jid: string;
+  text: string;
+}): boolean {
+  pruneWhatsAppOutbound(Date.now());
+  const id = input.id?.trim();
+  if (!input.fromMe) {
+    return false;
+  }
+
+  if (id && outboundSeenAt.has(`id:${input.jid}:${id}`)) {
+    return true;
+  }
+
+  const text = input.text.trim();
+  return Boolean(text && outboundSeenAt.has(`text:${input.jid}:${text}`));
+}
+
+export function resetWhatsAppOutboundForTests(): void {
+  outboundSeenAt.clear();
+}
+
+function pruneWhatsAppOutbound(now: number): void {
+  for (const [key, seenAt] of outboundSeenAt) {
+    if (now - seenAt > OUTBOUND_TTL_MS) {
+      outboundSeenAt.delete(key);
+    }
+  }
 }
 
 export function isPrivateWhatsAppChat(jid: string): boolean {
@@ -100,9 +155,10 @@ export function shouldHandleInboundMessage(
     key: WhatsAppInboundKey;
     message?: proto.IMessage | null;
   },
-  me: WhatsAppAccount | undefined
+  me: WhatsAppAccount | undefined,
+  options?: { requireGroupMention?: boolean }
 ): boolean {
-  return parseInboundWhatsAppMessage(msg, me) !== null;
+  return parseInboundWhatsAppMessage(msg, me, options) !== null;
 }
 
 export function parseInboundWhatsAppMessage(
@@ -110,7 +166,8 @@ export function parseInboundWhatsAppMessage(
     key: WhatsAppInboundKey;
     message?: proto.IMessage | null;
   },
-  me: WhatsAppAccount | undefined
+  me: WhatsAppAccount | undefined,
+  options?: { requireGroupMention?: boolean }
 ): WhatsAppInboundChat | null {
   const remoteJid = msg.key.remoteJid;
   const text = extractInboundText(msg.message);
@@ -130,6 +187,7 @@ export function parseInboundWhatsAppMessage(
       me,
       mentionedJids,
       quotedParticipant,
+      requireMention: options?.requireGroupMention,
       text,
     });
 
@@ -155,6 +213,7 @@ export function parseInboundWhatsAppMessage(
     jid: remoteJid,
     me,
     mentionedJids,
+    messageId: msg.key.id?.trim() || null,
     quotedParticipant,
     quotedText,
     senderJid,
@@ -169,6 +228,15 @@ function collectSenderJids(
   isGroup: boolean,
   me: WhatsAppAccount | undefined
 ): string[] {
+  const record = key as WhatsAppInboundKey & Record<string, unknown>;
+  const extraIdentities = [
+    record.participantAlt,
+    record.remoteJidAlt,
+    record.senderPn,
+    record.participantPn,
+    record.senderLid,
+    record.participantLid,
+  ];
   const candidates = isGroup
     ? [
         key.participantPn,
@@ -176,6 +244,7 @@ function collectSenderJids(
         key.participant,
         key.participantLid,
         key.senderLid,
+        ...extraIdentities,
         key.fromMe && me ? me.id : null,
         key.fromMe && me?.lid ? me.lid : null,
       ]
@@ -186,9 +255,16 @@ function collectSenderJids(
         key.participant,
         key.participantPn,
         key.participantLid,
+        ...extraIdentities,
       ];
 
-  return [...new Set(candidates.filter((jid): jid is string => Boolean(jid)))];
+  return [
+    ...new Set(
+      candidates.filter(
+        (jid): jid is string => typeof jid === "string" && Boolean(jid)
+      )
+    ),
+  ];
 }
 
 function extractContextInfo(

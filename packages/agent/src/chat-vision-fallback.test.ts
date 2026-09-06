@@ -4,7 +4,7 @@ import {
   replaceImagePartsWithDescriptions,
   resolveMessagesForNonVisionProvider,
 } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 
 const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -54,23 +54,25 @@ describe("preprocessUserContent vision fallback", () => {
       },
     };
 
-    const harness = createAgentHarness({ provider: wrappedProvider });
-    const session = harness.createChatSession({
-      preprocessUserContent: async (content) => {
-        if (typeof content === "string") {
-          return content;
-        }
+    const session = createAgentChatSession(
+      { provider: wrappedProvider },
+      {
+        preprocessUserContent: async (content) => {
+          if (typeof content === "string") {
+            return content;
+          }
 
-        const hasImage = content.some((part) => part.type === "image");
-        if (!hasImage) {
-          return content;
-        }
+          const hasImage = content.some((part) => part.type === "image");
+          if (!hasImage) {
+            return content;
+          }
 
-        return replaceImagePartsWithDescriptions(content, [
-          "A small red square.",
-        ]);
-      },
-    });
+          return replaceImagePartsWithDescriptions(content, [
+            "A small red square.",
+          ]);
+        },
+      }
+    );
 
     const reply = await session.send({
       images: [{ data: tinyPngBase64, mediaType: "image/png" }],

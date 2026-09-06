@@ -65,6 +65,15 @@ describe("isWhatsAppUserAuthorized", () => {
     ).toBe(true);
   });
 
+  test("returns true when pairedLid includes a device suffix", () => {
+    expect(
+      isWhatsAppUserAuthorized("128415361462410@lid", {
+        pairedJid: "6281379292556@s.whatsapp.net",
+        pairedLid: "128415361462410:25@lid",
+      })
+    ).toBe(true);
+  });
+
   test("returns true when pairedJid includes a device suffix", () => {
     expect(
       isWhatsAppUserAuthorized("6281379292556@s.whatsapp.net", {
@@ -192,6 +201,23 @@ describe("saveWhatsAppConfig", () => {
       expect(saved?.allowedPhones).toEqual(["6281111111111", "628222222222"]);
     });
   });
+
+  test("saves requireGroupMention and defaults to true when omitted", async () => {
+    await withTempHomedir("nakama-core-wa-home-", async () => {
+      const created = await saveWhatsAppConfig({ profileId: "default" });
+      expect(created.requireGroupMention).toBe(true);
+      expect((await loadWhatsAppConfigFile())?.requireGroupMention).toBe(true);
+
+      const updated = await saveWhatsAppConfig({
+        requireGroupMention: false,
+      });
+      expect(updated.requireGroupMention).toBe(false);
+      expect((await loadWhatsAppConfigFile())?.requireGroupMention).toBe(false);
+
+      const preserved = await saveWhatsAppConfig({ profileId: "default" });
+      expect(preserved.requireGroupMention).toBe(false);
+    });
+  });
 });
 
 describe("resetWhatsAppSessionForReconnect", () => {
@@ -292,6 +318,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
         pairingCode: null,
         phoneNumber: "+9876543210",
         profileId: "profile_from_file",
+        requireGroupMention: true,
       },
     });
 
@@ -302,6 +329,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
       pairingCode: null,
       phoneNumber: "+1234567890",
       profileId: "profile_from_file",
+      requireGroupMention: true,
     });
   });
 
@@ -315,11 +343,13 @@ describe("resolveWhatsAppConfigFromSources", () => {
         pairingCode: "ABCD1234",
         phoneNumber: "",
         profileId: "profile_from_file",
+        requireGroupMention: false,
       },
     });
 
     expect(resolved?.phoneNumber).toBe("");
     expect(resolved?.pairedJid).toBe("9876543210@s.whatsapp.net");
+    expect(resolved?.requireGroupMention).toBe(false);
   });
 });
 

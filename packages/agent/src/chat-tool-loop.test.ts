@@ -6,7 +6,7 @@ import type {
   ProviderClient,
   ToolDefinition,
 } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 
 function createMockProvider(responses: ChatCompletionResult[]): ProviderClient {
   let callIndex = 0;
@@ -94,8 +94,10 @@ describe("agent chat tool loop", () => {
       },
     ]);
 
-    const harness = createAgentHarness({ provider, tools: [sampleTool] });
-    const session = harness.createChatSession({ tools: [sampleTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [sampleTool] },
+      { tools: [sampleTool] }
+    );
     const reply = await session.send("say hi");
 
     expect(reply).toBe("Done");
@@ -138,8 +140,10 @@ describe("agent chat tool loop", () => {
       },
     ]);
 
-    const harness = createAgentHarness({ provider, tools: [sampleTool] });
-    const session = harness.createChatSession({ tools: [sampleTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [sampleTool] },
+      { tools: [sampleTool] }
+    );
     const events: string[] = [];
 
     await session.sendStream("go", {
@@ -204,8 +208,10 @@ describe("agent chat tool loop", () => {
       },
     ]);
 
-    const harness = createAgentHarness({ provider, tools: [parallelTool] });
-    const session = harness.createChatSession({ tools: [parallelTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [parallelTool] },
+      { tools: [parallelTool] }
+    );
     const events: string[] = [];
 
     await session.sendStream("go", {
@@ -280,8 +286,10 @@ describe("agent chat tool loop", () => {
       },
     ]);
 
-    const harness = createAgentHarness({ provider, tools: [parallelTool] });
-    const session = harness.createChatSession({ tools: [parallelTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [parallelTool] },
+      { tools: [parallelTool] }
+    );
     const reply = await session.send("run both");
 
     expect(reply).toBe("Done");
@@ -371,13 +379,15 @@ describe("agent chat tool loop", () => {
       },
     ]);
 
-    const harness = createAgentHarness({
-      provider,
-      tools: [parallelTool, sequentialTool],
-    });
-    const session = harness.createChatSession({
-      tools: [parallelTool, sequentialTool],
-    });
+    const session = createAgentChatSession(
+      {
+        provider,
+        tools: [parallelTool, sequentialTool],
+      },
+      {
+        tools: [parallelTool, sequentialTool],
+      }
+    );
     await session.send("run mixed");
 
     expect(maxActive).toBe(1);
@@ -400,8 +410,10 @@ describe("agent chat tool loop", () => {
       },
     ]);
 
-    const harness = createAgentHarness({ provider, tools: [sampleTool] });
-    const session = harness.createChatSession({ tools: [sampleTool] });
+    const session = createAgentChatSession(
+      { provider, tools: [sampleTool] },
+      { tools: [sampleTool] }
+    );
 
     await expect(session.send("say hi")).rejects.toThrow(
       "Unexpected provider call 2"
@@ -433,11 +445,13 @@ describe("agent chat tool loop", () => {
       },
     };
 
-    const harness = createAgentHarness({ provider });
-    const session = harness.createChatSession({
-      resolvePromptContext: () =>
-        "# Active Task Plan\n- [pending] Ship (id: 1)",
-    });
+    const session = createAgentChatSession(
+      { provider },
+      {
+        resolvePromptContext: () =>
+          "# Active Task Plan\n- [pending] Ship (id: 1)",
+      }
+    );
 
     await session.send("hello");
 

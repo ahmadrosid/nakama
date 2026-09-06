@@ -36,6 +36,7 @@ import {
 } from "@nakama/core";
 import {
   buildChatSystemPrompt,
+  buildWebSearchUnavailableGuidance,
   UNTRUSTED_DOCUMENT_GUIDANCE,
 } from "./chat-prompt";
 import {
@@ -45,11 +46,12 @@ import {
   providerReplaysThinking,
   usableContextTokens,
 } from "./history-compaction";
+import { parseAutomationResponse } from "./parse";
 import {
-  canRunToolCallsInParallel,
-  executeToolCall,
-  serializeToolResult,
-} from "./tool-loop";
+  buildAutomationSystemPrompt,
+  buildAutomationUserPrompt,
+} from "./prompt";
+import { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
 
@@ -126,14 +128,30 @@ export interface AgentChatSessionOptions {
   userTimezone?: string;
 }
 
+export async function createAutomationFromPrompt(
+  dependencies: AgentDependencies,
+  request: AgentRequest,
+  options?: { tools?: ToolDefinition[] }
+): Promise<AutomationDefinition> {
+  const tools = options?.tools ?? dependencies.tools ?? [];
+
+  if (!dependencies.provider) {
+    throw new Error("Provider is not configured.");
+  }
+
+  const result = await dependencies.provider.generateText({
+    prompt: buildAutomationUserPrompt(request.prompt, request.channel),
+    system: buildAutomationSystemPrompt(tools),
+  });
+
+  return parseAutomationResponse(result.content, {
+    prompt: request.prompt,
+    tools,
+  });
+}
+
 export function createAgentChatSession(
   dependencies: AgentDependencies,
-  harness: {
-    createAutomationFromPrompt(
-      request: AgentRequest,
-      options?: { tools?: ToolDefinition[] }
-    ): Promise<AutomationDefinition>;
-  },
   options: AgentChatSessionOptions = {}
 ): AgentChatSession {
   const channel = options.channel ?? "cli";
@@ -275,7 +293,11 @@ export function createAgentChatSession(
       return runCompaction(options?.force ?? false);
     },
     createAutomation(prompt) {
-      return harness.createAutomationFromPrompt({ channel, prompt }, { tools });
+      return createAutomationFromPrompt(
+        dependencies,
+        { channel, prompt },
+        { tools }
+      );
     },
     getContextUsage() {
       return lastContextUsage ?? estimateCurrentContextUsage();
@@ -400,14 +422,20 @@ async function sendMessage(
     enableTools && localTools.length > 0
       ? toLlmToolDefinitions(localTools)
       : undefined;
+  // Hosted search is dropped wherever the provider cannot serve it: OpenRouter
+  // has no hosted-search path, Gemini rejects googleSearch grounding beside
+  // function declarations, and no provider accepts it beside attachments. The
+  // model is told when that happens, otherwise the capability disappears from
+  // the turn without a word.
+  const hostedWebSearch =
+    enableTools &&
+    hasWebSearch &&
+    dependencies.provider.name !== "openrouter" &&
+    !(dependencies.provider.name === "gemini" && localTools.length > 0) &&
+    !multimodalTurn;
   const providerOptions = buildProviderOptions(dependencies, {
     multimodalTurn,
-    webSearch:
-      enableTools &&
-      hasWebSearch &&
-      dependencies.provider.name !== "openrouter" &&
-      !(dependencies.provider.name === "gemini" && localTools.length > 0) &&
-      !multimodalTurn,
+    webSearch: hostedWebSearch,
   });
 
   if (options.runCompaction) {
@@ -428,6 +456,9 @@ async function sendMessage(
     !effectiveSystemPrompt.includes("untrusted document data")
   ) {
     effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${UNTRUSTED_DOCUMENT_GUIDANCE}`;
+  }
+  if (enableTools && hasWebSearch && !hostedWebSearch) {
+    effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${buildWebSearchUnavailableGuidance(localTools)}`;
   }
   const baseToolContext =
     input.clientOrigin?.trim() && options.toolContext
@@ -629,7 +660,7 @@ async function executeToolCalls(
 
     for (const call of toolCalls) {
       history.push({
-        content: serializeToolResult(resultsByCallId.get(call.id)),
+        content: JSON.stringify(resultsByCallId.get(call.id)),
         name: call.name,
         role: "tool",
         toolCallId: call.id,
@@ -655,7 +686,7 @@ async function executeToolCalls(
     });
 
     history.push({
-      content: serializeToolResult(result),
+      content: JSON.stringify(result),
       name: call.name,
       role: "tool",
       toolCallId: call.id,

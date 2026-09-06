@@ -6,6 +6,7 @@ import {
   getUserMessageText,
   normalizeUserContent,
   parseDataUrl,
+  parseDocumentDataUrl,
   stripImagesForCompaction,
   validateCombinedAttachmentCount,
   validateDocumentAttachments,
@@ -225,8 +226,44 @@ describe("parseDataUrl", () => {
     });
   });
 
+  test("parses data url with parameters", () => {
+    expect(
+      parseDataUrl(`data:image/png;charset=utf-8;base64,${tinyPngBase64}`)
+    ).toEqual({
+      data: tinyPngBase64,
+      mediaType: "image/png",
+    });
+  });
+
   test("returns null for invalid url", () => {
     expect(parseDataUrl("not-a-data-url")).toBeNull();
+  });
+});
+
+describe("parseDocumentDataUrl", () => {
+  test("parses document data url with charset parameter", () => {
+    const doc = parseDocumentDataUrl(
+      "data:text/markdown;charset=utf-8;base64,IyBRQSBkb2M=",
+      "qa-test.md"
+    );
+    expect(doc).toEqual({
+      data: "IyBRQSBkb2M=",
+      filename: "qa-test.md",
+      mediaType: "text/markdown",
+    });
+  });
+
+  test("parses document data url without explicit mediatype", () => {
+    const doc = parseDocumentDataUrl("data:;base64,IyBRQSBkb2M=", "qa-test.md");
+    expect(doc).toEqual({
+      data: "IyBRQSBkb2M=",
+      filename: "qa-test.md",
+      mediaType: "text/markdown",
+    });
+  });
+
+  test("returns null for non-data url", () => {
+    expect(parseDocumentDataUrl("invalid", "doc.txt")).toBeNull();
   });
 });
 

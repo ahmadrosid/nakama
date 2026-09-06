@@ -19,7 +19,7 @@ import {
   emailSettingsQueryOptions,
   useSaveEmailSettings,
   useSendEmailTest,
-} from "@/hooks/use-email-settings";
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 type EmailSettingsState = {

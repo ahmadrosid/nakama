@@ -1,7 +1,7 @@
 import { isAbsolute, join } from "node:path";
 import { getUserConfigDir } from "../user-config";
-import { getSoulStatus, loadSoulStack } from "./load";
-import type { LoadedSoulStack, SoulStatus } from "./types";
+import { loadSoulStack } from "./load";
+import type { LoadedSoulStack } from "./types";
 
 /** Reject path segments that would escape `~/.nakama/orgs/{id}/...`. */
 export function assertConfigPathSegment(value: string, label: string): string {
@@ -123,11 +123,4 @@ export async function resolveSoulStackForProfile(
 ): Promise<LoadedSoulStack | null> {
   const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
   return stack.loaded.length > 0 ? stack : null;
-}
-
-export async function getResolvedSoulStatus(
-  orgId: string,
-  profileId: string
-): Promise<SoulStatus> {
-  return getSoulStatus(getProfileSoulDir(orgId, profileId));
 }

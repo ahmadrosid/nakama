@@ -22,7 +22,7 @@ export async function loadJavascriptTool(
   return loadCustomSubprocessTool({
     allowParallelSafe: true,
     record,
-    resolveModulePath: resolveJavascriptModulePath,
+    resolveModulePath: resolveCustomToolModulePath,
     run: runJavascriptTool,
     validateModule: validateJavascriptToolModule,
   });
@@ -31,7 +31,7 @@ export async function loadJavascriptTool(
 export async function validateJavascriptToolModule(
   modulePath: string
 ): Promise<void> {
-  const resolvedPath = resolveJavascriptModulePath(modulePath);
+  const resolvedPath = resolveCustomToolModulePath(modulePath);
 
   if (!(await pathExists(resolvedPath))) {
     throw new Error(`Tool module not found: ${modulePath}`);
@@ -48,10 +48,6 @@ export async function validateJavascriptToolModule(
   ) {
     throw new Error("Tool module must export a run(input, context) function.");
   }
-}
-
-export function resolveJavascriptModulePath(modulePath: string): string {
-  return resolveCustomToolModulePath(modulePath);
 }
 
 async function runJavascriptTool(

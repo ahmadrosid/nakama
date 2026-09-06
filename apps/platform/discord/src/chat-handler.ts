@@ -1,6 +1,9 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import { isAttachOnlyCommand } from "@nakama/core";
-import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
+import {
+  formatAgentQuestionnaireMessage,
+  hasActiveAgentQuestionnaire,
+} from "@nakama/core/agent-questionnaire";
 import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
@@ -17,6 +20,7 @@ import {
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { ImageAttachment, SendMessageInput } from "@nakama/core/contract";
 import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
 import {
@@ -43,6 +47,7 @@ import {
 } from "./channel-artifact-flow";
 import { isChannelDebugEnabled } from "./channel-log";
 import type { DiscordBridgeConfig } from "./config";
+import { DiscordEditableMessage } from "./editable-message";
 import { HELP_TEXT, splitDiscordMessage } from "./format";
 import {
   type DiscordBotInfo,
@@ -66,10 +71,8 @@ import {
   type DiscordMessenger,
   getMessageChannel,
 } from "./messenger";
-import { DiscordQuestionnaireMessage } from "./questionnaire-message";
 import type { ThreadStore } from "./thread-store";
 import { DiscordTodoStatusMessage } from "./todo-status-message";
-import { createTypingLoop } from "./typing-indicator";
 
 const chatLock = createChatLock({ waitMs: 15 * 60 * 1000 });
 const THREAD_OWNERSHIP_LOCK_KEY = "__discord_thread_ownership__";
@@ -720,9 +723,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       isThread
     );
 
-    const typingLoop = createTypingLoop(messenger);
+    const typingLoop = createTypingLoop(() => messenger.sendTyping(), {
+      refreshMs: 8000,
+    });
     const todoStatus = new DiscordTodoStatusMessage(messenger);
-    const questionnaireStatus = new DiscordQuestionnaireMessage(messenger);
+    const questionnaireStatus = new DiscordEditableMessage(messenger);
 
     let reply = "";
     let earlyAck: Promise<void> | undefined;
@@ -743,7 +748,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             typingLoop.ping();
             if (hasActiveAgentQuestionnaire(questionnaire)) {
               postedQuestionnaire = true;
-              void questionnaireStatus.update(questionnaire);
+              void questionnaireStatus.render(
+                formatAgentQuestionnaireMessage(questionnaire)
+              );
             }
           },
           onThinking: () => {

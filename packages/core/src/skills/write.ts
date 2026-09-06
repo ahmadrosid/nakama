@@ -1,4 +1,3 @@
-import { realpathSync } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -9,6 +8,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
+import { resolveWithRealpath } from "../tools/paths";
 import { getUserConfigDir } from "../user-config";
 import { BUNDLED_SKILL_NAMES } from "./bundled-names";
 import { isGlobalSkillSourcePath } from "./dedupe";
@@ -22,34 +22,6 @@ import {
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 const SKILL_NAME_PATTERN = /^[a-z0-9-]{1,64}$/;
-
-/**
- * Resolve a path with realpath when possible; if the leaf does not exist yet,
- * realpath the deepest existing parent and rejoin the remainder (same pattern as
- * packages/core/src/tools/paths.ts).
- */
-function resolveWithRealpath(targetPath: string): string {
-  const absolute = path.resolve(targetPath);
-  try {
-    return realpathSync(absolute);
-  } catch {
-    let dir = path.dirname(absolute);
-    const root = path.parse(dir).root;
-
-    while (true) {
-      try {
-        const resolvedDir = realpathSync(dir);
-        const relativeDir = path.relative(dir, path.dirname(absolute));
-        return path.resolve(resolvedDir, relativeDir, path.basename(absolute));
-      } catch {
-        if (dir === root) {
-          return absolute;
-        }
-        dir = path.dirname(dir);
-      }
-    }
-  }
-}
 
 function isResolvedWithinRoot(
   resolvedRoot: string,

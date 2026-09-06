@@ -1,4 +1,3 @@
-import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { JsonSchema, ToolContext, ToolDefinition } from "../contract";
 import { permissiveObjectSchema } from "../tools/schema";
@@ -65,21 +64,6 @@ export async function loadSkillTools(
   return tools;
 }
 
-function resolveSkillToolPath(
-  toolPath: string,
-  skillDirectory: string
-): string {
-  const resolved = path.isAbsolute(toolPath)
-    ? path.resolve(toolPath)
-    : path.resolve(skillDirectory, toolPath);
-
-  if (!isPathInsideDirectory(resolved, skillDirectory)) {
-    throw new Error(`Skill tool path must stay inside ${skillDirectory}.`);
-  }
-
-  return resolved;
-}
-
 async function importSkillToolModule(
   modulePath: string
 ): Promise<SkillToolModule> {
@@ -121,16 +105,6 @@ function normalizeSkillToolModule(imported: unknown): SkillToolModule {
   };
 }
 
-function isPathInsideDirectory(
-  targetPath: string,
-  directoryPath: string
-): boolean {
-  const relative = path.relative(directoryPath, targetPath);
-  return (
-    relative === "" || !(relative.startsWith("..") || path.isAbsolute(relative))
-  );
-}
-
 function isJsonSchema(value: unknown): value is JsonSchema {
   return typeof value === "object" && value !== null;
 }
@@ -138,5 +112,3 @@ function isJsonSchema(value: unknown): value is JsonSchema {
 export function clearSkillToolModuleCache(): void {
   moduleCache.clear();
 }
-
-export { resolveSkillToolPath };

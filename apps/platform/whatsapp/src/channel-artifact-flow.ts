@@ -1,6 +1,5 @@
-import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import type { NakamaClient } from "@nakama/client";
 import {
-  deliverTurnArtifactShares,
   formatMissingAttachArtifactMessage,
   getMostRecentDeliverableArtifact,
   isAttachIntent,
@@ -74,25 +73,6 @@ export async function maybeSendWhatsAppAttachOnlyCommand(input: {
     mimeType: artifact.mimeType,
     path: artifact.path,
     sizeBytes: artifact.sizeBytes,
-  });
-}
-
-export async function deliverWhatsAppTurnArtifactShares(input: {
-  client: NakamaClient;
-  session: RemoteChatSession;
-  conversationKey: string;
-  profileId: string;
-  sessionStore: ChannelSessionStore;
-  sendRaw: (text: string) => Promise<void>;
-}): Promise<void> {
-  await deliverTurnArtifactShares({
-    conversationKey: input.conversationKey,
-    publish: (path) =>
-      input.client.publishProfileArtifactShare(input.profileId, path),
-    // Raw: share tokens must not pass through markdown underscore stripping.
-    sendFooter: (footer) => input.sendRaw(footer),
-    session: input.session,
-    sessionStore: input.sessionStore,
   });
 }
 

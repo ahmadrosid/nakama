@@ -1,4 +1,5 @@
-import type { SoulStackFiles } from "@nakama/core/contract";
+import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SoulFileEditorDialog } from "@/components/soul-tools/soul-file-editor-dialog";
@@ -35,11 +36,175 @@ function resolveDefaultProfileId(
   return resolveInitialProfileId(profiles);
 }
 
-export function SoulTab({
-  profileId: controlledProfileId,
+function syncSoulProfileSelection({
+  embedded,
+  profiles,
+  urlProfile,
+  profileInitializedRef,
+  setProfileIdState,
 }: {
-  profileId?: string | null;
-} = {}) {
+  embedded: boolean;
+  profiles: Array<{ id: string }>;
+  urlProfile: string | null;
+  profileInitializedRef: { current: boolean };
+  setProfileIdState: (
+    value: string | null | ((current: string | null) => string | null)
+  ) => void;
+}) {
+  if (embedded) {
+    return;
+  }
+
+  if (profiles.length === 0) {
+    return;
+  }
+
+  const nextProfileId = resolveDefaultProfileId(profiles, urlProfile);
+
+  if (!profileInitializedRef.current) {
+    profileInitializedRef.current = true;
+    setProfileIdState(nextProfileId);
+    return;
+  }
+
+  setProfileIdState((current) => {
+    if (
+      urlProfile &&
+      profiles.some((profile) => profile.id === urlProfile) &&
+      urlProfile !== current
+    ) {
+      return urlProfile;
+    }
+
+    if (current && profiles.some((profile) => profile.id === current)) {
+      return current;
+    }
+
+    return nextProfileId;
+  });
+}
+
+async function saveSoulFile({
+  profileId,
+  openFile,
+  isWritable,
+  isDirty,
+  editContent,
+  writeSoulMutation,
+  setDialogError,
+  setSavedContent,
+}: {
+  profileId: string | null;
+  openFile: keyof SoulStackFiles | null;
+  isWritable: boolean;
+  isDirty: boolean;
+  editContent: string;
+  writeSoulMutation: ReturnType<typeof useWriteSoulFileMutation>;
+  setDialogError: (value: string | null) => void;
+  setSavedContent: (value: string) => void;
+}) {
+  if (!(profileId && openFile && isWritable && isDirty)) {
+    return;
+  }
+
+  setDialogError(null);
+
+  try {
+    await writeSoulMutation.mutateAsync({
+      content: editContent,
+      fileKey: openFile,
+      profileId,
+    });
+    setSavedContent(editContent);
+  } catch (err) {
+    setDialogError(formatError(err));
+  }
+}
+
+function applySoulQueryError(
+  queryError: unknown,
+  setError: (value: string | null) => void
+) {
+  if (queryError) {
+    setError(formatError(queryError));
+  }
+}
+
+function applySoulFileError(
+  fileError: unknown,
+  setDialogError: (value: string | null) => void
+) {
+  if (fileError) {
+    setDialogError(formatError(fileError));
+  }
+}
+
+function applySoulFileContent(
+  openFile: keyof SoulStackFiles | null,
+  dialogLoading: boolean,
+  fileContent: string,
+  setEditContent: (value: string) => void,
+  setSavedContent: (value: string) => void
+) {
+  if (openFile === null || dialogLoading) {
+    return;
+  }
+
+  setEditContent(fileContent);
+  setSavedContent(fileContent);
+}
+
+function presentSoulFileCount(
+  status: { files: SoulFileStatus } | null
+): number {
+  if (!status) {
+    return 0;
+  }
+
+  return SOUL_FILES.filter((file) => status.files[file.key]).length;
+}
+
+function renderSoulTabGate({
+  embedded,
+  profilesLength,
+  profilesFetching,
+  profileId,
+  loading,
+  status,
+}: {
+  embedded: boolean;
+  profilesLength: number;
+  profilesFetching: boolean;
+  profileId: string | null | undefined;
+  loading: boolean;
+  status: unknown;
+}): ReactNode | null {
+  if (!embedded && profilesLength === 0 && !profilesFetching) {
+    return (
+      <div className={cn(sectionClass, "p-8 text-muted-foreground text-sm")}>
+        Create a profile first to configure prompt files.
+      </div>
+    );
+  }
+
+  if (embedded && !profileId) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Select a profile to edit prompt files.
+      </p>
+    );
+  }
+
+  if (loading && !status) {
+    return (
+      <SoulTabPageState embedded={embedded} message="Loading prompt stack…" />
+    );
+  }
+
+  return null;
+}
+
+function useSoulTab(controlledProfileId?: string | null) {
   const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -82,13 +247,7 @@ export function SoulTab({
   const isDirty = editContent !== savedContent;
   const isWritable = openFileMeta?.writable ?? false;
 
-  const presentCount = useMemo(() => {
-    if (!status) {
-      return 0;
-    }
-
-    return SOUL_FILES.filter((file) => status.files[file.key]).length;
-  }, [status]);
+  const presentCount = useMemo(() => presentSoulFileCount(status), [status]);
 
   const setProfileId = useCallback(
     (nextProfileId: string) => {
@@ -112,171 +271,159 @@ export function SoulTab({
   );
 
   useEffect(() => {
-    if (embedded) {
-      return;
-    }
-
-    if (profiles.length === 0) {
-      return;
-    }
-
-    const urlProfile = searchParams.get("profile");
-    const nextProfileId = resolveDefaultProfileId(profiles, urlProfile);
-
-    if (!profileInitializedRef.current) {
-      profileInitializedRef.current = true;
-      setProfileIdState(nextProfileId);
-      return;
-    }
-
-    setProfileIdState((current) => {
-      if (
-        urlProfile &&
-        profiles.some((profile) => profile.id === urlProfile) &&
-        urlProfile !== current
-      ) {
-        return urlProfile;
-      }
-
-      if (current && profiles.some((profile) => profile.id === current)) {
-        return current;
-      }
-
-      return nextProfileId;
+    syncSoulProfileSelection({
+      embedded,
+      profileInitializedRef,
+      profiles,
+      setProfileIdState,
+      urlProfile: searchParams.get("profile"),
     });
   }, [embedded, profiles, searchParams]);
 
   useEffect(() => {
-    const queryError = profilesError ?? statusError;
-    if (queryError) {
-      setError(formatError(queryError));
-    }
+    applySoulQueryError(profilesError ?? statusError, setError);
   }, [profilesError, statusError]);
 
   useEffect(() => {
-    if (fileError) {
-      setDialogError(formatError(fileError));
-    }
+    applySoulFileError(fileError, setDialogError);
   }, [fileError]);
 
   useEffect(() => {
-    if (openFile === null || dialogLoading) {
-      return;
-    }
-
-    setEditContent(fileContent);
-    setSavedContent(fileContent);
+    applySoulFileContent(
+      openFile,
+      dialogLoading,
+      fileContent,
+      setEditContent,
+      setSavedContent
+    );
   }, [openFile, fileContent, dialogLoading]);
 
-  function handleOpenFile(fileKey: keyof SoulStackFiles) {
-    setOpenFile(fileKey);
-    setEditContent("");
-    setSavedContent("");
-    setDialogError(null);
-  }
+  return {
+    busy,
+    dialogError,
+    dialogLoading,
+    editContent,
+    embedded,
+    error,
+    isDirty,
+    isWritable,
+    loading,
+    openFile,
+    openFileMeta,
+    presentCount,
+    profileId,
+    profiles,
+    profilesFetching,
+    refetchProfiles,
+    refetchStatus,
+    refreshing,
+    selectedProfile,
+    setDialogError,
+    setEditContent,
+    setError,
+    setOpenFile,
+    setProfileId,
+    setSavedContent,
+    status,
+    writeSoulMutation,
+  };
+}
 
-  function handleDialogOpenChange(open: boolean) {
-    if (!open) {
-      setOpenFile(null);
-      setDialogError(null);
-    }
-  }
+export function SoulTab({
+  profileId: controlledProfileId,
+}: {
+  profileId?: string | null;
+} = {}) {
+  const tab = useSoulTab(controlledProfileId);
+  const gated = renderSoulTabGate({
+    embedded: tab.embedded,
+    loading: tab.loading,
+    profileId: tab.profileId,
+    profilesFetching: tab.profilesFetching,
+    profilesLength: tab.profiles.length,
+    status: tab.status,
+  });
 
-  async function handleSave() {
-    if (!(profileId && openFile && isWritable && isDirty)) {
-      return;
-    }
-
-    setDialogError(null);
-
-    try {
-      await writeSoulMutation.mutateAsync({
-        content: editContent,
-        fileKey: openFile,
-        profileId,
-      });
-      setSavedContent(editContent);
-    } catch (err) {
-      setDialogError(formatError(err));
-    }
-  }
-
-  async function refresh() {
-    setError(null);
-    await Promise.all([refetchProfiles(), refetchStatus()]);
-  }
-
-  if (!embedded && profiles.length === 0 && !profilesFetching) {
-    return (
-      <div className={cn(sectionClass, "p-8 text-muted-foreground text-sm")}>
-        Create a profile first to configure prompt files.
-      </div>
-    );
-  }
-
-  if (embedded && !profileId) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        Select a profile to edit prompt files.
-      </p>
-    );
-  }
-
-  if (loading && !status) {
-    return (
-      <SoulTabPageState embedded={embedded} message="Loading prompt stack…" />
-    );
+  if (gated) {
+    return gated;
   }
 
   const soulPanel = (
     <SoulTabPanel
-      busy={busy}
-      embedded={embedded}
-      onOpenFile={handleOpenFile}
-      onRefresh={() => void refresh()}
-      presentCount={presentCount}
-      refreshing={refreshing}
-      selectedProfile={selectedProfile}
-      status={status}
+      busy={tab.busy}
+      embedded={tab.embedded}
+      onOpenFile={(fileKey) => {
+        tab.setOpenFile(fileKey);
+        tab.setEditContent("");
+        tab.setSavedContent("");
+        tab.setDialogError(null);
+      }}
+      onRefresh={() => {
+        tab.setError(null);
+        void Promise.all([tab.refetchProfiles(), tab.refetchStatus()]);
+      }}
+      presentCount={tab.presentCount}
+      refreshing={tab.refreshing}
+      selectedProfile={tab.selectedProfile}
+      status={tab.status}
     />
   );
 
   return (
     <>
-      {error ? (
+      {tab.error ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
-          {error}
+          {tab.error}
         </p>
       ) : null}
 
-      {embedded ? (
+      {tab.embedded ? (
         soulPanel
       ) : (
         <SoulTabShell
-          busy={busy}
-          onProfileSelect={setProfileId}
-          onRefresh={() => void refresh()}
+          busy={tab.busy}
+          onProfileSelect={tab.setProfileId}
+          onRefresh={() => {
+            tab.setError(null);
+            void Promise.all([tab.refetchProfiles(), tab.refetchStatus()]);
+          }}
           panel={soulPanel}
-          profileId={profileId}
-          profiles={profiles}
-          refreshing={refreshing}
+          profileId={tab.profileId}
+          profiles={tab.profiles}
+          refreshing={tab.refreshing}
         />
       )}
 
       <SoulFileEditorDialog
-        busy={busy}
-        dialogError={dialogError}
-        dialogLoading={dialogLoading}
-        editContent={editContent}
-        isDirty={isDirty}
-        isWritable={isWritable}
-        onEditContentChange={setEditContent}
-        onOpenChange={handleDialogOpenChange}
-        onSave={() => void handleSave()}
-        open={openFile !== null}
-        openFile={openFile}
-        openFileMeta={openFileMeta}
-        status={status}
+        busy={tab.busy}
+        dialogError={tab.dialogError}
+        dialogLoading={tab.dialogLoading}
+        editContent={tab.editContent}
+        isDirty={tab.isDirty}
+        isWritable={tab.isWritable}
+        onEditContentChange={tab.setEditContent}
+        onOpenChange={(open) => {
+          if (!open) {
+            tab.setOpenFile(null);
+            tab.setDialogError(null);
+          }
+        }}
+        onSave={() =>
+          void saveSoulFile({
+            editContent: tab.editContent,
+            isDirty: tab.isDirty,
+            isWritable: tab.isWritable,
+            openFile: tab.openFile,
+            profileId: tab.profileId ?? null,
+            setDialogError: tab.setDialogError,
+            setSavedContent: tab.setSavedContent,
+            writeSoulMutation: tab.writeSoulMutation,
+          })
+        }
+        open={tab.openFile !== null}
+        openFile={tab.openFile}
+        openFileMeta={tab.openFileMeta}
+        status={tab.status}
       />
     </>
   );

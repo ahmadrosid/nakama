@@ -1,5 +1,6 @@
 export * from "./builtin";
 export * from "./context";
+export * from "./custom-web-search";
 export * from "./email";
 export * from "./extract-document-text";
 export * from "./knowledge-base-search";
@@ -8,5 +9,6 @@ export * from "./protected";
 export * from "./ripgrep";
 export * from "./schema";
 export * from "./search-files";
+export * from "./sqlite";
 export * from "./web-fetch";
 export * from "./web-search";

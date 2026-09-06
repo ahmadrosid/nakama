@@ -6,7 +6,7 @@ import {
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createSessionTools } from "../tools/session-tools";
 import { AgentService } from "./agent-service";
-import { registerSessionTools, resolveToolsFromStorage } from "./tool-resolver";
+import { resolveToolsFromStorage } from "./tool-resolver";
 
 function sessionTools() {
   return createSessionTools(
@@ -39,12 +39,13 @@ async function seedSessionToolRows(
 describe("resolveToolsFromStorage session", () => {
   test("resolves both registered session tools from storage", async () => {
     const db = createInMemoryDatabaseAdapter();
-    registerSessionTools(sessionTools());
     await seedSessionToolRows(db);
 
-    const names = (await resolveToolsFromStorage(await db.listTools(), db)).map(
-      (tool) => tool.name
-    );
+    const names = (
+      await resolveToolsFromStorage(await db.listTools(), db, [], {
+        serverTools: { session: sessionTools() },
+      })
+    ).map((tool) => tool.name);
 
     expect(names).toContain("list_profile_sessions");
     expect(names).toContain("read_profile_session");
@@ -52,17 +53,15 @@ describe("resolveToolsFromStorage session", () => {
 
   test("resolves nothing when the tools were never registered", async () => {
     const db = createInMemoryDatabaseAdapter();
-    registerSessionTools([]);
     await seedSessionToolRows(db);
 
-    const names = (await resolveToolsFromStorage(await db.listTools(), db)).map(
-      (tool) => tool.name
-    );
+    const names = (
+      await resolveToolsFromStorage(await db.listTools(), db, [], {
+        serverTools: { session: [] },
+      })
+    ).map((tool) => tool.name);
 
     expect(names).not.toContain("list_profile_sessions");
     expect(names).not.toContain("read_profile_session");
-
-    // Leave the registry as the rest of the suite expects to find it.
-    registerSessionTools(sessionTools());
   });
 });

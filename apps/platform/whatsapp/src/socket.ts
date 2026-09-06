@@ -12,7 +12,9 @@ import { createBaileysLogger } from "./baileys-logger";
 import {
   extractInboundText,
   isPrivateWhatsAppChat,
+  isWhatsAppOutboundEcho,
   parseInboundWhatsAppMessage,
+  rememberWhatsAppOutbound,
   type WhatsAppInboundChat,
 } from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
@@ -78,6 +80,7 @@ export async function createWhatsAppSocket(
       }
 
       socket = next;
+      wrapSocketSendMessage(next);
 
       next.ev.on("connection.update", async (update) => {
         if (myGen !== generation) {
@@ -155,11 +158,14 @@ export async function createWhatsAppSocket(
         for (const msg of m.messages) {
           const remoteJid = msg.key.remoteJid ?? null;
           const text = extractInboundText(msg.message);
-          const inbound = parseInboundWhatsAppMessage(msg, me);
+          // Let the chat handler apply the live mention setting.
+          const inbound = parseInboundWhatsAppMessage(msg, me, {
+            requireGroupMention: false,
+          });
 
           if (remoteJid) {
             console.log(
-              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} textBytes=${Buffer.byteLength(text, "utf8")} handle=${inbound ? "yes" : "no"}`
+              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} participantPn=${maskWhatsAppJid(msg.key.participantPn)} textBytes=${Buffer.byteLength(text, "utf8")} handle=${inbound ? "yes" : "no"}`
             );
           }
 
@@ -176,7 +182,15 @@ export async function createWhatsAppSocket(
             );
           }
 
-          if (!inbound) {
+          if (
+            !inbound ||
+            isWhatsAppOutboundEcho({
+              fromMe: inbound.fromMe,
+              id: inbound.messageId,
+              jid: inbound.jid,
+              text: inbound.text,
+            })
+          ) {
             continue;
           }
 
@@ -210,6 +224,51 @@ export async function createWhatsAppSocket(
   };
 
   return handle;
+}
+
+function wrapSocketSendMessage(target: WASocket): void {
+  if (typeof target.sendMessage !== "function") {
+    return;
+  }
+
+  const sendMessage = target.sendMessage.bind(target);
+  target.sendMessage = ((jid, content, options) => {
+    const text = outboundTextFromContent(content);
+    if (text) {
+      rememberWhatsAppOutbound({ jid, text });
+    }
+
+    return Promise.resolve(sendMessage(jid, content, options)).then(
+      (result) => {
+        rememberWhatsAppOutbound({
+          id:
+            result && typeof result === "object"
+              ? ((result as { key?: { id?: string | null } }).key?.id ?? null)
+              : null,
+          jid,
+          text,
+        });
+        return result;
+      }
+    );
+  }) as WASocket["sendMessage"];
+}
+
+function outboundTextFromContent(content: unknown): string {
+  if (!content || typeof content !== "object") {
+    return "";
+  }
+
+  const record = content as { caption?: unknown; text?: unknown };
+  if (typeof record.text === "string" && record.text.trim()) {
+    return record.text;
+  }
+
+  if (typeof record.caption === "string") {
+    return record.caption;
+  }
+
+  return "";
 }
 
 function retireSocket(target: WASocket | null | undefined): Promise<void> {

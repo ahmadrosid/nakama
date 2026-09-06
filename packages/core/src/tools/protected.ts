@@ -6,6 +6,7 @@ export const BUILTIN_TOOL_IDS = {
   knowledge_base_search: "tool_knowledge_base_search",
   read_file: "tool_read_file",
   search_files: "tool_search_files",
+  sqlite: "tool_sqlite",
   web_fetch: "tool_web_fetch",
   web_search: "tool_web_search",
   write_docx: "tool_write_docx",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { DiscordMessenger } from "./messenger";
-import { createTypingLoop } from "./typing-indicator";
 
 /** Drain the serialized typing promise chain. */
 async function flushTypingChain(): Promise<void> {
@@ -53,7 +53,9 @@ function createBlockingMessenger() {
 describe("createTypingLoop", () => {
   test("stop prevents later ping from sending typing", async () => {
     const { messenger, calls } = createFakeMessenger();
-    const loop = createTypingLoop(messenger);
+    const loop = createTypingLoop(() => messenger.sendTyping(), {
+      refreshMs: 8000,
+    });
 
     loop.start();
     await flushTypingChain();
@@ -68,7 +70,9 @@ describe("createTypingLoop", () => {
 
   test("start replaces a previous interval without leaking", async () => {
     const { messenger, calls } = createFakeMessenger();
-    const loop = createTypingLoop(messenger);
+    const loop = createTypingLoop(() => messenger.sendTyping(), {
+      refreshMs: 8000,
+    });
 
     loop.start();
     await flushTypingChain();
@@ -84,7 +88,9 @@ describe("createTypingLoop", () => {
 
   test("stop drops queued typing sends that have not started yet", async () => {
     const { getSendCount, messenger, releaseAll } = createBlockingMessenger();
-    const loop = createTypingLoop(messenger);
+    const loop = createTypingLoop(() => messenger.sendTyping(), {
+      refreshMs: 8000,
+    });
 
     loop.start();
     await flushTypingChain();

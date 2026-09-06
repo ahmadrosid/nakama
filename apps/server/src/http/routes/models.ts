@@ -38,8 +38,10 @@ import {
   type UpdateTimezoneRequest,
   type UpdateTranscriptionRequest,
   type UpdateVisionRequest,
+  type UpdateWebSearchSettingsRequest,
   type UpdateWhatsAppSettingsRequest,
   type VisionSettingsResponse,
+  type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
 import { installAgentBrowser } from "../../services/agent-browser-service";
@@ -168,6 +170,17 @@ export function registerModelRoutes(
     .object({})
     .passthrough()
     .openapi("EmailSettingsResponse");
+  const webSearchSettingsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("WebSearchSettingsResponse");
+  const updateWebSearchRequestSchema = z
+    .object({
+      apiKey: z.string().optional(),
+      endpoint: z.string().optional(),
+      provider: z.enum(["exa", "firecrawl"]).nullable().optional(),
+    })
+    .openapi("UpdateWebSearchSettingsRequest");
   const agentBrowserStatusSchema = z
     .object({})
     .passthrough()
@@ -1052,6 +1065,56 @@ export function registerModelRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
+      operationId: "getWebSearchSettings",
+      path: "/v1/settings/web-search",
+      responses: {
+        200: {
+          content: { "application/json": { schema: webSearchSettingsSchema } },
+          description: "Web search settings",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Forbidden",
+        },
+      },
+      summary: "Get web search settings",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "setWebSearchSettings",
+      path: "/v1/settings/web-search",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: updateWebSearchRequestSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: webSearchSettingsSchema } },
+          description: "Web search settings",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Forbidden",
+        },
+      },
+      summary: "Update web search settings",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
       operationId: "getAgentBrowserStatus",
       path: "/v1/settings/agent-browser",
       responses: {
@@ -1424,6 +1487,28 @@ export function registerModelRoutes(
     try {
       return json<SendEmailTestResponse>(
         await agent.sendEmailTest(body.to?.trim() || auth.user.email)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.get("/v1/settings/web-search", async (c) => {
+    requireOrgAdminFromContext(c);
+    return json<WebSearchSettingsResponse>(await agent.getWebSearchSettings());
+  });
+
+  app.put("/v1/settings/web-search", async (c) => {
+    requireOrgAdminFromContext(c);
+    const body = await readJson<UpdateWebSearchSettingsRequest>(c.req.raw);
+
+    try {
+      return json<WebSearchSettingsResponse>(
+        await agent.setWebSearchSettings(body)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {

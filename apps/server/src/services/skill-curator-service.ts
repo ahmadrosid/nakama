@@ -13,7 +13,7 @@ import {
   isGlobalSkillSourcePath,
   pathExists,
   readTextIfExists,
-  resolveSkillCuratorConsolidateEnabled,
+  resolveProfileOrgBooleanOverride,
   restoreArchivedSkillDirectory,
   writeTextFile,
 } from "@nakama/core";
@@ -256,12 +256,10 @@ export class SkillCuratorService {
     const org = await this.db.getOrganizationById(input.orgId);
 
     for (const profile of input.profiles) {
-      const consolidateEnabled = resolveSkillCuratorConsolidateEnabled({
-        orgSkillsCuratorConsolidateEnabled:
-          org?.skillsCuratorConsolidateEnabled ?? false,
-        profileSkillsCuratorConsolidateEnabled:
-          profile.skillsCuratorConsolidateEnabled ?? null,
-      });
+      const consolidateEnabled = resolveProfileOrgBooleanOverride(
+        profile.skillsCuratorConsolidateEnabled ?? null,
+        org?.skillsCuratorConsolidateEnabled ?? false
+      );
       if (!consolidateEnabled) {
         continue;
       }

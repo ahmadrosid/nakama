@@ -4,7 +4,6 @@ import {
   isPathWithinProfileSkillsDir,
   NakamaApiError,
   parseRawProfileSkillContent,
-  resolveSkillWriteApprovalRequired,
 } from "@nakama/core";
 import type {
   ApplySkillSuggestionOutcome,
@@ -19,7 +18,10 @@ import type {
   SkillSuggestionAction,
   StoredSkillSuggestion,
 } from "@nakama/db";
-import type { SkillProposalService } from "./skill-proposal-service";
+import {
+  isSkillWriteApprovalRequired,
+  type SkillProposalService,
+} from "./skill-proposal-service";
 import type { SkillsService } from "./skills-service";
 
 export function toSkillSuggestion(
@@ -58,19 +60,11 @@ export class SkillSuggestionService {
     orgId: string,
     profileId: string
   ): Promise<boolean> {
-    const db = this.requireDatabase();
-    const org = await db.getOrganizationById(orgId);
-    if (!org) {
-      throw new NakamaApiError("Organization not found.", 404);
-    }
-    const profile = await db.getProfileForOrg(profileId, orgId);
-    if (!profile) {
-      throw new NakamaApiError("Profile not found.", 404);
-    }
-    return resolveSkillWriteApprovalRequired({
-      orgSkillsWriteApproval: org.skillsWriteApproval ?? false,
-      profileSkillsWriteApproval: profile.skillsWriteApproval ?? null,
-    });
+    return isSkillWriteApprovalRequired(
+      this.requireDatabase(),
+      orgId,
+      profileId
+    );
   }
 
   async createSuggestion(

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { WASocket } from "@whiskeysockets/baileys";
-import { createTypingLoop } from "./typing-indicator";
 
 const JID = "628100000000@s.whatsapp.net";
 
@@ -47,7 +47,9 @@ function createBlockingSocket() {
 describe("createTypingLoop", () => {
   test("stop prevents later ping from sending presence", async () => {
     const { calls, socket } = createFakeSocket();
-    const loop = createTypingLoop(socket, JID);
+    const loop = createTypingLoop(async () => {
+      await socket.sendPresenceUpdate("composing", JID);
+    });
 
     loop.start();
     await flushTypingChain();
@@ -62,7 +64,9 @@ describe("createTypingLoop", () => {
 
   test("start replaces a previous interval without leaking", async () => {
     const { calls, socket } = createFakeSocket();
-    const loop = createTypingLoop(socket, JID);
+    const loop = createTypingLoop(async () => {
+      await socket.sendPresenceUpdate("composing", JID);
+    });
 
     loop.start();
     await flushTypingChain();
@@ -78,7 +82,9 @@ describe("createTypingLoop", () => {
 
   test("stop drops queued presence sends that have not started yet", async () => {
     const { getSendCount, releaseAll, socket } = createBlockingSocket();
-    const loop = createTypingLoop(socket, JID);
+    const loop = createTypingLoop(async () => {
+      await socket.sendPresenceUpdate("composing", JID);
+    });
 
     loop.start();
     await flushTypingChain();

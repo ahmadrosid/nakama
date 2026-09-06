@@ -1,13 +1,9 @@
 import { join } from "node:path";
 import { writeTextFile } from "../fs";
+import { SOUL_FILES } from "./load";
 import type { SoulStackFiles } from "./types";
 
-export const WRITABLE_SOUL_FILES = {
-  instructions: "INSTRUCTIONS.md",
-  memory: "MEMORY.md",
-  soul: "SOUL.md",
-  style: "STYLE.md",
-} as const;
+export const WRITABLE_SOUL_FILES = SOUL_FILES;
 
 export type WritableSoulFileKey = keyof typeof WRITABLE_SOUL_FILES;
 

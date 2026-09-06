@@ -5,6 +5,7 @@ import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard
 import { TranscriptionSettingsCard } from "@/components/settings/TranscriptionSettingsCard";
 import { VisionSettingsCard } from "@/components/settings/VisionSettingsCard";
 import { WebPublicUrlSettingsRow } from "@/components/settings/WebPublicUrlSettingsRow";
+import { WebSearchSettingsCard } from "@/components/settings/WebSearchSettingsCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,7 @@ export function SettingsPage() {
               <VisionSettingsCard />
               <TranscriptionSettingsCard />
               <ImageGenerationSettingsCard />
+              <WebSearchSettingsCard />
             </CardContent>
           </Card>
 

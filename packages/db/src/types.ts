@@ -39,6 +39,43 @@ export interface AutomationUnreadCountRecord {
   unreadCount: number;
 }
 
+export interface StoredWorkflowRecord {
+  createdAt: string;
+  definition: unknown;
+  enabled: boolean;
+  id: string;
+  name: string;
+  orgId?: string | null;
+  profileId: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface StoredWorkflowRunRecord {
+  completedAt: string | null;
+  error: string | null;
+  id: string;
+  input: string | null;
+  output: string | null;
+  startedAt: string;
+  status: AutomationRunStatus;
+  workflowId: string;
+}
+
+export interface StoredWorkflowRunStepRecord {
+  completedAt: string | null;
+  error: string | null;
+  id: string;
+  input: string | null;
+  kind: string;
+  output: string | null;
+  position: number;
+  runId: string;
+  startedAt: string;
+  status: string;
+  stepId: string;
+}
+
 export interface StoredProfileRecord {
   createdAt: string;
   id: string;
@@ -117,32 +154,6 @@ export interface StoredSessionSummaryRecord {
   profileId: string;
   title: string | null;
   updatedAt: string;
-}
-
-export interface StoredTaskRecord {
-  createdAt: string;
-  description: string;
-  id: string;
-  orgId?: string | null;
-  position: number;
-  profileId: string;
-  prompt: string;
-  sessionId?: string | null;
-  status: string;
-  title: string;
-  updatedAt: string;
-}
-
-export type TaskRunStatus = "running" | "completed" | "failed";
-
-export interface StoredTaskRunRecord {
-  completedAt: string | null;
-  error: string | null;
-  id: string;
-  output: string | null;
-  startedAt: string;
-  status: TaskRunStatus;
-  taskId: string;
 }
 
 export interface StoredLlmUsageStatsRecord {
@@ -615,8 +626,9 @@ export interface DatabaseAdapter {
   deleteProfile(id: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
   deleteSkill(id: string): Promise<boolean>;
-  deleteTask(id: string): Promise<boolean>;
   deleteTool(id: string): Promise<boolean>;
+  deleteWorkflow(id: string): Promise<boolean>;
+  deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
   getActiveArtifactShareByPath(
     orgId: string,
     profileId: string,
@@ -625,7 +637,6 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
-  getActiveTaskRun(taskId: string): Promise<StoredTaskRunRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
@@ -735,12 +746,16 @@ export interface DatabaseAdapter {
     profileId: string,
     skillId: string
   ): Promise<StoredSkillUsageRecord | null>;
-  getTask(id: string): Promise<StoredTaskRecord | null>;
   getTool(id: string): Promise<StoredToolRecord | null>;
   getToolByName(name: string): Promise<StoredToolRecord | null>;
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   getUserContext(orgId: string, userId: string): Promise<string | null>;
+  getWorkflow(id: string): Promise<StoredWorkflowRecord | null>;
+  getWorkflowRun(
+    workflowId: string,
+    runId: string
+  ): Promise<StoredWorkflowRunRecord | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
@@ -772,7 +787,8 @@ export interface DatabaseAdapter {
 
   insertAttachment(record: StoredAttachmentRecord): Promise<void>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
-  insertTaskRun(record: StoredTaskRunRecord): Promise<void>;
+  insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
+  insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
 
   listAutomationRuns(
     automationId: string,
@@ -856,10 +872,6 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<StoredSkillUsageRecord[]>;
 
-  listTaskRuns(taskId: string, limit?: number): Promise<StoredTaskRunRecord[]>;
-
-  listTasks(): Promise<StoredTaskRecord[]>;
-  listTasksForOrg(orgId: string): Promise<StoredTaskRecord[]>;
   listToolOutputSavings(
     orgId: string
   ): Promise<StoredToolOutputSavingsRecord[]>;
@@ -870,6 +882,12 @@ export interface DatabaseAdapter {
   listUserOrganizations(
     userId: string
   ): Promise<StoredUserOrganizationRecord[]>;
+  listWorkflowRunSteps(runId: string): Promise<StoredWorkflowRunStepRecord[]>;
+  listWorkflowRuns(
+    workflowId: string,
+    limit?: number
+  ): Promise<StoredWorkflowRunRecord[]>;
+  listWorkflowsForOrg(orgId: string): Promise<StoredWorkflowRecord[]>;
   markOrgInviteAccepted(id: string, acceptedAt: string): Promise<void>;
   markSkillSuggestionApplied(
     orgId: string,
@@ -958,7 +976,6 @@ export interface DatabaseAdapter {
       reviewedAt: string;
     }
   ): Promise<boolean>;
-  updateTaskRun(record: StoredTaskRunRecord): Promise<void>;
   updateUserPassword(
     id: string,
     passwordHash: string,
@@ -969,6 +986,8 @@ export interface DatabaseAdapter {
     profile: { name: string | null; phone: string | null; email?: string },
     updatedAt: string
   ): Promise<void>;
+  updateWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
+  updateWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
   upsertAutomation(record: StoredAutomationRecord): Promise<void>;
   upsertAutomationRunReadThrough(
     userId: string,
@@ -989,7 +1008,7 @@ export interface DatabaseAdapter {
   upsertProfile(record: StoredProfileRecord): Promise<void>;
   upsertSession(record: StoredSessionRecord): Promise<void>;
   upsertSkill(record: StoredSkillRecord): Promise<void>;
-  upsertTask(record: StoredTaskRecord): Promise<void>;
   upsertTool(record: StoredToolRecord): Promise<void>;
+  upsertWorkflow(record: StoredWorkflowRecord): Promise<void>;
   upsertWorkspaceSettings(record: StoredWorkspaceSettingsRecord): Promise<void>;
 }

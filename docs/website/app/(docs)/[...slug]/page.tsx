@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import {
   buildJsonLd,
   buildPageMetadata,
+  serializeJsonForHtml,
   slugToRelativePath,
 } from "@/lib/site-meta";
 import { source } from "@/lib/source";
@@ -32,7 +33,7 @@ export default async function Page(props: PageProps) {
   return (
     <>
       <script
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonForHtml(jsonLd) }}
         type="application/ld+json"
       />
       <DocsPage full={page.data.full} toc={page.data.toc}>

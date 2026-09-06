@@ -15,13 +15,3 @@ export const DEFAULT_KNOWLEDGE_SOURCES: KnowledgeBaseSource[] = [
     url: NAKAMA_DOCS_LLMS_URL,
   },
 ];
-
-export async function listKnowledgeBaseSources(): Promise<
-  KnowledgeBaseSource[]
-> {
-  return DEFAULT_KNOWLEDGE_SOURCES.filter((source) => source.enabled).map(
-    (source) => ({
-      ...source,
-    })
-  );
-}

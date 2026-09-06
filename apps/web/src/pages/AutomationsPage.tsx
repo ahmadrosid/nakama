@@ -1,10 +1,11 @@
 import { useSearchParams } from "react-router-dom";
 import { agentWorkTabFromSearchParams } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
 import { AutomationsDialogs } from "@/pages/automations/automations-dialogs";
 import { agentWorkPanelClassName } from "@/pages/automations/automations-page.shared";
 import { AutomationsPageLayout } from "@/pages/automations/automations-page-layout";
 import { useAutomationsPage } from "@/pages/automations/use-automations-page";
-import { TasksPage } from "@/pages/TasksPage";
+import { WorkflowsPage } from "@/pages/workflows/WorkflowsPage";
 
 export function AutomationsPage() {
   const state = useAutomationsPage();
@@ -12,7 +13,7 @@ export function AutomationsPage() {
   const activeTab = agentWorkTabFromSearchParams(searchParams);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {activeTab === "automations" ? (
         <div
           aria-labelledby="agent-work-tab-automations"
@@ -24,12 +25,12 @@ export function AutomationsPage() {
         </div>
       ) : (
         <div
-          aria-labelledby="agent-work-tab-tasks"
-          className={agentWorkPanelClassName}
-          id="agent-work-panel-tasks"
+          aria-labelledby="agent-work-tab-workflows"
+          className={cn("relative", agentWorkPanelClassName)}
+          id="agent-work-panel-workflows"
           role="tabpanel"
         >
-          <TasksPage />
+          <WorkflowsPage />
         </div>
       )}
       <AutomationsDialogs {...state} />

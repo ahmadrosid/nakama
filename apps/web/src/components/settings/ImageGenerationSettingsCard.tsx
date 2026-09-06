@@ -7,11 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelsQuery } from "@/hooks/use-app-queries";
 import {
   useImageGenerationSettings,
+  useModelsQuery,
   useSaveImageGenerationSettings,
-} from "@/hooks/use-image-generation-settings";
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
   groupModelsByProvider,

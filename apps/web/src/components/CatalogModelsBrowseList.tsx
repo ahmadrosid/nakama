@@ -38,6 +38,159 @@ export interface CatalogModelsBrowseListProps<
   toolbarTrailing?: ReactNode;
 }
 
+function filterCatalogRows<T extends { id: string; name: string }>(
+  rows: T[],
+  deferredSearch: string,
+  hideDeprecated: boolean,
+  filterRows: CatalogModelsBrowseListProps<T>["filterRows"],
+  isDeprecated: CatalogModelsBrowseListProps<T>["isDeprecated"],
+  showDeprecatedFilter: boolean
+): T[] {
+  if (filterRows) {
+    return filterRows(rows, deferredSearch, hideDeprecated);
+  }
+
+  const visible =
+    showDeprecatedFilter && hideDeprecated
+      ? rows.filter((row) => !isDeprecated!(row))
+      : rows;
+
+  return filterRowsBySearch(visible, deferredSearch);
+}
+
+function resolveCatalogStatus<T extends { id: string; name: string }>(
+  status: CatalogModelsBrowseListProps<T>["status"],
+  filtered: T[],
+  canFetch: boolean,
+  idleMessage?: string
+): ReactNode {
+  if (typeof status === "function") {
+    return status({ filteredCount: filtered.length, filteredRows: filtered });
+  }
+
+  if (status != null) {
+    return status;
+  }
+
+  if (canFetch) {
+    return `${filtered.length} model${filtered.length === 1 ? "" : "s"}`;
+  }
+
+  return idleMessage ?? "Enter credentials to browse models.";
+}
+
+function resolveCatalogEmptyMessage(
+  emptyMessage: string | undefined,
+  canFetch: boolean,
+  idleMessage?: string
+): string {
+  if (emptyMessage) {
+    return emptyMessage;
+  }
+
+  if (canFetch) {
+    return "No models found.";
+  }
+
+  return idleMessage ?? "Enter credentials to browse models.";
+}
+
+function CatalogBrowseToolbar({
+  search,
+  onSearchChange,
+  toolbarDisabled,
+  toolbarTrailing,
+  showDeprecatedFilter,
+  hideDeprecated,
+  onHideDeprecatedChange,
+}: {
+  search: string;
+  onSearchChange: (value: string) => void;
+  toolbarDisabled: boolean;
+  toolbarTrailing?: ReactNode;
+  showDeprecatedFilter: boolean;
+  hideDeprecated: boolean;
+  onHideDeprecatedChange: (value: boolean) => void;
+}) {
+  return (
+    <>
+      <Input
+        className="min-w-35 flex-1"
+        disabled={toolbarDisabled}
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder="Search model name or ID..."
+        value={search}
+      />
+      {toolbarTrailing}
+      {showDeprecatedFilter ? (
+        <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
+          <input
+            checked={hideDeprecated}
+            className="size-4 rounded border-input"
+            disabled={toolbarDisabled}
+            onChange={(event) => onHideDeprecatedChange(event.target.checked)}
+            type="checkbox"
+          />
+          Hide deprecated
+        </label>
+      ) : null}
+    </>
+  );
+}
+
+function CatalogBrowseStatus({
+  status,
+  onRefresh,
+  toolbarDisabled,
+  refreshDisabled,
+  isFetching,
+}: {
+  status: ReactNode;
+  onRefresh?: () => void;
+  toolbarDisabled: boolean;
+  refreshDisabled: boolean;
+  isFetching: boolean;
+}) {
+  if (!onRefresh) {
+    return status;
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span>{status}</span>
+      <button
+        className="text-foreground underline-offset-2 hover:underline disabled:opacity-50"
+        disabled={toolbarDisabled || refreshDisabled || isFetching}
+        onClick={onRefresh}
+        type="button"
+      >
+        Refresh
+      </button>
+    </div>
+  );
+}
+
+function CatalogBrowseFooter({
+  selectedCount,
+  onAddMany,
+}: {
+  selectedCount: number;
+  onAddMany: () => void;
+}) {
+  return (
+    <div className="sticky bottom-0 flex shrink-0 justify-end border-border border-t bg-background px-3 py-2">
+      <Button
+        disabled={selectedCount === 0}
+        onClick={onAddMany}
+        size="sm"
+        type="button"
+      >
+        Add {selectedCount} models
+      </Button>
+    </div>
+  );
+}
+
 export function CatalogModelsBrowseList<
   T extends { id: string; name: string },
 >({
@@ -77,40 +230,37 @@ export function CatalogModelsBrowseList<
     return new Set([...selectedIds].filter((id) => rowIds.has(id)));
   }, [multiSelect, rows, selectedIds]);
 
-  const filtered = useMemo(() => {
-    if (filterRows) {
-      return filterRows(rows, deferredSearch, hideDeprecated);
-    }
+  const filtered = useMemo(
+    () =>
+      filterCatalogRows(
+        rows,
+        deferredSearch,
+        hideDeprecated,
+        filterRows,
+        isDeprecated,
+        showDeprecatedFilter
+      ),
+    [
+      rows,
+      deferredSearch,
+      hideDeprecated,
+      filterRows,
+      isDeprecated,
+      showDeprecatedFilter,
+    ]
+  );
 
-    let result = rows;
-    if (showDeprecatedFilter && hideDeprecated) {
-      result = result.filter((row) => !isDeprecated!(row));
-    }
-
-    return filterRowsBySearch(result, deferredSearch);
-  }, [
-    rows,
-    deferredSearch,
-    hideDeprecated,
-    filterRows,
-    isDeprecated,
-    showDeprecatedFilter,
-  ]);
-
-  const resolvedStatus =
-    typeof status === "function"
-      ? status({ filteredCount: filtered.length, filteredRows: filtered })
-      : (status ??
-        (canFetch
-          ? `${filtered.length} model${filtered.length === 1 ? "" : "s"}`
-          : (idleMessage ?? "Enter credentials to browse models.")));
-
-  const resolvedEmptyMessage =
-    emptyMessage ??
-    (canFetch
-      ? "No models found."
-      : (idleMessage ?? "Enter credentials to browse models."));
-
+  const resolvedStatus = resolveCatalogStatus(
+    status,
+    filtered,
+    canFetch,
+    idleMessage
+  );
+  const resolvedEmptyMessage = resolveCatalogEmptyMessage(
+    emptyMessage,
+    canFetch,
+    idleMessage
+  );
   const toolbarDisabled = !canFetch;
 
   const handleRowSelect = (row: T) => {
@@ -142,60 +292,33 @@ export function CatalogModelsBrowseList<
       error={canFetch ? error : null}
       footer={
         multiSelect ? (
-          <div className="sticky bottom-0 flex shrink-0 justify-end border-border border-t bg-background px-3 py-2">
-            <Button
-              disabled={selectedRowIds.size === 0}
-              onClick={handleAddMany}
-              size="sm"
-              type="button"
-            >
-              Add {selectedRowIds.size} models
-            </Button>
-          </div>
+          <CatalogBrowseFooter
+            onAddMany={handleAddMany}
+            selectedCount={selectedRowIds.size}
+          />
         ) : undefined
       }
       isEmpty={!canFetch || filtered.length === 0}
       isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
       status={
-        onRefresh ? (
-          <div className="flex items-center justify-between gap-2">
-            <span>{resolvedStatus}</span>
-            <button
-              className="text-foreground underline-offset-2 hover:underline disabled:opacity-50"
-              disabled={toolbarDisabled || refreshDisabled || isFetching}
-              onClick={onRefresh}
-              type="button"
-            >
-              Refresh
-            </button>
-          </div>
-        ) : (
-          resolvedStatus
-        )
+        <CatalogBrowseStatus
+          isFetching={isFetching}
+          onRefresh={onRefresh}
+          refreshDisabled={refreshDisabled}
+          status={resolvedStatus}
+          toolbarDisabled={toolbarDisabled}
+        />
       }
       toolbar={
-        <>
-          <Input
-            className="min-w-35 flex-1"
-            disabled={toolbarDisabled}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search model name or ID..."
-            value={search}
-          />
-          {toolbarTrailing}
-          {showDeprecatedFilter ? (
-            <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
-              <input
-                checked={hideDeprecated}
-                className="size-4 rounded border-input"
-                disabled={toolbarDisabled}
-                onChange={(event) => setHideDeprecated(event.target.checked)}
-                type="checkbox"
-              />
-              Hide deprecated
-            </label>
-          ) : null}
-        </>
+        <CatalogBrowseToolbar
+          hideDeprecated={hideDeprecated}
+          onHideDeprecatedChange={setHideDeprecated}
+          onSearchChange={setSearch}
+          search={search}
+          showDeprecatedFilter={showDeprecatedFilter}
+          toolbarDisabled={toolbarDisabled}
+          toolbarTrailing={toolbarTrailing}
+        />
       }
     >
       <VirtualModelBrowseList

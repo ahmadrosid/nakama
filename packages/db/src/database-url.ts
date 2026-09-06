@@ -13,7 +13,7 @@ export function resolveDatabasePath(
 ): string {
   const trimmed = databaseUrl.trim();
 
-  if (trimmed === ":memory:" || trimmed === "memory:") {
+  if (trimmed === ":memory:") {
     return ":memory:";
   }
 

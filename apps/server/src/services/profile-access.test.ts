@@ -6,7 +6,6 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import { AutomationService } from "./automation-service";
-import { TaskService } from "./task-service";
 
 const ORG_ID = "org_test";
 
@@ -31,9 +30,7 @@ const automationInput = {
   prompt: "do it",
   trigger: { type: "manual" as const },
 };
-const taskInput = { prompt: "do it", status: "backlog" as const, title: "t" };
-
-describe("profile access: binding an automation/task to Super Bot is admin-only", () => {
+describe("profile access: binding an automation to Super Bot is admin-only", () => {
   test("member cannot bind an automation to the Super Bot profile", async () => {
     const { db, superId } = await seed();
     const service = new AutomationService(db, {
@@ -64,18 +61,6 @@ describe("profile access: binding an automation/task to Super Bot is admin-only"
     );
 
     expect(automation.profileId).toBe(superId);
-  });
-
-  test("member cannot bind a task to the Super Bot profile", async () => {
-    const { db, superId } = await seed();
-    const service = new TaskService(db);
-
-    const attempt = service.create(ORG_ID, taskInput as any, superId, {
-      orgRole: "member",
-    });
-
-    await expect(attempt).rejects.toBeInstanceOf(NakamaApiError);
-    await expect(attempt).rejects.toMatchObject({ status: 403 });
   });
 
   test("omitted access fail-closes Super Bot bind on create", async () => {

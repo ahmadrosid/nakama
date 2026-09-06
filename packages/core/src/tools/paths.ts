@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -92,7 +93,7 @@ export async function guardFilePath(
   try {
     realPath = await realpath(absolute);
   } catch {
-    realPath = await resolvePathThroughExistingParent(absolute);
+    realPath = resolveWithRealpath(absolute);
   }
 
   if (!isWithinDirs(realPath, allowedDirs)) {
@@ -102,28 +103,42 @@ export async function guardFilePath(
   return { allowed: true, resolved: realPath };
 }
 
-async function resolvePathThroughExistingParent(
-  filePath: string
-): Promise<string> {
-  const resolvedFilePath = path.resolve(filePath);
-  let dir = path.dirname(resolvedFilePath);
-  const root = path.parse(dir).root;
+/** Realpath when possible; otherwise realpath the deepest existing parent. */
+export function resolveWithRealpath(targetPath: string): string {
+  const absolute = path.resolve(targetPath);
+  try {
+    return realpathSync(absolute);
+  } catch {
+    let dir = path.dirname(absolute);
+    const root = path.parse(dir).root;
 
-  while (true) {
-    try {
-      const resolvedDir = await realpath(dir);
-      const relativeDir = path.relative(dir, path.dirname(resolvedFilePath));
-      return path.resolve(
-        resolvedDir,
-        relativeDir,
-        path.basename(resolvedFilePath)
-      );
-    } catch {
-      if (dir === root) {
-        return resolvedFilePath;
+    while (true) {
+      try {
+        const resolvedDir = realpathSync(dir);
+        const relativeDir = path.relative(dir, path.dirname(absolute));
+        return path.resolve(resolvedDir, relativeDir, path.basename(absolute));
+      } catch {
+        if (dir === root) {
+          return absolute;
+        }
+        dir = path.dirname(dir);
       }
-      dir = path.dirname(dir);
     }
+  }
+}
+
+export async function resolveWorkspaceRoot(
+  rawWorkspaceRoot: string
+): Promise<string> {
+  if (!path.isAbsolute(rawWorkspaceRoot)) {
+    throw new Error(
+      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
+  try {
+    return await realpath(rawWorkspaceRoot);
+  } catch {
+    return path.resolve(rawWorkspaceRoot);
   }
 }
 

@@ -27,6 +27,7 @@ import type {
 } from "@nakama/core";
 import {
   createId,
+  DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
   getKnowledgeBaseDir,
   getProfileSoulDir,
@@ -34,7 +35,6 @@ import {
   initSoulDirectory,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
-  listKnowledgeBaseSources,
   NakamaApiError,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
@@ -422,9 +422,22 @@ export class ProfileService {
     const profile = await this.requireProfile(orgId, profileId);
 
     if (profile.isDefault) {
-      throw new Error(
-        "The default profile for an organization cannot be deleted."
+      const orgProfiles = await this.db.listProfilesForOrg(orgId);
+      const successor = orgProfiles.find(
+        (entry) => entry.id !== profileId && !entry.isSuper
       );
+
+      if (orgProfiles.length < 3 || !successor) {
+        throw new Error(
+          "The default profile can only be deleted when the organization has at least 3 profiles."
+        );
+      }
+
+      await this.db.upsertProfile({
+        ...successor,
+        isDefault: true,
+        updatedAt: new Date().toISOString(),
+      });
     }
 
     const deleted = await this.db.deleteProfile(profileId);
@@ -733,7 +746,7 @@ export class ProfileService {
   ): Promise<ListKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
     const documents = await listKnowledgeBaseDocuments(orgId, profileId);
-    const sources = await listKnowledgeBaseSources();
+    const sources = DEFAULT_KNOWLEDGE_SOURCES;
     return { documents, profileId, sources };
   }
 

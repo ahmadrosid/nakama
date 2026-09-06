@@ -16,7 +16,7 @@ import {
   useErrorTrackingSettings,
   useSaveErrorTrackingSettings,
   useSendErrorTrackingTest,
-} from "@/hooks/use-error-tracking";
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
 export function ErrorTrackingSettingsCard() {

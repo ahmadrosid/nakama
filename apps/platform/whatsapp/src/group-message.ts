@@ -11,6 +11,7 @@ export interface GroupMessageHandlingDecision {
     | "missing-bot-info"
     | "reply-to-bot"
     | "bot-mention"
+    | "open-listen"
     | "no-text"
     | "no-trigger";
   shouldHandle: boolean;
@@ -44,11 +45,19 @@ export function explainGroupMessageHandling(input: {
   quotedParticipant: string | null;
   text: string;
   me?: WhatsAppAccount | undefined;
+  requireMention?: boolean;
 }): GroupMessageHandlingDecision {
   const text = input.text.trim();
 
   if (text.startsWith("/")) {
     return { reason: "slash-command", shouldHandle: true };
+  }
+
+  if (input.requireMention === false) {
+    return {
+      reason: text ? "open-listen" : "no-text",
+      shouldHandle: Boolean(text),
+    };
   }
 
   if (!input.me) {
@@ -71,4 +80,54 @@ export function explainGroupMessageHandling(input: {
 
 export function stripWhatsAppBotMention(text: string): string {
   return text.replace(/@\S+/g, "").replace(/\s+/g, " ").trim();
+}
+
+function isSameWhatsAppAddress(left: string, right: string): boolean {
+  if (areJidsSameUser(left, right)) {
+    return true;
+  }
+
+  const leftUser = left.split("@")[0]?.split(":")[0];
+  const rightUser = right.split("@")[0]?.split(":")[0];
+  const leftServer = left.split("@")[1];
+  const rightServer = right.split("@")[1];
+  return Boolean(
+    leftUser &&
+      leftUser === rightUser &&
+      leftServer &&
+      leftServer === rightServer
+  );
+}
+
+export function extraJidsFromGroupParticipants(
+  participants: ReadonlyArray<{
+    id?: string | null;
+    jid?: string | null;
+    lid?: string | null;
+  }>,
+  senderJids: readonly string[]
+): string[] {
+  const extras: string[] = [];
+
+  for (const participant of participants) {
+    const identities = [
+      participant.id,
+      participant.jid,
+      participant.lid,
+    ].filter((jid): jid is string => Boolean(jid));
+
+    if (
+      !identities.some((identity) =>
+        senderJids.some((senderJid) =>
+          isSameWhatsAppAddress(senderJid, identity)
+        )
+      )
+    ) {
+      continue;
+    }
+
+    extras.push(...identities);
+  }
+
+  return [...new Set(extras)];
 }

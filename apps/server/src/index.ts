@@ -33,7 +33,6 @@ import {
   NAKAMA_API_VERSION,
   writeRuntimeServerUrl,
 } from "@nakama/core";
-import { serverHasTaskChat } from "@nakama/core/ensure-server";
 import {
   createDatabase,
   type Database,
@@ -68,14 +67,9 @@ import { SkillProposalService } from "./services/skill-proposal-service";
 import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import { SkillsService } from "./services/skills-service";
 import { SystemStatusService } from "./services/system-status-service";
-import { TaskRunner } from "./services/task-runner";
-import { TaskService } from "./services/task-service";
-import {
-  registerGenerateImageTool,
-  registerSessionTools,
-  registerSubAgentTool,
-} from "./services/tool-resolver";
 import { WorkerManagerService } from "./services/worker-manager-service";
+import { WorkflowRunner } from "./services/workflow-runner";
+import { WorkflowService } from "./services/workflow-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
 import {
@@ -85,6 +79,7 @@ import {
 import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
+import { createWorkflowTools } from "./tools/workflow-tools";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -121,18 +116,18 @@ const agent = new AgentService(
   database.adapter,
   llmUsageTracker
 );
-registerSubAgentTool(createSubAgentTool(agent));
-registerSessionTools(createSessionTools(agent));
-registerGenerateImageTool(
-  createGenerateImageTool({
+agent.setServerTools({
+  generateImage: createGenerateImageTool({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
     recordUsage: (modelId, inputTokens, outputTokens) => {
       llmUsageTracker.record(modelId, inputTokens, outputTokens);
     },
-  })
-);
+  }),
+  session: createSessionTools(agent),
+  subAgent: createSubAgentTool(agent),
+});
 await agent.ensureVisionSettingsLoaded();
 await agent.ensureTranscriptionSettingsLoaded();
 await agent.ensureImageGenerationSettingsLoaded();
@@ -174,10 +169,12 @@ agent.setAutomationRunHistoryTools(
 );
 agent.setAutomationRunner(automationRunner);
 
-const taskService = new TaskService(database.adapter);
-const taskRunner = new TaskRunner(taskService, agent);
-taskService.setTaskRunner(taskRunner);
-agent.setTaskRunner(taskRunner);
+const workflowService = new WorkflowService(database.adapter);
+const workflowRunner = new WorkflowRunner(workflowService, agent);
+agent.setWorkflowTools(
+  createWorkflowTools(workflowService, workflowRunner, agent)
+);
+agent.setWorkflowRunner(workflowRunner);
 
 const workerManager = new WorkerManagerService(projectRoot);
 
@@ -242,7 +239,6 @@ if (seedResult.providerWritten) {
 const systemStatus = new SystemStatusService(
   agent,
   automationRunner,
-  taskRunner,
   workerManager,
   mcpService,
   composioService,
@@ -267,9 +263,9 @@ const app = createHonoApp({
   skillProposalService,
   skillSuggestionService,
   systemStatus,
-  taskService,
   webDistDir,
   workerManager,
+  workflowService,
 });
 
 const server = startServer({
@@ -459,10 +455,7 @@ async function findRunningNakamaServerUrl(
       ok?: boolean;
       apiVersion?: number;
     };
-    const hasTaskChat = await serverHasTaskChat(serverUrl, controller.signal);
-    return payload.ok === true &&
-      payload.apiVersion === NAKAMA_API_VERSION &&
-      hasTaskChat
+    return payload.ok === true && payload.apiVersion === NAKAMA_API_VERSION
       ? serverUrl
       : null;
   } catch {

@@ -3,13 +3,7 @@ import type {
   SendMessageArg,
   StreamHandlers,
 } from "@nakama/client";
-
-export function isAbortError(error: unknown): boolean {
-  return (
-    (error instanceof DOMException && error.name === "AbortError") ||
-    (error instanceof Error && error.name === "AbortError")
-  );
-}
+import { isAbortError } from "@nakama/core/channel-active-stream";
 
 export async function sendStreamCancellable(
   session: RemoteChatSession,

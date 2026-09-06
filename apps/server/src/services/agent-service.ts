@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import {
   type AgentChatSession,
-  type AgentHarness,
+  type AgentDependencies,
   type CompactionConfig,
-  createAgentHarness,
-  draftTaskPromptFromFields,
+  createAgentChatSession,
+  createAutomationFromPrompt,
   executeToolCall,
   expandLearnInLastUserMessage,
   suggestToolParamsFromPrompt,
@@ -70,6 +70,7 @@ import type {
   TelegramSettingsResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
+  ToolContext,
   ToolDefinition,
   ToolResponse,
   ToolSourceResponse,
@@ -92,12 +93,14 @@ import type {
   UpdateTranscriptionRequest,
   UpdateUserContextRequest,
   UpdateVisionRequest,
+  UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UploadKnowledgeBaseResponse,
   UserConfig,
   UserContextStatusResponse,
   VisionSettings,
   VisionSettingsResponse,
+  WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
 } from "@nakama/core";
 import {
@@ -120,7 +123,7 @@ import {
   findProviderInstance,
   getActiveProviderInstance,
   getProfileSoulDir,
-  getResolvedSoulStatus,
+  getSoulStatus,
   initSoulDirectory,
   isEmailConfigComplete,
   isProviderConfigured,
@@ -138,6 +141,7 @@ import {
   loadUserTimezone,
   loadUserTranscriptionSettings,
   loadUserVisionSettings,
+  loadWebSearchSettingsPublic,
   loadWhatsAppSettingsPublic,
   messageContentHasImages,
   NakamaApiError,
@@ -147,6 +151,7 @@ import {
   ollamaRequiresApiKey,
   parseAgentChannel,
   parseSentryDsn,
+  partitionTools,
   persistInlineAttachmentsInContent,
   readArtifactFile,
   readBundledSkillBody,
@@ -169,6 +174,7 @@ import {
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
+  saveWebSearchConfig,
   saveWhatsAppConfig,
   USER_CONTEXT_TEMPLATE,
   WRITABLE_SOUL_FILES,
@@ -182,7 +188,6 @@ import {
   mergeWorkspaceSettings,
   type StoredProfileRecord,
   type StoredSessionRecord,
-  type StoredTaskRunRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import {
@@ -258,7 +263,6 @@ import {
   resolveImageGenerationSelection,
 } from "./image-generation";
 import {
-  createVisionFallbackProvider,
   describeImagesWithVisionModel,
   resolvePrimaryModelVisionSupport,
   resolveVisionProviderSelection,
@@ -299,8 +303,11 @@ import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
-import type { TaskRunner } from "./task-runner";
-import { resolveProfileStoredTools } from "./tool-resolver";
+import {
+  resolveProfileStoredTools,
+  type ServerToolOverrides,
+} from "./tool-resolver";
+import type { WorkflowRunner } from "./workflow-runner";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -318,7 +325,7 @@ export interface CreateSessionOptions {
 }
 
 export class AgentService {
-  private harness: AgentHarness;
+  private harness: AgentDependencies;
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
@@ -328,11 +335,13 @@ export class AgentService {
   private readonly superBotTools: ToolDefinition[];
   private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
+  private workflowTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
   private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
-  private taskRunner: TaskRunner | null = null;
+  private workflowRunner: WorkflowRunner | null = null;
+
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
   private composioService: ComposioService | null = null;
@@ -343,6 +352,7 @@ export class AgentService {
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
+  private serverTools: ServerToolOverrides = {};
   private _providerConfigured: boolean;
   private visionSettingsPromise: Promise<void> | null = null;
   private transcriptionSettingsPromise: Promise<void> | null = null;
@@ -467,6 +477,15 @@ export class AgentService {
     this.sessions.clear();
   }
 
+  setWorkflowTools(tools: ToolDefinition[]): void {
+    this.workflowTools = tools;
+    this.sessions.clear();
+  }
+
+  setServerTools(tools: ServerToolOverrides): void {
+    this.serverTools = tools;
+  }
+
   setAutomationRunHistoryTools(tools: ToolDefinition[]): void {
     this.automationRunHistoryTools = tools;
   }
@@ -475,8 +494,8 @@ export class AgentService {
     this.automationRunner = runner;
   }
 
-  setTaskRunner(runner: TaskRunner): void {
-    this.taskRunner = runner;
+  setWorkflowRunner(runner: WorkflowRunner): void {
+    this.workflowRunner = runner;
   }
 
   setMcpClientManager(manager: McpClientManager): void {
@@ -1232,6 +1251,22 @@ export class AgentService {
     return saveEmailConfig(input);
   }
 
+  async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
+    return loadWebSearchSettingsPublic();
+  }
+
+  async setWebSearchSettings(
+    input: UpdateWebSearchSettingsRequest
+  ): Promise<WebSearchSettingsResponse> {
+    const settings = await saveWebSearchConfig(input);
+
+    // Sessions cache their resolved tool list, so the swap between hosted and
+    // custom search only takes effect once they are rebuilt.
+    this.sessions.clear();
+
+    return settings;
+  }
+
   async sendEmailTest(recipient: string): Promise<SendEmailTestResponse> {
     const config = await loadEmailConfig();
 
@@ -1271,10 +1306,16 @@ export class AgentService {
     input: UpdateWhatsAppSettingsRequest
   ): Promise<WhatsAppSettingsResponse> {
     return saveWhatsAppConfig({
+      ...(input.allowedPhones === undefined
+        ? {}
+        : { allowedPhones: input.allowedPhones }),
       ...(input.phoneNumber === undefined
         ? {}
         : { phoneNumber: input.phoneNumber.trim() }),
       ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      ...(input.requireGroupMention === undefined
+        ? {}
+        : { requireGroupMention: input.requireGroupMention }),
     });
   }
 
@@ -1311,7 +1352,7 @@ export class AgentService {
     const userContext = await this.loadUserContextForUser(orgId, undefined);
     const harness = this.createHarnessForProfile(profile);
 
-    const session = harness.createChatSession({
+    const session = createAgentChatSession(harness, {
       channel: "automation",
       enableToolLoop: true,
       soul: soulActive,
@@ -1331,6 +1372,96 @@ export class AgentService {
     });
 
     return session.send(prompt);
+  }
+
+  async resolveWorkflowExecutionTools(
+    orgId: string,
+    profileId: string
+  ): Promise<ToolDefinition[]> {
+    const profile = await this.requireProfile(orgId, profileId);
+    const tools = await this.resolveProfileTools(profile, {
+      includeAutomationTools: false,
+      includeSkillManageTools: false,
+      includeTodoTools: false,
+      includeWorkflowTools: false,
+    });
+    return partitionTools(tools).localTools;
+  }
+
+  async resolveWorkflowToolNames(
+    orgId: string,
+    profileId: string
+  ): Promise<Set<string>> {
+    const tools = await this.resolveWorkflowExecutionTools(orgId, profileId);
+    return new Set(tools.map((tool) => tool.name));
+  }
+
+  buildWorkflowToolContext(
+    orgId: string,
+    context: {
+      profileId: string;
+      runId: string;
+      workflowId: string;
+    }
+  ): ToolContext {
+    return buildToolExecutionContext({
+      orgId,
+      orgRole: "member",
+      profileId: context.profileId,
+      recordToolOutputSavings: this.savingsRecorderFor(orgId),
+      recordTurnUsage: this.turnUsageRecorderFor(orgId),
+      workflowId: context.workflowId,
+      workflowRunId: context.runId,
+    });
+  }
+
+  async runWorkflowSummarize(
+    orgId: string,
+    profileId: string,
+    prompt: string,
+    receiptBag: Record<string, unknown>
+  ): Promise<string> {
+    if (!this._providerConfigured) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const profile = await this.requireProfile(orgId, profileId);
+    const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
+      orgId,
+      profileId,
+      profile.systemPrompt,
+      "member"
+    );
+    const userTimezone = await this.getUserTimezone();
+    const userContext = await this.loadUserContextForUser(orgId, undefined);
+    const harness = this.createHarnessForProfile(profile);
+    const userMessage = [
+      "Workflow receipts (only source of truth — do not invent values):",
+      "```json",
+      JSON.stringify(receiptBag, null, 2),
+      "```",
+      "",
+      prompt.trim(),
+    ].join("\n");
+
+    const session = createAgentChatSession(harness, {
+      channel: "automation",
+      enableToolLoop: false,
+      soul: soulActive,
+      systemPrompt,
+      toolContext: buildToolExecutionContext({
+        orgId,
+        orgRole: "member",
+        profileId,
+        recordToolOutputSavings: this.savingsRecorderFor(orgId),
+        recordTurnUsage: this.turnUsageRecorderFor(orgId),
+      }),
+      tools: [],
+      userContext,
+      userTimezone,
+    });
+
+    return session.send(userMessage);
   }
 
   async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
@@ -1376,7 +1507,7 @@ export class AgentService {
     const harness = this.createHarnessForProfile(profile);
     const prompt = buildSubAgentPrompt(task, input.context);
 
-    const session = harness.createChatSession({
+    const session = createAgentChatSession(harness, {
       channel: "subagent",
       enableToolLoop: true,
       soul: soulActive,
@@ -1464,140 +1595,6 @@ export class AgentService {
     return buildSubAgentResult("success", outcome.reply);
   }
 
-  async runTaskPrompt(
-    taskId: string,
-    profileId: string,
-    prompt: string
-  ): Promise<string> {
-    if (!this._providerConfigured) {
-      throw new Error("Provider is not configured.");
-    }
-
-    const task = await this.db.getTask(taskId);
-
-    if (!task?.orgId) {
-      throw new Error("Task not found.");
-    }
-
-    const sessionId = await this.ensureTaskSession(
-      taskId,
-      profileId,
-      task.orgId
-    );
-    const session = await this.resolveSession(sessionId, task.orgId);
-
-    if (!session) {
-      throw new Error("Session not found.");
-    }
-
-    return session.send(prompt);
-  }
-
-  async ensureTaskSession(
-    taskId: string,
-    profileId: string,
-    orgId: string
-  ): Promise<string> {
-    const record = await this.db.getTask(taskId);
-
-    if (!record) {
-      throw new Error("Task not found.");
-    }
-
-    if (record.sessionId) {
-      const existing = await this.db.getSession(record.sessionId);
-
-      if (existing) {
-        return record.sessionId;
-      }
-    }
-
-    const sessionId = await this.createSession(
-      orgId,
-      "task",
-      profileId,
-      undefined,
-      {
-        orgRole: "member",
-      }
-    );
-
-    await this.db.upsertTask({
-      ...record,
-      sessionId,
-      updatedAt: new Date().toISOString(),
-    });
-
-    return sessionId;
-  }
-
-  async getTaskChatMessages(
-    taskId: string,
-    orgId?: string
-  ): Promise<{ sessionId: string; messages: ChatMessage[] } | null> {
-    const record = await this.db.getTask(taskId);
-
-    if (!record || (orgId && record.orgId !== orgId)) {
-      return null;
-    }
-
-    let sessionId = record.sessionId;
-
-    if (sessionId) {
-      const existing = await this.db.getSession(sessionId);
-
-      if (!existing) {
-        sessionId = null;
-      }
-    }
-
-    if (!sessionId) {
-      const orgId = record.orgId?.trim();
-
-      if (!orgId) {
-        throw new Error("Task organization is missing.");
-      }
-
-      sessionId = await this.ensureTaskSession(taskId, record.profileId, orgId);
-    }
-
-    let messages = await loadSessionHistory(this.db, sessionId);
-
-    if (messages.length === 0) {
-      const runs = await this.db.listTaskRuns(taskId, 1);
-      const latestRun = runs[0];
-
-      if (latestRun && latestRun.status !== "running") {
-        await this.seedTaskSessionFromRun(record.prompt, latestRun, sessionId);
-        messages = await loadSessionHistory(this.db, sessionId);
-      }
-    }
-
-    return { messages, sessionId };
-  }
-
-  private async seedTaskSessionFromRun(
-    prompt: string,
-    run: StoredTaskRunRecord,
-    sessionId: string
-  ): Promise<void> {
-    const history: ChatMessage[] = [{ content: prompt, role: "user" }];
-
-    if (run.status === "failed") {
-      history.push({
-        content: run.error ?? "Task run failed.",
-        role: "assistant",
-      });
-    } else if (run.output) {
-      history.push({
-        content: run.output,
-        role: "assistant",
-      });
-    }
-
-    await replaceSessionHistory(this.db, sessionId, history);
-  }
-
   async runAutomation(automationId: string) {
     if (!this.automationRunner) {
       throw new Error("Automation runner is not configured.");
@@ -1606,12 +1603,12 @@ export class AgentService {
     return this.automationRunner.run(automationId);
   }
 
-  async runTask(taskId: string) {
-    if (!this.taskRunner) {
-      throw new Error("Task runner is not configured.");
+  async runWorkflow(workflowId: string, input: Record<string, unknown> = {}) {
+    if (!this.workflowRunner) {
+      throw new Error("Workflow runner is not configured.");
     }
 
-    return this.taskRunner.run(taskId);
+    return this.workflowRunner.run(workflowId, input);
   }
 
   get providerConfigured(): boolean {
@@ -2044,19 +2041,7 @@ export class AgentService {
       throw new Error("Provider is not configured.");
     }
 
-    return this.harness.createAutomationFromPrompt({ channel, prompt });
-  }
-
-  async draftTaskPrompt(title: string, description?: string): Promise<string> {
-    const provider = createProviderFromActiveConfig(
-      this.userConfig,
-      process.env
-    );
-
-    return draftTaskPromptFromFields(
-      { description, title },
-      { provider: provider ?? undefined }
-    );
+    return createAutomationFromPrompt(this.harness, { channel, prompt });
   }
 
   async discoverModels(
@@ -2905,7 +2890,7 @@ export class AgentService {
     includeContents = false
   ): Promise<SoulStatusResponse> {
     const profile = await this.requireProfile(orgId, profileId);
-    const status = await getResolvedSoulStatus(orgId, profileId);
+    const status = await getSoulStatus(getProfileSoulDir(orgId, profileId));
 
     if (!includeContents) {
       return { ...status, profileId };
@@ -3093,7 +3078,7 @@ export class AgentService {
     providerInstance?: ReturnType<typeof getActiveProviderInstance>;
     modelId?: string | null;
     thinking: ThinkingSettings;
-  }): AgentHarness {
+  }): AgentDependencies {
     const providerInstance = options.providerInstance ?? null;
 
     this.syncUsagePricingContext(providerInstance);
@@ -3107,13 +3092,13 @@ export class AgentService {
           )
         : options.provider;
 
-    return createAgentHarness({
+    return {
       chatOptions: this.resolveChatProviderOptions(
         providerInstance,
         options.thinking
       ),
       provider: trackedProvider ?? undefined,
-    });
+    };
   }
 
   private syncUsagePricingContext(
@@ -3220,6 +3205,7 @@ export class AgentService {
     profile: StoredProfileRecord,
     options: {
       includeAutomationTools?: boolean;
+      includeWorkflowTools?: boolean;
       includeTodoTools?: boolean;
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
@@ -3229,9 +3215,11 @@ export class AgentService {
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      serverTools: this.serverTools,
       userConfig: this.userConfig,
     });
     const includeAutomationTools = options.includeAutomationTools ?? true;
+    const includeWorkflowTools = options.includeWorkflowTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
     const includeSubAgentTool = options.includeSubAgentTool ?? true;
@@ -3287,6 +3275,10 @@ export class AgentService {
 
     if (includeAutomationTools && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
+    }
+
+    if (includeWorkflowTools && this.workflowTools.length > 0) {
+      resolved = [...resolved, ...this.workflowTools];
     }
 
     if (includeTodoTools && this.todoTools.length > 0) {
@@ -3401,7 +3393,7 @@ export class AgentService {
     });
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
-    const session = harness.createChatSession({
+    const session = createAgentChatSession(harness, {
       channel,
       compaction,
       enableToolLoop: true,
@@ -3436,7 +3428,10 @@ export class AgentService {
           throw new NakamaApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
         }
 
-        let visionProvider = createVisionFallbackProvider(visionSelection);
+        let visionProvider = createProviderForInstance(
+          visionSelection.instance,
+          visionSelection.model
+        );
 
         if (this.llmUsageTracker) {
           visionProvider = wrapProviderWithUsageTracking(
@@ -3730,7 +3725,7 @@ export class AgentService {
   private createHarnessForProfile(
     profile: StoredProfileRecord,
     selectedModel: string | null = profile.model
-  ): AgentHarness {
+  ): AgentDependencies {
     const resolved = resolveProfileProviderSelection({
       defaultProviderId: this.userConfig?.defaultProviderId,
       profileModel: selectedModel,

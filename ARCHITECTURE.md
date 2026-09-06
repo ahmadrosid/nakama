@@ -2,7 +2,7 @@
 
 Nakama is an agent platform for teams. The platform does not replace the team. One shared server runtime serves thin clients.
 
-The org is the isolation boundary. Profiles, sessions, tools, MCP, skills, automations, tasks, attachments, and usage are org-scoped unless they are platform-level.
+The org is the isolation boundary. Profiles, sessions, tools, MCP, skills, automations, attachments, and usage are org-scoped unless they are platform-level.
 
 ## System overview
 
@@ -123,7 +123,7 @@ The HTTP app does these steps in this order:
 
 These route groups run before org middleware: `internal-automations`, `internal-curator`, `notification-webhooks`, Composio OAuth.
 
-These route groups run after org middleware: `system`, `auth`, `setup-import`, `workers`, `models`, `user-context`, `sessions`, `profiles`, `profile-portability`, `artifact-shares`, `mcp`, `skills`, `tools`, `automations`, `notification-destinations`, `token-optimization`, `coding-harnesses`, `composio`, `tasks`, `platform-orgs`, `data-portability`, `org-members`, `org-memory`, `org-curator`, `skill-proposals`, `skill-suggestions`.
+These route groups run after org middleware: `system`, `auth`, `setup-import`, `workers`, `models`, `user-context`, `sessions`, `profiles`, `profile-portability`, `artifact-shares`, `mcp`, `skills`, `tools`, `automations`, `notification-destinations`, `token-optimization`, `coding-harnesses`, `composio`, `platform-orgs`, `data-portability`, `org-members`, `org-memory`, `org-curator`, `skill-proposals`, `skill-suggestions`.
 
 ## Multi-tenancy
 
@@ -171,16 +171,16 @@ Per-turn context can include todos, matched skills, and Composio connections. A 
 
 Tools are profile-scoped. Super Bot can get extra runtime tools when the profile permits them.
 
-## Workers, automations, tasks
+## Workers and automations
 
 The server starts workers with PM2 through [`worker-manager-service.ts`](./apps/server/src/services/worker-manager-service.ts).
 
 - `apps/platform/automation` does scheduled work and skill-curator ticks.
 - `apps/platform/telegram`, `whatsapp`, and `discord` are channel bridges.
 
-The database stores automations in `automations` and `automation_runs`. The database stores tasks in `tasks` and `task_runs`.
+The database stores automations in `automations` and `automation_runs`.
 
-The services are `automation-service.ts`, `automation-runner.ts`, `task-service.ts`, and `task-runner.ts`.
+The services are `automation-service.ts` and `automation-runner.ts`.
 
 ## Notifications and attachments
 
@@ -210,7 +210,7 @@ The schema is [`packages/db/sql/schema.sql`](./packages/db/sql/schema.sql).
 | Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings` |
 | Agent config | `profiles`, `tools`, `profile_tools`, `skills`, `profile_skills`, `profile_skill_usage`, `mcp_servers`, `profile_mcp_servers` |
 | Runtime | `sessions`, `session_messages`, `attachments`, `artifact_shares` |
-| Execution | `automations`, `automation_runs`, `automation_run_read_state`, `tasks`, `task_runs` |
+| Execution | `automations`, `automation_runs`, `automation_run_read_state` |
 | Approvals | `org_memory_proposals`, `skill_proposals`, `skill_suggestions` |
 | Composio | `composio_toolkits`, `profile_composio_toolkits`, `composio_user_connections` |
 | Notifications | `notification_destinations` |

@@ -137,12 +137,6 @@ export interface AutomationWorkerStatus {
   scheduledJobs: number;
 }
 
-export interface TaskWorkerStatus {
-  activeRuns: number;
-  ok: boolean;
-  providerConfigured: boolean;
-}
-
 export interface WorkerProcessInfo {
   cpuPercent: number | null;
   managed: boolean;
@@ -321,7 +315,6 @@ export interface SystemStatusResponse {
   llmUsage: LlmUsageStatus;
   mcp: McpStatus;
   server: HealthResponse;
-  taskWorker: TaskWorkerStatus;
   telegramWorker: TelegramWorkerStatus;
   whatsappWorker: WhatsAppWorkerStatus;
 }
@@ -1126,86 +1119,168 @@ export interface MarkAutomationRunsReadResponse {
   readThroughAt: string;
 }
 
-export const TASK_STATUSES = [
-  "backlog",
-  "todo",
-  "in_progress",
-  "done",
-  "failed",
-] as const;
+export type WorkflowStepKind =
+  | "tool"
+  | "compare"
+  | "assert"
+  | "template"
+  | "summarize";
 
-export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type WorkflowCompareOp = "eq" | "near" | "contains";
 
-export interface StoredTask {
-  createdAt: string;
+export interface WorkflowToolStep {
+  id: string;
+  input: Record<string, unknown>;
+  kind: "tool";
+  tool: string;
+}
+
+export interface WorkflowCompareStep {
+  id: string;
+  kind: "compare";
+  left: unknown;
+  op: WorkflowCompareOp;
+  right: unknown;
+  tolerance?: number;
+}
+
+export interface WorkflowAssertStep {
+  expected: unknown;
+  id: string;
+  kind: "assert";
+  path: string;
+}
+
+export interface WorkflowTemplateStep {
+  id: string;
+  kind: "template";
+  template: string;
+}
+
+export interface WorkflowSummarizeStep {
+  id: string;
+  kind: "summarize";
+  prompt: string;
+}
+
+export type WorkflowStep =
+  | WorkflowToolStep
+  | WorkflowCompareStep
+  | WorkflowAssertStep
+  | WorkflowTemplateStep
+  | WorkflowSummarizeStep;
+
+export interface WorkflowDefinition {
   description: string;
   id: string;
-  position: number;
+  name: string;
+  steps: WorkflowStep[];
+  version: number;
+}
+
+export interface StoredWorkflow extends WorkflowDefinition {
+  createdAt: string;
+  enabled: boolean;
+  lastRunAt?: string | null;
+  orgId?: string | null;
   profileId: string;
-  prompt: string;
-  sessionId: string | null;
-  status: TaskStatus;
-  title: string;
   updatedAt: string;
 }
 
-export interface DraftTaskPromptRequest {
-  description?: string;
-  title: string;
+export type WorkflowRunStatus = "running" | "completed" | "failed";
+
+export type WorkflowRunStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface WorkflowReceiptBag {
+  input: Record<string, unknown>;
+  steps: Record<string, unknown>;
 }
 
-export interface DraftTaskPromptResponse {
-  prompt: string;
-}
-
-export interface CreateTaskRequest {
-  description?: string;
-  profileId?: string;
-  prompt: string;
-  status?: TaskStatus;
-  title: string;
-}
-
-export interface UpdateTaskRequest {
-  description?: string;
-  position?: number;
-  profileId?: string;
-  prompt?: string;
-  status?: TaskStatus;
-  title?: string;
-}
-
-export interface ListTasksResponse {
-  tasks: StoredTask[];
-}
-
-export interface TaskResponse {
-  task: StoredTask;
-}
-
-export type TaskRunStatus = "running" | "completed" | "failed";
-
-export interface TaskRunRecord {
+export interface WorkflowRunStepRecord {
   completedAt: string | null;
   error: string | null;
   id: string;
+  input: unknown;
+  kind: WorkflowStepKind;
+  output: unknown;
+  runId: string;
+  startedAt: string;
+  status: WorkflowRunStepStatus;
+  stepId: string;
+}
+
+export interface WorkflowRunRecord {
+  completedAt: string | null;
+  error: string | null;
+  id: string;
+  input: Record<string, unknown> | null;
   output: string | null;
   startedAt: string;
-  status: TaskRunStatus;
-  taskId: string;
+  status: WorkflowRunStatus;
+  steps?: WorkflowRunStepRecord[];
+  workflowId: string;
 }
 
-export interface RunTaskResponse {
-  run: TaskRunRecord;
+export interface ListWorkflowsResponse {
+  workflows: StoredWorkflow[];
 }
 
-export interface ListTaskRunsResponse {
-  runs: TaskRunRecord[];
+export interface WorkflowResponse {
+  workflow: StoredWorkflow;
 }
 
-export interface TaskMessagesResponse {
-  messages: ChatMessage[];
-  sessionId: string;
+export interface CreateWorkflowRequest {
+  description: string;
+  enabled?: boolean;
+  name: string;
+  profileId?: string;
+  steps: WorkflowStep[];
+}
+
+export interface UpdateWorkflowRequest {
+  description?: string;
+  enabled?: boolean;
+  name?: string;
+  profileId?: string;
+  steps?: WorkflowStep[];
+}
+
+export interface RunWorkflowRequest {
+  input?: Record<string, unknown>;
+}
+
+export interface RunWorkflowResponse {
+  run: WorkflowRunRecord;
+}
+
+export interface ListWorkflowRunsResponse {
+  runs: WorkflowRunRecord[];
+}
+
+export interface GetWorkflowRunResponse {
+  run: WorkflowRunRecord;
+}
+
+export interface WorkflowSqliteTableInfo {
+  name: string;
+  rowCount: number;
+}
+
+export interface WorkflowSqlitePreview {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  table: string;
+  total: number;
+}
+
+export interface WorkflowSqliteInspectResponse {
+  preview: WorkflowSqlitePreview | null;
+  tables: WorkflowSqliteTableInfo[];
 }
 
 export interface TimezoneSettingsResponse {
@@ -1276,6 +1351,24 @@ export interface ImageGenerationSettingsResponse {
 
 export interface UpdateImageGenerationRequest {
   model: string | null;
+}
+
+/** Search back-end that replaces the provider-hosted `web_search` tool. */
+export type WebSearchProvider = "exa" | "firecrawl";
+
+export interface WebSearchSettingsResponse {
+  apiKeyMasked: string | null;
+  /** false means the active LLM provider's own hosted web search is used. */
+  configured: boolean;
+  endpoint: string | null;
+  provider: WebSearchProvider | null;
+}
+
+export interface UpdateWebSearchSettingsRequest {
+  apiKey?: string;
+  endpoint?: string;
+  /** null clears the override and restores the built-in hosted search. */
+  provider?: WebSearchProvider | null;
 }
 
 export interface GenerateImageRequest {
@@ -1477,12 +1570,14 @@ export interface WhatsAppSettingsResponse {
   pairingCode: string | null;
   phoneNumberMasked: string | null;
   profileId: string;
+  requireGroupMention: boolean;
 }
 
 export interface UpdateWhatsAppSettingsRequest {
   allowedPhones?: string;
   phoneNumber?: string;
   profileId?: string;
+  requireGroupMention?: boolean;
 }
 
 export interface TimezoneCatalogEntry {
@@ -2309,12 +2404,20 @@ export interface ToolContext {
    */
   tokenOptimizerEnabled?: boolean | null;
   userId?: string;
+  workflowId?: string;
+  workflowRunId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
+  /**
+   * When true, the LLM provider runs this tool itself and `run` is never
+   * called. Only `web_search` uses it today: the built-in stub is hosted, a
+   * custom search back-end is not. Undefined is treated as local.
+   */
+  hosted?: boolean;
   name: string;
   /** When true, this tool may run concurrently with other parallelSafe tools in the same turn. */
   parallelSafe?: boolean;

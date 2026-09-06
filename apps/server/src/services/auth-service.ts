@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 const SALT_ROUNDS = 10;
 const SESSION_EXPIRY_DAYS = 7;
@@ -35,5 +35,5 @@ export class AuthService {
 }
 
 function generateOpaqueToken(): string {
-  return `${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
+  return randomBytes(32).toString("hex");
 }

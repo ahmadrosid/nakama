@@ -17,7 +17,7 @@ export async function loadPythonTool(
 ): Promise<ToolDefinition | null> {
   return loadCustomSubprocessTool({
     record,
-    resolveModulePath: resolvePythonModulePath,
+    resolveModulePath: resolveCustomToolModulePath,
     run: runPythonTool,
     validateModule: validatePythonToolModule,
   });
@@ -26,7 +26,7 @@ export async function loadPythonTool(
 export async function validatePythonToolModule(
   modulePath: string
 ): Promise<void> {
-  const resolvedPath = resolvePythonModulePath(modulePath);
+  const resolvedPath = resolveCustomToolModulePath(modulePath);
 
   if (!(await pathExists(resolvedPath))) {
     throw new Error(`Tool module not found: ${modulePath}`);
@@ -49,10 +49,6 @@ export async function validatePythonToolModule(
       'Python tools must include an if __name__ == "__main__" harness that reads JSON from sys.stdin and writes JSON to sys.stdout.'
     );
   }
-}
-
-export function resolvePythonModulePath(modulePath: string): string {
-  return resolveCustomToolModulePath(modulePath);
 }
 
 async function runPythonTool(

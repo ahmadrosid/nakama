@@ -4,7 +4,7 @@ import type {
   GenerateChatInput,
   ProviderClient,
 } from "@nakama/core";
-import { createAgentHarness } from "./index";
+import { createAgentChatSession } from "./index";
 
 function createCapturingProvider(
   response: ChatCompletionResult
@@ -37,13 +37,15 @@ describe("thinking provider options", () => {
       toolCalls: [],
     });
 
-    const harness = createAgentHarness({
-      chatOptions: { thinking: { effort: "high", enabled: true } },
-      provider,
-    });
-    const session = harness.createChatSession({
-      enableToolLoop: false,
-    });
+    const session = createAgentChatSession(
+      {
+        chatOptions: { thinking: { effort: "high", enabled: true } },
+        provider,
+      },
+      {
+        enableToolLoop: false,
+      }
+    );
 
     const events: string[] = [];
     await session.sendStream("hello", {
@@ -64,11 +66,13 @@ describe("thinking provider options", () => {
       toolCalls: [],
     });
 
-    const harness = createAgentHarness({
-      chatOptions: { thinking: { effort: "medium", enabled: true } },
-      provider,
-    });
-    const session = harness.createChatSession({ enableToolLoop: false });
+    const session = createAgentChatSession(
+      {
+        chatOptions: { thinking: { effort: "medium", enabled: true } },
+        provider,
+      },
+      { enableToolLoop: false }
+    );
 
     await session.send({
       images: [{ data: "aGVsbG8=", mediaType: "image/png" }],
