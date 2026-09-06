@@ -182,6 +182,160 @@ function ProviderSetupApiKeyField({
   );
 }
 
+function CloudflareAccountIdField({
+  density,
+  form,
+}: {
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  return (
+    <FormField
+      density={density}
+      footer={
+        form.baseUrlError ? (
+          <p
+            className="text-destructive text-sm"
+            id="cloudflare-account-id-error"
+            role="alert"
+          >
+            {form.baseUrlError}
+          </p>
+        ) : null
+      }
+      id="cloudflare-account-id"
+      label="Account ID"
+    >
+      <Input
+        aria-invalid={form.baseUrlError != null}
+        autoComplete="off"
+        disabled={form.busy}
+        id="cloudflare-account-id"
+        onChange={(event) => form.setBaseUrl(event.target.value)}
+        value={form.baseUrl}
+      />
+    </FormField>
+  );
+}
+
+function OpenRouterModelFields({
+  canPickModels,
+  density,
+  form,
+}: {
+  canPickModels: boolean;
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  if (!canPickModels) {
+    return null;
+  }
+
+  return (
+    <OpenRouterProviderModelFields
+      customModels={form.openRouterModels}
+      density={density}
+      disabled={form.busy}
+      modelsError={form.openRouterModelsError}
+      onCustomModelsChange={form.handleOpenRouterModelsChange}
+    />
+  );
+}
+
+function OllamaSetupFields({
+  canPickModels,
+  density,
+  form,
+}: {
+  canPickModels: boolean;
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  return (
+    <>
+      <OllamaProviderSetupFields
+        baseUrl={form.baseUrl}
+        baseUrlError={form.baseUrlError}
+        density={density}
+        disabled={form.busy}
+        hostMode={form.ollamaHostMode}
+        onBaseUrlChange={form.setBaseUrl}
+        onHostModeChange={form.handleOllamaHostModeChange}
+      />
+      {canPickModels ? (
+        <OllamaProviderModelFields
+          apiKey={form.apiKey}
+          baseUrl={form.baseUrl}
+          customModels={form.customModels}
+          density={density}
+          disabled={form.busy}
+          hostMode={form.ollamaHostMode}
+          modelsError={form.modelsError}
+          onCustomModelsChange={form.setCustomModels}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ShortlistModelFields({
+  canPickModels,
+  density,
+  form,
+}: {
+  canPickModels: boolean;
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  if (!canPickModels) {
+    return null;
+  }
+
+  return (
+    <ShortlistBrowseProviderModelFields
+      apiKey={form.selectedProvider === "fireworks" ? form.apiKey : undefined}
+      customModels={form.shortlistModels}
+      density={density}
+      disabled={form.busy}
+      modelsError={form.shortlistModelsError}
+      onCustomModelsChange={form.handleShortlistModelsChange}
+      provider={form.selectedProvider}
+    />
+  );
+}
+
+function DefaultModelSelectField({
+  density,
+  form,
+}: {
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  return (
+    <FormField density={density} id="model" label="Model">
+      <Select
+        disabled={form.busy || form.filteredModels.length === 0}
+        onValueChange={(value) =>
+          form.setSelectedModel(value == null ? "" : String(value))
+        }
+        value={form.selectedModel}
+      >
+        <SelectTrigger className="w-full" id="model">
+          <SelectValue placeholder="Select a model" />
+        </SelectTrigger>
+        <SelectContent>
+          {form.filteredModels.map((model) => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.name}
+              {model.default ? " (default)" : ""}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </FormField>
+  );
+}
+
 function ProviderSetupExtraFields({
   canPickModels,
   density,
@@ -192,33 +346,7 @@ function ProviderSetupExtraFields({
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
   if (form.selectedProvider === "cloudflare") {
-    return (
-      <FormField
-        density={density}
-        footer={
-          form.baseUrlError ? (
-            <p
-              className="text-destructive text-sm"
-              id="cloudflare-account-id-error"
-              role="alert"
-            >
-              {form.baseUrlError}
-            </p>
-          ) : null
-        }
-        id="cloudflare-account-id"
-        label="Account ID"
-      >
-        <Input
-          aria-invalid={form.baseUrlError != null}
-          autoComplete="off"
-          disabled={form.busy}
-          id="cloudflare-account-id"
-          onChange={(event) => form.setBaseUrl(event.target.value)}
-          value={form.baseUrl}
-        />
-      </FormField>
-    );
+    return <CloudflareAccountIdField density={density} form={form} />;
   }
 
   if (form.selectedProvider === "openai_compatible") {
@@ -244,90 +372,36 @@ function ProviderSetupExtraFields({
   }
 
   if (form.selectedProvider === "openrouter") {
-    if (!canPickModels) {
-      return null;
-    }
-
     return (
-      <OpenRouterProviderModelFields
-        customModels={form.openRouterModels}
+      <OpenRouterModelFields
+        canPickModels={canPickModels}
         density={density}
-        disabled={form.busy}
-        modelsError={form.openRouterModelsError}
-        onCustomModelsChange={form.handleOpenRouterModelsChange}
+        form={form}
       />
     );
   }
 
   if (form.selectedProvider === "ollama") {
     return (
-      <>
-        <OllamaProviderSetupFields
-          baseUrl={form.baseUrl}
-          baseUrlError={form.baseUrlError}
-          density={density}
-          disabled={form.busy}
-          hostMode={form.ollamaHostMode}
-          onBaseUrlChange={form.setBaseUrl}
-          onHostModeChange={form.handleOllamaHostModeChange}
-        />
-        {canPickModels ? (
-          <OllamaProviderModelFields
-            apiKey={form.apiKey}
-            baseUrl={form.baseUrl}
-            customModels={form.customModels}
-            density={density}
-            disabled={form.busy}
-            hostMode={form.ollamaHostMode}
-            modelsError={form.modelsError}
-            onCustomModelsChange={form.setCustomModels}
-          />
-        ) : null}
-      </>
-    );
-  }
-
-  if (isShortlistBrowseProvider(form.selectedProvider)) {
-    if (!canPickModels) {
-      return null;
-    }
-
-    return (
-      <ShortlistBrowseProviderModelFields
-        apiKey={form.selectedProvider === "fireworks" ? form.apiKey : undefined}
-        customModels={form.shortlistModels}
+      <OllamaSetupFields
+        canPickModels={canPickModels}
         density={density}
-        disabled={form.busy}
-        modelsError={form.shortlistModelsError}
-        onCustomModelsChange={form.handleShortlistModelsChange}
-        provider={form.selectedProvider}
+        form={form}
       />
     );
   }
 
-  return (
-    <FormField density={density} id="model" label="Model">
-      <Select
-        disabled={form.busy || form.filteredModels.length === 0}
-        onValueChange={(value) =>
-          form.setSelectedModel(value == null ? "" : String(value))
-        }
-        value={form.selectedModel}
-      >
-        <SelectTrigger className="w-full" id="model">
-          <SelectValue placeholder="Select a model" />
-        </SelectTrigger>
-        <SelectContent>
-          {form.filteredModels.map((model) => (
-            <SelectItem key={model.id} value={model.id}>
-              {model.name}
-              {model.default ? " (default)" : ""}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </FormField>
-  );
+  if (isShortlistBrowseProvider(form.selectedProvider)) {
+    return (
+      <ShortlistModelFields
+        canPickModels={canPickModels}
+        density={density}
+        form={form}
+      />
+    );
+  }
+
+  return <DefaultModelSelectField density={density} form={form} />;
 }
 
 function ProviderSetupDetails({
