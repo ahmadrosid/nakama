@@ -2554,6 +2554,7 @@ export interface ComposioToolErrorResult {
 
 export interface PluginReleaseSummary {
   createdAt: string;
+  digest: string;
   manifest: PluginManifest;
   pluginId: string;
   version: string;

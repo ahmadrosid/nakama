@@ -1,5 +1,12 @@
+import { isAbsolute, join } from "node:path";
+import { assertConfigPathSegment } from "./soul/resolve";
+import { getUserConfigDir } from "./user-config";
+
 export const PLUGIN_MANIFEST_API_VERSION = 1;
 export const PLUGIN_TOOL_NAME_MAX_LENGTH = 64;
+export const PLUGIN_MANIFEST_FILENAME = "nakama.plugin.json";
+const PLUGIN_PACKAGES_DIR_NAME = "plugins";
+const PLUGIN_STAGING_DIR_NAME = ".staging";
 
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
@@ -274,6 +281,37 @@ export function validatePluginJsonSchema(
   }
 
   return { ok: true };
+}
+
+export function getPluginsRootDir(configDir = getUserConfigDir()): string {
+  return join(assertAbsoluteConfigDir(configDir), PLUGIN_PACKAGES_DIR_NAME);
+}
+
+export function getPluginStagingRootDir(
+  configDir = getUserConfigDir()
+): string {
+  return join(getPluginsRootDir(configDir), PLUGIN_STAGING_DIR_NAME);
+}
+
+export function getPluginReleaseDir(
+  pluginId: string,
+  version: string,
+  configDir = getUserConfigDir()
+): string {
+  return join(
+    getPluginsRootDir(configDir),
+    assertConfigPathSegment(pluginId, "pluginId"),
+    assertConfigPathSegment(version, "version")
+  );
+}
+
+function assertAbsoluteConfigDir(configDir: string): string {
+  if (!isAbsolute(configDir)) {
+    throw new Error(
+      "configDir must be an absolute path; relative paths resolve against process.cwd() and break plugin isolation."
+    );
+  }
+  return configDir;
 }
 
 export function derivePluginToolName(

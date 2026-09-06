@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import {
   derivePluginToolName,
+  getPluginReleaseDir,
+  getPluginStagingRootDir,
+  getPluginsRootDir,
   PLUGIN_MANIFEST_API_VERSION,
   PLUGIN_TOOL_NAME_MAX_LENGTH,
   validatePluginJsonSchema,
@@ -297,6 +301,29 @@ describe("validatePluginJsonSchema", () => {
       false
     );
     expect(validatePluginJsonSchema({ pattern: "^x" }).ok).toBe(false);
+  });
+});
+
+describe("plugin package paths", () => {
+  test("resolves release and staging dirs from the config root", () => {
+    const configDir = "/tmp/nakama-config";
+    expect(getPluginsRootDir(configDir)).toBe(join(configDir, "plugins"));
+    expect(getPluginReleaseDir("notes", "1.0.0", configDir)).toBe(
+      join(configDir, "plugins", "notes", "1.0.0")
+    );
+    expect(getPluginStagingRootDir(configDir)).toBe(
+      join(configDir, "plugins", ".staging")
+    );
+  });
+
+  test("rejects relative config dirs and unsafe identity segments", () => {
+    expect(() => getPluginReleaseDir("notes", "1.0.0", "relative")).toThrow();
+    expect(() =>
+      getPluginReleaseDir("../notes", "1.0.0", "/tmp/nakama-config")
+    ).toThrow();
+    expect(() =>
+      getPluginReleaseDir("notes", "1.0.0/../2", "/tmp/nakama-config")
+    ).toThrow();
   });
 });
 

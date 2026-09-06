@@ -1526,6 +1526,7 @@ function migratePluginTables(db: Database): void {
       plugin_id TEXT NOT NULL,
       version TEXT NOT NULL,
       manifest TEXT NOT NULL,
+      digest TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       PRIMARY KEY (plugin_id, version)
     );
@@ -1546,6 +1547,7 @@ function migratePluginTables(db: Database): void {
     );
   `);
 
+  addNullableTextColumnIfMissing(db, "plugin_releases", "digest");
   addNullableTextColumnIfMissing(db, "tools", "plugin_id");
   addNullableTextColumnIfMissing(db, "tools", "plugin_key");
   addNullableTextColumnIfMissing(db, "skills", "plugin_id");

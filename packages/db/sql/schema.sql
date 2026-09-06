@@ -538,6 +538,7 @@ CREATE TABLE IF NOT EXISTS plugin_releases (
   plugin_id TEXT NOT NULL,
   version TEXT NOT NULL,
   manifest TEXT NOT NULL,
+  digest TEXT NOT NULL,
   created_at TEXT NOT NULL,
   PRIMARY KEY (plugin_id, version)
 );

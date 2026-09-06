@@ -49,6 +49,7 @@ import type {
   StoredWorkflowRunRecord,
   StoredWorkflowRunStepRecord,
   StoredWorkspaceSettingsRecord,
+  UpsertPluginReleaseResult,
 } from "../types";
 
 export interface SqliteDatabase {
@@ -981,11 +982,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getPluginReleaseStmt = db.prepare(
     "SELECT * FROM plugin_releases WHERE plugin_id = ? AND version = ?"
   );
-  const upsertPluginReleaseStmt = db.prepare(`
-    INSERT INTO plugin_releases (plugin_id, version, manifest, created_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(plugin_id, version) DO UPDATE SET
-      manifest = excluded.manifest
+  const insertPluginReleaseStmt = db.prepare(`
+    INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const fillEmptyPluginReleaseDigestStmt = db.prepare(`
+    UPDATE plugin_releases
+    SET digest = ?, manifest = ?
+    WHERE plugin_id = ? AND version = ? AND (digest IS NULL OR digest = '')
   `);
   const getOrgPluginStmt = db.prepare(
     "SELECT * FROM org_plugins WHERE org_id = ? AND plugin_id = ?"
@@ -1893,6 +1897,39 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         OR (SELECT COUNT(*) FROM org_members
             WHERE org_id = ? AND role = 'admin') > 1)
   `);
+
+  const upsertPluginReleaseTx = db.transaction(
+    (record: StoredPluginReleaseRecord): UpsertPluginReleaseResult => {
+      const existing = getPluginReleaseStmt.get(
+        record.pluginId,
+        record.version
+      ) as PluginReleaseRow | null;
+      if (existing) {
+        const existingDigest = existing.digest ?? "";
+        if (existingDigest && existingDigest !== record.digest) {
+          return { ok: false, reason: "digest_conflict" };
+        }
+        if (!existingDigest) {
+          fillEmptyPluginReleaseDigestStmt.run(
+            record.digest,
+            JSON.stringify(record.manifest),
+            record.pluginId,
+            record.version
+          );
+        }
+        return { ok: true };
+      }
+
+      insertPluginReleaseStmt.run(
+        record.pluginId,
+        record.version,
+        JSON.stringify(record.manifest),
+        record.digest,
+        record.createdAt
+      );
+      return { ok: true };
+    }
+  );
 
   const publishOrgPluginReleaseTx = db.transaction(
     (input: PublishOrgPluginReleaseInput): PluginPublishResult => {
@@ -3375,12 +3412,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async upsertPluginRelease(record) {
-      upsertPluginReleaseStmt.run(
-        record.pluginId,
-        record.version,
-        JSON.stringify(record.manifest),
-        record.createdAt
-      );
+      return upsertPluginReleaseTx(record);
     },
 
     async upsertProfile(record) {
@@ -3655,6 +3687,7 @@ function toToolRecord(row: ToolRow): StoredToolRecord {
 
 interface PluginReleaseRow {
   created_at: string;
+  digest: string | null;
   manifest: string;
   plugin_id: string;
   version: string;
@@ -3678,6 +3711,7 @@ function toPluginReleaseRecord(
 ): StoredPluginReleaseRecord {
   return {
     createdAt: row.created_at,
+    digest: row.digest ?? "",
     manifest: parseJson(row.manifest) as StoredPluginReleaseRecord["manifest"],
     pluginId: row.plugin_id,
     version: row.version,

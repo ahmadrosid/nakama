@@ -200,6 +200,10 @@ describe("plugin metadata migration", () => {
         "org_plugins",
         "plugin_releases",
       ]);
+      const releaseColumns = db
+        .prepare("PRAGMA table_info(plugin_releases)")
+        .all() as Array<{ name: string }>;
+      expect(releaseColumns.map((column) => column.name)).toContain("digest");
     } finally {
       db.close();
     }
@@ -211,6 +215,7 @@ describe("plugin ownership adapter", () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertPluginRelease({
       createdAt: now,
+      digest: "sha256:notes-1.0.0",
       manifest: notesManifest(),
       pluginId: "notes",
       version: "1.0.0",
@@ -273,12 +278,14 @@ describe("plugin ownership adapter", () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertPluginRelease({
       createdAt: now,
+      digest: "sha256:notes-1.0.0",
       manifest: notesManifest(),
       pluginId: "notes",
       version: "1.0.0",
     });
     await db.upsertPluginRelease({
       createdAt: now,
+      digest: "sha256:notes-1.1.0",
       manifest: notesManifest("1.1.0"),
       pluginId: "notes",
       version: "1.1.0",
@@ -349,12 +356,14 @@ describe("plugin ownership adapter", () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertPluginRelease({
       createdAt: now,
+      digest: "sha256:notes-1.0.0",
       manifest: notesManifest(),
       pluginId: "notes",
       version: "1.0.0",
     });
     await db.upsertPluginRelease({
       createdAt: now,
+      digest: "sha256:notes-1.1.0",
       manifest: notesManifest("1.1.0"),
       pluginId: "notes",
       version: "1.1.0",
@@ -415,6 +424,7 @@ describe("plugin ownership adapter", () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertPluginRelease({
       createdAt: now,
+      digest: "sha256:notes-1.0.0",
       manifest: notesManifest(),
       pluginId: "notes",
       version: "1.0.0",
@@ -490,6 +500,39 @@ describe("plugin ownership adapter", () => {
       name: "custom_tool",
       pluginId: null,
       pluginKey: null,
+    });
+  });
+
+  test("reinstalling the same digest is idempotent and a different digest conflicts", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const first = await db.upsertPluginRelease({
+      createdAt: now,
+      digest: "sha256:same",
+      manifest: notesManifest(),
+      pluginId: "notes",
+      version: "1.0.0",
+    });
+    const same = await db.upsertPluginRelease({
+      createdAt: now,
+      digest: "sha256:same",
+      manifest: notesManifest(),
+      pluginId: "notes",
+      version: "1.0.0",
+    });
+    const conflict = await db.upsertPluginRelease({
+      createdAt: now,
+      digest: "sha256:other",
+      manifest: notesManifest(),
+      pluginId: "notes",
+      version: "1.0.0",
+    });
+
+    expect(first).toEqual({ ok: true });
+    expect(same).toEqual({ ok: true });
+    expect(conflict).toEqual({ ok: false, reason: "digest_conflict" });
+    expect(await db.getPluginRelease("notes", "1.0.0")).toMatchObject({
+      digest: "sha256:same",
+      version: "1.0.0",
     });
   });
 });

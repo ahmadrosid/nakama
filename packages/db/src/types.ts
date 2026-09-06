@@ -408,6 +408,10 @@ export interface StoredOrgPluginRecord extends OrgPluginSummary {
   orgId: string;
 }
 
+export type UpsertPluginReleaseResult =
+  | { ok: true }
+  | { ok: false; reason: "digest_conflict" };
+
 export type PluginPublishFailureReason =
   | "stale_revision"
   | "tool_name_collision"
@@ -1057,7 +1061,9 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   upsertOrganization(record: StoredOrganizationRecord): Promise<void>;
   upsertOrgMember(record: StoredOrgMemberRecord): Promise<void>;
-  upsertPluginRelease(record: StoredPluginReleaseRecord): Promise<void>;
+  upsertPluginRelease(
+    record: StoredPluginReleaseRecord
+  ): Promise<UpsertPluginReleaseResult>;
   upsertProfile(record: StoredProfileRecord): Promise<void>;
   upsertSession(record: StoredSessionRecord): Promise<void>;
   upsertSkill(record: StoredSkillRecord): Promise<void>;
