@@ -1,4 +1,5 @@
 import type { LoadAttachmentBytes } from "./attachments/content";
+import type { OrgPluginLifecycleState, PluginManifest } from "./plugins";
 
 export type AutomationTrigger =
   | { type: "manual" }
@@ -1776,6 +1777,8 @@ export interface SkillSummary {
   hasTool: boolean;
   id: string;
   name: string;
+  pluginId?: string | null;
+  pluginKey?: string | null;
   sourcePath: string;
   updatedAt: string;
   usage?: SkillUsageSummary;
@@ -1910,6 +1913,8 @@ export interface ToolSummary {
   handlerType: string;
   id: string;
   name: string;
+  pluginId?: string | null;
+  pluginKey?: string | null;
 }
 
 export interface ToolDetail extends ToolSummary {
@@ -2545,4 +2550,22 @@ export interface ComposioToolErrorResult {
   code: ComposioToolErrorCode;
   error: string;
   toolkitSlug?: string;
+}
+
+export interface PluginReleaseSummary {
+  createdAt: string;
+  manifest: PluginManifest;
+  pluginId: string;
+  version: string;
+}
+
+export interface OrgPluginSummary {
+  databaseGeneration: string | null;
+  lastLifecycleError: string | null;
+  lifecycleState: OrgPluginLifecycleState;
+  pendingOperation: string | null;
+  pluginId: string;
+  revision: number;
+  selectedVersion: string | null;
+  updatedAt: string;
 }
