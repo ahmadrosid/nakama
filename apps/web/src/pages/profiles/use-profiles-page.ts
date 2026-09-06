@@ -780,7 +780,11 @@ export function useProfilesPage() {
       ? profiles.find((entry) => entry.id === profileId)
       : null;
 
-    if (!(profileId && profile) || profile.isSuper) {
+    if (
+      !(profileId && profile) ||
+      profile.isSuper ||
+      (profile.isDefault === true && profiles.length < 3)
+    ) {
       return;
     }
 

@@ -25,12 +25,16 @@ function cloneProfileDescription(name?: string): string {
   return "This creates a copy of the profile.";
 }
 
-function deleteProfileDescription(name?: string): string {
+function deleteProfileDescription(name?: string, isDefault?: boolean): string {
+  const defaultNote = isDefault
+    ? " Another profile becomes the org default."
+    : "";
+
   if (name) {
-    return `This removes ${name} and its chat history. This cannot be undone.`;
+    return `This removes ${name} and its chat history.${defaultNote} This cannot be undone.`;
   }
 
-  return "This removes the profile and its chat history. This cannot be undone.";
+  return `This removes the profile and its chat history.${defaultNote} This cannot be undone.`;
 }
 
 function removeAssignmentTitle(kind?: string): string {
@@ -111,6 +115,7 @@ function CloneProfileDialog({
 function DeleteProfileDialog({
   busy,
   open,
+  deleteTargetIsDefault,
   deleteTargetName,
   isPending,
   onOpenChange,
@@ -119,6 +124,7 @@ function DeleteProfileDialog({
 }: {
   busy: boolean;
   open: boolean;
+  deleteTargetIsDefault?: boolean;
   deleteTargetName?: string;
   isPending: boolean;
   onOpenChange: (open: boolean) => void;
@@ -131,7 +137,7 @@ function DeleteProfileDialog({
         <DialogHeader className="gap-3">
           <DialogTitle>Delete profile?</DialogTitle>
           <DialogDescription>
-            {deleteProfileDescription(deleteTargetName)}
+            {deleteProfileDescription(deleteTargetName, deleteTargetIsDefault)}
           </DialogDescription>
         </DialogHeader>
 
@@ -322,6 +328,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
 
       <DeleteProfileDialog
         busy={busy}
+        deleteTargetIsDefault={deleteTarget?.isDefault === true}
         deleteTargetName={deleteTarget?.name}
         isPending={deleteMutation.isPending}
         onCancel={() => setDeleteOpen(false)}

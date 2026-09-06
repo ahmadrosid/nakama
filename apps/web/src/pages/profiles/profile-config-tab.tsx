@@ -58,7 +58,10 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
               <Button
                 aria-label="Delete profile"
                 className="text-destructive hover:text-destructive"
-                disabled={busy}
+                disabled={
+                  busy ||
+                  (detail.isDefault === true && state.profiles.length < 3)
+                }
                 onClick={() => state.openDeleteDialog(selectedId)}
                 size="sm"
                 type="button"

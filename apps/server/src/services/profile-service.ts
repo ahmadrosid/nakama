@@ -422,9 +422,22 @@ export class ProfileService {
     const profile = await this.requireProfile(orgId, profileId);
 
     if (profile.isDefault) {
-      throw new Error(
-        "The default profile for an organization cannot be deleted."
+      const orgProfiles = await this.db.listProfilesForOrg(orgId);
+      const successor = orgProfiles.find(
+        (entry) => entry.id !== profileId && !entry.isSuper
       );
+
+      if (orgProfiles.length < 3 || !successor) {
+        throw new Error(
+          "The default profile can only be deleted when the organization has at least 3 profiles."
+        );
+      }
+
+      await this.db.upsertProfile({
+        ...successor,
+        isDefault: true,
+        updatedAt: new Date().toISOString(),
+      });
     }
 
     const deleted = await this.db.deleteProfile(profileId);

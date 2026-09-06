@@ -891,3 +891,82 @@ describe("profile service cloneProfile", () => {
     ).rejects.toThrow(/not found/i);
   });
 });
+
+describe("profile service deleteProfile", () => {
+  let tempConfigDir = "";
+
+  afterEach(async () => {
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { force: true, recursive: true });
+      tempConfigDir = "";
+    }
+  });
+
+  async function setup() {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-delete-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const db = createInMemoryDatabaseAdapter();
+    return { db, service: new ProfileService(db) };
+  }
+
+  async function markDefault(
+    db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+    profileId: string
+  ) {
+    const profile = await db.getProfile(profileId);
+    await db.upsertProfile({ ...profile!, isDefault: true });
+  }
+
+  test("blocks deleting the default when the org has fewer than 3 profiles", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    await service.createProfile(ORG_ID, { name: "Second" });
+    await markDefault(db, first.profile.id);
+
+    await expect(
+      service.deleteProfile(ORG_ID, first.profile.id)
+    ).rejects.toThrow(/at least 3 profiles/);
+
+    expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
+  });
+
+  test("deletes the default when the org has 3 profiles and promotes a successor", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+
+    await service.deleteProfile(ORG_ID, first.profile.id);
+
+    expect(await db.getProfile(first.profile.id)).toBeNull();
+    expect((await db.getDefaultProfileForOrg(ORG_ID))?.id).toBe(
+      second.profile.id
+    );
+  });
+
+  test("does not promote Super Bot as the new default", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    await service.createProfile(ORG_ID, {
+      isSuper: true,
+      name: "Super Bot",
+    });
+    const third = await service.createProfile(ORG_ID, { name: "Writer" });
+    await markDefault(db, first.profile.id);
+
+    await service.deleteProfile(ORG_ID, first.profile.id);
+
+    expect((await db.getDefaultProfileForOrg(ORG_ID))?.id).toBe(
+      third.profile.id
+    );
+  });
+});
