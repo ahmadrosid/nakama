@@ -856,6 +856,8 @@ describe("createChatHandler group chats", () => {
     await withTempHome(async (homeDir) => {
       const privateMessage = "private 🔒 message";
       const senderJid = "6281379292556@s.whatsapp.net";
+      const previousDebug = process.env.NAKAMA_CH_DEBUG;
+      process.env.NAKAMA_CH_DEBUG = "1";
       const log = spyOn(console, "log").mockImplementation(() => {});
 
       try {
@@ -901,6 +903,11 @@ describe("createChatHandler group chats", () => {
         expect(output).not.toContain(senderJid);
       } finally {
         log.mockRestore();
+        if (previousDebug === undefined) {
+          delete process.env.NAKAMA_CH_DEBUG;
+        } else {
+          process.env.NAKAMA_CH_DEBUG = previousDebug;
+        }
       }
     });
   });
