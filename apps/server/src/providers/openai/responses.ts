@@ -39,6 +39,7 @@ export async function generateOpenAIResponsesChat(options: {
   customModels?: CustomModelEntry[];
   /** Asks the model for a JSON object, mirroring chat `response_format`. */
   jsonOutput?: boolean;
+  extraHeaders?: Record<string, string>;
   /**
    * Overrides the OpenAI model-id heuristic. Compatible endpoints serve model
    * ids the heuristic has never seen, and it answers false for those.
@@ -60,6 +61,7 @@ export async function generateOpenAIResponsesChat(options: {
     headers: {
       Authorization: `Bearer ${options.apiKey}`,
       "Content-Type": "application/json",
+      ...(options.extraHeaders ?? {}),
     },
     method: "POST",
     signal: options.input.signal,

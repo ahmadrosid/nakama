@@ -1,4 +1,5 @@
 import type {
+  ChatgptOAuthCredentials,
   ProviderInstanceSummary,
   ProviderModelOption,
   UpdateProviderRequest,
@@ -53,6 +54,8 @@ export function useProviderInstanceCard({
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
+  const [chatgptOAuth, setChatgptOAuth] =
+    useState<ChatgptOAuthCredentials | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [editLabel, setEditLabel] = useState("");
   const [editBaseUrl, setEditBaseUrl] = useState("");
@@ -60,6 +63,7 @@ export function useProviderInstanceCard({
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
 
   const providerType = instance.type as SelectedProvider;
+  const isChatgpt = providerType === "chatgpt";
   const isOllama = providerType === "ollama";
   // Discovery providers (OpenAI-compatible, MiniMax, …) fetch model lists
   // live from the platform's /models endpoint, so their instances use the
@@ -144,6 +148,19 @@ export function useProviderInstanceCard({
   };
 
   const handleReplaceKey = async () => {
+    if (isChatgpt) {
+      if (!chatgptOAuth) {
+        setDialogError("Sign in with ChatGPT before saving.");
+        return;
+      }
+
+      await runUpdate({ chatgptOAuth }, () => {
+        setReplaceKeyOpen(false);
+        setChatgptOAuth(null);
+      });
+      return;
+    }
+
     const nextError = validateApiKeyForProvider(apiKey, providerType, {
       ollamaHostMode: instance.hostMode ?? undefined,
     });
@@ -237,6 +254,7 @@ export function useProviderInstanceCard({
     apiKey,
     busy,
     catalogModelsForType,
+    chatgptOAuth,
     deleteOpen,
     dialogError,
     editBaseUrl,
@@ -248,6 +266,7 @@ export function useProviderInstanceCard({
     handleManageModelsChange,
     handleReplaceKey,
     isCatalogShortlist,
+    isChatgpt,
     isCompatibleLike,
     isOllama,
     isOpenRouter,
@@ -261,6 +280,7 @@ export function useProviderInstanceCard({
     saveCompatible,
     saveManageModels,
     setApiKey,
+    setChatgptOAuth,
     setDeleteOpen,
     setEditBaseUrl,
     setEditLabel,

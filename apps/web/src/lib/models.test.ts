@@ -298,12 +298,13 @@ describe("firstAvailableProviderOption", () => {
 
   test("falls through to the next free builtin, then custom", () => {
     expect(firstAvailableProviderOption(new Set(["openai"]), "openai")).toBe(
-      "anthropic"
+      "chatgpt"
     );
     expect(
       firstAvailableProviderOption(
         new Set([
           "openai",
+          "chatgpt",
           "anthropic",
           "openrouter",
           "gemini",

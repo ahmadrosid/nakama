@@ -9,6 +9,7 @@ import {
 describe("parseProviderName", () => {
   test("accepts known providers", () => {
     expect(parseProviderName("openai")).toBe("openai");
+    expect(parseProviderName("chatgpt")).toBe("chatgpt");
     expect(parseProviderName("Anthropic")).toBe("anthropic");
     expect(parseProviderName(" GEMINI ")).toBe("gemini");
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");

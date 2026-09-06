@@ -38,7 +38,52 @@ function withVisionDefaults(
   }));
 }
 
-export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
+const CHATGPT_SHARED_MODEL_IDS = [
+  "gpt-5.4",
+  "gpt-5.5",
+  "gpt-5.6-luna",
+] as const;
+
+function deriveChatgptModels(
+  catalog: ProviderModelOption[]
+): ProviderModelOption[] {
+  const openaiById = new Map(
+    catalog
+      .filter((model) => model.provider === "openai")
+      .map((model) => [model.id, model])
+  );
+
+  const shared = CHATGPT_SHARED_MODEL_IDS.map((id) => {
+    const source = openaiById.get(id);
+
+    if (!source) {
+      throw new Error(`Missing OpenAI catalog model for ChatGPT: ${id}`);
+    }
+
+    return {
+      ...source,
+      default: id === "gpt-5.4",
+      inputPerMillionUsd: 0,
+      outputPerMillionUsd: 0,
+      provider: "chatgpt" as const,
+    };
+  });
+
+  return [
+    ...shared,
+    {
+      contextWindow: 128_000,
+      id: "gpt-5.4-mini",
+      inputPerMillionUsd: 0,
+      maxOutputTokens: 8192,
+      name: "GPT-5.4 mini",
+      outputPerMillionUsd: 0,
+      provider: "chatgpt" as const,
+    },
+  ];
+}
+
+const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 200_000,
     default: true,
@@ -429,6 +474,11 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
 ]);
 
+export const AVAILABLE_MODELS: ProviderModelOption[] = [
+  ...BASE_MODELS,
+  ...deriveChatgptModels(BASE_MODELS),
+];
+
 export function validateOpenRouterCustomModels(
   entries: unknown
 ): CustomModelEntry[] {
@@ -675,7 +725,8 @@ export function resolveModel(
     (provider === "openai" ||
       provider === "anthropic" ||
       provider === "gemini" ||
-      provider === "opencode_go")
+      provider === "opencode_go" ||
+      provider === "chatgpt")
   ) {
     return trimmed;
   }

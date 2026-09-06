@@ -1,5 +1,6 @@
 import { resolveCloudflareAccountInput } from "@nakama/core/cloudflare-provider-config";
 import type {
+  ChatgptOAuthCredentials,
   CreateProviderResponse,
   OllamaHostMode,
   ProviderModelOption,
@@ -96,6 +97,8 @@ export function useProviderSetupForm(
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [chatgptOAuth, setChatgptOAuth] =
+    useState<ChatgptOAuthCredentials | null>(null);
 
   useEffect(() => {
     if (catalogQueryError) {
@@ -444,6 +447,11 @@ export function useProviderSetupForm(
         return;
       }
 
+      if (selectedProvider === "chatgpt" && !chatgptOAuth) {
+        setFormError("Sign in with ChatGPT before saving.");
+        return;
+      }
+
       const modelToSave =
         selectedProvider === "openrouter"
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
@@ -465,6 +473,7 @@ export function useProviderSetupForm(
           buildCreateProviderRequest({
             apiKey: trimmedKey,
             baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
+            chatgptOAuth: chatgptOAuth ?? undefined,
             customModels:
               selectedProvider === "openai_compatible" ||
               selectedProvider === "ollama"
@@ -497,6 +506,7 @@ export function useProviderSetupForm(
         setApiKey("");
         setApiKeyTouched(false);
         setShowApiKey(false);
+        setChatgptOAuth(null);
         setOpenRouterModels([]);
         setShortlistModels([]);
         setCustomModels([]);
@@ -511,6 +521,7 @@ export function useProviderSetupForm(
     [
       apiKey,
       baseUrl,
+      chatgptOAuth,
       openRouterModels,
       shortlistModels,
       ollamaHostMode,
@@ -534,6 +545,7 @@ export function useProviderSetupForm(
     baseUrlError,
     busy,
     catalog,
+    chatgptOAuth,
     configuredTypes,
     customModels,
     displayName,
@@ -558,6 +570,7 @@ export function useProviderSetupForm(
     selectedModel,
     selectedProvider,
     setBaseUrl,
+    setChatgptOAuth,
     setCustomModels,
     setDisplayName,
     setSelectedModel,

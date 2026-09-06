@@ -26,6 +26,9 @@ import type {
   BranchSessionRequest,
   BranchSessionResponse,
   ChangePasswordRequest,
+  ChatgptOAuthDeviceCompleteRequest,
+  ChatgptOAuthDeviceCompleteResponse,
+  ChatgptOAuthDeviceStartResponse,
   CloneProfileRequest,
   CodingHarnessSettingsResponse,
   CompactionResponse,
@@ -564,6 +567,25 @@ export class NakamaClient {
     return this.request<DeleteProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}`,
       { method: "DELETE" }
+    );
+  }
+
+  async startChatgptOAuthDevice(): Promise<ChatgptOAuthDeviceStartResponse> {
+    return this.request<ChatgptOAuthDeviceStartResponse>(
+      "/v1/chatgpt-oauth/device/start",
+      { method: "POST" }
+    );
+  }
+
+  async completeChatgptOAuthDevice(
+    request: ChatgptOAuthDeviceCompleteRequest
+  ): Promise<ChatgptOAuthDeviceCompleteResponse> {
+    return this.request<ChatgptOAuthDeviceCompleteResponse>(
+      "/v1/chatgpt-oauth/device/complete",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
     );
   }
 

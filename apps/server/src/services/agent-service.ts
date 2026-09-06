@@ -18,6 +18,7 @@ import type {
   AssignToolRequest,
   BranchSessionResponse,
   ChatContextUsage,
+  ChatgptOAuthCredentials,
   ChatMessage,
   CloneProfileRequest,
   CompactionResponse,
@@ -106,6 +107,7 @@ import type {
 import {
   apiKeyEnvVarForProvider,
   appendOrgMemorySection,
+  applyChatgptOAuthToInstance,
   buildErrorReport,
   buildThinkingProviderOptions,
   buildToolExecutionContext,
@@ -2387,6 +2389,31 @@ export class AgentService {
     return { defaultProviderId };
   }
 
+  async persistChatgptOAuth(
+    providerId: string,
+    oauth: ChatgptOAuthCredentials
+  ): Promise<void> {
+    if (!this.userConfig) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const current = findProviderInstance(this.userConfig, providerId);
+
+    if (!current || current.type !== "chatgpt") {
+      throw new Error("ChatGPT provider not found.");
+    }
+
+    const updated = applyChatgptOAuthToInstance(current, oauth);
+    this.userConfig = {
+      ...this.userConfig,
+      providers: this.userConfig.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      ),
+    };
+    await saveUserConfig(this.userConfig);
+    this.refreshHarness();
+  }
+
   async getModels(
     options: { source?: "catalog" | "remote" } = {}
   ): Promise<ModelsResponse> {
@@ -3430,7 +3457,14 @@ export class AgentService {
 
         let visionProvider = createProviderForInstance(
           visionSelection.instance,
-          visionSelection.model
+          visionSelection.model,
+          process.env,
+          {
+            onChatgptTokenRefresh: (instanceId, oauth) =>
+              this.persistChatgptOAuth(instanceId, oauth),
+            resolveInstance: (instanceId) =>
+              findProviderInstance(this.userConfig, instanceId),
+          }
         );
 
         if (this.llmUsageTracker) {
@@ -3743,7 +3777,14 @@ export class AgentService {
 
     const provider = createProviderForInstance(
       resolved.instance,
-      resolved.model
+      resolved.model,
+      process.env,
+      {
+        onChatgptTokenRefresh: (instanceId, oauth) =>
+          this.persistChatgptOAuth(instanceId, oauth),
+        resolveInstance: (instanceId) =>
+          findProviderInstance(this.userConfig, instanceId),
+      }
     );
     const primarySupportsVision = resolvePrimaryModelVisionSupport(
       this.userConfig,

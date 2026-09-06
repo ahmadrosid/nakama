@@ -26,6 +26,7 @@ Nakama supports these built-in provider types:
 | Provider | Notes |
 |---|---|
 | OpenAI | GPT models; required for OpenAI audio transcription (Telegram voice notes) |
+| ChatGPT (Plus/Pro) | Sign in with ChatGPT; uses your plan quota via Codex (not API credits). One account per Nakama instance |
 | Anthropic | Claude models |
 | OpenRouter | Route to many models through one API key |
 | Gemini | Google Gemini models |
@@ -43,8 +44,8 @@ Most built-in types allow one configured instance each. **Ollama** and **Custom 
 
 Some capabilities depend on the active provider:
 
-- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter. Configure a custom back-end (Exa, Firecrawl, or any JSON search endpoint) in **Settings → Web search** to lift this restriction
-- **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Settings → Audio transcription model**
+- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter or ChatGPT (Plus/Pro). Configure a custom back-end (Exa, Firecrawl, or any JSON search endpoint) in **Settings → Web search** to lift this restriction
+- **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Settings → Audio transcription model** (ChatGPT Plus/Pro cannot replace this)
 - **Image parsing** — used when the chat model cannot see images. Set **Settings → Image parsing model**. The list only includes models marked as vision-capable. For a custom endpoint, turn **Vision** on for that model under **Settings → LLM providers**
 - **Responses API endpoints**: a custom endpoint that serves `/responses` rather than `/chat/completions`. Set **API** to Responses under **Settings → LLM providers**, or answer `responses` in the CLI setup wizard. Required for endpoints that do not serve chat/completions at all, and it keeps reasoning available alongside tools on models that reject the pair on chat/completions
 - **Coding agent provider passthrough** — spawn-time credentials for Claude Code / Codex / OpenCode; see [Coding agent](/coding-agent)
@@ -54,6 +55,15 @@ Some capabilities depend on the active provider:
 Each profile selects its own model from the configured providers. Two profiles in the same org can use different providers or models.
 
 Platform admins manage provider credentials globally. Org members use the models assigned to their profiles.
+
+## ChatGPT (Plus/Pro)
+
+ChatGPT Plus/Pro is **not** an OpenAI API key. In **Settings → LLM providers**, choose **ChatGPT (Plus/Pro)**, click **Sign in with ChatGPT**, open the device link, enter the code, then save.
+
+- One ChatGPT account covers the whole Nakama instance (operator use, not per-user login)
+- Usage comes from your ChatGPT plan quota, not pay-as-you-go API billing
+- Whisper transcription and image generation still need a regular OpenAI API key provider
+- Coding-agent provider passthrough does not apply to this provider type — use **Integrations → Coding agents → harness login** with `codex login` for Codex CLI subscription use
 
 ## Next steps
 
