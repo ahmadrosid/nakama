@@ -559,6 +559,278 @@ export function RunHistoryList({
   );
 }
 
+function runStatusLabel(status: AutomationRunStatus): string {
+  if (status === "completed") {
+    return "Completed";
+  }
+
+  if (status === "failed") {
+    return "Failed";
+  }
+
+  return "Running";
+}
+
+function runCopyText(run: AutomationRunRecord): string {
+  const hasError = Boolean(run.error?.trim());
+  const hasOutput = Boolean(run.output?.trim());
+
+  return [hasError ? run.error : null, hasOutput ? run.output : null]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function runExpandedRangeLabel(run: AutomationRunRecord): string {
+  const started = formatSessionTimestamp(run.startedAt);
+
+  if (run.completedAt) {
+    return `${started} → ${formatSessionTimestamp(run.completedAt)}`;
+  }
+
+  if (run.status === "running") {
+    return `${started} · running`;
+  }
+
+  return started;
+}
+
+function runHasExpandableBody(run: AutomationRunRecord): boolean {
+  return Boolean(
+    run.output?.trim() ||
+      run.error?.trim() ||
+      run.status === "running" ||
+      run.status === "failed"
+  );
+}
+
+function RunHistoryItemSummary({
+  run,
+  expanded,
+  hasBody,
+  onToggle,
+}: {
+  run: AutomationRunRecord;
+  expanded: boolean;
+  hasBody: boolean;
+  onToggle: () => void;
+}) {
+  const previewText = runPreviewText(run);
+  const duration = formatRunDuration(run.startedAt, run.completedAt);
+  const metaParts = [
+    runStatusLabel(run.status),
+    formatSessionRelativeTime(run.startedAt),
+    duration,
+    run.deliveryStatus === "failed" ? "Delivery failed" : null,
+  ].filter(Boolean);
+
+  return (
+    <button
+      aria-expanded={hasBody ? expanded : undefined}
+      aria-label={
+        hasBody
+          ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
+          : `Run from ${formatSessionRelativeTime(run.startedAt)}`
+      }
+      className={cn(
+        "flex min-w-0 flex-1 items-start gap-2.5 text-left",
+        !hasBody && "cursor-default"
+      )}
+      disabled={!hasBody}
+      onClick={() => {
+        if (hasBody) {
+          onToggle();
+        }
+      }}
+      type="button"
+    >
+      <RunStatusIcon status={run.status} />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
+          {run.read === false ? (
+            <span
+              aria-label="Unread"
+              className="size-1.5 shrink-0 rounded-full bg-primary"
+            />
+          ) : null}
+          <span
+            className="truncate"
+            title={formatSessionTimestamp(run.startedAt)}
+          >
+            {metaParts.join(" · ")}
+          </span>
+        </div>
+
+        {previewText ? (
+          <p
+            className={cn(
+              "mt-0.5 line-clamp-1 text-sm",
+              run.status === "failed"
+                ? "text-destructive"
+                : "text-foreground/80"
+            )}
+          >
+            {previewText}
+          </p>
+        ) : null}
+      </div>
+
+      {hasBody ? (
+        <ArrowRight01Icon
+          aria-hidden
+          className={cn(
+            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            expanded && "rotate-90"
+          )}
+        />
+      ) : null}
+    </button>
+  );
+}
+
+function RunHistoryExpandedActions({
+  busy,
+  copyText,
+  isFailed,
+  running,
+  onCopy,
+  onRerun,
+}: {
+  busy: boolean;
+  copyText: string;
+  isFailed: boolean;
+  running: boolean;
+  onCopy: () => void;
+  onRerun: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {isFailed ? (
+        <Button
+          className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
+          disabled={busy || running}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRerun();
+          }}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          {running ? (
+            <Spinner className="size-3.5" />
+          ) : (
+            <PlayIcon aria-hidden className="ml-px size-3.5" />
+          )}
+          Run again
+        </Button>
+      ) : null}
+      {copyText ? (
+        <Button
+          className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCopy();
+          }}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <Copy01Icon aria-hidden className="size-3.5" />
+          Copy
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function RunHistoryExpandedBody({
+  run,
+  busy,
+  running,
+  onRerun,
+}: {
+  run: AutomationRunRecord;
+  busy: boolean;
+  running: boolean;
+  onRerun: () => void;
+}) {
+  const isRunning = run.status === "running";
+  const hasOutput = Boolean(run.output?.trim());
+  const hasError = Boolean(run.error?.trim());
+  const copyText = runCopyText(run);
+
+  async function handleCopy() {
+    if (!copyText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(copyText);
+    } catch {
+      // Clipboard may be unavailable outside secure context.
+    }
+  }
+
+  return (
+    <div className="pb-3 pl-7">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p
+          className="type-code text-muted-foreground"
+          title={formatSessionTimestamp(run.startedAt)}
+        >
+          {runExpandedRangeLabel(run)}
+        </p>
+        <RunHistoryExpandedActions
+          busy={busy}
+          copyText={copyText}
+          isFailed={run.status === "failed"}
+          onCopy={() => {
+            void handleCopy();
+          }}
+          onRerun={onRerun}
+          running={running}
+        />
+      </div>
+
+      {run.deliveryError?.trim() ? (
+        <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
+          {run.deliveryError}
+        </p>
+      ) : null}
+
+      {isRunning && !hasOutput && !hasError ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Loading03Icon aria-hidden className="size-4 animate-spin" />
+          Run in progress…
+        </div>
+      ) : null}
+
+      {hasError && hasOutput ? (
+        <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
+          {run.error}
+        </p>
+      ) : null}
+
+      {hasOutput ? (
+        <div className="max-h-[min(70vh,28rem)] overflow-auto">
+          <MessageResponse>{run.output ?? ""}</MessageResponse>
+        </div>
+      ) : null}
+
+      {hasOutput || !hasError ? null : (
+        <p className="whitespace-pre-wrap break-words text-destructive text-sm">
+          {run.error}
+        </p>
+      )}
+
+      {hasOutput || hasError || isRunning ? null : (
+        <p className="text-muted-foreground text-sm">No output returned.</p>
+      )}
+    </div>
+  );
+}
+
 function RunHistoryItem({
   run,
   expanded,
@@ -576,107 +848,17 @@ function RunHistoryItem({
   onDelete: () => void;
   onRerun: () => void;
 }) {
-  const isRunning = run.status === "running";
-  const isFailed = run.status === "failed";
-  const isUnread = run.read === false;
-  const hasOutput = Boolean(run.output?.trim());
-  const hasError = Boolean(run.error?.trim());
-  const hasDeliveryError = Boolean(run.deliveryError?.trim());
-  const hasBody = hasOutput || hasError || isRunning || isFailed;
-  const previewText = runPreviewText(run);
-  const duration = formatRunDuration(run.startedAt, run.completedAt);
-  const statusLabel =
-    run.status === "completed"
-      ? "Completed"
-      : run.status === "failed"
-        ? "Failed"
-        : "Running";
-  const metaParts = [
-    statusLabel,
-    formatSessionRelativeTime(run.startedAt),
-    duration,
-    run.deliveryStatus === "failed" ? "Delivery failed" : null,
-  ].filter(Boolean);
-  const copyText = [hasError ? run.error : null, hasOutput ? run.output : null]
-    .filter(Boolean)
-    .join("\n\n");
-
-  async function handleCopy() {
-    if (!copyText) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(copyText);
-    } catch {
-      // Clipboard may be unavailable outside secure context.
-    }
-  }
+  const hasBody = runHasExpandableBody(run);
 
   return (
     <li>
       <div className="flex items-start gap-2 py-3">
-        <button
-          aria-expanded={hasBody ? expanded : undefined}
-          aria-label={
-            hasBody
-              ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
-              : `Run from ${formatSessionRelativeTime(run.startedAt)}`
-          }
-          className={cn(
-            "flex min-w-0 flex-1 items-start gap-2.5 text-left",
-            !hasBody && "cursor-default"
-          )}
-          disabled={!hasBody}
-          onClick={() => {
-            if (hasBody) {
-              onToggle();
-            }
-          }}
-          type="button"
-        >
-          <RunStatusIcon status={run.status} />
-
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
-              {isUnread ? (
-                <span
-                  aria-label="Unread"
-                  className="size-1.5 shrink-0 rounded-full bg-primary"
-                />
-              ) : null}
-              <span
-                className="truncate"
-                title={formatSessionTimestamp(run.startedAt)}
-              >
-                {metaParts.join(" · ")}
-              </span>
-            </div>
-
-            {previewText ? (
-              <p
-                className={cn(
-                  "mt-0.5 line-clamp-1 text-sm",
-                  run.status === "failed"
-                    ? "text-destructive"
-                    : "text-foreground/80"
-                )}
-              >
-                {previewText}
-              </p>
-            ) : null}
-          </div>
-
-          {hasBody ? (
-            <ArrowRight01Icon
-              aria-hidden
-              className={cn(
-                "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                expanded && "rotate-90"
-              )}
-            />
-          ) : null}
-        </button>
+        <RunHistoryItemSummary
+          expanded={expanded}
+          hasBody={hasBody}
+          onToggle={onToggle}
+          run={run}
+        />
 
         <Button
           aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
@@ -692,93 +874,12 @@ function RunHistoryItem({
       </div>
 
       {expanded && hasBody ? (
-        <div className="pb-3 pl-7">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p
-              className="type-code text-muted-foreground"
-              title={formatSessionTimestamp(run.startedAt)}
-            >
-              {formatSessionTimestamp(run.startedAt)}
-              {run.completedAt
-                ? ` → ${formatSessionTimestamp(run.completedAt)}`
-                : isRunning
-                  ? " · running"
-                  : ""}
-            </p>
-            <div className="flex items-center gap-1">
-              {isFailed ? (
-                <Button
-                  className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
-                  disabled={busy || running}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRerun();
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  {running ? (
-                    <Spinner className="size-3.5" />
-                  ) : (
-                    <PlayIcon aria-hidden className="ml-px size-3.5" />
-                  )}
-                  Run again
-                </Button>
-              ) : null}
-              {copyText ? (
-                <Button
-                  className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleCopy();
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Copy01Icon aria-hidden className="size-3.5" />
-                  Copy
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          {hasDeliveryError ? (
-            <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
-              {run.deliveryError}
-            </p>
-          ) : null}
-
-          {isRunning && !hasOutput && !hasError ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loading03Icon aria-hidden className="size-4 animate-spin" />
-              Run in progress…
-            </div>
-          ) : null}
-
-          {hasError && hasOutput ? (
-            <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
-              {run.error}
-            </p>
-          ) : null}
-
-          {hasOutput ? (
-            <div className="max-h-[min(70vh,28rem)] overflow-auto">
-              <MessageResponse>{run.output ?? ""}</MessageResponse>
-            </div>
-          ) : null}
-
-          {!hasOutput && hasError ? (
-            <p className="whitespace-pre-wrap break-words text-destructive text-sm">
-              {run.error}
-            </p>
-          ) : null}
-
-          {hasOutput || hasError || isRunning ? null : (
-            <p className="text-muted-foreground text-sm">No output returned.</p>
-          )}
-        </div>
+        <RunHistoryExpandedBody
+          busy={busy}
+          onRerun={onRerun}
+          run={run}
+          running={running}
+        />
       ) : null}
     </li>
   );

@@ -30,6 +30,296 @@ import { Spinner } from "@/components/ui/spinner";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { cn } from "@/lib/utils";
 
+function pairingCodeDescription(
+  pairingCode: string | null,
+  isPaired: boolean
+): string {
+  if (pairingCode) {
+    if (isPaired) {
+      return "Message this code to your bot to link another account.";
+    }
+
+    return "Message this code to your bot to finish linking.";
+  }
+
+  if (isPaired) {
+    return "Linked. Generate a new code to add another account.";
+  }
+
+  return "Generate a code, then message it to your bot once.";
+}
+
+function TelegramPairingCodeControls({
+  isPaired,
+  onCopyHandshakeCode,
+  onRegenerateHandshake,
+  pairingCode,
+  regeneratePending,
+  savePending,
+}: {
+  isPaired: boolean;
+  onCopyHandshakeCode: () => void;
+  onRegenerateHandshake: () => void;
+  pairingCode: string | null;
+  regeneratePending: boolean;
+  savePending: boolean;
+}) {
+  if (pairingCode) {
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
+          {pairingCode}
+        </code>
+        <Button
+          onClick={onCopyHandshakeCode}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Copy01Icon className="size-4" />
+          Copy
+        </Button>
+        <Button
+          disabled={regeneratePending || savePending}
+          onClick={onRegenerateHandshake}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {regeneratePending ? (
+            <Spinner />
+          ) : (
+            <>
+              <RefreshIcon aria-hidden="true" className="size-3.5" />
+              New code
+            </>
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  if (isPaired) {
+    return (
+      <Button
+        disabled={regeneratePending || savePending}
+        onClick={onRegenerateHandshake}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {regeneratePending ? (
+          <Spinner />
+        ) : (
+          <>
+            <RefreshIcon aria-hidden="true" className="size-3.5" />
+            New code
+          </>
+        )}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      disabled={regeneratePending || savePending}
+      onClick={onRegenerateHandshake}
+      size="sm"
+      type="button"
+    >
+      {regeneratePending ? (
+        <>
+          <Spinner className="size-3" />
+          Generating…
+        </>
+      ) : (
+        "Generate pairing code"
+      )}
+    </Button>
+  );
+}
+
+function TelegramBotTokenRow({
+  botToken,
+  configured,
+  onBotTokenChange,
+  onToggleShowBotToken,
+  paneItemClass,
+  savePending,
+  settings,
+  showBotToken,
+}: {
+  botToken: string;
+  configured: boolean;
+  onBotTokenChange: (value: string) => void;
+  onToggleShowBotToken: () => void;
+  paneItemClass: string | undefined;
+  savePending: boolean;
+  settings: { botTokenMasked?: string | null } | null | undefined;
+  showBotToken: boolean;
+}) {
+  return (
+    <SettingsRow
+      className={paneItemClass}
+      description="From @BotFather"
+      label="Bot token"
+    >
+      <InputGroup className="w-full min-w-[12rem] sm:w-[16rem]">
+        <InputGroupInput
+          autoComplete="off"
+          disabled={savePending}
+          id="telegram-bot-token"
+          onChange={(event) => onBotTokenChange(event.target.value)}
+          placeholder={
+            configured && settings?.botTokenMasked
+              ? `Saved (${settings.botTokenMasked})`
+              : "Paste token"
+          }
+          type={showBotToken ? "text" : "password"}
+          value={botToken}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            aria-label={showBotToken ? "Hide token" : "Show token"}
+            onClick={onToggleShowBotToken}
+            size="icon-xs"
+            type="button"
+          >
+            {showBotToken ? (
+              <ViewOffIcon className="size-4" />
+            ) : (
+              <ViewIcon className="size-4" />
+            )}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </SettingsRow>
+  );
+}
+
+function TelegramConfiguredSections({
+  allowedUserSummary,
+  isPaired,
+  onCopyHandshakeCode,
+  onManageAllowedUsers,
+  onProfileChange,
+  onRegenerateHandshake,
+  pairingCode,
+  paneItemClass,
+  profileId,
+  profiles,
+  regeneratePending,
+  running,
+  savePending,
+  worker,
+}: {
+  allowedUserSummary: string;
+  isPaired: boolean;
+  onCopyHandshakeCode: () => void;
+  onManageAllowedUsers: () => void;
+  onProfileChange: (profileId: string) => void;
+  onRegenerateHandshake: () => void;
+  pairingCode: string | null;
+  paneItemClass: string | undefined;
+  profileId: string;
+  profiles: ProfileSummary[];
+  regeneratePending: boolean;
+  running: boolean;
+  savePending: boolean;
+  worker: { process?: { managed?: boolean } } | null | undefined;
+}) {
+  return (
+    <>
+      <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
+        <SettingsRow
+          className={paneItemClass}
+          description={pairingCodeDescription(pairingCode, isPaired)}
+          label="Pairing code"
+        >
+          <TelegramPairingCodeControls
+            isPaired={isPaired}
+            onCopyHandshakeCode={onCopyHandshakeCode}
+            onRegenerateHandshake={onRegenerateHandshake}
+            pairingCode={pairingCode}
+            regeneratePending={regeneratePending}
+            savePending={savePending}
+          />
+        </SettingsRow>
+
+        {pairingCode ? <TelegramPairingGuide /> : null}
+      </div>
+
+      <SettingsRow
+        className={paneItemClass}
+        description="Telegram user IDs that can use this bot"
+        label="Allowed users"
+      >
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="text-muted-foreground text-xs">
+            {allowedUserSummary}
+          </span>
+          <Button
+            disabled={savePending}
+            onClick={onManageAllowedUsers}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Manage
+          </Button>
+        </div>
+      </SettingsRow>
+
+      <SettingsRow
+        className={paneItemClass}
+        description="Which agent answers on Telegram"
+        label="Reply as"
+      >
+        <Select
+          disabled={savePending || profiles.length === 0}
+          onValueChange={(value) => {
+            if (value) {
+              onProfileChange(String(value));
+            }
+          }}
+          value={profileId}
+        >
+          <SelectTrigger
+            className="w-[11rem] sm:w-[13rem]"
+            id="telegram-profile"
+          >
+            <SelectValue placeholder="Profile">
+              {profiles.find((profile) => profile.id === profileId)?.name}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent align="end">
+            {profiles.map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                <span className="flex items-center gap-2">
+                  <ProfileAvatar profile={profile} size="sm" />
+                  <span>{profile.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+
+      <SettingsRow
+        className={paneItemClass}
+        description={running ? "Running" : "Stopped"}
+        label="Bridge worker"
+      >
+        <WorkerActionBar
+          pm2Managed={worker?.process?.managed ?? false}
+          running={running}
+          workerName="telegram"
+        />
+      </SettingsRow>
+    </>
+  );
+}
+
 function TelegramPairingGuide() {
   return (
     <div className="space-y-3">
@@ -183,200 +473,34 @@ export function TelegramSettingsCardContent({
         />
       )}
 
-      <SettingsRow
-        className={paneItemClass}
-        description="From @BotFather"
-        label="Bot token"
-      >
-        <InputGroup className="w-full min-w-[12rem] sm:w-[16rem]">
-          <InputGroupInput
-            autoComplete="off"
-            disabled={savePending}
-            id="telegram-bot-token"
-            onChange={(event) => onBotTokenChange(event.target.value)}
-            placeholder={
-              configured && settings?.botTokenMasked
-                ? `Saved (${settings.botTokenMasked})`
-                : "Paste token"
-            }
-            type={showBotToken ? "text" : "password"}
-            value={botToken}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              aria-label={showBotToken ? "Hide token" : "Show token"}
-              onClick={onToggleShowBotToken}
-              size="icon-xs"
-              type="button"
-            >
-              {showBotToken ? (
-                <ViewOffIcon className="size-4" />
-              ) : (
-                <ViewIcon className="size-4" />
-              )}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-      </SettingsRow>
+      <TelegramBotTokenRow
+        botToken={botToken}
+        configured={configured}
+        onBotTokenChange={onBotTokenChange}
+        onToggleShowBotToken={onToggleShowBotToken}
+        paneItemClass={paneItemClass}
+        savePending={savePending}
+        settings={settings}
+        showBotToken={showBotToken}
+      />
 
       {configured ? (
-        <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
-          <SettingsRow
-            className={paneItemClass}
-            description={
-              pairingCode
-                ? isPaired
-                  ? "Message this code to your bot to link another account."
-                  : "Message this code to your bot to finish linking."
-                : isPaired
-                  ? "Linked. Generate a new code to add another account."
-                  : "Generate a code, then message it to your bot once."
-            }
-            label="Pairing code"
-          >
-            {pairingCode ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
-                  {pairingCode}
-                </code>
-                <Button
-                  onClick={onCopyHandshakeCode}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <Copy01Icon className="size-4" />
-                  Copy
-                </Button>
-                <Button
-                  disabled={regeneratePending || savePending}
-                  onClick={onRegenerateHandshake}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  {regeneratePending ? (
-                    <Spinner />
-                  ) : (
-                    <>
-                      <RefreshIcon aria-hidden="true" className="size-3.5" />
-                      New code
-                    </>
-                  )}
-                </Button>
-              </div>
-            ) : isPaired ? (
-              <Button
-                disabled={regeneratePending || savePending}
-                onClick={onRegenerateHandshake}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {regeneratePending ? (
-                  <Spinner />
-                ) : (
-                  <>
-                    <RefreshIcon aria-hidden="true" className="size-3.5" />
-                    New code
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button
-                disabled={regeneratePending || savePending}
-                onClick={onRegenerateHandshake}
-                size="sm"
-                type="button"
-              >
-                {regeneratePending ? (
-                  <>
-                    <Spinner className="size-3" />
-                    Generating…
-                  </>
-                ) : (
-                  "Generate pairing code"
-                )}
-              </Button>
-            )}
-          </SettingsRow>
-
-          {pairingCode ? <TelegramPairingGuide /> : null}
-        </div>
-      ) : null}
-
-      {configured ? (
-        <SettingsRow
-          className={paneItemClass}
-          description="Telegram user IDs that can use this bot"
-          label="Allowed users"
-        >
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="text-muted-foreground text-xs">
-              {allowedUserSummary}
-            </span>
-            <Button
-              disabled={savePending}
-              onClick={onManageAllowedUsers}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Manage
-            </Button>
-          </div>
-        </SettingsRow>
-      ) : null}
-
-      {configured ? (
-        <SettingsRow
-          className={paneItemClass}
-          description="Which agent answers on Telegram"
-          label="Reply as"
-        >
-          <Select
-            disabled={savePending || profiles.length === 0}
-            onValueChange={(value) => {
-              if (value) {
-                onProfileChange(String(value));
-              }
-            }}
-            value={profileId}
-          >
-            <SelectTrigger
-              className="w-[11rem] sm:w-[13rem]"
-              id="telegram-profile"
-            >
-              <SelectValue placeholder="Profile">
-                {profiles.find((profile) => profile.id === profileId)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent align="end">
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  <span className="flex items-center gap-2">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span>{profile.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingsRow>
-      ) : null}
-
-      {configured ? (
-        <SettingsRow
-          className={paneItemClass}
-          description={running ? "Running" : "Stopped"}
-          label="Bridge worker"
-        >
-          <WorkerActionBar
-            pm2Managed={worker?.process?.managed ?? false}
-            running={running}
-            workerName="telegram"
-          />
-        </SettingsRow>
+        <TelegramConfiguredSections
+          allowedUserSummary={allowedUserSummary}
+          isPaired={isPaired}
+          onCopyHandshakeCode={onCopyHandshakeCode}
+          onManageAllowedUsers={onManageAllowedUsers}
+          onProfileChange={onProfileChange}
+          onRegenerateHandshake={onRegenerateHandshake}
+          pairingCode={pairingCode}
+          paneItemClass={paneItemClass}
+          profileId={profileId}
+          profiles={profiles}
+          regeneratePending={regeneratePending}
+          running={running}
+          savePending={savePending}
+          worker={worker}
+        />
       ) : null}
 
       <IntegrationSettingsFooter

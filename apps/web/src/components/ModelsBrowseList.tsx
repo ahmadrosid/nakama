@@ -5,14 +5,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  type ModelCostFilter,
+  ModelCostFilterSelect,
+} from "@/components/ModelBrowseShell";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type ModelsDevRow, useModelsDev } from "@/hooks/use-models-dev";
 import { formatError } from "@/lib/client";
@@ -52,7 +49,7 @@ export function ModelsBrowseList({
   const { data: rows = [], isLoading, error } = useModelsDev();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [costFilter, setCostFilter] = useState<"all" | "free">("all");
+  const [costFilter, setCostFilter] = useState<ModelCostFilter>("all");
   const [hideDeprecated, setHideDeprecated] = useState(true);
 
   const sortedRows = useMemo(() => rows.toSorted(compareModelRows), [rows]);
@@ -101,20 +98,10 @@ export function ModelsBrowseList({
           placeholder="Search provider or model..."
           value={search}
         />
-        <Select
-          onValueChange={(value) => setCostFilter(value as "all" | "free")}
+        <ModelCostFilterSelect
+          onValueChange={setCostFilter}
           value={costFilter}
-        >
-          <SelectTrigger className="w-27.5">
-            <SelectValue>
-              {costFilter === "free" ? "Free only" : "All"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="free">Free only</SelectItem>
-          </SelectContent>
-        </Select>
+        />
         <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
           <input
             checked={hideDeprecated}
@@ -251,6 +238,83 @@ function VirtualModelList({
   );
 }
 
+function formatContextLabel(context: number): string | null {
+  if (context <= 0) {
+    return null;
+  }
+
+  if (context >= 1000) {
+    return `${Math.round(context / 1000)}K`;
+  }
+
+  return String(context);
+}
+
+function modelRowTitle(
+  alreadyConfigured: boolean,
+  unsupportedReason?: string
+): string | undefined {
+  if (alreadyConfigured) {
+    return "This provider is already added";
+  }
+
+  return unsupportedReason;
+}
+
+function ModelRowBadges({
+  row,
+  isPublicKey,
+}: {
+  row: ModelsDevRow;
+  isPublicKey: boolean;
+}) {
+  const contextLabel = formatContextLabel(row.context);
+
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-muted-foreground text-xs">
+      <div className="flex items-center gap-1">
+        {isPublicKey ? (
+          <span className="inline-flex items-center rounded bg-sky-500/15 px-1.5 py-0.5 font-bold text-2xs text-sky-400 uppercase tracking-wide ring-1 ring-sky-500/30">
+            public
+          </span>
+        ) : null}
+        {row.isFree ? (
+          <span className="inline-flex items-center rounded bg-emerald-500/15 px-1.5 py-0.5 font-bold text-2xs text-emerald-400 uppercase tracking-wide ring-1 ring-emerald-500/30">
+            FREE
+          </span>
+        ) : null}
+        {row.experimental ? (
+          <span
+            className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-2xs text-amber-400 uppercase tracking-wide ring-1 ring-amber-500/30"
+            title="Untested with nakama — feature support (tools, JSON mode, streaming) may vary."
+          >
+            experimental
+          </span>
+        ) : null}
+        {contextLabel ? <span>{contextLabel}</span> : null}
+      </div>
+      <div className="flex gap-1">
+        {row.toolCall ? (
+          <span className="rounded bg-muted px-1 py-0.5 text-2xs">tools</span>
+        ) : null}
+        {row.vision ? (
+          <span className="rounded bg-muted px-1 py-0.5 text-2xs">vision</span>
+        ) : null}
+        {row.reasoning ? (
+          <span className="rounded bg-muted px-1 py-0.5 text-2xs">
+            reasoning
+          </span>
+        ) : null}
+        {row.supported ? null : (
+          <span className="rounded bg-muted px-1 py-0.5 text-2xs uppercase">
+            n/a
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ModelRowButton({
   row,
   onSelect,
@@ -276,11 +340,7 @@ function ModelRowButton({
       disabled={!selectable}
       onClick={() => onSelect(row.nakamaProvider, row.modelId, row)}
       style={style}
-      title={
-        alreadyConfigured
-          ? "This provider is already added"
-          : row.unsupportedReason
-      }
+      title={modelRowTitle(alreadyConfigured, row.unsupportedReason)}
       type="button"
     >
       <div className="min-w-0 flex-1">
@@ -295,56 +355,7 @@ function ModelRowButton({
           {row.modelId}
         </div>
       </div>
-
-      <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-muted-foreground text-xs">
-        <div className="flex items-center gap-1">
-          {isPublicKey && (
-            <span className="inline-flex items-center rounded bg-sky-500/15 px-1.5 py-0.5 font-bold text-2xs text-sky-400 uppercase tracking-wide ring-1 ring-sky-500/30">
-              public
-            </span>
-          )}
-          {row.isFree && (
-            <span className="inline-flex items-center rounded bg-emerald-500/15 px-1.5 py-0.5 font-bold text-2xs text-emerald-400 uppercase tracking-wide ring-1 ring-emerald-500/30">
-              FREE
-            </span>
-          )}
-          {row.experimental && (
-            <span
-              className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-2xs text-amber-400 uppercase tracking-wide ring-1 ring-amber-500/30"
-              title="Untested with nakama — feature support (tools, JSON mode, streaming) may vary."
-            >
-              experimental
-            </span>
-          )}
-          {row.context > 0 && (
-            <span>
-              {row.context >= 1000
-                ? `${Math.round(row.context / 1000)}K`
-                : row.context}
-            </span>
-          )}
-        </div>
-        <div className="flex gap-1">
-          {row.toolCall && (
-            <span className="rounded bg-muted px-1 py-0.5 text-2xs">tools</span>
-          )}
-          {row.vision && (
-            <span className="rounded bg-muted px-1 py-0.5 text-2xs">
-              vision
-            </span>
-          )}
-          {row.reasoning && (
-            <span className="rounded bg-muted px-1 py-0.5 text-2xs">
-              reasoning
-            </span>
-          )}
-          {!row.supported && (
-            <span className="rounded bg-muted px-1 py-0.5 text-2xs uppercase">
-              n/a
-            </span>
-          )}
-        </div>
-      </div>
+      <ModelRowBadges isPublicKey={isPublicKey} row={row} />
     </button>
   );
 }

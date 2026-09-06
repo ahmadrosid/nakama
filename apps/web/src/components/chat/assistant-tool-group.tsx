@@ -470,6 +470,132 @@ function DedicatedToolRow({
   return <SubAgentToolRow message={message} modelLabel={modelLabel} />;
 }
 
+function subAgentStatusTone(status: string | undefined): string {
+  if (status === "fail") {
+    return "text-red-600 dark:text-red-400";
+  }
+  if (status === "timeout") {
+    return "text-amber-700 dark:text-amber-400";
+  }
+  return "text-muted-foreground";
+}
+
+function SubAgentToolHeader({
+  activity,
+  isRunning,
+  modelLabel,
+  statusTone,
+  subtitle,
+  title,
+}: {
+  activity: ChatListItem["subAgentActivity"];
+  isRunning: boolean;
+  modelLabel?: string | null;
+  statusTone: string;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-2.5">
+      <SubAgentMark
+        active={isRunning}
+        className={cn(
+          "mt-0.5 size-4 shrink-0",
+          isRunning ? "text-foreground/70" : "text-muted-foreground"
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        {modelLabel ? (
+          <span className="block text-muted-foreground text-xs">
+            {modelLabel}
+          </span>
+        ) : null}
+        <p className="min-w-0 truncate font-medium text-foreground text-sm">
+          {title}
+        </p>
+        <p
+          className={cn(
+            "mt-0.5 truncate text-sm",
+            isRunning && activity
+              ? "todo-shimmer-text font-medium text-foreground"
+              : statusTone
+          )}
+        >
+          {subtitle}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SubAgentRunningFooter({
+  activity,
+  elapsedSeconds,
+}: {
+  activity: ChatListItem["subAgentActivity"];
+  elapsedSeconds: number;
+}) {
+  return (
+    <div className="flex items-center gap-2 pl-6 text-muted-foreground text-xs tabular-nums">
+      {activity ? null : (
+        <span className="todo-shimmer-text text-muted-foreground text-sm">
+          Waiting for subagent
+        </span>
+      )}
+      <span>{formatElapsedSeconds(elapsedSeconds)}</span>
+    </div>
+  );
+}
+
+function SubAgentOutputSection({
+  expanded,
+  hasExpandableOutput,
+  onToggle,
+  output,
+}: {
+  expanded: boolean;
+  hasExpandableOutput: boolean;
+  onToggle: () => void;
+  output: string | null;
+}) {
+  if (hasExpandableOutput) {
+    return (
+      <div className="pl-6">
+        <button
+          aria-expanded={expanded}
+          className="flex w-full items-center gap-1 text-left text-muted-foreground text-sm transition-colors hover:text-foreground"
+          onClick={onToggle}
+          type="button"
+        >
+          <span className="min-w-0 flex-1">
+            {expanded ? "Hide full output" : "Show full output"}
+          </span>
+          <ArrowDown01Icon
+            aria-hidden
+            className={cn(
+              "size-3.5 shrink-0 transition-transform duration-200",
+              !expanded && "-rotate-90"
+            )}
+          />
+        </button>
+        {expanded && output ? (
+          <DetailBlock content={output} label="Output" tone="output" />
+        ) : null}
+      </div>
+    );
+  }
+
+  if (output) {
+    return (
+      <div className="pl-6">
+        <DetailBlock content={output} label="Output" tone="output" />
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function SubAgentToolRow({
   message,
   modelLabel,
@@ -479,14 +605,6 @@ function SubAgentToolRow({
 }) {
   const isRunning = message.toolStatus === "running";
   const elapsedSeconds = useElapsedSeconds(isRunning, message.createdAt);
-  const title = formatSubAgentTitle(message.toolInput);
-  const activity = message.subAgentActivity;
-  const subtitle = formatSubAgentSubtitle(
-    message.toolInput,
-    message.toolResult,
-    isRunning,
-    activity
-  );
   const parsed =
     message.toolStatus === "done"
       ? parseSubAgentResult(message.toolResult)
@@ -495,92 +613,38 @@ function SubAgentToolRow({
     message.toolStatus === "done"
       ? formatSubAgentToolResult(message.toolResult)
       : null;
-  const hasExpandableOutput = Boolean(
-    output && (!parsed?.summary || output !== parsed.summary)
-  );
   const [open, setOpen] = useState(false);
-  const expanded = !isRunning && open;
-
-  const statusTone =
-    parsed?.status === "fail"
-      ? "text-red-600 dark:text-red-400"
-      : parsed?.status === "timeout"
-        ? "text-amber-700 dark:text-amber-400"
-        : "text-muted-foreground";
 
   return (
     <div className="w-full max-w-full space-y-2">
-      <div className="flex min-w-0 items-start gap-2.5">
-        <SubAgentMark
-          active={isRunning}
-          className={cn(
-            "mt-0.5 size-4 shrink-0",
-            isRunning ? "text-foreground/70" : "text-muted-foreground"
-          )}
-        />
-        <div className="min-w-0 flex-1">
-          {modelLabel ? (
-            <span className="block text-muted-foreground text-xs">
-              {modelLabel}
-            </span>
-          ) : null}
-          <p className="min-w-0 truncate font-medium text-foreground text-sm">
-            {title}
-          </p>
-          <p
-            className={cn(
-              "mt-0.5 truncate text-sm",
-              isRunning && activity
-                ? "todo-shimmer-text font-medium text-foreground"
-                : statusTone
-            )}
-          >
-            {subtitle}
-          </p>
-        </div>
-      </div>
-
+      <SubAgentToolHeader
+        activity={message.subAgentActivity}
+        isRunning={isRunning}
+        modelLabel={modelLabel}
+        statusTone={subAgentStatusTone(parsed?.status)}
+        subtitle={formatSubAgentSubtitle(
+          message.toolInput,
+          message.toolResult,
+          isRunning,
+          message.subAgentActivity
+        )}
+        title={formatSubAgentTitle(message.toolInput)}
+      />
       {isRunning ? (
-        <div className="flex items-center gap-2 pl-6 text-muted-foreground text-xs tabular-nums">
-          {activity ? null : (
-            <span className="todo-shimmer-text text-muted-foreground text-sm">
-              Waiting for subagent
-            </span>
+        <SubAgentRunningFooter
+          activity={message.subAgentActivity}
+          elapsedSeconds={elapsedSeconds}
+        />
+      ) : (
+        <SubAgentOutputSection
+          expanded={open}
+          hasExpandableOutput={Boolean(
+            output && (!parsed?.summary || output !== parsed.summary)
           )}
-          <span>{formatElapsedSeconds(elapsedSeconds)}</span>
-        </div>
-      ) : null}
-
-      {!isRunning && hasExpandableOutput ? (
-        <div className="pl-6">
-          <button
-            aria-expanded={expanded}
-            className="flex w-full items-center gap-1 text-left text-muted-foreground text-sm transition-colors hover:text-foreground"
-            onClick={() => setOpen((current) => !current)}
-            type="button"
-          >
-            <span className="min-w-0 flex-1">
-              {expanded ? "Hide full output" : "Show full output"}
-            </span>
-            <ArrowDown01Icon
-              aria-hidden
-              className={cn(
-                "size-3.5 shrink-0 transition-transform duration-200",
-                !expanded && "-rotate-90"
-              )}
-            />
-          </button>
-          {expanded && output ? (
-            <DetailBlock content={output} label="Output" tone="output" />
-          ) : null}
-        </div>
-      ) : null}
-
-      {!(isRunning || hasExpandableOutput) && output ? (
-        <div className="pl-6">
-          <DetailBlock content={output} label="Output" tone="output" />
-        </div>
-      ) : null}
+          onToggle={() => setOpen((current) => !current)}
+          output={output}
+        />
+      )}
     </div>
   );
 }
@@ -649,6 +713,86 @@ function SubAgentMark({
   );
 }
 
+function useToolDetailsOpen(isRunning: boolean, defaultDetailsOpen: boolean) {
+  const [detailsOpen, setDetailsOpen] = useState(defaultDetailsOpen);
+  const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
+
+  if (isRunning !== prevIsRunning) {
+    setPrevIsRunning(isRunning);
+    if (isRunning) {
+      setDetailsOpen(true);
+    }
+  }
+
+  return { detailsOpen, setDetailsOpen };
+}
+
+function ToolTimelineOutput({
+  command,
+  isError,
+  isRunning,
+  output,
+}: {
+  command: string | null;
+  isError: boolean;
+  isRunning: boolean;
+  output: string | null;
+}) {
+  if (isRunning) {
+    return (
+      <p className="font-mono text-muted-foreground text-xs">
+        Waiting for output…
+      </p>
+    );
+  }
+
+  if (output) {
+    return (
+      <DetailBlock
+        content={output}
+        label={isError ? "Error" : "Output"}
+        tone={isError ? "error" : "output"}
+      />
+    );
+  }
+
+  if (command) {
+    return null;
+  }
+
+  return (
+    <p className="font-mono text-muted-foreground text-xs">
+      No output returned.
+    </p>
+  );
+}
+
+function ToolTimelineDetails({
+  command,
+  isError,
+  isRunning,
+  output,
+}: {
+  command: string | null;
+  isError: boolean;
+  isRunning: boolean;
+  output: string | null;
+}) {
+  return (
+    <div className="mt-2 space-y-2">
+      {command ? (
+        <DetailBlock content={command} label="Command" tone="command" />
+      ) : null}
+      <ToolTimelineOutput
+        command={command}
+        isError={isError}
+        isRunning={isRunning}
+        output={output}
+      />
+    </div>
+  );
+}
+
 function ToolTimelineItem({
   message,
   defaultDetailsOpen = false,
@@ -657,7 +801,6 @@ function ToolTimelineItem({
   defaultDetailsOpen?: boolean;
 }) {
   const isRunning = message.toolStatus === "running";
-  const label = formatToolActionLabel(message.tool, message.toolInput);
   const command =
     message.tool === "bash"
       ? formatToolCommand(message.tool, message.toolInput)
@@ -670,22 +813,17 @@ function ToolTimelineItem({
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
   const hasDetails = Boolean(isRunning || command || output);
-  const [detailsOpen, setDetailsOpen] = useState(defaultDetailsOpen);
-  const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
-
-  if (isRunning !== prevIsRunning) {
-    setPrevIsRunning(isRunning);
-    if (isRunning) {
-      setDetailsOpen(true);
-    }
-  }
+  const { detailsOpen, setDetailsOpen } = useToolDetailsOpen(
+    isRunning,
+    defaultDetailsOpen
+  );
 
   return (
     <div>
       <CollapsibleTrigger
         className="pl-0"
         disabled={!hasDetails}
-        label={label}
+        label={formatToolActionLabel(message.tool, message.toolInput)}
         labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
         onToggle={() => {
           if (hasDetails) {
@@ -695,26 +833,12 @@ function ToolTimelineItem({
         open={detailsOpen}
       />
       {detailsOpen && hasDetails ? (
-        <div className="mt-2 space-y-2">
-          {command ? (
-            <DetailBlock content={command} label="Command" tone="command" />
-          ) : null}
-          {isRunning ? (
-            <p className="font-mono text-muted-foreground text-xs">
-              Waiting for output…
-            </p>
-          ) : output ? (
-            <DetailBlock
-              content={output}
-              label={isError ? "Error" : "Output"}
-              tone={isError ? "error" : "output"}
-            />
-          ) : command ? null : (
-            <p className="font-mono text-muted-foreground text-xs">
-              No output returned.
-            </p>
-          )}
-        </div>
+        <ToolTimelineDetails
+          command={command}
+          isError={isError}
+          isRunning={isRunning}
+          output={output}
+        />
       ) : null}
     </div>
   );

@@ -17,6 +17,205 @@ import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
+function cloneProfileDescription(name?: string): string {
+  if (name) {
+    return `This creates a copy of ${name}.`;
+  }
+
+  return "This creates a copy of the profile.";
+}
+
+function deleteProfileDescription(name?: string): string {
+  if (name) {
+    return `This removes ${name} and its chat history. This cannot be undone.`;
+  }
+
+  return "This removes the profile and its chat history. This cannot be undone.";
+}
+
+function removeAssignmentTitle(kind?: string): string {
+  if (kind === "mcp") {
+    return "Delete MCP server?";
+  }
+
+  if (kind === "skill") {
+    return "Delete skill?";
+  }
+
+  if (kind === "composio") {
+    return "Remove Composio toolkit?";
+  }
+
+  return "Delete tool?";
+}
+
+function removeAssignmentDescription(kind?: string, name?: string): string {
+  if (kind === "mcp") {
+    return `Delete "${name}" from this profile? The server stays registered in Soul.`;
+  }
+
+  if (kind === "skill") {
+    return `Delete "${name}" from this profile? The skill stays available to assign again.`;
+  }
+
+  if (kind === "composio") {
+    return `Remove "${name}" from this profile? The org connection stays on Integrations.`;
+  }
+
+  return `Delete "${name}" from this profile?`;
+}
+
+function CloneProfileDialog({
+  busy,
+  cloneTargetId,
+  cloneTargetName,
+  isPending,
+  onOpenChange,
+  onConfirm,
+}: {
+  busy: boolean;
+  cloneTargetId: string | null;
+  cloneTargetName?: string;
+  isPending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={cloneTargetId !== null}>
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-3">
+          <DialogTitle>Clone profile?</DialogTitle>
+          <DialogDescription>
+            {cloneProfileDescription(cloneTargetName)}
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button disabled={busy} onClick={onConfirm} type="button">
+            {isPending ? <Spinner className="size-4" /> : "Clone"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteProfileDialog({
+  busy,
+  open,
+  deleteTargetName,
+  isPending,
+  onOpenChange,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  open: boolean;
+  deleteTargetName?: string;
+  isPending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-3">
+          <DialogTitle>Delete profile?</DialogTitle>
+          <DialogDescription>
+            {deleteProfileDescription(deleteTargetName)}
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+          <Button
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {isPending ? <Spinner className="size-4" /> : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RemoveAssignmentDialog({
+  busy,
+  removeConfirm,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  removeConfirm: ProfilesPageState["removeConfirm"];
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!(open || busy)) {
+          onCancel();
+        }
+      }}
+      open={removeConfirm !== null}
+    >
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-3">
+          <DialogTitle>
+            {removeAssignmentTitle(removeConfirm?.kind)}
+          </DialogTitle>
+          <DialogDescription>
+            {removeAssignmentDescription(
+              removeConfirm?.kind,
+              removeConfirm?.name
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter className="mx-0 -mb-2 gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+          <Button
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {isPending ? <Spinner className="size-4" /> : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProfilesDialogs(state: ProfilesPageState) {
   const {
     allTools,
@@ -112,136 +311,36 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         open={mcpCreateOpen}
       />
 
-      <Dialog
+      <CloneProfileDialog
+        busy={busy}
+        cloneTargetId={cloneTargetId}
+        cloneTargetName={cloneTarget?.name}
+        isPending={cloneProfileMutation.isPending}
+        onConfirm={() => void handleCloneConfirm()}
         onOpenChange={handleCloneOpenChange}
-        open={cloneTargetId !== null}
-      >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Clone profile?</DialogTitle>
-            <DialogDescription>
-              {cloneTarget
-                ? `This creates a copy of ${cloneTarget.name}.`
-                : "This creates a copy of the profile."}
-            </DialogDescription>
-          </DialogHeader>
+      />
 
-          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
-            <Button
-              disabled={busy}
-              onClick={() => handleCloneOpenChange(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void handleCloneConfirm()}
-              type="button"
-            >
-              {cloneProfileMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                "Clone"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteProfileDialog
+        busy={busy}
+        deleteTargetName={deleteTarget?.name}
+        isPending={deleteMutation.isPending}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => void handleDeleteConfirm()}
+        onOpenChange={handleDeleteOpenChange}
+        open={deleteOpen}
+      />
 
-      <Dialog onOpenChange={handleDeleteOpenChange} open={deleteOpen}>
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Delete profile?</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? `This removes ${deleteTarget.name} and its chat history. This cannot be undone.`
-                : "This removes the profile and its chat history. This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
-            <Button
-              disabled={busy}
-              onClick={() => setDeleteOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void handleDeleteConfirm()}
-              type="button"
-              variant="destructive"
-            >
-              {deleteMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        onOpenChange={(open) => {
-          if (!(open || busy)) {
-            setRemoveConfirm(null);
-          }
-        }}
-        open={removeConfirm !== null}
-      >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>
-              {removeConfirm?.kind === "mcp"
-                ? "Delete MCP server?"
-                : removeConfirm?.kind === "skill"
-                  ? "Delete skill?"
-                  : removeConfirm?.kind === "composio"
-                    ? "Remove Composio toolkit?"
-                    : "Delete tool?"}
-            </DialogTitle>
-            <DialogDescription>
-              {removeConfirm?.kind === "mcp"
-                ? `Delete "${removeConfirm.name}" from this profile? The server stays registered in Soul.`
-                : removeConfirm?.kind === "skill"
-                  ? `Delete "${removeConfirm.name}" from this profile? The skill stays available to assign again.`
-                  : removeConfirm?.kind === "composio"
-                    ? `Remove "${removeConfirm.name}" from this profile? The org connection stays on Integrations.`
-                    : `Delete "${removeConfirm?.name}" from this profile?`}
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="mx-0 -mb-2 gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
-            <Button
-              disabled={busy}
-              onClick={() => setRemoveConfirm(null)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void handleRemoveAssignmentConfirm()}
-              type="button"
-              variant="destructive"
-            >
-              {unassignMutation.isPending ||
-              unassignMcpMutation.isPending ||
-              unassignSkillMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RemoveAssignmentDialog
+        busy={busy}
+        isPending={
+          unassignMutation.isPending ||
+          unassignMcpMutation.isPending ||
+          unassignSkillMutation.isPending
+        }
+        onCancel={() => setRemoveConfirm(null)}
+        onConfirm={() => void handleRemoveAssignmentConfirm()}
+        removeConfirm={removeConfirm}
+      />
     </>
   );
 }

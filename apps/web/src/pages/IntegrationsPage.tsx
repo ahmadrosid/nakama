@@ -93,23 +93,55 @@ function resolveSection(value: string | null): IntegrationSectionId {
   return "telegram";
 }
 
-export function IntegrationsPage() {
-  const { activeOrg, isLoading } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+function IntegrationSectionPanel({
+  section,
+  isOrgAdmin,
+}: {
+  section: IntegrationSectionId;
+  isOrgAdmin: boolean;
+}) {
+  if (section === "token") {
+    return <LocalAuthTokenCard />;
+  }
 
-  if (isLoading) {
+  if (section === "optimization") {
+    return <TokenOptimizationCard />;
+  }
+
+  if (section === "coding-agents") {
+    return <CodingAgentsSettingsCard />;
+  }
+
+  if (section === "composio") {
     return (
-      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
-        <Spinner className="size-5" />
+      <div className={cn(isOrgAdmin && "space-y-4")}>
+        {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
+        <ComposioConnectionsCard bordered embedded />
       </div>
     );
   }
 
-  if (activeOrg?.role === "viewer") {
-    return <Navigate replace to="/chat" />;
+  if (section === "telegram") {
+    return <TelegramSettingsCard />;
   }
 
-  const isOrgAdmin = activeOrg?.role === "admin";
+  if (section === "discord") {
+    return <DiscordSettingsCard />;
+  }
+
+  if (section === "notifications") {
+    return <NotificationDestinationsCard />;
+  }
+
+  if (section === "error-tracking") {
+    return <ErrorTrackingSettingsCard />;
+  }
+
+  return <WhatsAppSettingsCard />;
+}
+
+function IntegrationsPageBody({ isOrgAdmin }: { isOrgAdmin: boolean }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const section = resolveSection(
     isOrgAdmin ? searchParams.get("section") : "composio"
   );
@@ -158,34 +190,29 @@ export function IntegrationsPage() {
         </aside>
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
-          {section === "token" ? <LocalAuthTokenCard /> : null}
-
-          {section === "optimization" ? <TokenOptimizationCard /> : null}
-
-          {section === "coding-agents" ? <CodingAgentsSettingsCard /> : null}
-
-          {section === "composio" ? (
-            <div className={cn(isOrgAdmin && "space-y-4")}>
-              {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
-              <ComposioConnectionsCard bordered embedded />
-            </div>
-          ) : null}
-
-          {section === "telegram" ? <TelegramSettingsCard /> : null}
-
-          {section === "discord" ? <DiscordSettingsCard /> : null}
-
-          {section === "notifications" ? (
-            <NotificationDestinationsCard />
-          ) : null}
-
-          {section === "error-tracking" ? <ErrorTrackingSettingsCard /> : null}
-
-          {section === "whatsapp" ? <WhatsAppSettingsCard /> : null}
+          <IntegrationSectionPanel isOrgAdmin={isOrgAdmin} section={section} />
         </div>
       </div>
     </section>
   );
+}
+
+export function IntegrationsPage() {
+  const { activeOrg, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
+        <Spinner className="size-5" />
+      </div>
+    );
+  }
+
+  if (activeOrg?.role === "viewer") {
+    return <Navigate replace to="/chat" />;
+  }
+
+  return <IntegrationsPageBody isOrgAdmin={activeOrg?.role === "admin"} />;
 }
 
 function SidebarButton({
