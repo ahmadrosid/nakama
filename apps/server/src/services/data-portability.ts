@@ -30,6 +30,12 @@ import {
   type RestoreDataImportResponse,
 } from "@nakama/core";
 import { unzipSync, zipSync } from "fflate";
+import {
+  PluginExportBarrierError,
+  quarantineInvalidPluginReleases,
+  runWithPluginExportBarrier,
+  vacuumPluginDatabaseInto,
+} from "./plugin-service";
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
@@ -45,6 +51,7 @@ const MAX_IMPORT_ARCHIVE_BASE64_CHARS =
 
 export interface CreateDataExportOptions {
   databasePath?: string | null;
+  drainTimeoutMs?: number;
   now?: Date;
   rootDir?: string;
 }
@@ -61,6 +68,7 @@ export interface PreviewDataImportOptions {
 
 export interface RestoreDataImportOptions {
   confirm: boolean;
+  databasePath?: string | null;
   rootDir?: string;
 }
 
@@ -78,6 +86,8 @@ interface InventoryItem {
 
 const RESTORE_PREFIX = ".nakama-restore-";
 const BACKUP_PREFIX = ".nakama-backup-";
+const PLUGIN_SNAPSHOT_PREFIX = ".nakama-plugin-snapshot-";
+const ORG_PLUGIN_SQLITE = /^orgs\/[^/]+\/plugins\/[^/]+\/db\/[^/]+\.sqlite$/;
 
 function resolveNakamaRootDir(rootDir?: string): string {
   const raw = rootDir ?? getUserConfigDir();
@@ -94,57 +104,95 @@ export async function createNakamaDataExport(
 ): Promise<CreateDataExportResult> {
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const createdAt = (options.now ?? new Date()).toISOString();
-  const { files, skipped } = await inventoryConfigRoot(rootDir);
-  const topLevelPaths = Array.from(
-    new Set(
-      files.map((file) => file.relativePath.split("/")[0]).filter(Boolean)
-    )
-  ).sort();
-  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
-  if (options.databasePath) {
-    const databasePath = resolve(options.databasePath);
-    const relativeDatabasePath = relative(rootDir, databasePath);
-    if (
-      relativeDatabasePath.startsWith("..") ||
-      isAbsolute(relativeDatabasePath)
-    ) {
-      skipped.push({
-        path: databasePath,
-        reason: "Database path is outside the Nakama root.",
-      });
+  try {
+    return await runWithPluginExportBarrier(
+      async () => {
+        const snapshotParent = (await pathExists(rootDir))
+          ? await mkdtemp(join(rootDir, PLUGIN_SNAPSHOT_PREFIX))
+          : "";
+        try {
+          const snapshots = snapshotParent
+            ? await snapshotOrgPluginDatabases(rootDir, snapshotParent)
+            : new Map<string, string>();
+          const { files, skipped } = await inventoryConfigRoot(rootDir);
+          if (options.databasePath) {
+            const databasePath = resolve(options.databasePath);
+            const relativeDatabasePath = relative(rootDir, databasePath);
+            if (
+              relativeDatabasePath.startsWith("..") ||
+              isAbsolute(relativeDatabasePath)
+            ) {
+              skipped.push({
+                path: databasePath,
+                reason: "Database path is outside the Nakama root.",
+              });
+            }
+          }
+
+          const entries: Record<string, Uint8Array> = {};
+          for (const file of files) {
+            validateArchivePath(file.relativePath);
+            entries[file.relativePath] = await readFile(file.absolutePath);
+          }
+          for (const [relativePath, absolutePath] of snapshots) {
+            validateArchivePath(relativePath);
+            entries[relativePath] = await readFile(absolutePath);
+            files.push({
+              absolutePath,
+              relativePath,
+              size: entries[relativePath].byteLength,
+            });
+          }
+
+          const topLevelPaths = Array.from(
+            new Set(
+              files
+                .map((file) => file.relativePath.split("/")[0])
+                .filter(Boolean)
+            )
+          ).sort();
+          const totalBytes = Object.values(entries).reduce(
+            (sum, data) => sum + data.byteLength,
+            0
+          );
+
+          const manifest: DataExportManifest = {
+            apiVersion: NAKAMA_API_VERSION,
+            createdAt,
+            fileCount: files.length,
+            kind: "nakama-export",
+            skipped,
+            sourceRootName: basename(rootDir) || ".nakama",
+            topLevelPaths,
+            totalBytes,
+            version: NAKAMA_EXPORT_FORMAT_VERSION,
+          };
+
+          entries[NAKAMA_EXPORT_MANIFEST] = Buffer.from(
+            JSON.stringify(manifest, null, 2),
+            "utf8"
+          );
+
+          return {
+            data: Buffer.from(zipSync(entries)),
+            filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
+            manifest,
+          };
+        } finally {
+          if (snapshotParent) {
+            await rm(snapshotParent, { force: true, recursive: true });
+          }
+        }
+      },
+      { configDir: rootDir, drainTimeoutMs: options.drainTimeoutMs }
+    );
+  } catch (error) {
+    if (error instanceof PluginExportBarrierError) {
+      throw new NakamaApiError(error.message, 503);
     }
+    throw error;
   }
-
-  const manifest: DataExportManifest = {
-    apiVersion: NAKAMA_API_VERSION,
-    createdAt,
-    fileCount: files.length,
-    kind: "nakama-export",
-    skipped,
-    sourceRootName: basename(rootDir) || ".nakama",
-    topLevelPaths,
-    totalBytes,
-    version: NAKAMA_EXPORT_FORMAT_VERSION,
-  };
-
-  const entries: Record<string, Uint8Array> = {
-    [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
-      JSON.stringify(manifest, null, 2),
-      "utf8"
-    ),
-  };
-
-  for (const file of files) {
-    validateArchivePath(file.relativePath);
-    entries[file.relativePath] = await readFile(file.absolutePath);
-  }
-
-  return {
-    data: Buffer.from(zipSync(entries)),
-    filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
-    manifest,
-  };
 }
 
 export async function previewNakamaDataImport(
@@ -249,6 +297,7 @@ export async function restoreNakamaDataImport(
       await movePath(join(stagedRoot, name), join(rootDir, name));
     }
     restoreCommitted = true;
+    await finalizeRestoredPlugins(rootDir, options.databasePath);
 
     if (backedUpEntries.length > 0) {
       try {
@@ -327,11 +376,14 @@ async function inventoryConfigRoot(rootDir: string): Promise<{
       const absolutePath = join(currentDir, entry.name);
       const relativePath = toZipPath(relative(rootDir, absolutePath));
 
-      if (shouldSkipRelativePath(relativePath)) {
-        skipped.push({
-          path: relativePath,
-          reason: "Internal data-portability temporary path.",
-        });
+      const skipReason = skipRelativePathReason(relativePath);
+      if (skipReason) {
+        if (!firstSegment(relativePath).startsWith(PLUGIN_SNAPSHOT_PREFIX)) {
+          skipped.push({
+            path: relativePath,
+            reason: skipReason,
+          });
+        }
         continue;
       }
 
@@ -491,13 +543,137 @@ function toZipPath(path: string): string {
   return path.split(sep).join("/");
 }
 
-function shouldSkipRelativePath(path: string): boolean {
-  const first = path.split("/")[0];
-  return (
+function firstSegment(path: string): string {
+  return path.split("/")[0] ?? "";
+}
+
+function skipRelativePathReason(path: string): string | null {
+  const parts = path.split("/");
+  const first = parts[0] ?? "";
+  if (
     first === NAKAMA_EXPORT_MANIFEST ||
     first.startsWith(RESTORE_PREFIX) ||
-    first.startsWith(BACKUP_PREFIX)
-  );
+    first.startsWith(BACKUP_PREFIX) ||
+    first.startsWith(PLUGIN_SNAPSHOT_PREFIX)
+  ) {
+    return "Internal data-portability temporary path.";
+  }
+  if (parts[0] === "plugins" && parts[1] === ".staging") {
+    return "Transient plugin package staging is excluded.";
+  }
+  if (
+    path.endsWith(".sqlite-wal") ||
+    path.endsWith(".sqlite-shm") ||
+    path.endsWith("-wal") ||
+    path.endsWith("-shm")
+  ) {
+    return "Database sidecars are represented by completed snapshots.";
+  }
+  if (ORG_PLUGIN_SQLITE.test(path)) {
+    return "Live plugin databases are replaced by completed snapshots.";
+  }
+  return null;
+}
+
+async function snapshotOrgPluginDatabases(
+  rootDir: string,
+  snapshotParent: string
+): Promise<Map<string, string>> {
+  const snapshots = new Map<string, string>();
+  const orgsDir = join(rootDir, "orgs");
+  if (!(await pathExists(orgsDir))) {
+    return snapshots;
+  }
+
+  for (const org of await readdir(orgsDir, { withFileTypes: true })) {
+    if (!org.isDirectory()) {
+      continue;
+    }
+    const pluginsDir = join(orgsDir, org.name, "plugins");
+    if (!(await pathExists(pluginsDir))) {
+      continue;
+    }
+    for (const plugin of await readdir(pluginsDir, { withFileTypes: true })) {
+      if (!plugin.isDirectory()) {
+        continue;
+      }
+      const dbDir = join(pluginsDir, plugin.name, "db");
+      if (!(await pathExists(dbDir))) {
+        continue;
+      }
+      for (const entry of await readdir(dbDir, { withFileTypes: true })) {
+        if (!(entry.isFile() && entry.name.endsWith(".sqlite"))) {
+          continue;
+        }
+        const relativePath = toZipPath(
+          relative(rootDir, join(dbDir, entry.name))
+        );
+        if (!ORG_PLUGIN_SQLITE.test(relativePath)) {
+          continue;
+        }
+        const target = join(
+          snapshotParent,
+          `${org.name}-${plugin.name}-${entry.name}`
+        );
+        await vacuumPluginDatabaseInto(join(dbDir, entry.name), target);
+        snapshots.set(relativePath, target);
+      }
+    }
+  }
+
+  return snapshots;
+}
+
+async function finalizeRestoredPlugins(
+  rootDir: string,
+  databasePath?: string | null
+): Promise<void> {
+  await quarantineInvalidPluginReleases(rootDir);
+  const candidates = [
+    databasePath ? resolve(databasePath) : "",
+    join(rootDir, "data/sqlite/nakama.sqlite"),
+    join(rootDir, "nakama.db"),
+  ].filter(Boolean);
+
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate) || !(await pathExists(candidate))) {
+      continue;
+    }
+    seen.add(candidate);
+    await disableRestoredOrgPlugins(candidate);
+  }
+}
+
+async function disableRestoredOrgPlugins(databasePath: string): Promise<void> {
+  const { Database } = await import("bun:sqlite");
+  let db: InstanceType<typeof Database>;
+  try {
+    db = new Database(databasePath);
+  } catch {
+    return;
+  }
+  try {
+    const tables = db
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'org_plugins'"
+      )
+      .all() as Array<{ name: string }>;
+    if (tables.length === 0) {
+      return;
+    }
+    db.run(
+      `UPDATE org_plugins
+       SET lifecycle_state = 'disabled',
+           pending_operation = NULL,
+           revision = revision + 1,
+           updated_at = ?
+       WHERE lifecycle_state != 'retained'`,
+      [new Date().toISOString()]
+    );
+  } finally {
+    db.close();
+  }
 }
 
 function toBuffer(value: Buffer | Uint8Array | ArrayBuffer): Buffer {
@@ -516,7 +692,11 @@ async function listMovableTopLevelEntries(rootDir: string): Promise<string[]> {
   const entries = await readdir(rootDir);
   return entries.filter(
     (name) =>
-      !(name.startsWith(RESTORE_PREFIX) || name.startsWith(BACKUP_PREFIX))
+      !(
+        name.startsWith(RESTORE_PREFIX) ||
+        name.startsWith(BACKUP_PREFIX) ||
+        name.startsWith(PLUGIN_SNAPSHOT_PREFIX)
+      )
   );
 }
 

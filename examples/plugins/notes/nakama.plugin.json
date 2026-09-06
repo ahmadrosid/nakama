@@ -1,0 +1,49 @@
+{
+  "apiVersion": 1,
+  "id": "notes",
+  "name": "Notes",
+  "description": "Shared organization notes for the dashboard and assigned agents.",
+  "version": "1.0.0",
+  "author": "Nakama",
+  "license": "MIT",
+  "minNakamaVersion": "0.1.0",
+  "skills": [{ "key": "notes", "directory": "skills/notes" }],
+  "actions": [
+    {
+      "key": "list",
+      "description": "List organization notes",
+      "entry": "actions/list.js",
+      "access": "member",
+      "effect": "read",
+      "exposeAsTool": true,
+      "inputSchema": { "type": "object", "additionalProperties": false }
+    },
+    {
+      "key": "create",
+      "description": "Create an organization note",
+      "entry": "actions/create.js",
+      "access": "member",
+      "effect": "write",
+      "exposeAsTool": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "body": { "type": "string" }
+        }
+      }
+    }
+  ],
+  "ui": {
+    "pageLabel": "Notes",
+    "entryHtml": "ui/index.html",
+    "assetsDir": "ui/assets"
+  },
+  "database": {
+    "migrations": [
+      { "id": "001-create-notes", "path": "migrations/001-create-notes.sql" }
+    ]
+  }
+}

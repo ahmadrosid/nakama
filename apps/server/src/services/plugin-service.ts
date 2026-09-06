@@ -1,7 +1,14 @@
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import {
+  copyFile,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertConfigPathSegment,
@@ -12,6 +19,7 @@ import {
   getOrgPluginDataDir,
   getPluginReleaseDir,
   getPluginStagingRootDir,
+  getPluginsRootDir,
   type OrgPluginDetail,
   PLUGIN_MANIFEST_API_VERSION,
   PLUGIN_MANIFEST_FILENAME,
@@ -242,6 +250,71 @@ const DEFAULT_HOOK_TIMEOUT_MS = 2000;
 
 export function resetPluginAdmissionForTests(): void {
   admissionGates.clear();
+}
+
+export class PluginExportBarrierError extends Error {
+  constructor(
+    message = "Plugin export timed out waiting for in-flight calls."
+  ) {
+    super(message);
+    this.name = "PluginExportBarrierError";
+  }
+}
+
+function pluginReleaseIntegrityPath(
+  pluginId: string,
+  version: string,
+  configDir: string
+): string {
+  return `${getPluginReleaseDir(pluginId, version, configDir)}.integrity`;
+}
+
+export async function runWithPluginExportBarrier<T>(
+  work: () => Promise<T>,
+  options: { configDir?: string; drainTimeoutMs?: number } = {}
+): Promise<T> {
+  const timeoutMs = options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS;
+  const keys = new Set<string>(admissionGates.keys());
+  if (options.configDir) {
+    for (const key of await discoverPluginAdmissionKeys(options.configDir)) {
+      keys.add(key);
+    }
+  }
+
+  const gates = [...keys].map((key) => {
+    const [orgId, pluginId] = key.split("\0");
+    return admissionGateFor(orgId ?? "", pluginId ?? "");
+  });
+
+  try {
+    for (const gate of gates) {
+      await withAdmissionGate(gate, () => {
+        gate.closed = true;
+      });
+    }
+    await Promise.all(gates.map((gate) => drainAdmissionGate(gate, timeoutMs)));
+    if (gates.some((gate) => gate.active > 0)) {
+      throw new PluginExportBarrierError();
+    }
+    return await work();
+  } finally {
+    for (const gate of gates) {
+      gate.closed = false;
+    }
+  }
+}
+
+export async function vacuumPluginDatabaseInto(
+  sourcePath: string,
+  targetPath: string
+): Promise<void> {
+  await ensureDir(dirname(targetPath));
+  const source = new Database(sourcePath);
+  try {
+    source.exec(`VACUUM INTO ${sqlQuote(targetPath)}`);
+  } finally {
+    source.close();
+  }
 }
 
 export async function shutdownPluginRuntime(timeoutMs = 1500): Promise<void> {
@@ -616,6 +689,9 @@ export class PluginService {
       install.selectedVersion
     );
     if (!release) {
+      throw new PluginLifecycleError("package_unavailable");
+    }
+    if (await this.describeMissingPluginBytes(install)) {
       throw new PluginLifecycleError("package_unavailable");
     }
 
@@ -1687,6 +1763,15 @@ export class PluginService {
       if (!(await pathExists(releaseDir))) {
         return "package_unavailable";
       }
+      if (
+        !(await pluginReleaseIntegrityMatches(
+          install.pluginId,
+          install.selectedVersion,
+          this.configDir
+        ))
+      ) {
+        return "package_unavailable";
+      }
     }
     if (install.databaseGeneration) {
       const databasePath = getOrgPluginDatabasePath(
@@ -1727,6 +1812,11 @@ export class PluginService {
     }
 
     if (existing?.digest === digest && (await pathExists(releaseDir))) {
+      await writePluginReleaseIntegrity(
+        manifest.id,
+        manifest.version,
+        this.configDir
+      );
       return {
         createdAt: existing.createdAt,
         digest,
@@ -1771,6 +1861,12 @@ export class PluginService {
         }
         throw new PluginPackageError("version_conflict");
       }
+
+      await writePluginReleaseIntegrity(
+        manifest.id,
+        manifest.version,
+        this.configDir
+      );
 
       return {
         createdAt,
@@ -2213,6 +2309,127 @@ function readU32(buffer: Uint8Array, offset: number): number {
     0,
     true
   );
+}
+
+async function discoverPluginAdmissionKeys(
+  configDir: string
+): Promise<string[]> {
+  const orgsDir = join(configDir, "orgs");
+  if (!(await pathExists(orgsDir))) {
+    return [];
+  }
+  const keys: string[] = [];
+  for (const org of await readdir(orgsDir, { withFileTypes: true })) {
+    if (!org.isDirectory()) {
+      continue;
+    }
+    const pluginsDir = join(orgsDir, org.name, "plugins");
+    if (!(await pathExists(pluginsDir))) {
+      continue;
+    }
+    for (const plugin of await readdir(pluginsDir, { withFileTypes: true })) {
+      if (plugin.isDirectory()) {
+        keys.push(`${org.name}\0${plugin.name}`);
+      }
+    }
+  }
+  return keys;
+}
+
+async function writePluginReleaseIntegrity(
+  pluginId: string,
+  version: string,
+  configDir: string
+): Promise<void> {
+  const releaseDir = getPluginReleaseDir(pluginId, version, configDir);
+  const digest = await hashPluginReleaseTree(releaseDir);
+  await writeFile(
+    pluginReleaseIntegrityPath(pluginId, version, configDir),
+    `${digest}\n`,
+    { mode: 0o600 }
+  );
+}
+
+async function pluginReleaseIntegrityMatches(
+  pluginId: string,
+  version: string,
+  configDir: string
+): Promise<boolean> {
+  const integrityPath = pluginReleaseIntegrityPath(
+    pluginId,
+    version,
+    configDir
+  );
+  if (!(await pathExists(integrityPath))) {
+    return true;
+  }
+  const expected = (await readFile(integrityPath, "utf8")).trim();
+  const actual = await hashPluginReleaseTree(
+    getPluginReleaseDir(pluginId, version, configDir)
+  );
+  return expected === actual;
+}
+
+export async function quarantineInvalidPluginReleases(
+  configDir: string
+): Promise<string[]> {
+  const root = getPluginsRootDir(configDir);
+  if (!(await pathExists(root))) {
+    return [];
+  }
+  const quarantined: string[] = [];
+  for (const plugin of await readdir(root, { withFileTypes: true })) {
+    if (!plugin.isDirectory() || plugin.name.startsWith(".")) {
+      continue;
+    }
+    const pluginDir = join(root, plugin.name);
+    for (const entry of await readdir(pluginDir, { withFileTypes: true })) {
+      if (!(entry.isFile() && entry.name.endsWith(".integrity"))) {
+        continue;
+      }
+      const version = entry.name.slice(0, -".integrity".length);
+      if (
+        await pluginReleaseIntegrityMatches(plugin.name, version, configDir)
+      ) {
+        continue;
+      }
+      const releaseDir = getPluginReleaseDir(plugin.name, version, configDir);
+      if (await pathExists(releaseDir)) {
+        await rename(releaseDir, `${releaseDir}.unavailable`);
+        quarantined.push(`${plugin.name}@${version}`);
+      }
+    }
+  }
+  return quarantined;
+}
+
+async function hashPluginReleaseTree(releaseDir: string): Promise<string> {
+  const files: string[] = [];
+  await collectReleaseFiles(releaseDir, releaseDir, files);
+  files.sort();
+  const hash = createHash("sha256");
+  for (const relativePath of files) {
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(await readFile(join(releaseDir, relativePath)));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+async function collectReleaseFiles(
+  root: string,
+  current: string,
+  out: string[]
+): Promise<void> {
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const absolute = join(current, entry.name);
+    if (entry.isDirectory()) {
+      await collectReleaseFiles(root, absolute, out);
+    } else if (entry.isFile()) {
+      out.push(relative(root, absolute).split(sep).join("/"));
+    }
+  }
 }
 
 function admissionGateFor(orgId: string, pluginId: string): AdmissionGate {

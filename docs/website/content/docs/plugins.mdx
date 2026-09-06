@@ -1,0 +1,55 @@
+---
+title: "Plugins"
+description: "Install approved plugin packages and use their pages, skills, and tools in your organization."
+---
+
+## Why plugins exist
+
+Skills and custom tools cover one piece of a feature. A plugin ships the whole feature: a dashboard page, agent tools, and the data they share — without changing Nakama itself.
+
+## What you get
+
+After a package is approved and your organization turns it on:
+
+- Members open the plugin page from the sidebar
+- Assigned profiles can call the plugin's tools in chat
+- Notes and other plugin records stay in that organization
+
+The same note you create on the page is the one the agent reads. Another organization never sees it.
+
+## How to use them
+
+**1. Install a package (platform admin).** Open **System → Plugins**, upload the ZIP, review what it declares, and install it. Installation stores the package. It does not run plugin code and does not turn the plugin on for any organization.
+
+**2. Activate it in the organization (org admin).** Still on **System → Plugins**, add the plugin to the active organization, then enable it. Enable is what creates the organization's data store and makes the page available.
+
+**3. Assign capabilities (platform admin).** Use the existing profile skill and tool pickers. Plugin items show as owned by the plugin. Assign them the same way you assign other skills and tools.
+
+**4. Use the page (members).** Open the plugin from the sidebar Plugins group. Viewers can read chat only — they cannot open plugin pages or call plugin actions.
+
+**5. Update or remove (org admin).** Disable the plugin first. Then pick an approved newer release and update, or uninstall. Uninstall keeps the organization's plugin data until you confirm a separate delete.
+
+## Who can do what
+
+| Action | Who |
+|---|---|
+| Upload or remove a package | Platform admin |
+| Enable, disable, update, uninstall, delete retained data | Org admin |
+| Open plugin pages and call plugin actions | Members and admins |
+| View plugin pages or invoke plugin actions | Viewers cannot |
+
+## Trust
+
+An installed plugin is trusted code. Approving a package lets that code run with the signed-in user's dashboard session and the server process. Organization folders keep one org's notes away from another org by accident. They do not protect you from a malicious plugin author.
+
+## Backup
+
+Plugin data is included in a full **Settings → Export ZIP** backup as a consistent snapshot. Restore leaves plugins disabled until an admin enables them again. If a restored package no longer matches its stored hash, that release stays unavailable.
+
+See [Backup and restore](/backup-restore).
+
+## Next steps
+
+- [Profiles](/profiles) — assign plugin skills and tools; profile packs keep plugin references only
+- [Backup and restore](/backup-restore) — whole-install ZIP including plugin data
+- [Skills](/skills) — how assigned skills show up in chat
