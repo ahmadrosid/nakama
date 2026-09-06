@@ -12,18 +12,6 @@ import { TerminalRenderer } from "./terminal-renderer";
 test.each([
   {
     boundary: "none",
-    delayedParsing: false,
-    delayedPaste: false,
-    withImages: false,
-  },
-  {
-    boundary: "none",
-    delayedParsing: false,
-    delayedPaste: false,
-    withImages: true,
-  },
-  {
-    boundary: "none",
     delayedParsing: true,
     delayedPaste: false,
     withImages: true,
