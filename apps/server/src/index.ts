@@ -189,6 +189,8 @@ try {
 } catch (error) {
   console.warn("Could not recover plugin operations:", error);
 }
+skillsService.setPluginService(pluginService);
+agent.setPluginService(pluginService);
 const orgMemoryService = new OrgMemoryService(database.adapter);
 const skillProposalService = new SkillProposalService(
   database.adapter,

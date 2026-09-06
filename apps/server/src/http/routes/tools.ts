@@ -319,9 +319,12 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.get("/v1/tools/:toolId/source", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    return json<ToolSourceResponse>(
-      await agent.getToolSource(decodeURIComponent(c.req.param("toolId")))
-    );
+    const toolId = decodeURIComponent(c.req.param("toolId"));
+    const existing = await agent.getTool(toolId);
+    if (existing.tool.pluginId) {
+      throw new NakamaApiError("Plugin-owned tools cannot be edited.", 409);
+    }
+    return json<ToolSourceResponse>(await agent.getToolSource(toolId));
   });
 
   app.get("/v1/tools/:toolId", async (c) => {
@@ -333,7 +336,12 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.delete("/v1/tools/:toolId", async (c) => {
     requirePlatformAdminFromContext(c);
-    await agent.deleteTool(decodeURIComponent(c.req.param("toolId")));
+    const toolId = decodeURIComponent(c.req.param("toolId"));
+    const existing = await agent.getTool(toolId);
+    if (existing.tool.pluginId) {
+      throw new NakamaApiError("Plugin-owned tools cannot be deleted.", 409);
+    }
+    await agent.deleteTool(toolId);
     return new Response(null, { status: 204 });
   });
 

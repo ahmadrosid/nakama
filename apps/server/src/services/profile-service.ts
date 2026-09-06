@@ -460,6 +460,9 @@ export class ProfileService {
 
   async getToolSource(toolId: string): Promise<ToolSourceResponse> {
     const tool = await this.requireTool(toolId);
+    if (tool.pluginId) {
+      throw new Error("Plugin-owned tools cannot be edited.");
+    }
     return readToolSource(tool);
   }
 
@@ -481,6 +484,10 @@ export class ProfileService {
 
     if (isProtectedToolId(tool.id)) {
       throw new Error(`Built-in tool "${tool.name}" cannot be deleted.`);
+    }
+
+    if (tool.pluginId) {
+      throw new Error("Plugin-owned tools cannot be deleted.");
     }
 
     const deleted = await this.db.deleteTool(toolId);
@@ -920,6 +927,8 @@ function toToolSummary(record: StoredToolRecord): ToolSummary {
     handlerType: record.handlerType,
     id: record.id,
     name: record.name,
+    pluginId: record.pluginId ?? null,
+    pluginKey: record.pluginKey ?? null,
   };
 }
 

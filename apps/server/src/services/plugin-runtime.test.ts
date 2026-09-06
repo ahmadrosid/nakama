@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  derivePluginToolName,
   getOrgPluginDatabasePath,
   getOrgPluginDataDir,
   PLUGIN_MANIFEST_API_VERSION,
@@ -175,6 +176,32 @@ describe("plugin runtime", () => {
     const service = new PluginService(db, configDir);
     await service.installPluginPackage(bundle("echoer", echoJs));
     await enablePlugin(db, "org_a", "echoer", "1.0.0");
+    const now = new Date().toISOString();
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_1",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Default",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const toolId = "tool_echoer_echo";
+    await db.upsertTool({
+      createdAt: now,
+      description: "Echo",
+      handlerConfig: { actionKey: "echo" },
+      handlerType: "plugin",
+      id: toolId,
+      name: derivePluginToolName("echoer", "echo") ?? "plugin_echoer__echo",
+      orgId: "org_a",
+      pluginId: "echoer",
+      pluginKey: "echo",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("profile_1", toolId);
 
     const actor = { id: "user_1", role: "member" as const };
     const input = { message: "hello" };

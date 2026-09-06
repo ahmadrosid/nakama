@@ -281,6 +281,7 @@ import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { OrgMemoryService } from "./org-memory-service";
+import type { PluginService } from "./plugin-service";
 import type { ProfileChangeMeta } from "./profile-change-history";
 import {
   recordProfileChangeEvent,
@@ -319,6 +320,7 @@ import type { WorkflowRunner } from "./workflow-runner";
 
 interface StoredSession {
   channel: AgentChannel;
+  pluginRevision: string;
   profileId: string;
   session: AgentChatSession;
 }
@@ -353,6 +355,7 @@ export class AgentService {
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
   private composioService: ComposioService | null = null;
+  private pluginService: PluginService | null = null;
   private skillsService: SkillsService | null = null;
   private skillProposalService: SkillProposalService | null = null;
   private skillSuggestionService: SkillSuggestionService | null = null;
@@ -517,6 +520,11 @@ export class AgentService {
 
   setComposioService(service: ComposioService): void {
     this.composioService = service;
+  }
+
+  setPluginService(service: PluginService | null): void {
+    this.pluginService = service;
+    this.sessions.clear();
   }
 
   setSkillsService(service: SkillsService): void {
@@ -1498,7 +1506,7 @@ export class AgentService {
       input.orgId,
       input.profileId,
       profile.systemPrompt,
-      "member"
+      input.orgRole ?? "member"
     );
     const childSystemPrompt = [
       systemPrompt.trim(),
@@ -1524,7 +1532,7 @@ export class AgentService {
         agentDepth: input.agentDepth,
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
-        orgRole: "member",
+        orgRole: input.orgRole ?? "member",
         profileId: input.profileId,
         recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
         recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
@@ -1678,6 +1686,7 @@ export class AgentService {
 
     this.sessions.set(sessionId, {
       channel,
+      pluginRevision: await this.pluginCapabilityRevision(orgId),
       profileId: resolvedProfileId,
       session,
     });
@@ -1855,6 +1864,7 @@ export class AgentService {
     );
     this.sessions.set(nextSessionId, {
       channel,
+      pluginRevision: await this.pluginCapabilityRevision(profileOrgId),
       profileId: record.profileId,
       session,
     });
@@ -1923,9 +1933,14 @@ export class AgentService {
     }
 
     const stored = this.sessions.get(sessionId);
+    const pluginRevision = await this.pluginCapabilityRevision(orgId);
+
+    if (stored && stored.pluginRevision === pluginRevision) {
+      return stored.session;
+    }
 
     if (stored) {
-      return stored.session;
+      this.sessions.delete(sessionId);
     }
 
     const channel = parseAgentChannel(record.channel);
@@ -1953,6 +1968,7 @@ export class AgentService {
 
     this.sessions.set(sessionId, {
       channel,
+      pluginRevision,
       profileId: record.profileId,
       session,
     });
@@ -2007,6 +2023,12 @@ export class AgentService {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
     if (!record) {
       return null;
+    }
+
+    const cached = this.sessions.get(sessionId);
+    const pluginRevision = await this.pluginCapabilityRevision(orgId);
+    if (cached && cached.pluginRevision !== pluginRevision) {
+      this.sessions.delete(sessionId);
     }
 
     return sessionTurnRegistry.beginTurn(sessionId).started;
@@ -3192,6 +3214,13 @@ export class AgentService {
     };
   }
 
+  private async pluginCapabilityRevision(orgId: string): Promise<string> {
+    if (!this.pluginService) {
+      return "";
+    }
+    return this.pluginService.capabilityRevisionForOrg(orgId);
+  }
+
   /**
    * Sessions carry no org column; the org is only reachable through their
    * profile. Every by-id session operation resolves scope here so a caller in
@@ -3277,6 +3306,7 @@ export class AgentService {
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      pluginService: this.pluginService,
       serverTools: this.serverTools,
       userConfig: this.userConfig,
     });

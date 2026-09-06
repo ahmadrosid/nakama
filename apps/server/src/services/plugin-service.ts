@@ -306,6 +306,10 @@ export class PluginService {
   async invokePluginAction(
     input: InvokePluginActionInput
   ): Promise<PluginInvocationResult> {
+    if (input.access === "tool") {
+      await this.assertToolAssignment(input);
+    }
+
     const { handle, install, manifest, releaseDir } =
       await this.admitInvocation(input.orgId, input.pluginId, "action");
     try {
@@ -392,6 +396,135 @@ export class PluginService {
     } finally {
       handle.release();
     }
+  }
+
+  async capabilityRevisionForOrg(orgId: string): Promise<string> {
+    const installs = (await this.db.listOrgPlugins()).filter(
+      (install) => install.orgId === orgId
+    );
+    return installs
+      .map(
+        (install) =>
+          `${install.pluginId}:${install.revision}:${install.lifecycleState}:${install.selectedVersion ?? ""}`
+      )
+      .sort()
+      .join(";");
+  }
+
+  async resolveEnabledSkillDirectory(
+    orgId: string,
+    pluginId: string,
+    pluginKey: string
+  ): Promise<string | null> {
+    const install = await this.db.getOrgPlugin(orgId, pluginId);
+    if (
+      !(
+        install &&
+        install.lifecycleState === "enabled" &&
+        install.selectedVersion
+      )
+    ) {
+      return null;
+    }
+
+    const release = await this.db.getPluginRelease(
+      pluginId,
+      install.selectedVersion
+    );
+    const skill = release?.manifest.skills.find(
+      (item) => item.key === pluginKey
+    );
+    if (!skill) {
+      return null;
+    }
+
+    const releaseDir = getPluginReleaseDir(
+      pluginId,
+      install.selectedVersion,
+      this.configDir
+    );
+    try {
+      return resolvePluginReleaseEntry(releaseDir, skill.directory);
+    } catch {
+      return null;
+    }
+  }
+
+  async getEnabledExposedAction(
+    orgId: string,
+    pluginId: string,
+    actionKey: string
+  ): Promise<PluginManifest["actions"][number] | null> {
+    const install = await this.db.getOrgPlugin(orgId, pluginId);
+    if (
+      !(
+        install &&
+        install.lifecycleState === "enabled" &&
+        install.selectedVersion
+      )
+    ) {
+      return null;
+    }
+    const release = await this.db.getPluginRelease(
+      pluginId,
+      install.selectedVersion
+    );
+    const action = release?.manifest.actions.find(
+      (item) => item.key === actionKey && item.exposeAsTool
+    );
+    return action ?? null;
+  }
+
+  async previewPluginContributionChanges(
+    orgId: string,
+    pluginId: string,
+    targetVersion: string
+  ): Promise<{
+    removedActionKeys: string[];
+    removedSkillKeys: string[];
+    retainedSkillIds: string[];
+    retainedToolIds: string[];
+  }> {
+    const target = await this.db.getPluginRelease(pluginId, targetVersion);
+    if (!target) {
+      throw new PluginLifecycleError("not_found");
+    }
+
+    const targetSkillKeys = new Set(
+      target.manifest.skills.map((skill) => skill.key)
+    );
+    const targetActionKeys = new Set(
+      target.manifest.actions
+        .filter((action) => action.exposeAsTool)
+        .map((action) => action.key)
+    );
+    const skills = (await this.db.listSkills()).filter(
+      (skill) => skill.orgId === orgId && skill.pluginId === pluginId
+    );
+    const tools = (await this.db.listTools()).filter(
+      (tool) => tool.orgId === orgId && tool.pluginId === pluginId
+    );
+
+    return {
+      removedActionKeys: tools
+        .filter((tool) => !targetActionKeys.has(tool.pluginKey ?? ""))
+        .map((tool) => tool.pluginKey ?? "")
+        .filter(Boolean)
+        .sort(),
+      removedSkillKeys: skills
+        .filter((skill) => !targetSkillKeys.has(skill.pluginKey ?? ""))
+        .map((skill) => skill.pluginKey ?? "")
+        .filter(Boolean)
+        .sort(),
+      retainedSkillIds: skills
+        .filter((skill) => targetSkillKeys.has(skill.pluginKey ?? ""))
+        .map((skill) => skill.id)
+        .sort(),
+      retainedToolIds: tools
+        .filter((tool) => targetActionKeys.has(tool.pluginKey ?? ""))
+        .map((tool) => tool.id)
+        .sort(),
+    };
   }
 
   async closePluginAdmission(orgId: string, pluginId: string): Promise<void> {
@@ -837,6 +970,31 @@ export class PluginService {
           selectedVersion: install.selectedVersion,
         }).catch(() => undefined);
       }
+    }
+  }
+
+  private async assertToolAssignment(
+    input: InvokePluginActionInput
+  ): Promise<void> {
+    const profileId = input.profileId?.trim();
+    if (!profileId) {
+      throw new PluginInvocationError("invalid_input");
+    }
+
+    const profile = await this.db.getProfileForOrg(profileId, input.orgId);
+    if (!profile) {
+      throw new PluginInvocationError("forbidden");
+    }
+
+    const assigned = await this.db.listToolsForProfile(profileId);
+    const ok = assigned.some(
+      (tool) =>
+        tool.handlerType === "plugin" &&
+        tool.pluginId === input.pluginId &&
+        tool.pluginKey === input.actionKey
+    );
+    if (!ok) {
+      throw new PluginInvocationError("forbidden");
     }
   }
 
