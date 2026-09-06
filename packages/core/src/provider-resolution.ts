@@ -15,6 +15,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openai_compatible",
   "opencode_go",
   "cloudflare",
+  "chatgpt",
   "minimax",
   "minimax_cn",
   "zhipu",
@@ -45,6 +46,7 @@ export function parseProviderName(
     normalized === "openai_compatible" ||
     normalized === "opencode_go" ||
     normalized === "cloudflare" ||
+    normalized === "chatgpt" ||
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
     normalized === "zhipu" ||

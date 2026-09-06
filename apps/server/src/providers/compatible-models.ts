@@ -323,6 +323,7 @@ export function getModelsForProviderInstance(
 
   if (
     instance.type === "openai" ||
+    instance.type === "chatgpt" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||

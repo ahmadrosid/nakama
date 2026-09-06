@@ -1,17 +1,21 @@
 import {
   apiKeyEnvVarForProvider,
   getActiveProviderInstance,
+  isChatgptProviderConnected,
   isOllamaCloudInstance,
   type ProviderClient,
   type ProviderInstance,
   type ProviderName,
+  readChatgptOAuthFromInstance,
   readEnvValue,
   type UserConfig,
 } from "@nakama/core";
+import type { ChatgptOAuthCredentials } from "@nakama/core/contract";
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
+import { createChatgptProvider } from "./chatgpt";
 import { createCloudflareProvider } from "./cloudflare";
 import { compatibleModelSupportsThinking } from "./compatible-models";
 import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
@@ -176,11 +180,40 @@ export function readApiKeyForInstance(
   return readEnvValue(env, envVar);
 }
 
+export interface CreateProviderForInstanceOptions {
+  onChatgptTokenRefresh?: (
+    instanceId: string,
+    oauth: ChatgptOAuthCredentials
+  ) => Promise<void>;
+  resolveInstance?: (instanceId: string) => ProviderInstance | null;
+}
+
 export function createProviderForInstance(
   instance: ProviderInstance,
   model: string,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  options?: CreateProviderForInstanceOptions
 ): ProviderClient | null {
+  if (instance.type === "chatgpt") {
+    if (!isChatgptProviderConnected(instance)) {
+      return null;
+    }
+
+    return createChatgptProvider({
+      getOAuth: () => {
+        const latest = options?.resolveInstance?.(instance.id) ?? instance;
+        return readChatgptOAuthFromInstance(latest);
+      },
+      model,
+      ...(options?.onChatgptTokenRefresh
+        ? {
+            onTokenRefresh: (oauth) =>
+              options.onChatgptTokenRefresh!(instance.id, oauth),
+          }
+        : {}),
+    });
+  }
+
   const apiKey = readApiKeyForInstance(instance, env);
 
   if (

@@ -5,12 +5,16 @@ import { join } from "node:path";
 import { NakamaApiError } from "./api-error";
 import { pathExists } from "./fs";
 import {
+  applyChatgptOAuthToInstance,
+  chatgptOAuthNeedsRefresh,
   createProviderInstanceId,
   ensureUserConfigDir,
   getUserConfigPath,
+  isChatgptProviderConnected,
   loadUserConfig,
   loadUserWebPublicUrl,
   normalizeProviderInstanceLabel,
+  readChatgptOAuthFromInstance,
   saveUserConfig,
   saveUserTimezone,
   saveUserWebPublicUrl,
@@ -279,5 +283,71 @@ created_at=2026-06-15T00:00:00.000Z
     await expect(loadUserWebPublicUrl()).resolves.toBe(
       "https://gateway.devscale.id/v1"
     );
+  });
+});
+
+describe("chatgpt oauth helpers", () => {
+  test("isChatgptProviderConnected requires refresh token and account id", () => {
+    expect(
+      isChatgptProviderConnected({
+        apiKey: "",
+        chatgptAccountId: "acct_1",
+        chatgptRefreshToken: "refresh",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "chatgpt-1",
+        label: "ChatGPT",
+        type: "chatgpt",
+      })
+    ).toBe(true);
+  });
+
+  test("readChatgptOAuthFromInstance returns null when fields are missing", () => {
+    expect(
+      readChatgptOAuthFromInstance({
+        apiKey: "",
+        chatgptRefreshToken: "refresh",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "chatgpt-1",
+        label: "ChatGPT",
+        type: "chatgpt",
+      })
+    ).toBeNull();
+  });
+
+  test("applyChatgptOAuthToInstance stores oauth fields and clears api key", () => {
+    const updated = applyChatgptOAuthToInstance(
+      {
+        apiKey: "sk-old",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "chatgpt-1",
+        label: "ChatGPT",
+        type: "chatgpt",
+      },
+      {
+        accessToken: "access",
+        accountId: "acct_1",
+        expiresAt: "2026-01-02T00:00:00.000Z",
+        refreshToken: "refresh",
+      }
+    );
+
+    expect(updated.apiKey).toBe("");
+    expect(updated.chatgptAccountId).toBe("acct_1");
+  });
+
+  test("chatgptOAuthNeedsRefresh is true within five minutes of expiry", () => {
+    const expiresAt = new Date("2026-01-01T00:04:00.000Z").toISOString();
+
+    expect(
+      chatgptOAuthNeedsRefresh(
+        {
+          accessToken: "access",
+          accountId: "acct_1",
+          expiresAt,
+          refreshToken: "refresh",
+        },
+        Date.parse("2026-01-01T00:00:00.000Z")
+      )
+    ).toBe(true);
   });
 });

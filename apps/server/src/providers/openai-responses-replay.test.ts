@@ -88,4 +88,26 @@ describe("OpenAI Responses assistant replay", () => {
       type: "message",
     });
   });
+
+  test("sends store false", async () => {
+    let body: { store?: boolean } = {};
+    globalThis.fetch = mock(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        body = JSON.parse(String(init?.body)) as { store?: boolean };
+        return new Response(JSON.stringify(RESPONSE_PAYLOAD), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    ) as unknown as typeof fetch;
+
+    await generateOpenAIResponsesChat({
+      apiKey: "sk-test",
+      input: { messages: [{ content: "hi", role: "user" }], system: "s" },
+      model: "gpt-5.4",
+      stream: false,
+    });
+
+    expect(body.store).toBe(false);
+  });
 });

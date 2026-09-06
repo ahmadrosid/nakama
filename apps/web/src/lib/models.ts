@@ -55,6 +55,7 @@ export function formatProviderLabel(
     provider === "ollama" ||
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
+    provider === "chatgpt" ||
     provider === "minimax" ||
     provider === "minimax_cn" ||
     provider === "zhipu" ||
@@ -70,6 +71,7 @@ export function formatProviderLabel(
 export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
   [
     { id: "openai", label: "OpenAI" },
+    { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
     { id: "anthropic", label: "Anthropic" },
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
@@ -187,6 +189,10 @@ export function apiKeyPlaceholder(provider: SelectedProvider): string {
     return "Optional for local Ollama";
   }
 
+  if (provider === "chatgpt") {
+    return "Use Sign in with ChatGPT";
+  }
+
   if (provider === "gemini") {
     return "AIza…";
   }
@@ -208,6 +214,10 @@ export function validateApiKeyForProvider(
   options?: { ollamaHostMode?: OllamaHostMode }
 ): string | null {
   if (provider === "openai_compatible") {
+    return null;
+  }
+
+  if (provider === "chatgpt") {
     return null;
   }
 
@@ -578,12 +588,14 @@ export function buildCreateProviderRequest(options: {
   hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
   wireApi?: WireApi;
+  chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
 }): CreateProviderRequest {
   const request = buildConfigureProviderRequest(options);
 
   return {
     apiKey: request.apiKey,
     type: request.provider,
+    ...(options.chatgptOAuth ? { chatgptOAuth: options.chatgptOAuth } : {}),
     ...(request.model ? { model: request.model } : {}),
     ...(options.displayName?.trim()
       ? { label: options.displayName.trim() }

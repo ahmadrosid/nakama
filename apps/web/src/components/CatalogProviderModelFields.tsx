@@ -88,7 +88,8 @@ export function CatalogProviderModelFields({
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);
   const canDiscoverRemote =
-    provider === "openai" && Boolean(providerInstanceId);
+    (provider === "openai" || provider === "chatgpt") &&
+    Boolean(providerInstanceId);
 
   const staticCatalog = useMemo(() => {
     const fromApi = filterModelsByProvider(
@@ -124,7 +125,7 @@ export function CatalogProviderModelFields({
     }
 
     return mergeBrowseModels(
-      staticCatalog,
+      provider === "chatgpt" ? [] : staticCatalog,
       remoteResponse?.models ?? [],
       provider
     );
@@ -152,9 +153,9 @@ export function CatalogProviderModelFields({
   };
 
   const browseFooter = remoteError
-    ? "Could not load models from OpenAI. Check the API key and try again."
+    ? `Could not load models from ${providerLabel}.`
     : remoteLoading
-      ? "Loading models from OpenAI…"
+      ? `Loading models from ${providerLabel}…`
       : `Choose which ${providerLabel} models appear in chat for this provider.`;
 
   return (

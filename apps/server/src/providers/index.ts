@@ -1,5 +1,6 @@
 export * from "./anthropic";
 export * from "./cerebras";
+export * from "./chatgpt";
 export * from "./cloudflare";
 export * from "./compatible-models";
 export * from "./create";

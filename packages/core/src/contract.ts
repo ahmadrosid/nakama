@@ -1659,6 +1659,7 @@ export interface ListProvidersResponse {
 export interface CreateProviderRequest {
   apiKey: string;
   baseUrl?: string;
+  chatgptOAuth?: ChatgptOAuthCredentials;
   customModels?: CustomModelEntry[];
   hostMode?: OllamaHostMode;
   label?: string;
@@ -1676,6 +1677,7 @@ export interface CreateProviderResponse {
 export interface UpdateProviderRequest {
   apiKey?: string;
   baseUrl?: string;
+  chatgptOAuth?: ChatgptOAuthCredentials;
   customModels?: CustomModelEntry[];
   hostMode?: OllamaHostMode;
   label?: string;
@@ -2212,11 +2214,35 @@ export type ProviderName =
   | "openai_compatible"
   | "opencode_go"
   | "cloudflare"
+  | "chatgpt"
   | "minimax"
   | "minimax_cn"
   | "zhipu"
   | "zhipu_cn"
   | "xai";
+
+export interface ChatgptOAuthCredentials {
+  accessToken: string;
+  accountId: string;
+  expiresAt: string;
+  refreshToken: string;
+}
+
+export interface ChatgptOAuthDeviceStartResponse {
+  intervalSeconds: number;
+  sessionId: string;
+  userCode: string;
+  verificationUri: string;
+}
+
+export interface ChatgptOAuthDeviceCompleteRequest {
+  sessionId: string;
+}
+
+export interface ChatgptOAuthDeviceCompleteResponse {
+  chatgptOAuth: ChatgptOAuthCredentials;
+  models?: CustomModelEntry[];
+}
 
 export type OllamaHostMode = "local" | "cloud";
 

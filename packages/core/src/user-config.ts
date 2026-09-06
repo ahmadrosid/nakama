@@ -11,6 +11,7 @@ import {
   validateDisplayName,
 } from "./compatible-provider-config";
 import type {
+  ChatgptOAuthCredentials,
   CustomModelEntry,
   ProviderChatOptions,
   ThinkingEffort,
@@ -43,6 +44,10 @@ export {
 export interface ProviderInstance {
   apiKey: string;
   baseUrl?: string;
+  chatgptAccessToken?: string;
+  chatgptAccountId?: string;
+  chatgptRefreshToken?: string;
+  chatgptTokenExpiresAt?: string;
   createdAt: string;
   customModels?: CustomModelEntry[];
   hostMode?: import("./contract").OllamaHostMode;
@@ -74,6 +79,7 @@ const PROVIDER_SECTION_PREFIX = "provider.";
 const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   anthropic: "Anthropic",
   cerebras: "Cerebras",
+  chatgpt: "ChatGPT (Plus/Pro)",
   cloudflare: "Cloudflare Worker AI",
   deepseek: "DeepSeek",
   fireworks: "Fireworks",
@@ -643,6 +649,18 @@ function loadProvidersFromSections(
       id,
       label,
       type,
+      ...(values.chatgpt_access_token?.trim()
+        ? { chatgptAccessToken: values.chatgpt_access_token.trim() }
+        : {}),
+      ...(values.chatgpt_refresh_token?.trim()
+        ? { chatgptRefreshToken: values.chatgpt_refresh_token.trim() }
+        : {}),
+      ...(values.chatgpt_account_id?.trim()
+        ? { chatgptAccountId: values.chatgpt_account_id.trim() }
+        : {}),
+      ...(values.chatgpt_token_expires_at?.trim()
+        ? { chatgptTokenExpiresAt: values.chatgpt_token_expires_at.trim() }
+        : {}),
       ...(baseUrl ? { baseUrl } : {}),
       ...(hostMode ? { hostMode } : {}),
       ...(wireApi ? { wireApi } : {}),
@@ -680,6 +698,22 @@ function buildProviderSectionValues(
 
   if (provider.customModels?.length) {
     values.models_json = serializeCustomModels(provider.customModels);
+  }
+
+  if (provider.chatgptAccessToken?.trim()) {
+    values.chatgpt_access_token = provider.chatgptAccessToken.trim();
+  }
+
+  if (provider.chatgptRefreshToken?.trim()) {
+    values.chatgpt_refresh_token = provider.chatgptRefreshToken.trim();
+  }
+
+  if (provider.chatgptAccountId?.trim()) {
+    values.chatgpt_account_id = provider.chatgptAccountId.trim();
+  }
+
+  if (provider.chatgptTokenExpiresAt?.trim()) {
+    values.chatgpt_token_expires_at = provider.chatgptTokenExpiresAt.trim();
   }
 
   return values;
@@ -835,4 +869,61 @@ export function validateProviderApiKeyFormat(
   }
 
   return trimmed;
+}
+
+export function isChatgptProviderConnected(
+  instance: ProviderInstance
+): boolean {
+  return (
+    instance.type === "chatgpt" &&
+    Boolean(instance.chatgptRefreshToken?.trim()) &&
+    Boolean(instance.chatgptAccountId?.trim())
+  );
+}
+
+export function readChatgptOAuthFromInstance(
+  instance: ProviderInstance
+): ChatgptOAuthCredentials | null {
+  const refreshToken = instance.chatgptRefreshToken?.trim();
+  const accessToken = instance.chatgptAccessToken?.trim();
+  const accountId = instance.chatgptAccountId?.trim();
+  const expiresAt = instance.chatgptTokenExpiresAt?.trim();
+
+  if (!(refreshToken && accessToken && accountId && expiresAt)) {
+    return null;
+  }
+
+  return {
+    accessToken,
+    accountId,
+    expiresAt,
+    refreshToken,
+  };
+}
+
+export function applyChatgptOAuthToInstance(
+  instance: ProviderInstance,
+  oauth: ChatgptOAuthCredentials
+): ProviderInstance {
+  return {
+    ...instance,
+    apiKey: "",
+    chatgptAccessToken: oauth.accessToken.trim(),
+    chatgptAccountId: oauth.accountId.trim(),
+    chatgptRefreshToken: oauth.refreshToken.trim(),
+    chatgptTokenExpiresAt: oauth.expiresAt.trim(),
+  };
+}
+
+export function chatgptOAuthNeedsRefresh(
+  oauth: ChatgptOAuthCredentials,
+  now = Date.now()
+): boolean {
+  const expiresAt = Date.parse(oauth.expiresAt);
+
+  if (!Number.isFinite(expiresAt)) {
+    return true;
+  }
+
+  return expiresAt - now <= 5 * 60 * 1000;
 }

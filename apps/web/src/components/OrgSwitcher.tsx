@@ -1,6 +1,6 @@
 import type { UserOrgSummary } from "@nakama/core/contract";
 import { Add01Icon, ArrowDown01Icon, Edit03Icon } from "hugeicons-react";
-import { useEffect, useRef, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,14 +64,16 @@ interface OrgSwitcherProps {
 }
 
 function OrgSwitcherTrigger({
+  className,
   collapsed,
   initial,
   label,
+  ...props
 }: {
   collapsed: boolean;
   initial: string;
   label: string;
-}) {
+} & ComponentProps<typeof Button>) {
   return (
     <Button
       aria-label={collapsed ? `Current organization: ${label}` : undefined}
@@ -79,11 +81,13 @@ function OrgSwitcherTrigger({
         "font-normal hover:bg-sidebar-accent/60 motion-reduce:transition-none",
         collapsed
           ? "sidebar-nav-link sidebar-nav-link--collapsed p-0"
-          : "h-auto w-full min-w-0 justify-start gap-2 px-2 py-1.5 text-left"
+          : "h-auto w-full min-w-0 justify-start gap-2 px-2 py-1.5 text-left",
+        className
       )}
       title={collapsed ? label : undefined}
       type="button"
       variant="ghost"
+      {...props}
     >
       {collapsed ? (
         <span className="flex size-8 items-center justify-center rounded-md bg-muted font-semibold text-foreground text-xs">

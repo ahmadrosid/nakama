@@ -44,6 +44,11 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import {
+  completeChatgptOAuthDeviceSession,
+  fetchChatgptCodexModels,
+  startChatgptOAuthDeviceSession,
+} from "../../providers/chatgpt/oauth";
 import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
@@ -1316,6 +1321,46 @@ export function registerModelRoutes(
     return json<DeleteProviderResponse>(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId")))
     );
+  });
+
+  app.post("/v1/chatgpt-oauth/device/start", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+
+    try {
+      return json(await startChatgptOAuthDeviceSession());
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/chatgpt-oauth/device/complete", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const body = await readJson<{ sessionId?: string }>(c.req.raw);
+    const sessionId = body.sessionId?.trim();
+
+    if (!sessionId) {
+      return errorResponse("sessionId is required.", 400);
+    }
+
+    try {
+      const chatgptOAuth = await completeChatgptOAuthDeviceSession(sessionId);
+      const models = await fetchChatgptCodexModels(chatgptOAuth).catch(
+        () => []
+      );
+      return json({ chatgptOAuth, models });
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.put("/v1/settings/provider", async (c) => {

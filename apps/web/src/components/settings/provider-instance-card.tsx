@@ -138,7 +138,15 @@ function ProviderInstanceTableRow({
             </ProviderActionButton>
           ) : null}
           <ProviderActionButton
-            label={instance.hasApiKey ? "Update key" : "Add key"}
+            label={
+              card.isChatgpt
+                ? instance.hasApiKey
+                  ? "Reconnect ChatGPT"
+                  : "Connect ChatGPT"
+                : instance.hasApiKey
+                  ? "Update key"
+                  : "Add key"
+            }
             onClick={() => card.setReplaceKeyOpen(true)}
           >
             <Key01Icon className="size-3.5" />
@@ -247,9 +255,11 @@ function ProviderInstanceCardDialogs({
       <ProviderReplaceKeyDialog
         apiKey={card.apiKey}
         busy={card.busy}
+        chatgptOAuth={card.chatgptOAuth}
         dialogError={card.dialogError}
         instance={instance}
         onApiKeyChange={card.setApiKey}
+        onChatgptOAuthChange={card.setChatgptOAuth}
         onOpenChange={card.setReplaceKeyOpen}
         onSave={() => void card.handleReplaceKey()}
         onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}

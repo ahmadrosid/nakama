@@ -2,6 +2,7 @@ import type { CreateProviderResponse } from "@nakama/core/contract";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useState } from "react";
+import { ChatgptSignInPanel } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { OllamaProviderModelFields } from "@/components/OllamaProviderModelFields";
@@ -53,8 +54,12 @@ export function ProviderSetupForm({
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
   const apiKeyOptional =
     form.selectedProvider === "openai_compatible" ||
+    form.selectedProvider === "chatgpt" ||
     (form.selectedProvider === "ollama" && !ollamaKeyRequired);
-  const canPickModels = apiKeyOptional || form.apiKey.trim().length > 0;
+  const canConnect =
+    form.selectedProvider === "chatgpt"
+      ? Boolean(form.chatgptOAuth)
+      : apiKeyOptional || form.apiKey.trim().length > 0;
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
@@ -111,7 +116,7 @@ export function ProviderSetupForm({
       ) : (
         <ProviderSetupDetails
           apiKeyOptional={apiKeyOptional}
-          canPickModels={canPickModels}
+          canConnect={canConnect}
           density={density}
           form={form}
           submitLabel={submitLabel}
@@ -219,15 +224,15 @@ function CloudflareAccountIdField({
 }
 
 function OpenRouterModelFields({
-  canPickModels,
+  canConnect,
   density,
   form,
 }: {
-  canPickModels: boolean;
+  canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
-  if (!canPickModels) {
+  if (!canConnect) {
     return null;
   }
 
@@ -243,11 +248,11 @@ function OpenRouterModelFields({
 }
 
 function OllamaSetupFields({
-  canPickModels,
+  canConnect,
   density,
   form,
 }: {
-  canPickModels: boolean;
+  canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
@@ -262,7 +267,7 @@ function OllamaSetupFields({
         onBaseUrlChange={form.setBaseUrl}
         onHostModeChange={form.handleOllamaHostModeChange}
       />
-      {canPickModels ? (
+      {canConnect ? (
         <OllamaProviderModelFields
           apiKey={form.apiKey}
           baseUrl={form.baseUrl}
@@ -279,15 +284,15 @@ function OllamaSetupFields({
 }
 
 function ShortlistModelFields({
-  canPickModels,
+  canConnect,
   density,
   form,
 }: {
-  canPickModels: boolean;
+  canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
-  if (!(canPickModels && isShortlistBrowseProvider(form.selectedProvider))) {
+  if (!(canConnect && isShortlistBrowseProvider(form.selectedProvider))) {
     return null;
   }
 
@@ -337,11 +342,11 @@ function DefaultModelSelectField({
 }
 
 function ProviderSetupExtraFields({
-  canPickModels,
+  canConnect,
   density,
   form,
 }: {
-  canPickModels: boolean;
+  canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
@@ -365,7 +370,7 @@ function ProviderSetupExtraFields({
         onCustomModelsChange={form.setCustomModels}
         onDisplayNameChange={form.setDisplayName}
         onWireApiChange={form.setWireApi}
-        showModelsEditor={canPickModels}
+        showModelsEditor={canConnect}
         wireApi={form.wireApi}
       />
     );
@@ -374,7 +379,7 @@ function ProviderSetupExtraFields({
   if (form.selectedProvider === "openrouter") {
     return (
       <OpenRouterModelFields
-        canPickModels={canPickModels}
+        canConnect={canConnect}
         density={density}
         form={form}
       />
@@ -384,7 +389,7 @@ function ProviderSetupExtraFields({
   if (form.selectedProvider === "ollama") {
     return (
       <OllamaSetupFields
-        canPickModels={canPickModels}
+        canConnect={canConnect}
         density={density}
         form={form}
       />
@@ -394,11 +399,15 @@ function ProviderSetupExtraFields({
   if (isShortlistBrowseProvider(form.selectedProvider)) {
     return (
       <ShortlistModelFields
-        canPickModels={canPickModels}
+        canConnect={canConnect}
         density={density}
         form={form}
       />
     );
+  }
+
+  if (form.selectedProvider === "chatgpt" && !canConnect) {
+    return null;
   }
 
   return <DefaultModelSelectField density={density} form={form} />;
@@ -406,26 +415,36 @@ function ProviderSetupExtraFields({
 
 function ProviderSetupDetails({
   apiKeyOptional,
-  canPickModels,
+  canConnect,
   density,
   form,
   submitLabel,
 }: {
   apiKeyOptional: boolean;
-  canPickModels: boolean;
+  canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
   submitLabel: string;
 }) {
   return (
     <>
-      <ProviderSetupApiKeyField
-        apiKeyOptional={apiKeyOptional}
-        density={density}
-        form={form}
-      />
+      {form.selectedProvider === "chatgpt" ? (
+        <ChatgptSignInPanel
+          density={density}
+          disabled={form.busy}
+          oauth={form.chatgptOAuth}
+          onModelsChange={form.handleChatgptModelsChange}
+          onOAuthChange={form.setChatgptOAuth}
+        />
+      ) : (
+        <ProviderSetupApiKeyField
+          apiKeyOptional={apiKeyOptional}
+          density={density}
+          form={form}
+        />
+      )}
       <ProviderSetupExtraFields
-        canPickModels={canPickModels}
+        canConnect={canConnect}
         density={density}
         form={form}
       />
@@ -435,10 +454,7 @@ function ProviderSetupDetails({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button
-          disabled={form.busy || !(apiKeyOptional || form.apiKey.trim())}
-          type="submit"
-        >
+        <Button disabled={form.busy || !canConnect} type="submit">
           {form.busy ? (
             <>
               <Spinner className="mr-2" />

@@ -79,6 +79,25 @@ describe("getModelsForProviderInstance openai", () => {
   });
 });
 
+describe("getModelsForProviderInstance chatgpt", () => {
+  test("uses shortlist when custom models are saved", () => {
+    const models = getModelsForProviderInstance({
+      apiKey: "",
+      chatgptAccountId: "acct_1",
+      chatgptRefreshToken: "refresh",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [{ default: true, id: "gpt-5.4", name: "GPT-5.4" }],
+      id: "chatgpt-1",
+      label: "ChatGPT",
+      type: "chatgpt",
+    });
+
+    expect(models).toHaveLength(1);
+    expect(models[0]?.id).toBe("gpt-5.4");
+    expect(models[0]?.providerId).toBe("chatgpt-1");
+  });
+});
+
 describe("getModelsForProviderInstance opencode_go", () => {
   test("uses shortlist when custom models are saved", () => {
     const models = getModelsForProviderInstance({

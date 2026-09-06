@@ -18,6 +18,7 @@ import type {
   AssignToolRequest,
   BranchSessionResponse,
   ChatContextUsage,
+  ChatgptOAuthCredentials,
   ChatMessage,
   CloneProfileRequest,
   CompactionResponse,
@@ -106,10 +107,12 @@ import type {
 import {
   apiKeyEnvVarForProvider,
   appendOrgMemorySection,
+  applyChatgptOAuthToInstance,
   buildErrorReport,
   buildThinkingProviderOptions,
   buildToolExecutionContext,
   buildUserContextStatus,
+  chatgptOAuthNeedsRefresh,
   composeKnowledgeBaseCatalog,
   composeSoulSystemPrompt,
   createErrorTrackingSink,
@@ -155,6 +158,7 @@ import {
   persistInlineAttachmentsInContent,
   readArtifactFile,
   readBundledSkillBody,
+  readChatgptOAuthFromInstance,
   readEnvValue,
   refreshErrorTrackingEnabled,
   regenerateDiscordHandshake,
@@ -202,6 +206,10 @@ import {
   getModelsForProviderInstance,
   isCostEstimated,
 } from "../providers";
+import {
+  fetchChatgptCodexModels,
+  refreshChatgptOAuthToken,
+} from "../providers/chatgpt/oauth";
 import { isAllowedImageGenerationSelection } from "../providers/models";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
@@ -2237,6 +2245,35 @@ export class AgentService {
       };
     }
 
+    if (instance.type === "chatgpt") {
+      let oauth = readChatgptOAuthFromInstance(instance);
+
+      if (!oauth) {
+        throw new NakamaApiError(
+          "Sign in with ChatGPT before discovering models.",
+          400
+        );
+      }
+
+      if (chatgptOAuthNeedsRefresh(oauth)) {
+        oauth = await refreshChatgptOAuthToken(oauth.refreshToken);
+        await this.persistChatgptOAuth(providerId, oauth);
+      }
+
+      const entries = await fetchChatgptCodexModels(oauth);
+      const models = catalogCustomModelsToCatalog(entries, [], "chatgpt");
+
+      return {
+        catalog: AVAILABLE_MODELS,
+        currentProviderId: providerId,
+        customModels: entries,
+        displayName: instance.label,
+        models,
+        provider: "chatgpt",
+        providers: [],
+      };
+    }
+
     if (instance.type !== "openai") {
       throw new NakamaApiError(
         `Remote model discovery is not supported for ${instance.type}.`,
@@ -2385,6 +2422,31 @@ export class AgentService {
     this.refreshHarness();
 
     return { defaultProviderId };
+  }
+
+  async persistChatgptOAuth(
+    providerId: string,
+    oauth: ChatgptOAuthCredentials
+  ): Promise<void> {
+    if (!this.userConfig) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const current = findProviderInstance(this.userConfig, providerId);
+
+    if (!current || current.type !== "chatgpt") {
+      throw new Error("ChatGPT provider not found.");
+    }
+
+    const updated = applyChatgptOAuthToInstance(current, oauth);
+    this.userConfig = {
+      ...this.userConfig,
+      providers: this.userConfig.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      ),
+    };
+    await saveUserConfig(this.userConfig);
+    this.refreshHarness();
   }
 
   async getModels(
@@ -3430,7 +3492,14 @@ export class AgentService {
 
         let visionProvider = createProviderForInstance(
           visionSelection.instance,
-          visionSelection.model
+          visionSelection.model,
+          process.env,
+          {
+            onChatgptTokenRefresh: (instanceId, oauth) =>
+              this.persistChatgptOAuth(instanceId, oauth),
+            resolveInstance: (instanceId) =>
+              findProviderInstance(this.userConfig, instanceId),
+          }
         );
 
         if (this.llmUsageTracker) {
@@ -3743,7 +3812,14 @@ export class AgentService {
 
     const provider = createProviderForInstance(
       resolved.instance,
-      resolved.model
+      resolved.model,
+      process.env,
+      {
+        onChatgptTokenRefresh: (instanceId, oauth) =>
+          this.persistChatgptOAuth(instanceId, oauth),
+        resolveInstance: (instanceId) =>
+          findProviderInstance(this.userConfig, instanceId),
+      }
     );
     const primarySupportsVision = resolvePrimaryModelVisionSupport(
       this.userConfig,
