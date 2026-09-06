@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildPublicArtifactShareUrl,
   resolvePublicArtifactShareOrigin,
+  tryBuildPublicArtifactShareUrl,
 } from "./public-artifact-share-url";
 
 describe("resolvePublicArtifactShareOrigin", () => {
@@ -64,5 +65,18 @@ describe("buildPublicArtifactShareUrl", () => {
     expect(
       buildPublicArtifactShareUrl("https://app.example.com", "tok/2")
     ).toBe("https://app.example.com/v1/public/artifact-shares/tok%2F2");
+  });
+});
+
+describe("tryBuildPublicArtifactShareUrl", () => {
+  test("returns null for rejected origins instead of throwing", () => {
+    expect(
+      tryBuildPublicArtifactShareUrl("file:///etc/passwd", "tok_1")
+    ).toBeNull();
+    expect(
+      tryBuildPublicArtifactShareUrl("http://localhost:4310", "tok_1", undefined, {
+        isProd: true,
+      })
+    ).toBeNull();
   });
 });

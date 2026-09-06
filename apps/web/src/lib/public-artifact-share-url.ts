@@ -49,3 +49,17 @@ export function buildPublicArtifactShareUrl(
   const suffix = query ? `?${query}` : "";
   return `${origin}${path}${suffix}`;
 }
+
+/** Same as buildPublicArtifactShareUrl, or null when the origin is rejected. */
+export function tryBuildPublicArtifactShareUrl(
+  baseUrl: string,
+  token: string,
+  query?: string,
+  options?: { isProd?: boolean }
+): string | null {
+  try {
+    return buildPublicArtifactShareUrl(baseUrl, token, query, options);
+  } catch {
+    return null;
+  }
+}
