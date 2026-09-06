@@ -607,14 +607,24 @@ export function useRevokeArtifactShareMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       profileId,
       shareId,
     }: {
       profileId: string;
       shareId: string;
       path?: string;
-    }) => client.revokeProfileArtifactShare(profileId, shareId),
+    }) => {
+      try {
+        return await client.revokeProfileArtifactShare(profileId, shareId);
+      } catch (error) {
+        // Another tab may have revoked this link; still clear stale share state.
+        if (error instanceof NakamaApiError && error.status === 404) {
+          return { id: shareId, revoked: false };
+        }
+        throw error;
+      }
+    },
     onSuccess: async (_data, variables) => {
       if (variables.path) {
         await queryClient.invalidateQueries({

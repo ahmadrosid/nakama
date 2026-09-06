@@ -200,7 +200,7 @@ export function useArtifactShareControls({
     }
 
     try {
-      await revokeMutation.mutateAsync({
+      const { revoked } = await revokeMutation.mutateAsync({
         path: artifactPath,
         profileId,
         shareId,
@@ -208,6 +208,12 @@ export function useArtifactShareControls({
       clearStoredArtifactShare({ artifactPath, orgId, profileId });
       setStoredUrl(null);
       storedShareIdRef.current = null;
+
+      if (!revoked) {
+        closePublishDialog();
+        toast("This share link was already revoked. Open sharing again.");
+        return;
+      }
 
       const result = await publishMutation.mutateAsync({
         path: artifactPath,
@@ -233,7 +239,7 @@ export function useArtifactShareControls({
       }
 
       closePublishDialog();
-      toast("New share link created");
+      toast("Share link changed. Open sharing again.");
     } catch (error) {
       toast(formatError(error));
     }
@@ -246,7 +252,7 @@ export function useArtifactShareControls({
     }
 
     try {
-      await revokeMutation.mutateAsync({
+      const { revoked } = await revokeMutation.mutateAsync({
         path: artifactPath,
         profileId,
         shareId,
@@ -254,7 +260,9 @@ export function useArtifactShareControls({
       clearStoredArtifactShare({ artifactPath, orgId, profileId });
       setStoredUrl(null);
       storedShareIdRef.current = null;
-      toast("Share link revoked");
+      toast(
+        revoked ? "Share link revoked" : "This share link was already revoked."
+      );
     } catch (error) {
       toast(formatError(error));
     }
