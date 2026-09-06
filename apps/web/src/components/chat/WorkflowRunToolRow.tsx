@@ -7,13 +7,10 @@ import { useQuery } from "@tanstack/react-query";
 import { CancelCircleIcon } from "hugeicons-react";
 import type { ChatListItem } from "@/lib/chat-history";
 import {
-  activeWorkflowStepIndex,
-  buildWorkflowStepViews,
-  formatWorkflowRunStatusLabel,
+  buildWorkflowRunCard,
   isRunWorkflowTool,
   parseRunWorkflowResult,
   parseWorkflowId,
-  pickRunningWorkflowRun,
   type WorkflowStepView,
 } from "@/lib/chat-stream-workflow";
 import { client } from "@/lib/client";
@@ -23,7 +20,7 @@ import { cn } from "@/lib/utils";
 const cardSurface =
   "rounded-xl bg-card px-4 py-3 shadow-sm ring-1 ring-border/80 dark:shadow-none";
 
-export function WorkflowRunCard({
+function WorkflowRunCard({
   statusLabel,
   title,
   views,
@@ -55,9 +52,10 @@ function useWorkflowRunCard(message: ChatListItem) {
   const workflowId = parseWorkflowId(message.toolInput);
   const parsed = parseRunWorkflowResult(message.toolResult);
   const isRunning = message.toolStatus === "running";
+  const canLoad = Boolean(workflowId) && isRunWorkflowTool(message.tool);
 
   const workflowQuery = useQuery({
-    enabled: Boolean(workflowId) && isRunWorkflowTool(message.tool),
+    enabled: canLoad,
     queryFn: () => client.getWorkflow(workflowId!),
     queryKey: queryKeys.workflows.detail(workflowId ?? ""),
   });
@@ -69,25 +67,12 @@ function useWorkflowRunCard(message: ChatListItem) {
     refetchInterval: isRunning ? 800 : false,
   });
 
-  const run =
-    parsed?.run ??
-    (isRunning ? pickRunningWorkflowRun(runsQuery.data ?? []) : null);
-  const views = buildWorkflowStepViews(workflowQuery.data?.steps ?? [], run);
-  const workflowOff = workflowQuery.data?.enabled === false;
-  const status = isRunning
-    ? "running"
-    : (parsed?.status ?? run?.status ?? (workflowOff ? "off" : "completed"));
-
-  return {
-    statusLabel: formatWorkflowRunStatusLabel(
-      status,
-      isRunning,
-      activeWorkflowStepIndex(views),
-      views.length
-    ),
-    title: workflowQuery.data?.name ?? parsed?.name ?? "Workflow",
-    views,
-  };
+  return buildWorkflowRunCard({
+    isRunning,
+    parsed,
+    runs: runsQuery.data ?? [],
+    workflow: workflowQuery.data,
+  });
 }
 
 function WorkflowChecklist({ views }: { views: WorkflowStepView[] }) {

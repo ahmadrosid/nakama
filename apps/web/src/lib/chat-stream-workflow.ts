@@ -1,4 +1,5 @@
 import type {
+  StoredWorkflow,
   WorkflowRunRecord,
   WorkflowRunStepRecord,
   WorkflowRunStepStatus,
@@ -120,10 +121,47 @@ export function parseRunWorkflowResult(result: unknown): {
   };
 }
 
-export function pickRunningWorkflowRun(
+function pickRunningWorkflowRun(
   runs: WorkflowRunRecord[]
 ): WorkflowRunRecord | null {
   return runs.find((run) => run.status === "running") ?? null;
+}
+
+export function buildWorkflowRunCard({
+  isRunning,
+  parsed,
+  runs,
+  workflow,
+}: {
+  isRunning: boolean;
+  parsed: ReturnType<typeof parseRunWorkflowResult>;
+  runs: WorkflowRunRecord[];
+  workflow:
+    | Pick<StoredWorkflow, "enabled" | "name" | "steps">
+    | null
+    | undefined;
+}): {
+  statusLabel: string;
+  title: string;
+  views: WorkflowStepView[];
+} {
+  const run = parsed?.run ?? (isRunning ? pickRunningWorkflowRun(runs) : null);
+  const views = buildWorkflowStepViews(workflow?.steps ?? [], run);
+  const workflowOff = workflow?.enabled === false;
+  const status = isRunning
+    ? "running"
+    : (parsed?.status ?? run?.status ?? (workflowOff ? "off" : "completed"));
+
+  return {
+    statusLabel: formatWorkflowRunStatusLabel(
+      status,
+      isRunning,
+      activeWorkflowStepIndex(views),
+      views.length
+    ),
+    title: workflow?.name ?? parsed?.name ?? "Workflow",
+    views,
+  };
 }
 
 export function formatWorkflowRunStatusLabel(

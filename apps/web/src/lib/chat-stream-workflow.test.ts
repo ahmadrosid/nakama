@@ -3,6 +3,7 @@ import type { WorkflowRunRecord, WorkflowStep } from "@nakama/core/contract";
 import { formatToolActionLabel, formatToolResult } from "./chat-stream";
 import {
   activeWorkflowStepIndex,
+  buildWorkflowRunCard,
   buildWorkflowStepViews,
   describeWorkflowStep,
   formatListWorkflowsToolResult,
@@ -216,6 +217,19 @@ describe("chat-stream-workflow", () => {
 
     expect(views[0]?.meta).toBe("5 words");
     expect(views[2]?.meta).toBe("Morning Brief — 5 September 2026");
+  });
+
+  test("buildWorkflowRunCard prefers workflow name and off status", () => {
+    const card = buildWorkflowRunCard({
+      isRunning: false,
+      parsed: { name: "From result", run: null, status: null },
+      runs: [],
+      workflow: { enabled: false, name: "Morning Brief", steps },
+    });
+
+    expect(card.title).toBe("Morning Brief");
+    expect(card.statusLabel).toBe("Off");
+    expect(card.views).toHaveLength(3);
   });
 
   test("formatWorkflowRunStatusLabel covers run states", () => {
