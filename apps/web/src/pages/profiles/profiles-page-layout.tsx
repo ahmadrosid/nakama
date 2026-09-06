@@ -185,7 +185,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
           ) : detailTab === "knowledge" ? (
             <div
               aria-labelledby="profile-detail-tab-knowledge"
-              className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+              className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
               id="profile-detail-panel-knowledge"
               role="tabpanel"
             >
