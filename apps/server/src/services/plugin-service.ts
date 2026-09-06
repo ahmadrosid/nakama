@@ -207,8 +207,8 @@ interface PendingPluginOperation {
   targetVersion: string | null;
 }
 
-export type PluginActionAccessKind = "tool" | "ui";
-export type PluginHookKind = "activate" | "deactivate";
+type PluginActionAccessKind = "tool" | "ui";
+type PluginHookKind = "activate" | "deactivate";
 
 export interface InvokePluginActionInput {
   access: PluginActionAccessKind;

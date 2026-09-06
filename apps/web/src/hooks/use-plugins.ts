@@ -45,7 +45,7 @@ export function orgPluginQueryOptions(orgId: string, pluginId: string) {
   });
 }
 
-export function pluginReleasesQueryOptions() {
+function pluginReleasesQueryOptions() {
   return queryOptions({
     queryFn: () => client.listPluginReleases(),
     queryKey: queryKeys.plugins.releases,

@@ -38,7 +38,7 @@ function buildAllowlistedSubprocessEnv(
   return env;
 }
 
-export interface SpawnJsonToolTransport {
+interface SpawnJsonToolTransport {
   extraArgs?: string[];
   extraEnv?: NodeJS.ProcessEnv;
   includeConfigDir?: boolean;
