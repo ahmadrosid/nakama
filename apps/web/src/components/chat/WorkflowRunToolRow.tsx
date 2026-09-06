@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
 import {
-  CancelCircleIcon,
-  CheckmarkCircle01Icon,
-  CircleIcon,
-  Loading03Icon,
-} from "hugeicons-react";
+  CheckmarkCircle02Icon,
+  DashedLineCircleIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useQuery } from "@tanstack/react-query";
+import { CancelCircleIcon } from "hugeicons-react";
 import type { ChatListItem } from "@/lib/chat-history";
 import {
   activeWorkflowStepIndex,
@@ -160,9 +160,13 @@ function StepMark({
 }) {
   if (status === "completed") {
     return (
-      <CheckmarkCircle01Icon
+      <HugeiconsIcon
         aria-hidden
         className={cn("size-4 shrink-0 text-emerald-500", className)}
+        color="currentColor"
+        icon={CheckmarkCircle02Icon}
+        size={16}
+        strokeWidth={1.5}
       />
     );
   }
@@ -176,22 +180,18 @@ function StepMark({
     );
   }
 
-  if (status === "running") {
-    return (
-      <Loading03Icon
-        aria-hidden
-        className={cn(
-          "size-4 shrink-0 animate-spin text-muted-foreground",
-          className
-        )}
-      />
-    );
-  }
-
   return (
-    <CircleIcon
+    <HugeiconsIcon
       aria-hidden
-      className={cn("size-4 shrink-0 text-muted-foreground", className)}
+      className={cn(
+        "size-4 shrink-0 text-muted-foreground",
+        status === "running" && "animate-spin",
+        className
+      )}
+      color="currentColor"
+      icon={DashedLineCircleIcon}
+      size={16}
+      strokeWidth={1.5}
     />
   );
 }

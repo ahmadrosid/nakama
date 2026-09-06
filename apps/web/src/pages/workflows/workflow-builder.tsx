@@ -487,7 +487,7 @@ function WorkflowBuilderMeta({
       <div className="flex items-center gap-2">
         <Input
           aria-label="Workflow name"
-          className="h-8 min-w-0 flex-1 border-transparent bg-transparent px-0 font-medium shadow-none focus-visible:border-input focus-visible:bg-background"
+          className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-medium shadow-none focus-visible:border-input focus-visible:bg-background"
           onChange={(event) => onNameChange(event.target.value)}
           value={name}
         />
@@ -523,7 +523,7 @@ function WorkflowBuilderMeta({
       </div>
       <Input
         aria-label="Workflow description"
-        className="mt-1 h-8 border-transparent bg-transparent px-0 text-muted-foreground shadow-none focus-visible:border-input focus-visible:bg-background"
+        className="mt-1 h-8 border-transparent bg-transparent text-muted-foreground shadow-none focus-visible:border-input focus-visible:bg-background"
         onChange={(event) => onDescriptionChange(event.target.value)}
         value={description}
       />

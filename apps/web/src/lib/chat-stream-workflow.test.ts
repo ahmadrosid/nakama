@@ -179,7 +179,7 @@ describe("chat-stream-workflow", () => {
     ]);
   });
 
-  test("fetch receipts show size instead of body", () => {
+  test("fetch receipts show word count instead of body", () => {
     const views = buildWorkflowStepViews(steps, {
       ...runRecord("done", "completed", "2026-09-05T01:00:00.000Z"),
       steps: [
@@ -214,7 +214,7 @@ describe("chat-stream-workflow", () => {
       ],
     });
 
-    expect(views[0]?.meta).toBe("369 KB");
+    expect(views[0]?.meta).toBe("5 words");
     expect(views[2]?.meta).toBe("Morning Brief — 5 September 2026");
   });
 

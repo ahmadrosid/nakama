@@ -5,6 +5,7 @@ import type {
   WorkflowStep,
 } from "@nakama/core/contract";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
+import { countWords } from "@/lib/pasted-text";
 
 export function isRunWorkflowTool(tool: string | undefined): boolean {
   return tool === "run_workflow";
@@ -299,8 +300,8 @@ function summarizeReceiptOutput(
 
   if (typeof output === "object" && !Array.isArray(output)) {
     const record = output as Record<string, unknown>;
-    if (typeof record.bytes === "number") {
-      return `${Math.round(record.bytes / 1024)} KB`;
+    if (typeof record.content === "string" && record.content.trim()) {
+      return formatWordCountLabel(record.content);
     }
 
     if (typeof record.output === "string" && record.output.trim()) {
@@ -309,10 +310,6 @@ function summarizeReceiptOutput(
 
     if (record.ok === true) {
       return "ok";
-    }
-
-    if ("content" in record) {
-      return "Fetched";
     }
   }
 
@@ -367,6 +364,11 @@ function formatHost(value: string): string {
 
 function readTrimmedString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function formatWordCountLabel(text: string): string {
+  const count = countWords(text);
+  return count === 1 ? "1 word" : `${count.toLocaleString("en-US")} words`;
 }
 
 function truncateDisplay(value: string, maxLength: number): string {
