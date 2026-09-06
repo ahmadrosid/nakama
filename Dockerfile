@@ -11,9 +11,7 @@ COPY package.json bun.lock ./
 COPY apps apps
 COPY packages packages
 
-# Host network: OrbStack/Docker bridge DNS is often AAAA-only, and bun then
-# ConnectionRefused on IPv6-less bridges.
-RUN --network=host bun install --frozen-lockfile --ignore-scripts \
+RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @nakama/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
@@ -57,7 +55,7 @@ COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
-RUN --network=host bun install --frozen-lockfile --production --ignore-scripts \
+RUN bun install --frozen-lockfile --production --ignore-scripts \
       --filter '@nakama/server' \
       --filter '@nakama/automation' \
       --filter '@nakama/telegram' \

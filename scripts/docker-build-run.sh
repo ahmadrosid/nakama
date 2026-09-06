@@ -11,6 +11,9 @@ echo "Building ${IMAGE_NAME}..."
 # buildx handles cross-platform builds; legacy `docker build` fails on Apple Silicon
 # when forcing linux/amd64. Custom DOCKER_CONFIG disables the buildx CLI plugin.
 # Build before stopping the running container so a failed build leaves the old service up.
+# Host network: OrbStack/Docker bridge DNS is often AAAA-only, and bun then
+# ConnectionRefused on IPv6-less bridges. Do not put RUN --network=host in the
+# Dockerfile — GHCR publish rejects that entitlement.
 if [[ "${IMAGE_NAME}" == "nakama" && "$#" -eq 0 ]]; then
   docker buildx build --load --network=host --allow network.host --platform=linux/amd64 -t nakama "${ROOT}"
 else
