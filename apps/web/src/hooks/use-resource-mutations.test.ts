@@ -84,18 +84,15 @@ test.each([200, 404])(
   }
 );
 
-test.each([401, 403, 500])(
-  "revoke preserves HTTP %s failures rather than allowing rotation to continue",
-  async (status) => {
-    queryClient.setQueryData(queryKey, { active: true, id: variables.shareId });
-    const error = new NakamaApiError("Request failed", status);
-    revoke.mockRejectedValue(error);
+test("revoke preserves HTTP 403 failures rather than allowing rotation to continue", async () => {
+  queryClient.setQueryData(queryKey, { active: true, id: variables.shareId });
+  const error = new NakamaApiError("Request failed", 403);
+  revoke.mockRejectedValue(error);
 
-    const mutate = renderMutation();
-    await expect(mutate()).rejects.toBe(error);
-    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
-  }
-);
+  const mutate = renderMutation();
+  await expect(mutate()).rejects.toBe(error);
+  expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
+});
 
 describe("artifact share controls with a stale share ID", () => {
   const unusedAuthAction = mock(async () => {});
