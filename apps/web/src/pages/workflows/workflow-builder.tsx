@@ -798,16 +798,41 @@ function WorkflowStepPanel({
   tab: "configure" | "database" | "test";
   tools: ToolSummary[];
 }) {
-  const meta = stepMeta(step);
-  const receipt = latestRun?.steps?.find((entry) => entry.stepId === step.id);
-  const [inputDraft, setInputDraft] = useState(() =>
-    step.kind === "tool" ? JSON.stringify(step.input, null, 2) : ""
-  );
-  const isSqlite = step.kind === "tool" && step.tool === "sqlite";
   const expanded = useWorkflowDatabaseUi((state) => state.expanded);
-  const expand = useWorkflowDatabaseUi((state) => state.expand);
-  const collapse = useWorkflowDatabaseUi((state) => state.collapse);
   const host = useWorkflowStepHost();
+  useWorkflowStepEscape({ expanded, onClose });
+
+  if (!host) {
+    return null;
+  }
+
+  return createPortal(
+    <WorkflowStepDrawer
+      busy={busy}
+      inputError={inputError}
+      latestRun={latestRun}
+      onClose={onClose}
+      onInputError={onInputError}
+      onPatch={onPatch}
+      onRename={onRename}
+      onTabChange={onTabChange}
+      step={step}
+      stepNumber={stepNumber}
+      tab={tab}
+      tools={tools}
+    />,
+    host
+  );
+}
+
+function useWorkflowStepEscape({
+  expanded,
+  onClose,
+}: {
+  expanded: boolean;
+  onClose: () => void;
+}) {
+  const collapseExpanded = useWorkflowDatabaseUi((state) => state.collapse);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -815,134 +840,260 @@ function WorkflowStepPanel({
         return;
       }
       if (expanded) {
-        collapse();
+        collapseExpanded();
         return;
       }
       onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [collapse, expanded, onClose]);
+  }, [collapseExpanded, expanded, onClose]);
+}
 
-  const drawer = (
-    <aside
-      className={cn(
-        "absolute inset-y-0 right-0 z-30 flex min-h-0 flex-col border-border border-l bg-background shadow-xl",
-        "slide-in-from-right animate-in duration-200",
-        expanded
-          ? "inset-0 w-full"
-          : isSqlite
-            ? "w-[min(36rem,100%)]"
-            : "w-[min(22rem,100%)]"
-      )}
-    >
-      <div className="flex items-center gap-3 border-border border-b px-4 py-3">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums">
-          {stepNumber}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm">{meta.title}</div>
-          <div className="text-muted-foreground text-xs">{meta.kindLabel}</div>
-        </div>
-        <Button
-          aria-label={expanded ? "Collapse step" : "Expand step"}
-          className={iconHitArea}
-          onClick={expanded ? collapse : expand}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          {expanded ? (
-            <ArrowShrink02Icon className="size-4" strokeWidth={1.5} />
-          ) : (
-            <ArrowExpand01Icon className="size-4" strokeWidth={1.5} />
-          )}
-        </Button>
-        <Button
-          aria-label="Close step"
-          className={iconHitArea}
-          onClick={onClose}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Cancel01Icon className="size-4" strokeWidth={1.5} />
-        </Button>
-      </div>
-
-      <div className="flex gap-4 border-border border-b px-4">
-        <PanelTab
-          active={tab === "configure"}
-          onClick={() => onTabChange("configure")}
-        >
-          Configure
-        </PanelTab>
-        {isSqlite ? (
-          <PanelTab
-            active={tab === "database"}
-            onClick={() => onTabChange("database")}
-          >
-            Database
-          </PanelTab>
-        ) : null}
-        <PanelTab active={tab === "test"} onClick={() => onTabChange("test")}>
-          Test
-        </PanelTab>
-      </div>
-
-      <div
-        className={cn(
-          "min-h-0 flex-1 p-4",
-          expanded && tab === "database" ? "overflow-hidden" : "overflow-y-auto"
-        )}
-      >
-        {tab === "configure" ? (
-          <div className={cn("space-y-4", expanded && "mx-auto max-w-xl")}>
-            <FormField id={`step-${step.id}-name`} label="Name">
-              <Input
-                disabled={busy}
-                id={`step-${step.id}-name`}
-                onChange={(event) => onRename(event.target.value)}
-                value={step.id}
-              />
-            </FormField>
-            <StepConfigureFields
-              busy={busy}
-              inputDraft={inputDraft}
-              inputError={inputError}
-              onInputDraft={setInputDraft}
-              onInputError={onInputError}
-              onPatch={onPatch}
-              step={step}
-              tools={tools}
-            />
-          </div>
-        ) : tab === "database" && isSqlite ? (
-          <WorkflowDatabaseExplorer layout={expanded ? "split" : "stack"} />
-        ) : (
-          <div className={cn(expanded && "mx-auto max-w-xl")}>
-            <StepTestReceipt latestRun={latestRun} receipt={receipt} />
-          </div>
-        )}
-      </div>
-    </aside>
+function WorkflowStepDrawer({
+  busy,
+  inputError,
+  latestRun,
+  onClose,
+  onInputError,
+  onPatch,
+  onRename,
+  onTabChange,
+  step,
+  stepNumber,
+  tab,
+  tools,
+}: {
+  busy: boolean;
+  inputError: string | null;
+  latestRun: WorkflowRunRecord | null;
+  onClose: () => void;
+  onInputError: (error: string | null) => void;
+  onPatch: (step: WorkflowStep) => void;
+  onRename: (id: string) => void;
+  onTabChange: (tab: "configure" | "database" | "test") => void;
+  step: WorkflowStep;
+  stepNumber: number;
+  tab: "configure" | "database" | "test";
+  tools: ToolSummary[];
+}) {
+  const meta = stepMeta(step);
+  const [inputDraft, setInputDraft] = useState(() =>
+    step.kind === "tool" ? JSON.stringify(step.input, null, 2) : ""
   );
+  const isSqlite = step.kind === "tool" && step.tool === "sqlite";
+  const expanded = useWorkflowDatabaseUi((state) => state.expanded);
+  const expand = useWorkflowDatabaseUi((state) => state.expand);
+  const collapse = useWorkflowDatabaseUi((state) => state.collapse);
 
-  if (!host) {
-    return null;
-  }
-
-  return createPortal(
+  return (
     <>
       <button
         aria-label="Close step"
-        className="fade-in-0 absolute inset-0 z-20 animate-in bg-background/50 duration-200"
+        className="absolute inset-0 z-20 bg-background/50"
         onClick={onClose}
         type="button"
       />
-      {drawer}
-    </>,
-    host
+      <aside
+        className={cn(
+          "absolute inset-y-0 right-0 z-30 flex min-h-0 flex-col border-border border-l bg-background shadow-xl",
+          stepDrawerWidthClass(expanded, isSqlite)
+        )}
+      >
+        <WorkflowStepDrawerHeader
+          expanded={expanded}
+          kindLabel={meta.kindLabel}
+          onClose={onClose}
+          onToggleExpand={expanded ? collapse : expand}
+          stepNumber={stepNumber}
+          title={meta.title}
+        />
+        <WorkflowStepDrawerTabs
+          isSqlite={isSqlite}
+          onTabChange={onTabChange}
+          tab={tab}
+        />
+        <WorkflowStepDrawerBody
+          busy={busy}
+          expanded={expanded}
+          inputDraft={inputDraft}
+          inputError={inputError}
+          isSqlite={isSqlite}
+          latestRun={latestRun}
+          onInputDraft={setInputDraft}
+          onInputError={onInputError}
+          onPatch={onPatch}
+          onRename={onRename}
+          step={step}
+          tab={tab}
+          tools={tools}
+        />
+      </aside>
+    </>
+  );
+}
+
+function stepDrawerWidthClass(expanded: boolean, isSqlite: boolean): string {
+  if (expanded) {
+    return "inset-0 w-full";
+  }
+  if (isSqlite) {
+    return "w-[min(36rem,100%)]";
+  }
+  return "w-[min(22rem,100%)]";
+}
+
+function WorkflowStepDrawerHeader({
+  expanded,
+  kindLabel,
+  onClose,
+  onToggleExpand,
+  stepNumber,
+  title,
+}: {
+  expanded: boolean;
+  kindLabel: string;
+  onClose: () => void;
+  onToggleExpand: () => void;
+  stepNumber: number;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-border border-b px-4 py-3">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums">
+        {stepNumber}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-sm">{title}</div>
+        <div className="text-muted-foreground text-xs">{kindLabel}</div>
+      </div>
+      <Button
+        aria-label={expanded ? "Collapse step" : "Expand step"}
+        className={iconHitArea}
+        onClick={onToggleExpand}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        {expanded ? (
+          <ArrowShrink02Icon className="size-4" strokeWidth={1.5} />
+        ) : (
+          <ArrowExpand01Icon className="size-4" strokeWidth={1.5} />
+        )}
+      </Button>
+      <Button
+        aria-label="Close step"
+        className={iconHitArea}
+        onClick={onClose}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <Cancel01Icon className="size-4" strokeWidth={1.5} />
+      </Button>
+    </div>
+  );
+}
+
+function WorkflowStepDrawerTabs({
+  isSqlite,
+  onTabChange,
+  tab,
+}: {
+  isSqlite: boolean;
+  onTabChange: (tab: "configure" | "database" | "test") => void;
+  tab: "configure" | "database" | "test";
+}) {
+  return (
+    <div className="flex gap-4 border-border border-b px-4">
+      <PanelTab
+        active={tab === "configure"}
+        onClick={() => onTabChange("configure")}
+      >
+        Configure
+      </PanelTab>
+      {isSqlite ? (
+        <PanelTab
+          active={tab === "database"}
+          onClick={() => onTabChange("database")}
+        >
+          Database
+        </PanelTab>
+      ) : null}
+      <PanelTab active={tab === "test"} onClick={() => onTabChange("test")}>
+        Test
+      </PanelTab>
+    </div>
+  );
+}
+
+function WorkflowStepDrawerBody({
+  busy,
+  expanded,
+  inputDraft,
+  inputError,
+  isSqlite,
+  latestRun,
+  onInputDraft,
+  onInputError,
+  onPatch,
+  onRename,
+  step,
+  tab,
+  tools,
+}: {
+  busy: boolean;
+  expanded: boolean;
+  inputDraft: string;
+  inputError: string | null;
+  isSqlite: boolean;
+  latestRun: WorkflowRunRecord | null;
+  onInputDraft: (value: string) => void;
+  onInputError: (error: string | null) => void;
+  onPatch: (step: WorkflowStep) => void;
+  onRename: (id: string) => void;
+  step: WorkflowStep;
+  tab: "configure" | "database" | "test";
+  tools: ToolSummary[];
+}) {
+  const receipt = latestRun?.steps?.find((entry) => entry.stepId === step.id);
+
+  return (
+    <div
+      className={cn(
+        "min-h-0 flex-1 p-4",
+        expanded && tab === "database" ? "overflow-hidden" : "overflow-y-auto"
+      )}
+    >
+      {tab === "configure" ? (
+        <div className={cn("space-y-4", expanded && "mx-auto max-w-xl")}>
+          <FormField id={`step-${step.id}-name`} label="Name">
+            <Input
+              disabled={busy}
+              id={`step-${step.id}-name`}
+              onChange={(event) => onRename(event.target.value)}
+              value={step.id}
+            />
+          </FormField>
+          <StepConfigureFields
+            busy={busy}
+            inputDraft={inputDraft}
+            inputError={inputError}
+            onInputDraft={onInputDraft}
+            onInputError={onInputError}
+            onPatch={onPatch}
+            step={step}
+            tools={tools}
+          />
+        </div>
+      ) : tab === "database" && isSqlite ? (
+        <WorkflowDatabaseExplorer layout={expanded ? "split" : "stack"} />
+      ) : (
+        <div className={cn(expanded && "mx-auto max-w-xl")}>
+          <StepTestReceipt latestRun={latestRun} receipt={receipt} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -950,7 +1101,7 @@ function useWorkflowStepHost(): HTMLElement | null {
   const [host, setHost] = useState<HTMLElement | null>(null);
 
   useLayoutEffect(() => {
-    setHost(document.getElementById("agent-work-panel-workflows"));
+    setHost(document.querySelector<HTMLElement>("[data-app-shell-content]"));
   }, []);
 
   return host;

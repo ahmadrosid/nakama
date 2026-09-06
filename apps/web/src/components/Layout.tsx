@@ -49,7 +49,10 @@ export function Layout() {
         <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
           <ProfileRail />
           <AppShellSidebar shell={shell} />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            data-app-shell-content=""
+          >
             <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
             <AppShellError error={shell.error} />
             <main className={appShellMainClassName(shell.page, shell.pathname)}>
@@ -361,6 +364,52 @@ function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
 
 function SidebarNavButton({
   item,
+  icon,
+  active,
+  collapsed,
+  to,
+  onPrefetch,
+  badge,
+  className,
+}: {
+  item: NavItem;
+  icon: ElementType;
+  active: boolean;
+  collapsed: boolean;
+  to: string;
+  onPrefetch?: () => void;
+  badge?: number;
+  className?: string;
+}) {
+  const link = (
+    <SidebarNavLink
+      active={active}
+      badge={badge}
+      className={className}
+      collapsed={collapsed}
+      icon={icon}
+      item={item}
+      onPrefetch={onPrefetch}
+      to={to}
+    />
+  );
+
+  if (!collapsed) {
+    return link;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={link} />
+      <TooltipContent side="right" sideOffset={8}>
+        {badge && badge > 0 ? `${item.label} (${badge} unread)` : item.label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarNavLink({
+  item,
   icon: Icon,
   active,
   collapsed,
@@ -381,7 +430,7 @@ function SidebarNavButton({
   const showBadge = Boolean(badge && badge > 0);
   const badgeLabel = badge && badge > 99 ? "99+" : String(badge ?? "");
 
-  const link = (
+  return (
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={
@@ -425,18 +474,5 @@ function SidebarNavButton({
         </span>
       ) : null}
     </Link>
-  );
-
-  if (!collapsed) {
-    return link;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger render={link} />
-      <TooltipContent side="right" sideOffset={8}>
-        {showBadge ? `${item.label} (${badge} unread)` : item.label}
-      </TooltipContent>
-    </Tooltip>
   );
 }
