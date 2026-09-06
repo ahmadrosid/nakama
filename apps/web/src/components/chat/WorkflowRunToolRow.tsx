@@ -20,15 +20,9 @@ import { cn } from "@/lib/utils";
 const cardSurface =
   "rounded-xl bg-card px-4 py-3 shadow-sm ring-1 ring-border/80 dark:shadow-none";
 
-function WorkflowRunCard({
-  statusLabel,
-  title,
-  views,
-}: {
-  statusLabel: string;
-  title: string;
-  views: WorkflowStepView[];
-}) {
+export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
+  const { statusLabel, title, views } = useWorkflowRunCard(message);
+
   return (
     <section className={cardSurface}>
       <header className="mb-3 flex items-baseline justify-between gap-3">
@@ -39,13 +33,47 @@ function WorkflowRunCard({
           {statusLabel}
         </p>
       </header>
-      <WorkflowChecklist views={views} />
+      {views.length === 0 ? (
+        <p className="text-pretty text-muted-foreground text-sm">Starting…</p>
+      ) : (
+        <ol className="flex flex-col gap-3">
+          {views.map((step) => (
+            <li className="flex items-start gap-2.5" key={step.id}>
+              {renderStepMark(step.status, "mt-0.5")}
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    "min-w-0 truncate text-pretty text-sm",
+                    stepTitleTone(step.status)
+                  )}
+                >
+                  {step.title}
+                  {step.tag ? (
+                    <span className="ml-1.5 font-normal text-muted-foreground text-xs">
+                      {step.tag}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="truncate text-pretty text-muted-foreground text-xs">
+                  {step.detail}
+                </p>
+              </div>
+              {step.meta ? (
+                <p
+                  className={cn(
+                    "max-w-[40%] shrink-0 text-right text-xs tabular-nums",
+                    stepMetaTone(step.status)
+                  )}
+                >
+                  {step.meta}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
-}
-
-export function WorkflowRunToolRow({ message }: { message: ChatListItem }) {
-  return <WorkflowRunCard {...useWorkflowRunCard(message)} />;
 }
 
 function useWorkflowDefinition(
@@ -81,87 +109,27 @@ function useWorkflowRunCard(message: ChatListItem) {
   });
 }
 
-function WorkflowChecklist({ views }: { views: WorkflowStepView[] }) {
-  if (views.length === 0) {
-    return (
-      <p className="text-pretty text-muted-foreground text-sm">Starting…</p>
-    );
+function stepTitleTone(status: WorkflowStepView["status"]): string {
+  if (status === "running") {
+    return "todo-shimmer-text text-foreground";
   }
-
-  return (
-    <ol className="flex flex-col gap-3">
-      {views.map((step) => (
-        <WorkflowChecklistItem key={step.id} step={step} />
-      ))}
-    </ol>
-  );
+  if (status === "pending" || status === "skipped") {
+    return "text-muted-foreground";
+  }
+  return "text-foreground";
 }
 
-function WorkflowChecklistItem({ step }: { step: WorkflowStepView }) {
-  const running = step.status === "running";
-  const pending = step.status === "pending" || step.status === "skipped";
-
-  return (
-    <li className="flex items-start gap-2.5">
-      <StepMark className="mt-0.5" status={step.status} />
-      <div className="min-w-0 flex-1">
-        <p
-          className={cn(
-            "min-w-0 truncate text-pretty text-sm",
-            running
-              ? "todo-shimmer-text text-foreground"
-              : pending
-                ? "text-muted-foreground"
-                : "text-foreground"
-          )}
-        >
-          {step.title}
-          {step.tag ? (
-            <span className="ml-1.5 font-normal text-muted-foreground text-xs">
-              {step.tag}
-            </span>
-          ) : null}
-        </p>
-        <p className="truncate text-pretty text-muted-foreground text-xs">
-          {step.detail}
-        </p>
-      </div>
-      {step.meta ? (
-        <p
-          className={cn(
-            "max-w-[40%] shrink-0 text-right text-xs tabular-nums",
-            step.status === "failed"
-              ? "text-red-600 dark:text-red-400"
-              : "text-emerald-600 dark:text-emerald-400"
-          )}
-        >
-          {step.meta}
-        </p>
-      ) : null}
-    </li>
-  );
+function stepMetaTone(status: WorkflowStepView["status"]): string {
+  if (status === "failed") {
+    return "text-red-600 dark:text-red-400";
+  }
+  return "text-emerald-600 dark:text-emerald-400";
 }
 
-function StepMark({
-  status,
-  className,
-}: {
-  status: WorkflowStepView["status"];
-  className?: string;
-}) {
-  if (status === "completed") {
-    return (
-      <HugeiconsIcon
-        aria-hidden
-        className={cn("size-4 shrink-0 text-emerald-500", className)}
-        color="currentColor"
-        icon={CheckmarkCircle02Icon}
-        size={16}
-        strokeWidth={1.5}
-      />
-    );
-  }
-
+function renderStepMark(
+  status: WorkflowStepView["status"],
+  className?: string
+) {
   if (status === "failed") {
     return (
       <CancelCircleIcon
@@ -171,16 +139,18 @@ function StepMark({
     );
   }
 
+  const completed = status === "completed";
   return (
     <HugeiconsIcon
       aria-hidden
       className={cn(
-        "size-4 shrink-0 text-muted-foreground",
+        "size-4 shrink-0",
+        completed ? "text-emerald-500" : "text-muted-foreground",
         status === "running" && "animate-spin",
         className
       )}
       color="currentColor"
-      icon={DashedLineCircleIcon}
+      icon={completed ? CheckmarkCircle02Icon : DashedLineCircleIcon}
       size={16}
       strokeWidth={1.5}
     />
