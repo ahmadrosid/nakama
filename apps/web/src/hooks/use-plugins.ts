@@ -411,6 +411,29 @@ export function pluginPageStateMessage(kind: PluginPageViewKind): string {
   return "Loading plugin";
 }
 
+export function pluginRowIdentity(plugin: OrgPluginDetail): string {
+  return `${plugin.name} ${plugin.pluginId}`;
+}
+
+export function pluginRowActions(plugin: OrgPluginDetail): {
+  disable: boolean;
+  enable: boolean;
+  purge: boolean;
+  uninstall: boolean;
+  update: boolean;
+} {
+  return {
+    disable: plugin.lifecycleState === "enabled",
+    enable: plugin.installed && plugin.lifecycleState === "disabled",
+    purge: plugin.lifecycleState === "retained",
+    uninstall: plugin.installed && plugin.lifecycleState === "disabled",
+    update:
+      plugin.installed &&
+      plugin.lifecycleState === "disabled" &&
+      nextPluginVersions(plugin).length > 0,
+  };
+}
+
 export function apiErrorStatus(error: unknown): number | undefined {
   if (error instanceof NakamaApiError) {
     return error.status;

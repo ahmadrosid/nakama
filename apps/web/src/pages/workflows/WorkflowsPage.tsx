@@ -7,14 +7,7 @@ import { parseUnknownWorkflowToolError } from "@nakama/core/workflow-ops";
 import { Message01Icon, WorkflowSquare01Icon } from "hugeicons-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DeleteConfirmationDialog } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -200,45 +193,19 @@ export function WorkflowsPage() {
         workflows={workflows}
       />
 
-      <Dialog
-        onOpenChange={(open) => {
-          if (!(open || busy)) {
-            setDeleteTarget(null);
-          }
-        }}
+      <DeleteConfirmationDialog
+        busy={busy}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => void handleDeleteConfirm()}
         open={deleteTarget !== null}
+        title="Delete workflow?"
       >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Delete workflow?</DialogTitle>
-            <DialogDescription>
-              This removes{" "}
-              <span className="font-medium text-foreground">
-                {deleteTarget?.name}
-              </span>{" "}
-              and its run history permanently.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-            <Button
-              disabled={busy}
-              onClick={() => setDeleteTarget(null)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void handleDeleteConfirm()}
-              type="button"
-              variant="destructive"
-            >
-              {busy ? <Spinner className="size-4" /> : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        This removes{" "}
+        <span className="font-medium text-foreground">
+          {deleteTarget?.name}
+        </span>{" "}
+        and its run history permanently.
+      </DeleteConfirmationDialog>
     </div>
   );
 }

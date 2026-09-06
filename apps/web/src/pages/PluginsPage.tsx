@@ -21,6 +21,7 @@ import {
   formatPluginTrustLines,
   isPluginLifecycleBusy,
   nextPluginVersions,
+  pluginRowActions,
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
@@ -84,17 +85,18 @@ export function PluginsPage() {
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const busy =
-    previewPackage.isPending ||
-    installPackage.isPending ||
-    removeRelease.isPending ||
-    installOrg.isPending ||
-    enableOrg.isPending ||
-    disableOrg.isPending ||
-    previewUpdate.isPending ||
-    updateOrg.isPending ||
-    uninstallOrg.isPending ||
-    purgeData.isPending;
+  const busy = [
+    previewPackage,
+    installPackage,
+    removeRelease,
+    installOrg,
+    enableOrg,
+    disableOrg,
+    previewUpdate,
+    updateOrg,
+    uninstallOrg,
+    purgeData,
+  ].some((mutation) => mutation.isPending);
 
   function rememberFocus(target: EventTarget | null) {
     if (target instanceof HTMLElement) {
@@ -387,70 +389,31 @@ function PluginRow({
             Assign
           </Button>
         ) : null}
-        {canManage && !plugin.installed ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => onAction("install", event)}
-            size="sm"
-            type="button"
-          >
-            Install
-          </Button>
-        ) : null}
-        {canManage && actions.enable ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => onAction("enable", event)}
-            size="sm"
-            type="button"
-          >
-            Enable
-          </Button>
-        ) : null}
-        {canManage && actions.disable ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => onAction("disable", event)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Disable
-          </Button>
-        ) : null}
-        {canManage && actions.update ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => onAction("update", event)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Update
-          </Button>
-        ) : null}
-        {canManage && actions.uninstall ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => onAction("uninstall", event)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Uninstall
-          </Button>
-        ) : null}
-        {canManage && actions.purge ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => onAction("purge", event)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Delete data
-          </Button>
-        ) : null}
+        {canManage
+          ? (
+              [
+                ["install", "Install", !plugin.installed, "default"],
+                ["enable", "Enable", actions.enable, "default"],
+                ["disable", "Disable", actions.disable, "outline"],
+                ["update", "Update", actions.update, "outline"],
+                ["uninstall", "Uninstall", actions.uninstall, "ghost"],
+                ["purge", "Delete data", actions.purge, "ghost"],
+              ] as const
+            )
+              .filter(([, , visible]) => visible)
+              .map(([type, label, , variant]) => (
+                <Button
+                  disabled={busy}
+                  key={type}
+                  onClick={(event) => onAction(type, event)}
+                  size="sm"
+                  type="button"
+                  variant={variant}
+                >
+                  {label}
+                </Button>
+              ))
+          : null}
         {canUpload ? <span className="sr-only">{plugin.revision}</span> : null}
       </div>
     </li>
@@ -619,27 +582,4 @@ function confirmLabel(dialog: PluginDialog | null): string {
     return "Delete data";
   }
   return "Remove";
-}
-
-export function pluginRowIdentity(plugin: OrgPluginDetail): string {
-  return `${plugin.name} ${plugin.pluginId}`;
-}
-
-export function pluginRowActions(plugin: OrgPluginDetail): {
-  disable: boolean;
-  enable: boolean;
-  purge: boolean;
-  uninstall: boolean;
-  update: boolean;
-} {
-  return {
-    disable: plugin.lifecycleState === "enabled",
-    enable: plugin.installed && plugin.lifecycleState === "disabled",
-    purge: plugin.lifecycleState === "retained",
-    uninstall: plugin.installed && plugin.lifecycleState === "disabled",
-    update:
-      plugin.installed &&
-      plugin.lifecycleState === "disabled" &&
-      nextPluginVersions(plugin).length > 0,
-  };
 }

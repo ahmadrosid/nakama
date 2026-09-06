@@ -123,6 +123,7 @@ export function PluginPage() {
         </div>
       )}
       {frameSrc ? (
+        // eslint-disable-next-line react-doctor/iframe-missing-sandbox -- Admin-approved same-origin code requires browser authority; see docs/plugins.md#trust-model. Revisit if untrusted plugins are supported.
         <iframe
           className="min-h-0 min-w-0 flex-1 border-0 bg-background"
           key={`${orgId}:${pluginId}:${resolvedTheme}`}

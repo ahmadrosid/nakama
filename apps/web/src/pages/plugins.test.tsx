@@ -17,6 +17,8 @@ import {
   orgPluginQueryOptions,
   orgPluginsQueryOptions,
   pluginHasRetainedData,
+  pluginRowActions,
+  pluginRowIdentity,
   pluginUiBootstrapUrl,
   pluginUiDocumentUrl,
   resolvePluginPageView,
@@ -26,7 +28,7 @@ import {
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { PluginPageState } from "@/pages/PluginPage";
-import { pluginRowActions, pluginRowIdentity } from "@/pages/PluginsPage";
+import { PluginsPage } from "@/pages/PluginsPage";
 
 const enable = spyOn(client, "enableOrgPlugin");
 const installPackage = spyOn(client, "installPluginPackage");
@@ -106,6 +108,54 @@ function renderEnable() {
 }
 
 describe("plugin management authority and mutations", () => {
+  test.each([
+    {
+      actions: ["Enable", "Update", "Uninstall"],
+      role: "admin" as const,
+      state: "disabled" as const,
+    },
+    { actions: ["Disable"], role: "admin" as const, state: "enabled" as const },
+    {
+      actions: ["Delete data"],
+      role: "admin" as const,
+      state: "retained" as const,
+    },
+    { actions: [], role: "member" as const, state: "disabled" as const },
+    { actions: [], role: "member" as const, state: "enabled" as const },
+  ])(
+    "renders $role actions for a $state plugin",
+    ({ role, state, actions }) => {
+      queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
+        plugins: [
+          plugin({
+            availableVersions: ["1.0.0", "1.1.0"],
+            lifecycleState: state,
+          }),
+        ],
+      });
+      const html = renderToString(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider
+            value={{
+              ...authValue,
+              activeOrg: { ...authValue.activeOrg!, role },
+              user: { ...authValue.user!, isPlatformAdmin: false },
+            }}
+          >
+            <MemoryRouter>
+              <PluginsPage />
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      const buttons = [...html.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map(
+        (match) => match[1].replace(/<[^>]*>/g, "")
+      );
+      expect(buttons).toEqual([...actions]);
+      expect(html.includes('href="/plugins/notes"')).toBe(state === "enabled");
+    }
+  );
+
   test("enable sends expectedRevision and invalidates org-scoped keys", async () => {
     const enabled = plugin({ lifecycleState: "enabled", revision: 4 });
     enable.mockResolvedValue(enabled);
