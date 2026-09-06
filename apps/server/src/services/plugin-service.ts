@@ -53,19 +53,6 @@ const UNIX_IFDIR_MAX = 0x4f_ff;
 const UNIX_IFREG_MIN = 0x80_00;
 const UNIX_IFREG_MAX = 0x8f_ff;
 
-export type PluginPackageErrorCode =
-  | "archive_too_large"
-  | "digest_mismatch"
-  | "duplicate_entry"
-  | "expansion_limit"
-  | "invalid_archive"
-  | "invalid_manifest"
-  | "missing_manifest"
-  | "missing_referenced_file"
-  | "unsafe_path"
-  | "unsupported_entry"
-  | "version_conflict";
-
 export class PluginHostError extends Error {
   readonly retryable: boolean;
 
@@ -78,9 +65,6 @@ export class PluginHostError extends Error {
     this.retryable = retryable;
   }
 }
-
-export const PluginPackageError = PluginHostError;
-export type PluginPackageError = PluginHostError;
 
 export interface PluginPackagePreview {
   contributions: PluginContributionSummary;
@@ -149,33 +133,6 @@ const SPOOFABLE_INPUT_KEYS = new Set([
   "workspaceRoot",
 ]);
 
-export type PluginInvocationErrorCode =
-  | "admission_closed"
-  | "busy"
-  | "forbidden"
-  | "invalid_entry"
-  | "invalid_input"
-  | "not_enabled"
-  | "not_installed"
-  | "unknown_action"
-  | "unknown_hook";
-
-export const PluginInvocationError = PluginHostError;
-export type PluginInvocationError = PluginHostError;
-
-export type PluginLifecycleErrorCode =
-  | "incompatible"
-  | "interrupted"
-  | "invalid_state"
-  | "migration_failed"
-  | "in_use"
-  | "not_found"
-  | "package_unavailable"
-  | "stale_revision";
-
-export const PluginLifecycleError = PluginHostError;
-export type PluginLifecycleError = PluginHostError;
-
 export interface PluginServiceOptions {
   drainTimeoutMs?: number;
   hookTimeoutMs?: number;
@@ -236,6 +193,10 @@ interface AdmissionGate {
 }
 
 const admissionGates = new Map<string, AdmissionGate>();
+// One API process owns plugin execution. Exports also exclude package/lifecycle
+// mutations, which may change the selected database while it is being copied.
+let exportPending = false;
+let activeMutations = 0;
 const MIGRATION_LEDGER_TABLE = "_nakama_plugin_migrations";
 const DEFAULT_DRAIN_TIMEOUT_MS = 6000;
 const DEFAULT_HOOK_TIMEOUT_MS = 2000;
@@ -243,6 +204,8 @@ const DEFAULT_HOOK_TIMEOUT_MS = 2000;
 export function resetPluginAdmissionForTests(): void {
   admissionGates.clear();
   pluginLifecycleTestHooks = {};
+  exportPending = false;
+  activeMutations = 0;
 }
 
 export class PluginExportBarrierError extends Error {
@@ -264,36 +227,43 @@ function pluginReleaseIntegrityPath(
 
 export async function runWithPluginExportBarrier<T>(
   work: () => Promise<T>,
-  options: { configDir?: string; drainTimeoutMs?: number } = {}
+  options: { drainTimeoutMs?: number } = {}
 ): Promise<T> {
-  const timeoutMs = options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS;
-  const keys = new Set<string>(admissionGates.keys());
-  if (options.configDir) {
-    for (const key of await discoverPluginAdmissionKeys(options.configDir)) {
-      keys.add(key);
-    }
+  if (exportPending) {
+    throw new PluginExportBarrierError(
+      "A plugin export is already in progress."
+    );
   }
-
-  const gates = [...keys].map((key) => {
-    const [orgId, pluginId] = key.split("\0");
-    return admissionGateFor(orgId ?? "", pluginId ?? "");
-  });
-
+  exportPending = true;
+  const timeoutMs = options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS;
   try {
-    for (const gate of gates) {
-      await withAdmissionGate(gate, () => {
-        gate.closed = true;
-      });
+    const deadline = Date.now() + timeoutMs;
+    while (activeMutations > 0 && Date.now() < deadline) {
+      await Bun.sleep(10);
     }
+    if (activeMutations > 0) {
+      throw new PluginExportBarrierError();
+    }
+    const gates = [...admissionGates.values()];
     await Promise.all(gates.map((gate) => drainAdmissionGate(gate, timeoutMs)));
     if (gates.some((gate) => gate.active > 0)) {
       throw new PluginExportBarrierError();
     }
     return await work();
   } finally {
-    for (const gate of gates) {
-      gate.closed = false;
-    }
+    exportPending = false;
+  }
+}
+
+async function withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
+  if (exportPending) {
+    throw new PluginHostError("in_use");
+  }
+  activeMutations += 1;
+  try {
+    return await work();
+  } finally {
+    activeMutations -= 1;
   }
 }
 
@@ -356,25 +326,27 @@ export class PluginService {
     archive: Uint8Array,
     options: InstallPluginPackageOptions = {}
   ): Promise<PluginPackageInstallResult> {
-    const inspected = inspectPluginPackage(archive);
-    if (
-      options.expectedDigest !== undefined &&
-      options.expectedDigest !== inspected.digest
-    ) {
-      throw new PluginPackageError("digest_mismatch");
-    }
+    return withPluginMutation(async () => {
+      const inspected = inspectPluginPackage(archive);
+      if (
+        options.expectedDigest !== undefined &&
+        options.expectedDigest !== inspected.digest
+      ) {
+        throw new PluginHostError("digest_mismatch");
+      }
 
-    const { id, version } = inspected.manifest;
-    return withKeyedLock(installLocks, `${id}@${version}`, async () =>
-      withKeyedLock(stagingLocks, "staging", async () => {
-        await cleanupAbandonedStaging(this.configDir);
-        try {
-          return await this.publishInspectedPackage(inspected);
-        } finally {
+      const { id, version } = inspected.manifest;
+      return withKeyedLock(installLocks, `${id}@${version}`, async () =>
+        withKeyedLock(stagingLocks, "staging", async () => {
           await cleanupAbandonedStaging(this.configDir);
-        }
-      })
-    );
+          try {
+            return await this.publishInspectedPackage(inspected);
+          } finally {
+            await cleanupAbandonedStaging(this.configDir);
+          }
+        })
+      );
+    });
   }
 
   async invokePluginAction(
@@ -394,15 +366,15 @@ export class PluginService {
           (item) => item.key === input.actionKey
         );
         if (!action) {
-          throw new PluginInvocationError("unknown_action");
+          throw new PluginHostError("unknown_action");
         }
         if (!actorMayInvoke(action.access, input.actor.role)) {
-          throw new PluginInvocationError("forbidden");
+          throw new PluginHostError("forbidden");
         }
 
         const cleanedInput = stripSpoofedInput(input.input);
         if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
-          throw new PluginInvocationError("invalid_input");
+          throw new PluginHostError("invalid_input");
         }
 
         const context = this.buildInvocationContext({
@@ -416,7 +388,7 @@ export class PluginService {
           sessionId: input.access === "tool" ? input.sessionId : undefined,
         });
         if (input.access === "tool" && !context.profileId) {
-          throw new PluginInvocationError("invalid_input");
+          throw new PluginHostError("invalid_input");
         }
 
         return {
@@ -444,7 +416,7 @@ export class PluginService {
             ? manifest.hooks?.activate
             : manifest.hooks?.deactivate;
         if (!entry) {
-          throw new PluginInvocationError("unknown_hook");
+          throw new PluginHostError("unknown_hook");
         }
 
         return {
@@ -555,7 +527,7 @@ export class PluginService {
   }> {
     const target = await this.db.getPluginRelease(pluginId, targetVersion);
     if (!target) {
-      throw new PluginLifecycleError("not_found");
+      throw new PluginHostError("not_found");
     }
 
     const targetSkillKeys = new Set(
@@ -608,7 +580,7 @@ export class PluginService {
       this.options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
     );
     if (gate.active > 0) {
-      throw new PluginLifecycleError("in_use");
+      throw new PluginHostError("in_use");
     }
   }
 
@@ -617,49 +589,51 @@ export class PluginService {
     pluginId: string,
     version?: string
   ): Promise<StoredOrgPluginRecord> {
-    const existing = await this.db.getOrgPlugin(orgId, pluginId);
-    const release = await this.resolveApprovedRelease(pluginId, version);
-    if (!release) {
-      throw new PluginLifecycleError("not_found");
-    }
-
-    if (!existing) {
-      return this.writeOrgPluginState({
-        databaseGeneration: null,
-        expectedRevision: 0,
-        lifecycleState: "disabled",
-        orgId,
-        pluginId,
-        selectedVersion: release.version,
-      });
-    }
-
-    if (existing.lifecycleState === "retained") {
-      await this.assertReinstallCompatible(
-        orgId,
-        pluginId,
-        existing,
-        release.manifest
-      );
-      return this.writeOrgPluginState({
-        databaseGeneration: existing.databaseGeneration,
-        expectedRevision: existing.revision,
-        lastLifecycleError: null,
-        lifecycleState: "disabled",
-        orgId,
-        pluginId,
-        selectedVersion: release.version,
-      });
-    }
-
-    if (existing.lifecycleState === "disabled") {
-      if (version && existing.selectedVersion !== version) {
-        throw new PluginLifecycleError("invalid_state");
+    return withPluginMutation(async () => {
+      const existing = await this.db.getOrgPlugin(orgId, pluginId);
+      const release = await this.resolveApprovedRelease(pluginId, version);
+      if (!release) {
+        throw new PluginHostError("not_found");
       }
-      return existing;
-    }
 
-    throw new PluginLifecycleError("invalid_state");
+      if (!existing) {
+        return this.writeOrgPluginState({
+          databaseGeneration: null,
+          expectedRevision: 0,
+          lifecycleState: "disabled",
+          orgId,
+          pluginId,
+          selectedVersion: release.version,
+        });
+      }
+
+      if (existing.lifecycleState === "retained") {
+        await this.assertReinstallCompatible(
+          orgId,
+          pluginId,
+          existing,
+          release.manifest
+        );
+        return this.writeOrgPluginState({
+          databaseGeneration: existing.databaseGeneration,
+          expectedRevision: existing.revision,
+          lastLifecycleError: null,
+          lifecycleState: "disabled",
+          orgId,
+          pluginId,
+          selectedVersion: release.version,
+        });
+      }
+
+      if (existing.lifecycleState === "disabled") {
+        if (version && existing.selectedVersion !== version) {
+          throw new PluginHostError("invalid_state");
+        }
+        return existing;
+      }
+
+      throw new PluginHostError("invalid_state");
+    });
   }
 
   async enableOrgPlugin(
@@ -668,130 +642,129 @@ export class PluginService {
     expectedRevision: number,
     actor: PluginExecutionActor
   ): Promise<StoredOrgPluginRecord> {
-    const install = await this.requireOrgPlugin(orgId, pluginId);
-    if (install.revision !== expectedRevision) {
-      throw new PluginLifecycleError("stale_revision");
-    }
-    if (install.lifecycleState !== "disabled" || !install.selectedVersion) {
-      throw new PluginLifecycleError("invalid_state");
-    }
+    return withPluginMutation(async () => {
+      const install = await this.requireOrgPlugin(orgId, pluginId);
+      if (install.revision !== expectedRevision) {
+        throw new PluginHostError("stale_revision");
+      }
+      if (install.lifecycleState !== "disabled" || !install.selectedVersion) {
+        throw new PluginHostError("invalid_state");
+      }
 
-    const release = await this.db.getPluginRelease(
-      pluginId,
-      install.selectedVersion
-    );
-    if (!release) {
-      throw new PluginLifecycleError("package_unavailable");
-    }
-    if (await this.describeMissingPluginBytes(install)) {
-      throw new PluginLifecycleError("package_unavailable");
-    }
+      const release = await this.db.getPluginRelease(
+        pluginId,
+        install.selectedVersion
+      );
+      if (!release) {
+        throw new PluginHostError("package_unavailable");
+      }
+      if (await this.describeMissingPluginBytes(install)) {
+        throw new PluginHostError("package_unavailable");
+      }
 
-    const operationId = randomUUID();
-    const targetGeneration = await this.planDatabaseGeneration(
-      orgId,
-      pluginId,
-      install,
-      release.manifest
-    );
-    const pending = serializePending({
-      kind: "enable",
-      operationId,
-      targetGeneration,
-      targetVersion: install.selectedVersion,
-    });
-    const enabling = await this.writeOrgPluginState({
-      databaseGeneration: install.databaseGeneration,
-      expectedRevision,
-      lastLifecycleError: null,
-      lifecycleState: "enabling",
-      orgId,
-      pendingOperation: pending,
-      pluginId,
-      selectedVersion: install.selectedVersion,
-    });
-
-    let published = false;
-    try {
-      await this.preparePluginDatabase({
-        install,
-        manifest: release.manifest,
+      const operationId = randomUUID();
+      const targetGeneration = await this.planDatabaseGeneration(
         orgId,
         pluginId,
+        install,
+        release.manifest
+      );
+      const pending = serializePending({
+        kind: "enable",
+        operationId,
         targetGeneration,
-        version: install.selectedVersion,
+        targetVersion: install.selectedVersion,
       });
-      await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
-      if (release.manifest.hooks?.activate) {
-        await this.invokePluginHook({
-          actor,
-          databaseGeneration: targetGeneration ?? undefined,
-          kind: "activate",
-          orgId,
-          pluginId,
-          signal: AbortSignal.timeout(
-            this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
-          ),
-        });
-      }
-      await this.publishInstallation({
-        databaseGeneration: targetGeneration,
-        expectedRevision: enabling.revision,
+      const enabling = await this.writeOrgPluginState({
+        databaseGeneration: install.databaseGeneration,
+        expectedRevision,
         lastLifecycleError: null,
         lifecycleState: "enabling",
-        manifest: release.manifest,
         orgId,
         pendingOperation: pending,
         pluginId,
         selectedVersion: install.selectedVersion,
       });
-      published = true;
-      await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
-      const enabled = await this.writeOrgPluginState({
-        databaseGeneration: targetGeneration,
-        expectedRevision: enabling.revision + 1,
-        lastLifecycleError: null,
-        lifecycleState: "enabled",
-        orgId,
-        pendingOperation: null,
-        pluginId,
-        selectedVersion: install.selectedVersion,
-      });
-      this.openPluginAdmission(orgId, pluginId);
-      return enabled;
-    } catch (error) {
-      if (
-        error instanceof PluginLifecycleError &&
-        error.code === "interrupted"
-      ) {
-        throw error;
-      }
-      if (!published) {
-        await this.discardUnpublishedGeneration(
+
+      let published = false;
+      try {
+        await this.preparePluginDatabase({
+          install,
+          manifest: release.manifest,
           orgId,
           pluginId,
-          install.databaseGeneration,
-          targetGeneration
-        );
-        await this.writeOrgPluginState({
-          databaseGeneration: install.databaseGeneration,
+          targetGeneration,
+          version: install.selectedVersion,
+        });
+        await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
+        if (release.manifest.hooks?.activate) {
+          await this.invokePluginHook({
+            actor,
+            databaseGeneration: targetGeneration ?? undefined,
+            kind: "activate",
+            orgId,
+            pluginId,
+            signal: AbortSignal.timeout(
+              this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
+            ),
+          });
+        }
+        await this.publishInstallation({
+          databaseGeneration: targetGeneration,
           expectedRevision: enabling.revision,
-          lastLifecycleError: lifecycleErrorMessage(error),
-          lifecycleState: "disabled",
+          lastLifecycleError: null,
+          lifecycleState: "enabling",
+          manifest: release.manifest,
+          orgId,
+          pendingOperation: pending,
+          pluginId,
+          selectedVersion: install.selectedVersion,
+        });
+        published = true;
+        await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
+        const enabled = await this.writeOrgPluginState({
+          databaseGeneration: targetGeneration,
+          expectedRevision: enabling.revision + 1,
+          lastLifecycleError: null,
+          lifecycleState: "enabled",
           orgId,
           pendingOperation: null,
           pluginId,
           selectedVersion: install.selectedVersion,
-        }).catch(() => undefined);
+        });
+        this.openPluginAdmission(orgId, pluginId);
+        return enabled;
+      } catch (error) {
+        if (error instanceof PluginHostError && error.code === "interrupted") {
+          throw error;
+        }
+        if (!published) {
+          await this.discardUnpublishedGeneration(
+            orgId,
+            pluginId,
+            install.databaseGeneration,
+            targetGeneration
+          );
+          await this.writeOrgPluginState({
+            databaseGeneration: install.databaseGeneration,
+            expectedRevision: enabling.revision,
+            lastLifecycleError: lifecycleErrorMessage(error),
+            lifecycleState: "disabled",
+            orgId,
+            pendingOperation: null,
+            pluginId,
+            selectedVersion: install.selectedVersion,
+          }).catch(() => undefined);
+        }
+        if (error instanceof PluginHostError) {
+          throw error;
+        }
+        throw new PluginHostError(
+          "migration_failed",
+          lifecycleErrorMessage(error)
+        );
       }
-      if (error instanceof PluginLifecycleError) {
-        throw error;
-      }
-      throw new PluginLifecycleError(
-        "migration_failed",
-        lifecycleErrorMessage(error)
-      );
-    }
+    });
   }
 
   async disableOrgPlugin(
@@ -800,62 +773,64 @@ export class PluginService {
     expectedRevision: number,
     actor: PluginExecutionActor
   ): Promise<StoredOrgPluginRecord> {
-    const install = await this.requireOrgPlugin(orgId, pluginId);
-    if (install.revision !== expectedRevision) {
-      throw new PluginLifecycleError("stale_revision");
-    }
-    if (install.lifecycleState !== "enabled") {
-      throw new PluginLifecycleError("invalid_state");
-    }
-
-    const pending = serializePending({
-      kind: "disable",
-      operationId: randomUUID(),
-      targetGeneration: install.databaseGeneration,
-      targetVersion: install.selectedVersion,
-    });
-    const disabling = await this.writeOrgPluginState({
-      databaseGeneration: install.databaseGeneration,
-      expectedRevision,
-      lastLifecycleError: null,
-      lifecycleState: "disabling",
-      orgId,
-      pendingOperation: pending,
-      pluginId,
-      selectedVersion: install.selectedVersion,
-    });
-
-    await this.closePluginAdmission(orgId, pluginId);
-
-    let hookError: string | null = null;
-    const release = install.selectedVersion
-      ? await this.db.getPluginRelease(pluginId, install.selectedVersion)
-      : null;
-    if (release?.manifest.hooks?.deactivate) {
-      try {
-        await this.invokePluginHook({
-          actor,
-          kind: "deactivate",
-          orgId,
-          pluginId,
-          signal: AbortSignal.timeout(
-            this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
-          ),
-        });
-      } catch (error) {
-        hookError = lifecycleErrorMessage(error);
+    return withPluginMutation(async () => {
+      const install = await this.requireOrgPlugin(orgId, pluginId);
+      if (install.revision !== expectedRevision) {
+        throw new PluginHostError("stale_revision");
       }
-    }
+      if (install.lifecycleState !== "enabled") {
+        throw new PluginHostError("invalid_state");
+      }
 
-    return this.writeOrgPluginState({
-      databaseGeneration: install.databaseGeneration,
-      expectedRevision: disabling.revision,
-      lastLifecycleError: hookError,
-      lifecycleState: "disabled",
-      orgId,
-      pendingOperation: null,
-      pluginId,
-      selectedVersion: install.selectedVersion,
+      const pending = serializePending({
+        kind: "disable",
+        operationId: randomUUID(),
+        targetGeneration: install.databaseGeneration,
+        targetVersion: install.selectedVersion,
+      });
+      const disabling = await this.writeOrgPluginState({
+        databaseGeneration: install.databaseGeneration,
+        expectedRevision,
+        lastLifecycleError: null,
+        lifecycleState: "disabling",
+        orgId,
+        pendingOperation: pending,
+        pluginId,
+        selectedVersion: install.selectedVersion,
+      });
+
+      await this.closePluginAdmission(orgId, pluginId);
+
+      let hookError: string | null = null;
+      const release = install.selectedVersion
+        ? await this.db.getPluginRelease(pluginId, install.selectedVersion)
+        : null;
+      if (release?.manifest.hooks?.deactivate) {
+        try {
+          await this.invokePluginHook({
+            actor,
+            kind: "deactivate",
+            orgId,
+            pluginId,
+            signal: AbortSignal.timeout(
+              this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
+            ),
+          });
+        } catch (error) {
+          hookError = lifecycleErrorMessage(error);
+        }
+      }
+
+      return this.writeOrgPluginState({
+        databaseGeneration: install.databaseGeneration,
+        expectedRevision: disabling.revision,
+        lastLifecycleError: hookError,
+        lifecycleState: "disabled",
+        orgId,
+        pendingOperation: null,
+        pluginId,
+        selectedVersion: install.selectedVersion,
+      });
     });
   }
 
@@ -863,115 +838,112 @@ export class PluginService {
     orgId: string,
     pluginId: string,
     targetVersion: string,
-    expectedRevision: number,
-    actor: PluginExecutionActor
+    expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    void actor;
-    const install = await this.requireOrgPlugin(orgId, pluginId);
-    if (install.revision !== expectedRevision) {
-      throw new PluginLifecycleError("stale_revision");
-    }
-    if (install.lifecycleState !== "disabled" || !install.selectedVersion) {
-      throw new PluginLifecycleError("invalid_state");
-    }
+    return withPluginMutation(async () => {
+      const install = await this.requireOrgPlugin(orgId, pluginId);
+      if (install.revision !== expectedRevision) {
+        throw new PluginHostError("stale_revision");
+      }
+      if (install.lifecycleState !== "disabled" || !install.selectedVersion) {
+        throw new PluginHostError("invalid_state");
+      }
 
-    const target = await this.db.getPluginRelease(pluginId, targetVersion);
-    if (!target) {
-      throw new PluginLifecycleError("not_found");
-    }
-    this.assertContributionNames(pluginId, target.manifest);
+      const target = await this.db.getPluginRelease(pluginId, targetVersion);
+      if (!target) {
+        throw new PluginHostError("not_found");
+      }
+      this.assertContributionNames(pluginId, target.manifest);
 
-    const targetGeneration = await this.planDatabaseGeneration(
-      orgId,
-      pluginId,
-      install,
-      target.manifest
-    );
-    const pending = serializePending({
-      kind: "update",
-      operationId: randomUUID(),
-      targetGeneration,
-      targetVersion,
-    });
-    const updating = await this.writeOrgPluginState({
-      databaseGeneration: install.databaseGeneration,
-      expectedRevision,
-      lastLifecycleError: null,
-      lifecycleState: "updating",
-      orgId,
-      pendingOperation: pending,
-      pluginId,
-      selectedVersion: install.selectedVersion,
-    });
-
-    let published = false;
-    try {
-      await this.closePluginAdmission(orgId, pluginId);
-      await this.preparePluginDatabase({
-        install,
-        manifest: target.manifest,
+      const targetGeneration = await this.planDatabaseGeneration(
         orgId,
         pluginId,
+        install,
+        target.manifest
+      );
+      const pending = serializePending({
+        kind: "update",
+        operationId: randomUUID(),
         targetGeneration,
-        version: targetVersion,
+        targetVersion,
       });
-      await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
-      await this.publishInstallation({
-        databaseGeneration: targetGeneration,
-        expectedRevision: updating.revision,
+      const updating = await this.writeOrgPluginState({
+        databaseGeneration: install.databaseGeneration,
+        expectedRevision,
         lastLifecycleError: null,
         lifecycleState: "updating",
-        manifest: target.manifest,
         orgId,
         pendingOperation: pending,
         pluginId,
-        selectedVersion: targetVersion,
+        selectedVersion: install.selectedVersion,
       });
-      published = true;
-      await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
-      return this.writeOrgPluginState({
-        databaseGeneration: targetGeneration,
-        expectedRevision: updating.revision + 1,
-        lastLifecycleError: null,
-        lifecycleState: "disabled",
-        orgId,
-        pendingOperation: null,
-        pluginId,
-        selectedVersion: targetVersion,
-      });
-    } catch (error) {
-      if (
-        error instanceof PluginLifecycleError &&
-        error.code === "interrupted"
-      ) {
-        throw error;
-      }
-      if (!published) {
-        await this.discardUnpublishedGeneration(
+
+      let published = false;
+      try {
+        await this.closePluginAdmission(orgId, pluginId);
+        await this.preparePluginDatabase({
+          install,
+          manifest: target.manifest,
           orgId,
           pluginId,
-          install.databaseGeneration,
-          targetGeneration
-        );
-        await this.writeOrgPluginState({
-          databaseGeneration: install.databaseGeneration,
+          targetGeneration,
+          version: targetVersion,
+        });
+        await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
+        await this.publishInstallation({
+          databaseGeneration: targetGeneration,
           expectedRevision: updating.revision,
-          lastLifecycleError: lifecycleErrorMessage(error),
+          lastLifecycleError: null,
+          lifecycleState: "updating",
+          manifest: target.manifest,
+          orgId,
+          pendingOperation: pending,
+          pluginId,
+          selectedVersion: targetVersion,
+        });
+        published = true;
+        await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
+        return this.writeOrgPluginState({
+          databaseGeneration: targetGeneration,
+          expectedRevision: updating.revision + 1,
+          lastLifecycleError: null,
           lifecycleState: "disabled",
           orgId,
           pendingOperation: null,
           pluginId,
-          selectedVersion: install.selectedVersion,
-        }).catch(() => undefined);
+          selectedVersion: targetVersion,
+        });
+      } catch (error) {
+        if (error instanceof PluginHostError && error.code === "interrupted") {
+          throw error;
+        }
+        if (!published) {
+          await this.discardUnpublishedGeneration(
+            orgId,
+            pluginId,
+            install.databaseGeneration,
+            targetGeneration
+          );
+          await this.writeOrgPluginState({
+            databaseGeneration: install.databaseGeneration,
+            expectedRevision: updating.revision,
+            lastLifecycleError: lifecycleErrorMessage(error),
+            lifecycleState: "disabled",
+            orgId,
+            pendingOperation: null,
+            pluginId,
+            selectedVersion: install.selectedVersion,
+          }).catch(() => undefined);
+        }
+        if (error instanceof PluginHostError) {
+          throw error;
+        }
+        throw new PluginHostError(
+          "migration_failed",
+          lifecycleErrorMessage(error)
+        );
       }
-      if (error instanceof PluginLifecycleError) {
-        throw error;
-      }
-      throw new PluginLifecycleError(
-        "migration_failed",
-        lifecycleErrorMessage(error)
-      );
-    }
+    });
   }
 
   async uninstallOrgPlugin(
@@ -979,27 +951,29 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    const install = await this.requireOrgPlugin(orgId, pluginId);
-    if (install.revision !== expectedRevision) {
-      throw new PluginLifecycleError("stale_revision");
-    }
-    if (
-      install.lifecycleState !== "disabled" &&
-      install.lifecycleState !== "retained"
-    ) {
-      throw new PluginLifecycleError("invalid_state");
-    }
+    return withPluginMutation(async () => {
+      const install = await this.requireOrgPlugin(orgId, pluginId);
+      if (install.revision !== expectedRevision) {
+        throw new PluginHostError("stale_revision");
+      }
+      if (
+        install.lifecycleState !== "disabled" &&
+        install.lifecycleState !== "retained"
+      ) {
+        throw new PluginHostError("invalid_state");
+      }
 
-    await this.closePluginAdmission(orgId, pluginId);
-    return this.writeOrgPluginState({
-      databaseGeneration: install.databaseGeneration,
-      expectedRevision,
-      lastLifecycleError: null,
-      lifecycleState: "retained",
-      orgId,
-      pendingOperation: null,
-      pluginId,
-      selectedVersion: install.selectedVersion,
+      await this.closePluginAdmission(orgId, pluginId);
+      return this.writeOrgPluginState({
+        databaseGeneration: install.databaseGeneration,
+        expectedRevision,
+        lastLifecycleError: null,
+        lifecycleState: "retained",
+        orgId,
+        pendingOperation: null,
+        pluginId,
+        selectedVersion: install.selectedVersion,
+      });
     });
   }
 
@@ -1008,24 +982,26 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<void> {
-    const install = await this.requireOrgPlugin(orgId, pluginId);
-    if (install.revision !== expectedRevision) {
-      throw new PluginLifecycleError("stale_revision");
-    }
-    if (install.lifecycleState !== "retained") {
-      throw new PluginLifecycleError("invalid_state");
-    }
-    const deleted = await this.db.deleteOrgPlugin(
-      orgId,
-      pluginId,
-      expectedRevision
-    );
-    if (!deleted) {
-      throw new PluginLifecycleError("stale_revision");
-    }
-    await rm(getOrgPluginDataDir(orgId, pluginId, this.configDir), {
-      force: true,
-      recursive: true,
+    return withPluginMutation(async () => {
+      const install = await this.requireOrgPlugin(orgId, pluginId);
+      if (install.revision !== expectedRevision) {
+        throw new PluginHostError("stale_revision");
+      }
+      if (install.lifecycleState !== "retained") {
+        throw new PluginHostError("invalid_state");
+      }
+      const deleted = await this.db.deleteOrgPlugin(
+        orgId,
+        pluginId,
+        expectedRevision
+      );
+      if (!deleted) {
+        throw new PluginHostError("stale_revision");
+      }
+      await rm(getOrgPluginDataDir(orgId, pluginId, this.configDir), {
+        force: true,
+        recursive: true,
+      });
     });
   }
 
@@ -1101,27 +1077,29 @@ export class PluginService {
   }
 
   async removePluginRelease(pluginId: string, version: string): Promise<void> {
-    const release = await this.db.getPluginRelease(pluginId, version);
-    if (!release) {
-      throw new PluginLifecycleError("not_found");
-    }
+    return withPluginMutation(async () => {
+      const release = await this.db.getPluginRelease(pluginId, version);
+      if (!release) {
+        throw new PluginHostError("not_found");
+      }
 
-    const dependents = (await this.db.listOrgPlugins()).filter(
-      (install) =>
-        install.pluginId === pluginId && install.selectedVersion === version
-    );
-    if (dependents.length > 0) {
-      throw new PluginLifecycleError("in_use");
-    }
+      const dependents = (await this.db.listOrgPlugins()).filter(
+        (install) =>
+          install.pluginId === pluginId && install.selectedVersion === version
+      );
+      if (dependents.length > 0) {
+        throw new PluginHostError("in_use");
+      }
 
-    const deleted = await this.db.deletePluginRelease(pluginId, version);
-    if (!deleted) {
-      throw new PluginLifecycleError("not_found");
-    }
+      const deleted = await this.db.deletePluginRelease(pluginId, version);
+      if (!deleted) {
+        throw new PluginHostError("not_found");
+      }
 
-    await rm(getPluginReleaseDir(pluginId, version, this.configDir), {
-      force: true,
-      recursive: true,
+      await rm(getPluginReleaseDir(pluginId, version, this.configDir), {
+        force: true,
+        recursive: true,
+      });
     });
   }
 
@@ -1150,7 +1128,13 @@ export class PluginService {
       return null;
     }
 
-    const relativePath = assetPath.trim() === "" ? ui.entryHtml : assetPath;
+    const uiDirectory = dirname(ui.entryHtml);
+    const relativePath =
+      assetPath === ""
+        ? ui.entryHtml
+        : uiDirectory === "."
+          ? assetPath
+          : `${uiDirectory}/${assetPath}`;
     if (!isUiReleasePath(ui, relativePath)) {
       return null;
     }
@@ -1201,24 +1185,26 @@ export class PluginService {
   }
 
   async recoverInterruptedPluginOperations(): Promise<void> {
-    const installs = await this.db.listOrgPlugins();
-    for (const install of installs) {
-      try {
-        await this.recoverOneInstall(install);
-      } catch (error) {
-        await this.writeOrgPluginState({
-          databaseGeneration: install.databaseGeneration,
-          expectedRevision: install.revision,
-          lastLifecycleError: lifecycleErrorMessage(error),
-          lifecycleState:
-            install.lifecycleState === "enabled" ? "disabled" : "disabled",
-          orgId: install.orgId,
-          pendingOperation: null,
-          pluginId: install.pluginId,
-          selectedVersion: install.selectedVersion,
-        }).catch(() => undefined);
+    return withPluginMutation(async () => {
+      const installs = await this.db.listOrgPlugins();
+      for (const install of installs) {
+        try {
+          await this.recoverOneInstall(install);
+        } catch (error) {
+          await this.writeOrgPluginState({
+            databaseGeneration: install.databaseGeneration,
+            expectedRevision: install.revision,
+            lastLifecycleError: lifecycleErrorMessage(error),
+            lifecycleState:
+              install.lifecycleState === "enabled" ? "disabled" : "disabled",
+            orgId: install.orgId,
+            pendingOperation: null,
+            pluginId: install.pluginId,
+            selectedVersion: install.selectedVersion,
+          }).catch(() => undefined);
+        }
       }
-    }
+    });
   }
 
   private async assertToolAssignment(
@@ -1226,12 +1212,12 @@ export class PluginService {
   ): Promise<void> {
     const profileId = input.profileId?.trim();
     if (!profileId) {
-      throw new PluginInvocationError("invalid_input");
+      throw new PluginHostError("invalid_input");
     }
 
     const profile = await this.db.getProfileForOrg(profileId, input.orgId);
     if (!profile) {
-      throw new PluginInvocationError("forbidden");
+      throw new PluginHostError("forbidden");
     }
 
     const assigned = await this.db.listToolsForProfile(profileId);
@@ -1242,7 +1228,7 @@ export class PluginService {
         tool.pluginKey === input.actionKey
     );
     if (!ok) {
-      throw new PluginInvocationError("forbidden");
+      throw new PluginHostError("forbidden");
     }
   }
 
@@ -1291,18 +1277,18 @@ export class PluginService {
     const gate = admissionGateFor(orgId, pluginId);
     return withAdmissionGate(gate, async () => {
       if (kind === "action" && gate.closed) {
-        throw new PluginInvocationError("admission_closed");
+        throw new PluginHostError("admission_closed");
       }
 
       const install = await this.db.getOrgPlugin(orgId, pluginId);
       if (!(install && install.selectedVersion)) {
-        throw new PluginInvocationError("not_installed");
+        throw new PluginHostError("not_installed");
       }
       if (kind === "action" && install.lifecycleState !== "enabled") {
-        throw new PluginInvocationError("not_enabled");
+        throw new PluginHostError("not_enabled");
       }
       if (gate.active >= MAX_PLUGIN_INVOCATIONS) {
-        throw new PluginInvocationError("busy", true);
+        throw new PluginHostError("busy", true);
       }
 
       const release = await this.db.getPluginRelease(
@@ -1310,7 +1296,7 @@ export class PluginService {
         install.selectedVersion
       );
       if (!release) {
-        throw new PluginInvocationError("not_installed");
+        throw new PluginHostError("not_installed");
       }
 
       const releaseDir = getPluginReleaseDir(
@@ -1319,9 +1305,14 @@ export class PluginService {
         this.configDir
       );
       if (!(await pathExists(releaseDir))) {
-        throw new PluginInvocationError("not_installed");
+        throw new PluginHostError("not_installed");
       }
 
+      // Check immediately before reserving the handle, after all asynchronous
+      // lookups, so a pending admission cannot slip into an active snapshot.
+      if (exportPending && (kind === "action" || activeMutations === 0)) {
+        throw new PluginHostError("admission_closed");
+      }
       gate.active += 1;
       const abort = new AbortController();
       gate.controllers.add(abort);
@@ -1415,10 +1406,10 @@ export class PluginService {
     try {
       entryPath = resolvePluginReleaseEntry(input.releaseDir, input.entry);
     } catch {
-      throw new PluginInvocationError("invalid_entry");
+      throw new PluginHostError("invalid_entry");
     }
     if (!(await pathExists(entryPath))) {
-      throw new PluginInvocationError("invalid_entry");
+      throw new PluginHostError("invalid_entry");
     }
 
     await ensureDir(input.context.dataDir);
@@ -1452,7 +1443,7 @@ export class PluginService {
   ): Promise<StoredOrgPluginRecord> {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
     if (!install) {
-      throw new PluginLifecycleError("not_found");
+      throw new PluginHostError("not_found");
     }
     return install;
   }
@@ -1491,11 +1482,11 @@ export class PluginService {
       selectedVersion: input.selectedVersion,
     });
     if (!result.ok) {
-      throw new PluginLifecycleError("stale_revision");
+      throw new PluginHostError("stale_revision");
     }
     const saved = await this.db.getOrgPlugin(input.orgId, input.pluginId);
     if (!saved) {
-      throw new PluginLifecycleError("not_found");
+      throw new PluginHostError("not_found");
     }
     return saved;
   }
@@ -1530,7 +1521,7 @@ export class PluginService {
       selectedVersion: input.selectedVersion,
     });
     if (!result.ok) {
-      throw new PluginLifecycleError(
+      throw new PluginHostError(
         result.reason === "stale_revision" ? "stale_revision" : "invalid_state"
       );
     }
@@ -1545,7 +1536,7 @@ export class PluginService {
         continue;
       }
       if (!derivePluginToolName(pluginId, action.key)) {
-        throw new PluginLifecycleError("invalid_state");
+        throw new PluginHostError("invalid_state");
       }
     }
   }
@@ -1701,17 +1692,17 @@ export class PluginService {
         install.selectedVersion &&
         install.selectedVersion !== manifest.version
       ) {
-        throw new PluginLifecycleError("incompatible");
+        throw new PluginHostError("incompatible");
       }
       return;
     }
     try {
       await this.countPendingMigrations(databasePath, manifest);
     } catch (error) {
-      if (error instanceof PluginLifecycleError) {
+      if (error instanceof PluginHostError) {
         throw error;
       }
-      throw new PluginLifecycleError("incompatible");
+      throw new PluginHostError("incompatible");
     }
   }
 
@@ -1831,7 +1822,7 @@ export class PluginService {
     );
 
     if (existing && existing.digest && existing.digest !== digest) {
-      throw new PluginPackageError("version_conflict");
+      throw new PluginHostError("version_conflict");
     }
 
     if (existing?.digest === digest && (await pathExists(releaseDir))) {
@@ -1882,7 +1873,7 @@ export class PluginService {
         if (published) {
           await rm(releaseDir, { force: true, recursive: true });
         }
-        throw new PluginPackageError("version_conflict");
+        throw new PluginHostError("version_conflict");
       }
 
       await writePluginReleaseIntegrity(
@@ -1956,36 +1947,36 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
 
 function inspectPluginPackage(archive: Uint8Array): InspectedPackage {
   if (archive.byteLength > MAX_COMPRESSED_BYTES) {
-    throw new PluginPackageError("archive_too_large");
+    throw new PluginHostError("archive_too_large");
   }
 
   const central = parseCentralDirectory(archive);
   if (central.length > MAX_FILES) {
-    throw new PluginPackageError("expansion_limit");
+    throw new PluginHostError("expansion_limit");
   }
 
   const seen = new Set<string>();
   let declaredTotal = 0;
   for (const entry of central) {
     if (Buffer.byteLength(entry.name, "utf8") > MAX_PATH_BYTES) {
-      throw new PluginPackageError("unsafe_path");
+      throw new PluginHostError("unsafe_path");
     }
     const kind = classifyZipEntry(entry);
     if (kind === "other") {
-      throw new PluginPackageError("unsupported_entry");
+      throw new PluginHostError("unsupported_entry");
     }
     const normalized = normalizeArchivePath(entry.name);
     if (seen.has(normalized)) {
-      throw new PluginPackageError("duplicate_entry");
+      throw new PluginHostError("duplicate_entry");
     }
     seen.add(normalized);
     if (kind === "file") {
       if (entry.uncompressedSize > MAX_FILE_BYTES) {
-        throw new PluginPackageError("expansion_limit");
+        throw new PluginHostError("expansion_limit");
       }
       declaredTotal += entry.uncompressedSize;
       if (declaredTotal > MAX_UNCOMPRESSED_BYTES) {
-        throw new PluginPackageError("expansion_limit");
+        throw new PluginHostError("expansion_limit");
       }
     }
   }
@@ -2003,19 +1994,19 @@ function inspectPluginPackage(archive: Uint8Array): InspectedPackage {
 
   const manifestBytes = files.get(PLUGIN_MANIFEST_FILENAME);
   if (!manifestBytes) {
-    throw new PluginPackageError("missing_manifest");
+    throw new PluginHostError("missing_manifest");
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(manifestBytes).toString("utf8"));
   } catch {
-    throw new PluginPackageError("invalid_manifest");
+    throw new PluginHostError("invalid_manifest");
   }
 
   const validated = validatePluginManifest(parsed);
   if (!validated.ok) {
-    throw new PluginPackageError("invalid_manifest");
+    throw new PluginHostError("invalid_manifest");
   }
 
   assertReferencedFilesExist(validated.manifest, files);
@@ -2030,7 +2021,7 @@ function inspectPluginPackage(archive: Uint8Array): InspectedPackage {
 function extractZipBounded(archive: Uint8Array): Map<string, Uint8Array> {
   const files = new Map<string, Uint8Array>();
   let total = 0;
-  let failure: PluginPackageError | undefined;
+  let failure: PluginHostError | undefined;
   const unzipper = new Unzip();
   unzipper.register(UnzipInflate);
   unzipper.register(UnzipPassThrough);
@@ -2049,20 +2040,20 @@ function extractZipBounded(archive: Uint8Array): Map<string, Uint8Array> {
         return;
       }
       if (error) {
-        failure = new PluginPackageError("invalid_archive");
+        failure = new PluginHostError("invalid_archive");
         return;
       }
       size += chunk.byteLength;
       total += chunk.byteLength;
       if (size > MAX_FILE_BYTES || total > MAX_UNCOMPRESSED_BYTES) {
-        failure = new PluginPackageError("expansion_limit");
+        failure = new PluginHostError("expansion_limit");
         file.terminate();
         return;
       }
       chunks.push(chunk);
       if (final) {
         if (files.size >= MAX_FILES) {
-          failure = new PluginPackageError("expansion_limit");
+          failure = new PluginHostError("expansion_limit");
           file.terminate();
           return;
         }
@@ -2073,14 +2064,14 @@ function extractZipBounded(archive: Uint8Array): Map<string, Uint8Array> {
     try {
       file.start();
     } catch {
-      failure = new PluginPackageError("unsupported_entry");
+      failure = new PluginHostError("unsupported_entry");
     }
   };
 
   try {
     unzipper.push(archive, true);
   } catch {
-    throw new PluginPackageError("invalid_archive");
+    throw new PluginHostError("invalid_archive");
   }
   if (failure) {
     throw failure;
@@ -2094,10 +2085,10 @@ function parseCentralDirectory(archive: Uint8Array): CentralDirectoryEntry[] {
   const cdSize = readU32(archive, eocd + 12);
   const cdOffset = readU32(archive, eocd + 16);
   if (cdOffset === ZIP64_SENTINEL || cdSize === ZIP64_SENTINEL) {
-    throw new PluginPackageError("invalid_archive");
+    throw new PluginHostError("invalid_archive");
   }
   if (cdOffset + cdSize > archive.byteLength) {
-    throw new PluginPackageError("invalid_archive");
+    throw new PluginHostError("invalid_archive");
   }
 
   const entries: CentralDirectoryEntry[] = [];
@@ -2105,7 +2096,7 @@ function parseCentralDirectory(archive: Uint8Array): CentralDirectoryEntry[] {
   const end = cdOffset + cdSize;
   while (cursor < end) {
     if (readU32(archive, cursor) !== CD_SIGNATURE) {
-      throw new PluginPackageError("invalid_archive");
+      throw new PluginHostError("invalid_archive");
     }
     const versionMadeBy = readU16(archive, cursor + 4);
     const nameLength = readU16(archive, cursor + 28);
@@ -2114,7 +2105,7 @@ function parseCentralDirectory(archive: Uint8Array): CentralDirectoryEntry[] {
     const nameStart = cursor + 46;
     const nameEnd = nameStart + nameLength;
     if (nameEnd + extraLength + commentLength > end) {
-      throw new PluginPackageError("invalid_archive");
+      throw new PluginHostError("invalid_archive");
     }
     entries.push({
       attrs: readU32(archive, cursor + 38),
@@ -2126,7 +2117,7 @@ function parseCentralDirectory(archive: Uint8Array): CentralDirectoryEntry[] {
   }
 
   if (entries.length !== totalEntries) {
-    throw new PluginPackageError("invalid_archive");
+    throw new PluginHostError("invalid_archive");
   }
   return entries;
 }
@@ -2134,7 +2125,7 @@ function parseCentralDirectory(archive: Uint8Array): CentralDirectoryEntry[] {
 function findEocdOffset(archive: Uint8Array): number {
   const minimum = 22;
   if (archive.byteLength < minimum) {
-    throw new PluginPackageError("invalid_archive");
+    throw new PluginHostError("invalid_archive");
   }
   const maxComment = Math.min(0xff_ff, archive.byteLength - minimum);
   for (let comment = 0; comment <= maxComment; comment += 1) {
@@ -2146,7 +2137,7 @@ function findEocdOffset(archive: Uint8Array): number {
       return offset;
     }
   }
-  throw new PluginPackageError("invalid_archive");
+  throw new PluginHostError("invalid_archive");
 }
 
 function classifyZipEntry(
@@ -2179,7 +2170,7 @@ function normalizeArchivePath(name: string): string {
     name.startsWith("/") ||
     /^[a-zA-Z]:/.test(name)
   ) {
-    throw new PluginPackageError("unsafe_path");
+    throw new PluginHostError("unsafe_path");
   }
   const trimmed = name.endsWith("/") ? name.slice(0, -1) : name;
   const parts = trimmed.split("/");
@@ -2187,7 +2178,7 @@ function normalizeArchivePath(name: string): string {
     parts.length === 0 ||
     parts.some((part) => part === "" || part === "." || part === "..")
   ) {
-    throw new PluginPackageError("unsafe_path");
+    throw new PluginHostError("unsafe_path");
   }
   return parts.join("/");
 }
@@ -2199,7 +2190,7 @@ function resolvePackageRoot(names: string[]): string {
       name.endsWith(`/${PLUGIN_MANIFEST_FILENAME}`)
   );
   if (manifests.length !== 1) {
-    throw new PluginPackageError("missing_manifest");
+    throw new PluginHostError("missing_manifest");
   }
   const manifestName = manifests[0] ?? PLUGIN_MANIFEST_FILENAME;
   if (manifestName === PLUGIN_MANIFEST_FILENAME) {
@@ -2232,12 +2223,12 @@ function assertReferencedFilesExist(
 ): void {
   for (const skill of manifest.skills) {
     if (!hasPrefix(files, skill.directory)) {
-      throw new PluginPackageError("missing_referenced_file");
+      throw new PluginHostError("missing_referenced_file");
     }
   }
   for (const action of manifest.actions) {
     if (!files.has(action.entry)) {
-      throw new PluginPackageError("missing_referenced_file");
+      throw new PluginHostError("missing_referenced_file");
     }
   }
   if (
@@ -2247,16 +2238,16 @@ function assertReferencedFilesExist(
       hasPrefix(files, manifest.ui.assetsDir)
     )
   ) {
-    throw new PluginPackageError("missing_referenced_file");
+    throw new PluginHostError("missing_referenced_file");
   }
   for (const migration of manifest.database?.migrations ?? []) {
     if (!files.has(migration.path)) {
-      throw new PluginPackageError("missing_referenced_file");
+      throw new PluginHostError("missing_referenced_file");
     }
   }
   for (const hook of [manifest.hooks?.activate, manifest.hooks?.deactivate]) {
     if (hook && !files.has(hook)) {
-      throw new PluginPackageError("missing_referenced_file");
+      throw new PluginHostError("missing_referenced_file");
     }
   }
 }
@@ -2280,7 +2271,7 @@ async function writePackageTree(
   for (const [relativePath, data] of files) {
     const dest = resolve(root, relativePath);
     if (dest !== root && !dest.startsWith(`${root}${sep}`)) {
-      throw new PluginPackageError("unsafe_path");
+      throw new PluginHostError("unsafe_path");
     }
     await ensureDir(dirname(dest));
     await writeFile(dest, data, { mode: 0o600 });
@@ -2321,31 +2312,6 @@ function readU32(buffer: Uint8Array, offset: number): number {
     0,
     true
   );
-}
-
-async function discoverPluginAdmissionKeys(
-  configDir: string
-): Promise<string[]> {
-  const orgsDir = join(configDir, "orgs");
-  if (!(await pathExists(orgsDir))) {
-    return [];
-  }
-  const keys: string[] = [];
-  for (const org of await readdir(orgsDir, { withFileTypes: true })) {
-    if (!org.isDirectory()) {
-      continue;
-    }
-    const pluginsDir = join(orgsDir, org.name, "plugins");
-    if (!(await pathExists(pluginsDir))) {
-      continue;
-    }
-    for (const plugin of await readdir(pluginsDir, { withFileTypes: true })) {
-      if (plugin.isDirectory()) {
-        keys.push(`${org.name}\0${plugin.name}`);
-      }
-    }
-  }
-  return keys;
 }
 
 async function writePluginReleaseIntegrity(
@@ -2623,16 +2589,16 @@ function assertMigrationCompatibility(
   incoming: Array<{ checksum: string; id: string }>
 ): void {
   if (applied.length > incoming.length) {
-    throw new PluginLifecycleError("incompatible", "migration downgrade");
+    throw new PluginHostError("incompatible", "migration downgrade");
   }
   const incomingById = new Map(incoming.map((row) => [row.id, row]));
   for (const row of applied) {
     const expected = incomingById.get(row.id);
     if (!expected) {
-      throw new PluginLifecycleError("incompatible", "migration downgrade");
+      throw new PluginHostError("incompatible", "migration downgrade");
     }
     if (expected.checksum !== row.checksum) {
-      throw new PluginLifecycleError("incompatible", "checksum_mismatch");
+      throw new PluginHostError("incompatible", "checksum_mismatch");
     }
   }
 }
@@ -2657,13 +2623,10 @@ function applyPluginMigrations(
       ).run(migration.id, migration.checksum, new Date().toISOString());
     }
   } catch (error) {
-    if (error instanceof PluginLifecycleError) {
+    if (error instanceof PluginHostError) {
       throw error;
     }
-    throw new PluginLifecycleError(
-      "migration_failed",
-      lifecycleErrorMessage(error)
-    );
+    throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
   } finally {
     db.close();
   }

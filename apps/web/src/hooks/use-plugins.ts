@@ -259,7 +259,7 @@ export function pluginUiDocumentUrl(
   theme: "dark" | "light"
 ): string {
   const params = new URLSearchParams({ theme });
-  return `/v1/plugins/ui/${encodeURIComponent(orgId)}/${encodeURIComponent(pluginId)}?${params}`;
+  return `/v1/plugins/ui/${encodeURIComponent(orgId)}/${encodeURIComponent(pluginId)}/?${params}`;
 }
 
 /**

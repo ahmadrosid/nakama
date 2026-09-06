@@ -483,7 +483,7 @@ function DialogBody({
 }) {
   if (dialog.type === "upload") {
     return (
-      <ul className="space-y-1 text-sm">
+      <ul className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]">
         {formatPluginTrustLines(dialog.preview).map((line) => (
           <li key={line}>{line}</li>
         ))}

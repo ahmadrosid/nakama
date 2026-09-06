@@ -19,7 +19,7 @@ import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 import type { PluginService } from "./plugin-service";
-import { actorMayInvoke, PluginInvocationError } from "./plugin-service";
+import { actorMayInvoke, PluginHostError } from "./plugin-service";
 
 export type ServerToolOverrides = {
   generateImage?: ToolDefinition | null;
@@ -209,7 +209,7 @@ async function loadPluginTool(
       const trustedOrgId = context.orgId?.trim();
       const trustedProfileId = context.profileId?.trim();
       if (!(trustedOrgId && trustedProfileId)) {
-        throw new PluginInvocationError("invalid_input");
+        throw new PluginHostError("invalid_input");
       }
 
       const invoked = await pluginService.invokePluginAction({

@@ -12,8 +12,7 @@ import {
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
 import {
-  PluginInvocationError,
-  PluginLifecycleError,
+  PluginHostError,
   PluginService,
   resetPluginAdmissionForTests,
   setPluginLifecycleTestHooks,
@@ -350,14 +349,8 @@ describe("plugin lifecycle", () => {
     const generationBefore = disabled.databaseGeneration;
 
     await expect(
-      service.updateOrgPlugin(
-        "org_a",
-        "notes",
-        "1.1.0",
-        disabled.revision,
-        actor
-      )
-    ).rejects.toBeInstanceOf(PluginLifecycleError);
+      service.updateOrgPlugin("org_a", "notes", "1.1.0", disabled.revision)
+    ).rejects.toBeInstanceOf(PluginHostError);
 
     const install = await db.getOrgPlugin("org_a", "notes");
     expect(install).toMatchObject({
@@ -386,7 +379,7 @@ describe("plugin lifecycle", () => {
           return;
         }
         interrupted = true;
-        throw new PluginLifecycleError("interrupted");
+        throw new PluginHostError("interrupted");
       },
     });
     await service.installPluginPackage(v1Bundle());
@@ -406,13 +399,7 @@ describe("plugin lifecycle", () => {
     await service.installPluginPackage(v2Bundle({ extraAction: true }));
     armInterrupt = true;
     await expect(
-      service.updateOrgPlugin(
-        "org_a",
-        "notes",
-        "1.1.0",
-        disabled.revision,
-        actor
-      )
+      service.updateOrgPlugin("org_a", "notes", "1.1.0", disabled.revision)
     ).rejects.toMatchObject({ code: "interrupted" });
     expect(interrupted).toBe(true);
     setPluginLifecycleTestHooks(null);
@@ -440,7 +427,7 @@ describe("plugin lifecycle", () => {
     const service = new PluginService(db, configDir);
     setPluginLifecycleTestHooks({
       afterPublishBeforeFinalize: async () => {
-        throw new PluginLifecycleError("interrupted");
+        throw new PluginHostError("interrupted");
       },
     });
     await service.installPluginPackage(v1Bundle());
@@ -468,8 +455,7 @@ describe("plugin lifecycle", () => {
       "org_a",
       "notes",
       "1.0.1",
-      disabled.revision,
-      actor
+      disabled.revision
     );
     expect(updated.databaseGeneration).toBe(disabled.databaseGeneration);
     expect(updated.selectedVersion).toBe("1.0.1");
@@ -572,7 +558,7 @@ describe("plugin lifecycle", () => {
       "notes",
       (reinstalled?.revision ?? 0) + 9
     );
-    await expect(stalePurge).rejects.toBeInstanceOf(PluginLifecycleError);
+    await expect(stalePurge).rejects.toBeInstanceOf(PluginHostError);
     expect(await db.getOrgPlugin("org_a", "notes")).not.toBeNull();
 
     const disabledAgain = await service.uninstallOrgPlugin(
@@ -659,13 +645,7 @@ describe("plugin lifecycle", () => {
     const results = await Promise.allSettled([
       service.enableOrgPlugin("org_a", "notes", enabled.revision, actor),
       service.disableOrgPlugin("org_a", "notes", enabled.revision, actor),
-      service.updateOrgPlugin(
-        "org_a",
-        "notes",
-        "1.1.0",
-        enabled.revision,
-        actor
-      ),
+      service.updateOrgPlugin("org_a", "notes", "1.1.0", enabled.revision),
     ]);
     const fulfilled = results.filter((result) => result.status === "fulfilled");
     expect(fulfilled).toHaveLength(1);
@@ -684,7 +664,7 @@ describe("plugin lifecycle", () => {
         orgId: "org_a",
         pluginId: "notes",
       })
-    ).rejects.toBeInstanceOf(PluginInvocationError);
+    ).rejects.toBeInstanceOf(PluginHostError);
 
     const tools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
@@ -712,14 +692,8 @@ describe("plugin lifecycle", () => {
     await service.installPluginPackage(commitThenFailBundle());
 
     await expect(
-      service.updateOrgPlugin(
-        "org_a",
-        "notes",
-        "1.2.0",
-        disabled.revision,
-        actor
-      )
-    ).rejects.toBeInstanceOf(PluginLifecycleError);
+      service.updateOrgPlugin("org_a", "notes", "1.2.0", disabled.revision)
+    ).rejects.toBeInstanceOf(PluginHostError);
 
     const install = await db.getOrgPlugin("org_a", "notes");
     const selected = new Database(
@@ -794,8 +768,7 @@ describe("plugin lifecycle", () => {
       "org_a",
       "notes",
       "1.1.0",
-      disabled.revision,
-      actor
+      disabled.revision
     );
     const afterTools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"

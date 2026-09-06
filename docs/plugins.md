@@ -89,7 +89,7 @@ parent.postMessage(
 ```
 
 3. Fetch `__nakama/bootstrap.json?theme=`.
-4. POST actions to `/v1/plugins/{pluginId}/actions/{key}` with `X-Org-Id` from bootstrap.
+4. POST actions to `/v1/plugins/{pluginId}/actions/{key}` with `X-Org-Id` from bootstrap and `X-CSRF-Token` from the `nakama_csrf` cookie.
 
 ## Build and pack
 

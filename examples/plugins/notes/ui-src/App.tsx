@@ -32,10 +32,15 @@ async function callAction<T>(
   key: string,
   input: Record<string, unknown>
 ): Promise<T> {
+  const csrfToken = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("nakama_csrf="))
+    ?.slice("nakama_csrf=".length);
   const response = await fetch(`${bootstrap.actionBaseUrl}/${key}`, {
     body: JSON.stringify({ input }),
     headers: {
       "Content-Type": "application/json",
+      ...(csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {}),
       "X-Org-Id": bootstrap.orgId,
     },
     method: "POST",

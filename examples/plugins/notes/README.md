@@ -17,6 +17,8 @@ Vite writes `ui/` with relative asset URLs so the page works under `/v1/plugins/
 
 The committed `ui/` folder is enough to install without running Vite.
 
+Action requests include the active organization and the `nakama_csrf` cookie value as `X-CSRF-Token`, just like Nakama's own client.
+
 ## Pack a ZIP
 
 Zip so `nakama.plugin.json` is at the archive root, or inside one top-level folder:

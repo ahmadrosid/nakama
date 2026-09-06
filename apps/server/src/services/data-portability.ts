@@ -24,11 +24,13 @@ import {
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
   getUserConfigDir,
+  loadConfig,
   NAKAMA_API_VERSION,
   NakamaApiError,
   pathExists,
   type RestoreDataImportResponse,
 } from "@nakama/core";
+import { resolveDatabasePath } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
 import {
   PluginExportBarrierError,
@@ -104,6 +106,10 @@ export async function createNakamaDataExport(
 ): Promise<CreateDataExportResult> {
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const createdAt = (options.now ?? new Date()).toISOString();
+  const configuredDatabasePath =
+    options.databasePath === undefined
+      ? resolveDatabasePath(loadConfig().databaseUrl, { baseDir: rootDir })
+      : options.databasePath;
 
   try {
     return await runWithPluginExportBarrier(
@@ -115,20 +121,29 @@ export async function createNakamaDataExport(
           const snapshots = snapshotParent
             ? await snapshotOrgPluginDatabases(rootDir, snapshotParent)
             : new Map<string, string>();
-          const { files, skipped } = await inventoryConfigRoot(rootDir);
-          if (options.databasePath) {
-            const databasePath = resolve(options.databasePath);
+          const outsideDatabases: DataExportSkippedItem[] = [];
+          if (configuredDatabasePath && configuredDatabasePath !== ":memory:") {
+            const databasePath = resolve(configuredDatabasePath);
             const relativeDatabasePath = relative(rootDir, databasePath);
             if (
               relativeDatabasePath.startsWith("..") ||
               isAbsolute(relativeDatabasePath)
             ) {
-              skipped.push({
+              outsideDatabases.push({
                 path: databasePath,
                 reason: "Database path is outside the Nakama root.",
               });
+            } else if (snapshotParent && (await pathExists(databasePath))) {
+              const target = join(snapshotParent, relativeDatabasePath);
+              await vacuumPluginDatabaseInto(databasePath, target);
+              snapshots.set(toZipPath(relativeDatabasePath), target);
             }
           }
+          const { files, skipped } = await inventoryConfigRoot(
+            rootDir,
+            snapshots
+          );
+          skipped.push(...outsideDatabases);
 
           const entries: Record<string, Uint8Array> = {};
           for (const file of files) {
@@ -185,7 +200,7 @@ export async function createNakamaDataExport(
           }
         }
       },
-      { configDir: rootDir, drainTimeoutMs: options.drainTimeoutMs }
+      { drainTimeoutMs: options.drainTimeoutMs }
     );
   } catch (error) {
     if (error instanceof PluginExportBarrierError) {
@@ -354,7 +369,10 @@ export async function restoreNakamaDataImport(
   }
 }
 
-async function inventoryConfigRoot(rootDir: string): Promise<{
+async function inventoryConfigRoot(
+  rootDir: string,
+  snapshots: ReadonlyMap<string, string>
+): Promise<{
   files: InventoryItem[];
   skipped: DataExportSkippedItem[];
 }> {
@@ -376,7 +394,7 @@ async function inventoryConfigRoot(rootDir: string): Promise<{
       const absolutePath = join(currentDir, entry.name);
       const relativePath = toZipPath(relative(rootDir, absolutePath));
 
-      const skipReason = skipRelativePathReason(relativePath);
+      const skipReason = skipRelativePathReason(relativePath, snapshots);
       if (skipReason) {
         if (!firstSegment(relativePath).startsWith(PLUGIN_SNAPSHOT_PREFIX)) {
           skipped.push({
@@ -547,7 +565,10 @@ function firstSegment(path: string): string {
   return path.split("/")[0] ?? "";
 }
 
-function skipRelativePathReason(path: string): string | null {
+function skipRelativePathReason(
+  path: string,
+  snapshots: ReadonlyMap<string, string>
+): string | null {
   const parts = path.split("/");
   const first = parts[0] ?? "";
   if (
@@ -562,15 +583,13 @@ function skipRelativePathReason(path: string): string | null {
     return "Transient plugin package staging is excluded.";
   }
   if (
-    path.endsWith(".sqlite-wal") ||
-    path.endsWith(".sqlite-shm") ||
-    path.endsWith("-wal") ||
-    path.endsWith("-shm")
+    (path.endsWith("-wal") || path.endsWith("-shm")) &&
+    snapshots.has(path.slice(0, -4))
   ) {
     return "Database sidecars are represented by completed snapshots.";
   }
-  if (ORG_PLUGIN_SQLITE.test(path)) {
-    return "Live plugin databases are replaced by completed snapshots.";
+  if (snapshots.has(path)) {
+    return "Live databases are replaced by completed snapshots.";
   }
   return null;
 }
@@ -611,10 +630,7 @@ async function snapshotOrgPluginDatabases(
         if (!ORG_PLUGIN_SQLITE.test(relativePath)) {
           continue;
         }
-        const target = join(
-          snapshotParent,
-          `${org.name}-${plugin.name}-${entry.name}`
-        );
+        const target = join(snapshotParent, relativePath);
         await vacuumPluginDatabaseInto(join(dbDir, entry.name), target);
         snapshots.set(relativePath, target);
       }

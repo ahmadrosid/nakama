@@ -290,7 +290,7 @@ describe("plugin page states and iframe contract", () => {
 
   test("theme is on the iframe URL", () => {
     expect(pluginUiDocumentUrl("org-a", "notes", "dark")).toBe(
-      "/v1/plugins/ui/org-a/notes?theme=dark"
+      "/v1/plugins/ui/org-a/notes/?theme=dark"
     );
   });
 

@@ -161,11 +161,17 @@ describe("Notes plugin example", () => {
     expect(fromB.result).toEqual({ notes: [] });
 
     const html = await readFile(join(NOTES_DIR, "ui/index.html"), "utf8");
-    const app = await readFile(join(NOTES_DIR, "ui/assets/app.js"), "utf8");
-    expect(html).toContain("./assets/app.js");
-    expect(app).toContain("nakama-plugin-ready");
-    expect(app).toContain("__nakama/bootstrap.json");
-    expect(app).toContain('pluginId: "notes"');
+    const assets = [...html.matchAll(/(?:src|href)="\.\/(assets\/[^"]+)"/g)];
+    expect(assets.length).toBeGreaterThan(0);
+    for (const [, assetPath] of assets) {
+      const asset = await service.resolveEnabledUiAsset(
+        ORG_A,
+        "notes",
+        assetPath
+      );
+      expect(asset).not.toBeNull();
+      expect((await readFile(asset!.path)).byteLength).toBeGreaterThan(0);
+    }
   });
 
   test("upgrade keeps old notes readable with the new pinned field", async () => {
@@ -189,13 +195,7 @@ describe("Notes plugin example", () => {
       ACTOR
     );
     await service.installPluginPackage(await zipNotesV2());
-    await service.updateOrgPlugin(
-      ORG_A,
-      "notes",
-      "1.1.0",
-      disabled.revision,
-      ACTOR
-    );
+    await service.updateOrgPlugin(ORG_A, "notes", "1.1.0", disabled.revision);
     const updated = await db.getOrgPlugin(ORG_A, "notes");
     const reenabled = await service.enableOrgPlugin(
       ORG_A,

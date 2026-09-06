@@ -13,8 +13,7 @@ import {
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
 import {
-  PluginInvocationError,
-  PluginLifecycleError,
+  PluginHostError,
   PluginService,
   resetPluginAdmissionForTests,
   vacuumPluginDatabaseInto,
@@ -465,7 +464,7 @@ describe("plugin runtime", () => {
     const started = [invoke(), invoke(), invoke(), invoke()];
     await Bun.sleep(50);
     const excess = invoke();
-    await expect(excess).rejects.toBeInstanceOf(PluginInvocationError);
+    await expect(excess).rejects.toBeInstanceOf(PluginHostError);
     await expect(excess).rejects.toMatchObject({
       code: "busy",
       retryable: true,
@@ -497,7 +496,7 @@ describe("plugin runtime", () => {
 
     await expect(
       service.closePluginAdmission("org_a", "slow")
-    ).rejects.toBeInstanceOf(PluginLifecycleError);
+    ).rejects.toBeInstanceOf(PluginHostError);
     await expect(
       service.closePluginAdmission("org_a", "slow")
     ).rejects.toMatchObject({

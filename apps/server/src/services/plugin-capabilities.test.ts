@@ -14,7 +14,7 @@ import {
   seedOrgDefaultProfile,
 } from "@nakama/db";
 import { zipSync } from "fflate";
-import { PluginInvocationError, PluginService } from "./plugin-service";
+import { PluginHostError, PluginService } from "./plugin-service";
 import { SkillCuratorService } from "./skill-curator-service";
 import { SkillsService } from "./skills-service";
 import { resolveProfileStoredTools } from "./tool-resolver";
@@ -342,7 +342,7 @@ describe("plugin capabilities", () => {
           userId: "user_1",
         }
       )
-    ).rejects.toBeInstanceOf(PluginInvocationError);
+    ).rejects.toBeInstanceOf(PluginHostError);
     expect(
       existsSync(
         join(getOrgPluginDataDir(ORG_ID, "notes", configDir), "spawned")
@@ -438,8 +438,7 @@ describe("plugin capabilities", () => {
       ORG_ID,
       "notes",
       "1.1.0",
-      disabledAgain.revision,
-      ACTOR
+      disabledAgain.revision
     );
     const afterUpdate = await db.getOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(
@@ -466,7 +465,7 @@ describe("plugin capabilities", () => {
         pluginId: "notes",
         profileId: profile.id,
       })
-    ).rejects.toBeInstanceOf(PluginInvocationError);
+    ).rejects.toBeInstanceOf(PluginHostError);
   });
 
   test("generic sync, curator, file edits, and deletes cannot mutate plugin-owned contributions", async () => {

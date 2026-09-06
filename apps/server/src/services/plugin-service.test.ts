@@ -8,7 +8,7 @@ import { crc32 } from "node:zlib";
 import { getPluginReleaseDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
-import { PluginPackageError, PluginService } from "./plugin-service";
+import { PluginHostError, PluginService } from "./plugin-service";
 
 const SIDE_EFFECT_MARKER = join(tmpdir(), "nakama-plugin-side-effect-marker");
 
@@ -263,10 +263,10 @@ describe("PluginService", () => {
     for (const archive of cases) {
       await expect(
         service.previewPluginPackage(archive)
-      ).rejects.toBeInstanceOf(PluginPackageError);
+      ).rejects.toBeInstanceOf(PluginHostError);
       await expect(
         service.installPluginPackage(archive)
-      ).rejects.toBeInstanceOf(PluginPackageError);
+      ).rejects.toBeInstanceOf(PluginHostError);
       expect(existsSync(escapeProbe)).toBe(false);
       expect(existsSync(getPluginReleaseDir("notes", "1.0.0", configDir))).toBe(
         false

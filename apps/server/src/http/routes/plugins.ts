@@ -496,7 +496,7 @@ export function registerPluginRoutes(
   });
 
   app.post("/v1/plugins/:pluginId/update", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
     const body = await readJson<UpdateOrgPluginRequest>(c.req.raw);
@@ -505,8 +505,7 @@ export function registerPluginRoutes(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
         body.targetVersion,
-        body.expectedRevision,
-        pluginActor(auth)
+        body.expectedRevision
       );
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
       return json<OrgPluginDetail>(detail!);
@@ -614,6 +613,11 @@ async function servePluginUi(c: Context<AppEnv>, options: ServerOptions) {
   const asset = await plugins.resolveEnabledUiAsset(orgId, pluginId, assetPath);
   if (!asset) {
     throw new NakamaApiError("Not found", 404);
+  }
+
+  if (assetPath === "" && !c.req.path.endsWith("/")) {
+    const url = new URL(c.req.url);
+    return c.redirect(`${url.pathname}/${url.search}`, 302);
   }
 
   const file = Bun.file(asset.path);

@@ -74,7 +74,9 @@ function pluginBundle(
     "nakama.plugin.json": Buffer.from(JSON.stringify(manifest)),
     "secret.txt": Buffer.from("backend-secret"),
     "ui/assets/app.js": Buffer.from("export {}"),
-    "ui/index.html": Buffer.from("<html><body>notes</body></html>"),
+    "ui/index.html": Buffer.from(
+      '<html><body>notes<script src="./assets/app.js" type="module"></script></body></html>'
+    ),
     ...Object.fromEntries(
       Object.entries(extras).map(([key, value]) => [key, Buffer.from(value)])
     ),
@@ -335,7 +337,7 @@ describe("plugin HTTP API", () => {
     expect(enabled.status).toBe(200);
 
     expect(
-      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes`, viewer)).status
+      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes/`, viewer)).status
     ).toBe(403);
     expect(
       (
@@ -368,19 +370,29 @@ describe("plugin HTTP API", () => {
     });
 
     const orgId = admin.orgId!;
+    const redirect = await jsonRequest(
+      app,
+      `/v1/plugins/ui/${orgId}/notes?theme=dark`,
+      admin
+    );
+    expect(redirect.status).toBe(302);
+    expect(redirect.headers.get("location")).toBe(
+      `/v1/plugins/ui/${orgId}/notes/?theme=dark`
+    );
     const document = await jsonRequest(
       app,
-      `/v1/plugins/ui/${orgId}/notes`,
+      `/v1/plugins/ui/${orgId}/notes/`,
       admin
     );
     expect(document.status).toBe(200);
-    expect(await document.text()).toContain("notes");
-
-    const asset = await jsonRequest(
-      app,
-      `/v1/plugins/ui/${orgId}/notes/ui/assets/app.js`,
-      admin
+    const html = await document.text();
+    const scriptSrc = html.match(/src="([^"]+)"/)?.[1];
+    expect(scriptSrc).toBeDefined();
+    const scriptUrl = new URL(
+      scriptSrc!,
+      `http://localhost${redirect.headers.get("location")}`
     );
+    const asset = await jsonRequest(app, scriptUrl.pathname, admin);
     expect(asset.status).toBe(200);
 
     const forbidden = [
@@ -389,20 +401,20 @@ describe("plugin HTTP API", () => {
       `/v1/plugins/ui/${orgId}/notes/migrations/001.sql`,
       `/v1/plugins/ui/${orgId}/notes/../1.0.1/ui/index.html`,
       `/v1/plugins/ui/${orgId}/notes/%2e%2e/secret.txt`,
-      `/v1/plugins/ui/${orgId}/notes/ui/assets/../../secret.txt`,
+      `/v1/plugins/ui/${orgId}/notes/assets/../../secret.txt`,
     ];
     for (const path of forbidden) {
       expect((await jsonRequest(app, path, admin)).status).toBe(404);
     }
 
     expect(
-      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes`, null)).status
+      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes/`, null)).status
     ).toBe(401);
     expect(
       (
         await jsonRequest(
           app,
-          `/v1/plugins/ui/${orgId}/notes/ui/assets/app.js`,
+          `/v1/plugins/ui/${orgId}/notes/assets/app.js`,
           null
         )
       ).status
@@ -426,7 +438,7 @@ describe("plugin HTTP API", () => {
 
     const document = await jsonRequest(
       app,
-      `/v1/plugins/ui/${admin.orgId}/notes`,
+      `/v1/plugins/ui/${admin.orgId}/notes/`,
       admin
     );
     expect(document.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
@@ -501,7 +513,7 @@ describe("plugin HTTP API", () => {
 
     const pathOnly = await jsonRequest(
       app,
-      `/v1/plugins/ui/${orgA}/notes`,
+      `/v1/plugins/ui/${orgA}/notes/`,
       admin,
       {},
       ""
@@ -510,7 +522,7 @@ describe("plugin HTTP API", () => {
 
     const conflict = await jsonRequest(
       app,
-      `/v1/plugins/ui/${orgA}/notes`,
+      `/v1/plugins/ui/${orgA}/notes/`,
       admin,
       { headers: { "X-Org-Id": "org_b" } },
       ""

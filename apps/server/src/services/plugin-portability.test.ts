@@ -13,7 +13,7 @@ import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
 } from "@nakama/db";
-import { zipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 import {
   createNakamaDataExport,
   restoreNakamaDataImport,
@@ -22,6 +22,8 @@ import {
   PluginService,
   quarantineInvalidPluginReleases,
   resetPluginAdmissionForTests,
+  runWithPluginExportBarrier,
+  setPluginLifecycleTestHooks,
 } from "./plugin-service";
 import {
   createProfilePackExport,
@@ -258,6 +260,162 @@ describe("plugin portability", () => {
     }
 
     await database.close();
+  });
+
+  test.each(["explicit", "configured"])(
+    "export snapshots %s main database WAL rows and preserves unrelated sidecars",
+    async (pathSource) => {
+      const databasePath = join(configDir, "nakama.db");
+      const previousDatabaseUrl = process.env.DATABASE_URL;
+      if (pathSource === "configured") {
+        process.env.DATABASE_URL = `file:${databasePath}`;
+      }
+      const live = new Database(databasePath);
+      const otherPath = join(configDir, "other.db");
+      const other = new Database(otherPath);
+      const restoreRoot = await mkdtemp(join(tmpdir(), "nakama-wal-restore-"));
+      try {
+        for (const db of [live, other]) {
+          db.exec(`
+          PRAGMA journal_mode=WAL;
+          CREATE TABLE notes (body TEXT);
+          PRAGMA wal_checkpoint(TRUNCATE);
+          INSERT INTO notes VALUES ('committed');
+        `);
+        }
+        const exported = await createNakamaDataExport({
+          ...(pathSource === "explicit" ? { databasePath } : {}),
+          rootDir: configDir,
+        });
+        const entries = unzipSync(exported.data);
+        expect(entries["nakama.db-wal"]).toBeUndefined();
+        expect(entries["other.db-wal"]).toBeDefined();
+        await restoreNakamaDataImport(exported.data, {
+          confirm: true,
+          rootDir: restoreRoot,
+        });
+        for (const name of ["nakama.db", "other.db"]) {
+          const restored = new Database(join(restoreRoot, name));
+          try {
+            expect(restored.query("SELECT body FROM notes").all()).toEqual([
+              { body: "committed" },
+            ]);
+          } finally {
+            restored.close();
+          }
+        }
+      } finally {
+        if (previousDatabaseUrl === undefined) {
+          delete process.env.DATABASE_URL;
+        } else {
+          process.env.DATABASE_URL = previousDatabaseUrl;
+        }
+        live.close();
+        other.close();
+        await rm(restoreRoot, { force: true, recursive: true });
+      }
+    }
+  );
+
+  test("export blocks lifecycle mutations, new calls, and overlapping exports", async () => {
+    const service = new PluginService(
+      createInMemoryDatabaseAdapter(),
+      configDir
+    );
+    const archive = await zipPluginDir(NOTES_DIR);
+    await service.installPluginPackage(archive);
+    const added = await service.addOrgPlugin(ORG, "notes");
+    const enabled = await service.enableOrgPlugin(
+      ORG,
+      "notes",
+      added.revision,
+      ACTOR
+    );
+    const disabled = await service.disableOrgPlugin(
+      ORG,
+      "notes",
+      enabled.revision,
+      ACTOR
+    );
+
+    await runWithPluginExportBarrier(async () => {
+      const mutations = [
+        () => service.installPluginPackage(archive),
+        () => service.addOrgPlugin(DEST, "notes"),
+        () => service.enableOrgPlugin(ORG, "notes", disabled.revision, ACTOR),
+        () => service.disableOrgPlugin(ORG, "notes", disabled.revision, ACTOR),
+        () => service.updateOrgPlugin(ORG, "notes", "1.0.0", disabled.revision),
+        () => service.uninstallOrgPlugin(ORG, "notes", disabled.revision),
+        () => service.deleteRetainedPluginData(ORG, "notes", disabled.revision),
+        () => service.removePluginRelease("notes", "1.0.0"),
+      ];
+      for (const mutate of mutations) {
+        await expect(mutate()).rejects.toMatchObject({ code: "in_use" });
+      }
+      await expect(
+        runWithPluginExportBarrier(async () => undefined)
+      ).rejects.toThrow();
+      // A rejected overlapping export must not clear the first export's lock.
+      await expect(mutations[2]!()).rejects.toMatchObject({ code: "in_use" });
+    });
+
+    await service.enableOrgPlugin(ORG, "notes", disabled.revision, ACTOR);
+    const invoke = () =>
+      service.invokePluginAction({
+        access: "ui",
+        actionKey: "create",
+        actor: ACTOR,
+        input: { title: "after export" },
+        orgId: ORG,
+        pluginId: "notes",
+      });
+    await expect(
+      runWithPluginExportBarrier(async () => {
+        await expect(invoke()).rejects.toMatchObject({
+          code: "admission_closed",
+        });
+        throw new Error("export failed");
+      })
+    ).rejects.toThrow("export failed");
+    expect((await invoke()).result).toMatchObject({ title: "after export" });
+  });
+
+  test("export waits for an admitted lifecycle mutation to publish", async () => {
+    const service = new PluginService(
+      createInMemoryDatabaseAdapter(),
+      configDir
+    );
+    await service.installPluginPackage(await zipPluginDir(NOTES_DIR));
+    const added = await service.addOrgPlugin(ORG, "notes");
+    const reached = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    setPluginLifecycleTestHooks({
+      afterMigrationBeforePublish: async () => {
+        reached.resolve();
+        await resume.promise;
+      },
+    });
+    const enable = service.enableOrgPlugin(ORG, "notes", added.revision, ACTOR);
+    await reached.promise;
+    let snapshotStarted = false;
+    const exported = runWithPluginExportBarrier(async () => {
+      snapshotStarted = true;
+      expect(
+        (await service.getOrgPluginDetail(ORG, "notes"))?.lifecycleState
+      ).toBe("enabled");
+    });
+    try {
+      await expect(service.addOrgPlugin(DEST, "notes")).rejects.toMatchObject({
+        code: "in_use",
+      });
+      expect(snapshotStarted).toBe(false);
+    } finally {
+      resume.resolve();
+      await enable;
+      await exported;
+      setPluginLifecycleTestHooks(null);
+    }
+    expect(snapshotStarted).toBe(true);
   });
 
   test("invalid restored package hashes stay unavailable", async () => {
