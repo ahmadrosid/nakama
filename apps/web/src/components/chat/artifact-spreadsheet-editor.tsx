@@ -12,12 +12,11 @@ import {
 import { cn } from "@/lib/utils";
 import { isSpreadsheetNumericCell } from "./spreadsheet-numeric";
 
-const GRID_LINE = "border-[#e0e0e0] dark:border-[#3c4043]";
-const GUTTER_BG = "bg-[#f8f9fa] dark:bg-[#2d2e30]";
-const GUTTER_ACTIVE =
-  "bg-[#e8f0fe] text-[#1967d2] dark:bg-[#394457] dark:text-[#8ab4f8]";
-const SELECTION_RING =
-  "ring-2 ring-inset ring-[#1a73e8] dark:ring-[#8ab4f8] z-[1]";
+const GRID_LINE = "border-border";
+const GUTTER_BG = "bg-muted";
+const GUTTER_TEXT = "text-muted-foreground";
+const GUTTER_ACTIVE = "bg-accent text-foreground";
+const SELECTION_RING = "z-[1] ring-2 ring-inset ring-ring";
 
 type CellCoord = { row: number; col: number };
 
@@ -60,7 +59,8 @@ export function SpreadsheetGrid({
             {Array.from({ length: columnCount }, (_, columnIndex) => (
               <th
                 className={cn(
-                  "sticky top-0 z-20 min-w-[6.5rem] border-r border-b px-1 text-[#5f6368] text-[11px] dark:text-[#9aa0a6]",
+                  "sticky top-0 z-20 min-w-[6.5rem] border-r border-b px-1 text-[11px]",
+                  GUTTER_TEXT,
                   namedHeaders
                     ? "h-7 px-1.5 text-left font-semibold"
                     : "h-6 text-center font-normal",
@@ -89,7 +89,8 @@ export function SpreadsheetGrid({
               <tr key={`row-${rowIndex}`}>
                 <th
                   className={cn(
-                    "sticky left-0 z-20 h-7 w-10 min-w-10 border-r border-b p-0 text-center font-normal text-[#5f6368] text-[11px] tabular-nums dark:text-[#9aa0a6]",
+                    "sticky left-0 z-20 h-7 w-10 min-w-10 border-r border-b p-0 text-center font-normal text-[11px] tabular-nums",
+                    GUTTER_TEXT,
                     GRID_LINE,
                     GUTTER_BG,
                     rowSelected && GUTTER_ACTIVE
