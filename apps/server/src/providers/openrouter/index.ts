@@ -108,6 +108,14 @@ function toSdkTools(
   }));
 }
 
+function isImageUrl(value: unknown): value is { url: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { url?: unknown }).url === "string"
+  );
+}
+
 function toSdkUserContent(
   content: Extract<OpenAIMessage, { role: "user" }>["content"]
 ): string | ChatContentItems[] {
@@ -116,12 +124,7 @@ function toSdkUserContent(
   }
 
   return content.map((part): ChatContentItems => {
-    if (
-      part.type === "image_url" &&
-      typeof part.image_url === "object" &&
-      part.image_url !== null &&
-      typeof part.image_url.url === "string"
-    ) {
+    if (part.type === "image_url" && isImageUrl(part.image_url)) {
       return {
         imageUrl: { url: part.image_url.url },
         type: "image_url",
