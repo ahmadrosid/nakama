@@ -8,6 +8,7 @@ import type { AppEnv } from "./types";
 
 export const ORG_ID_HEADER = "x-org-id";
 const PLUGIN_UI_PATH = /^\/v1\/plugins\/ui\/([^/]+)(?:\/|$)/;
+const PLUGIN_ACTION_PATH = /^\/v1\/plugins\/[^/]+\/actions\/[^/]+$/;
 
 function isPlatformRoute(pathname: string): boolean {
   return pathname === "/v1/platform" || pathname.startsWith("/v1/platform/");
@@ -45,6 +46,9 @@ function resolveOrgId(
   }
   if (pathOrgId) {
     return { orgId: pathOrgId };
+  }
+  if (PLUGIN_ACTION_PATH.test(pathname) && request.method === "POST") {
+    return { orgId: null };
   }
 
   const sessionOrgId = auth.session?.activeOrgId?.trim();
@@ -85,7 +89,9 @@ export function createOrgContextMiddleware(
     }
 
     let orgId = resolved.orgId;
-    if (!orgId && auth.mode === "local-token") {
+    const actionRequiresHeader =
+      PLUGIN_ACTION_PATH.test(c.req.path) && c.req.method === "POST";
+    if (!orgId && auth.mode === "local-token" && !actionRequiresHeader) {
       const memberships = await databaseAdapter.listUserOrganizations(
         auth.user.id
       );

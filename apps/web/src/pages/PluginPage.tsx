@@ -149,7 +149,7 @@ export function PluginPageState({
 
   return (
     <div className="flex min-h-64 flex-col items-start justify-center gap-3 p-6">
-      <h1 className="type-page-title">{pluginPageStateMessage(kind)}</h1>
+      <p className="type-page-title">{pluginPageStateMessage(kind)}</p>
       <Link className="text-sm underline underline-offset-2" to={href}>
         {linkLabel}
       </Link>

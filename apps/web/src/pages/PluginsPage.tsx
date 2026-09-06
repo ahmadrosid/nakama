@@ -21,7 +21,6 @@ import {
   formatPluginTrustLines,
   isPluginLifecycleBusy,
   nextPluginVersions,
-  pluginHasRetainedData,
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
@@ -350,7 +349,7 @@ function PluginRow({
     event: MouseEvent<HTMLButtonElement>
   ) => void;
 }) {
-  const versions = nextPluginVersions(plugin);
+  const actions = pluginRowActions(plugin);
   const canOpen = plugin.lifecycleState === "enabled" && plugin.ui !== null;
 
   return (
@@ -398,9 +397,7 @@ function PluginRow({
             Install
           </Button>
         ) : null}
-        {canManage &&
-        plugin.installed &&
-        plugin.lifecycleState === "disabled" ? (
+        {canManage && actions.enable ? (
           <Button
             disabled={busy}
             onClick={(event) => onAction("enable", event)}
@@ -410,7 +407,7 @@ function PluginRow({
             Enable
           </Button>
         ) : null}
-        {canManage && plugin.lifecycleState === "enabled" ? (
+        {canManage && actions.disable ? (
           <Button
             disabled={busy}
             onClick={(event) => onAction("disable", event)}
@@ -421,7 +418,7 @@ function PluginRow({
             Disable
           </Button>
         ) : null}
-        {canManage && plugin.installed && versions.length > 0 ? (
+        {canManage && actions.update ? (
           <Button
             disabled={busy}
             onClick={(event) => onAction("update", event)}
@@ -432,9 +429,7 @@ function PluginRow({
             Update
           </Button>
         ) : null}
-        {canManage &&
-        plugin.installed &&
-        plugin.lifecycleState !== "retained" ? (
+        {canManage && actions.uninstall ? (
           <Button
             disabled={busy}
             onClick={(event) => onAction("uninstall", event)}
@@ -445,7 +440,7 @@ function PluginRow({
             Uninstall
           </Button>
         ) : null}
-        {canManage && pluginHasRetainedData(plugin) ? (
+        {canManage && actions.purge ? (
           <Button
             disabled={busy}
             onClick={(event) => onAction("purge", event)}
@@ -628,4 +623,23 @@ function confirmLabel(dialog: PluginDialog | null): string {
 
 export function pluginRowIdentity(plugin: OrgPluginDetail): string {
   return `${plugin.name} ${plugin.pluginId}`;
+}
+
+export function pluginRowActions(plugin: OrgPluginDetail): {
+  disable: boolean;
+  enable: boolean;
+  purge: boolean;
+  uninstall: boolean;
+  update: boolean;
+} {
+  return {
+    disable: plugin.lifecycleState === "enabled",
+    enable: plugin.installed && plugin.lifecycleState === "disabled",
+    purge: plugin.lifecycleState === "retained",
+    uninstall: plugin.installed && plugin.lifecycleState === "disabled",
+    update:
+      plugin.installed &&
+      plugin.lifecycleState === "disabled" &&
+      nextPluginVersions(plugin).length > 0,
+  };
 }

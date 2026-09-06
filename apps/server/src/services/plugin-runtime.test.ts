@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,8 +14,10 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
 import {
   PluginInvocationError,
+  PluginLifecycleError,
   PluginService,
   resetPluginAdmissionForTests,
+  vacuumPluginDatabaseInto,
 } from "./plugin-service";
 
 const echoJs = `
@@ -473,6 +476,45 @@ describe("plugin runtime", () => {
     await expect(invoke()).rejects.toMatchObject({
       code: "admission_closed",
     });
+  });
+
+  test("drain fails the lifecycle close when children are still active", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir, { drainTimeoutMs: 0 });
+    await service.installPluginPackage(bundle("slow", slowJs));
+    await enablePlugin(db, "org_a", "slow", "1.0.0");
+
+    const hanging = service.invokePluginAction({
+      access: "ui",
+      actionKey: "echo",
+      actor: { id: "user_1", role: "member" },
+      input: {},
+      orgId: "org_a",
+      pluginId: "slow",
+    });
+    hanging.catch(() => undefined);
+    await Bun.sleep(40);
+
+    await expect(
+      service.closePluginAdmission("org_a", "slow")
+    ).rejects.toBeInstanceOf(PluginLifecycleError);
+    await expect(
+      service.closePluginAdmission("org_a", "slow")
+    ).rejects.toMatchObject({
+      code: "in_use",
+    });
+    await Promise.allSettled([hanging]);
+  });
+
+  test("VACUUM INTO failure does not copy a live database file", async () => {
+    const sourcePath = join(configDir, "live.db");
+    const targetPath = join(configDir, "snapshot.db");
+    await writeFile(sourcePath, "not-a-sqlite-database");
+
+    await expect(
+      vacuumPluginDatabaseInto(sourcePath, targetPath)
+    ).rejects.toThrow();
+    expect(existsSync(targetPath)).toBe(false);
   });
 
   test("lifecycle hook spawn uses the same host-derived org context", async () => {

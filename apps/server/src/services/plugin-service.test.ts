@@ -383,4 +383,24 @@ describe("PluginService", () => {
     expect(existsSync(join(configDir, "plugins", ".staging"))).toBe(false);
     expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
   });
+
+  test("concurrent installs of different plugins keep both releases", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    const [notes, tasks] = await Promise.all([
+      service.installPluginPackage(validBundle()),
+      service.installPluginPackage(validBundle({ id: "tasks", name: "Tasks" })),
+    ]);
+
+    expect(notes.pluginId).toBe("notes");
+    expect(tasks.pluginId).toBe("tasks");
+    expect(existsSync(getPluginReleaseDir("notes", "1.0.0", configDir))).toBe(
+      true
+    );
+    expect(existsSync(getPluginReleaseDir("tasks", "1.0.0", configDir))).toBe(
+      true
+    );
+    expect(await db.getPluginRelease("notes", "1.0.0")).not.toBeNull();
+    expect(await db.getPluginRelease("tasks", "1.0.0")).not.toBeNull();
+  });
 });

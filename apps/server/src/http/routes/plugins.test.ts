@@ -333,6 +333,18 @@ describe("plugin HTTP API", () => {
       }
     );
     expect(enabled.status).toBe(200);
+
+    expect(
+      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes`, viewer)).status
+    ).toBe(403);
+    expect(
+      (
+        await jsonRequest(app, "/v1/plugins/notes/actions/list", viewer, {
+          body: JSON.stringify({ input: {} }),
+          method: "POST",
+        })
+      ).status
+    ).toBe(403);
   });
 
   test("crafted UI paths cannot leave the enabled UI directory and require auth", async () => {
@@ -527,7 +539,7 @@ describe("plugin HTTP API", () => {
       },
       ""
     );
-    expect(actionOnCookieB.status).not.toBe(200);
+    expect(actionOnCookieB.status).toBe(400);
   });
 
   test("unknown, disabled, and unauthorized actions fail before execution", async () => {

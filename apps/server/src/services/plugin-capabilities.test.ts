@@ -173,7 +173,7 @@ describe("plugin capabilities", () => {
 
     const catalog = await skills.composeCatalogForProfile(ORG_ID, profile.id);
     expect(catalog).toContain("notes");
-    expect(catalog).toContain("Capture notes");
+    expect(catalog).toContain("**notes**");
 
     const matched = await skills.formatMatchedSkillsForPrompt(
       ORG_ID,
@@ -210,7 +210,7 @@ describe("plugin capabilities", () => {
       ORG_ID,
       OTHER_PROFILE
     );
-    expect(otherCatalog).not.toContain("Capture notes");
+    expect(otherCatalog).not.toContain("**notes**");
     const otherTools = await resolveProfileStoredTools(
       await db.listToolsForProfile(OTHER_PROFILE),
       db,
@@ -222,6 +222,79 @@ describe("plugin capabilities", () => {
         (item) => item.name === derivePluginToolName("notes", "write")
       )
     ).toBe(false);
+  });
+
+  test("member resolve skips admin-only plugin tools", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrgDefaultProfile(db, ORG_ID);
+    const plugins = new PluginService(db, configDir);
+    await plugins.installPluginPackage(
+      encodeZip({
+        "actions/write.js": ACTION_JS,
+        "nakama.plugin.json": JSON.stringify(
+          manifest("1.0.0", {
+            actions: [
+              {
+                access: "member",
+                description: "Write a note",
+                effect: "write",
+                entry: "actions/write.js",
+                exposeAsTool: true,
+                inputSchema: { type: "object" },
+                key: "write",
+              },
+              {
+                access: "admin",
+                description: "Wipe notes",
+                effect: "write",
+                entry: "actions/write.js",
+                exposeAsTool: true,
+                inputSchema: { type: "object" },
+                key: "wipe",
+              },
+            ],
+          })
+        ),
+        "skills/notes/SKILL.md": SKILL_MD,
+      })
+    );
+    const added = await plugins.addOrgPlugin(ORG_ID, "notes");
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    const tools = (await db.listTools()).filter(
+      (row) => row.pluginId === "notes"
+    );
+    for (const tool of tools) {
+      await db.assignToolToProfile(profile.id, tool.id);
+    }
+
+    const memberResolved = await resolveProfileStoredTools(
+      await db.listToolsForProfile(profile.id),
+      db,
+      [],
+      { actorRole: "member", pluginService: plugins }
+    );
+    expect(
+      memberResolved.some(
+        (item) => item.name === derivePluginToolName("notes", "write")
+      )
+    ).toBe(true);
+    expect(
+      memberResolved.some(
+        (item) => item.name === derivePluginToolName("notes", "wipe")
+      )
+    ).toBe(false);
+
+    const adminResolved = await resolveProfileStoredTools(
+      await db.listToolsForProfile(profile.id),
+      db,
+      [],
+      { actorRole: "admin", pluginService: plugins }
+    );
+    expect(
+      adminResolved.some(
+        (item) => item.name === derivePluginToolName("notes", "wipe")
+      )
+    ).toBe(true);
   });
 
   test("AE3: disable between resolve and invoke prevents spawn; next resolve drops the tool", async () => {
@@ -299,7 +372,7 @@ describe("plugin capabilities", () => {
     ).toBe(true);
 
     const catalog = await skills.composeCatalogForProfile(ORG_ID, profile.id);
-    expect(catalog).not.toContain("Capture notes");
+    expect(catalog).not.toContain("**notes**");
   });
 
   test("re-enable and update preserve retained IDs; removed keys are reported and not callable", async () => {
@@ -523,7 +596,7 @@ Standalone body.
     await db.assignSkillToProfile(profile.id, standalone!.id);
 
     const catalog = await skills.composeCatalogForProfile(ORG_ID, profile.id);
-    expect(catalog).toContain("Capture notes");
+    expect(catalog).toContain("**notes**");
     expect(catalog).toContain("Standalone notes shadow attempt");
 
     const matched = await skills.formatMatchedSkillsForPrompt(

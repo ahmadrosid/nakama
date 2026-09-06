@@ -2667,8 +2667,8 @@ export class AgentService {
     return this.profileService.deleteProfile(orgId, profileId);
   }
 
-  async listTools(): Promise<ListToolsResponse> {
-    return this.profileService.listTools();
+  async listTools(orgId: string): Promise<ListToolsResponse> {
+    return this.profileService.listTools(orgId);
   }
 
   async getTool(toolId: string): Promise<ToolResponse> {
@@ -3295,6 +3295,7 @@ export class AgentService {
   private async resolveProfileTools(
     profile: StoredProfileRecord,
     options: {
+      actorRole?: "admin" | "member" | "viewer" | null;
       includeAutomationTools?: boolean;
       includeWorkflowTools?: boolean;
       includeTodoTools?: boolean;
@@ -3306,6 +3307,7 @@ export class AgentService {
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      actorRole: options.actorRole ?? undefined,
       pluginService: this.pluginService,
       serverTools: this.serverTools,
       userConfig: this.userConfig,
@@ -3437,7 +3439,17 @@ export class AgentService {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
     const includeSkillManageTools = SKILL_MANAGE_CHANNELS[channel];
+    const pluginOrgRole =
+      channel === "telegram" || channel === "whatsapp" || channel === "discord"
+        ? "member"
+        : orgRole;
     let tools = await this.resolveProfileTools(profile, {
+      actorRole:
+        pluginOrgRole === "admin" ||
+        pluginOrgRole === "member" ||
+        pluginOrgRole === "viewer"
+          ? pluginOrgRole
+          : undefined,
       includeSkillManageTools,
       userId,
     });
@@ -3597,7 +3609,9 @@ export class AgentService {
                     profile.isSuper &&
                     matched.some((skill) => skill.name === "create-profile")
                   ) {
-                    parts.push(await this.formatProfileAuthoringToolContext());
+                    parts.push(
+                      await this.formatProfileAuthoringToolContext(orgId)
+                    );
                   }
 
                   if (matched.some((skill) => skill.name === "coding-agent")) {
@@ -3651,13 +3665,20 @@ export class AgentService {
     });
   }
 
-  private async formatProfileAuthoringToolContext(): Promise<string> {
-    const { tools } = await this.profileService.listTools();
+  private async formatProfileAuthoringToolContext(
+    orgId: string
+  ): Promise<string> {
+    const { tools } = await this.profileService.listTools(orgId);
     const lines = tools
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((tool) => {
-        const source = tool.handlerType === "builtin" ? "builtin" : "custom";
+        const source =
+          tool.handlerType === "builtin"
+            ? "builtin"
+            : tool.handlerType === "plugin"
+              ? "plugin"
+              : "custom";
         return `- ${tool.name} (${source}, id: ${tool.id}) - ${tool.description}`;
       });
 

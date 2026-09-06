@@ -447,9 +447,11 @@ export class ProfileService {
     }
   }
 
-  async listTools(): Promise<ListToolsResponse> {
+  async listTools(orgId: string): Promise<ListToolsResponse> {
     await ensureBuiltinToolDefinitions(this.db);
-    const tools = await this.db.listTools();
+    const tools = (await this.db.listTools()).filter(
+      (tool) => !tool.orgId || tool.orgId === orgId
+    );
     return { tools: tools.map(toToolDetail) };
   }
 
@@ -460,9 +462,6 @@ export class ProfileService {
 
   async getToolSource(toolId: string): Promise<ToolSourceResponse> {
     const tool = await this.requireTool(toolId);
-    if (tool.pluginId) {
-      throw new Error("Plugin-owned tools cannot be edited.");
-    }
     return readToolSource(tool);
   }
 
@@ -553,6 +552,10 @@ export class ProfileService {
 
     if (!tool) {
       throw new Error("Tool not found.");
+    }
+
+    if (tool.orgId && tool.orgId !== orgId) {
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     await withAssignmentChange(

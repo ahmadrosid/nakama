@@ -390,7 +390,12 @@ export function registerSessionRoutes(
         excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
         isPlatformAdmin: auth.isPlatformAdmin,
         model: body.model,
-        orgRole: auth.orgRole,
+        orgRole:
+          channel === "telegram" ||
+          channel === "whatsapp" ||
+          channel === "discord"
+            ? "member"
+            : auth.orgRole,
       }
     );
     return json<CreateSessionResponse>({ sessionId }, 201);

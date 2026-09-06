@@ -217,12 +217,23 @@ describe("AgentService plugin capabilities", () => {
         channel: "telegram",
         isPlatformAdmin: true,
         orgId: ORG_ID,
-        orgRole: "member",
+        orgRole: "admin",
         profileId: profile.id,
         userId: "telegram_user",
       }
     )) as { actor: { id: string; role: string } };
     expect(messaging.actor).toEqual({ id: "telegram_user", role: "member" });
+
+    expect(
+      pluginActorFromContext({
+        channel: "telegram",
+        isPlatformAdmin: true,
+        orgId: ORG_ID,
+        orgRole: "admin",
+        profileId: profile.id,
+        userId: "telegram_user",
+      })
+    ).toEqual({ id: "telegram_user", role: "member" });
 
     expect(
       pluginActorFromContext({

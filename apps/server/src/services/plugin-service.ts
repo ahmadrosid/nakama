@@ -1,13 +1,6 @@
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import {
-  copyFile,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -245,7 +238,7 @@ interface AdmissionGate {
 
 const admissionGates = new Map<string, AdmissionGate>();
 const MIGRATION_LEDGER_TABLE = "_nakama_plugin_migrations";
-const DEFAULT_DRAIN_TIMEOUT_MS = 2000;
+const DEFAULT_DRAIN_TIMEOUT_MS = 6000;
 const DEFAULT_HOOK_TIMEOUT_MS = 2000;
 
 export function resetPluginAdmissionForTests(): void {
@@ -372,14 +365,16 @@ export class PluginService {
     }
 
     const { id, version } = inspected.manifest;
-    return withInstallLock(`${id}@${version}`, async () => {
-      await cleanupAbandonedStaging(this.configDir);
-      try {
-        return await this.publishInspectedPackage(inspected);
-      } finally {
+    return withInstallLock(`${id}@${version}`, async () =>
+      withStagingLock(async () => {
         await cleanupAbandonedStaging(this.configDir);
-      }
-    });
+        try {
+          return await this.publishInspectedPackage(inspected);
+        } finally {
+          await cleanupAbandonedStaging(this.configDir);
+        }
+      })
+    );
   }
 
   async invokePluginAction(
@@ -618,6 +613,9 @@ export class PluginService {
       gate,
       this.options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
     );
+    if (gate.active > 0) {
+      throw new PluginLifecycleError("in_use");
+    }
   }
 
   async addOrgPlugin(
@@ -737,6 +735,9 @@ export class PluginService {
           kind: "activate",
           orgId,
           pluginId,
+          signal: AbortSignal.timeout(
+            this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
+          ),
         });
       }
       await this.publishInstallation({
@@ -1602,7 +1603,7 @@ export class PluginService {
         )
       ))
     ) {
-      await snapshotPluginDatabase(
+      await vacuumPluginDatabaseInto(
         getOrgPluginDatabasePath(
           input.orgId,
           input.pluginId,
@@ -2054,6 +2055,11 @@ function extractZipBounded(archive: Uint8Array): Map<string, Uint8Array> {
       }
       chunks.push(chunk);
       if (final) {
+        if (files.size >= MAX_FILES) {
+          failure = new PluginPackageError("expansion_limit");
+          file.terminate();
+          return;
+        }
         normalizeArchivePath(file.name);
         files.set(file.name, concatChunks(chunks));
       }
@@ -2657,26 +2663,11 @@ function applyPluginMigrations(
   }
 }
 
-async function snapshotPluginDatabase(
-  sourcePath: string,
-  targetPath: string
-): Promise<void> {
-  const source = new Database(sourcePath);
-  try {
-    source.exec(`VACUUM INTO ${sqlQuote(targetPath)}`);
-  } catch {
-    source.close();
-    await copyFile(sourcePath, targetPath);
-    return;
-  }
-  source.close();
-}
-
 function sqlQuote(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function actorMayInvoke(
+export function actorMayInvoke(
   access: PluginActionAccess,
   role: PluginActorRole
 ): boolean {
@@ -2704,6 +2695,23 @@ function stripSpoofedInput(input: unknown): unknown {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+let stagingLock: Promise<unknown> = Promise.resolve();
+
+async function withStagingLock<T>(work: () => Promise<T>): Promise<T> {
+  const previous = stagingLock;
+  let releaseLock = () => {};
+  const current = new Promise<void>((resolveLock) => {
+    releaseLock = resolveLock;
+  });
+  stagingLock = previous.then(() => current);
+  await previous;
+  try {
+    return await work();
+  } finally {
+    releaseLock();
+  }
 }
 
 async function withInstallLock<T>(

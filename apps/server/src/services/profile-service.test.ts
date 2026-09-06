@@ -970,3 +970,81 @@ describe("profile service deleteProfile", () => {
     );
   });
 });
+
+describe("profile service plugin tool org scope", () => {
+  let tempConfigDir = "";
+
+  afterEach(async () => {
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { force: true, recursive: true });
+      tempConfigDir = "";
+    }
+  });
+
+  test("listTools omits another org's plugin-owned tools", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "Other org write",
+      handlerConfig: { actionKey: "write" },
+      handlerType: "plugin",
+      id: "tool_other",
+      name: "notes_write_other",
+      orgId: "org_other",
+      pluginId: "notes",
+      pluginKey: "write",
+      updatedAt: now,
+    });
+    await db.upsertTool({
+      createdAt: now,
+      description: "This org write",
+      handlerConfig: { actionKey: "write" },
+      handlerType: "plugin",
+      id: "tool_mine",
+      name: "notes_write_mine",
+      orgId: ORG_ID,
+      pluginId: "notes",
+      pluginKey: "write",
+      updatedAt: now,
+    });
+
+    const listed = await service.listTools(ORG_ID);
+    expect(listed.tools.some((tool) => tool.id === "tool_other")).toBe(false);
+    expect(listed.tools.some((tool) => tool.id === "tool_mine")).toBe(true);
+  });
+
+  test("assignTool rejects a plugin tool owned by another org", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-plugin-org-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const profile = await service.createProfile(ORG_ID, { name: "Scoped" });
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "Other org write",
+      handlerConfig: { actionKey: "write" },
+      handlerType: "plugin",
+      id: "tool_other",
+      name: "notes_write_other",
+      orgId: "org_other",
+      pluginId: "notes",
+      pluginKey: "write",
+      updatedAt: now,
+    });
+
+    await expect(
+      service.assignTool(ORG_ID, profile.profile.id, { toolId: "tool_other" })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await db.listToolsForProfile(profile.profile.id)).some(
+        (tool) => tool.id === "tool_other"
+      )
+    ).toBe(false);
+  });
+});

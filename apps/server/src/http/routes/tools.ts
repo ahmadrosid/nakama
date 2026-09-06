@@ -307,8 +307,10 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     })
   );
 
-  app.get("/v1/tools", async () =>
-    json<ListToolsResponse>(await agent.listTools())
+  app.get("/v1/tools", async (c) =>
+    json<ListToolsResponse>(
+      await agent.listTools(requireActiveOrgIdFromContext(c))
+    )
   );
 
   app.post("/v1/tools", async (c) => {
@@ -320,10 +322,6 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   app.get("/v1/tools/:toolId/source", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const toolId = decodeURIComponent(c.req.param("toolId"));
-    const existing = await agent.getTool(toolId);
-    if (existing.tool.pluginId) {
-      throw new NakamaApiError("Plugin-owned tools cannot be edited.", 409);
-    }
     return json<ToolSourceResponse>(await agent.getToolSource(toolId));
   });
 

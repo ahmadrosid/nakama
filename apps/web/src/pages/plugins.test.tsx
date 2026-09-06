@@ -26,7 +26,7 @@ import {
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { PluginPageState } from "@/pages/PluginPage";
-import { pluginRowIdentity } from "@/pages/PluginsPage";
+import { pluginRowActions, pluginRowIdentity } from "@/pages/PluginsPage";
 
 const enable = spyOn(client, "enableOrgPlugin");
 const installPackage = spyOn(client, "installPluginPackage");
@@ -180,6 +180,46 @@ describe("plugin management authority and mutations", () => {
     );
     expect(pluginRowIdentity(plugin({ pluginId: "zeta" }))).toBe("Notes zeta");
   });
+
+  test("update and uninstall only while disabled; purge only while retained", () => {
+    const enabled = plugin({
+      availableVersions: ["1.0.0", "1.1.0"],
+      lifecycleState: "enabled",
+      selectedVersion: "1.0.0",
+    });
+    expect(pluginRowActions(enabled)).toEqual({
+      disable: true,
+      enable: false,
+      purge: false,
+      uninstall: false,
+      update: false,
+    });
+
+    const disabled = plugin({
+      availableVersions: ["1.0.0", "1.1.0"],
+      lifecycleState: "disabled",
+      selectedVersion: "1.0.0",
+    });
+    expect(pluginRowActions(disabled)).toEqual({
+      disable: false,
+      enable: true,
+      purge: false,
+      uninstall: true,
+      update: true,
+    });
+
+    const retained = plugin({
+      databaseGeneration: "gen-1",
+      lifecycleState: "retained",
+    });
+    expect(pluginRowActions(retained)).toEqual({
+      disable: false,
+      enable: false,
+      purge: true,
+      uninstall: false,
+      update: false,
+    });
+  });
 });
 
 describe("plugin page states and iframe contract", () => {
@@ -304,9 +344,9 @@ describe("plugin page states and iframe contract", () => {
         })
       )
     );
-    expect(html).toContain("This plugin didn");
     expect(html).toContain("/system?tab=plugins");
     expect(html).not.toContain("<iframe");
+    expect(html.match(/<h1\b/g)).toBeNull();
   });
 
   test("viewer deep link points to chat, not management", () => {
@@ -321,9 +361,9 @@ describe("plugin page states and iframe contract", () => {
         })
       )
     );
-    expect(html).toContain("You can");
-    expect(html).toContain("open this plugin");
     expect(html).toContain("/chat");
+    expect(html).not.toContain("/system?tab=plugins");
+    expect(html).not.toContain("<iframe");
   });
 });
 

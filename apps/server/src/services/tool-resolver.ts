@@ -19,7 +19,7 @@ import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 import type { PluginService } from "./plugin-service";
-import { PluginInvocationError } from "./plugin-service";
+import { actorMayInvoke, PluginInvocationError } from "./plugin-service";
 
 export type ServerToolOverrides = {
   generateImage?: ToolDefinition | null;
@@ -28,6 +28,7 @@ export type ServerToolOverrides = {
 };
 
 export type ResolveStoredToolsOptions = {
+  actorRole?: PluginActorRole;
   pluginService?: PluginService | null;
   serverTools?: ServerToolOverrides;
   userConfig?: UserConfig | null;
@@ -88,7 +89,8 @@ export async function resolveToolsFromStorage(
       record,
       builtinMap,
       serverTools,
-      options.pluginService
+      options.pluginService,
+      options.actorRole
     );
 
     if (tool) {
@@ -103,7 +105,8 @@ async function resolveStoredTool(
   record: StoredToolRecord,
   builtinMap: Map<string, ToolDefinition>,
   serverTools: Map<string, ToolDefinition>,
-  pluginService?: PluginService | null
+  pluginService?: PluginService | null,
+  actorRole?: PluginActorRole
 ): Promise<ToolDefinition | null> {
   if (record.handlerType === "builtin") {
     return builtinMap.get(record.name) ?? null;
@@ -119,7 +122,7 @@ async function resolveStoredTool(
   }
 
   if (record.handlerType === "plugin") {
-    return loadPluginTool(record, pluginService);
+    return loadPluginTool(record, pluginService, actorRole);
   }
 
   const customHandler = getCustomToolHandler(record.handlerType);
@@ -174,7 +177,8 @@ function createCodingAgentAwareBashTool(
 
 async function loadPluginTool(
   record: StoredToolRecord,
-  pluginService?: PluginService | null
+  pluginService?: PluginService | null,
+  actorRole?: PluginActorRole
 ): Promise<ToolDefinition | null> {
   const pluginId = record.pluginId;
   const actionKey = record.pluginKey;
@@ -189,6 +193,9 @@ async function loadPluginTool(
     actionKey
   );
   if (!action) {
+    return null;
+  }
+  if (actorRole && !actorMayInvoke(action.access, actorRole)) {
     return null;
   }
 
@@ -224,9 +231,15 @@ async function loadPluginTool(
 export function pluginActorFromContext(
   context: ToolContext
 ): PluginExecutionActor {
+  const messagingChannel =
+    context.channel === "telegram" ||
+    context.channel === "whatsapp" ||
+    context.channel === "discord";
   return {
     id: context.userId?.trim() ?? "",
-    role: pluginActorRoleFromOrgRole(context.orgRole),
+    role: messagingChannel
+      ? "member"
+      : pluginActorRoleFromOrgRole(context.orgRole),
   };
 }
 
