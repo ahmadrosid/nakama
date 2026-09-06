@@ -79,6 +79,35 @@ async function runSkillCurator(
   }
 }
 
+function loadSkillsCuratorLatest(
+  orgId: string | undefined,
+  role: string | undefined,
+  loadLatest: (id: string) => Promise<void>
+) {
+  if (!orgId || role !== "admin") {
+    return;
+  }
+
+  void loadLatest(orgId).catch((error: unknown) => {
+    toast(formatError(error));
+  });
+}
+
+function loadAutomationPollInterval(
+  orgId: string | undefined,
+  isPlatformAdmin: boolean | undefined,
+  setPollIntervalMinutes: (value: number | null) => void
+) {
+  if (!orgId || isPlatformAdmin !== true) {
+    return;
+  }
+
+  void client
+    .getAutomationWorkerSettings()
+    .then((settings) => setPollIntervalMinutes(settings.pollIntervalMinutes))
+    .catch((error: unknown) => toast(formatError(error)));
+}
+
 function useSkillsCuratorOrgCard() {
   const { activeOrg, updateOrg, user } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -98,24 +127,15 @@ function useSkillsCuratorOrgCard() {
   }, []);
 
   useEffect(() => {
-    if (!orgId || activeOrg?.role !== "admin") {
-      return;
-    }
-
-    void loadLatest(orgId).catch((error: unknown) => {
-      toast(formatError(error));
-    });
+    loadSkillsCuratorLatest(orgId, activeOrg?.role, loadLatest);
   }, [activeOrg?.role, loadLatest, orgId]);
 
   useEffect(() => {
-    if (!orgId || user?.isPlatformAdmin !== true) {
-      return;
-    }
-
-    void client
-      .getAutomationWorkerSettings()
-      .then((settings) => setPollIntervalMinutes(settings.pollIntervalMinutes))
-      .catch((error: unknown) => toast(formatError(error)));
+    loadAutomationPollInterval(
+      orgId,
+      user?.isPlatformAdmin,
+      setPollIntervalMinutes
+    );
   }, [orgId, user?.isPlatformAdmin]);
 
   return {

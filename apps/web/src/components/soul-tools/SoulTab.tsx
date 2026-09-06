@@ -1,4 +1,4 @@
-import type { SoulStackFiles } from "@nakama/core/contract";
+import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -121,6 +121,49 @@ async function saveSoulFile({
   }
 }
 
+function applySoulQueryError(
+  queryError: unknown,
+  setError: (value: string | null) => void
+) {
+  if (queryError) {
+    setError(formatError(queryError));
+  }
+}
+
+function applySoulFileError(
+  fileError: unknown,
+  setDialogError: (value: string | null) => void
+) {
+  if (fileError) {
+    setDialogError(formatError(fileError));
+  }
+}
+
+function applySoulFileContent(
+  openFile: keyof SoulStackFiles | null,
+  dialogLoading: boolean,
+  fileContent: string,
+  setEditContent: (value: string) => void,
+  setSavedContent: (value: string) => void
+) {
+  if (openFile === null || dialogLoading) {
+    return;
+  }
+
+  setEditContent(fileContent);
+  setSavedContent(fileContent);
+}
+
+function presentSoulFileCount(
+  status: { files: SoulFileStatus } | null
+): number {
+  if (!status) {
+    return 0;
+  }
+
+  return SOUL_FILES.filter((file) => status.files[file.key]).length;
+}
+
 function renderSoulTabGate({
   embedded,
   profilesLength,
@@ -204,13 +247,7 @@ function useSoulTab(controlledProfileId?: string | null) {
   const isDirty = editContent !== savedContent;
   const isWritable = openFileMeta?.writable ?? false;
 
-  const presentCount = useMemo(() => {
-    if (!status) {
-      return 0;
-    }
-
-    return SOUL_FILES.filter((file) => status.files[file.key]).length;
-  }, [status]);
+  const presentCount = useMemo(() => presentSoulFileCount(status), [status]);
 
   const setProfileId = useCallback(
     (nextProfileId: string) => {
@@ -244,25 +281,21 @@ function useSoulTab(controlledProfileId?: string | null) {
   }, [embedded, profiles, searchParams]);
 
   useEffect(() => {
-    const queryError = profilesError ?? statusError;
-    if (queryError) {
-      setError(formatError(queryError));
-    }
+    applySoulQueryError(profilesError ?? statusError, setError);
   }, [profilesError, statusError]);
 
   useEffect(() => {
-    if (fileError) {
-      setDialogError(formatError(fileError));
-    }
+    applySoulFileError(fileError, setDialogError);
   }, [fileError]);
 
   useEffect(() => {
-    if (openFile === null || dialogLoading) {
-      return;
-    }
-
-    setEditContent(fileContent);
-    setSavedContent(fileContent);
+    applySoulFileContent(
+      openFile,
+      dialogLoading,
+      fileContent,
+      setEditContent,
+      setSavedContent
+    );
   }, [openFile, fileContent, dialogLoading]);
 
   return {
