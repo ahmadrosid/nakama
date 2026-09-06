@@ -171,9 +171,10 @@ export function WorkflowsPage() {
           }
         }}
         onProfileChange={(profileId) => {
-          if (selected) {
-            return handleProfileChange(selected, profileId);
+          if (!selected) {
+            return Promise.resolve();
           }
+          return handleProfileChange(selected, profileId);
         }}
         onRun={() => {
           if (selected) {
@@ -264,7 +265,7 @@ function WorkflowsPageLayout({
   isLoading: boolean;
   onCreate: () => void;
   onDelete: () => void;
-  onProfileChange: (profileId: string) => void | Promise<void>;
+  onProfileChange: (profileId: string) => Promise<void>;
   onRun: () => void;
   onSave: (input: {
     description: string;
