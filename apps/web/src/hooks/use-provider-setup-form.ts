@@ -2,6 +2,7 @@ import { resolveCloudflareAccountInput } from "@nakama/core/cloudflare-provider-
 import type {
   ChatgptOAuthCredentials,
   CreateProviderResponse,
+  CustomModelEntry,
   OllamaHostMode,
   ProviderModelOption,
   WireApi,
@@ -92,6 +93,7 @@ export function useProviderSetupForm(
   const [wireApi, setWireApi] = useState<WireApi>("chat");
   const [customModels, setCustomModels] = useState<ModelListRow[]>([]);
   const [extraModels, setExtraModels] = useState<ProviderModelOption[]>([]);
+  const [chatgptModels, setChatgptModels] = useState<ProviderModelOption[]>([]);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -136,6 +138,10 @@ export function useProviderSetupForm(
       return modelsFromShortlistRows(selectedProvider, shortlistModels);
     }
 
+    if (selectedProvider === "chatgpt" && chatgptModels.length > 0) {
+      return chatgptModels;
+    }
+
     const catalogModels = filterModelsByProvider(catalog, selectedProvider);
     const catalogIds = new Set(catalogModels.map((model) => model.id));
     const extras = extraModels.filter(
@@ -150,6 +156,7 @@ export function useProviderSetupForm(
     openRouterModels,
     shortlistModels,
     extraModels,
+    chatgptModels,
   ]);
 
   const ollamaApiKeyOptions = useMemo(
@@ -242,8 +249,27 @@ export function useProviderSetupForm(
         setBaseUrl("");
         setCustomModels([]);
       }
+
+      if (provider !== "chatgpt") {
+        setChatgptOAuth(null);
+        setChatgptModels([]);
+      }
     },
     [configuredTypes]
+  );
+
+  const handleChatgptModelsChange = useCallback(
+    (entries: CustomModelEntry[]) => {
+      setChatgptModels(
+        entries.map((entry, index) => ({
+          default: entry.default === true || index === 0,
+          id: entry.id,
+          name: entry.name?.trim() || entry.id,
+          provider: "chatgpt" as const,
+        }))
+      );
+    },
+    []
   );
 
   const selectOpenRouterModel = useCallback(
@@ -507,6 +533,7 @@ export function useProviderSetupForm(
         setApiKeyTouched(false);
         setShowApiKey(false);
         setChatgptOAuth(null);
+        setChatgptModels([]);
         setOpenRouterModels([]);
         setShortlistModels([]);
         setCustomModels([]);
@@ -557,6 +584,7 @@ export function useProviderSetupForm(
     handleApiKeyBlur,
     handleApiKeyChange,
     handleBrowseSelect,
+    handleChatgptModelsChange,
     handleOllamaHostModeChange,
     handleOpenRouterModelsChange,
     handleProviderSelect,

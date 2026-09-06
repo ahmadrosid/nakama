@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   CHATGPT_JWT_CLAIM_PATH,
+  parseChatgptCodexModelsPayload,
   readChatgptAccountIdFromAccessToken,
 } from "./oauth";
 
@@ -11,6 +12,23 @@ function buildJwt(payload: Record<string, unknown>): string {
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${header}.${body}.signature`;
 }
+
+describe("parseChatgptCodexModelsPayload", () => {
+  test("reads slug, display name, and skips unsupported models", () => {
+    expect(
+      parseChatgptCodexModelsPayload({
+        models: [
+          { display_name: "GPT-5.4", slug: "gpt-5.4" },
+          { id: "hidden", supported_in_api: false },
+          { display_name: "GPT-5.4 mini", slug: "gpt-5.4-mini" },
+        ],
+      })
+    ).toEqual([
+      { id: "gpt-5.4", name: "GPT-5.4" },
+      { id: "gpt-5.4-mini", name: "GPT-5.4 mini" },
+    ]);
+  });
+});
 
 describe("readChatgptAccountIdFromAccessToken", () => {
   test("reads chatgpt_account_id from access token payload", () => {

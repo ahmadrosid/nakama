@@ -1,4 +1,7 @@
-import type { ChatgptOAuthCredentials } from "@nakama/core/contract";
+import type {
+  ChatgptOAuthCredentials,
+  CustomModelEntry,
+} from "@nakama/core/contract";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
@@ -7,10 +10,13 @@ import { client, formatError } from "@/lib/client";
 
 type ChatgptSignInFlow = "idle" | "waiting" | "error";
 
+const CHATGPT_DEVICE_LOGIN_URL = "https://auth.openai.com/codex/device";
+
 interface ChatgptSignInPanelProps {
   density?: "default" | "compact";
   disabled?: boolean;
   oauth: ChatgptOAuthCredentials | null;
+  onModelsChange?: (models: CustomModelEntry[]) => void;
   onOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
 }
 
@@ -19,6 +25,7 @@ export function ChatgptSignInPanel({
   disabled = false,
   oauth,
   onOAuthChange,
+  onModelsChange,
 }: ChatgptSignInPanelProps) {
   const [flow, setFlow] = useState<ChatgptSignInFlow>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +49,10 @@ export function ChatgptSignInPanel({
     setError(null);
     setFlow("waiting");
     onOAuthChange(null);
+    onModelsChange?.([]);
     setUserCode(null);
     setVerificationUri(null);
+    window.open(CHATGPT_DEVICE_LOGIN_URL, "_blank", "noopener,noreferrer");
 
     try {
       const start = await client.startChatgptOAuthDevice();
@@ -62,6 +71,7 @@ export function ChatgptSignInPanel({
       }
 
       onOAuthChange(result.chatgptOAuth);
+      onModelsChange?.(result.models ?? []);
       setFlow("idle");
       setError(null);
     } catch (err) {
@@ -119,7 +129,7 @@ export function ChatgptSignInPanel({
             Open{" "}
             <a
               className="underline"
-              href={verificationUri ?? "https://auth.openai.com/codex/device"}
+              href={verificationUri ?? CHATGPT_DEVICE_LOGIN_URL}
               rel="noreferrer"
               target="_blank"
             >

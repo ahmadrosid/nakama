@@ -2241,6 +2241,7 @@ export interface ChatgptOAuthDeviceCompleteRequest {
 
 export interface ChatgptOAuthDeviceCompleteResponse {
   chatgptOAuth: ChatgptOAuthCredentials;
+  models?: CustomModelEntry[];
 }
 
 export type OllamaHostMode = "local" | "cloud";

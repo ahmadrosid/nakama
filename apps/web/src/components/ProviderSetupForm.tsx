@@ -406,6 +406,10 @@ function ProviderSetupExtraFields({
     );
   }
 
+  if (form.selectedProvider === "chatgpt" && !canConnect) {
+    return null;
+  }
+
   return <DefaultModelSelectField density={density} form={form} />;
 }
 
@@ -429,6 +433,7 @@ function ProviderSetupDetails({
           density={density}
           disabled={form.busy}
           oauth={form.chatgptOAuth}
+          onModelsChange={form.handleChatgptModelsChange}
           onOAuthChange={form.setChatgptOAuth}
         />
       ) : (

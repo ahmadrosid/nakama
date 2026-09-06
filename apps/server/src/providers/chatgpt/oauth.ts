@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ChatgptOAuthCredentials } from "@nakama/core";
+import type { ChatgptOAuthCredentials, CustomModelEntry } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import type { ChatgptOAuthDeviceStartResponse } from "@nakama/core/contract";
 
@@ -240,6 +240,82 @@ async function exchangeChatgptAuthorizationCode(
   });
 
   return readTokenResponse(response, "exchange");
+}
+
+export function parseChatgptCodexModelsPayload(
+  payload: unknown
+): CustomModelEntry[] {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const record = payload as { models?: unknown };
+  const rows = Array.isArray(record.models) ? record.models : [];
+  const unique = new Map<string, CustomModelEntry>();
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") {
+      continue;
+    }
+
+    const item = row as {
+      display_name?: unknown;
+      id?: unknown;
+      slug?: unknown;
+      supported_in_api?: unknown;
+    };
+
+    if (item.supported_in_api === false) {
+      continue;
+    }
+
+    const id =
+      (typeof item.slug === "string" && item.slug.trim()) ||
+      (typeof item.id === "string" && item.id.trim()) ||
+      "";
+
+    if (!id || unique.has(id)) {
+      continue;
+    }
+
+    unique.set(id, {
+      id,
+      name:
+        typeof item.display_name === "string" && item.display_name.trim()
+          ? item.display_name.trim()
+          : id,
+    });
+  }
+
+  return [...unique.values()];
+}
+
+export async function fetchChatgptCodexModels(
+  oauth: ChatgptOAuthCredentials
+): Promise<CustomModelEntry[]> {
+  try {
+    const response = await fetch(
+      `${CHATGPT_CODEX_BASE_URL}/models?client_version=1.0.0`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${oauth.accessToken}`,
+          "ChatGPT-Account-ID": oauth.accountId,
+          "OpenAI-Beta": "responses=v1",
+          originator: "nakama",
+          version: "1.0.0",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return parseChatgptCodexModelsPayload(await response.json());
+  } catch {
+    return [];
+  }
 }
 
 export async function refreshChatgptOAuthToken(

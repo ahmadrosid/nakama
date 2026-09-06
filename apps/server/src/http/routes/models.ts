@@ -44,12 +44,12 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
-import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   completeChatgptOAuthDeviceSession,
+  fetchChatgptCodexModels,
   startChatgptOAuthDeviceSession,
-} from "../../services/chatgpt-oauth-service";
-
+} from "../../providers/chatgpt/oauth";
+import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -1349,7 +1349,8 @@ export function registerModelRoutes(
 
     try {
       const chatgptOAuth = await completeChatgptOAuthDeviceSession(sessionId);
-      return json({ chatgptOAuth });
+      const models = await fetchChatgptCodexModels(chatgptOAuth);
+      return json({ chatgptOAuth, models });
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
