@@ -4,7 +4,6 @@ import {
   buildNewChatPath,
   CHAT_DRAFT_STORAGE_PREFIX,
   chatProfileIdFromPath,
-  clearLastChatModel,
   consumeStoredChatDraft,
   isChatSessionPath,
   isProfilesPath,
@@ -336,11 +335,8 @@ describe("chat history route helpers", () => {
       // Each profile keeps its own pick.
       expect(readLastChatModel("super")).toBe("anthropic-1::claude-opus-5");
 
-      // Empty writes never clobber a stored pick.
-      writeLastChatModel("default", "");
-      expect(readLastChatModel("default")).toBe("openai-1::gpt-5.6");
-
-      clearLastChatModel("default");
+      // A falsy selection forgets that profile's pick, and only that one.
+      writeLastChatModel("default", null);
       expect(readLastChatModel("default")).toBeNull();
       expect(readLastChatModel("super")).toBe("anthropic-1::claude-opus-5");
     } finally {

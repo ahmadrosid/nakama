@@ -394,14 +394,12 @@ export function sessionStorageKey(profileId: string): string {
   return `nakama:session:${profileId}`;
 }
 
-export const LAST_CHAT_MODEL_STORAGE_PREFIX = "nakama:last-model:";
-
 export function lastChatModelStorageKey(profileId: string): string {
-  return `${LAST_CHAT_MODEL_STORAGE_PREFIX}${profileId}`;
+  return `nakama:last-model:${profileId}`;
 }
 
 /**
- * The model the user last picked by hand, per profile — a new chat resumes it
+ * The model the user last picked by hand, per profile. A new chat resumes it
  * instead of snapping back to the profile default.
  */
 export function readLastChatModel(profileId: string): string | null {
@@ -414,20 +412,22 @@ export function readLastChatModel(profileId: string): string | null {
   );
 }
 
-export function writeLastChatModel(profileId: string, selection: string): void {
-  if (typeof localStorage === "undefined" || !(profileId && selection)) {
-    return;
-  }
-
-  localStorage.setItem(lastChatModelStorageKey(profileId), selection);
-}
-
-export function clearLastChatModel(profileId: string): void {
+/** A falsy selection forgets the pick. */
+export function writeLastChatModel(
+  profileId: string,
+  selection: string | null
+): void {
   if (typeof localStorage === "undefined" || !profileId) {
     return;
   }
 
-  localStorage.removeItem(lastChatModelStorageKey(profileId));
+  const key = lastChatModelStorageKey(profileId);
+
+  if (selection) {
+    localStorage.setItem(key, selection);
+  } else {
+    localStorage.removeItem(key);
+  }
 }
 
 /**

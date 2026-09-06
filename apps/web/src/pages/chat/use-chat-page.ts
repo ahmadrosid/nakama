@@ -43,7 +43,6 @@ import {
   type ChatListItem,
   chatMessagesToListItems,
   clearFailedChatTurn,
-  clearLastChatModel,
   consumeStoredChatDraft,
   isReadOnlySessionChannel,
   parseChatRouteParams,
@@ -330,11 +329,7 @@ export function useChatPage() {
             return;
           }
           setSessionModel(previousModel);
-          if (previousStoredModel) {
-            writeLastChatModel(profileId, previousStoredModel);
-          } else {
-            clearLastChatModel(profileId);
-          }
+          writeLastChatModel(profileId, previousStoredModel);
           setError(formatError(err));
         });
     },

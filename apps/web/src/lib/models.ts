@@ -783,19 +783,13 @@ export function knownModelSelection(
 
   const decoded = decodeModelSelection(selection);
   const modelId = decoded?.modelId ?? selection;
+  const pinnedProvider =
+    decoded && decoded.providerId !== "__unknown__" ? decoded.providerId : null;
 
-  if (decoded && decoded.providerId !== "__unknown__") {
-    const group = groups.find(
-      (entry) => entry.providerId === decoded.providerId
-    );
-
-    return group?.models.some((model) => model.id === modelId)
-      ? encodeModelSelection(group.providerId, modelId)
-      : null;
-  }
-
-  const match = groups.find((group) =>
-    group.models.some((model) => model.id === modelId)
+  const match = groups.find(
+    (group) =>
+      (!pinnedProvider || group.providerId === pinnedProvider) &&
+      group.models.some((model) => model.id === modelId)
   );
 
   return match ? encodeModelSelection(match.providerId, modelId) : null;
