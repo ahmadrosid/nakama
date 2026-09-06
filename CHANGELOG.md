@@ -9,7 +9,35 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
-## [0.4.7] - 2026-08-30
+## [0.4.8] - 2026-09-06
+
+### Added
+
+- User-triggered workflow recipes with receipt-bound summarize ([#826])
+- Workspace worker polling interval is configurable ([#788])
+- Settings and the sidebar show the installed Nakama version
+- `web_search` can run through Exa or Firecrawl instead of the hosted provider
+
+### Changed
+
+- Automations Tasks board and API are gone; Automations is the work page ([#846])
+- Web search settings offer Exa and Firecrawl only — no free-form endpoint ([#845])
+- Shared worker boot and unused wrappers trimmed ([#848], [#849], [#850], [#851], [#852])
+
+### Fixed
+
+- Setup claims the first admin in one transaction; import archives are size-capped ([#819], [#820])
+- Origin, Composio OAuth hosts, and `web_fetch` addresses stay on allowlists ([#813], [#821], [#822])
+- Tool delete unassigns profiles in the same transaction ([#804])
+- Discord stream cleanup, Telegram `$` replacements, and WhatsApp outbound port/token survive pairing ([#809], [#824])
+- Knowledge preview stays in the attachment panel; chat actions stay visible on touch ([#814], [#815], [#855], [#859])
+- Route errors show the runtime message; data URLs with parameters still parse ([#854], [#856], [#858], [#860])
+- CLI retained transcripts cap at 1000 messages ([#853])
+- Backup-import preview cleanup is tied to generation ([#808])
+- Legacy `users.user_context` is no longer read ([#816])
+- Skill-suggestion queries use one prepared statement ([#806], [#811])
+
+
 
 ### Added
 
@@ -659,7 +687,8 @@ First tagged release. The baseline it established:
 - Export and import for data portability
 - Docker image published from GitHub Actions, and a VitePress documentation site
 
-[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.7...main
+[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.8...main
+[0.4.8]: https://github.com/ahmadrosid/nakama/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/ahmadrosid/nakama/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/ahmadrosid/nakama/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/ahmadrosid/nakama/compare/v0.4.4...v0.4.5
@@ -917,3 +946,33 @@ First tagged release. The baseline it established:
 [#782]: https://github.com/ahmadrosid/nakama/pull/782
 [#784]: https://github.com/ahmadrosid/nakama/pull/784
 [#785]: https://github.com/ahmadrosid/nakama/pull/785
+[#788]: https://github.com/ahmadrosid/nakama/pull/788
+[#804]: https://github.com/ahmadrosid/nakama/pull/804
+[#806]: https://github.com/ahmadrosid/nakama/pull/806
+[#808]: https://github.com/ahmadrosid/nakama/pull/808
+[#809]: https://github.com/ahmadrosid/nakama/pull/809
+[#811]: https://github.com/ahmadrosid/nakama/pull/811
+[#813]: https://github.com/ahmadrosid/nakama/pull/813
+[#814]: https://github.com/ahmadrosid/nakama/pull/814
+[#815]: https://github.com/ahmadrosid/nakama/pull/815
+[#816]: https://github.com/ahmadrosid/nakama/pull/816
+[#819]: https://github.com/ahmadrosid/nakama/pull/819
+[#820]: https://github.com/ahmadrosid/nakama/pull/820
+[#821]: https://github.com/ahmadrosid/nakama/pull/821
+[#822]: https://github.com/ahmadrosid/nakama/pull/822
+[#824]: https://github.com/ahmadrosid/nakama/pull/824
+[#826]: https://github.com/ahmadrosid/nakama/pull/826
+[#845]: https://github.com/ahmadrosid/nakama/pull/845
+[#846]: https://github.com/ahmadrosid/nakama/pull/846
+[#848]: https://github.com/ahmadrosid/nakama/pull/848
+[#849]: https://github.com/ahmadrosid/nakama/pull/849
+[#850]: https://github.com/ahmadrosid/nakama/pull/850
+[#851]: https://github.com/ahmadrosid/nakama/pull/851
+[#852]: https://github.com/ahmadrosid/nakama/pull/852
+[#853]: https://github.com/ahmadrosid/nakama/pull/853
+[#854]: https://github.com/ahmadrosid/nakama/pull/854
+[#855]: https://github.com/ahmadrosid/nakama/pull/855
+[#856]: https://github.com/ahmadrosid/nakama/pull/856
+[#858]: https://github.com/ahmadrosid/nakama/pull/858
+[#859]: https://github.com/ahmadrosid/nakama/pull/859
+[#860]: https://github.com/ahmadrosid/nakama/pull/860

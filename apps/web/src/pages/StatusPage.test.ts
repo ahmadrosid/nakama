@@ -47,7 +47,7 @@ const healthyStatus: SystemStatusResponse = {
     ok: true,
     providerConfigured: true,
     userConfigured: true,
-    version: "0.4.6",
+    version: "0.4.8",
   },
   telegramWorker: { configured: true, ok: true, paired: true, running: true },
   whatsappWorker: {
