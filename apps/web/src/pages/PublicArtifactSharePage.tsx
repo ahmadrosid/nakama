@@ -18,6 +18,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
+import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
 import { cn } from "@/lib/utils";
 
 function publicShareError(token: string, loadError: unknown): string | null {
@@ -285,7 +286,7 @@ export function PublicArtifactSharePage() {
     };
   }, []);
 
-  const downloadUrl = `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`;
+  const downloadUrl = buildPublicArtifactShareUrl(client.baseUrl, token);
   const fillViewport = preview.isHtml || preview.isSpreadsheet;
 
   return (
