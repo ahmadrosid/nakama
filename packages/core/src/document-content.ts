@@ -62,6 +62,12 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     DOCX_MEDIA_TYPE,
   ]),
   cerebras: new Set<string>(),
+  chatgpt: new Set([
+    "application/pdf",
+    "text/plain",
+    "text/csv",
+    DOCX_MEDIA_TYPE,
+  ]),
   cloudflare: new Set<string>(),
   deepseek: new Set<string>(),
   fireworks: new Set<string>(),

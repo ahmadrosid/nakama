@@ -85,6 +85,8 @@ export function apiKeyEnvVarForProvider(
       return "OPENCODE_GO_API_KEY";
     case "cloudflare":
       return "CLOUDFLARE_API_KEY";
+    case "chatgpt":
+      return null;
     case "minimax":
       return "MINIMAX_API_KEY";
     case "minimax_cn":
