@@ -266,6 +266,7 @@ export async function writeWhatsAppConfigIni(
     pairingCode?: string | null;
     pairedJid?: string | null;
     allowedPhones?: string[];
+    requireGroupMention?: boolean;
   }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "whatsapp");
@@ -287,6 +288,10 @@ export async function writeWhatsAppConfigIni(
 
   if (config.allowedPhones?.length) {
     lines.push(`allowed_phones=${config.allowedPhones.join(",")}`);
+  }
+
+  if (config.requireGroupMention === false) {
+    lines.push("require_group_mention=false");
   }
 
   lines.push("");

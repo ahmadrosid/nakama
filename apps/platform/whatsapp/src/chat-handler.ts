@@ -19,7 +19,10 @@ import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { SendMessageInput } from "@nakama/core/contract";
 import { pickProfileForOrg } from "@nakama/core/profiles";
-import { normalizePairingCode } from "@nakama/core/whatsapp-config";
+import {
+  DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION,
+  normalizePairingCode,
+} from "@nakama/core/whatsapp-config";
 import type { WASocket } from "@whiskeysockets/baileys";
 import type { WhatsAppAuthStore } from "./auth-store";
 import {
@@ -34,11 +37,16 @@ import {
 } from "./format";
 import {
   explainGroupMessageHandling,
+  extraJidsFromGroupParticipants,
   isWhatsAppBotAddress,
   resolveChannelOrgKey,
   stripWhatsAppBotMention,
 } from "./group-message";
-import type { WhatsAppInboundChat } from "./inbound-message";
+import {
+  isWhatsAppOutboundEcho,
+  rememberWhatsAppOutbound,
+  type WhatsAppInboundChat,
+} from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
 import { WhatsAppTodoStatusMessage } from "./todo-status-message";
 
@@ -81,14 +89,38 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     const trimmed = text.trim();
+    if (
+      isWhatsAppOutboundEcho({
+        fromMe: inbound.fromMe,
+        id: inbound.messageId,
+        jid,
+        text: trimmed,
+      })
+    ) {
+      console.log(
+        [
+          "Ignored WhatsApp outbound echo",
+          `jid=${maskWhatsAppJid(jid)}`,
+          `fromMe=${inbound.fromMe ? "yes" : "no"}`,
+          `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
+        ].join(" ")
+      );
+      return;
+    }
+
     const isGroup = inbound.isGroup;
     const conversationKey = jid;
     const channelOrgKey = resolveChannelOrgKey(jid, isGroup);
+    await authStore.reload();
+    const requireGroupMention =
+      authStore.getConfig()?.requireGroupMention ??
+      DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION;
     const groupDecision = isGroup
       ? explainGroupMessageHandling({
           me: inbound.me,
           mentionedJids: inbound.mentionedJids,
           quotedParticipant: inbound.quotedParticipant,
+          requireMention: requireGroupMention,
           text: trimmed,
         })
       : null;
@@ -116,14 +148,24 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     await withChatLock(conversationKey, async () => {
       await authStore.reload();
-      const senderJids = inbound.senderJids;
+      const senderJids = [...inbound.senderJids];
       const pairingText = isGroup ? stripWhatsAppBotMention(trimmed) : trimmed;
-      const authorized =
+      let authorized =
         inbound.fromMe ||
         authStore.isAuthorized(senderJids) ||
         senderJids.some((senderJid) =>
           isWhatsAppBotAddress(senderJid, inbound.me)
         );
+
+      if (!authorized && isGroup) {
+        const resolvedSenderJids = await resolveGroupSenderJids(
+          jid,
+          senderJids
+        );
+        senderJids.push(...resolvedSenderJids);
+        authorized =
+          authStore.isAuthorized(senderJids) || requireGroupMention === false;
+      }
 
       if (authorized) {
         await authStore.rememberIdentities(senderJids);
@@ -131,12 +173,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (!authorized) {
         if (!authStore.getConfig()?.pairingCode) {
+          console.log(
+            [
+              "Ignored WhatsApp message",
+              "reason=unauthorized",
+              `jid=${maskWhatsAppJid(jid)}`,
+              `sender=${maskWhatsAppJid(inbound.senderJid)}`,
+              `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
+            ].join(" ")
+          );
           return;
         }
 
         if (isGroup) {
           if (looksLikePairingCodeAttempt(pairingText)) {
             await handlePairing(inbound.senderJid, pairingText);
+            return;
+          }
+
+          if (groupDecision?.reason === "open-listen") {
             return;
           }
 
@@ -580,7 +635,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     for (const chunk of splitWhatsAppMessage(prepared)) {
-      await socket.sendMessage(jid, { text: chunk });
+      rememberWhatsAppOutbound({ jid, text: chunk });
+      const sent = await socket.sendMessage(jid, { text: chunk });
+      rememberWhatsAppOutbound({
+        id: readSentMessageId(sent),
+        jid,
+        text: chunk,
+      });
     }
   }
 
@@ -599,6 +660,35 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
     await sessionStore.save();
   }
+
+  async function resolveGroupSenderJids(
+    groupJid: string,
+    senderJids: readonly string[]
+  ): Promise<string[]> {
+    const socket = getSocket();
+    if (!socket || typeof socket.groupMetadata !== "function") {
+      return [];
+    }
+
+    try {
+      const metadata = await socket.groupMetadata(groupJid);
+      return extraJidsFromGroupParticipants(
+        metadata.participants ?? [],
+        senderJids
+      );
+    } catch {
+      return [];
+    }
+  }
+}
+
+function readSentMessageId(sent: unknown): string | null {
+  if (!sent || typeof sent !== "object") {
+    return null;
+  }
+
+  const id = (sent as { key?: { id?: string | null } }).key?.id;
+  return id?.trim() || null;
 }
 
 function normalizeInboundChat(
@@ -611,6 +701,7 @@ function normalizeInboundChat(
     jid: data.jid,
     me: data.me,
     mentionedJids: data.mentionedJids ?? [],
+    messageId: data.messageId ?? null,
     quotedParticipant: data.quotedParticipant ?? null,
     quotedText: data.quotedText ?? null,
     senderJid: data.senderJid ?? data.jid,

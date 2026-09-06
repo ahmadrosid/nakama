@@ -1570,12 +1570,14 @@ export interface WhatsAppSettingsResponse {
   pairingCode: string | null;
   phoneNumberMasked: string | null;
   profileId: string;
+  requireGroupMention: boolean;
 }
 
 export interface UpdateWhatsAppSettingsRequest {
   allowedPhones?: string;
   phoneNumber?: string;
   profileId?: string;
+  requireGroupMention?: boolean;
 }
 
 export interface TimezoneCatalogEntry {

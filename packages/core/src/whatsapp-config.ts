@@ -22,6 +22,8 @@ export const generatePairingCode = generateHandshakeCode;
 export const normalizePairingCode = normalizeHandshakeInput;
 
 export const DEFAULT_WHATSAPP_PROFILE_ID = "default";
+export const DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION = true;
+
 export interface WhatsAppConfigFile {
   allowedPhones: string[];
   outboundPort?: string | null;
@@ -31,6 +33,7 @@ export interface WhatsAppConfigFile {
   pairingCode: string | null;
   phoneNumber: string;
   profileId: string;
+  requireGroupMention: boolean;
 }
 
 export interface WhatsAppSettingsPublic {
@@ -40,12 +43,14 @@ export interface WhatsAppSettingsPublic {
   pairingCode: string | null;
   phoneNumberMasked: string | null;
   profileId: string;
+  requireGroupMention: boolean;
 }
 
 export interface UpdateWhatsAppSettingsInput {
   allowedPhones?: string;
   phoneNumber?: string;
   profileId?: string;
+  requireGroupMention?: boolean;
 }
 
 export function getWhatsAppConfigDir(): string {
@@ -98,7 +103,7 @@ function whatsAppJidServer(jid: string): string {
 function normalizeWhatsAppUserJid(jid: string): string {
   const server = whatsAppJidServer(jid);
 
-  if (server !== "s.whatsapp.net") {
+  if (server !== "s.whatsapp.net" && server !== "lid") {
     return jid.trim();
   }
 
@@ -115,8 +120,9 @@ function isSameWhatsAppUserJid(left: string, right: string): boolean {
   }
 
   if (
-    whatsAppJidServer(left) !== "s.whatsapp.net" ||
-    whatsAppJidServer(right) !== "s.whatsapp.net"
+    whatsAppJidServer(left) !== whatsAppJidServer(right) ||
+    (whatsAppJidServer(left) !== "s.whatsapp.net" &&
+      whatsAppJidServer(left) !== "lid")
   ) {
     return false;
   }
@@ -224,6 +230,10 @@ export async function loadWhatsAppConfigFile(): Promise<WhatsAppConfigFile | nul
     pairingCode,
     phoneNumber,
     profileId,
+    requireGroupMention: parseIniBoolean(
+      values.require_group_mention,
+      DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION
+    ),
   };
 }
 
@@ -260,6 +270,7 @@ export function toWhatsAppSettingsPublic(
       pairingCode: null,
       phoneNumberMasked: null,
       profileId: DEFAULT_WHATSAPP_PROFILE_ID,
+      requireGroupMention: DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION,
     };
   }
 
@@ -272,6 +283,7 @@ export function toWhatsAppSettingsPublic(
       maskPhoneNumber(file.phoneNumber) ??
       maskPhoneNumberFromJid(file.pairedJid),
     profileId: file.profileId,
+    requireGroupMention: file.requireGroupMention,
   };
 }
 
@@ -296,6 +308,7 @@ async function writeWhatsAppConfigFile(
       : []),
     ...(config.outboundPort ? [`outbound_port=${config.outboundPort}`] : []),
     ...(config.outboundToken ? [`outbound_token=${config.outboundToken}`] : []),
+    `require_group_mention=${config.requireGroupMention ? "true" : "false"}`,
     "",
   ];
 
@@ -351,7 +364,17 @@ function buildSavedWhatsAppConfig(
     pairingCode: resolvePairingCode(existing, pairedJid),
     phoneNumber,
     profileId: resolveProfileId(input, existing),
+    requireGroupMention: resolveRequireGroupMention(input, existing),
   };
+}
+
+function resolveRequireGroupMention(
+  input: UpdateWhatsAppSettingsInput,
+  existing: WhatsAppConfigFile | null
+): boolean {
+  return input.requireGroupMention === undefined
+    ? (existing?.requireGroupMention ?? DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION)
+    : input.requireGroupMention;
 }
 
 function resolveAllowedPhones(
@@ -542,5 +565,38 @@ export function resolveWhatsAppConfigFromSources(options: {
       env.NAKAMA_WHATSAPP_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_WHATSAPP_PROFILE_ID,
+    requireGroupMention:
+      file?.requireGroupMention ?? DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION,
   };
+}
+
+function parseIniBoolean(
+  value: string | undefined,
+  fallback: boolean
+): boolean {
+  const trimmed = value?.trim().toLowerCase();
+
+  if (!trimmed) {
+    return fallback;
+  }
+
+  if (
+    trimmed === "true" ||
+    trimmed === "1" ||
+    trimmed === "yes" ||
+    trimmed === "on"
+  ) {
+    return true;
+  }
+
+  if (
+    trimmed === "false" ||
+    trimmed === "0" ||
+    trimmed === "no" ||
+    trimmed === "off"
+  ) {
+    return false;
+  }
+
+  return fallback;
 }

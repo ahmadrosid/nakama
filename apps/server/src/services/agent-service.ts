@@ -1313,6 +1313,9 @@ export class AgentService {
         ? {}
         : { phoneNumber: input.phoneNumber.trim() }),
       ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      ...(input.requireGroupMention === undefined
+        ? {}
+        : { requireGroupMention: input.requireGroupMention }),
     });
   }
 

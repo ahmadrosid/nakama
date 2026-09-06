@@ -56,6 +56,7 @@ export function WhatsAppSettingsCard({
       onProfileChange={card.onProfileChange}
       onReconnect={card.onReconnect}
       onRegeneratePairingCode={card.onRegeneratePairingCode}
+      onRequireGroupMentionChange={card.onRequireGroupMentionChange}
       onSave={card.onSave}
       paired={card.paired}
       pairingCode={card.pairingCode}
@@ -64,6 +65,7 @@ export function WhatsAppSettingsCard({
       qrCode={card.qrCode}
       reconnectPending={card.reconnectPending}
       regeneratePending={card.regeneratePending}
+      requireGroupMention={card.requireGroupMention}
       running={card.running}
       savePending={card.savePending}
       showQr={card.showQr}

@@ -197,9 +197,11 @@ export function useWhatsAppSettingsCard({
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [allowedPhones, setAllowedPhones] = useState<string[]>([]);
   const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
+  const [requireGroupMention, setRequireGroupMention] = useState(true);
 
   const settingsProfileId = settings?.profileId;
   const settingsAllowedPhones = settings?.allowedPhones;
+  const settingsRequireGroupMention = settings?.requireGroupMention;
 
   useEffect(() => {
     if (settingsProfileId !== undefined) {
@@ -212,6 +214,12 @@ export function useWhatsAppSettingsCard({
       setAllowedPhones(settingsAllowedPhones);
     }
   }, [settingsAllowedPhones]);
+
+  useEffect(() => {
+    if (settingsRequireGroupMention !== undefined) {
+      setRequireGroupMention(settingsRequireGroupMention);
+    }
+  }, [settingsRequireGroupMention]);
 
   const configured = settings?.configured === true;
   const worker = status?.whatsappWorker;
@@ -307,7 +315,10 @@ export function useWhatsAppSettingsCard({
     setFormError(null);
     setHint(null);
     saveMutation.mutate(
-      { profileId: profileId.trim() || "default" },
+      {
+        profileId: profileId.trim() || "default",
+        requireGroupMention,
+      },
       {
         onError: (error) => {
           setFormError(formatError(error));
@@ -369,6 +380,29 @@ export function useWhatsAppSettingsCard({
     );
   }
 
+  function handleRequireGroupMentionChange(next: boolean) {
+    setRequireGroupMention(next);
+    setHint(null);
+    setFormError(null);
+
+    if (!configured) {
+      return;
+    }
+
+    saveMutation.mutate(
+      { requireGroupMention: next },
+      {
+        onError: (error) => {
+          setRequireGroupMention(!next);
+          setFormError(formatError(error));
+        },
+        onSuccess: () => {
+          setHint("Group mention setting saved.");
+        },
+      }
+    );
+  }
+
   return {
     actionLabel: submitLabel ?? (configured ? "Save" : "Enable WhatsApp"),
     allowedPhoneSummary: formatAllowedPhoneSummary(allowedPhones.length),
@@ -395,6 +429,7 @@ export function useWhatsAppSettingsCard({
     onProfileChange: handleProfileChange,
     onReconnect: handleReconnect,
     onRegeneratePairingCode: handleRegeneratePairingCode,
+    onRequireGroupMentionChange: handleRequireGroupMentionChange,
     onSave: handleSave,
     onSavedAllowedPhones: () => {
       setHint("Allowed numbers saved.");
@@ -407,6 +442,7 @@ export function useWhatsAppSettingsCard({
     qrCode,
     reconnectPending: reconnectMutation.isPending,
     regeneratePending: regenerateMutation.isPending,
+    requireGroupMention,
     running,
     savePending: saveMutation.isPending,
     showQr: linking.showQr,

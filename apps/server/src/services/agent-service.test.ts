@@ -1131,6 +1131,25 @@ describe("AgentService WhatsApp allowed phones", () => {
       "6281352311912",
     ]);
   });
+
+  test("writes requireGroupMention to WhatsApp config", async () => {
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const saved = await service.setWhatsAppSettings({
+      profileId: "default",
+      requireGroupMention: false,
+    });
+
+    expect(saved.requireGroupMention).toBe(false);
+    expect((await service.getWhatsAppSettings()).requireGroupMention).toBe(
+      false
+    );
+    expect((await loadWhatsAppConfigFile())?.requireGroupMention).toBe(false);
+  });
 });
 
 async function captureError(
