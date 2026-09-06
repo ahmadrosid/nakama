@@ -339,7 +339,9 @@ export function stripImagesForCompaction(
 }
 
 export function parseDataUrl(dataUrl: string): ImageAttachment | null {
-  const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl.trim());
+  const match = /^data:(?:([^;,]+))?(?:;[^,]*)*;base64,(.+)$/s.exec(
+    dataUrl.trim()
+  );
 
   if (!match) {
     return null;
@@ -347,7 +349,7 @@ export function parseDataUrl(dataUrl: string): ImageAttachment | null {
 
   return {
     data: match[2]!,
-    mediaType: match[1]!,
+    mediaType: match[1] ?? "image/png",
   };
 }
 
@@ -355,13 +357,15 @@ export function parseDocumentDataUrl(
   dataUrl: string,
   filename: string
 ): DocumentAttachment | null {
-  const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl.trim());
+  const match = /^data:(?:([^;,]+))?(?:;[^,]*)*;base64,(.+)$/s.exec(
+    dataUrl.trim()
+  );
 
   if (!match) {
     return null;
   }
 
-  const mediaType = normalizeDocumentMediaType(match[1]!, filename);
+  const mediaType = normalizeDocumentMediaType(match[1] ?? "", filename);
 
   return {
     data: match[2]!,
