@@ -154,7 +154,8 @@ export function modelExistsOnInstance(
     instance.type === "openai" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
-    instance.type === "deepseek"
+    instance.type === "deepseek" ||
+    instance.type === "mistral"
   ) {
     if (instance.customModels?.length) {
       return findCustomModel(instance.customModels, trimmed) !== undefined;
@@ -352,7 +353,8 @@ export function applyProviderInstanceUpdate(
       instance.type === "xai_oauth" ||
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
-      instance.type === "deepseek"
+      instance.type === "deepseek" ||
+      instance.type === "mistral"
     ) {
       next.customModels = validateCustomModels(request.customModels);
     }

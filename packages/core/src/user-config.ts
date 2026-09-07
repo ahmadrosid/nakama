@@ -90,6 +90,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   gemini: "Gemini",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
+  mistral: "Mistral",
   ollama: "Ollama",
   openai: "OpenAI",
   openai_compatible: "Custom",

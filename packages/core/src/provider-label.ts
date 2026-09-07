@@ -13,6 +13,7 @@ const BUILTIN_LABELS: Record<
   gemini: "Gemini",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
+  mistral: "Mistral",
   ollama: "Ollama",
   openai: "OpenAI",
   opencode_go: "OpenCode Go",

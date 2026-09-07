@@ -191,6 +191,68 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
   },
   {
+    contextWindow: 262_144,
+    default: true,
+    id: "mistral-small-2603",
+    inputPerMillionUsd: 0.15,
+    maxOutputTokens: 65_536,
+    name: "Mistral Small 4",
+    outputPerMillionUsd: 0.6,
+    provider: "mistral",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 262_144,
+    id: "mistral-medium-latest",
+    inputPerMillionUsd: 1.5,
+    maxOutputTokens: 65_536,
+    name: "Mistral Medium 3.5",
+    outputPerMillionUsd: 7.5,
+    provider: "mistral",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 262_144,
+    id: "mistral-large-2512",
+    inputPerMillionUsd: 0.5,
+    maxOutputTokens: 65_536,
+    name: "Mistral Large 3",
+    outputPerMillionUsd: 1.5,
+    provider: "mistral",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 131_072,
+    id: "ministral-3b-2512",
+    inputPerMillionUsd: 0.1,
+    maxOutputTokens: 65_536,
+    name: "Ministral 3 3B",
+    outputPerMillionUsd: 0.1,
+    provider: "mistral",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 262_144,
+    id: "ministral-8b-2512",
+    inputPerMillionUsd: 0.15,
+    maxOutputTokens: 65_536,
+    name: "Ministral 3 8B",
+    outputPerMillionUsd: 0.15,
+    provider: "mistral",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 262_144,
+    id: "ministral-14b-2512",
+    inputPerMillionUsd: 0.2,
+    maxOutputTokens: 65_536,
+    name: "Ministral 3 14B",
+    outputPerMillionUsd: 0.2,
+    provider: "mistral",
+    supportsVision: true,
+  },
+  {
     contextWindow: 131_072,
     default: true,
     id: "gpt-oss-120b",
@@ -610,6 +672,7 @@ export function getDefaultModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "mistral" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -626,15 +689,17 @@ export function getDefaultModel(
           ? "gemini-2.5-flash"
           : provider === "deepseek"
             ? "deepseek-v4-flash"
-            : provider === "cerebras"
-              ? "gpt-oss-120b"
-              : provider === "fireworks"
-                ? "accounts/fireworks/models/kimi-k2p6"
-                : provider === "opencode_go"
-                  ? "opencode-go/kimi-k2.7-code"
-                  : provider === "cloudflare"
-                    ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                    : "gpt-5.4";
+            : provider === "mistral"
+              ? "mistral-small-2603"
+              : provider === "cerebras"
+                ? "gpt-oss-120b"
+                : provider === "fireworks"
+                  ? "accounts/fireworks/models/kimi-k2p6"
+                  : provider === "opencode_go"
+                    ? "opencode-go/kimi-k2.7-code"
+                    : provider === "cloudflare"
+                      ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                      : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -698,6 +763,7 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "mistral" ||
       provider === "cerebras" ||
       provider === "fireworks" ||
       provider === "opencode_go") &&

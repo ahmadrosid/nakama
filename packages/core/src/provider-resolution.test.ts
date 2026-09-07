@@ -16,6 +16,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("mistral")).toBe("mistral");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
     expect(parseProviderName("minimax")).toBe("minimax");
@@ -34,6 +35,10 @@ describe("parseProviderName", () => {
 describe("apiKeyEnvVarForProvider", () => {
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
+  });
+
+  test("mistral uses MISTRAL_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
   });
 });
 
@@ -94,6 +99,18 @@ describe("resolveProvider deepseek", () => {
     });
 
     expect(provider).toBeNull();
+  });
+});
+
+describe("resolveProvider mistral", () => {
+  test("auto-resolves Mistral when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        MISTRAL_API_KEY: "ms-test",
+      },
+    });
+
+    expect(provider).toBe("mistral");
   });
 });
 

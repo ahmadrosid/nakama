@@ -87,6 +87,28 @@ describe("resolveModel", () => {
     expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
   });
 
+  test("resolves catalog models for Mistral", () => {
+    expect(resolveModel("mistral", "mistral-large-2512")).toBe(
+      "mistral-large-2512"
+    );
+    expect(getDefaultModel("mistral")).toBe("mistral-small-2603");
+    expect(getModelById("mistral-small-2603")?.supportsThinking).toBe(true);
+    expect(getModelById("mistral-small-2603")?.supportsVision).toBe(true);
+    expect(getModelById("ministral-3b-2512")?.supportsVision).toBe(true);
+  });
+
+  test("uses mistral custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "mistral-small-2603", name: "Mistral Small 4" },
+    ];
+    expect(resolveModel("mistral", "mistral-small-2603", customModels)).toBe(
+      "mistral-small-2603"
+    );
+    expect(resolveModel("mistral", "unknown-model", customModels)).toBe(
+      "mistral-small-2603"
+    );
+  });
+
   test("resolves catalog models for Cerebras", () => {
     expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
     expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
@@ -223,5 +245,11 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("opencode-go/kimi-k2.7-code", "opencode_go")
     ).toBe(false);
+  });
+
+  test("reads Mistral vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("mistral-small-2603", "mistral")).toBe(true);
+    expect(modelSupportsVision("mistral-large-2512", "mistral")).toBe(true);
+    expect(modelSupportsVision("ministral-14b-2512", "mistral")).toBe(true);
   });
 });
