@@ -1,23 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderInstance } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
+import {
+  makeAnthropicProvider,
+  makeOpenAIProvider,
+} from "./coding-agent-test-fixtures";
 
-const anthropicProvider: ProviderInstance = {
-  apiKey: "sk-ant-test",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  id: "prov_anthropic",
-  label: "Anthropic",
-  type: "anthropic",
-};
-
-const openaiProvider: ProviderInstance = {
-  apiKey: "sk-openai-test",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  id: "prov_openai",
-  label: "OpenAI",
-  type: "openai",
-};
+const anthropicProvider = makeAnthropicProvider();
+const openaiProvider = makeOpenAIProvider();
 
 describe("enrichCodingAgentBashInput", () => {
   test("merges provider passthrough env when coding agent command is detected", async () => {

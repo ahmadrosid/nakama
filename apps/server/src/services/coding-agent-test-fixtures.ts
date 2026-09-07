@@ -44,3 +44,16 @@ export function makeAnthropicProvider(
     ...overrides,
   };
 }
+
+export function makeOpenAIProvider(
+  overrides: Partial<ProviderInstance> = {}
+): ProviderInstance {
+  return {
+    apiKey: "sk-openai-test",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    id: "prov_openai",
+    label: "OpenAI",
+    type: "openai",
+    ...overrides,
+  };
+}
