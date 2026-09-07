@@ -962,7 +962,9 @@ export function useChatPage() {
    */
   const branchAndSendPrompt = useCallback(
     async (prompt: ChatListItem, text: string, anchorId: string) => {
-      if (!profileId) {
+      // Branch before send, so a read-only session must bail here: sendMessage
+      // no-ops on those and would strand the user in an empty branch.
+      if (!profileId || readOnlySession) {
         return;
       }
 
@@ -1020,6 +1022,7 @@ export function useChatPage() {
       branchSessionMutation,
       messages,
       profileId,
+      readOnlySession,
       sendMessage,
       session,
       sessionModel,
