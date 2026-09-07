@@ -6,7 +6,7 @@ import { createId, getUserConfigDir, jsonSchemaFromZod } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 
-// Serialize writes, copies and deletion so clear/purge cannot leave a late archive.
+// Serialize archive mutations per org, including profile deletion and its cascade.
 const archiveOperations = new Map<string, Promise<unknown>>();
 
 async function withArchiveLock<T>(
@@ -39,12 +39,16 @@ export function sessionHistoryArchivePath(
 }
 
 export async function archiveSessionHistory(
+  db: DatabaseAdapter,
   orgId: string,
   sessionId: string,
   history: readonly ChatMessage[]
 ): Promise<string> {
   const path = sessionHistoryArchivePath(orgId, sessionId);
-  return withArchiveLock(path, async () => {
+  return withArchiveLock(dirname(path), async () => {
+    if (!(await db.getSession(sessionId))) {
+      throw new Error("Session not found.");
+    }
     await mkdir(dirname(path), { recursive: true });
     const file = await open(path, "a+", 0o600);
     try {
@@ -70,16 +74,42 @@ export function deleteSessionHistoryArchive(
   sessionId: string
 ): Promise<void> {
   const path = sessionHistoryArchivePath(orgId, sessionId);
-  return withArchiveLock(path, () => rm(path, { force: true }));
+  return withArchiveLock(dirname(path), () => rm(path, { force: true }));
+}
+
+export function deleteProfileWithHistoryArchives(
+  db: DatabaseAdapter,
+  orgId: string,
+  profileId: string
+): Promise<boolean> {
+  return withArchiveLock(
+    dirname(sessionHistoryArchivePath(orgId, "")),
+    async () => {
+      const sessions = await db.listSessions();
+      for (const session of sessions) {
+        if (session.profileId === profileId) {
+          await rm(sessionHistoryArchivePath(orgId, session.id), {
+            force: true,
+          });
+        }
+      }
+      // Keep session IDs available for retry if filesystem cleanup fails.
+      return db.deleteProfile(profileId);
+    }
+  );
 }
 
 export function copySessionHistoryArchive(
+  db: DatabaseAdapter,
   orgId: string,
   sourceId: string,
   targetId: string
 ): Promise<void> {
   const source = sessionHistoryArchivePath(orgId, sourceId);
-  return withArchiveLock(source, async () => {
+  return withArchiveLock(dirname(source), async () => {
+    if (!(await db.getSession(targetId))) {
+      throw new Error("Session not found.");
+    }
     try {
       await copyFile(source, sessionHistoryArchivePath(orgId, targetId));
     } catch (error) {

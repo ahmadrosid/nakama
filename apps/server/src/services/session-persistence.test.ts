@@ -1,15 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
 import type { ChatMessage, ProviderClient } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
+  createSqliteDatabase,
   type DatabaseAdapter,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { ProfileService } from "./profile-service";
 import {
   archiveSessionHistory,
+  copySessionHistoryArchive,
   createReadSessionHistoryTool,
   deleteSessionHistoryArchive,
   loadSessionHistory,
@@ -60,18 +63,38 @@ function historyWithTool(): ChatMessage[] {
   ];
 }
 
+async function seedSession(
+  db: DatabaseAdapter,
+  id: string,
+  profileId = "profile",
+  orgId = "org_1"
+) {
+  await db.upsertSession({
+    agentQuestionnaire: null,
+    agentTodos: [],
+    channel: "web",
+    createdAt: new Date().toISOString(),
+    id,
+    model: null,
+    orgId,
+    profileId,
+    title: null,
+  });
+}
+
 describe("wrapPersistedSession", () => {
   setupTestConfigDir("nakama-history-archive-");
 
   test("compaction replaces working history but preserves raw messages for scoped recovery", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await seedSession(db, "session_1");
     const original = historyWithTool();
     await replaceSessionHistory(db, "session_1", original);
     const session = createAgentChatSession(
       { provider: summaryProvider },
       {
         archiveHistory: (history) =>
-          archiveSessionHistory("org_1", "session_1", history),
+          archiveSessionHistory(db, "org_1", "session_1", history),
         compaction: { contextWindow: 100_000, maxOutputTokens: 8192 },
         initialHistory: original,
       }
@@ -143,6 +166,8 @@ describe("wrapPersistedSession", () => {
   test.each(["send", "stream"])(
     "automatic %s pruning archives original output but not no-op turns",
     async (mode) => {
+      const db = createInMemoryDatabaseAdapter();
+      await seedSession(db, "automatic");
       const original = historyWithTool();
       original[2] = {
         content: "x".repeat(200_000),
@@ -154,7 +179,7 @@ describe("wrapPersistedSession", () => {
         { provider: summaryProvider },
         {
           archiveHistory: (history) =>
-            archiveSessionHistory("org_1", "automatic", history),
+            archiveSessionHistory(db, "org_1", "automatic", history),
           compaction: { contextWindow: 100_000, maxOutputTokens: 8192 },
           initialHistory: original,
         }
@@ -237,12 +262,14 @@ describe("wrapPersistedSession", () => {
   });
 
   test("clear during an archive write does not resurrect history or leave an archive", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await seedSession(db, "cleared");
     let writing: Promise<string> | undefined;
     const session = createAgentChatSession(
       { provider: summaryProvider },
       {
         archiveHistory(history) {
-          writing = archiveSessionHistory("org_1", "cleared", history);
+          writing = archiveSessionHistory(db, "org_1", "cleared", history);
           session.clear();
           const deletion = deleteSessionHistoryArchive("org_1", "cleared");
           return Promise.all([writing, deletion]).then(([pointer]) => pointer);
@@ -257,6 +284,108 @@ describe("wrapPersistedSession", () => {
     await expect(
       readFile(sessionHistoryArchivePath("org_1", "cleared"))
     ).rejects.toThrow();
+  });
+
+  test("profile deletion cleans archives, rejects late writers, and can retry failed cleanup", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    const db = database.adapter;
+    try {
+      const now = new Date().toISOString();
+      for (const [orgId, profileId] of [
+        ["org_1", "deleted"],
+        ["org_1", "kept"],
+        ["org_2", "other"],
+      ]) {
+        await db.upsertOrganization({
+          createdAt: now,
+          id: orgId,
+          name: orgId,
+          slug: orgId,
+          updatedAt: now,
+        });
+        await db.upsertProfile({
+          createdAt: now,
+          id: profileId,
+          isDefault: false,
+          isSuper: false,
+          model: null,
+          name: profileId,
+          orgId,
+          systemPrompt: "",
+          updatedAt: now,
+        });
+        await seedSession(db, profileId, profileId, orgId);
+        await archiveSessionHistory(db, orgId, profileId, historyWithTool());
+      }
+      const path = sessionHistoryArchivePath("org_1", "deleted");
+      await rm(path);
+      await mkdir(path);
+      const service = new ProfileService(db);
+      await expect(service.deleteProfile("org_1", "deleted")).rejects.toThrow();
+      expect(await db.getProfile("deleted")).not.toBeNull();
+      expect(await db.getSession("deleted")).not.toBeNull();
+      await rm(path, { recursive: true });
+
+      let queuedWrites: Promise<PromiseSettledResult<unknown>[]> | undefined;
+      const concurrentDb = new Proxy(db, {
+        get(target, property, receiver) {
+          if (property === "listSessions") {
+            return async () => {
+              const snapshot = await db.listSessions();
+              // A session created after enumeration must not escape cleanup.
+              await seedSession(db, "late", "deleted");
+              queuedWrites = Promise.allSettled([
+                archiveSessionHistory(db, "org_1", "late", historyWithTool()),
+                copySessionHistoryArchive(db, "org_1", "kept", "late"),
+              ]);
+              return snapshot;
+            };
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      const writing = archiveSessionHistory(
+        db,
+        "org_1",
+        "deleted",
+        historyWithTool()
+      );
+      await new AgentService(null, null, concurrentDb).deleteProfile(
+        "org_1",
+        "deleted"
+      );
+      await writing;
+      expect((await queuedWrites)?.map((result) => result.status)).toEqual([
+        "rejected",
+        "rejected",
+      ]);
+      expect(await db.getSession("late")).toBeNull();
+      await expect(
+        readFile(sessionHistoryArchivePath("org_1", "late"))
+      ).rejects.toThrow();
+      expect(await db.getProfile("deleted")).toBeNull();
+      expect(await db.getSession("deleted")).toBeNull();
+      await expect(
+        archiveSessionHistory(db, "org_1", "deleted", historyWithTool())
+      ).rejects.toThrow();
+      await expect(
+        copySessionHistoryArchive(db, "org_1", "kept", "deleted")
+      ).rejects.toThrow();
+      await expect(readFile(path)).rejects.toThrow();
+      for (const [orgId, id] of [
+        ["org_1", "kept"],
+        ["org_2", "other"],
+      ]) {
+        expect(await db.getSession(id)).not.toBeNull();
+        expect(
+          JSON.parse(
+            await readFile(sessionHistoryArchivePath(orgId, id), "utf8")
+          ).messages
+        ).toEqual(historyWithTool());
+      }
+    } finally {
+      database.close();
+    }
   });
 
   test("clear leaves the delete to clearSession instead of firing it unawaited", () => {

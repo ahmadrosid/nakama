@@ -1828,7 +1828,7 @@ export class AgentService {
       userId: record.userId ?? null,
     });
 
-    await copySessionHistoryArchive(orgId, sessionId, nextSessionId);
+    await copySessionHistoryArchive(this.db, orgId, sessionId, nextSessionId);
     await replaceSessionHistory(
       this.db,
       nextSessionId,
@@ -2650,7 +2650,13 @@ export class AgentService {
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
-    return this.profileService.deleteProfile(orgId, profileId);
+    await this.profileService.deleteProfile(orgId, profileId);
+    for (const [sessionId, record] of this.sessions) {
+      if (record.profileId === profileId) {
+        record.session.clear();
+        this.sessions.delete(sessionId);
+      }
+    }
   }
 
   async listTools(): Promise<ListToolsResponse> {
@@ -3466,7 +3472,7 @@ export class AgentService {
 
     const session = createAgentChatSession(harness, {
       archiveHistory: (history) =>
-        archiveSessionHistory(orgId, sessionId, history),
+        archiveSessionHistory(this.db, orgId, sessionId, history),
       channel,
       compaction,
       enableToolLoop: true,
