@@ -204,7 +204,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   {
     contextWindow: 262_144,
-    id: "mistral-medium-2604",
+    id: "mistral-medium-latest",
     inputPerMillionUsd: 1.5,
     maxOutputTokens: 65_536,
     name: "Mistral Medium 3.5",
