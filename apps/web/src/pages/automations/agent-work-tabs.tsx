@@ -24,7 +24,7 @@ export function AgentWorkTabs() {
   return (
     <div
       aria-label="Agent work views"
-      className="flex h-full min-w-0 items-stretch"
+      className="no-scrollbar flex h-full min-w-0 items-stretch overflow-x-auto"
       role="tablist"
     >
       {TAB_ORDER.map((tab) => (
