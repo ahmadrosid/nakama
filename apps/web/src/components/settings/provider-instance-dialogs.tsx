@@ -63,52 +63,64 @@ export function ProviderReplaceKeyDialog({
   onToggleShowApiKey: () => void;
   onSave: () => void;
 }) {
-  const isXaiOAuth = providerType === "xai_oauth";
-  const isChatgpt = providerType === "chatgpt";
+  let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
+  let hasCredentials = Boolean(apiKey.trim());
+  let credentialField = (
+    <InputGroup>
+      <InputGroupInput
+        autoComplete="off"
+        disabled={busy}
+        onChange={(event) => onApiKeyChange(event.target.value)}
+        placeholder={apiKeyPlaceholder(providerType)}
+        type={showApiKey ? "text" : "password"}
+        value={apiKey}
+      />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          aria-label={showApiKey ? "Hide API key" : "Show API key"}
+          onClick={onToggleShowApiKey}
+          size="icon-sm"
+        >
+          {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
+  );
+
+  switch (providerType) {
+    case "xai_oauth":
+      title = `Reconnect ${instance.label}`;
+      hasCredentials = Boolean(xaiOAuth);
+      credentialField = (
+        <XaiSignInPanel
+          disabled={busy}
+          oauth={xaiOAuth}
+          onOAuthChange={onXaiOAuthChange}
+        />
+      );
+      break;
+    case "chatgpt":
+      title = `Reconnect ${instance.label}`;
+      hasCredentials = Boolean(chatgptOAuth);
+      credentialField = (
+        <ChatgptSignInPanel
+          disabled={busy}
+          oauth={chatgptOAuth}
+          onOAuthChange={onChatgptOAuthChange}
+        />
+      );
+      break;
+    default:
+      break;
+  }
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isChatgpt || isXaiOAuth
-              ? `Reconnect ${instance.label}`
-              : `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`}
-          </DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {isXaiOAuth ? (
-          <XaiSignInPanel
-            disabled={busy}
-            oauth={xaiOAuth}
-            onOAuthChange={onXaiOAuthChange}
-          />
-        ) : isChatgpt ? (
-          <ChatgptSignInPanel
-            disabled={busy}
-            oauth={chatgptOAuth}
-            onOAuthChange={onChatgptOAuthChange}
-          />
-        ) : (
-          <InputGroup>
-            <InputGroupInput
-              autoComplete="off"
-              disabled={busy}
-              onChange={(event) => onApiKeyChange(event.target.value)}
-              placeholder={apiKeyPlaceholder(providerType)}
-              type={showApiKey ? "text" : "password"}
-              value={apiKey}
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                onClick={onToggleShowApiKey}
-                size="icon-sm"
-              >
-                {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-        )}
+        {credentialField}
         {dialogError ? (
           <p className="text-destructive text-sm" role="alert">
             {dialogError}
@@ -124,14 +136,7 @@ export function ProviderReplaceKeyDialog({
             Cancel
           </Button>
           <Button
-            disabled={
-              busy ||
-              (isXaiOAuth
-                ? !xaiOAuth
-                : isChatgpt
-                  ? !chatgptOAuth
-                  : !apiKey.trim())
-            }
+            disabled={busy || !hasCredentials}
             onClick={onSave}
             type="button"
           >
