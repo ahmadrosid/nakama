@@ -131,7 +131,7 @@ export function catalogCustomModelsToCatalog(
     }
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
-    } else if (provider === "deepseek") {
+    } else if (provider === "deepseek" || provider === "mistral") {
       model.supportsThinking = false;
     }
     if (entry.inputPerMillionUsd !== undefined) {

@@ -102,6 +102,18 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
+describe("resolveProvider mistral", () => {
+  test("auto-resolves Mistral when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        MISTRAL_API_KEY: "ms-test",
+      },
+    });
+
+    expect(provider).toBe("mistral");
+  });
+});
+
 describe("resolveProvider cerebras", () => {
   test("auto-resolves Cerebras when it is the only env API key", () => {
     const provider = resolveProvider({
