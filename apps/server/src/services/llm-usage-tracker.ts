@@ -2,6 +2,7 @@ import type { LlmUsageModelStats, LlmUsageStats } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   estimateUsageCostUsd,
+  hasCatalogPricing,
   type PricingContext,
 } from "../providers/pricing";
 
@@ -77,7 +78,12 @@ export class LlmUsageTracker {
     this.pricingContext = context;
   }
 
-  record(modelId: string, inputTokens: number, outputTokens: number): void {
+  /** Returns the cost of this call, or null when the model has no known pricing. */
+  record(
+    modelId: string,
+    inputTokens: number,
+    outputTokens: number
+  ): number | null {
     const costDelta = estimateUsageCostUsd(
       modelId,
       inputTokens,
@@ -114,6 +120,8 @@ export class LlmUsageTracker {
     void persistence.then(() => {
       this.pendingWrites.delete(persistence);
     });
+
+    return hasCatalogPricing(modelId, this.pricingContext) ? costDelta : null;
   }
 
   private async persist(
