@@ -60,7 +60,6 @@ export interface ProposeOrgMemoryResult {
   message: string;
   outcome: ProposeOrgMemoryOutcome;
   proposalId?: string;
-  warnings?: string[];
 }
 
 export interface ProposeOrgMemoryInput {
@@ -446,7 +445,6 @@ export class OrgMemoryService {
     input: ProposeOrgMemoryInput
   ): Promise<ProposeOrgMemoryResult> {
     const text = this.normalizeProposalBullet(input.bullet);
-    const warnings = detectOrgMemoryInjectionWarnings(text);
     const content = await this.getMemory(orgId);
     const parsed = parseOrgMemoryContent(content);
     const dedupKey = normalizeOrgMemoryDedupKey(text);
@@ -482,7 +480,6 @@ export class OrgMemoryService {
         message: "This fact is already awaiting admin approval.",
         outcome: "already_pending",
         proposalId: pending.id,
-        warnings: warnings.length > 0 ? warnings : undefined,
       };
     }
 
@@ -506,7 +503,6 @@ export class OrgMemoryService {
       message: `Recorded for admin review (proposal ${proposal.id}).`,
       outcome: "created",
       proposalId: proposal.id,
-      warnings: warnings.length > 0 ? warnings : undefined,
     };
   }
 
@@ -689,9 +685,14 @@ export class OrgMemoryService {
         400
       );
     }
-    if (/^##\s/m.test(text)) {
+    // Rejected here and not in normalizeBullet on purpose: this is the path the
+    // agent reaches through propose_org_memory, so the content is whatever a
+    // document or a message talked it into. An org admin adding a fact through
+    // POST /memory/facts is a person who meant it, and still gets through.
+    const injection = detectOrgMemoryInjectionWarnings(text);
+    if (injection.length > 0) {
       throw new NakamaApiError(
-        "Memory bullet must not contain markdown headings.",
+        `Memory bullet rejected. ${injection.join(" ")}`,
         400
       );
     }
