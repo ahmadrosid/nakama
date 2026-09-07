@@ -69,6 +69,148 @@ const sampleTool: ToolDefinition = {
 };
 
 describe("agent chat tool loop", () => {
+  test.each(["send", "stream"] as const)(
+    "%s stops accumulating large tool results before another provider call and resets the budget next turn",
+    async (mode) => {
+      let providerCalls = 0;
+      let toolRuns = 0;
+      const tool: ToolDefinition = {
+        ...sampleTool,
+        async run() {
+          toolRuns += 1;
+          return "x".repeat(128_000);
+        },
+      };
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        async generateChat() {
+          providerCalls += 1;
+          const toolCalls =
+            providerCalls <= 8
+              ? [
+                  {
+                    arguments: {},
+                    id: `call_${providerCalls}`,
+                    name: tool.name,
+                  },
+                ]
+              : [];
+          return {
+            assistantMessage: { content: "", role: "assistant", toolCalls },
+            content: "",
+            toolCalls,
+          };
+        },
+        streamChat(input) {
+          return this.generateChat(input);
+        },
+      };
+      const session = createAgentChatSession({ provider }, { tools: [tool] });
+      let streamed = "";
+      const reply =
+        mode === "send"
+          ? await session.send("Read the files")
+          : await session.sendStream("Read the files", {
+              onChunk: (chunk) => {
+                streamed += chunk;
+              },
+            });
+      expect(providerCalls).toBe(7);
+      expect(toolRuns).toBe(7);
+      expect(reply.length).toBeGreaterThan(0);
+      expect(session.getHistory().at(-1)).toEqual({
+        content: reply,
+        role: "assistant",
+      });
+      expect(
+        session.getHistory().filter((message) => message.role === "tool")
+      ).toHaveLength(7);
+      if (mode === "stream") {
+        expect(streamed).toBe(reply);
+      }
+      await session.send("Continue");
+      expect(providerCalls).toBe(9);
+      expect(toolRuns).toBe(8);
+    }
+  );
+
+  test.each([false, true])(
+    "counts every result in a batch (parallelSafe=%s)",
+    async (parallelSafe) => {
+      const tool: ToolDefinition = {
+        ...sampleTool,
+        parallelSafe,
+        async run() {
+          return "x".repeat(450_000);
+        },
+      };
+      const toolCalls = ["first", "second"].map((id) => ({
+        arguments: {},
+        id,
+        name: tool.name,
+      }));
+      const provider = createMockProvider([
+        {
+          assistantMessage: { content: "", role: "assistant", toolCalls },
+          content: "",
+          toolCalls,
+        },
+      ]);
+      const session = createAgentChatSession({ provider }, { tools: [tool] });
+      const reply = await session.send("Read both files");
+      expect(reply.length).toBeGreaterThan(0);
+      expect(
+        session
+          .getHistory()
+          .filter((message) => message.role === "tool")
+          .map((message) => message.toolCallId)
+      ).toEqual(["first", "second"]);
+      expect(session.getHistory().at(-1)).toEqual({
+        content: reply,
+        role: "assistant",
+      });
+    }
+  );
+
+  test.each(["reported", "estimated"])(
+    "%s assistant output consumes the budget before tools execute",
+    async (source) => {
+      let toolRuns = 0;
+      const tool: ToolDefinition = {
+        ...sampleTool,
+        async run() {
+          toolRuns += 1;
+          return {};
+        },
+      };
+      const toolCalls = [{ arguments: {}, id: "unexecuted", name: tool.name }];
+      const provider = createMockProvider([
+        {
+          assistantMessage: {
+            content: "",
+            role: "assistant",
+            thinking: source === "estimated" ? "x".repeat(800_000) : "",
+            toolCalls,
+          },
+          content: "",
+          toolCalls,
+          usage:
+            source === "reported"
+              ? { inputTokens: 1, outputTokens: 200_000, totalTokens: 200_001 }
+              : undefined,
+        },
+      ]);
+      const session = createAgentChatSession({ provider }, { tools: [tool] });
+      const reply = await session.send("Think first");
+      expect(toolRuns).toBe(0);
+      expect(reply.length).toBeGreaterThan(0);
+      expect(session.getHistory()).toEqual([
+        { content: "Think first", role: "user" },
+        { content: reply, role: "assistant" },
+      ]);
+    }
+  );
+
   test("handles a single tool call then a final reply", async () => {
     const provider = createMockProvider([
       {
