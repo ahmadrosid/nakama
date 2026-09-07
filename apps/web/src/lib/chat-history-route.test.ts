@@ -7,9 +7,11 @@ import {
   consumeStoredChatDraft,
   isChatSessionPath,
   isProfilesPath,
+  lastChatModelStorageKey,
   parseChatRouteParams,
   pickKnownProfileId,
   readInitialDraftChatProfileId,
+  readLastChatModel,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
   readRequestedProfileFromNewChatSearch,
@@ -18,6 +20,7 @@ import {
   resolveHistoryProfileId,
   resolveProfilesPageProfileId,
   storeChatDraft,
+  writeLastChatModel,
   writeStoredActiveChatProfileId,
 } from "./chat-history";
 
@@ -301,5 +304,46 @@ describe("chat history route helpers", () => {
     const profiles = [{ id: "default" }, { id: "super" }];
     expect(pickKnownProfileId(profiles, "missing", "super")).toBe("super");
     expect(pickKnownProfileId(profiles, "missing")).toBeNull();
+  });
+
+  test("remembers the last hand-picked model per profile", () => {
+    const store = new Map<string, string>();
+    const previousLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+      },
+    });
+
+    try {
+      expect(readLastChatModel("default")).toBeNull();
+
+      writeLastChatModel("default", "openai-1::gpt-5.6");
+      writeLastChatModel("super", "anthropic-1::claude-opus-5");
+
+      expect(store.get(lastChatModelStorageKey("default"))).toBe(
+        "openai-1::gpt-5.6"
+      );
+      expect(readLastChatModel("default")).toBe("openai-1::gpt-5.6");
+      // Each profile keeps its own pick.
+      expect(readLastChatModel("super")).toBe("anthropic-1::claude-opus-5");
+
+      // A falsy selection forgets that profile's pick, and only that one.
+      writeLastChatModel("default", null);
+      expect(readLastChatModel("default")).toBeNull();
+      expect(readLastChatModel("super")).toBe("anthropic-1::claude-opus-5");
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: previousLocalStorage,
+      });
+    }
   });
 });
