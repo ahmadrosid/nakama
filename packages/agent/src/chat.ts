@@ -3,6 +3,7 @@ import type {
   AutomationDefinition,
   ChatContextUsage,
   ChatMessage,
+  ChatUsage,
   CompactionResponse,
   MessageContentPart,
   ProviderChatOptions,
@@ -78,6 +79,8 @@ export interface StreamHandlers {
     tool: string;
     input: Record<string, unknown>;
   }) => void;
+  /** Fired once per LLM call in the turn, after the provider reports usage. */
+  onUsage?: (usage: ChatUsage) => void;
 }
 
 export type SendMessageArg = string | SendMessageInput;
@@ -586,7 +589,14 @@ async function runConversation(
     // message and never starts another tool batch.
     signal?.throwIfAborted();
 
-    history.push(result.assistantMessage);
+    if (result.usage) {
+      handlers?.onUsage?.(result.usage);
+    }
+    history.push(
+      result.usage
+        ? { ...result.assistantMessage, usage: result.usage }
+        : result.assistantMessage
+    );
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
       return result.content;
