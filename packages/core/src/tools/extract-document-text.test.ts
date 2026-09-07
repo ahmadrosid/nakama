@@ -10,7 +10,10 @@ import {
   getMailboxIdentity,
 } from "../mail/attachment-reference";
 import type { MailReader } from "../mail/types";
-import { runExtractDocumentText } from "./extract-document-text";
+import {
+  runExtractDocumentText,
+  UNTRUSTED_DOCUMENT_GUIDANCE,
+} from "./extract-document-text";
 
 process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??=
   "test-email-attachment-secret-32-chars";
@@ -93,6 +96,28 @@ describe("extract_document_text tool", () => {
       truncated: false,
       untrustedContent: true,
     });
+    expect("text" in result && result.text.toLowerCase()).toContain("dummy");
+  });
+
+  test("notice comes before the extracted text", async () => {
+    const documentRef = createAttachmentReference(context, {
+      attachmentId: "0",
+      folder: "INBOX",
+      mailboxId,
+      uid: 42,
+    });
+
+    const result = await runExtractDocumentText({ documentRef }, context, {
+      createReader: () => readerWith(SAMPLE_PDF),
+      loadConfig: async () => completeConfig,
+    });
+
+    // The guidance has to be read before the document text, and the linter sorts
+    // object keys, so a separate field cannot hold that position. Asserting the
+    // prefix is the only form of this that a formatter cannot undo.
+    expect("text" in result && result.text).toStartWith(
+      `${UNTRUSTED_DOCUMENT_GUIDANCE}\n\n`
+    );
     expect("text" in result && result.text.toLowerCase()).toContain("dummy");
   });
 
