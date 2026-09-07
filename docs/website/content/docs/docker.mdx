@@ -78,6 +78,12 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 See [Agent browser](/agent-browser#3-optional-cloakbrowser-for-antibot-sites).
 
+## Optional: MicroSandbox bash backend
+
+Stock `docker run` / `./scripts/docker-build-run.sh` does **not** pass `/dev/kvm` (or nested virtualization). Keep `NAKAMA_BASH_BACKEND=host` (the default) inside Docker unless you deliberately add hypervisor access.
+
+If you set `NAKAMA_BASH_BACKEND=microsandbox` without a working MicroSandbox runtime / KVM device, **every** `bash` tool call fails closed — there is no silent host fallback. Coding-agent harness runs require `host` for now. See [Built-in tools — bash](/builtin-tools#bash).
+
 ## Next steps
 
 - [Quickstart](/quickstart) — first-run flow from zero
