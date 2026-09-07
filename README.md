@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://github.com/ahmadrosid/nakama/releases"><img src="https://img.shields.io/github/v/release/ahmadrosid/nakama?display_name=tag&sort=semver" alt="Latest release"></a>
   <a href="https://github.com/ahmadrosid/nakama/graphs/contributors"><img src="https://img.shields.io/github/contributors/ahmadrosid/nakama?style=flat-square" alt="Contributors"></a>
+  <a href="https://discord.com/invite/Cwq3erYvh"><img src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 # Nakama
