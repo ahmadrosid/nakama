@@ -154,8 +154,20 @@ export function usePostTurnSkillReviewOverlay({
       ),
     [proposalsQuery.data?.proposals, sessionId]
   );
+  const [dismissedIdsBySession, setDismissedIdsBySession] = useState<
+    Record<string, readonly string[]>
+  >({});
+  const sessionKey = sessionId ?? "";
+  const dismissedIds = new Set(dismissedIdsBySession[sessionKey] ?? []);
+
+  const visibleSuggestions = suggestions.filter(
+    (suggestion) => !dismissedIds.has(`suggestion:${suggestion.id}`)
+  );
+  const visibleProposals = pendingProposals.filter(
+    (proposal) => !dismissedIds.has(`proposal:${proposal.id}`)
+  );
   const showBanner =
-    canPoll && (suggestions.length > 0 || pendingProposals.length > 0);
+    canPoll && (visibleSuggestions.length > 0 || visibleProposals.length > 0);
 
   const banner = showBanner ? (
     <SkillPostTurnReviewBanner
@@ -169,8 +181,18 @@ export function usePostTurnSkillReviewOverlay({
           void proposalsQuery.refetch();
         })
       }
-      pendingProposals={pendingProposals}
-      suggestions={suggestions}
+      onDismiss={(id) => {
+        if (!sessionKey) {
+          return;
+        }
+        setDismissedIdsBySession((current) => {
+          const next = new Set(current[sessionKey] ?? []);
+          next.add(id);
+          return { ...current, [sessionKey]: [...next] };
+        });
+      }}
+      pendingProposals={visibleProposals}
+      suggestions={visibleSuggestions}
     />
   ) : null;
 
