@@ -1,5 +1,13 @@
 import type { TelegramNotificationDestinationConfig } from "@nakama/core/contract";
 
+export function maskWebhookApiKey(apiKey: string): string {
+  const trimmed = apiKey.trim();
+  if (trimmed.length <= 4) {
+    return "••••";
+  }
+  return `••••${trimmed.slice(-4)}`;
+}
+
 export function buildNotificationWebhookUrl(
   origin: string,
   webhookPath: string
