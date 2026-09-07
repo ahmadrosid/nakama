@@ -5,7 +5,7 @@ Nakama is a multi-tenant Bun + TypeScript platform for running AI agent teams (o
 - [README.md](./README.md) — product overview and quick start
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
 - [AGENTS.md](./AGENTS.md) — authoritative agent/dev notes (layout, tests, docs conventions)
-- Discord: https://discord.gg/qhKbMFEUc
+- Discord: https://discord.gg/Cwq3erYvh
 
 ## Prerequisites
 
