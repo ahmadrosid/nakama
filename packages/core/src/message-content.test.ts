@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "./api-error";
+import type { ChatMessage } from "./contract";
 import {
   countUserImages,
   estimateUserContentTokens,
   getUserMessageText,
+  messagesIncludeUserImages,
   normalizeUserContent,
   parseDataUrl,
   parseDocumentDataUrl,
@@ -275,5 +277,31 @@ describe("countUserImages", () => {
         { data: tinyPngBase64, mediaType: "image/png", type: "image" },
       ])
     ).toBe(1);
+  });
+});
+
+describe("messagesIncludeUserImages", () => {
+  test("detects image parts in user messages", () => {
+    const messages: ChatMessage[] = [
+      { content: "hello", role: "user" },
+      {
+        content: [
+          { text: "see this", type: "text" },
+          { data: "abc", mediaType: "image/png", type: "image" },
+        ],
+        role: "user",
+      },
+    ];
+
+    expect(messagesIncludeUserImages(messages)).toBe(true);
+  });
+
+  test("returns false for text-only history", () => {
+    const messages: ChatMessage[] = [
+      { content: "hello", role: "user" },
+      { content: "hi", role: "assistant" },
+    ];
+
+    expect(messagesIncludeUserImages(messages)).toBe(false);
   });
 });

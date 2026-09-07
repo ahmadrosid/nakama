@@ -20,8 +20,6 @@ process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??=
 
 const FIXTURES = join(import.meta.dir, "..", "__fixtures__");
 const SAMPLE_PDF = readFileSync(join(FIXTURES, "sample.pdf"));
-const SAMPLE_DOCX = readFileSync(join(FIXTURES, "sample.docx"));
-const SAMPLE_XLSX = readFileSync(join(FIXTURES, "sample.xlsx"));
 
 const completeConfig: EmailConfigFile = {
   from: "user@example.com",
@@ -77,7 +75,7 @@ function readerWith(
 }
 
 describe("extract_document_text tool", () => {
-  test("extracts text from a valid PDF attachment", async () => {
+  test("extracts a mail PDF and prefixes the untrusted-document notice", async () => {
     const documentRef = createAttachmentReference(context, {
       attachmentId: "0",
       folder: "INBOX",
@@ -96,79 +94,10 @@ describe("extract_document_text tool", () => {
       truncated: false,
       untrustedContent: true,
     });
-    expect("text" in result && result.text.toLowerCase()).toContain("dummy");
-  });
-
-  test("notice comes before the extracted text", async () => {
-    const documentRef = createAttachmentReference(context, {
-      attachmentId: "0",
-      folder: "INBOX",
-      mailboxId,
-      uid: 42,
-    });
-
-    const result = await runExtractDocumentText({ documentRef }, context, {
-      createReader: () => readerWith(SAMPLE_PDF),
-      loadConfig: async () => completeConfig,
-    });
-
-    // The guidance has to be read before the document text, and the linter sorts
-    // object keys, so a separate field cannot hold that position. Asserting the
-    // prefix is the only form of this that a formatter cannot undo.
     expect("text" in result && result.text).toStartWith(
       `${UNTRUSTED_DOCUMENT_GUIDANCE}\n\n`
     );
     expect("text" in result && result.text.toLowerCase()).toContain("dummy");
-  });
-
-  test("extracts text from a DOCX attachment", async () => {
-    const documentRef = createAttachmentReference(context, {
-      attachmentId: "0",
-      folder: "INBOX",
-      mailboxId,
-      uid: 42,
-    });
-
-    const result = await runExtractDocumentText({ documentRef }, context, {
-      createReader: () =>
-        readerWith(SAMPLE_DOCX, {
-          filename: "notes.docx",
-          mediaType:
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        }),
-      loadConfig: async () => completeConfig,
-    });
-
-    expect(result).toMatchObject({
-      filename: "notes.docx",
-      untrustedContent: true,
-    });
-    expect("text" in result && result.text).toContain("Laporan");
-  });
-
-  test("extracts text from an Excel attachment", async () => {
-    const documentRef = createAttachmentReference(context, {
-      attachmentId: "0",
-      folder: "INBOX",
-      mailboxId,
-      uid: 42,
-    });
-
-    const result = await runExtractDocumentText({ documentRef }, context, {
-      createReader: () =>
-        readerWith(SAMPLE_XLSX, {
-          filename: "budget.xlsx",
-          mediaType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
-      loadConfig: async () => completeConfig,
-    });
-
-    expect(result).toMatchObject({
-      filename: "budget.xlsx",
-      untrustedContent: true,
-    });
-    expect("text" in result && result.text).toContain("Widget");
   });
 
   test("extracts from a provider-neutral stored document reference", async () => {

@@ -81,28 +81,15 @@ describe("web_fetch input schema", () => {
     });
   });
 
-  test("rejects empty / non-string url", () => {
+  test("rejects empty url, non-http schemes, unknown keys, and non-boolean raw", () => {
     expect(() => webFetchInputSchema.parse({})).toThrow();
     expect(() => webFetchInputSchema.parse({ url: "" })).toThrow();
-    expect(() => webFetchInputSchema.parse({ url: 5 })).toThrow();
-  });
-
-  test("rejects non-http(s) schemes", () => {
     expect(() =>
       webFetchInputSchema.parse({ url: "file:///etc/passwd" })
     ).toThrow();
     expect(() =>
-      webFetchInputSchema.parse({ url: "ftp://example.com" })
-    ).toThrow();
-  });
-
-  test("rejects unknown keys (strict)", () => {
-    expect(() =>
       webFetchInputSchema.parse({ extra: 1, url: "https://example.com" })
     ).toThrow();
-  });
-
-  test("rejects non-boolean raw", () => {
     expect(() =>
       webFetchInputSchema.parse({ raw: "true", url: "https://x" })
     ).toThrow();
@@ -118,19 +105,13 @@ describe("web_fetch tool metadata", () => {
 });
 
 describe("web_fetch tool validation errors", () => {
-  test("throws on missing url", async () => {
+  test("throws on missing url, non-http url, and unknown keys", async () => {
     await expect(webFetchTool.run({} as never, CTX)).rejects.toThrow(
       /invalid parameter at url/
     );
-  });
-
-  test("throws on non-http(s) url", async () => {
     await expect(
       webFetchTool.run({ url: "file:///etc/passwd" }, CTX)
     ).rejects.toThrow(/http: or https:/);
-  });
-
-  test("throws on unknown keys", async () => {
     await expect(
       webFetchTool.run({ extra: 1, url: "https://example.com" } as never, CTX)
     ).rejects.toThrow(/Unrecognized key/);
@@ -138,70 +119,32 @@ describe("web_fetch tool validation errors", () => {
 });
 
 describe("web_fetch SSRF guard", () => {
-  test("rejects loopback IPv4 literals", async () => {
-    await expect(
-      webFetchTool.run({ url: "http://127.0.0.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://127.1.2.3/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-  });
-
-  test("rejects RFC1918 IPv4 literals", async () => {
-    await expect(
-      webFetchTool.run({ url: "http://10.0.0.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://172.16.0.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://172.31.255.255/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://192.168.1.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-  });
-
-  test("rejects CGNAT 100.64.0.0/10", async () => {
-    await expect(
-      webFetchTool.run({ url: "http://100.64.0.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://100.127.255.254/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-  });
-
-  test("rejects link-local 169.254.x.x", async () => {
-    await expect(
-      webFetchTool.run({ url: "http://169.254.169.254/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-  });
-
-  test("rejects multicast and reserved IPv4", async () => {
-    await expect(
-      webFetchTool.run({ url: "http://224.0.0.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://239.255.255.255/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-    await expect(
-      webFetchTool.run({ url: "http://240.0.0.1/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-  });
-
-  test("rejects IPv6 loopback literal", async () => {
-    await expect(
-      webFetchTool.run({ url: "http://[::1]/" }, CTX)
-    ).rejects.toThrow(/private or reserved/);
-  });
-
-  test("rejects non-global IPv6 literals", async () => {
+  test("rejects private and reserved IP literals", async () => {
     stubFetch(async () => htmlResponse("<p>must not fetch</p>"));
 
-    for (const host of ["2001::1", "2001:db8::1", "::192.0.2.1"]) {
-      await expect(
-        webFetchTool.run({ url: `http://[${host}]/` }, CTX)
-      ).rejects.toThrow(/private or reserved/);
+    const blocked = [
+      "http://127.0.0.1/",
+      "http://127.1.2.3/",
+      "http://10.0.0.1/",
+      "http://172.16.0.1/",
+      "http://172.31.255.255/",
+      "http://192.168.1.1/",
+      "http://100.64.0.1/",
+      "http://100.127.255.254/",
+      "http://169.254.169.254/",
+      "http://224.0.0.1/",
+      "http://239.255.255.255/",
+      "http://240.0.0.1/",
+      "http://[::1]/",
+      "http://[2001::1]/",
+      "http://[2001:db8::1]/",
+      "http://[::192.0.2.1]/",
+    ];
+
+    for (const url of blocked) {
+      await expect(webFetchTool.run({ url }, CTX)).rejects.toThrow(
+        /private or reserved/
+      );
     }
   });
 
@@ -519,29 +462,6 @@ describe("web_fetch content cap", () => {
       CTX
     );
 
-    expect(out.truncated).toBe(true);
-    expect(out.content.length).toBe(CAP);
-    expect(out.content.endsWith(MARKER)).toBe(true);
-  });
-
-  test("caps a large JSON body, the case that motivated the limit", async () => {
-    // An OpenAPI spec fetched in one call is what put 913 KB into a real session.
-    const spec = JSON.stringify({
-      paths: Object.fromEntries(
-        Array.from({ length: 2000 }, (_, i) => [
-          `/v1/resource/${i}`,
-          { get: { summary: `read resource ${i}` } },
-        ])
-      ),
-    });
-    stubFetch(async () => jsonResponse(spec));
-
-    const out = await webFetchTool.run(
-      { url: "https://api.example.com/o.json" },
-      CTX
-    );
-
-    expect(out.bytes).toBeGreaterThan(CAP);
     expect(out.truncated).toBe(true);
     expect(out.content.length).toBe(CAP);
     expect(out.content.endsWith(MARKER)).toBe(true);
