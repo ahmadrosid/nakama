@@ -8,6 +8,17 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const serverUrl = process.env.NAKAMA_SERVER_URL ?? "http://127.0.0.1:4310";
 
 export default defineConfig({
+  optimizeDeps: {
+    // Chat is lazy-loaded. Without this, first /chat visit discovers streamdown
+    // mid-session, Vite rewrites dep chunks, and the browser 404s the old ones.
+    include: [
+      "@streamdown/cjk",
+      "@streamdown/code",
+      "@streamdown/math",
+      "@streamdown/mermaid",
+      "streamdown",
+    ],
+  },
   plugins: [react(), tailwindcss()],
   preview: {
     port: 3003,
