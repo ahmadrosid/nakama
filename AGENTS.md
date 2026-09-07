@@ -37,7 +37,7 @@ Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always 
 
 ## Browser automation
 
-Upload PR screenshots from `/tmp` with `gh pr edit --attach`; never commit screenshot files just for PR evidence.
+Use `gh pr edit <number> --attach <image-path>` to upload a screenshot and embed it in the PR description.
 
 Do not use `agent-browser` or start the browser test harness unless the user explicitly requests browser testing. Use automated tests, type checks, and builds by default; browser checks are not required to finish a feature or open a PR.
 
