@@ -23,6 +23,21 @@ export function MobileNavDrawer({ className }: { className?: string }) {
     setOpen(false);
   }, [location.pathname, location.search]);
 
+  // The trigger disappears at sm, but an open drawer would stay mounted over
+  // the desktop sidebar after a rotation or a window resize.
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 640px)");
+    const closeAboveSm = () => {
+      if (desktop.matches) {
+        setOpen(false);
+      }
+    };
+
+    closeAboveSm();
+    desktop.addEventListener("change", closeAboveSm);
+    return () => desktop.removeEventListener("change", closeAboveSm);
+  }, []);
+
   const close = () => setOpen(false);
 
   return (
