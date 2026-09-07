@@ -9,6 +9,11 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+### Changed
+
+- The token optimiser is on by default; `NAKAMA_OMNI=0` or the Integrations
+  toggle turns it off ([#881])
+
 ## [0.4.8] - 2026-09-06
 
 ### Added
@@ -976,3 +981,4 @@ First tagged release. The baseline it established:
 [#858]: https://github.com/ahmadrosid/nakama/pull/858
 [#859]: https://github.com/ahmadrosid/nakama/pull/859
 [#860]: https://github.com/ahmadrosid/nakama/pull/860
+[#881]: https://github.com/ahmadrosid/nakama/pull/881

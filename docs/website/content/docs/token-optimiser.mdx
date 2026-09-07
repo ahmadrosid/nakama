@@ -3,9 +3,9 @@ title: "Token optimiser"
 description: "Shorten bash and read_file output before it reaches the model, measure what that saves, and expand anything folded."
 ---
 
-Long tool output is the most expensive thing in an agent turn, and most of it is output the model has already been shown. The optional **token optimiser** folds that away before it is inserted into the conversation, and keeps a handle so the agent can read the full text if it needs to.
+Long tool output is the most expensive thing in an agent turn, and most of it is output the model has already been shown. The **token optimiser** folds that away before it is inserted into the conversation, and keeps a handle so the agent can read the full text if it needs to.
 
-It is off by default.
+It is on by default. Nothing is lost when it runs: folded text is archived and the agent can expand it by handle.
 
 ## What it touches
 
@@ -15,11 +15,11 @@ That narrowness is measured, not cautious. Replayed against real sessions, the s
 
 The optimiser runs in process. It is not an MCP server, deliberately: that server publishes 26 tools and 8,241 bytes of definitions that ride on every single request, which costs more than the folding saves and makes tool selection worse at the same time.
 
-## Turning it on
+## Turning it off
 
-**Integrations → Context savings** carries the toggle and the numbers. Switching it on is an org-admin action, because it changes what every session in the org does.
+**Integrations → Context savings** carries the toggle and the numbers. Changing it is an org-admin action, because it changes what every session in the org does.
 
-`NAKAMA_OMNI=1` sets the server-wide default for orgs that have not chosen. An explicit org setting wins in both directions, so an admin who switched it off in the dashboard is not overridden by the environment, and the reverse holds too.
+`NAKAMA_OMNI=0` turns it off server-wide for orgs that have not chosen. An explicit org setting wins in both directions, so an admin who switched it off in the dashboard is not overridden by the environment, and the reverse holds too.
 
 ## Reading the panel
 
@@ -54,7 +54,7 @@ Handles are per org. The ledger lives at `omni.db` under the org memory director
 The optimiser is a separate binary, pinned to a single version rather than resolved to latest, so an install does not change under a restart.
 
 - **In the image.** The Docker build carries it by default. Override with `docker build --build-arg OMNI_VERSION=...`.
-- **At runtime.** An instance already deployed cannot be talked into a rebuild, so switching the toggle on fetches the binary and reports the reason when it cannot. Set `NAKAMA_OMNI_AUTO_INSTALL=0` to refuse that and rely on the image alone.
+- **At runtime.** An instance already deployed cannot be talked into a rebuild, so switching the toggle on fetches the binary and reports the reason when it cannot. A source checkout that never touches the toggle has no binary to run: the optimiser then fails open and the panel says it is missing. Set `NAKAMA_OMNI_AUTO_INSTALL=0` to refuse the download and rely on the image alone.
 
 The download is checked against the `SHA256SUMS` published with the same release. Stated plainly: that catches a truncated or corrupted download. It is not a defence against a compromised release, since whoever can replace the archive can replace the sums. Operators who need more than that disable auto-install and build the binary into the image.
 

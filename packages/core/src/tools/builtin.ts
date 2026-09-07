@@ -875,10 +875,9 @@ export const builtinTools: ToolDefinition[] = [
   webFetchTool,
   emailTool,
   extractDocumentTextTool,
-  // Gated on the server-wide env var, not the per-org toggle: the env var says
-  // the binary exists here, the toggle says whether an org uses it. Publishing
-  // the expander per-org would let an org flip folding on and have no way to
-  // read back what was folded until a restart.
+  // Gated on the server-wide env var, not the per-org toggle: the toggle says
+  // whether an org folds, and publishing the expander per-org would let an org
+  // flip folding on with no way to read back what was folded until a restart.
   ...(isOmniEnabled() ? [omniRetrieveTool] : []),
 ];
 
