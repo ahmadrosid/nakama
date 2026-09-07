@@ -44,7 +44,7 @@ export function MobileNavDrawer({ className }: { className?: string }) {
       <DialogPrimitive.Portal>
         <DialogOverlay className="bg-black/40" />
         <DialogPrimitive.Popup
-          className="data-open:slide-in-from-left data-closed:slide-out-to-left fixed inset-y-0 left-0 z-50 flex w-[18.5rem] max-w-[85vw] bg-background pl-[env(safe-area-inset-left)] outline-none duration-150 data-closed:animate-out data-open:animate-in"
+          className="data-open:slide-in-from-left data-closed:slide-out-to-left fixed inset-y-0 left-0 z-50 flex w-[18.5rem] max-w-[85vw] bg-background pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] outline-none duration-150 data-closed:animate-out data-open:animate-in"
           data-slot="mobile-nav-drawer"
         >
           <DialogTitle className="sr-only">Navigation</DialogTitle>
