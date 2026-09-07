@@ -78,6 +78,9 @@ function SubscriptionSignInPanel<T>({
 
       setUserCode(start.userCode);
       setVerificationUri(start.verificationUri);
+      if (!loginUrl) {
+        window.open(start.verificationUri, "_blank", "noopener,noreferrer");
+      }
 
       const result = await completeDevice(start.sessionId, controller.signal);
       if (controller.signal.aborted) {

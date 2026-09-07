@@ -232,7 +232,7 @@ test("an admin completes Grok device sign-in through authenticated HTTP routes",
       return Response.json({
         device_code: "private-device",
         user_code: "CODE",
-        verification_uri: "https://accounts.x.ai/device",
+        verification_uri: "https://accounts.x.ai/oauth2/device",
         interval: 1,
         expires_in: 60,
       });

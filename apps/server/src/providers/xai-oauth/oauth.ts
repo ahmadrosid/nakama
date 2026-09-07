@@ -98,14 +98,10 @@ export async function startXaiOAuthDeviceSession(
   ) {
     throw new Error("Grok device authorization returned an invalid response.");
   }
-  const uri = new URL(data.verification_uri);
-  if (
-    uri.protocol !== "https:" ||
-    !["auth.x.ai", "accounts.x.ai"].includes(uri.hostname) ||
-    uri.username ||
-    uri.password ||
-    uri.port
-  ) {
+  const uri =
+    trustedXaiVerificationUri(data.verification_uri_complete) ??
+    trustedXaiVerificationUri(data.verification_uri);
+  if (!uri) {
     throw new Error("Grok returned an invalid sign-in URL.");
   }
   const sessionId = randomUUID();
@@ -120,8 +116,29 @@ export async function startXaiOAuthDeviceSession(
     intervalSeconds: interval,
     sessionId,
     userCode: data.user_code,
-    verificationUri: uri.toString(),
+    verificationUri: uri,
   };
+}
+
+function trustedXaiVerificationUri(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  try {
+    const uri = new URL(value);
+    if (
+      uri.protocol !== "https:" ||
+      !["auth.x.ai", "accounts.x.ai"].includes(uri.hostname) ||
+      uri.username ||
+      uri.password ||
+      uri.port
+    ) {
+      return null;
+    }
+    return uri.toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function completeXaiOAuthDeviceSession(

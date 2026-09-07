@@ -22,7 +22,9 @@ const devicePayload = {
   expires_in: 60,
   interval: 1,
   user_code: "CODE",
-  verification_uri: "https://accounts.x.ai/device",
+  verification_uri: "https://accounts.x.ai/oauth2/device",
+  verification_uri_complete:
+    "https://accounts.x.ai/oauth2/device?user_code=CODE",
 };
 const credentials = {
   accessToken: "access",
@@ -53,6 +55,9 @@ test("device session is bound to its owner and can only be completed once", asyn
     return Response.json(tokenPayload);
   });
   const start = await startXaiOAuthDeviceSession("alice/org1");
+  expect(start.verificationUri).toBe(
+    "https://accounts.x.ai/oauth2/device?user_code=CODE"
+  );
   expect(JSON.stringify(start)).not.toContain("secret-device-code");
   await expect(
     completeXaiOAuthDeviceSession(start.sessionId, "bob/org1")
@@ -139,7 +144,10 @@ test("expired and cancelled sessions do not reach the token endpoint", async () 
 
 test("rejects untrusted verification URLs and malformed device responses", async () => {
   for (const override of [
-    { verification_uri: "https://evil.example/device" },
+    {
+      verification_uri: "https://evil.example/device",
+      verification_uri_complete: "https://evil.example/device",
+    },
     { expires_in: -1 },
     { interval: "1" },
   ]) {

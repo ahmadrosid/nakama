@@ -477,14 +477,6 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
 export const AVAILABLE_MODELS: ProviderModelOption[] = [
   ...BASE_MODELS,
   ...deriveChatgptModels(BASE_MODELS),
-  {
-    default: true,
-    id: "grok-4.6",
-    inputPerMillionUsd: 0,
-    name: "Grok 4.6",
-    outputPerMillionUsd: 0,
-    provider: "xai_oauth",
-  },
 ];
 
 export function validateOpenRouterCustomModels(
@@ -591,10 +583,9 @@ export function getDefaultModel(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): string {
-  if (isDiscoveryModelProvider(provider)) {
-    // Discovery providers fetch model lists live from the platform
-    // (/models) and store them as instance custom models — no hardcoded
-    // catalog.
+  if (isDiscoveryModelProvider(provider) || provider === "xai_oauth") {
+    // Discovery providers and Grok subscription fetch model lists live
+    // and store them as instance custom models — no hardcoded catalog.
     return resolveCompatibleDefaultModel(customModels);
   }
 

@@ -357,6 +357,7 @@ describe("buildProviderInstanceFromCreateRequest", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {
         apiKey: "",
+        customModels: [{ id: "grok-4.6", name: "grok-4.6" }],
         type: "xai_oauth",
         xaiOAuth: {
           accessToken: "access",
