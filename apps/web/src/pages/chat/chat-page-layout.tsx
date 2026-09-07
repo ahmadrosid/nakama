@@ -19,6 +19,9 @@ export function ChatPageColumn({
         attachmentPanel.isFullscreen
           ? "pointer-events-none w-0 flex-none overflow-hidden px-0 opacity-0"
           : "flex-1 px-3 sm:px-6",
+        // No room for two columns on a phone, so an open panel takes over.
+        attachmentPanel.isOpen &&
+          "max-sm:pointer-events-none max-sm:w-0 max-sm:flex-none max-sm:overflow-hidden max-sm:px-0 max-sm:opacity-0",
         centered && "justify-center"
       )}
     >
