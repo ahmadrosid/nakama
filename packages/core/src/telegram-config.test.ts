@@ -43,7 +43,6 @@ describeSharedChannelConfigTests({
   },
   generateHandshakeCode,
   isUserAuthorized: isTelegramUserAuthorized,
-  label: "Telegram",
   loadConfigFile: loadTelegramConfigFile,
   mask: maskBotToken,
   name: "telegram",

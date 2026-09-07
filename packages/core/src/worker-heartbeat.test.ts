@@ -8,13 +8,26 @@ import {
 } from "./worker-heartbeat";
 
 describe("worker-heartbeat store", () => {
-  test("isHeartbeatAlive rejects stale heartbeats", () => {
+  test("isHeartbeatAlive rejects stale, missing, and invalid heartbeats", () => {
+    expect(isHeartbeatAlive(null)).toBe(false);
+    expect(
+      isHeartbeatAlive({
+        pid: process.pid,
+        updatedAt: "not-a-date",
+      })
+    ).toBe(false);
     expect(
       isHeartbeatAlive({
         pid: process.pid,
         updatedAt: new Date(Date.now() - 60_000).toISOString(),
       })
     ).toBe(false);
+    expect(
+      isHeartbeatAlive({
+        pid: process.pid,
+        updatedAt: new Date().toISOString(),
+      })
+    ).toBe(true);
   });
 
   test("write/read/clear round-trip", async () => {
