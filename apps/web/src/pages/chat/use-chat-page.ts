@@ -95,11 +95,11 @@ import {
 import {
   appendFailedTurnIfNeeded,
   findFailedRetryPrompt,
-  findRetryCheckpoint,
   findRetryPrompt,
   markStreamingTurnFailed,
   messagesWithoutFailedTurn,
   nextSuccessfulTurnAt,
+  planPromptBranch,
 } from "@/pages/chat/chat-page.shared";
 
 interface SendMessageOptions {
@@ -968,9 +968,9 @@ export function useChatPage() {
         return;
       }
 
-      const checkpoint = findRetryCheckpoint(messages, prompt);
+      const plan = planPromptBranch(messages, prompt);
 
-      if (checkpoint && !session) {
+      if (plan && !session) {
         setError(
           "Chat session is unavailable. Please send a new message instead."
         );
@@ -984,19 +984,15 @@ export function useChatPage() {
         let retrySession: RemoteChatSession;
         let initialMessages: ChatListItem[] = [];
 
-        if (checkpoint && session) {
+        if (plan && session) {
           const result = await branchSessionMutation.mutateAsync({
             channel: "web",
-            messageIndex: checkpoint.historyIndex!,
+            messageIndex: plan.messageIndex,
             profileId,
             sessionId: session.id,
           });
           retrySession = client.createChatSession(result.sessionId, "web");
-          initialMessages = messages.filter(
-            (item) =>
-              typeof item.historyIndex === "number" &&
-              item.historyIndex <= checkpoint.historyIndex!
-          );
+          initialMessages = plan.initialMessages;
         } else {
           retrySession = await client.createSession("web", {
             model: sessionModel ?? undefined,
