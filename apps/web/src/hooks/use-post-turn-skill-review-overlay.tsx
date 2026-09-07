@@ -27,14 +27,12 @@ interface UsePostTurnSkillReviewOverlayArgs {
 
 function canPollPostTurnReview({
   activeOrgId,
-  canReview,
   readOnlySession,
   reviewEnabled,
   sessionChannel,
   sessionId,
 }: {
   activeOrgId?: string;
-  canReview: boolean;
   readOnlySession: boolean;
   reviewEnabled: boolean;
   sessionChannel: AgentChannel;
@@ -45,8 +43,7 @@ function canPollPostTurnReview({
     Boolean(activeOrgId) &&
     Boolean(sessionId) &&
     sessionChannel === "web" &&
-    !readOnlySession &&
-    canReview
+    !readOnlySession
   );
 }
 
@@ -128,14 +125,15 @@ export function usePostTurnSkillReviewOverlay({
     user?.isPlatformAdmin === true,
     activeOrg?.role
   );
-  const canPoll = canPollPostTurnReview({
-    activeOrgId: activeOrg?.id,
-    canReview,
-    readOnlySession,
-    reviewEnabled,
-    sessionChannel,
-    sessionId,
-  });
+  const canPoll =
+    canReview &&
+    canPollPostTurnReview({
+      activeOrgId: activeOrg?.id,
+      readOnlySession,
+      reviewEnabled,
+      sessionChannel,
+      sessionId,
+    });
   const polling = usePostTurnPolling(canPoll, lastSuccessfulTurnAt);
   const pollQuery = {
     enabled: canPoll,
@@ -159,17 +157,13 @@ export function usePostTurnSkillReviewOverlay({
       ),
     [proposalsQuery.data?.proposals, sessionId]
   );
-  const [dismissedIdsBySession, setDismissedIdsBySession] = useState<
-    Record<string, readonly string[]>
-  >({});
-  const sessionKey = sessionId ?? "";
-  const dismissedIds = new Set(dismissedIdsBySession[sessionKey] ?? []);
-
+  const [dismissedIds, setDismissedIds] = useState<readonly string[]>([]);
+  const dismissed = new Set(dismissedIds);
   const visibleSuggestions = suggestions.filter(
-    (suggestion) => !dismissedIds.has(`suggestion:${suggestion.id}`)
+    (suggestion) => !dismissed.has(`${sessionId}:suggestion:${suggestion.id}`)
   );
   const visibleProposals = pendingProposals.filter(
-    (proposal) => !dismissedIds.has(`proposal:${proposal.id}`)
+    (proposal) => !dismissed.has(`${sessionId}:proposal:${proposal.id}`)
   );
   const showBanner =
     canPoll && (visibleSuggestions.length > 0 || visibleProposals.length > 0);
@@ -178,8 +172,6 @@ export function usePostTurnSkillReviewOverlay({
     <SkillPostTurnReviewBanner
       applyErrorById={applyErrorById}
       applyStateById={applyStateById}
-      canApply={canReview}
-      isOrgAdmin={canReview}
       onApply={(id) =>
         void handleApply(id, () => {
           void suggestionsQuery.refetch();
@@ -187,14 +179,14 @@ export function usePostTurnSkillReviewOverlay({
         })
       }
       onDismiss={(id) => {
-        if (!sessionKey) {
+        if (!sessionId) {
           return;
         }
-        setDismissedIdsBySession((current) => {
-          const next = new Set(current[sessionKey] ?? []);
-          next.add(id);
-          return { ...current, [sessionKey]: [...next] };
-        });
+        setDismissedIds((current) =>
+          current.includes(`${sessionId}:${id}`)
+            ? current
+            : [...current, `${sessionId}:${id}`]
+        );
       }}
       pendingProposals={visibleProposals}
       suggestions={visibleSuggestions}

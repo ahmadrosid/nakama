@@ -18,8 +18,6 @@ export type SuggestionApplyState =
 interface SkillPostTurnReviewBannerProps {
   applyErrorById: Record<string, string | undefined>;
   applyStateById: Record<string, SuggestionApplyState>;
-  canApply: boolean;
-  isOrgAdmin: boolean;
   onApply: (suggestionId: string) => void;
   onDismiss: (id: string) => void;
   pendingProposals: SkillProposal[];
@@ -55,20 +53,16 @@ function DismissButton({
 const PENDING_PROPOSAL_REASON =
   "Makes the agent smarter for you. Needs admin approval to go live.";
 
-function proposalTitle(proposal: SkillProposal): string {
-  const action = proposal.action.replaceAll("_", " ");
-  return `${action.charAt(0).toUpperCase()}${action.slice(1)} “${proposal.skillName}”`;
-}
-
 function PendingProposalRow({
-  isOrgAdmin,
   onDismiss,
   proposal,
 }: {
-  isOrgAdmin: boolean;
   onDismiss: () => void;
   proposal: SkillProposal;
 }) {
+  const action = proposal.action.replaceAll("_", " ");
+  const title = `${action.charAt(0).toUpperCase()}${action.slice(1)} “${proposal.skillName}”`;
+
   return (
     <div className="text-sm">
       <div className="flex items-center gap-2">
@@ -78,17 +72,15 @@ function PendingProposalRow({
           strokeWidth={1.5}
         />
         <p className="min-w-0 flex-1 truncate font-medium text-foreground">
-          {proposalTitle(proposal)}
+          {title}
         </p>
         <div className="flex shrink-0 items-center">
-          {isOrgAdmin ? (
-            <Link
-              className="px-1.5 text-xs underline underline-offset-2 hover:text-foreground"
-              to={orgSkillProposalsPath(proposal.profileId)}
-            >
-              Review
-            </Link>
-          ) : null}
+          <Link
+            className="px-1.5 text-xs underline underline-offset-2 hover:text-foreground"
+            to={orgSkillProposalsPath(proposal.profileId)}
+          >
+            Review
+          </Link>
           <DismissButton
             label={`Dismiss skill ${proposal.action} ${proposal.skillName}`}
             onDismiss={onDismiss}
@@ -107,8 +99,6 @@ export function SkillPostTurnReviewBanner({
   pendingProposals,
   applyStateById,
   applyErrorById,
-  canApply,
-  isOrgAdmin,
   onApply,
   onDismiss,
 }: SkillPostTurnReviewBannerProps) {
@@ -124,7 +114,6 @@ export function SkillPostTurnReviewBanner({
       >
         {pendingProposals.map((proposal) => (
           <PendingProposalRow
-            isOrgAdmin={isOrgAdmin}
             key={proposal.id}
             onDismiss={() => onDismiss(`proposal:${proposal.id}`)}
             proposal={proposal}
@@ -172,7 +161,7 @@ export function SkillPostTurnReviewBanner({
               ) : null}
               <div className="mt-2 flex items-center gap-2">
                 <Button
-                  disabled={!canApply || applied || loading}
+                  disabled={applied || loading}
                   onClick={() => onApply(suggestion.id)}
                   size="sm"
                   type="button"
@@ -184,11 +173,6 @@ export function SkillPostTurnReviewBanner({
                       : "Applied"
                     : "Apply"}
                 </Button>
-                {canApply ? null : (
-                  <span className="text-muted-foreground text-xs">
-                    Viewers cannot apply.
-                  </span>
-                )}
               </div>
             </div>
           );
