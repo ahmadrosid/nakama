@@ -3,21 +3,22 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { orgIdFromSkillSourcePath } from "@nakama/core";
+
+const BOOTSTRAP_SCHEMA_VERSION = 1;
+
 export function migrateDatabase(db: Database): void {
-  const schemaPath = resolveSchemaPath();
-  const sql = readFileSync(schemaPath, "utf8");
+  applyBootstrapSchema(db);
 
   // Each step runs in its own transaction so a failure cannot leave one half
   // applied. They deliberately do not share a single outer transaction: the
-  // schema sets `PRAGMA foreign_keys`, and migrateLegacyProfileIds toggles it
-  // and opens its own BEGIN, both of which SQLite ignores or rejects inside a
-  // transaction. Stopping between steps is safe because every step is
-  // idempotent and this runs on every open.
+  // bootstrap schema has its own versioned transaction, while
+  // migrateLegacyProfileIds toggles `PRAGMA foreign_keys` and opens its own
+  // BEGIN. Stopping between steps is safe because every compatibility step is
+  // idempotent and runs on every open.
   const atomic = (step: (database: Database) => void): void => {
     db.transaction(() => step(db))();
   };
 
-  db.exec(sql);
   atomic(migrateProfilesTable);
   atomic(migrateAutomationsTable);
   atomic(migrateDropTasksTables);
@@ -53,6 +54,33 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioTables);
   atomic(migrateComposioUserConnections);
   atomic(migrateProfileChangeEventsTable);
+}
+
+function applyBootstrapSchema(db: Database): void {
+  // Foreign-key enforcement is connection-scoped, so it must run even after
+  // the bootstrap schema has already been applied.
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_version (
+      version INTEGER PRIMARY KEY NOT NULL
+    );
+  `);
+
+  const current = db
+    .prepare("SELECT MAX(version) AS version FROM schema_version")
+    .get() as { version: number | null };
+  if ((current.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
+    return;
+  }
+
+  const schemaPath = resolveSchemaPath();
+  const sql = readFileSync(schemaPath, "utf8");
+  db.transaction(() => {
+    db.exec(sql);
+    db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(
+      BOOTSTRAP_SCHEMA_VERSION
+    );
+  })();
 }
 
 export function resolveSchemaPath(
