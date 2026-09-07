@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { OrgRole } from "@nakama/core";
+import {
+  createInMemoryDatabaseAdapter,
+  seedOrgDefaultProfile,
+} from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import type { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -153,6 +158,44 @@ describe("RBAC: viewer cannot reach state-changing automation/session routes", (
 });
 
 describe("RBAC: admin can still reach the same routes (not a 403)", () => {
+  test.each(["admin", "member"] as const)(
+    "messaging Super Bot sessions enforce the authenticated %s role",
+    async (role) => {
+      const databaseAdapter = createInMemoryDatabaseAdapter();
+      const agent = new AgentService(null, null, databaseAdapter);
+      const { app, authService } = createMinimalHonoApp({
+        agent,
+        databaseAdapter,
+      });
+      const email = `${role}@example.com`;
+      await seedUser(databaseAdapter, authService, email, role);
+      const profile = await seedOrgDefaultProfile(databaseAdapter, ORG_ID);
+      await databaseAdapter.upsertProfile({ ...profile, isSuper: true });
+      const session = await loginUserSession(app, email, PASSWORD, ORG_ID);
+
+      for (const channel of ["telegram", "whatsapp", "discord"]) {
+        const response = await app.fetch(
+          new Request("http://localhost:4310/v1/sessions", {
+            body: JSON.stringify({ channel, profileId: profile.id }),
+            headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+            method: "POST",
+          })
+        );
+        expect(response.status).toBe(role === "admin" ? 201 : 403);
+        if (role === "admin") {
+          const body = (await response.json()) as { sessionId: string };
+          expect(
+            await databaseAdapter.getSession(body.sessionId)
+          ).toMatchObject({
+            channel,
+            profileId: profile.id,
+            userId: "user_admin",
+          });
+        }
+      }
+    }
+  );
+
   test("POST /v1/automations is not forbidden for admin", async () => {
     const { app, databaseAdapter, authService } = createApp();
     await seedUser(databaseAdapter, authService, "admin@example.com", "admin");

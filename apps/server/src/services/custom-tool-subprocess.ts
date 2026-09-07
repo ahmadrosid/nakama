@@ -40,7 +40,6 @@ function buildAllowlistedSubprocessEnv(
 
 interface SpawnJsonToolTransport {
   extraArgs?: string[];
-  extraEnv?: NodeJS.ProcessEnv;
   includeConfigDir?: boolean;
   /** When set, written to stdin instead of `input`. Legacy callers omit this. */
   stdin?: unknown;
@@ -71,13 +70,10 @@ export async function spawnJsonTool(
 ): Promise<unknown> {
   const { args, bin, context, cwd, input, label, transport, workspaceRoot } =
     options;
-  const env = {
-    ...buildAllowlistedSubprocessEnv(
-      workspaceRoot,
-      transport?.includeConfigDir ?? true
-    ),
-    ...transport?.extraEnv,
-  };
+  const env = buildAllowlistedSubprocessEnv(
+    workspaceRoot,
+    transport?.includeConfigDir ?? true
+  );
   const timeoutMs = resolveCustomToolTimeoutMs();
   const childArgs = [...(transport?.extraArgs ?? []), ...args];
   const stdinPayload =
@@ -89,7 +85,6 @@ export async function spawnJsonTool(
       // does not leave a tool process holding the session open.
       const child = spawn(bin, childArgs, {
         cwd,
-        detached: false,
         env,
         stdio: ["pipe", "pipe", "pipe"],
       });

@@ -250,6 +250,18 @@ describe("plugin ownership adapter", () => {
 
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
+    expect((await db.listOrgPlugins()).map((row) => row.orgId)).toEqual([
+      "org_a",
+      "org_b",
+    ]);
+    expect((await db.listOrgPlugins("org_a")).map((row) => row.orgId)).toEqual([
+      "org_a",
+    ]);
+    expect((await db.listOrgPlugins("org_b")).map((row) => row.orgId)).toEqual([
+      "org_b",
+    ]);
+    expect(await db.listOrgPlugins("missing")).toEqual([]);
+    expect(await db.listOrgPlugins("")).toEqual([]);
 
     const skills = (await db.listSkills()).filter(
       (skill) => skill.pluginId === "notes"

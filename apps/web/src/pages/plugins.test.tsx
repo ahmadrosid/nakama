@@ -16,9 +16,7 @@ import {
   nextPluginVersions,
   orgPluginQueryOptions,
   orgPluginsQueryOptions,
-  pluginHasRetainedData,
   pluginRowActions,
-  pluginRowIdentity,
   pluginUiDocumentUrl,
   resolvePluginPageView,
   useEnableOrgPlugin,
@@ -223,13 +221,6 @@ describe("plugin management authority and mutations", () => {
     expect(installPackage).toHaveBeenCalled();
   });
 
-  test("management list identity keeps duplicate labels distinct", () => {
-    expect(pluginRowIdentity(plugin({ pluginId: "alpha" }))).toBe(
-      "Notes alpha"
-    );
-    expect(pluginRowIdentity(plugin({ pluginId: "zeta" }))).toBe("Notes zeta");
-  });
-
   test("update and uninstall only while disabled; purge only while retained", () => {
     const enabled = plugin({
       availableVersions: ["1.0.0", "1.1.0"],
@@ -417,7 +408,7 @@ describe("plugin ownership and update helpers", () => {
     expect(isPluginOwned({ pluginId: null })).toBe(false);
   });
 
-  test("update versions and retained data follow server fields", () => {
+  test("update versions exclude the selected version", () => {
     expect(
       nextPluginVersions(
         plugin({
@@ -426,11 +417,6 @@ describe("plugin ownership and update helpers", () => {
         })
       )
     ).toEqual(["1.1.0"]);
-    expect(
-      pluginHasRetainedData(
-        plugin({ databaseGeneration: "gen-1", lifecycleState: "retained" })
-      )
-    ).toBe(true);
   });
 
   test("install trust lines include identity and digest", () => {

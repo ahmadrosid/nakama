@@ -901,7 +901,7 @@ export interface DatabaseAdapter {
     orgId: string,
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
-  listOrgPlugins(): Promise<StoredOrgPluginRecord[]>;
+  listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
 
   listPluginReleases(pluginId?: string): Promise<StoredPluginReleaseRecord[]>;
 

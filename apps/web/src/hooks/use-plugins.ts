@@ -294,12 +294,6 @@ export function isPluginLifecycleBusy(plugin: OrgPluginDetail): boolean {
   );
 }
 
-export function pluginHasRetainedData(plugin: OrgPluginDetail): boolean {
-  return (
-    plugin.lifecycleState === "retained" || plugin.databaseGeneration !== null
-  );
-}
-
 export function nextPluginVersions(plugin: OrgPluginDetail): string[] {
   return plugin.availableVersions.filter(
     (version) => version !== plugin.selectedVersion
@@ -392,10 +386,6 @@ export function pluginPageStateMessage(kind: PluginPageViewKind): string {
     return "This plugin didn't load";
   }
   return "Loading plugin";
-}
-
-export function pluginRowIdentity(plugin: OrgPluginDetail): string {
-  return `${plugin.name} ${plugin.pluginId}`;
 }
 
 export function pluginRowActions(plugin: OrgPluginDetail): {

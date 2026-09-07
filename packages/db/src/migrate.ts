@@ -1547,7 +1547,6 @@ function migratePluginTables(db: Database): void {
     );
   `);
 
-  addNullableTextColumnIfMissing(db, "plugin_releases", "digest");
   addNullableTextColumnIfMissing(db, "tools", "plugin_id");
   addNullableTextColumnIfMissing(db, "tools", "plugin_key");
   addNullableTextColumnIfMissing(db, "skills", "plugin_id");

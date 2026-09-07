@@ -392,9 +392,7 @@ export class PluginService {
   }
 
   async capabilityRevisionForOrg(orgId: string): Promise<string> {
-    const installs = (await this.db.listOrgPlugins()).filter(
-      (install) => install.orgId === orgId
-    );
+    const installs = await this.db.listOrgPlugins(orgId);
     return installs
       .map(
         (install) =>
@@ -932,9 +930,7 @@ export class PluginService {
 
   async listOrgPluginDetails(orgId: string): Promise<OrgPluginDetail[]> {
     const releases = await this.db.listPluginReleases();
-    const installs = (await this.db.listOrgPlugins()).filter(
-      (install) => install.orgId === orgId
-    );
+    const installs = await this.db.listOrgPlugins(orgId);
     const pluginIds = [
       ...new Set([
         ...releases.map((release) => release.pluginId),

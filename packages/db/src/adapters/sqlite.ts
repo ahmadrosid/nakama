@@ -998,6 +998,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listOrgPluginsStmt = db.prepare(
     "SELECT * FROM org_plugins ORDER BY org_id, plugin_id"
   );
+  const listOrgPluginsForOrgStmt = db.prepare(
+    "SELECT * FROM org_plugins WHERE org_id = ? ORDER BY plugin_id"
+  );
   const listPluginReleasesStmt = db.prepare(
     "SELECT * FROM plugin_releases WHERE plugin_id = ? ORDER BY created_at ASC"
   );
@@ -3051,10 +3054,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return rows.map(toOrgMemoryProposalRecord);
     },
 
-    async listOrgPlugins() {
-      return listOrgPluginsStmt
-        .all()
-        .map((row) => toOrgPluginRecord(row as OrgPluginRow));
+    async listOrgPlugins(orgId) {
+      const rows =
+        orgId === undefined
+          ? listOrgPluginsStmt.all()
+          : listOrgPluginsForOrgStmt.all(orgId);
+      return rows.map((row) => toOrgPluginRecord(row as OrgPluginRow));
     },
 
     async listPluginReleases(pluginId) {
