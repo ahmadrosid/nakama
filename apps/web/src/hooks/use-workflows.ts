@@ -1,4 +1,7 @@
-import type { UpdateWorkflowRequest } from "@nakama/core/contract";
+import type {
+  UpdateWorkflowRequest,
+  WorkflowRunRecord,
+} from "@nakama/core/contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
@@ -25,11 +28,26 @@ export function useWorkflowSqliteQuery(table: string | null, enabled: boolean) {
   });
 }
 
+const RUN_POLL_INTERVAL_MS = 2000;
+
+/**
+ * A run settles on the server, so the panel has to ask. Poll while one is in
+ * flight and stop as soon as none is, which keeps a finished workflow at zero
+ * requests without holding a second stream open for the page.
+ */
+export function workflowRunsRefetchInterval(
+  runs: WorkflowRunRecord[] | undefined
+): number | false {
+  const running = runs?.some((run) => run.status === "running") ?? false;
+  return running ? RUN_POLL_INTERVAL_MS : false;
+}
+
 export function useWorkflowRunsQuery(workflowId: string | null) {
   return useQuery({
     enabled: Boolean(workflowId),
     queryFn: () => client.listWorkflowRuns(workflowId!),
     queryKey: queryKeys.workflows.runs(workflowId ?? ""),
+    refetchInterval: (query) => workflowRunsRefetchInterval(query.state.data),
   });
 }
 
