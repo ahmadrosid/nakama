@@ -2,8 +2,6 @@
 
 Nakama plugins are trusted ZIP packages. A platform admin installs the bytes. An organization admin activates them. Plugin code runs as ordinary Bun and browser JavaScript — there is no sandbox.
 
-The Notes example at `examples/plugins/notes/` is the starter: skill, React page, tools, SQLite, and `migrations/002-add-pinned.sql` for the upgrade zip tests build from that tree.
-
 ## Package layout
 
 ```text
@@ -50,8 +48,6 @@ Spoofed org, role, or path fields in input are stripped. Use `bun:sqlite` agains
 
 List migrations in order with immutable ids. Nakama applies them to a private database generation, records checksums, then publishes the generation with the release. Do not put schema changes in activate hooks.
 
-The Notes v2 package adds `pinned` through `002-add-pinned.sql`. Existing rows stay readable; the new column defaults to `0`.
-
 ## Lifecycle idempotency
 
 Activation retries reuse a stable operation id. Hooks must tolerate being run more than once. Disable still finishes if a deactivate hook fails. Uninstall keeps organization data until a separate confirmed delete.
@@ -93,12 +89,12 @@ parent.postMessage(
 
 ## Build and pack
 
-From `examples/plugins/notes/`:
+From your plugin directory, build the UI into `ui/` and package the files declared by your manifest:
 
 ```bash
 bun install
 bun run build
-zip -r notes-1.0.0.zip nakama.plugin.json actions skills ui migrations
+zip -r plugin-1.0.0.zip nakama.plugin.json actions skills ui migrations
 ```
 
-Committed `ui/` assets are enough for install without running Vite.
+Include the built UI assets in the ZIP so installation does not need to run Vite. Omit directories for capabilities your plugin does not use.

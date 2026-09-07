@@ -1,9 +1,8 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   getCustomToolsDir,
   getOrgPluginDatabasePath,
@@ -31,38 +30,46 @@ import {
   previewProfilePackImport,
 } from "./profile-portability";
 
-const NOTES_DIR = fileURLToPath(
-  new URL("../../../../examples/plugins/notes", import.meta.url)
-);
-
 const ACTOR = { id: "admin_1", role: "admin" as const };
 const ORG = "org_src";
 const DEST = "org_dest";
 
-async function zipPluginDir(dir: string): Promise<Uint8Array> {
-  const entries: Record<string, Uint8Array> = {};
-
-  async function walk(current: string, relative: string): Promise<void> {
-    for (const entry of await readdir(current, { withFileTypes: true })) {
-      if (
-        entry.name === "node_modules" ||
-        entry.name === "ui-src" ||
-        entry.name.startsWith(".")
-      ) {
-        continue;
-      }
-      const nextRel = relative ? `${relative}/${entry.name}` : entry.name;
-      const absolute = join(current, entry.name);
-      if (entry.isDirectory()) {
-        await walk(absolute, nextRel);
-      } else if (entry.isFile()) {
-        entries[nextRel] = await readFile(absolute);
-      }
-    }
-  }
-
-  await walk(dir, "");
-  return zipSync(entries);
+function notesBundle(): Uint8Array {
+  return zipSync({
+    "actions/create.js": Buffer.from(
+      "export function run(input) { return input; }"
+    ),
+    "actions/list.js": Buffer.from(
+      "export function run() { return { notes: [] }; }"
+    ),
+    "migrations/001.sql": Buffer.from("CREATE TABLE notes (title TEXT);"),
+    "nakama.plugin.json": Buffer.from(
+      JSON.stringify({
+        actions: ["list", "create"].map((key) => ({
+          access: "member",
+          description: key,
+          effect: key === "list" ? "read" : "write",
+          entry: `actions/${key}.js`,
+          exposeAsTool: true,
+          inputSchema: { type: "object" },
+          key,
+        })),
+        apiVersion: 1,
+        author: "Nakama",
+        database: { migrations: [{ id: "001", path: "migrations/001.sql" }] },
+        description: "Portability test fixture",
+        id: "notes",
+        license: "MIT",
+        minNakamaVersion: "0.1.0",
+        name: "Notes",
+        skills: [{ directory: "skills/notes", key: "notes" }],
+        version: "1.0.0",
+      })
+    ),
+    "skills/notes/SKILL.md": Buffer.from(
+      "---\nname: notes\ndescription: Test plugin skill\n---\nList notes.\n"
+    ),
+  });
 }
 
 function hangBundle(): Uint8Array {
@@ -322,7 +329,7 @@ describe("plugin portability", () => {
       createInMemoryDatabaseAdapter(),
       configDir
     );
-    const archive = await zipPluginDir(NOTES_DIR);
+    const archive = notesBundle();
     await service.installPluginPackage(archive);
     const added = await service.addOrgPlugin(ORG, "notes");
     const enabled = await service.enableOrgPlugin(
@@ -385,7 +392,7 @@ describe("plugin portability", () => {
       createInMemoryDatabaseAdapter(),
       configDir
     );
-    await service.installPluginPackage(await zipPluginDir(NOTES_DIR));
+    await service.installPluginPackage(notesBundle());
     const added = await service.addOrgPlugin(ORG, "notes");
     const reached = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
@@ -429,7 +436,7 @@ describe("plugin portability", () => {
       updatedAt: new Date().toISOString(),
     });
     const service = new PluginService(database.adapter, configDir);
-    await service.installPluginPackage(await zipPluginDir(NOTES_DIR));
+    await service.installPluginPackage(notesBundle());
     await service.addOrgPlugin(ORG, "notes");
     const exported = await createNakamaDataExport({ rootDir: configDir });
     await database.close();
@@ -506,7 +513,7 @@ describe("plugin portability", () => {
   test("profile import skips missing plugins and never copies plugin-owned code", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
-    await service.installPluginPackage(await zipPluginDir(NOTES_DIR));
+    await service.installPluginPackage(notesBundle());
     const added = await service.addOrgPlugin(ORG, "notes");
     await service.enableOrgPlugin(ORG, "notes", added.revision, ACTOR);
 
