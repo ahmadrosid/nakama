@@ -49,6 +49,9 @@ export interface SqliteDatabase {
   reopen(): Promise<void>;
 }
 
+const INTERRUPTED_RUN_ERROR =
+  "Interrupted: the server process running this exited before it finished.";
+
 interface AutomationRow {
   created_at: string;
   definition: string;
@@ -588,6 +591,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteWorkflowRunStmt = db.prepare(`
     DELETE FROM workflow_runs
     WHERE workflow_id = ? AND id = ?
+  `);
+  const failInterruptedAutomationRunsStmt = db.prepare(`
+    UPDATE automation_runs
+    SET status = 'failed', completed_at = ?, error = ?
+    WHERE status = 'running'
+  `);
+  const failInterruptedWorkflowRunsStmt = db.prepare(`
+    UPDATE workflow_runs
+    SET status = 'failed', completed_at = ?, error = ?
+    WHERE status = 'running'
+  `);
+  const failInterruptedWorkflowRunStepsStmt = db.prepare(`
+    UPDATE workflow_run_steps
+    SET status = 'failed', completed_at = ?, error = ?
+    WHERE status = 'running'
   `);
 
   const listWorkflowRunStepsStmt = db.prepare(`
@@ -2078,6 +2096,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteWorkflowRun(workflowId, runId) {
       const result = deleteWorkflowRunStmt.run(workflowId, runId);
       return result.changes > 0;
+    },
+
+    async failInterruptedRuns() {
+      const completedAt = new Date().toISOString();
+      const automations = failInterruptedAutomationRunsStmt.run(
+        completedAt,
+        INTERRUPTED_RUN_ERROR
+      );
+      const workflows = failInterruptedWorkflowRunsStmt.run(
+        completedAt,
+        INTERRUPTED_RUN_ERROR
+      );
+      // Steps follow their run: a failed run whose steps still read `running`
+      // renders as work in progress under a finished run.
+      failInterruptedWorkflowRunStepsStmt.run(
+        completedAt,
+        INTERRUPTED_RUN_ERROR
+      );
+      return automations.changes + workflows.changes;
     },
 
     async getActiveArtifactShareByPath(orgId, profileId, sourcePath) {

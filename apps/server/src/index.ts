@@ -107,6 +107,15 @@ const database = await createDatabase(config.databaseUrl, {
 
 await seedDatabase(database.adapter);
 
+// Runs are only completed by the process that started them, so a crash or a
+// kill leaves rows claiming work nothing is doing. Settle them before serving.
+// ponytail: correct while this is a single process; two servers would mean one
+// boot settling the other's live runs, which needs a heartbeat to tell apart.
+const interruptedRuns = await database.adapter.failInterruptedRuns();
+if (interruptedRuns > 0) {
+  console.log(`Settled ${interruptedRuns} run(s) interrupted by a restart`);
+}
+
 const authService = new AuthService();
 
 const llmUsageTracker = await LlmUsageTracker.create(database.adapter);
