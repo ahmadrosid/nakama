@@ -39,12 +39,21 @@ describe("usage tracking", () => {
     const priced = await wrapProviderWithUsageTracking(
       providerReporting(usage),
       tracker,
-      "gpt-4o"
+      "claude-sonnet-4-6"
     ).generateChat(input);
     expect(priced.usage?.costUsd).toBeCloseTo(
-      estimateUsageCostUsd("gpt-4o", 123, 45),
+      estimateUsageCostUsd("claude-sonnet-4-6", 123, 45),
       12
     );
+
+    // Off the catalog, so the only rate available is the fallback one. The
+    // totals still count it; the result must not show it as money.
+    const offCatalog = await wrapProviderWithUsageTracking(
+      providerReporting(usage),
+      tracker,
+      "gpt-4o"
+    ).generateChat(input);
+    expect(offCatalog.usage).toEqual(usage);
 
     tracker.setPricingContext({ provider: "openai_compatible" });
     const unpriced = await wrapProviderWithUsageTracking(
@@ -196,7 +205,6 @@ describe("usage tracking", () => {
     });
 
     expect(result.usage).toEqual({
-      costUsd: estimateUsageCostUsd("gpt-4o", 123, 45),
       inputTokens: 123,
       outputTokens: 45,
       totalTokens: 168,
