@@ -184,15 +184,16 @@ describe("agent chat tool loop", () => {
         },
       };
       const toolCalls = [{ arguments: {}, id: "unexecuted", name: tool.name }];
+      const partialReply = "Here is what the analysis found.";
       const provider = createMockProvider([
         {
           assistantMessage: {
-            content: "",
+            content: partialReply,
             role: "assistant",
             thinking: source === "estimated" ? "x".repeat(800_000) : "",
             toolCalls,
           },
-          content: "",
+          content: partialReply,
           toolCalls,
           usage:
             source === "reported"
@@ -201,9 +202,16 @@ describe("agent chat tool loop", () => {
         },
       ]);
       const session = createAgentChatSession({ provider }, { tools: [tool] });
-      const reply = await session.send("Think first");
+      let streamed = "";
+      const reply = await session.sendStream("Think first", {
+        onChunk: (chunk) => {
+          streamed += chunk;
+        },
+      });
       expect(toolRuns).toBe(0);
-      expect(reply.length).toBeGreaterThan(0);
+      expect(reply.startsWith(partialReply)).toBe(true);
+      expect(reply.length).toBeGreaterThan(partialReply.length);
+      expect(streamed).toBe(reply);
       expect(session.getHistory()).toEqual([
         { content: "Think first", role: "user" },
         { content: reply, role: "assistant" },

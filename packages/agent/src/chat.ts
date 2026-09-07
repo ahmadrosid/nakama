@@ -538,6 +538,7 @@ async function runConversation(
   signal?: AbortSignal
 ): Promise<string> {
   let producedTokens = 0;
+  let stoppedReply = "";
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
     if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
@@ -600,6 +601,8 @@ async function runConversation(
       producedTokens >= MAX_TURN_OUTPUT_TOKENS &&
       result.toolCalls.length > 0
     ) {
+      // Keep visible text, but not tool calls that will never execute.
+      stoppedReply = result.content;
       break;
     }
     history.push(result.assistantMessage);
@@ -624,11 +627,11 @@ async function runConversation(
   }
 
   if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
-    const content =
-      "Stopped because this turn reached its output budget. Send another message to continue.";
+    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached its output budget. Send another message to continue.`;
+    const content = stoppedReply + notice;
     history.push({ content, role: "assistant" });
     if (mode === "stream") {
-      handlers?.onChunk(content);
+      handlers?.onChunk(notice);
     }
     return content;
   }
