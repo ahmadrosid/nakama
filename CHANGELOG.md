@@ -9,6 +9,11 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+### Changed
+
+- Pinned tool-output optimiser bumped to 0.7.9: a fold always leaves part of the
+  result readable, and non-ASCII output no longer panics the cut ([#875])
+
 ## [0.4.8] - 2026-09-06
 
 ### Added
@@ -976,3 +981,4 @@ First tagged release. The baseline it established:
 [#858]: https://github.com/ahmadrosid/nakama/pull/858
 [#859]: https://github.com/ahmadrosid/nakama/pull/859
 [#860]: https://github.com/ahmadrosid/nakama/pull/860
+[#875]: https://github.com/ahmadrosid/nakama/pull/875
