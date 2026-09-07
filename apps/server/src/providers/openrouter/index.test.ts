@@ -87,6 +87,110 @@ describe("createOpenRouterProvider", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("serializes user image parts with the OpenRouter SDK shape", async () => {
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request =
+          input instanceof Request ? input : new Request(input, init);
+        const body = (await request.json()) as {
+          messages: Array<{ content: unknown; role: string }>;
+        };
+
+        expect(body.messages[1]).toEqual({
+          content: [
+            { text: "What is this?", type: "text" },
+            {
+              image_url: {
+                url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+              },
+              type: "image_url",
+            },
+          ],
+          role: "user",
+        });
+
+        return new Response(chatCompletionResponse("A tiny image"), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+
+    await provider.generateChat({
+      messages: [
+        {
+          content: [
+            { text: "What is this?", type: "text" },
+            {
+              data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+              mediaType: "image/png",
+              type: "image",
+            },
+          ],
+          role: "user",
+        },
+      ],
+      system: "You are helpful.",
+    });
+  });
+
+  test("serializes user document parts with the OpenRouter SDK shape", async () => {
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request =
+          input instanceof Request ? input : new Request(input, init);
+        const body = (await request.json()) as {
+          messages: Array<{ content: unknown; role: string }>;
+        };
+
+        expect(body.messages[1]).toEqual({
+          content: [
+            { text: "Summarize this report", type: "text" },
+            {
+              file: {
+                file_data: "data:application/pdf;base64,JVBERi0=",
+                filename: "report.pdf",
+              },
+              type: "file",
+            },
+          ],
+          role: "user",
+        });
+
+        return new Response(chatCompletionResponse("A short report"), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+
+    await provider.generateChat({
+      messages: [
+        {
+          content: [
+            { text: "Summarize this report", type: "text" },
+            {
+              data: "JVBERi0=",
+              filename: "report.pdf",
+              mediaType: "application/pdf",
+              type: "document",
+            },
+          ],
+          role: "user",
+        },
+      ],
+      system: "You are helpful.",
+    });
+  });
+
   test("returns tool calls from generateChat", async () => {
     const fetchMock = mock(
       async () =>
