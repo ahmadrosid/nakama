@@ -37,6 +37,8 @@ Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always 
 
 ## Browser automation
 
+Upload PR screenshots from `/tmp` with `gh pr edit --attach`; never commit screenshot files just for PR evidence.
+
 Do not use `agent-browser` or start the browser test harness unless the user explicitly requests browser testing. Use automated tests, type checks, and builds by default; browser checks are not required to finish a feature or open a PR.
 
 When browser testing is explicitly requested, use `agent-browser` for routine UI checks. Do not add Playwright for that path.
