@@ -34,7 +34,11 @@ describe("rotate-token command", () => {
       await expect(verifyLocalAuthToken(rotated!)).resolves.toEqual({
         email: "local-client@nakama.internal",
       });
-      expect(logs.some((line) => line.includes(rotated!))).toBe(true);
+      expect(
+        logs.some((line) => line.includes("Local auth token rotated."))
+      ).toBe(true);
+      expect(logs.some((line) => line.includes("Token file:"))).toBe(true);
+      expect(logs.some((line) => line.includes(rotated!))).toBe(false);
     } finally {
       delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { force: true, recursive: true });
