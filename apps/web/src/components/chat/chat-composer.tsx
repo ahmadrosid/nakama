@@ -4,6 +4,7 @@ import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
   AgentTodo,
+  ChatUsage,
   ProviderModelOption,
   SkillSummary,
   ThinkingEffort,
@@ -44,6 +45,7 @@ import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { ChatThinkingEffortControl } from "@/components/chat/chat-thinking-effort-control";
+import { ChatSessionUsageChip } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { Button } from "@/components/ui/button";
@@ -130,6 +132,8 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
     models: ProviderModelOption[];
   }>;
   renderModelLabel: (selection: string | null) => string | null;
+  /** Tokens and cost of the whole session; hidden by the Settings toggle. */
+  sessionUsage?: ChatUsage | null;
   showOfflineHint?: boolean;
   showTips?: boolean;
   thinkingEffort?: ThinkingEffort;
@@ -723,6 +727,9 @@ function ChatComposerFullFooter({
       >
         {props.contextUsage ? (
           <ChatContextUsageRing usage={props.contextUsage} />
+        ) : null}
+        {props.sessionUsage ? (
+          <ChatSessionUsageChip usage={props.sessionUsage} />
         ) : null}
 
         {props.providerConfigured ? (
