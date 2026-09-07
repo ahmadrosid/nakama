@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,11 +22,15 @@ export function Layout() {
   return (
     <TooltipProvider delay={0}>
       <ActiveChatProfileProvider>
-        <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
-          <ProfileRail />
-          <AppSidebar />
+        <div className="flex h-svh overflow-hidden bg-background pl-[env(safe-area-inset-left)]">
+          {/* The rail and sidebar cost a fixed 296px, so on a phone they live
+              in MobileNavDrawer instead of the layout. */}
+          <div className="hidden h-full sm:flex">
+            <ProfileRail />
+            <AppSidebar />
+          </div>
           <div
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
             data-app-shell-content=""
           >
             <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
@@ -37,7 +42,6 @@ export function Layout() {
             </main>
           </div>
         </div>
-        <NarrowViewportNotice />
         <CommandPalette />
       </ActiveChatProfileProvider>
     </TooltipProvider>
@@ -71,8 +75,10 @@ function appShellMainClassName(page: PageId, pathname: string): string {
   const skillDetail = pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`);
   return cn(
     "min-h-0 flex-1",
-    flush ? "flex flex-col overflow-hidden" : "overflow-y-auto",
-    flush || skillDetail ? null : "p-6"
+    flush
+      ? "flex flex-col overflow-hidden"
+      : "overflow-y-auto overflow-x-hidden",
+    flush || skillDetail ? null : "p-4 sm:p-6"
   );
 }
 
@@ -83,13 +89,18 @@ function AppShellHeader({
   label: string | undefined;
   page: PageId;
 }) {
-  if (page === "chat") {
-    return null;
-  }
-
   const hideTitle = page === "soul" || page === "profiles";
+
   return (
-    <header className="app-shell-header gap-4 bg-card px-6">
+    <header
+      className={cn(
+        "app-shell-header gap-2 bg-card px-3 sm:gap-4 sm:px-6",
+        // Chat gives its whole column to the conversation on desktop; on a
+        // phone the bar is the only way to reach navigation.
+        page === "chat" && "sm:hidden"
+      )}
+    >
+      <MobileNavDrawer className="sm:hidden" />
       {page === "automations" ? (
         <AgentWorkTabs />
       ) : hideTitle ? null : (
@@ -97,7 +108,7 @@ function AppShellHeader({
       )}
       <div
         className={cn(
-          "flex h-full shrink-0 items-stretch gap-2",
+          "flex h-full min-w-0 shrink-0 items-stretch gap-2",
           !hideTitle && "ml-auto"
         )}
         data-page-header-actions
@@ -112,31 +123,8 @@ function AppShellError({ error }: { error: string | null | undefined }) {
   }
 
   return (
-    <div className="shrink-0 border-red-200 border-b bg-red-50 px-6 py-3 text-red-800 text-sm dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+    <div className="shrink-0 border-red-200 border-b bg-red-50 px-4 py-3 text-red-800 text-sm sm:px-6 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
       {error}
-    </div>
-  );
-}
-
-/**
- * The rail and sidebar cost a fixed 296px. Measured on the settings page, that
- * leaves 344px of content at 640px wide and 79px at 375px, with labels clipped
- * and the page scrolling sideways. Tablets at `sm` (640px) can use the shell;
- * below that we say so instead of rendering a layout nobody can use.
- */
-function NarrowViewportNotice() {
-  return (
-    <div className="hidden h-svh flex-col items-center justify-center gap-3 bg-background px-6 text-center max-sm:flex">
-      <h1 className="type-page-title">This console needs a wider window</h1>
-      <p className="max-w-sm text-muted-foreground text-sm">
-        Profiles, tools and integrations are laid out for a screen at least
-        640px wide. Open Nakama on a tablet or desktop browser, or widen this
-        window.
-      </p>
-      <p className="max-w-sm text-muted-foreground text-sm">
-        To chat with your agent from a phone, use the Telegram, WhatsApp or
-        Discord bridge instead.
-      </p>
     </div>
   );
 }
