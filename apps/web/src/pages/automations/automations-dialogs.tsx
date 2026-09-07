@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import {
-  DeleteConfirmationDialog,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -94,35 +93,89 @@ export function AutomationsDialogs({
         </DialogContent>
       </Dialog>
 
-      <DeleteConfirmationDialog
-        busy={busy}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => void handleDeleteConfirm()}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || busy)) {
+            setDeleteTarget(null);
+          }
+        }}
         open={deleteTarget !== null}
-        title="Delete automation?"
       >
-        This removes{" "}
-        <span className="font-medium text-foreground">
-          {deleteTarget?.name}
-        </span>{" "}
-        and its run history permanently.
-      </DeleteConfirmationDialog>
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>Delete automation?</DialogTitle>
+            <DialogDescription>
+              This removes{" "}
+              <span className="font-medium text-foreground">
+                {deleteTarget?.name}
+              </span>{" "}
+              and its run history permanently.
+            </DialogDescription>
+          </DialogHeader>
 
-      <DeleteConfirmationDialog
-        busy={busy}
-        onClose={() => setDeleteRunTarget(null)}
-        onConfirm={() => void handleDeleteRunConfirm()}
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              disabled={busy}
+              onClick={() => setDeleteTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => void handleDeleteConfirm()}
+              type="button"
+              variant="destructive"
+            >
+              {busy ? <Spinner className="size-4" /> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || busy)) {
+            setDeleteRunTarget(null);
+          }
+        }}
         open={deleteRunTarget !== null}
-        title="Delete run history item?"
       >
-        This permanently removes the run from{" "}
-        <span className="font-medium text-foreground">
-          {deleteRunTarget
-            ? formatSessionTimestamp(deleteRunTarget.startedAt)
-            : ""}
-        </span>
-        .
-      </DeleteConfirmationDialog>
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>Delete run history item?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the run from{" "}
+              <span className="font-medium text-foreground">
+                {deleteRunTarget
+                  ? formatSessionTimestamp(deleteRunTarget.startedAt)
+                  : ""}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              disabled={busy}
+              onClick={() => setDeleteRunTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => void handleDeleteRunConfirm()}
+              type="button"
+              variant="destructive"
+            >
+              {busy ? <Spinner className="size-4" /> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

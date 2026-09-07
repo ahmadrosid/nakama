@@ -11,8 +11,6 @@ skills/<key>/SKILL.md
 ui/index.html
 ui/assets/*
 migrations/*.sql
-hooks/activate.js      # optional
-hooks/deactivate.js    # optional
 ```
 
 The archive may put those files at the root or inside one top-level folder. `PluginService` resolves that package root from the single `nakama.plugin.json`.
@@ -46,11 +44,11 @@ Spoofed org, role, or path fields in input are stripped. Use `bun:sqlite` agains
 
 ## Schema and migrations
 
-List migrations in order with immutable ids. Nakama applies them to a private database generation, records checksums, then publishes the generation with the release. Do not put schema changes in activate hooks.
+List migrations in order with immutable ids. Nakama applies them to a private database generation, records checksums, then publishes the generation with the release.
 
-## Lifecycle idempotency
+## Lifecycle
 
-Activation retries reuse a stable operation id. Hooks must tolerate being run more than once. Disable still finishes if a deactivate hook fails. Uninstall keeps organization data until a separate confirmed delete.
+Disable stops new actions and drains running calls. Uninstall keeps organization data until a separate confirmed delete. Activation and deactivation hooks are not supported.
 
 ## Managed paths
 

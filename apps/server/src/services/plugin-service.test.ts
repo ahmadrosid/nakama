@@ -41,7 +41,6 @@ function notesManifest(overrides: Record<string, unknown> = {}) {
       },
     ],
     apiVersion: PLUGIN_MANIFEST_API_VERSION,
-    hooks: { activate: "hooks/activate.js" },
     minNakamaVersion: "0.1.0",
     skills: [{ directory: "skills/notes", key: "notes" }],
     ui: {
@@ -69,7 +68,6 @@ function validBundle(overrides: Record<string, unknown> = {}): Uint8Array {
   const manifest = notesManifest(overrides);
   return encodeZip({
     "actions/list.js": sideEffectJs,
-    "hooks/activate.js": sideEffectJs,
     "nakama.plugin.json": JSON.stringify(manifest),
     "side-effect.js": sideEffectJs,
     "skills/notes/SKILL.md": "# Notes\n",
@@ -177,7 +175,6 @@ describe("PluginService", () => {
     expect(preview.contributions).toEqual({
       actionKeys: ["list"],
       hasDatabase: false,
-      hasHooks: true,
       hasUi: true,
       skillKeys: ["notes"],
     });
@@ -251,7 +248,6 @@ describe("PluginService", () => {
       ]),
       encodeZip({
         "actions/list.js": sideEffectJs,
-        "hooks/activate.js": sideEffectJs,
         "nakama.plugin.json": JSON.stringify(notesManifest()),
         "oversized.bin": new Uint8Array(20 * 1024 * 1024 + 1),
         "skills/notes/SKILL.md": "# Notes\n",

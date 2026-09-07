@@ -20,7 +20,6 @@ import {
 } from "./tool-resolver";
 
 const ORG_ID = "org_u5_agent";
-const ACTOR = { id: "user_1", role: "member" as const };
 
 const ACTION_JS = `
 export async function run(_input, context) {
@@ -104,8 +103,7 @@ describe("AgentService plugin capabilities", () => {
     const enabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
-      added.revision,
-      ACTOR
+      added.revision
     );
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
@@ -131,7 +129,7 @@ describe("AgentService plugin capabilities", () => {
       )
     ).toBe(true);
 
-    await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision, ACTOR);
+    await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision);
     const started = await agent.beginSessionTurn(sessionId, ORG_ID);
     expect(started).toBe(true);
     const next = await agent.resolveSession(sessionId, ORG_ID);
@@ -171,7 +169,7 @@ describe("AgentService plugin capabilities", () => {
 
     await plugins.installPluginPackage(bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await db.assignToolToProfile(profile.id, tool!.id);
 

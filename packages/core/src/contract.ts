@@ -387,13 +387,6 @@ export interface ProfilePackCustomTool {
   name: string;
 }
 
-export interface ProfilePackPluginReference {
-  contributionKey: string;
-  kind: "skill" | "tool";
-  pluginId: string;
-  version: string;
-}
-
 export interface ProfilePackMeta {
   bundledSkillNames: string[];
   composioToolkitSlugs: string[];
@@ -401,7 +394,6 @@ export interface ProfilePackMeta {
   mcpServerNames: string[];
   model: string | null;
   name: string;
-  pluginReferences?: ProfilePackPluginReference[];
   profileSkillNames: string[];
   skillsCuratorConsolidateEnabled: boolean | null;
   skillsPostTurnReview: boolean | null;
@@ -2618,7 +2610,6 @@ export interface PluginPackagePreviewResponse {
   contributions: {
     actionKeys: string[];
     hasDatabase: boolean;
-    hasHooks: boolean;
     hasUi: boolean;
     skillKeys: string[];
   };

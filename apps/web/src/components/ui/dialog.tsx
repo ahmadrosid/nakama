@@ -4,7 +4,6 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Cancel01Icon } from "hugeicons-react";
 import type * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -145,60 +144,7 @@ function DialogDescription({
   );
 }
 
-function DeleteConfirmationDialog({
-  open,
-  busy,
-  title,
-  children,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!(nextOpen || busy)) {
-          onClose();
-        }
-      }}
-      open={open}
-    >
-      <DialogContent className="gap-6 p-6 sm:max-w-md">
-        <DialogHeader className="gap-3">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{children}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-          <Button
-            disabled={busy}
-            onClick={onClose}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={onConfirm}
-            type="button"
-            variant="destructive"
-          >
-            {busy ? <Spinner className="size-4" /> : "Delete"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export {
-  DeleteConfirmationDialog,
   Dialog,
   DialogClose,
   DialogContent,

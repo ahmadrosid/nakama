@@ -88,7 +88,8 @@ export function CatalogProviderModelFields({
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);
   const canDiscoverRemote =
-    ["openai", "chatgpt"].includes(provider) && Boolean(providerInstanceId);
+    (provider === "openai" || provider === "chatgpt") &&
+    Boolean(providerInstanceId);
 
   const staticCatalog = useMemo(() => {
     const fromApi = filterModelsByProvider(
@@ -221,7 +222,11 @@ export function CatalogProviderModelFields({
           onChange={onCustomModelsChange}
           showPricing
           showVision
-          visionDefaultOn={["openai", "anthropic", "gemini"].includes(provider)}
+          visionDefaultOn={
+            provider === "openai" ||
+            provider === "anthropic" ||
+            provider === "gemini"
+          }
         />
       )}
     </FormField>

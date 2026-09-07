@@ -69,7 +69,7 @@ function pluginBundle(
   return zipSync({
     "actions/list.js": Buffer.from(echoJs),
     "actions/wipe.js": Buffer.from(echoJs),
-    "hooks/activate.js": Buffer.from(echoJs),
+    "private.js": Buffer.from(echoJs),
     "migrations/001.sql": Buffer.from("SELECT 1;"),
     "nakama.plugin.json": Buffer.from(JSON.stringify(manifest)),
     "secret.txt": Buffer.from("backend-secret"),
@@ -364,10 +364,7 @@ describe("plugin HTTP API", () => {
       "notes",
       "1.0.0"
     );
-    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision, {
-      id: "user_admin",
-      role: "admin",
-    });
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision);
 
     const orgId = admin.orgId!;
     const redirect = await jsonRequest(
@@ -397,7 +394,7 @@ describe("plugin HTTP API", () => {
 
     const forbidden = [
       `/v1/plugins/ui/${orgId}/notes/secret.txt`,
-      `/v1/plugins/ui/${orgId}/notes/hooks/activate.js`,
+      `/v1/plugins/ui/${orgId}/notes/private.js`,
       `/v1/plugins/ui/${orgId}/notes/migrations/001.sql`,
       `/v1/plugins/ui/${orgId}/notes/../1.0.1/ui/index.html`,
       `/v1/plugins/ui/${orgId}/notes/%2e%2e/secret.txt`,
@@ -431,10 +428,7 @@ describe("plugin HTTP API", () => {
     );
     await installRelease(app, platform);
     const added = await pluginService.addOrgPlugin(admin.orgId!, "notes");
-    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision, {
-      id: "user_admin",
-      role: "admin",
-    });
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision);
 
     const document = await jsonRequest(
       app,
@@ -500,10 +494,7 @@ describe("plugin HTTP API", () => {
     );
     await installRelease(app, platform);
     const added = await pluginService.addOrgPlugin(orgA, "notes");
-    await pluginService.enableOrgPlugin(orgA, "notes", added.revision, {
-      id: adminUser!.id,
-      role: "admin",
-    });
+    await pluginService.enableOrgPlugin(orgA, "notes", added.revision);
 
     const switched = await jsonRequest(app, "/v1/auth/active-org", admin, {
       body: JSON.stringify({ orgId: "org_b" }),
@@ -586,12 +577,7 @@ describe("plugin HTTP API", () => {
     expect(disabled.status).toBe(409);
 
     const added = await pluginService.getOrgPluginDetail(admin.orgId!, "notes");
-    await pluginService.enableOrgPlugin(
-      admin.orgId!,
-      "notes",
-      added!.revision,
-      { id: "user_admin", role: "admin" }
-    );
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added!.revision);
 
     const unknown = await jsonRequest(
       app,
@@ -756,10 +742,7 @@ describe("plugin HTTP API", () => {
       "notes",
       "1.0.0"
     );
-    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision, {
-      id: "user_admin",
-      role: "admin",
-    });
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision);
     const enabled = await pluginService.getOrgPluginDetail(
       admin.orgId!,
       "notes"
@@ -767,8 +750,7 @@ describe("plugin HTTP API", () => {
     await pluginService.disableOrgPlugin(
       admin.orgId!,
       "notes",
-      enabled!.revision,
-      { id: "user_admin", role: "admin" }
+      enabled!.revision
     );
 
     const preview = await jsonRequest(

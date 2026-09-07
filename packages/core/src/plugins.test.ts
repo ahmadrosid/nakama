@@ -91,6 +91,17 @@ describe("validatePluginManifest", () => {
     }
   });
 
+  test("rejects unsupported lifecycle hooks", () => {
+    expect(
+      validatePluginManifest({
+        ...identity,
+        apiVersion: PLUGIN_MANIFEST_API_VERSION,
+        hooks: { activate: "hooks/activate.js" },
+        minNakamaVersion: "0.1.0",
+      })
+    ).toEqual({ code: "unsupported_hooks", ok: false });
+  });
+
   test("rejects invalid package and API versions", () => {
     expect(
       validatePluginManifest({

@@ -438,7 +438,6 @@ describe("plugin ownership and update helpers", () => {
       contributions: {
         actionKeys: ["list"],
         hasDatabase: true,
-        hasHooks: false,
         hasUi: true,
         skillKeys: [],
       },

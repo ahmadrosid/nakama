@@ -160,7 +160,7 @@ describe("plugin capabilities", () => {
 
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
 
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
@@ -259,7 +259,7 @@ describe("plugin capabilities", () => {
       })
     );
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
     const tools = (await db.listTools()).filter(
       (row) => row.pluginId === "notes"
     );
@@ -309,8 +309,7 @@ describe("plugin capabilities", () => {
     const enabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
-      added.revision,
-      ACTOR
+      added.revision
     );
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
@@ -330,7 +329,7 @@ describe("plugin capabilities", () => {
     );
     expect(pluginTool).toBeDefined();
 
-    await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision, ACTOR);
+    await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision);
 
     await expect(
       pluginTool!.run(
@@ -385,8 +384,7 @@ describe("plugin capabilities", () => {
     const enabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
-      added.revision,
-      ACTOR
+      added.revision
     );
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
@@ -398,14 +396,12 @@ describe("plugin capabilities", () => {
     const disabled = await plugins.disableOrgPlugin(
       ORG_ID,
       "notes",
-      enabled.revision,
-      ACTOR
+      enabled.revision
     );
     const reenabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
-      disabled.revision,
-      ACTOR
+      disabled.revision
     );
     expect(
       (await db.listSkills()).find((row) => row.pluginId === "notes")?.id
@@ -431,8 +427,7 @@ describe("plugin capabilities", () => {
     const disabledAgain = await plugins.disableOrgPlugin(
       ORG_ID,
       "notes",
-      reenabled.revision,
-      ACTOR
+      reenabled.revision
     );
     await plugins.updateOrgPlugin(
       ORG_ID,
@@ -441,12 +436,7 @@ describe("plugin capabilities", () => {
       disabledAgain.revision
     );
     const afterUpdate = await db.getOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(
-      ORG_ID,
-      "notes",
-      afterUpdate!.revision,
-      ACTOR
-    );
+    await plugins.enableOrgPlugin(ORG_ID, "notes", afterUpdate!.revision);
 
     expect(
       (await db.listSkills()).find((row) => row.pluginKey === "notes")?.id
@@ -477,7 +467,7 @@ describe("plugin capabilities", () => {
 
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
@@ -561,7 +551,7 @@ Standalone body.
 
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
     const pluginSkill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
@@ -636,7 +626,7 @@ Standalone body.
     const plugins = new PluginService(db, configDir);
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
-    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision, ACTOR);
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await db.assignToolToProfile(profile.id, tool!.id);
 

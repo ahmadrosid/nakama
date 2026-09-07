@@ -23,7 +23,6 @@ import {
   type ProfilePackCustomTool,
   type ProfilePackManifest,
   type ProfilePackMeta,
-  type ProfilePackPluginReference,
   type ProfilePackPreviewResponse,
   type ProfilePackSkippedItem,
   parseSkillMarkdown,
@@ -244,7 +243,6 @@ export async function previewProfilePackImport(
       reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
     })
   );
-  await resolvePluginReferences(db, orgId, manifest, skippedAssignments);
 
   for (const skill of readSkillNamesFromZip(entries)) {
     if (await db.getSkillByName(skill.name, orgId)) {
@@ -325,8 +323,7 @@ export async function importProfilePack(
       db,
       orgId,
       profileId,
-      skippedAssignments,
-      manifest.meta.pluginReferences ?? []
+      skippedAssignments
     );
     await restoreToolAssignments(
       db,
@@ -360,13 +357,6 @@ export async function importProfilePack(
       async (skill) => {
         await db.assignSkillToProfile(profileId, skill.id);
       }
-    );
-    await restorePluginReferences(
-      db,
-      orgId,
-      profileId,
-      manifest,
-      skippedAssignments
     );
     await assignComposioToolkitsBySlug(
       db,
@@ -516,17 +506,9 @@ async function buildProfilePackMeta(
 
   const bundledSkillNames: string[] = [];
   const profileSkillNames: string[] = [];
-  const pluginReferences: ProfilePackPluginReference[] = [];
 
   for (const skill of skills) {
-    if (skill.pluginId && skill.pluginKey) {
-      const install = await db.getOrgPlugin(profile.orgId, skill.pluginId);
-      pluginReferences.push({
-        contributionKey: skill.pluginKey,
-        kind: "skill",
-        pluginId: skill.pluginId,
-        version: install?.selectedVersion ?? "",
-      });
+    if (skill.pluginId) {
       continue;
     }
     if (isGlobalSkillSourcePath(skill.sourcePath)) {
@@ -552,12 +534,6 @@ async function buildProfilePackMeta(
     mcpServerNames: mcpServers.map((server) => server.name).sort(),
     model: profile.model,
     name: profile.name,
-    pluginReferences: await completePluginToolReferences(
-      db,
-      profile.orgId,
-      pluginReferences,
-      tools
-    ),
     profileSkillNames: profileSkillNames.sort(),
     skillsCuratorConsolidateEnabled:
       profile.skillsCuratorConsolidateEnabled ?? null,
@@ -571,32 +547,6 @@ async function buildProfilePackMeta(
       .map((tool) => tool.name)
       .sort(),
   };
-}
-
-async function completePluginToolReferences(
-  db: DatabaseAdapter,
-  orgId: string,
-  skillReferences: ProfilePackPluginReference[],
-  tools: StoredToolRecord[]
-): Promise<ProfilePackPluginReference[]> {
-  const references = [...skillReferences];
-  for (const tool of tools) {
-    if (!(tool.pluginId && tool.pluginKey)) {
-      continue;
-    }
-    const install = await db.getOrgPlugin(orgId, tool.pluginId);
-    references.push({
-      contributionKey: tool.pluginKey,
-      kind: "tool",
-      pluginId: tool.pluginId,
-      version: install?.selectedVersion ?? "",
-    });
-  }
-  return references.sort((left, right) =>
-    `${left.kind}:${left.pluginId}:${left.contributionKey}`.localeCompare(
-      `${right.kind}:${right.pluginId}:${right.contributionKey}`
-    )
-  );
 }
 
 async function collectPackedCustomTools(
@@ -971,107 +921,6 @@ function portableCustomToolModulePath(absolutePath: string): string | null {
   return modulePath;
 }
 
-async function resolvePluginReferences(
-  db: DatabaseAdapter,
-  orgId: string,
-  manifest: ProfilePackManifest,
-  skipped: ProfilePackSkippedItem[],
-  profileId?: string
-): Promise<void> {
-  for (const reference of manifest.meta.pluginReferences ?? []) {
-    const resolved = await resolveCompatiblePluginContribution(
-      db,
-      orgId,
-      reference
-    );
-    if (!resolved) {
-      skipped.push(pluginReferenceSkip(reference));
-      continue;
-    }
-    if (!profileId) {
-      continue;
-    }
-    if (resolved.kind === "skill") {
-      await db.assignSkillToProfile(profileId, resolved.id);
-    } else {
-      await db.assignToolToProfile(profileId, resolved.id);
-    }
-  }
-}
-
-async function restorePluginReferences(
-  db: DatabaseAdapter,
-  orgId: string,
-  profileId: string,
-  manifest: ProfilePackManifest,
-  skipped: ProfilePackSkippedItem[]
-): Promise<void> {
-  await resolvePluginReferences(db, orgId, manifest, skipped, profileId);
-}
-
-async function resolveCompatiblePluginContribution(
-  db: DatabaseAdapter,
-  orgId: string,
-  reference: ProfilePackPluginReference
-): Promise<{ id: string; kind: "skill" | "tool" } | null> {
-  const install = await db.getOrgPlugin(orgId, reference.pluginId);
-  if (
-    !(
-      install &&
-      install.selectedVersion &&
-      (install.lifecycleState === "enabled" ||
-        install.lifecycleState === "disabled")
-    )
-  ) {
-    return null;
-  }
-  if (reference.version && install.selectedVersion !== reference.version) {
-    const release = await db.getPluginRelease(
-      reference.pluginId,
-      install.selectedVersion
-    );
-    const hasContribution =
-      reference.kind === "skill"
-        ? release?.manifest.skills.some(
-            (skill) => skill.key === reference.contributionKey
-          )
-        : release?.manifest.actions.some(
-            (action) =>
-              action.key === reference.contributionKey && action.exposeAsTool
-          );
-    if (!hasContribution) {
-      return null;
-    }
-  }
-
-  if (reference.kind === "skill") {
-    const skill = (await db.listSkills()).find(
-      (item) =>
-        item.orgId === orgId &&
-        item.pluginId === reference.pluginId &&
-        item.pluginKey === reference.contributionKey
-    );
-    return skill ? { id: skill.id, kind: "skill" } : null;
-  }
-
-  const tool = (await db.listTools()).find(
-    (item) =>
-      item.orgId === orgId &&
-      item.pluginId === reference.pluginId &&
-      item.pluginKey === reference.contributionKey
-  );
-  return tool ? { id: tool.id, kind: "tool" } : null;
-}
-
-function pluginReferenceSkip(
-  reference: ProfilePackPluginReference
-): ProfilePackSkippedItem {
-  return {
-    path: `plugin:${reference.pluginId}:${reference.kind}:${reference.contributionKey}`,
-    reason: `Plugin ${reference.kind} "${reference.pluginId}/${reference.contributionKey}" was not found on an approved compatible installation and will be skipped.`,
-  };
-}
-
 function customToolSkip(name: string, detail: string): ProfilePackSkippedItem {
   return {
     path: `custom tool:${name}`,
@@ -1146,8 +995,7 @@ async function recreatePackedSkills(
   db: DatabaseAdapter,
   orgId: string,
   profileId: string,
-  skipped: ProfilePackSkippedItem[],
-  pluginReferences: ProfilePackPluginReference[] = []
+  skipped: ProfilePackSkippedItem[]
 ): Promise<string[]> {
   const skillsDir = getProfileSkillsDir(orgId, profileId);
   const createdSkillIds: string[] = [];
@@ -1160,22 +1008,7 @@ async function recreatePackedSkills(
     (entry) => entry.isDirectory() && entry.name !== SKILL_ARCHIVE_DIR_NAME
   );
 
-  const pluginSkillKeys = new Set(
-    pluginReferences
-      .filter((reference) => reference.kind === "skill")
-      .map((reference) => reference.contributionKey)
-  );
-
   for (const folder of folders) {
-    if (pluginSkillKeys.has(folder.name)) {
-      skipped.push({
-        path: `skills/${folder.name}`,
-        reason:
-          "Plugin-owned skills are not restored as standalone profile skills.",
-      });
-      await rm(join(skillsDir, folder.name), { force: true, recursive: true });
-      continue;
-    }
     const sourcePath = join(skillsDir, folder.name);
     const discovered = await discoverSkillDirectory(sourcePath);
 

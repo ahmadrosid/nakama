@@ -56,7 +56,6 @@ export function ProviderReplaceKeyDialog({
   onSave: () => void;
 }) {
   const isChatgpt = providerType === "chatgpt";
-  const apiKeyAction = instance.hasApiKey ? "Update API key" : "Add API key";
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -65,7 +64,7 @@ export function ProviderReplaceKeyDialog({
           <DialogTitle>
             {isChatgpt
               ? `Reconnect ${instance.label}`
-              : `${apiKeyAction} for ${instance.label}`}
+              : `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`}
           </DialogTitle>
         </DialogHeader>
         {isChatgpt ? (

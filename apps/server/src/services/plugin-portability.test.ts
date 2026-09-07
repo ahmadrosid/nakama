@@ -195,7 +195,7 @@ describe("plugin portability", () => {
     const service = new PluginService(database.adapter, configDir);
     await service.installPluginPackage(slowWriteBundle());
     const added = await service.addOrgPlugin(ORG, "slow");
-    await service.enableOrgPlugin(ORG, "slow", added.revision, ACTOR);
+    await service.enableOrgPlugin(ORG, "slow", added.revision);
 
     const write = service.invokePluginAction({
       access: "ui",
@@ -246,8 +246,7 @@ describe("plugin portability", () => {
       const enabled = await restoredService.enableOrgPlugin(
         ORG,
         "slow",
-        row!.revision,
-        ACTOR
+        row!.revision
       );
       const snapshot = new Database(
         getOrgPluginDatabasePath(
@@ -332,25 +331,19 @@ describe("plugin portability", () => {
     const archive = notesBundle();
     await service.installPluginPackage(archive);
     const added = await service.addOrgPlugin(ORG, "notes");
-    const enabled = await service.enableOrgPlugin(
-      ORG,
-      "notes",
-      added.revision,
-      ACTOR
-    );
+    const enabled = await service.enableOrgPlugin(ORG, "notes", added.revision);
     const disabled = await service.disableOrgPlugin(
       ORG,
       "notes",
-      enabled.revision,
-      ACTOR
+      enabled.revision
     );
 
     await runWithPluginExportBarrier(async () => {
       const mutations = [
         () => service.installPluginPackage(archive),
         () => service.addOrgPlugin(DEST, "notes"),
-        () => service.enableOrgPlugin(ORG, "notes", disabled.revision, ACTOR),
-        () => service.disableOrgPlugin(ORG, "notes", disabled.revision, ACTOR),
+        () => service.enableOrgPlugin(ORG, "notes", disabled.revision),
+        () => service.disableOrgPlugin(ORG, "notes", disabled.revision),
         () => service.updateOrgPlugin(ORG, "notes", "1.0.0", disabled.revision),
         () => service.uninstallOrgPlugin(ORG, "notes", disabled.revision),
         () => service.deleteRetainedPluginData(ORG, "notes", disabled.revision),
@@ -366,7 +359,7 @@ describe("plugin portability", () => {
       await expect(mutations[2]!()).rejects.toMatchObject({ code: "in_use" });
     });
 
-    await service.enableOrgPlugin(ORG, "notes", disabled.revision, ACTOR);
+    await service.enableOrgPlugin(ORG, "notes", disabled.revision);
     const invoke = () =>
       service.invokePluginAction({
         access: "ui",
@@ -402,7 +395,7 @@ describe("plugin portability", () => {
         await resume.promise;
       },
     });
-    const enable = service.enableOrgPlugin(ORG, "notes", added.revision, ACTOR);
+    const enable = service.enableOrgPlugin(ORG, "notes", added.revision);
     await reached.promise;
     let snapshotStarted = false;
     const exported = runWithPluginExportBarrier(async () => {
@@ -459,7 +452,7 @@ describe("plugin portability", () => {
       const restoredService = new PluginService(restored.adapter, restoreRoot);
       const row = await restored.adapter.getOrgPlugin(ORG, "notes");
       await expect(
-        restoredService.enableOrgPlugin(ORG, "notes", row!.revision, ACTOR)
+        restoredService.enableOrgPlugin(ORG, "notes", row!.revision)
       ).rejects.toMatchObject({ code: "package_unavailable" });
       expect(
         await restored.adapter.getPluginRelease("notes", "1.0.0")
@@ -475,7 +468,7 @@ describe("plugin portability", () => {
     const service = new PluginService(db, configDir, { drainTimeoutMs: 80 });
     await service.installPluginPackage(hangBundle());
     const added = await service.addOrgPlugin(ORG, "hang");
-    await service.enableOrgPlugin(ORG, "hang", added.revision, ACTOR);
+    await service.enableOrgPlugin(ORG, "hang", added.revision);
     const hung = service.invokePluginAction({
       access: "ui",
       actionKey: "hang",
@@ -510,79 +503,74 @@ describe("plugin portability", () => {
     second.catch(() => undefined);
   });
 
-  test("profile import skips missing plugins and never copies plugin-owned code", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new PluginService(db, configDir);
-    await service.installPluginPackage(notesBundle());
-    const added = await service.addOrgPlugin(ORG, "notes");
-    await service.enableOrgPlugin(ORG, "notes", added.revision, ACTOR);
+  test.each([false, true])(
+    "profile packs omit plugin code and assignments (destination installed: %s)",
+    async (installed) => {
+      const db = createInMemoryDatabaseAdapter();
+      const service = new PluginService(db, configDir);
+      await service.installPluginPackage(notesBundle());
+      const added = await service.addOrgPlugin(ORG, "notes");
+      await service.enableOrgPlugin(ORG, "notes", added.revision);
 
-    await db.upsertProfile({
-      createdAt: new Date().toISOString(),
-      id: "writer",
-      isDefault: false,
-      isSuper: false,
-      model: null,
-      name: "Writer",
-      orgId: ORG,
-      systemPrompt: "",
-      updatedAt: new Date().toISOString(),
-    });
-    const skill = (await db.listSkills()).find(
-      (row) => row.orgId === ORG && row.pluginId === "notes"
-    );
-    const tool = (await db.listTools()).find(
-      (row) =>
-        row.orgId === ORG &&
-        row.pluginId === "notes" &&
-        row.pluginKey === "list"
-    );
-    await db.assignSkillToProfile("writer", skill!.id);
-    await db.assignToolToProfile("writer", tool!.id);
+      await db.upsertProfile({
+        createdAt: new Date().toISOString(),
+        id: "writer",
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: "Writer",
+        orgId: ORG,
+        systemPrompt: "",
+        updatedAt: new Date().toISOString(),
+      });
+      const skill = (await db.listSkills()).find(
+        (row) => row.orgId === ORG && row.pluginId === "notes"
+      );
+      const tool = (await db.listTools()).find(
+        (row) =>
+          row.orgId === ORG &&
+          row.pluginId === "notes" &&
+          row.pluginKey === "list"
+      );
+      await db.assignSkillToProfile("writer", skill!.id);
+      await db.assignToolToProfile("writer", tool!.id);
 
-    const packed = await createProfilePackExport(db, ORG, "writer");
-    expect(packed.manifest.meta.pluginReferences).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          contributionKey: "notes",
-          kind: "skill",
-          pluginId: "notes",
-        }),
-        expect.objectContaining({
-          contributionKey: "list",
-          kind: "tool",
-          pluginId: "notes",
-        }),
-      ])
-    );
-    expect(packed.manifest.meta.toolNames).not.toContain("plugin_notes__list");
-    expect(
-      packed.manifest.meta.customTools?.some((item) =>
-        item.name.startsWith("plugin_notes__")
-      )
-    ).toBeFalsy();
+      const packed = await createProfilePackExport(db, ORG, "writer");
+      expect(packed.manifest.meta.bundledSkillNames).toEqual([]);
+      expect(packed.manifest.meta.profileSkillNames).toEqual([]);
+      expect(packed.manifest.meta.toolNames).toEqual([]);
+      expect(
+        Object.keys(unzipSync(packed.data)).some(
+          (path) =>
+            path.startsWith("skills/") || path.startsWith("custom-tools/")
+        )
+      ).toBe(false);
+      expect(
+        packed.manifest.meta.customTools?.some((item) =>
+          item.name.startsWith("plugin_notes__")
+        )
+      ).toBeFalsy();
 
-    const dest = createInMemoryDatabaseAdapter();
-    const preview = await previewProfilePackImport(dest, DEST, packed.data);
-    expect(
-      preview.skippedAssignments.some((item) => item.path.startsWith("plugin:"))
-    ).toBe(true);
+      const dest = createInMemoryDatabaseAdapter();
+      if (installed) {
+        const destService = new PluginService(dest, configDir);
+        await destService.installPluginPackage(notesBundle());
+        const destAdded = await destService.addOrgPlugin(DEST, "notes");
+        await destService.enableOrgPlugin(DEST, "notes", destAdded.revision);
+      }
+      const preview = await previewProfilePackImport(dest, DEST, packed.data);
+      expect(preview.skippedAssignments).toEqual([]);
 
-    const imported = await importProfilePack(dest, DEST, packed.data, {
-      confirm: true,
-      restoreCustomTools: true,
-    });
-    expect(
-      imported.skippedAssignments.some((item) =>
-        item.path.startsWith("plugin:")
-      )
-    ).toBe(true);
-    expect(
-      (await dest.listTools()).some((item) => item.pluginId === "notes")
-    ).toBe(false);
-    expect(await dest.getToolByName("plugin_notes__list")).toBeNull();
-    expect(
-      await pathExists(join(getCustomToolsDir(), "plugin_notes__list.js"))
-    ).toBe(false);
-  });
+      const imported = await importProfilePack(dest, DEST, packed.data, {
+        confirm: true,
+        restoreCustomTools: true,
+      });
+      expect(imported.skippedAssignments).toEqual([]);
+      expect(await dest.listToolsForProfile(imported.profileId)).toEqual([]);
+      expect(await dest.listSkillsForProfile(imported.profileId)).toEqual([]);
+      expect(
+        await pathExists(join(getCustomToolsDir(), "plugin_notes__list.js"))
+      ).toBe(false);
+    }
+  );
 });

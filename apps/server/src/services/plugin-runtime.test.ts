@@ -84,12 +84,6 @@ export async function run() {
 }
 `;
 
-const hookJs = `
-export async function run(input, context) {
-  return { kind: "activate", orgId: context.orgId, pluginId: context.pluginId };
-}
-`;
-
 function encodeZip(files: Record<string, string>): Uint8Array {
   const entries: Record<string, Uint8Array> = {};
   for (const [name, value] of Object.entries(files)) {
@@ -118,7 +112,6 @@ function manifest(id: string, extras: Record<string, unknown> = {}) {
     apiVersion: PLUGIN_MANIFEST_API_VERSION,
     author: "Nakama",
     description: "Runtime fixture",
-    hooks: { activate: "hooks/activate.js" },
     id,
     license: "MIT",
     minNakamaVersion: "0.1.0",
@@ -136,7 +129,6 @@ function bundle(
 ): Uint8Array {
   return encodeZip({
     "actions/echo.js": actionSource,
-    "hooks/activate.js": hookJs,
     "nakama.plugin.json": JSON.stringify(manifest(id, extras)),
   });
 }
@@ -514,25 +506,6 @@ describe("plugin runtime", () => {
       vacuumPluginDatabaseInto(sourcePath, targetPath)
     ).rejects.toThrow();
     expect(existsSync(targetPath)).toBe(false);
-  });
-
-  test("lifecycle hook spawn uses the same host-derived org context", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new PluginService(db, configDir);
-    await service.installPluginPackage(bundle("echoer", echoJs));
-    await enablePlugin(db, "org_a", "echoer", "1.0.0");
-
-    const hooked = await service.invokePluginHook({
-      actor: { id: "user_1", role: "admin" },
-      kind: "activate",
-      orgId: "org_a",
-      pluginId: "echoer",
-    });
-    expect(hooked.result).toEqual({
-      kind: "activate",
-      orgId: "org_a",
-      pluginId: "echoer",
-    });
   });
 
   test("disabled installations are not spawned", async () => {

@@ -89,7 +89,6 @@ export interface InstallPluginPackageOptions {
 interface PluginContributionSummary {
   actionKeys: string[];
   hasDatabase: boolean;
-  hasHooks: boolean;
   hasUi: boolean;
   skillKeys: string[];
 }
@@ -135,7 +134,6 @@ const SPOOFABLE_INPUT_KEYS = new Set([
 
 export interface PluginServiceOptions {
   drainTimeoutMs?: number;
-  hookTimeoutMs?: number;
 }
 
 let pluginLifecycleTestHooks: {
@@ -157,7 +155,6 @@ interface PendingPluginOperation {
 }
 
 type PluginActionAccessKind = "tool" | "ui";
-type PluginHookKind = "activate" | "deactivate";
 
 export interface InvokePluginActionInput {
   access: PluginActionAccessKind;
@@ -168,15 +165,6 @@ export interface InvokePluginActionInput {
   pluginId: string;
   profileId?: string;
   sessionId?: string;
-  signal?: AbortSignal;
-}
-
-export interface InvokePluginHookInput {
-  actor: PluginExecutionActor;
-  databaseGeneration?: string;
-  kind: PluginHookKind;
-  orgId: string;
-  pluginId: string;
   signal?: AbortSignal;
 }
 
@@ -199,7 +187,6 @@ let exportPending = false;
 let activeMutations = 0;
 const MIGRATION_LEDGER_TABLE = "_nakama_plugin_migrations";
 const DEFAULT_DRAIN_TIMEOUT_MS = 6000;
-const DEFAULT_HOOK_TIMEOUT_MS = 2000;
 
 export function resetPluginAdmissionForTests(): void {
   admissionGates.clear();
@@ -356,86 +343,52 @@ export class PluginService {
       await this.assertToolAssignment(input);
     }
 
-    return this.runAdmitted(
-      input.orgId,
-      input.pluginId,
-      "action",
-      input.signal,
-      ({ handle, install, manifest, releaseDir }) => {
-        const action = manifest.actions.find(
-          (item) => item.key === input.actionKey
-        );
-        if (!action) {
-          throw new PluginHostError("unknown_action");
-        }
-        if (!actorMayInvoke(action.access, input.actor.role)) {
-          throw new PluginHostError("forbidden");
-        }
+    const { handle, install, manifest, releaseDir } =
+      await this.admitInvocation(input.orgId, input.pluginId);
+    try {
+      const action = manifest.actions.find(
+        (item) => item.key === input.actionKey
+      );
+      if (!action) {
+        throw new PluginHostError("unknown_action");
+      }
+      if (!actorMayInvoke(action.access, input.actor.role)) {
+        throw new PluginHostError("forbidden");
+      }
 
-        const cleanedInput = stripSpoofedInput(input.input);
-        if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
-          throw new PluginHostError("invalid_input");
-        }
+      const cleanedInput = stripSpoofedInput(input.input);
+      if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
+        throw new PluginHostError("invalid_input");
+      }
 
-        const context = this.buildInvocationContext({
-          actor: input.actor,
-          install,
-          invocationId: handle.invocationId,
-          manifest,
-          orgId: input.orgId,
-          pluginId: input.pluginId,
-          profileId: input.access === "tool" ? input.profileId : undefined,
-          sessionId: input.access === "tool" ? input.sessionId : undefined,
-        });
-        if (input.access === "tool" && !context.profileId) {
-          throw new PluginHostError("invalid_input");
-        }
+      const context = this.buildInvocationContext({
+        actor: input.actor,
+        install,
+        invocationId: handle.invocationId,
+        manifest,
+        orgId: input.orgId,
+        pluginId: input.pluginId,
+        profileId: input.access === "tool" ? input.profileId : undefined,
+        sessionId: input.access === "tool" ? input.sessionId : undefined,
+      });
+      if (input.access === "tool" && !context.profileId) {
+        throw new PluginHostError("invalid_input");
+      }
 
-        return {
+      return {
+        invocationId: handle.invocationId,
+        result: await this.spawnPluginModule({
           context,
           entry: action.entry,
           input: cleanedInput,
           label: "Plugin action",
           releaseDir,
-        };
-      }
-    );
-  }
-
-  async invokePluginHook(
-    input: InvokePluginHookInput
-  ): Promise<PluginInvocationResult> {
-    return this.runAdmitted(
-      input.orgId,
-      input.pluginId,
-      "hook",
-      input.signal,
-      ({ handle, install, manifest, releaseDir }) => {
-        const entry =
-          input.kind === "activate"
-            ? manifest.hooks?.activate
-            : manifest.hooks?.deactivate;
-        if (!entry) {
-          throw new PluginHostError("unknown_hook");
-        }
-
-        return {
-          context: this.buildInvocationContext({
-            actor: input.actor,
-            databaseGeneration: input.databaseGeneration,
-            install,
-            invocationId: handle.invocationId,
-            manifest,
-            orgId: input.orgId,
-            pluginId: input.pluginId,
-          }),
-          entry,
-          input: {},
-          label: "Plugin hook",
-          releaseDir,
-        };
-      }
-    );
+          signal: mergeAbortSignals(input.signal, handle.abort.signal),
+        }),
+      };
+    } finally {
+      handle.release();
+    }
   }
 
   async capabilityRevisionForOrg(orgId: string): Promise<string> {
@@ -639,8 +592,7 @@ export class PluginService {
   async enableOrgPlugin(
     orgId: string,
     pluginId: string,
-    expectedRevision: number,
-    actor: PluginExecutionActor
+    expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
     return withPluginMutation(async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
@@ -697,18 +649,6 @@ export class PluginService {
           version: install.selectedVersion,
         });
         await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
-        if (release.manifest.hooks?.activate) {
-          await this.invokePluginHook({
-            actor,
-            databaseGeneration: targetGeneration ?? undefined,
-            kind: "activate",
-            orgId,
-            pluginId,
-            signal: AbortSignal.timeout(
-              this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
-            ),
-          });
-        }
         await this.publishInstallation({
           databaseGeneration: targetGeneration,
           expectedRevision: enabling.revision,
@@ -770,8 +710,7 @@ export class PluginService {
   async disableOrgPlugin(
     orgId: string,
     pluginId: string,
-    expectedRevision: number,
-    actor: PluginExecutionActor
+    expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
     return withPluginMutation(async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
@@ -801,30 +740,10 @@ export class PluginService {
 
       await this.closePluginAdmission(orgId, pluginId);
 
-      let hookError: string | null = null;
-      const release = install.selectedVersion
-        ? await this.db.getPluginRelease(pluginId, install.selectedVersion)
-        : null;
-      if (release?.manifest.hooks?.deactivate) {
-        try {
-          await this.invokePluginHook({
-            actor,
-            kind: "deactivate",
-            orgId,
-            pluginId,
-            signal: AbortSignal.timeout(
-              this.options.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
-            ),
-          });
-        } catch (error) {
-          hookError = lifecycleErrorMessage(error);
-        }
-      }
-
       return this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision: disabling.revision,
-        lastLifecycleError: hookError,
+        lastLifecycleError: null,
         lifecycleState: "disabled",
         orgId,
         pendingOperation: null,
@@ -1232,38 +1151,9 @@ export class PluginService {
     }
   }
 
-  private async runAdmitted(
-    orgId: string,
-    pluginId: string,
-    kind: "action" | "hook",
-    signal: AbortSignal | undefined,
-    work: (admitted: Awaited<ReturnType<PluginService["admitInvocation"]>>) => {
-      context: PluginExecutionContext;
-      entry: string;
-      input: unknown;
-      label: string;
-      releaseDir: string;
-    }
-  ): Promise<PluginInvocationResult> {
-    const admitted = await this.admitInvocation(orgId, pluginId, kind);
-    try {
-      const job = work(admitted);
-      return {
-        invocationId: admitted.handle.invocationId,
-        result: await this.spawnPluginModule({
-          ...job,
-          signal: mergeAbortSignals(signal, admitted.handle.abort.signal),
-        }),
-      };
-    } finally {
-      admitted.handle.release();
-    }
-  }
-
   private async admitInvocation(
     orgId: string,
-    pluginId: string,
-    kind: "action" | "hook"
+    pluginId: string
   ): Promise<{
     handle: {
       abort: AbortController;
@@ -1276,7 +1166,7 @@ export class PluginService {
   }> {
     const gate = admissionGateFor(orgId, pluginId);
     return withAdmissionGate(gate, async () => {
-      if (kind === "action" && gate.closed) {
+      if (gate.closed) {
         throw new PluginHostError("admission_closed");
       }
 
@@ -1284,7 +1174,7 @@ export class PluginService {
       if (!(install && install.selectedVersion)) {
         throw new PluginHostError("not_installed");
       }
-      if (kind === "action" && install.lifecycleState !== "enabled") {
+      if (install.lifecycleState !== "enabled") {
         throw new PluginHostError("not_enabled");
       }
       if (gate.active >= MAX_PLUGIN_INVOCATIONS) {
@@ -1310,7 +1200,7 @@ export class PluginService {
 
       // Check immediately before reserving the handle, after all asynchronous
       // lookups, so a pending admission cannot slip into an active snapshot.
-      if (exportPending && (kind === "action" || activeMutations === 0)) {
+      if (exportPending) {
         throw new PluginHostError("admission_closed");
       }
       gate.active += 1;
@@ -1334,7 +1224,6 @@ export class PluginService {
 
   private buildInvocationContext(input: {
     actor: PluginExecutionActor;
-    databaseGeneration?: string;
     install: NonNullable<Awaited<ReturnType<DatabaseAdapter["getOrgPlugin"]>>>;
     invocationId: string;
     manifest: PluginManifest;
@@ -1358,8 +1247,7 @@ export class PluginService {
       pluginVersion: input.manifest.version,
     };
 
-    const generation =
-      input.databaseGeneration ?? input.install.databaseGeneration;
+    const generation = input.install.databaseGeneration;
     if (generation) {
       context.databasePath = getOrgPluginDatabasePath(
         input.orgId,
@@ -1933,10 +1821,6 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
     contributions: {
       actionKeys: inspected.manifest.actions.map((action) => action.key),
       hasDatabase: Boolean(inspected.manifest.database?.migrations.length),
-      hasHooks: Boolean(
-        inspected.manifest.hooks?.activate ||
-          inspected.manifest.hooks?.deactivate
-      ),
       hasUi: Boolean(inspected.manifest.ui),
       skillKeys: inspected.manifest.skills.map((skill) => skill.key),
     },
@@ -2242,11 +2126,6 @@ function assertReferencedFilesExist(
   }
   for (const migration of manifest.database?.migrations ?? []) {
     if (!files.has(migration.path)) {
-      throw new PluginHostError("missing_referenced_file");
-    }
-  }
-  for (const hook of [manifest.hooks?.activate, manifest.hooks?.deactivate]) {
-    if (hook && !files.has(hook)) {
       throw new PluginHostError("missing_referenced_file");
     }
   }

@@ -56,6 +56,7 @@ export type PluginManifestValidationCode =
   | "missing_field"
   | "undeclared_entrypoint"
   | "unsupported_api"
+  | "unsupported_hooks"
   | "unsupported_schema";
 
 export interface PluginSkillContribution {
@@ -84,18 +85,12 @@ export interface PluginMigrationContribution {
   path: string;
 }
 
-export interface PluginHooksContribution {
-  activate?: string;
-  deactivate?: string;
-}
-
 export interface PluginManifest {
   actions: PluginActionContribution[];
   apiVersion: typeof PLUGIN_MANIFEST_API_VERSION;
   author: string;
   database?: { migrations: PluginMigrationContribution[] };
   description: string;
-  hooks?: PluginHooksContribution;
   id: string;
   license: string;
   minNakamaVersion: string;
@@ -191,9 +186,8 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
     return databaseResult;
   }
 
-  const hooksResult = parseHooks(value.hooks);
-  if (!hooksResult.ok) {
-    return hooksResult;
+  if (value.hooks !== undefined) {
+    return fail("unsupported_hooks");
   }
 
   return {
@@ -203,7 +197,6 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
       author: value.author,
       ...(databaseResult.database ? { database: databaseResult.database } : {}),
       description: value.description,
-      ...(hooksResult.hooks ? { hooks: hooksResult.hooks } : {}),
       id: value.id,
       license: value.license,
       minNakamaVersion: value.minNakamaVersion,
@@ -689,44 +682,6 @@ function parseDatabase(
   }
 
   return { database: { migrations }, ok: true };
-}
-
-function parseHooks(
-  value: unknown
-):
-  | { hooks?: PluginHooksContribution; ok: true }
-  | { code: PluginManifestValidationCode; ok: false } {
-  if (value === undefined) {
-    return { ok: true };
-  }
-  if (!isRecord(value)) {
-    return fail("missing_field");
-  }
-
-  const hooks: PluginHooksContribution = {};
-  if (value.activate !== undefined) {
-    if (
-      !(
-        isNonEmptyString(value.activate) && isRelativePluginPath(value.activate)
-      )
-    ) {
-      return fail("invalid_path");
-    }
-    hooks.activate = value.activate;
-  }
-  if (value.deactivate !== undefined) {
-    if (
-      !(
-        isNonEmptyString(value.deactivate) &&
-        isRelativePluginPath(value.deactivate)
-      )
-    ) {
-      return fail("invalid_path");
-    }
-    hooks.deactivate = value.deactivate;
-  }
-
-  return { hooks, ok: true };
 }
 
 function fail(code: PluginManifestValidationCode): {

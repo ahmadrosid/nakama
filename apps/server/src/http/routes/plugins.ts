@@ -433,7 +433,7 @@ export function registerPluginRoutes(
   });
 
   app.post("/v1/plugins/:pluginId/enable", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
     const body = await readJson<PluginRevisionRequest>(c.req.raw);
@@ -441,8 +441,7 @@ export function registerPluginRoutes(
       const install = await plugins.enableOrgPlugin(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
-        body.expectedRevision,
-        pluginActor(auth)
+        body.expectedRevision
       );
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
       return json<OrgPluginDetail>(detail!);
@@ -452,7 +451,7 @@ export function registerPluginRoutes(
   });
 
   app.post("/v1/plugins/:pluginId/disable", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
     const body = await readJson<PluginRevisionRequest>(c.req.raw);
@@ -460,8 +459,7 @@ export function registerPluginRoutes(
       const install = await plugins.disableOrgPlugin(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
-        body.expectedRevision,
-        pluginActor(auth)
+        body.expectedRevision
       );
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
       return json<OrgPluginDetail>(detail!);

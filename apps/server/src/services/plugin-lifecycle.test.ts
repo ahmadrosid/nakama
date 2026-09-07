@@ -69,24 +69,6 @@ export async function run() {
 }
 `;
 
-const activateJs = `
-export async function run(_input, context) {
-  return { hook: "activate", databasePath: context.databasePath ?? null };
-}
-`;
-
-const deactivateJs = `
-export async function run() {
-  return { hook: "deactivate" };
-}
-`;
-
-const hangDeactivateJs = `
-export async function run() {
-  await new Promise(() => {});
-}
-`;
-
 const hangActionJs = `
 export async function run() {
   await new Promise(() => {});
@@ -131,10 +113,6 @@ function baseManifest(
       migrations: [{ id: "001_items", path: "migrations/001_items.sql" }],
     },
     description: "Lifecycle fixture",
-    hooks: {
-      activate: "hooks/activate.js",
-      deactivate: "hooks/deactivate.js",
-    },
     id,
     license: "MIT",
     minNakamaVersion: "0.1.0",
@@ -145,16 +123,9 @@ function baseManifest(
   };
 }
 
-function v1Bundle(
-  id = "notes",
-  options: { hangDeactivate?: boolean } = {}
-): Uint8Array {
+function v1Bundle(id = "notes"): Uint8Array {
   return encodeZip({
     "actions/write.js": writeJs,
-    "hooks/activate.js": activateJs,
-    "hooks/deactivate.js": options.hangDeactivate
-      ? hangDeactivateJs
-      : deactivateJs,
     "migrations/001_items.sql": MIGRATION_001,
     "nakama.plugin.json": JSON.stringify(baseManifest(id, "1.0.0")),
     "skills/notes/SKILL.md": "# Notes\n",
@@ -194,8 +165,6 @@ function v2Bundle(options: {
   return encodeZip({
     "actions/extra.js": extraJs,
     "actions/write.js": writeJs,
-    "hooks/activate.js": activateJs,
-    "hooks/deactivate.js": deactivateJs,
     "migrations/001_items.sql": MIGRATION_001,
     "migrations/002_extra.sql": options.failSecondMigration
       ? MIGRATION_002_FAIL
@@ -208,8 +177,6 @@ function v2Bundle(options: {
 function codeOnlyBundle(id = "notes"): Uint8Array {
   return encodeZip({
     "actions/write.js": `${writeJs}\n`,
-    "hooks/activate.js": activateJs,
-    "hooks/deactivate.js": deactivateJs,
     "migrations/001_items.sql": MIGRATION_001,
     "nakama.plugin.json": JSON.stringify(baseManifest(id, "1.0.1")),
     "skills/notes/SKILL.md": "# Notes v2\n",
@@ -227,8 +194,6 @@ function commitThenFailBundle(id = "notes"): Uint8Array {
   };
   return encodeZip({
     "actions/write.js": writeJs,
-    "hooks/activate.js": activateJs,
-    "hooks/deactivate.js": deactivateJs,
     "migrations/001_items.sql": MIGRATION_001,
     "migrations/002_leaked.sql": MIGRATION_COMMIT_THEN_FAIL,
     "nakama.plugin.json": JSON.stringify(baseManifest(id, "1.2.0", extras)),
@@ -240,8 +205,6 @@ function hangActionBundle(id = "notes"): Uint8Array {
   const manifest = baseManifest(id, "1.0.0");
   return encodeZip({
     "actions/write.js": hangActionJs,
-    "hooks/activate.js": activateJs,
-    "hooks/deactivate.js": deactivateJs,
     "migrations/001_items.sql": MIGRATION_001,
     "nakama.plugin.json": JSON.stringify(manifest),
     "skills/notes/SKILL.md": "# Notes\n",
@@ -279,8 +242,8 @@ describe("plugin lifecycle", () => {
 
     const orgA = await added(service, "org_a", "notes");
     const orgB = await added(service, "org_b", "notes");
-    await service.enableOrgPlugin("org_a", "notes", orgA.revision, actor);
-    await service.enableOrgPlugin("org_b", "notes", orgB.revision, actor);
+    await service.enableOrgPlugin("org_a", "notes", orgA.revision);
+    await service.enableOrgPlugin("org_b", "notes", orgB.revision);
 
     await service.invokePluginAction({
       access: "ui",
@@ -333,14 +296,12 @@ describe("plugin lifecycle", () => {
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      addedRow.revision,
-      actor
+      addedRow.revision
     );
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
-      enabled.revision,
-      actor
+      enabled.revision
     );
     await service.installPluginPackage(
       v2Bundle({ extraAction: true, failSecondMigration: true })
@@ -387,14 +348,12 @@ describe("plugin lifecycle", () => {
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      addedRow.revision,
-      actor
+      addedRow.revision
     );
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
-      enabled.revision,
-      actor
+      enabled.revision
     );
     await service.installPluginPackage(v2Bundle({ extraAction: true }));
     armInterrupt = true;
@@ -433,7 +392,7 @@ describe("plugin lifecycle", () => {
     await service.installPluginPackage(v1Bundle());
     const addedRow = await added(service, "org_a", "notes");
     await expect(
-      service.enableOrgPlugin("org_a", "notes", addedRow.revision, actor)
+      service.enableOrgPlugin("org_a", "notes", addedRow.revision)
     ).rejects.toMatchObject({ code: "interrupted" });
     setPluginLifecycleTestHooks(null);
     const published = await db.getOrgPlugin("org_a", "notes");
@@ -494,14 +453,12 @@ describe("plugin lifecycle", () => {
     const enabledA = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      orgA.revision,
-      actor
+      orgA.revision
     );
     const enabledB = await service.enableOrgPlugin(
       "org_b",
       "notes",
-      orgB.revision,
-      actor
+      orgB.revision
     );
     await service.invokePluginAction({
       access: "ui",
@@ -514,8 +471,7 @@ describe("plugin lifecycle", () => {
     const disabledA = await service.disableOrgPlugin(
       "org_a",
       "notes",
-      enabledA.revision,
-      actor
+      enabledA.revision
     );
     const retained = await service.uninstallOrgPlugin(
       "org_a",
@@ -584,40 +540,6 @@ describe("plugin lifecycle", () => {
     );
   });
 
-  test("AE7: deactivate hook timeout still disables and blocks future calls", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new PluginService(db, configDir, { hookTimeoutMs: 80 });
-    await service.installPluginPackage(
-      v1Bundle("notes", { hangDeactivate: true })
-    );
-    const addedRow = await added(service, "org_a", "notes");
-    const enabled = await service.enableOrgPlugin(
-      "org_a",
-      "notes",
-      addedRow.revision,
-      actor
-    );
-
-    const disabled = await service.disableOrgPlugin(
-      "org_a",
-      "notes",
-      enabled.revision,
-      actor
-    );
-    expect(disabled.lifecycleState).toBe("disabled");
-    expect(disabled.lastLifecycleError).toBeTruthy();
-    await expect(
-      service.invokePluginAction({
-        access: "ui",
-        actionKey: "write",
-        actor,
-        input: { body: "x", id: "n1" },
-        orgId: "org_a",
-        pluginId: "notes",
-      })
-    ).rejects.toMatchObject({ code: "admission_closed" });
-  });
-
   test("enable/disable/update race: only the winner mutates and disable closes admission", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
@@ -627,8 +549,7 @@ describe("plugin lifecycle", () => {
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      addedRow.revision,
-      actor
+      addedRow.revision
     );
 
     const hanging = service.invokePluginAction({
@@ -643,8 +564,8 @@ describe("plugin lifecycle", () => {
     await Bun.sleep(30);
 
     const results = await Promise.allSettled([
-      service.enableOrgPlugin("org_a", "notes", enabled.revision, actor),
-      service.disableOrgPlugin("org_a", "notes", enabled.revision, actor),
+      service.enableOrgPlugin("org_a", "notes", enabled.revision),
+      service.disableOrgPlugin("org_a", "notes", enabled.revision),
       service.updateOrgPlugin("org_a", "notes", "1.1.0", enabled.revision),
     ]);
     const fulfilled = results.filter((result) => result.status === "fulfilled");
@@ -680,14 +601,12 @@ describe("plugin lifecycle", () => {
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      addedRow.revision,
-      actor
+      addedRow.revision
     );
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
-      enabled.revision,
-      actor
+      enabled.revision
     );
     await service.installPluginPackage(commitThenFailBundle());
 
@@ -729,8 +648,7 @@ describe("plugin lifecycle", () => {
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      addedRow.revision,
-      actor
+      addedRow.revision
     );
     const tools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
@@ -758,8 +676,7 @@ describe("plugin lifecycle", () => {
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
-      enabled.revision,
-      actor
+      enabled.revision
     );
     expect(await db.listToolsForProfile("profile_1")).toHaveLength(1);
 
@@ -793,14 +710,12 @@ describe("plugin lifecycle", () => {
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
-      addedRow.revision,
-      actor
+      addedRow.revision
     );
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
-      enabled.revision,
-      actor
+      enabled.revision
     );
     await service.uninstallOrgPlugin("org_a", "notes", disabled.revision);
 
