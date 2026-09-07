@@ -6,7 +6,7 @@
       "entry": ["src/index.ts", "scripts/*.ts"]
     },
     "apps/web": {
-      "entry": ["src/shims/*.ts"]
+      "entry": ["src/shims/*.ts", "sw/service-worker.ts"]
     },
     // Not in package.json#workspaces; Knip would skip it otherwise.
     "docs/website": {}
