@@ -12,6 +12,7 @@ import {
   getOrgMemoryHistoryEntry,
   listOrgMemoryHistory,
   NakamaApiError,
+  normalizeOrgMemoryBullet,
   normalizeOrgMemoryDedupKey,
   ORG_MEMORY_PREAMBLE,
   type OrgMemoryChangeAction,
@@ -673,7 +674,7 @@ export class OrgMemoryService {
   }
 
   private normalizeBullet(bullet: string): string {
-    const text = bullet.trim().replace(/^-\s+/, "").trim();
+    const text = normalizeOrgMemoryBullet(bullet);
     if (text.length === 0) {
       throw new NakamaApiError("Memory bullet must not be empty.", 400);
     }
@@ -685,12 +686,6 @@ export class OrgMemoryService {
     if (text.length > MAX_PROPOSAL_BULLET_LENGTH) {
       throw new NakamaApiError(
         `Memory bullet exceeds the ${MAX_PROPOSAL_BULLET_LENGTH} character limit.`,
-        400
-      );
-    }
-    if (text.includes("\n\n")) {
-      throw new NakamaApiError(
-        "Memory bullet must not contain multiple blank lines.",
         400
       );
     }
