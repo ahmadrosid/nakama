@@ -99,7 +99,7 @@ describe("extract_document_text tool", () => {
     expect("text" in result && result.text.toLowerCase()).toContain("dummy");
   });
 
-  test("ships the untrusted-content notice after the extracted text", async () => {
+  test("notice comes before the extracted text", async () => {
     const documentRef = createAttachmentReference(context, {
       attachmentId: "0",
       folder: "INBOX",
@@ -114,9 +114,10 @@ describe("extract_document_text tool", () => {
 
     // chat.ts serializes a tool result exactly like this, so key order decides
     // whether the model reads the notice before or after the untrusted text.
+    // Pinning it here is what stops a later edit reordering the literal.
     const toolMessage = JSON.stringify(result);
     expect(toolMessage).toContain(UNTRUSTED_DOCUMENT_GUIDANCE);
-    expect(toolMessage.indexOf(UNTRUSTED_DOCUMENT_GUIDANCE)).toBeGreaterThan(
+    expect(toolMessage.indexOf(UNTRUSTED_DOCUMENT_GUIDANCE)).toBeLessThan(
       toolMessage.indexOf('"text"')
     );
   });
