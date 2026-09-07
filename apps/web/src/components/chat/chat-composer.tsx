@@ -567,9 +567,6 @@ export function ChatComposer(props: ChatComposerProps) {
     }
     storeComposerDraft(props.draftStorageKey, "");
     textInput.clear();
-    if (prefill) {
-      onPrefillConsumed?.(prefill);
-    }
   }
 
   const composerProps: ChatComposerProps = {
