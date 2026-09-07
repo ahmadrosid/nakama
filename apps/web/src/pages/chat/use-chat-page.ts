@@ -956,6 +956,77 @@ export function useChatPage() {
     [executeSend, profileId, readOnlySession]
   );
 
+  /**
+   * Branch the session at the checkpoint before `prompt`, then send `text` into
+   * the branch.
+   */
+  const branchAndSendPrompt = useCallback(
+    async (prompt: ChatListItem, text: string, anchorId: string) => {
+      if (!profileId) {
+        return;
+      }
+
+      const checkpoint = findRetryCheckpoint(messages, prompt);
+
+      if (checkpoint && !session) {
+        setError(
+          "Chat session is unavailable. Please send a new message instead."
+        );
+        return;
+      }
+
+      setBranchingMessageId(anchorId);
+      setError(null);
+
+      try {
+        let retrySession: RemoteChatSession;
+        let initialMessages: ChatListItem[] = [];
+
+        if (checkpoint && session) {
+          const result = await branchSessionMutation.mutateAsync({
+            channel: "web",
+            messageIndex: checkpoint.historyIndex!,
+            profileId,
+            sessionId: session.id,
+          });
+          retrySession = client.createChatSession(result.sessionId, "web");
+          initialMessages = messages.filter(
+            (item) =>
+              typeof item.historyIndex === "number" &&
+              item.historyIndex <= checkpoint.historyIndex!
+          );
+        } else {
+          retrySession = await client.createSession("web", {
+            model: sessionModel ?? undefined,
+            profileId,
+          });
+        }
+
+        localStorage.setItem(sessionStorageKey(profileId), retrySession.id);
+        setSession(retrySession);
+        syncChatUrl(profileId, retrySession.id);
+
+        await sendMessage(text, [], {
+          initialMessages,
+          sessionOverride: retrySession,
+        });
+      } catch (err) {
+        setError(formatError(err));
+      } finally {
+        setBranchingMessageId(null);
+      }
+    },
+    [
+      branchSessionMutation,
+      messages,
+      profileId,
+      sendMessage,
+      session,
+      sessionModel,
+      syncChatUrl,
+    ]
+  );
+
   const handleTryAgainMessage = useCallback(
     async (message: ChatListItem) => {
       if (busy || !profileId) {
@@ -1008,66 +1079,9 @@ export function useChatPage() {
         return;
       }
 
-      const checkpoint = findRetryCheckpoint(messages, prompt);
-
-      if (checkpoint && !session) {
-        setError(
-          "Chat session is unavailable. Please send a new message instead."
-        );
-        return;
-      }
-
-      setBranchingMessageId(message.id);
-      setError(null);
-
-      try {
-        let retrySession: RemoteChatSession;
-        let initialMessages: ChatListItem[] = [];
-
-        if (checkpoint && session) {
-          const result = await branchSessionMutation.mutateAsync({
-            channel: "web",
-            messageIndex: checkpoint.historyIndex!,
-            profileId,
-            sessionId: session.id,
-          });
-          retrySession = client.createChatSession(result.sessionId, "web");
-          initialMessages = messages.filter(
-            (item) =>
-              typeof item.historyIndex === "number" &&
-              item.historyIndex <= checkpoint.historyIndex!
-          );
-        } else {
-          retrySession = await client.createSession("web", {
-            model: sessionModel ?? undefined,
-            profileId,
-          });
-        }
-
-        localStorage.setItem(sessionStorageKey(profileId), retrySession.id);
-        setSession(retrySession);
-        syncChatUrl(profileId, retrySession.id);
-
-        await sendMessage(prompt.content, [], {
-          initialMessages,
-          sessionOverride: retrySession,
-        });
-      } catch (err) {
-        setError(formatError(err));
-      } finally {
-        setBranchingMessageId(null);
-      }
+      await branchAndSendPrompt(prompt, prompt.content, message.id);
     },
-    [
-      branchSessionMutation,
-      busy,
-      messages,
-      profileId,
-      sendMessage,
-      session,
-      sessionModel,
-      syncChatUrl,
-    ]
+    [branchAndSendPrompt, busy, messages, profileId, sendMessage, session]
   );
 
   const isEmptyState = messages.length === 0 && !busy;
