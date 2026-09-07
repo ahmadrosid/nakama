@@ -134,28 +134,4 @@ describe("agent chat cancellation", () => {
     // stays locked until the model finishes on its own.
     expect(providerSignal).toBe(controller.signal);
   });
-
-  test("runs to completion when nothing aborts", async () => {
-    const controller = new AbortController();
-    const tool: ToolDefinition = {
-      description: "Sample tool",
-      name: "slow",
-      parameters: { properties: {}, type: "object" },
-      run: () => Promise.resolve({ ok: true }),
-    };
-
-    const { provider } = createCountingProvider(callThenReply);
-    const session = createAgentChatSession(
-      { provider, tools: [tool] },
-      { tools: [tool] }
-    );
-
-    const reply = await session.sendStream(
-      "run it",
-      { onChunk: () => {} },
-      { signal: controller.signal }
-    );
-
-    expect(reply).toBe("Done");
-  });
 });

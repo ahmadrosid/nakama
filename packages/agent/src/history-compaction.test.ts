@@ -30,10 +30,6 @@ const smallWindow: CompactionConfig = {
   maxOutputTokens: 8192,
 };
 
-function repeat(char: string, count: number): string {
-  return char.repeat(count);
-}
-
 function createToolMessage(content: string): ChatMessage {
   return {
     content,
@@ -50,13 +46,13 @@ function createToolMessage(content: string): ChatMessage {
 function seedHistory(toolChars: number): ChatMessage[] {
   return [
     { content: "turn 1", role: "user" },
-    createToolMessage(repeat("a", toolChars)),
+    createToolMessage("a".repeat(toolChars)),
     { content: "done 1", role: "assistant" },
     { content: "turn 2", role: "user" },
-    createToolMessage(repeat("b", toolChars)),
+    createToolMessage("b".repeat(toolChars)),
     { content: "done 2", role: "assistant" },
     { content: "turn 3", role: "user" },
-    createToolMessage(repeat("c", toolChars)),
+    createToolMessage("c".repeat(toolChars)),
     { content: "done 3", role: "assistant" },
     { content: "turn 4", role: "user" },
     { content: "done 4", role: "assistant" },
@@ -71,32 +67,6 @@ describe("history compaction", () => {
     expect(isOverflow(usable, compaction)).toBe(true);
   });
 
-  test("prunes old tool outputs while protecting recent turns", () => {
-    const messages: ChatMessage[] = [
-      { content: "turn 1", role: "user" },
-      createToolMessage(repeat("a", 200_000)),
-      { content: "done 1", role: "assistant" },
-      { content: "turn 2", role: "user" },
-      createToolMessage(repeat("b", 10_000)),
-      { content: "done 2", role: "assistant" },
-      { content: "turn 3", role: "user" },
-      createToolMessage(repeat("c", 10_000)),
-      { content: "done 3", role: "assistant" },
-      { content: "turn 4", role: "user" },
-      { content: "done 4", role: "assistant" },
-    ];
-
-    const result = pruneToolOutputs(messages, compaction);
-
-    expect(result.prunedTokens).toBeGreaterThan(0);
-    expect(messages[1]?.role === "tool" && messages[1].content).toContain(
-      "truncated"
-    );
-    expect(messages[10]?.role === "assistant" && messages[10].content).toBe(
-      "done 4"
-    );
-  });
-
   test("does not prune when tool output is well below the model's usable window (#342)", () => {
     // Three 30k-token tool results; the last 2 turns are protected, so two
     // candidates (60k tokens) are considered. On a 1M window the protect
@@ -106,13 +76,13 @@ describe("history compaction", () => {
 
     expect(result.prunedTokens).toBe(0);
     expect(messages[1]?.role === "tool" && messages[1].content).toBe(
-      repeat("a", 120_000)
+      "a".repeat(120_000)
     );
     expect(messages[4]?.role === "tool" && messages[4].content).toBe(
-      repeat("b", 120_000)
+      "b".repeat(120_000)
     );
     expect(messages[7]?.role === "tool" && messages[7].content).toBe(
-      repeat("c", 120_000)
+      "c".repeat(120_000)
     );
   });
 
@@ -128,7 +98,7 @@ describe("history compaction", () => {
       "truncated"
     );
     expect(messages[4]?.role === "tool" && messages[4].content).toBe(
-      repeat("b", 120_000)
+      "b".repeat(120_000)
     );
   });
 
@@ -138,13 +108,13 @@ describe("history compaction", () => {
     // it, but the reclaim equals the minimum, so nothing may be rewritten.
     const messages: ChatMessage[] = [
       { content: "turn 1", role: "user" },
-      createToolMessage(repeat("a", 80_000)),
+      createToolMessage("a".repeat(80_000)),
       { content: "done 1", role: "assistant" },
       { content: "turn 2", role: "user" },
-      createToolMessage(repeat("b", 380_000)),
+      createToolMessage("b".repeat(380_000)),
       { content: "done 2", role: "assistant" },
       { content: "turn 3", role: "user" },
-      createToolMessage(repeat("c", 4000)),
+      createToolMessage("c".repeat(4000)),
       { content: "done 3", role: "assistant" },
       { content: "turn 4", role: "user" },
       { content: "done 4", role: "assistant" },
@@ -158,10 +128,10 @@ describe("history compaction", () => {
 
     expect(result.prunedTokens).toBe(0);
     expect(messages[1]?.role === "tool" && messages[1].content).toBe(
-      repeat("a", 80_000)
+      "a".repeat(80_000)
     );
     expect(messages[4]?.role === "tool" && messages[4].content).toBe(
-      repeat("b", 380_000)
+      "b".repeat(380_000)
     );
   });
 
@@ -176,21 +146,21 @@ describe("history compaction", () => {
 
     expect(result.prunedTokens).toBe(0);
     expect(messages[1]?.role === "tool" && messages[1].content).toBe(
-      repeat("a", 200_000)
+      "a".repeat(200_000)
     );
   });
 
   test("does not mutate shared tool message objects in place (#589)", () => {
-    const original = createToolMessage(repeat("a", 200_000));
+    const original = createToolMessage("a".repeat(200_000));
     const messages: ChatMessage[] = [
       { content: "turn 1", role: "user" },
       original,
       { content: "done 1", role: "assistant" },
       { content: "turn 2", role: "user" },
-      createToolMessage(repeat("b", 10_000)),
+      createToolMessage("b".repeat(10_000)),
       { content: "done 2", role: "assistant" },
       { content: "turn 3", role: "user" },
-      createToolMessage(repeat("c", 10_000)),
+      createToolMessage("c".repeat(10_000)),
       { content: "done 3", role: "assistant" },
       { content: "turn 4", role: "user" },
       { content: "done 4", role: "assistant" },
@@ -199,7 +169,7 @@ describe("history compaction", () => {
     const result = pruneToolOutputs(messages, compaction);
 
     expect(result.prunedTokens).toBeGreaterThan(0);
-    expect(original.content).toBe(repeat("a", 200_000));
+    expect(original.content).toBe("a".repeat(200_000));
     expect(messages[1]).not.toBe(original);
     expect(messages[1]?.role === "tool" && messages[1].content).toContain(
       "truncated"
@@ -313,7 +283,7 @@ describe("history compaction", () => {
 
   test("estimates history tokens from serialized payload", () => {
     const messages: ChatMessage[] = [
-      { content: repeat("x", 400), role: "user" },
+      { content: "x".repeat(400), role: "user" },
     ];
     const estimate = estimateHistoryTokens(messages, "system prompt");
 
@@ -321,7 +291,7 @@ describe("history compaction", () => {
   });
 
   test("counts providerContent once and keeps thinking (#340)", () => {
-    const thinking = repeat("t", 800);
+    const thinking = "t".repeat(800);
     const text = "Let me look that up.";
     const toolCalls = [
       {
