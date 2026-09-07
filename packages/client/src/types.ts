@@ -4,6 +4,7 @@ import type {
   AutomationDefinition,
   ChatContextUsage,
   ChatMessage,
+  ChatUsage,
   CompactionResponse,
   SendMessageInput,
 } from "@nakama/core/contract";
@@ -46,6 +47,7 @@ export interface StreamHandlers {
     tool: string;
     input: Record<string, unknown>;
   }) => void;
+  onUsage?: (usage: ChatUsage) => void;
 }
 
 export type SendMessageArg = string | SendMessageInput;
