@@ -49,6 +49,9 @@ export function TelegramAllowedUsersDialog({
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<AllowedTelegramUser | null>(
+    null
+  );
 
   function saveAllowedUsers(
     nextUsers: AllowedTelegramUser[],
@@ -134,8 +137,16 @@ export function TelegramAllowedUsersDialog({
     });
   }
 
-  function removeAllowedUserId(id: string) {
-    saveAllowedUsers(allowedUsers.filter((entry) => entry.id !== id));
+  function confirmRemoveAllowedUser() {
+    if (!removeTarget) {
+      return;
+    }
+
+    const id = removeTarget.id;
+    saveAllowedUsers(
+      allowedUsers.filter((entry) => entry.id !== id),
+      () => setRemoveTarget(null)
+    );
   }
 
   return (
@@ -223,7 +234,7 @@ export function TelegramAllowedUsersDialog({
                     <Button
                       aria-label={`Remove Telegram user ID ${user.id}`}
                       disabled={saveMutation.isPending}
-                      onClick={() => removeAllowedUserId(user.id)}
+                      onClick={() => setRemoveTarget(user)}
                       size="icon-sm"
                       type="button"
                       variant="ghost"
@@ -307,6 +318,41 @@ export function TelegramAllowedUsersDialog({
               type="button"
             >
               Add user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(next) => !next && setRemoveTarget(null)}
+        open={removeTarget !== null}
+      >
+        <DialogContent className="gap-5 p-6 sm:max-w-lg">
+          <DialogHeader className="gap-2">
+            <DialogTitle>Remove Telegram user</DialogTitle>
+            <DialogDescription>
+              {removeTarget?.username
+                ? `@${removeTarget.username} (${removeTarget.id})`
+                : removeTarget?.id}{" "}
+              loses access to this profile as soon as this is saved.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
+            <Button
+              onClick={() => setRemoveTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={saveMutation.isPending}
+              onClick={confirmRemoveAllowedUser}
+              type="button"
+              variant="destructive"
+            >
+              Remove
             </Button>
           </DialogFooter>
         </DialogContent>
