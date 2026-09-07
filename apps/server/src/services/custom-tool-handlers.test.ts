@@ -39,9 +39,15 @@ function makeRecord(
 
 let reportedErrors: ErrorReport[] = [];
 let firstReport: Promise<ErrorReport>;
+let queueDir = "";
 const realConsoleError = console.error;
 
 beforeEach(async () => {
+  // reportError queues before it sends, and that queue is a read-modify-write on
+  // one file under NAKAMA_CONFIG_DIR. Without a temp dir here the suite trims
+  // the real queue on whatever machine runs it.
+  queueDir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-report-"));
+  process.env.NAKAMA_CONFIG_DIR = queueDir;
   process.env.NAKAMA_ERROR_TRACKING_DSN = "https://key@errors.example.test/7";
   await refreshErrorTrackingEnabled();
   reportedErrors = [];
@@ -60,9 +66,15 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.NAKAMA_ERROR_TRACKING_DSN;
+  if (originalConfigDir === undefined) {
+    delete process.env.NAKAMA_CONFIG_DIR;
+  } else {
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+  }
   await refreshErrorTrackingEnabled();
   setErrorSink(null);
   console.error = realConsoleError;
+  await rm(queueDir, { force: true, recursive: true });
 });
 
 describe("withToolRetries", () => {
@@ -133,6 +145,7 @@ describe("withToolRetries", () => {
       withToolRetries(run, "flaky")({}, ctx(controller.signal))
     ).rejects.toBe(cancellation);
     expect(attempts).toBe(1);
+    expect(reportedErrors).toEqual([]);
   });
 
   test("an already-aborted signal never starts the run", async () => {
@@ -149,6 +162,7 @@ describe("withToolRetries", () => {
       withToolRetries(run, "flaky")({}, ctx(controller.signal))
     ).rejects.toBe(cancellation);
     expect(attempts).toBe(0);
+    expect(reportedErrors).toEqual([]);
   });
 
   test("aborting during the backoff cancels the retry", async () => {
@@ -169,6 +183,7 @@ describe("withToolRetries", () => {
     await expect(pending).rejects.toBe(cancellation);
     // Never reached the second attempt.
     expect(attempts).toBe(1);
+    expect(reportedErrors).toEqual([]);
   });
 });
 
