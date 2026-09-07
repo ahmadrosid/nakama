@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildNotificationWebhookUrl,
   formatTelegramDestinationLabel,
-  LATEST_WEBHOOK_SECRET_TTL_MS,
   maskWebhookApiKey,
 } from "./notification-destinations";
 
@@ -33,9 +32,5 @@ describe("maskWebhookApiKey", () => {
 
   test("fully masks short keys", () => {
     expect(maskWebhookApiKey("abc")).toBe("••••");
-  });
-
-  test("exports a one-minute clear window", () => {
-    expect(LATEST_WEBHOOK_SECRET_TTL_MS).toBe(60_000);
   });
 });

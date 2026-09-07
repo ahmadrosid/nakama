@@ -1,8 +1,5 @@
 import type { TelegramNotificationDestinationConfig } from "@nakama/core/contract";
 
-/** Clear newly minted webhook secrets from React state after this window. */
-export const LATEST_WEBHOOK_SECRET_TTL_MS = 60_000;
-
 export function maskWebhookApiKey(apiKey: string): string {
   const trimmed = apiKey.trim();
   if (trimmed.length <= 4) {

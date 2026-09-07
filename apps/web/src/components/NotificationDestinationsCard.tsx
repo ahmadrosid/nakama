@@ -25,7 +25,6 @@ import { formatError } from "@/lib/client";
 import {
   buildNotificationWebhookUrl,
   formatTelegramDestinationLabel,
-  LATEST_WEBHOOK_SECRET_TTL_MS,
   maskWebhookApiKey,
   parseTelegramTopicLink,
 } from "@/lib/notification-destinations";
@@ -88,18 +87,6 @@ function LatestSecret({
     `    "level": "info"`,
     `  }'`,
   ].join("\n");
-  const displayCurlExample = revealed
-    ? curlExample
-    : [
-        `curl -X POST '${webhookUrl}' \\`,
-        `  -H 'Content-Type: application/json' \\`,
-        `  -H 'X-API-Key: ${maskWebhookApiKey(apiKey)}' \\`,
-        `  -d '{`,
-        `    "title": "New notification",`,
-        `    "body": "Hello from Nakama",`,
-        `    "level": "info"`,
-        `  }'`,
-      ].join("\n");
 
   async function copyCurlExample() {
     try {
@@ -188,7 +175,7 @@ function LatestSecret({
           <div>
             <p className="text-muted-foreground text-xs">Example curl</p>
             <pre className="mt-1 overflow-x-auto rounded-md border border-border bg-background p-3 text-foreground text-xs">
-              <code>{displayCurlExample}</code>
+              <code>{curlExample.replace(apiKey, displayApiKey)}</code>
             </pre>
           </div>
         </div>
@@ -222,7 +209,7 @@ export function NotificationDestinationsCard() {
 
     const timer = window.setTimeout(() => {
       setLatestSecret(null);
-    }, LATEST_WEBHOOK_SECRET_TTL_MS);
+    }, 60_000);
 
     return () => {
       window.clearTimeout(timer);
@@ -554,12 +541,7 @@ function NotificationDestinationItem({
       ) : null}
 
       {latestSecret?.destination.id === destination.id ? (
-        {latestSecret ? (
-          <LatestSecret
-            key={latestSecret.apiKey}
-            latestSecret={latestSecret}
-          />
-        ) : null}
+        <LatestSecret key={latestSecret.apiKey} latestSecret={latestSecret} />
       ) : null}
     </div>
   );
