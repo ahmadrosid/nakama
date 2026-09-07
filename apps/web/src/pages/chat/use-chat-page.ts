@@ -44,6 +44,7 @@ import {
   chatMessagesToListItems,
   clearFailedChatTurn,
   consumeStoredChatDraft,
+  isEditableUserMessage,
   isReadOnlySessionChannel,
   parseChatRouteParams,
   pickKnownProfileId,
@@ -94,6 +95,7 @@ import {
 } from "@/lib/thinking-settings";
 import {
   appendFailedTurnIfNeeded,
+  editedPromptText,
   findFailedRetryPrompt,
   findRetryPrompt,
   markStreamingTurnFailed,
@@ -1090,14 +1092,16 @@ export function useChatPage() {
         return;
       }
 
-      const nextText = text.trim();
+      const nextText = editedPromptText(message, text);
 
-      if (!nextText || nextText === message.content.trim()) {
+      if (nextText === null) {
         return;
       }
 
-      if (message.images?.length || message.documents?.length) {
-        setError("Editing is available for text-only messages.");
+      // The list only offers Edit on eligible rows. The handler repeats the
+      // check so an attachment or an unsent turn can never reach the branch.
+      if (!isEditableUserMessage(message)) {
+        setError("Editing is available for text-only messages already sent.");
         return;
       }
 
