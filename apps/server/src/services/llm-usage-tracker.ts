@@ -2,7 +2,7 @@ import type { LlmUsageModelStats, LlmUsageStats } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   estimateUsageCostUsd,
-  hasCatalogPricing,
+  getExplicitModelPricing,
   type PricingContext,
 } from "../providers/pricing";
 
@@ -78,7 +78,11 @@ export class LlmUsageTracker {
     this.pricingContext = context;
   }
 
-  /** Returns the cost of this call, or null when the model has no known pricing. */
+  /**
+   * Returns the cost of this call, or null when the model has no published
+   * rates. The running totals still use the fallback rate, but a null keeps
+   * the house guess out of anything shown to the user as money.
+   */
   record(
     modelId: string,
     inputTokens: number,
@@ -121,7 +125,9 @@ export class LlmUsageTracker {
       this.pendingWrites.delete(persistence);
     });
 
-    return hasCatalogPricing(modelId, this.pricingContext) ? costDelta : null;
+    return getExplicitModelPricing(modelId, this.pricingContext) === null
+      ? null
+      : costDelta;
   }
 
   private async persist(
