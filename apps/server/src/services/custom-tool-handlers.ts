@@ -4,6 +4,7 @@ import type {
   ToolDefinition,
   ToolSourceResponse,
 } from "@nakama/core";
+import { reportError } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import { resolveCustomToolModulePath } from "./custom-tool-shared";
 import {
@@ -61,9 +62,14 @@ const TOOL_RETRY_BASE_DELAY_MS = 500;
  * retried; an aborted `context.signal` stops immediately and is never
  * retried, including mid-backoff. Cancellation preserves the signal's reason;
  * other final failures are re-thrown unchanged.
+ *
+ * A failure that uses up the budget is also mirrored to the operator's error
+ * tracker, tagged `tool:<name>`. That is the only place that can tell an
+ * exhausted tool from a single failed attempt.
  */
 export function withToolRetries(
-  run: (input: unknown, context: ToolContext) => Promise<unknown>
+  run: (input: unknown, context: ToolContext) => Promise<unknown>,
+  toolName: string
 ): (input: unknown, context: ToolContext) => Promise<unknown> {
   return async (input, context) => {
     let attempts = 0;
@@ -75,6 +81,10 @@ export function withToolRetries(
         attempts += 1;
         context.signal?.throwIfAborted();
         if (attempts > TOOL_RETRY_LIMIT) {
+          // Not awaited: reportError queues synchronously and never throws, and
+          // the model should not wait out the tracker's HTTP timeout on a turn
+          // that has already failed.
+          void reportError(error, { kind: "tool", source: `tool:${toolName}` });
           throw error;
         }
         // Rejects immediately if the signal aborts mid-backoff (including an
@@ -112,7 +122,10 @@ export function getCustomToolHandler(
       if (!definition) {
         return null;
       }
-      return { ...definition, run: withToolRetries(definition.run) };
+      return {
+        ...definition,
+        run: withToolRetries(definition.run, definition.name),
+      };
     },
   };
 }

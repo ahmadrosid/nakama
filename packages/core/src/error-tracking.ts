@@ -12,8 +12,11 @@ import { scrubText } from "./error-tracking-scrub";
  * "test" is the event the Integrations tab sends to prove a DSN works. It rides the
  * same pipeline so the operator is checking the real path, and carries a lower level
  * at the ingest so it never sits in a triage queue next to real crashes.
+ *
+ * "tool" is a custom tool that failed every attempt in its retry budget. The process
+ * survives it, so it is tagged apart from a crash and the operator can filter on it.
  */
-export type ErrorReportKind = "crash" | "test";
+export type ErrorReportKind = "crash" | "test" | "tool";
 
 export interface ErrorReport {
   at: string;
