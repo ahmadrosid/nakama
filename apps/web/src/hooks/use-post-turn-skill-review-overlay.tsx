@@ -12,6 +12,7 @@ import {
   useSkillSuggestions,
 } from "@/hooks/use-skill-suggestions";
 import { formatError } from "@/lib/client";
+import { canAccessSystemPage } from "@/lib/navigation";
 
 const POST_TURN_POLL_WINDOW_MS = 45_000;
 const POST_TURN_POLL_INTERVAL_MS = 3000;
@@ -26,14 +27,14 @@ interface UsePostTurnSkillReviewOverlayArgs {
 
 function canPollPostTurnReview({
   activeOrgId,
-  activeOrgRole,
+  canReview,
   readOnlySession,
   reviewEnabled,
   sessionChannel,
   sessionId,
 }: {
   activeOrgId?: string;
-  activeOrgRole?: string;
+  canReview: boolean;
   readOnlySession: boolean;
   reviewEnabled: boolean;
   sessionChannel: AgentChannel;
@@ -45,7 +46,7 @@ function canPollPostTurnReview({
     Boolean(sessionId) &&
     sessionChannel === "web" &&
     !readOnlySession &&
-    activeOrgRole !== "viewer"
+    canReview
   );
 }
 
@@ -118,14 +119,18 @@ export function usePostTurnSkillReviewOverlay({
   lastSuccessfulTurnAt,
   readOnlySession,
 }: UsePostTurnSkillReviewOverlayArgs) {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
   const reviewEnabled = resolveProfileOrgBooleanOverride(
     profile?.skillsPostTurnReview ?? null,
     activeOrg?.skillsPostTurnReview ?? false
   );
+  const canReview = canAccessSystemPage(
+    user?.isPlatformAdmin === true,
+    activeOrg?.role
+  );
   const canPoll = canPollPostTurnReview({
     activeOrgId: activeOrg?.id,
-    activeOrgRole: activeOrg?.role,
+    canReview,
     readOnlySession,
     reviewEnabled,
     sessionChannel,
@@ -173,8 +178,8 @@ export function usePostTurnSkillReviewOverlay({
     <SkillPostTurnReviewBanner
       applyErrorById={applyErrorById}
       applyStateById={applyStateById}
-      canApply={activeOrg?.role !== "viewer"}
-      isOrgAdmin={activeOrg?.role === "admin"}
+      canApply={canReview}
+      isOrgAdmin={canReview}
       onApply={(id) =>
         void handleApply(id, () => {
           void suggestionsQuery.refetch();
