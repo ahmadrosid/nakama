@@ -193,6 +193,59 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 131_072,
     default: true,
+    id: "openai/gpt-oss-120b",
+    inputPerMillionUsd: 0.15,
+    maxOutputTokens: 40_960,
+    name: "GPT-OSS 120B",
+    outputPerMillionUsd: 0.6,
+    provider: "together",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    contextWindow: 131_072,
+    id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    inputPerMillionUsd: 1.04,
+    maxOutputTokens: 40_960,
+    name: "Llama 3.3 70B Instruct Turbo",
+    outputPerMillionUsd: 1.04,
+    provider: "together",
+    supportsVision: false,
+  },
+  {
+    contextWindow: 262_144,
+    id: "Qwen/Qwen3.5-9B",
+    inputPerMillionUsd: 0.17,
+    maxOutputTokens: 65_536,
+    name: "Qwen3.5 9B",
+    outputPerMillionUsd: 0.25,
+    provider: "together",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "deepseek-ai/DeepSeek-V4-Flash-0731",
+    inputPerMillionUsd: 0.14,
+    maxOutputTokens: 384_000,
+    name: "DeepSeek V4 Flash",
+    outputPerMillionUsd: 0.28,
+    provider: "together",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    contextWindow: 524_288,
+    id: "MiniMaxAI/MiniMax-M3",
+    inputPerMillionUsd: 0.3,
+    maxOutputTokens: 131_072,
+    name: "MiniMax M3",
+    outputPerMillionUsd: 1.2,
+    provider: "together",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 131_072,
+    default: true,
     id: "gpt-oss-120b",
     inputPerMillionUsd: 0.35,
     maxOutputTokens: 40_960,
@@ -611,6 +664,7 @@ export function getDefaultModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "together" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -627,15 +681,17 @@ export function getDefaultModel(
           ? "gemini-2.5-flash"
           : provider === "deepseek"
             ? "deepseek-v4-flash"
-            : provider === "cerebras"
-              ? "gpt-oss-120b"
-              : provider === "fireworks"
-                ? "accounts/fireworks/models/kimi-k2p6"
-                : provider === "opencode_go"
-                  ? "opencode-go/kimi-k2.7-code"
-                  : provider === "cloudflare"
-                    ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                    : "gpt-5.4";
+            : provider === "together"
+              ? "openai/gpt-oss-120b"
+              : provider === "cerebras"
+                ? "gpt-oss-120b"
+                : provider === "fireworks"
+                  ? "accounts/fireworks/models/kimi-k2p6"
+                  : provider === "opencode_go"
+                    ? "opencode-go/kimi-k2.7-code"
+                    : provider === "cloudflare"
+                      ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                      : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -699,6 +755,7 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "together" ||
       provider === "cerebras" ||
       provider === "fireworks" ||
       provider === "opencode_go") &&

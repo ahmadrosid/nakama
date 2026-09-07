@@ -28,6 +28,7 @@ import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
 export interface CreateProviderOptions {
@@ -80,6 +81,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_DEEPSEEK_BASE_URL,
         model,
         providerName: "deepseek",
+      });
+    case "together":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_TOGETHER_BASE_URL,
+        model,
+        providerName: "together",
       });
     case "minimax":
     case "minimax_cn":

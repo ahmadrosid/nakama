@@ -87,6 +87,31 @@ describe("resolveModel", () => {
     expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
   });
 
+  test("resolves catalog models for Together AI", () => {
+    expect(resolveModel("together", "openai/gpt-oss-120b")).toBe(
+      "openai/gpt-oss-120b"
+    );
+    expect(
+      resolveModel("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
+    ).toBe("meta-llama/Llama-3.3-70B-Instruct-Turbo");
+    expect(getDefaultModel("together")).toBe("openai/gpt-oss-120b");
+    expect(getModelById("Qwen/Qwen3.5-9B")?.supportsVision).toBe(true);
+    expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsVision).toBe(true);
+    expect(getModelById("openai/gpt-oss-120b")?.supportsThinking).toBe(true);
+  });
+
+  test("uses together custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "Qwen/Qwen3.5-9B", name: "Qwen3.5 9B" },
+    ];
+    expect(resolveModel("together", "Qwen/Qwen3.5-9B", customModels)).toBe(
+      "Qwen/Qwen3.5-9B"
+    );
+    expect(resolveModel("together", "unknown-model", customModels)).toBe(
+      "Qwen/Qwen3.5-9B"
+    );
+  });
+
   test("resolves catalog models for Cerebras", () => {
     expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
     expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
@@ -223,5 +248,11 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("opencode-go/kimi-k2.7-code", "opencode_go")
     ).toBe(false);
+  });
+
+  test("reads Together AI vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("openai/gpt-oss-120b", "together")).toBe(false);
+    expect(modelSupportsVision("Qwen/Qwen3.5-9B", "together")).toBe(true);
+    expect(modelSupportsVision("MiniMaxAI/MiniMax-M3", "together")).toBe(true);
   });
 });

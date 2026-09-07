@@ -22,6 +22,7 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "together"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -119,6 +120,22 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats together models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -204,6 +221,22 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("cb-1", "model-1"),
         group("cb-1", "cerebras", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats together models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -310,6 +343,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "together",
           "cerebras",
           "cloudflare",
           "fireworks",

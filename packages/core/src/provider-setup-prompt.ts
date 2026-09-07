@@ -35,6 +35,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "together", label: "Together AI" },
   { id: "xai", label: "xAI Grok" },
   { id: "cerebras", label: "Cerebras" },
   { id: "cloudflare", label: "Cloudflare Worker AI" },
@@ -190,7 +191,8 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "minimax_cn" ||
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
-    normalized === "xai"
+    normalized === "xai" ||
+    normalized === "together"
   ) {
     return normalized;
   }

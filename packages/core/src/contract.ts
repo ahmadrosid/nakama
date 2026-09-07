@@ -2220,7 +2220,8 @@ export type ProviderName =
   | "minimax_cn"
   | "zhipu"
   | "zhipu_cn"
-  | "xai";
+  | "xai"
+  | "together";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

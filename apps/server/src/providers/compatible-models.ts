@@ -131,7 +131,7 @@ export function catalogCustomModelsToCatalog(
     }
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
-    } else if (provider === "deepseek") {
+    } else if (provider === "deepseek" || provider === "together") {
       model.supportsThinking = false;
     }
     if (entry.inputPerMillionUsd !== undefined) {
@@ -327,6 +327,7 @@ export function getModelsForProviderInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "together" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];

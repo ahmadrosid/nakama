@@ -23,6 +23,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("zhipu")).toBe("zhipu");
     expect(parseProviderName("zhipu_cn")).toBe("zhipu_cn");
     expect(parseProviderName("xai")).toBe("xai");
+    expect(parseProviderName("together")).toBe("together");
   });
 
   test("rejects unknown values", () => {
@@ -34,6 +35,10 @@ describe("parseProviderName", () => {
 describe("apiKeyEnvVarForProvider", () => {
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
+  });
+
+  test("maps Together AI to its env key", () => {
+    expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
   });
 });
 
@@ -97,6 +102,18 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
+describe("resolveProvider together", () => {
+  test("auto-resolves Together when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        TOGETHER_API_KEY: "tg-test",
+      },
+    });
+
+    expect(provider).toBe("together");
+  });
+});
+
 describe("resolveProvider cerebras", () => {
   test("auto-resolves Cerebras when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -133,6 +150,7 @@ describe("isDiscoveryModelProvider", () => {
 
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
+    expect(isDiscoveryModelProvider("together")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
   });
