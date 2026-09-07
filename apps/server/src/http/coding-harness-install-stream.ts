@@ -10,7 +10,10 @@ type InstallStreamOptions = {
 };
 
 export function streamInstallEvents<TEvent extends { type: string }>(
-  executor: (send: (event: TEvent) => void) => Promise<void>,
+  executor: (
+    send: (event: TEvent) => void,
+    signal: AbortSignal
+  ) => Promise<void>,
   options: InstallStreamOptions = {}
 ): Response {
   const encoder = new TextEncoder();
@@ -23,6 +26,12 @@ export function streamInstallEvents<TEvent extends { type: string }>(
   let terminated = false;
   let keepalive: ReturnType<typeof setInterval> | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * Closing the stream used to leave the installer running: the deadline ended
+   * the response and nothing told the work to stop. This is what the executor
+   * watches so a timeout, or a client that hangs up, actually reaches it.
+   */
+  const abortController = new AbortController();
 
   const clearTimers = () => {
     clearInterval(keepalive);
@@ -33,6 +42,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
     cancel() {
       terminated = true;
       clearTimers();
+      abortController.abort();
     },
     async start(controller) {
       const send = (event: TEvent) => {
@@ -68,11 +78,12 @@ export function streamInstallEvents<TEvent extends { type: string }>(
           error: timeoutMessage,
           type: "error",
         } as Extract<TEvent, InstallStreamErrorEvent>);
+        abortController.abort();
         finish();
       }, timeoutMs);
 
       try {
-        await executor(send);
+        await executor(send, abortController.signal);
       } catch (error) {
         send({
           error: formatServerError(error),
@@ -94,7 +105,10 @@ export function streamInstallEvents<TEvent extends { type: string }>(
 }
 
 export function streamAgentBrowserInstall(
-  executor: (send: (event: AgentBrowserInstallEvent) => void) => Promise<void>,
+  executor: (
+    send: (event: AgentBrowserInstallEvent) => void,
+    signal: AbortSignal
+  ) => Promise<void>,
   options: InstallStreamOptions = {}
 ): Response {
   return streamInstallEvents<AgentBrowserInstallEvent>(executor, options);
