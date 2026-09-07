@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://github.com/ahmadrosid/nakama/releases"><img src="https://img.shields.io/github/v/release/ahmadrosid/nakama?display_name=tag&sort=semver" alt="Latest release"></a>
   <a href="https://github.com/ahmadrosid/nakama/graphs/contributors"><img src="https://img.shields.io/github/contributors/ahmadrosid/nakama?style=flat-square" alt="Contributors"></a>
+  <a href="https://discord.com/invite/Cwq3erYvh"><img src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 # Nakama
@@ -98,10 +99,11 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 Open the dashboard at http://localhost:4310.
 
 The image carries [omni](https://github.com/fajarhide/omni), which shortens `bash`
-and `read_file` output before it reaches the model. Turn it on under Integrations,
-or with `NAKAMA_OMNI=1`. Build with `--build-arg OMNI_VERSION=` to leave the binary
-out; the server then downloads it, checksum verified, the first time the toggle is
-switched on. Set `NAKAMA_OMNI_AUTO_INSTALL=0` to forbid that download.
+and `read_file` output before it reaches the model. It is on by default; switch it
+off under Integrations, or with `NAKAMA_OMNI=0`. Build with
+`--build-arg OMNI_VERSION=` to leave the binary out; the server then downloads it,
+checksum verified, the first time the toggle is switched on. Set
+`NAKAMA_OMNI_AUTO_INSTALL=0` to forbid that download.
 
 ### Integrations
 
