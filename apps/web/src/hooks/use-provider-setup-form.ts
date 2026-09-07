@@ -274,6 +274,7 @@ export function useProviderSetupForm(
           id: entry.id,
           name: entry.name?.trim() || entry.id,
           provider: selectedProvider,
+          supportsVision: entry.supportsVision !== false,
         }))
       );
     },
@@ -519,6 +520,7 @@ export function useProviderSetupForm(
                     default: entry.id === modelToSave,
                     id: entry.id,
                     name: entry.name,
+                    supportsVision: entry.supportsVision !== false,
                   }))
                 : selectedProvider === "openai_compatible" ||
                     selectedProvider === "ollama"

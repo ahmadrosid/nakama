@@ -246,7 +246,7 @@ export async function fetchXaiOAuthModels(
     }
     const name =
       typeof row.name === "string" && row.name.trim() ? row.name : id;
-    return [{ id, name }];
+    return [{ id, name, supportsVision: true }];
   });
   if (!models.length) {
     throw new NakamaApiError(

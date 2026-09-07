@@ -775,7 +775,9 @@ export function modelSupportsVision(
   if (
     provider === "openai" ||
     provider === "anthropic" ||
-    provider === "gemini"
+    provider === "gemini" ||
+    provider === "chatgpt" ||
+    provider === "xai_oauth"
   ) {
     return true;
   }

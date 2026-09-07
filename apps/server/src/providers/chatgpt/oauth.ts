@@ -284,6 +284,7 @@ export function parseChatgptCodexModelsPayload(
         typeof item.display_name === "string" && item.display_name.trim()
           ? item.display_name.trim()
           : id,
+      supportsVision: true,
     });
   }
 

@@ -48,8 +48,8 @@ describe("parseChatgptCodexModelsPayload", () => {
         ],
       })
     ).toEqual([
-      { id: "gpt-5.4", name: "GPT-5.4" },
-      { id: "gpt-5.4-mini", name: "GPT-5.4 mini" },
+      { id: "gpt-5.4", name: "GPT-5.4", supportsVision: true },
+      { id: "gpt-5.4-mini", name: "GPT-5.4 mini", supportsVision: true },
     ]);
   });
 });

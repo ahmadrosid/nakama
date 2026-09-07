@@ -206,7 +206,7 @@ test("discovers language models using the subscription bearer", async () => {
     return Response.json({ models: [{ id: "grok-4.6" }] });
   });
   expect(await fetchXaiOAuthModels(credentials)).toEqual([
-    { id: "grok-4.6", name: "grok-4.6" },
+    { id: "grok-4.6", name: "grok-4.6", supportsVision: true },
   ]);
 });
 

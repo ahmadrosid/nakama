@@ -225,7 +225,9 @@ export function CatalogProviderModelFields({
           visionDefaultOn={
             provider === "openai" ||
             provider === "anthropic" ||
-            provider === "gemini"
+            provider === "gemini" ||
+            provider === "chatgpt" ||
+            provider === "xai_oauth"
           }
         />
       )}
