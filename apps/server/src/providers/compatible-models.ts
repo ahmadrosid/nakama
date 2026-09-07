@@ -324,6 +324,7 @@ export function getModelsForProviderInstance(
   if (
     instance.type === "openai" ||
     instance.type === "chatgpt" ||
+    instance.type === "xai_oauth" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||

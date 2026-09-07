@@ -18,6 +18,7 @@ import type {
   ThinkingSettings,
   TranscriptionSettings,
   VisionSettings,
+  XaiOAuthCredentials,
 } from "./contract";
 import { ensureDir, readTextOrNull, writeTextFile } from "./fs";
 import {
@@ -55,6 +56,9 @@ export interface ProviderInstance {
   label: string;
   type: UserProviderName;
   wireApi?: import("./contract").WireApi;
+  xaiAccessToken?: string;
+  xaiRefreshToken?: string;
+  xaiTokenExpiresAt?: string;
 }
 
 export interface UserConfig {
@@ -92,6 +96,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
   xai: "xAI Grok",
+  xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };
@@ -649,14 +654,23 @@ function loadProvidersFromSections(
       id,
       label,
       type,
+      ...(values.xai_access_token?.trim()
+        ? { xaiAccessToken: values.xai_access_token.trim() }
+        : {}),
       ...(values.chatgpt_access_token?.trim()
         ? { chatgptAccessToken: values.chatgpt_access_token.trim() }
+        : {}),
+      ...(values.xai_refresh_token?.trim()
+        ? { xaiRefreshToken: values.xai_refresh_token.trim() }
         : {}),
       ...(values.chatgpt_refresh_token?.trim()
         ? { chatgptRefreshToken: values.chatgpt_refresh_token.trim() }
         : {}),
       ...(values.chatgpt_account_id?.trim()
         ? { chatgptAccountId: values.chatgpt_account_id.trim() }
+        : {}),
+      ...(values.xai_token_expires_at?.trim()
+        ? { xaiTokenExpiresAt: values.xai_token_expires_at.trim() }
         : {}),
       ...(values.chatgpt_token_expires_at?.trim()
         ? { chatgptTokenExpiresAt: values.chatgpt_token_expires_at.trim() }
@@ -700,8 +714,16 @@ function buildProviderSectionValues(
     values.models_json = serializeCustomModels(provider.customModels);
   }
 
+  if (provider.xaiAccessToken?.trim()) {
+    values.xai_access_token = provider.xaiAccessToken.trim();
+  }
+
   if (provider.chatgptAccessToken?.trim()) {
     values.chatgpt_access_token = provider.chatgptAccessToken.trim();
+  }
+
+  if (provider.xaiRefreshToken?.trim()) {
+    values.xai_refresh_token = provider.xaiRefreshToken.trim();
   }
 
   if (provider.chatgptRefreshToken?.trim()) {
@@ -710,6 +732,10 @@ function buildProviderSectionValues(
 
   if (provider.chatgptAccountId?.trim()) {
     values.chatgpt_account_id = provider.chatgptAccountId.trim();
+  }
+
+  if (provider.xaiTokenExpiresAt?.trim()) {
+    values.xai_token_expires_at = provider.xaiTokenExpiresAt.trim();
   }
 
   if (provider.chatgptTokenExpiresAt?.trim()) {
@@ -926,4 +952,42 @@ export function chatgptOAuthNeedsRefresh(
   }
 
   return expiresAt - now <= 5 * 60 * 1000;
+}
+
+export function readXaiOAuthFromInstance(
+  instance: ProviderInstance | null | undefined
+): XaiOAuthCredentials | null {
+  if (instance?.type !== "xai_oauth") {
+    return null;
+  }
+  const accessToken = instance.xaiAccessToken?.trim();
+  const refreshToken = instance.xaiRefreshToken?.trim();
+  const expiresAt = instance.xaiTokenExpiresAt?.trim();
+  return accessToken && refreshToken && expiresAt
+    ? { accessToken, expiresAt, refreshToken }
+    : null;
+}
+
+export function applyXaiOAuthToInstance(
+  instance: ProviderInstance,
+  oauth: XaiOAuthCredentials
+): ProviderInstance {
+  if (
+    !oauth ||
+    typeof oauth.accessToken !== "string" ||
+    !oauth.accessToken.trim() ||
+    typeof oauth.refreshToken !== "string" ||
+    !oauth.refreshToken.trim() ||
+    typeof oauth.expiresAt !== "string" ||
+    !Number.isFinite(Date.parse(oauth.expiresAt))
+  ) {
+    throw new Error("Invalid Grok OAuth credentials. Sign in again.");
+  }
+  return {
+    ...instance,
+    apiKey: "",
+    xaiAccessToken: oauth.accessToken.trim(),
+    xaiRefreshToken: oauth.refreshToken.trim(),
+    xaiTokenExpiresAt: oauth.expiresAt,
+  };
 }

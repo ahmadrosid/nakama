@@ -1,6 +1,8 @@
 import type {
   ChatgptOAuthCredentials,
+  ChatgptOAuthDeviceStartResponse,
   CustomModelEntry,
+  XaiOAuthCredentials,
 } from "@nakama/core/contract";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,26 +10,38 @@ import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
 import { client, formatError } from "@/lib/client";
 
-type ChatgptSignInFlow = "idle" | "waiting" | "error";
+type SubscriptionSignInFlow = "idle" | "waiting" | "error";
 
 const CHATGPT_DEVICE_LOGIN_URL = "https://auth.openai.com/codex/device";
 
-interface ChatgptSignInPanelProps {
+interface SignInPanelProps<T> {
   density?: "default" | "compact";
   disabled?: boolean;
-  oauth: ChatgptOAuthCredentials | null;
+  oauth: T | null;
   onModelsChange?: (models: CustomModelEntry[]) => void;
-  onOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
+  onOAuthChange: (oauth: T | null) => void;
 }
 
-export function ChatgptSignInPanel({
+function SubscriptionSignInPanel<T>({
+  label,
+  loginUrl,
+  startDevice,
+  completeDevice,
   density = "default",
   disabled = false,
   oauth,
   onOAuthChange,
   onModelsChange,
-}: ChatgptSignInPanelProps) {
-  const [flow, setFlow] = useState<ChatgptSignInFlow>("idle");
+}: SignInPanelProps<T> & {
+  label: string;
+  loginUrl?: string;
+  startDevice: () => Promise<ChatgptOAuthDeviceStartResponse>;
+  completeDevice: (
+    sessionId: string,
+    signal: AbortSignal
+  ) => Promise<{ oauth: T; models?: CustomModelEntry[] }>;
+}) {
+  const [flow, setFlow] = useState<SubscriptionSignInFlow>("idle");
   const [error, setError] = useState<string | null>(null);
   const [userCode, setUserCode] = useState<string | null>(null);
   const [verificationUri, setVerificationUri] = useState<string | null>(null);
@@ -52,10 +66,12 @@ export function ChatgptSignInPanel({
     onModelsChange?.([]);
     setUserCode(null);
     setVerificationUri(null);
-    window.open(CHATGPT_DEVICE_LOGIN_URL, "_blank", "noopener,noreferrer");
+    if (loginUrl) {
+      window.open(loginUrl, "_blank", "noopener,noreferrer");
+    }
 
     try {
-      const start = await client.startChatgptOAuthDevice();
+      const start = await startDevice();
       if (controller.signal.aborted) {
         return;
       }
@@ -63,14 +79,12 @@ export function ChatgptSignInPanel({
       setUserCode(start.userCode);
       setVerificationUri(start.verificationUri);
 
-      const result = await client.completeChatgptOAuthDevice({
-        sessionId: start.sessionId,
-      });
+      const result = await completeDevice(start.sessionId, controller.signal);
       if (controller.signal.aborted) {
         return;
       }
 
-      onOAuthChange(result.chatgptOAuth);
+      onOAuthChange(result.oauth);
       onModelsChange?.(result.models ?? []);
       setFlow("idle");
       setError(null);
@@ -99,14 +113,14 @@ export function ChatgptSignInPanel({
           <p className="text-destructive text-sm" role="alert">
             {error}
           </p>
-        ) : (
+        ) : label === "ChatGPT" ? (
           <p className="text-muted-foreground text-xs">
             One ChatGPT Plus/Pro account for this Nakama instance. Uses your
             plan quota, not OpenAI API credits.
           </p>
-        )
+        ) : null
       }
-      label="ChatGPT account"
+      label={`${label} account`}
     >
       {connected ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -129,11 +143,11 @@ export function ChatgptSignInPanel({
             Open{" "}
             <a
               className="underline"
-              href={verificationUri ?? CHATGPT_DEVICE_LOGIN_URL}
+              href={verificationUri ?? loginUrl}
               rel="noreferrer"
               target="_blank"
             >
-              auth.openai.com/codex/device
+              {verificationUri ?? "sign-in page"}
             </a>{" "}
             and enter this code:
           </p>
@@ -159,9 +173,43 @@ export function ChatgptSignInPanel({
           onClick={() => void startSignIn()}
           type="button"
         >
-          Sign in with ChatGPT
+          Sign in with {label}
         </Button>
       )}
     </FormField>
+  );
+}
+
+export function ChatgptSignInPanel(
+  props: SignInPanelProps<ChatgptOAuthCredentials>
+) {
+  return (
+    <SubscriptionSignInPanel
+      {...props}
+      completeDevice={async (sessionId) => {
+        const result = await client.completeChatgptOAuthDevice({ sessionId });
+        return { models: result.models, oauth: result.chatgptOAuth };
+      }}
+      label="ChatGPT"
+      loginUrl={CHATGPT_DEVICE_LOGIN_URL}
+      startDevice={() => client.startChatgptOAuthDevice()}
+    />
+  );
+}
+
+export function XaiSignInPanel(props: SignInPanelProps<XaiOAuthCredentials>) {
+  return (
+    <SubscriptionSignInPanel
+      {...props}
+      completeDevice={async (sessionId, signal) => {
+        const result = await client.completeXaiOAuthDevice(
+          { sessionId },
+          signal
+        );
+        return { models: result.models, oauth: result.xaiOAuth };
+      }}
+      label="Grok"
+      startDevice={() => client.startXaiOAuthDevice()}
+    />
   );
 }

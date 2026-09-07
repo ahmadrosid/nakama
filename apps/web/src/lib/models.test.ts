@@ -306,6 +306,7 @@ describe("firstAvailableProviderOption", () => {
         new Set([
           "openai",
           "chatgpt",
+          "xai_oauth",
           "anthropic",
           "openrouter",
           "gemini",

@@ -6,6 +6,7 @@ import { NakamaApiError } from "./api-error";
 import { pathExists } from "./fs";
 import {
   applyChatgptOAuthToInstance,
+  applyXaiOAuthToInstance,
   chatgptOAuthNeedsRefresh,
   createProviderInstanceId,
   ensureUserConfigDir,
@@ -15,6 +16,7 @@ import {
   loadUserWebPublicUrl,
   normalizeProviderInstanceLabel,
   readChatgptOAuthFromInstance,
+  readXaiOAuthFromInstance,
   saveUserConfig,
   saveUserTimezone,
   saveUserWebPublicUrl,
@@ -96,6 +98,33 @@ describe("ensureUserConfigDir", () => {
 
 describe("user config multi-provider", () => {
   let configDir = "";
+
+  test("round-trips Grok OAuth tokens without using the API key field", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-xai-oauth-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const oauth = {
+      accessToken: "access",
+      expiresAt: "2027-01-01T00:00:00.000Z",
+      refreshToken: "refresh",
+    };
+    const instance = applyXaiOAuthToInstance(
+      {
+        apiKey: "",
+        createdAt: new Date().toISOString(),
+        id: "grok",
+        label: "Grok",
+        type: "xai_oauth",
+      },
+      oauth
+    );
+    await saveUserConfig({
+      defaultProviderId: instance.id,
+      providers: [instance],
+    });
+    const loaded = await loadUserConfig();
+    expect(readXaiOAuthFromInstance(loaded!.providers[0]!)).toEqual(oauth);
+    expect(loaded!.providers[0]!.apiKey).toBe("");
+  });
 
   afterEach(async () => {
     if (configDir) {

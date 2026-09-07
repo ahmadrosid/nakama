@@ -6,6 +6,7 @@ import type {
   OllamaHostMode,
   ProviderModelOption,
   WireApi,
+  XaiOAuthCredentials,
 } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
@@ -93,12 +94,15 @@ export function useProviderSetupForm(
   const [wireApi, setWireApi] = useState<WireApi>("chat");
   const [customModels, setCustomModels] = useState<ModelListRow[]>([]);
   const [extraModels, setExtraModels] = useState<ProviderModelOption[]>([]);
-  const [chatgptModels, setChatgptModels] = useState<ProviderModelOption[]>([]);
+  const [subscriptionModels, setSubscriptionModels] = useState<
+    ProviderModelOption[]
+  >([]);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [xaiOAuth, setXaiOAuth] = useState<XaiOAuthCredentials | null>(null);
   const [chatgptOAuth, setChatgptOAuth] =
     useState<ChatgptOAuthCredentials | null>(null);
 
@@ -138,8 +142,11 @@ export function useProviderSetupForm(
       return modelsFromShortlistRows(selectedProvider, shortlistModels);
     }
 
-    if (selectedProvider === "chatgpt" && chatgptModels.length > 0) {
-      return chatgptModels;
+    if (
+      (selectedProvider === "chatgpt" || selectedProvider === "xai_oauth") &&
+      subscriptionModels.length > 0
+    ) {
+      return subscriptionModels;
     }
 
     const catalogModels = filterModelsByProvider(catalog, selectedProvider);
@@ -156,7 +163,7 @@ export function useProviderSetupForm(
     openRouterModels,
     shortlistModels,
     extraModels,
-    chatgptModels,
+    subscriptionModels,
   ]);
 
   const ollamaApiKeyOptions = useMemo(
@@ -250,26 +257,27 @@ export function useProviderSetupForm(
         setCustomModels([]);
       }
 
+      setXaiOAuth(null);
+      setSubscriptionModels([]);
       if (provider !== "chatgpt") {
         setChatgptOAuth(null);
-        setChatgptModels([]);
       }
     },
     [configuredTypes]
   );
 
-  const handleChatgptModelsChange = useCallback(
+  const handleSubscriptionModelsChange = useCallback(
     (entries: CustomModelEntry[]) => {
-      setChatgptModels(
+      setSubscriptionModels(
         entries.map((entry, index) => ({
           default: entry.default === true || index === 0,
           id: entry.id,
           name: entry.name?.trim() || entry.id,
-          provider: "chatgpt" as const,
+          provider: selectedProvider,
         }))
       );
     },
-    []
+    [selectedProvider]
   );
 
   const selectOpenRouterModel = useCallback(
@@ -473,6 +481,11 @@ export function useProviderSetupForm(
         return;
       }
 
+      if (selectedProvider === "xai_oauth" && !xaiOAuth) {
+        setFormError("Sign in with Grok before saving.");
+        return;
+      }
+
       if (selectedProvider === "chatgpt" && !chatgptOAuth) {
         setFormError("Sign in with ChatGPT before saving.");
         return;
@@ -501,25 +514,31 @@ export function useProviderSetupForm(
             baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
             chatgptOAuth: chatgptOAuth ?? undefined,
             customModels:
-              selectedProvider === "openai_compatible" ||
-              selectedProvider === "ollama"
-                ? normalizeModelListRows(customModels)
-                : selectedProvider === "openrouter"
-                  ? normalizeModelListRows(openRouterModels)
-                  : isShortlistCapabilityProvider(selectedProvider)
-                    ? normalizeModelListRows(shortlistModels)
-                    : selectedProvider === "opencode_go" && modelToSave
-                      ? normalizeModelListRows([
-                          {
-                            default: true,
-                            id: modelToSave,
-                            name: getModelDisplayName(
-                              filteredModels,
-                              modelToSave
-                            ),
-                          },
-                        ])
-                      : undefined,
+              selectedProvider === "xai_oauth"
+                ? filteredModels.map((entry) => ({
+                    default: entry.id === modelToSave,
+                    id: entry.id,
+                    name: entry.name,
+                  }))
+                : selectedProvider === "openai_compatible" ||
+                    selectedProvider === "ollama"
+                  ? normalizeModelListRows(customModels)
+                  : selectedProvider === "openrouter"
+                    ? normalizeModelListRows(openRouterModels)
+                    : isShortlistCapabilityProvider(selectedProvider)
+                      ? normalizeModelListRows(shortlistModels)
+                      : selectedProvider === "opencode_go" && modelToSave
+                        ? normalizeModelListRows([
+                            {
+                              default: true,
+                              id: modelToSave,
+                              name: getModelDisplayName(
+                                filteredModels,
+                                modelToSave
+                              ),
+                            },
+                          ])
+                        : undefined,
             displayName,
             hostMode:
               selectedProvider === "ollama" ? ollamaHostMode : undefined,
@@ -527,13 +546,18 @@ export function useProviderSetupForm(
             provider: selectedProvider,
             wireApi:
               selectedProvider === "openai_compatible" ? wireApi : undefined,
+            xaiOAuth:
+              selectedProvider === "xai_oauth"
+                ? (xaiOAuth ?? undefined)
+                : undefined,
           })
         );
         setApiKey("");
         setApiKeyTouched(false);
         setShowApiKey(false);
+        setXaiOAuth(null);
         setChatgptOAuth(null);
-        setChatgptModels([]);
+        setSubscriptionModels([]);
         setOpenRouterModels([]);
         setShortlistModels([]);
         setCustomModels([]);
@@ -548,6 +572,7 @@ export function useProviderSetupForm(
     [
       apiKey,
       baseUrl,
+      xaiOAuth,
       chatgptOAuth,
       openRouterModels,
       shortlistModels,
@@ -584,12 +609,12 @@ export function useProviderSetupForm(
     handleApiKeyBlur,
     handleApiKeyChange,
     handleBrowseSelect,
-    handleChatgptModelsChange,
     handleOllamaHostModeChange,
     handleOpenRouterModelsChange,
     handleProviderSelect,
     handleShortlistModelsChange,
     handleSubmit,
+    handleSubscriptionModelsChange,
     modelsError,
     ollamaHostMode,
     openCodeZenConfigured,
@@ -604,9 +629,11 @@ export function useProviderSetupForm(
     setSelectedModel,
     setShowApiKey,
     setWireApi,
+    setXaiOAuth,
     shortlistModels,
     shortlistModelsError,
     showApiKey,
     wireApi,
+    xaiOAuth,
   };
 }

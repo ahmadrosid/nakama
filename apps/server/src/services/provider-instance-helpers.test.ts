@@ -353,6 +353,25 @@ describe("applyProviderInstanceUpdate", () => {
 });
 
 describe("buildProviderInstanceFromCreateRequest", () => {
+  test("creates a Grok subscription provider without an API key", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        apiKey: "",
+        type: "xai_oauth",
+        xaiOAuth: {
+          accessToken: "access",
+          expiresAt: "2027-01-01T00:00:00.000Z",
+          refreshToken: "refresh",
+        },
+      },
+      []
+    );
+    expect(instance.type).toBe("xai_oauth");
+    expect(instance.xaiRefreshToken).toBe("refresh");
+    expect(instance.apiKey).toBe("");
+    expect(modelExistsOnInstance(instance, "grok-4.6")).toBe(true);
+  });
+
   test("persists a Cloudflare Workers AI base URL on the instance", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {

@@ -477,6 +477,14 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
 export const AVAILABLE_MODELS: ProviderModelOption[] = [
   ...BASE_MODELS,
   ...deriveChatgptModels(BASE_MODELS),
+  {
+    default: true,
+    id: "grok-4.6",
+    inputPerMillionUsd: 0,
+    name: "Grok 4.6",
+    outputPerMillionUsd: 0,
+    provider: "xai_oauth",
+  },
 ];
 
 export function validateOpenRouterCustomModels(
@@ -726,7 +734,8 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "opencode_go" ||
-      provider === "chatgpt")
+      provider === "chatgpt" ||
+      provider === "xai_oauth")
   ) {
     return trimmed;
   }

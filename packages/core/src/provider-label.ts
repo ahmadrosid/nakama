@@ -18,6 +18,7 @@ const BUILTIN_LABELS: Record<
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
   xai: "xAI Grok",
+  xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };

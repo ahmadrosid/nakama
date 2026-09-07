@@ -2,10 +2,14 @@ import type {
   ChatgptOAuthCredentials,
   ProviderInstanceSummary,
   WireApi,
+  XaiOAuthCredentials,
 } from "@nakama/core/contract";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { ChatgptSignInPanel } from "@/components/ChatgptSignInPanel";
+import {
+  ChatgptSignInPanel,
+  XaiSignInPanel,
+} from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { Button } from "@/components/ui/button";
@@ -32,7 +36,9 @@ export function ProviderReplaceKeyDialog({
   providerType,
   apiKey,
   showApiKey,
-  chatgptOAuth,
+  xaiOAuth = null,
+  onXaiOAuthChange,
+  chatgptOAuth = null,
   busy,
   dialogError,
   onOpenChange,
@@ -46,15 +52,18 @@ export function ProviderReplaceKeyDialog({
   providerType: SelectedProvider;
   apiKey: string;
   showApiKey: boolean;
+  xaiOAuth?: XaiOAuthCredentials | null;
+  onXaiOAuthChange: (oauth: XaiOAuthCredentials | null) => void;
   chatgptOAuth?: ChatgptOAuthCredentials | null;
   busy: boolean;
   dialogError: string | null;
   onOpenChange: (open: boolean) => void;
   onApiKeyChange: (value: string) => void;
-  onChatgptOAuthChange?: (oauth: ChatgptOAuthCredentials | null) => void;
+  onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
   onToggleShowApiKey: () => void;
   onSave: () => void;
 }) {
+  const isXaiOAuth = providerType === "xai_oauth";
   const isChatgpt = providerType === "chatgpt";
 
   return (
@@ -62,16 +71,22 @@ export function ProviderReplaceKeyDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isChatgpt
+            {isChatgpt || isXaiOAuth
               ? `Reconnect ${instance.label}`
               : `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`}
           </DialogTitle>
         </DialogHeader>
-        {isChatgpt ? (
+        {isXaiOAuth ? (
+          <XaiSignInPanel
+            disabled={busy}
+            oauth={xaiOAuth}
+            onOAuthChange={onXaiOAuthChange}
+          />
+        ) : isChatgpt ? (
           <ChatgptSignInPanel
             disabled={busy}
-            oauth={chatgptOAuth ?? null}
-            onOAuthChange={onChatgptOAuthChange ?? (() => {})}
+            oauth={chatgptOAuth}
+            onOAuthChange={onChatgptOAuthChange}
           />
         ) : (
           <InputGroup>
@@ -109,7 +124,14 @@ export function ProviderReplaceKeyDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || (isChatgpt ? !chatgptOAuth : !apiKey.trim())}
+            disabled={
+              busy ||
+              (isXaiOAuth
+                ? !xaiOAuth
+                : isChatgpt
+                  ? !chatgptOAuth
+                  : !apiKey.trim())
+            }
             onClick={onSave}
             type="button"
           >
