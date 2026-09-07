@@ -73,7 +73,6 @@ export function ChatPageContent(state: ChatPageState) {
 
   const composer = (
     <>
-      {skillReviewBanner}
       {readOnlyBanner}
       <ChatComposer
         availableSkills={availableSkills}
@@ -90,6 +89,7 @@ export function ChatPageContent(state: ChatPageState) {
         disabled={composerDisabled}
         draftStorageKey={composerDraftKey}
         error={error}
+        headerNotice={skillReviewBanner}
         onModelChange={handleModelChange}
         onNavigateSetup={navigateSetup}
         onStop={stopStreaming}
