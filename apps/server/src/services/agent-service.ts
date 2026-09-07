@@ -3471,8 +3471,12 @@ export class AgentService {
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
     const session = createAgentChatSession(harness, {
-      archiveHistory: (history) =>
-        archiveSessionHistory(this.db, orgId, sessionId, history),
+      archiveHistory: (history) => {
+        if (this.sessions.get(sessionId)?.session !== persistedSession) {
+          throw new Error("Session changed during compaction. Try again.");
+        }
+        return archiveSessionHistory(this.db, orgId, sessionId, history);
+      },
       channel,
       compaction,
       enableToolLoop: true,
@@ -3630,12 +3634,13 @@ export class AgentService {
       userTimezone,
     });
 
-    return wrapPersistedSession(sessionId, session, this.db, {
+    const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
       onBeginTurn: (id) => {
         this.superBotSessionState.beginTurn(id);
         void this.agentQuestionnaireState.clear(id);
       },
     });
+    return persistedSession;
   }
 
   private async formatProfileAuthoringToolContext(): Promise<string> {

@@ -82,7 +82,7 @@ async function seedSession(
   });
 }
 
-describe("wrapPersistedSession", () => {
+describe("session persistence", () => {
   setupTestConfigDir("nakama-history-archive-");
 
   test("compaction replaces working history but preserves raw messages for scoped recovery", async () => {
@@ -254,7 +254,12 @@ describe("wrapPersistedSession", () => {
         "utf8"
       )
     ).toBe(source);
+    await replaceSessionHistory(db, branch!.sessionId, history);
+    service.setAutomationTools([]);
+    const detached = await service.resolveSession(branch!.sessionId, "org_1");
+    service.setAutomationTools([]);
     expect(await service.clearSession(branch!.sessionId, "org_1")).toBe(true);
+    await expect(detached!.compact({ force: true })).rejects.toThrow();
     await expect(
       readFile(sessionHistoryArchivePath("org_1", branch!.sessionId))
     ).rejects.toThrow();
