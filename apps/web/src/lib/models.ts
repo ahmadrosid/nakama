@@ -265,12 +265,24 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
 }
 
 export function validateCustomModelsInput(
-  models: Array<{ id: string }>
+  models: Array<{
+    id: string;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }>
 ): string | null {
   const valid = models.filter((model) => model.id.trim());
 
   if (valid.length === 0) {
     return "Add at least one model.";
+  }
+
+  for (const row of valid) {
+    const hasInput = row.inputPerMillionUsd !== undefined;
+    const hasOutput = row.outputPerMillionUsd !== undefined;
+    if (hasInput !== hasOutput) {
+      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
+    }
   }
 
   return null;
@@ -293,12 +305,6 @@ export function validateOpenRouterModelsInput(
     if (slugError) {
       return slugError;
     }
-
-    const hasInput = row.inputPerMillionUsd !== undefined;
-    const hasOutput = row.outputPerMillionUsd !== undefined;
-    if (hasInput !== hasOutput) {
-      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
-    }
   }
 
   return null;
@@ -311,20 +317,7 @@ export function validateShortlistCapabilityModelsInput(
     outputPerMillionUsd?: number;
   }>
 ): string | null {
-  const listError = validateCustomModelsInput(models);
-  if (listError) {
-    return listError;
-  }
-
-  for (const row of models) {
-    const hasInput = row.inputPerMillionUsd !== undefined;
-    const hasOutput = row.outputPerMillionUsd !== undefined;
-    if (hasInput !== hasOutput) {
-      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
-    }
-  }
-
-  return null;
+  return validateCustomModelsInput(models);
 }
 
 export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
