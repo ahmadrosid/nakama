@@ -8,7 +8,11 @@ import type {
   XaiOAuthCredentials,
 } from "@nakama/core";
 import { generateOpenAIResponsesChat } from "../openai/responses";
-import { resolveXaiOAuthCredentials, XAI_OAUTH_BASE_URL } from "./oauth";
+import {
+  resolveXaiOAuthCredentials,
+  XAI_OAUTH_BASE_URL,
+  XAI_OAUTH_HEADERS,
+} from "./oauth";
 
 export interface XaiProviderOptions {
   getOAuth: () => XaiOAuthCredentials | null;
@@ -33,6 +37,7 @@ export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
     return generateOpenAIResponsesChat({
       apiKey: oauth.accessToken,
       baseUrl: XAI_OAUTH_BASE_URL,
+      extraHeaders: XAI_OAUTH_HEADERS,
       input,
       label: "Grok",
       model,

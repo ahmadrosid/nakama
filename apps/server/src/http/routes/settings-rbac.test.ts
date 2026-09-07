@@ -244,7 +244,7 @@ test("an admin completes Grok device sign-in through authenticated HTTP routes",
         expires_in: 900,
       });
     }
-    if (url.endsWith("/language-models")) {
+    if (url.endsWith("/models-v2")) {
       return Response.json({ models: [{ id: "grok-4.6" }] });
     }
     throw new Error(`Unexpected request: ${url}`);

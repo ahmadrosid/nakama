@@ -11,7 +11,13 @@ import {
 // https://auth.x.ai/.well-known/openid-configuration.
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
-export const XAI_OAUTH_BASE_URL = "https://api.x.ai/v1";
+export const XAI_OAUTH_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
+export const XAI_OAUTH_HEADERS = {
+  "User-Agent": "xai-grok-cli",
+  "X-XAI-Token-Auth": "xai-grok-cli",
+  "x-grok-client-identifier": "grok-shell",
+  "x-grok-client-version": "0.2.103",
+};
 const sessions = new Map<
   string,
   { owner: string; deviceCode: string; expiresAt: number; interval: number }
@@ -59,13 +65,17 @@ function readTokens(
   };
 }
 
-function authError(status: number): Error {
+function authError(status: number): NakamaApiError {
   if (status === 403 || status === 402) {
-    return new Error(
-      `Grok subscription access denied (${status}). Check your xAI plan's API eligibility and remaining quota.`
+    return new NakamaApiError(
+      `Grok subscription access denied (${status}). Check your xAI plan's API eligibility and remaining quota.`,
+      400
     );
   }
-  return new Error(`Grok OAuth failed (${status}). Try signing in again.`);
+  return new NakamaApiError(
+    `Grok OAuth failed (${status}). Try signing in again.`,
+    400
+  );
 }
 
 export async function startXaiOAuthDeviceSession(
@@ -208,22 +218,41 @@ export async function refreshXaiOAuthToken(
 export async function fetchXaiOAuthModels(
   oauth: XaiOAuthCredentials
 ): Promise<CustomModelEntry[]> {
-  const response = await fetch(`${XAI_OAUTH_BASE_URL}/language-models`, {
-    headers: { Authorization: `Bearer ${oauth.accessToken}` },
+  const response = await fetch(`${XAI_OAUTH_BASE_URL}/models-v2`, {
+    headers: {
+      ...XAI_OAUTH_HEADERS,
+      Accept: "application/json",
+      Authorization: `Bearer ${oauth.accessToken}`,
+    },
     redirect: "error",
     signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
     throw authError(response.status);
   }
-  const payload = (await response.json()) as { models?: { id?: unknown }[] };
-  const models = (payload.models ?? []).flatMap((row) =>
-    typeof row.id === "string" && row.id.trim()
-      ? [{ id: row.id, name: row.id }]
-      : []
-  );
+  const payload = (await response.json()) as {
+    data?: { id?: unknown; model?: unknown; name?: unknown }[];
+    models?: { id?: unknown; model?: unknown; name?: unknown }[];
+  };
+  const models = (payload.models ?? payload.data ?? []).flatMap((row) => {
+    const id =
+      typeof row.id === "string"
+        ? row.id.trim()
+        : typeof row.model === "string"
+          ? row.model.trim()
+          : "";
+    if (!id) {
+      return [];
+    }
+    const name =
+      typeof row.name === "string" && row.name.trim() ? row.name : id;
+    return [{ id, name }];
+  });
   if (!models.length) {
-    throw new Error("Grok returned no language models for this account.");
+    throw new NakamaApiError(
+      "Grok returned no language models for this account.",
+      400
+    );
   }
   return models;
 }

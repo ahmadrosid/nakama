@@ -199,10 +199,10 @@ test("concurrent refreshes share one exchange and persist before returning", asy
 
 test("discovers language models using the subscription bearer", async () => {
   mockFetch((url, init) => {
-    expect(url).toBe("https://api.x.ai/v1/language-models");
-    expect(new Headers(init?.headers).get("Authorization")).toBe(
-      "Bearer access"
-    );
+    expect(url).toBe("https://cli-chat-proxy.grok.com/v1/models-v2");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer access");
+    expect(headers.get("X-XAI-Token-Auth")).toBe("xai-grok-cli");
     return Response.json({ models: [{ id: "grok-4.6" }] });
   });
   expect(await fetchXaiOAuthModels(credentials)).toEqual([
@@ -212,9 +212,10 @@ test("discovers language models using the subscription bearer", async () => {
 
 test("subscription inference uses Responses API with tool calls and usage", async () => {
   mockFetch((url, init) => {
-    expect(url).toBe("https://api.x.ai/v1/responses");
+    expect(url).toBe("https://cli-chat-proxy.grok.com/v1/responses");
     const headers = new Headers(init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer access");
+    expect(headers.get("X-XAI-Token-Auth")).toBe("xai-grok-cli");
     expect(headers.has("ChatGPT-Account-ID")).toBe(false);
     const body = JSON.parse(String(init?.body));
     expect(body.tools[0].name).toBe("lookup");
