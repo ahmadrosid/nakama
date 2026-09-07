@@ -42,7 +42,9 @@ export function detectOrgMemoryInjectionWarnings(bullet: string): string[] {
   if (/ignore (all )?previous/i.test(bullet)) {
     warnings.push("Contains instruction-like phrasing.");
   }
-  if (/^system:/im.test(bullet)) {
+  // The list marker is part of the evasion, not decoration: `- system:` reads to
+  // a model exactly like `system:` and slipped past a bare `^system:` anchor.
+  if (/^\s*(?:[-*+]\s+)?system:/im.test(bullet)) {
     warnings.push("Contains a system-style prefix.");
   }
   if (/^##\s/m.test(bullet)) {

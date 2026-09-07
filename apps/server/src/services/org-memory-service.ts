@@ -80,6 +80,29 @@ export interface OrgMemoryChangeContext {
   restoredFromId?: string | null;
 }
 
+/**
+ * Both sides on purpose. Normalization collapses newlines, so the raw bullet is
+ * the only place a line-anchored pattern can still be seen: `x\n## Pinned`
+ * matches raw and not normalized. The reverse is also true, since collapsing
+ * joins a pattern split across a newline: `ignore all\nprevious` matches
+ * normalized and not raw. Checking one side leaves the other open.
+ */
+function assertNoOrgMemoryInjection(raw: string, normalized: string): void {
+  const injection = [
+    ...new Set([
+      ...detectOrgMemoryInjectionWarnings(raw),
+      ...detectOrgMemoryInjectionWarnings(normalized),
+    ]),
+  ];
+
+  if (injection.length > 0) {
+    throw new NakamaApiError(
+      `Memory bullet rejected. ${injection.join(" ")}`,
+      400
+    );
+  }
+}
+
 export class OrgMemoryService {
   constructor(
     private readonly database: DatabaseAdapter | null = null,
@@ -523,6 +546,15 @@ export class OrgMemoryService {
       throw new NakamaApiError("Only pending proposals can be approved.", 400);
     }
 
+    // A proposal created before propose_org_memory started rejecting these can
+    // still be sitting in the queue, and approving is the write that matters.
+    // An admin who wants the text anyway can reject this and add the fact
+    // through POST /memory/facts, which is the path meant for a person.
+    assertNoOrgMemoryInjection(
+      proposal.bullet,
+      normalizeOrgMemoryBullet(proposal.bullet)
+    );
+
     const pin = options.pin ?? false;
     const dateUtc = utcDateString();
     const content = await this.getMemory(orgId);
@@ -689,13 +721,7 @@ export class OrgMemoryService {
     // agent reaches through propose_org_memory, so the content is whatever a
     // document or a message talked it into. An org admin adding a fact through
     // POST /memory/facts is a person who meant it, and still gets through.
-    const injection = detectOrgMemoryInjectionWarnings(text);
-    if (injection.length > 0) {
-      throw new NakamaApiError(
-        `Memory bullet rejected. ${injection.join(" ")}`,
-        400
-      );
-    }
+    assertNoOrgMemoryInjection(bullet, text);
     return text;
   }
 
