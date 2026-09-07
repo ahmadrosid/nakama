@@ -18,4 +18,19 @@ describe("createProviderForInstance routing", () => {
     expect(client).not.toBeNull();
     expect(client?.name).toBe("xai");
   });
+
+  test("creates a mistral client from a mistral instance", () => {
+    const instance: ProviderInstance = {
+      apiKey: "test-key",
+      createdAt: new Date().toISOString(),
+      id: "inst_mistral",
+      label: "Mistral",
+      type: "mistral",
+    };
+
+    const client = createProviderForInstance(instance, "mistral-small-2603");
+
+    expect(client).not.toBeNull();
+    expect(client?.name).toBe("mistral");
+  });
 });

@@ -327,6 +327,7 @@ export function getModelsForProviderInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "mistral" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];

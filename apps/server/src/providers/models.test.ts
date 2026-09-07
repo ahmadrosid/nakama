@@ -87,6 +87,13 @@ describe("resolveModel", () => {
     expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
   });
 
+  test("resolves catalog models for Mistral", () => {
+    expect(resolveModel("mistral", "mistral-large-2512")).toBe(
+      "mistral-large-2512"
+    );
+    expect(getDefaultModel("mistral")).toBe("mistral-small-2603");
+  });
+
   test("resolves catalog models for Cerebras", () => {
     expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
     expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
