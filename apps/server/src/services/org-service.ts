@@ -331,6 +331,7 @@ export class OrgService {
     return {
       activeOrgId,
       email: user.email,
+      id: user.id,
       isPlatformAdmin: Boolean(user.isPlatformAdmin),
       name: user.name ?? null,
       orgId: activeOrgId,

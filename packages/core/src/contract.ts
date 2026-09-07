@@ -461,6 +461,7 @@ export interface WebPublicUrlSettingsResponse {
 export interface AuthUserResponse {
   activeOrgId?: string | null;
   email: string;
+  id: string;
   isPlatformAdmin?: boolean;
   name?: string | null;
   orgId?: string | null;

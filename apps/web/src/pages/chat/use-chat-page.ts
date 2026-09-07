@@ -25,6 +25,7 @@ import {
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
 import {
   buildThinkingSettingsPayload,
   useProfileQuery,
@@ -41,6 +42,8 @@ import {
   buildChatPath,
   buildNewChatPath,
   type ChatListItem,
+  type ComposerPrefill,
+  chatComposerDraftKey,
   chatMessagesToListItems,
   clearFailedChatTurn,
   consumeStoredChatDraft,
@@ -52,6 +55,7 @@ import {
   readLastChatModel,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
+  readRequestedProfileFromNewChatSearch,
   readStoredActiveChatProfileId,
   resolveDefaultProfileId,
   sessionStorageKey,
@@ -122,6 +126,7 @@ export function useChatPage() {
   const [searchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
+  const { user, activeOrg } = useAuth();
   const {
     profileId: liveChatProfileId,
     setProfileId: setLiveChatProfileId,
@@ -154,7 +159,24 @@ export function useChatPage() {
   );
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [composerDraft, setComposerDraft] = useState("");
+  const [composerPrefill, setComposerPrefill] =
+    useState<ComposerPrefill | null>(null);
+  const composerDraftKey = chatComposerDraftKey(
+    user?.id,
+    activeOrg?.id,
+    readRequestedProfileFromNewChatSearch(location.search) ??
+      routeSession?.profileId ??
+      profileId,
+    routeSession?.sessionId ?? null
+  );
+  const consumeComposerPrefill = useCallback((consumed: ComposerPrefill) => {
+    setComposerPrefill((current) => (current === consumed ? null : current));
+  }, []);
+  useEffect(() => {
+    setComposerPrefill((current) =>
+      current?.scopeKey === composerDraftKey ? current : null
+    );
+  }, [composerDraftKey]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedComposerMessage[]>(
     []
   );
@@ -644,14 +666,25 @@ export function useChatPage() {
       return;
     }
     const requestedProfile = searchParams.get("profile")?.trim() || null;
+    const targetProfileId = requestedProfile || profileId;
+    const targetDraftKey = chatComposerDraftKey(
+      user?.id,
+      activeOrg?.id,
+      targetProfileId,
+      null
+    );
+    if (!targetDraftKey) {
+      return;
+    }
     const inlineDraft = readRequestedDraftFromNewChatSearch(location.search);
     const draftKey = readRequestedDraftKeyFromNewChatSearch(location.search);
     const storedDraft = draftKey ? consumeStoredChatDraft(draftKey) : null;
     const requestedDraft = inlineDraft ?? storedDraft;
-    const targetProfileId = requestedProfile || profileIdRef.current;
 
-    if (targetProfileId) {
+    try {
       localStorage.removeItem(sessionStorageKey(targetProfileId));
+    } catch {
+      // Starting a new chat must still work when browser storage is disabled.
     }
     skipNextProfileSessionRef.current = true;
     loadedRouteRef.current = null;
@@ -674,12 +707,20 @@ export function useChatPage() {
       setProfileId(requestedProfile);
     }
 
-    if (requestedDraft) {
-      setComposerDraft(requestedDraft);
+    if (requestedDraft !== null) {
+      setComposerPrefill({ scopeKey: targetDraftKey, text: requestedDraft });
     }
 
     navigate(buildChatBasePath(), { replace: true });
-  }, [searchParams, navigate, location.search, restoreLastChatModel]);
+  }, [
+    searchParams,
+    navigate,
+    location.search,
+    restoreLastChatModel,
+    profileId,
+    user?.id,
+    activeOrg?.id,
+  ]);
 
   useEffect(() => {
     if (!profileId || routeSession) {
@@ -1085,7 +1126,9 @@ export function useChatPage() {
     canStop,
     chatStatus,
     composerDisabled,
-    composerDraft,
+    composerDraftKey,
+    composerPrefill,
+    consumeComposerPrefill,
     contextUsage: isEmptyState ? null : contextUsage,
     currentModelSelection,
     error,
@@ -1108,7 +1151,6 @@ export function useChatPage() {
     sendMessage,
     session,
     sessionChannel,
-    setComposerDraft,
     showOfflineHint,
     showThinking,
     stopStreaming,

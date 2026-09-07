@@ -47,6 +47,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     .object({
       activeOrgId: z.string().nullable().optional(),
       email: z.string(),
+      id: z.string(),
       isPlatformAdmin: z.boolean().optional(),
       name: z.string().nullable().optional(),
       orgId: z.string().nullable().optional(),

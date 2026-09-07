@@ -5,7 +5,10 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
-import { formatSessionChannelLabel } from "@/lib/chat-history";
+import {
+  formatSessionChannelLabel,
+  readComposerDraft,
+} from "@/lib/chat-history";
 import { extractModelId } from "@/lib/models";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
@@ -24,8 +27,9 @@ export function ChatPageContent(state: ChatPageState) {
     turnStartedAt,
     canStop,
     error,
-    composerDraft,
-    setComposerDraft,
+    composerDraftKey,
+    composerPrefill,
+    consumeComposerPrefill,
     queuedMessages,
     branchingMessageId,
     showOfflineHint,
@@ -71,10 +75,7 @@ export function ChatPageContent(state: ChatPageState) {
   ) : null;
 
   const composer = (
-    <PromptInputProvider
-      initialInput={composerDraft}
-      key={composerDraft || "empty"}
-    >
+    <>
       {skillReviewBanner}
       {readOnlyBanner}
       <ChatComposer
@@ -90,16 +91,16 @@ export function ChatPageContent(state: ChatPageState) {
         contextUsage={contextUsage}
         currentModelSelection={currentModelSelection}
         disabled={composerDisabled}
+        draftStorageKey={composerDraftKey}
         error={error}
         onModelChange={handleModelChange}
         onNavigateSetup={navigateSetup}
+        onPrefillConsumed={consumeComposerPrefill}
         onStop={stopStreaming}
         onSubmit={(text, files) => {
-          setComposerDraft("");
           void sendMessage(text, files);
         }}
         onSubmitQuestionnaire={(answers) => {
-          setComposerDraft("");
           void sendMessage(
             formatAgentQuestionnaireAnswersMessage(answers),
             [],
@@ -109,6 +110,11 @@ export function ChatPageContent(state: ChatPageState) {
           );
         }}
         onThinkingEffortChange={handleThinkingEffortChange}
+        prefill={
+          composerPrefill?.scopeKey === composerDraftKey
+            ? composerPrefill
+            : null
+        }
         primarySupportsVision={activeModelSupportsVision}
         profileModelId={extractModelId(currentModelSelection)}
         providerConfigured={health?.providerConfigured}
@@ -123,29 +129,25 @@ export function ChatPageContent(state: ChatPageState) {
         thinkingEffortVisible={thinkingEffortVisible}
         todos={agentTodos}
       />
-    </PromptInputProvider>
+    </>
   );
 
-  if (isEmptyState) {
-    return (
-      <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
-        <ChatPageColumn centered>
-          <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-            <ChatWelcome
-              onProfileSwitch={handleProfileSwitch}
-              profile={activeProfile}
-              profileId={profileId}
-              profileSwitchDisabled={busy}
-              profiles={profiles}
-            />
-            {composer}
-          </div>
-        </ChatPageColumn>
-      </ChatAttachmentPanelProvider>
-    );
-  }
-
-  return (
+  const content = isEmptyState ? (
+    <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
+      <ChatPageColumn centered>
+        <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
+          <ChatWelcome
+            onProfileSwitch={handleProfileSwitch}
+            profile={activeProfile}
+            profileId={profileId}
+            profileSwitchDisabled={busy}
+            profiles={profiles}
+          />
+          {composer}
+        </div>
+      </ChatPageColumn>
+    </ChatAttachmentPanelProvider>
+  ) : (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <ChatPageColumn>
@@ -175,5 +177,14 @@ export function ChatPageContent(state: ChatPageState) {
         </div>
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
+  );
+
+  return (
+    <PromptInputProvider
+      initialInput={readComposerDraft(composerDraftKey)}
+      key={composerDraftKey}
+    >
+      {content}
+    </PromptInputProvider>
   );
 }

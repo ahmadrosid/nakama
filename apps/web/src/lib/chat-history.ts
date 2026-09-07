@@ -103,6 +103,45 @@ export function storeChatDraft(draft: string): string {
   return key;
 }
 
+export interface ComposerPrefill {
+  scopeKey: string;
+  text: string;
+}
+
+export function chatComposerDraftKey(
+  userId: string | undefined,
+  orgId: string | undefined,
+  profileId: string,
+  sessionId: string | null
+): string | null {
+  return userId && orgId && profileId
+    ? `nakama:composer-draft:${JSON.stringify([userId, orgId, profileId, sessionId])}`
+    : null;
+}
+
+export function readComposerDraft(key: string | null): string {
+  try {
+    return key ? (localStorage.getItem(key) ?? "") : "";
+  } catch {
+    return "";
+  }
+}
+
+export function storeComposerDraft(key: string | null, text: string): void {
+  if (!key) {
+    return;
+  }
+  try {
+    if (text) {
+      localStorage.setItem(key, text);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be disabled or full; the composer must still work.
+  }
+}
+
 export const MAX_URL_CHAT_DRAFT_LENGTH = 1500;
 
 export function chatProfileIdFromPath(pathname: string): string | null {
