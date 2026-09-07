@@ -5,10 +5,7 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
-import {
-  formatSessionChannelLabel,
-  readComposerDraft,
-} from "@/lib/chat-history";
+import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { extractModelId } from "@/lib/models";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
@@ -28,8 +25,7 @@ export function ChatPageContent(state: ChatPageState) {
     canStop,
     error,
     composerDraftKey,
-    composerPrefill,
-    consumeComposerPrefill,
+    composerEntry,
     queuedMessages,
     branchingMessageId,
     showOfflineHint,
@@ -95,7 +91,6 @@ export function ChatPageContent(state: ChatPageState) {
         error={error}
         onModelChange={handleModelChange}
         onNavigateSetup={navigateSetup}
-        onPrefillConsumed={consumeComposerPrefill}
         onStop={stopStreaming}
         onSubmit={(text, files) => {
           void sendMessage(text, files);
@@ -110,11 +105,6 @@ export function ChatPageContent(state: ChatPageState) {
           );
         }}
         onThinkingEffortChange={handleThinkingEffortChange}
-        prefill={
-          composerPrefill?.scopeKey === composerDraftKey
-            ? composerPrefill
-            : null
-        }
         primarySupportsVision={activeModelSupportsVision}
         profileModelId={extractModelId(currentModelSelection)}
         providerConfigured={health?.providerConfigured}
@@ -181,8 +171,8 @@ export function ChatPageContent(state: ChatPageState) {
 
   return (
     <PromptInputProvider
-      initialInput={readComposerDraft(composerDraftKey)}
-      key={composerDraftKey}
+      initialInput={composerEntry.initialInput}
+      key={`${composerDraftKey}:${composerEntry.revision}`}
     >
       {content}
     </PromptInputProvider>

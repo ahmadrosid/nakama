@@ -103,11 +103,6 @@ export function storeChatDraft(draft: string): string {
   return key;
 }
 
-export interface ComposerPrefill {
-  scopeKey: string;
-  text: string;
-}
-
 export function chatComposerDraftKey(
   userId: string | undefined,
   orgId: string | undefined,

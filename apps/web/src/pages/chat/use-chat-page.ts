@@ -42,7 +42,6 @@ import {
   buildChatPath,
   buildNewChatPath,
   type ChatListItem,
-  type ComposerPrefill,
   chatComposerDraftKey,
   chatMessagesToListItems,
   clearFailedChatTurn,
@@ -50,6 +49,7 @@ import {
   isReadOnlySessionChannel,
   parseChatRouteParams,
   pickKnownProfileId,
+  readComposerDraft,
   readFailedChatTurn,
   readInitialDraftChatProfileId,
   readLastChatModel,
@@ -59,6 +59,7 @@ import {
   readStoredActiveChatProfileId,
   resolveDefaultProfileId,
   sessionStorageKey,
+  storeComposerDraft,
   storeFailedChatTurn,
   writeLastChatModel,
 } from "@/lib/chat-history";
@@ -159,8 +160,6 @@ export function useChatPage() {
   );
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [composerPrefill, setComposerPrefill] =
-    useState<ComposerPrefill | null>(null);
   const composerDraftKey = chatComposerDraftKey(
     user?.id,
     activeOrg?.id,
@@ -169,14 +168,18 @@ export function useChatPage() {
       profileId,
     routeSession?.sessionId ?? null
   );
-  const consumeComposerPrefill = useCallback((consumed: ComposerPrefill) => {
-    setComposerPrefill((current) => (current === consumed ? null : current));
-  }, []);
-  useEffect(() => {
-    setComposerPrefill((current) =>
-      current?.scopeKey === composerDraftKey ? current : null
-    );
-  }, [composerDraftKey]);
+  const [composerEntry, setComposerEntry] = useState(() => ({
+    initialInput: readComposerDraft(composerDraftKey),
+    revision: 0,
+    scopeKey: composerDraftKey,
+  }));
+  if (composerEntry.scopeKey !== composerDraftKey) {
+    setComposerEntry({
+      initialInput: readComposerDraft(composerDraftKey),
+      revision: 0,
+      scopeKey: composerDraftKey,
+    });
+  }
   const [queuedMessages, setQueuedMessages] = useState<QueuedComposerMessage[]>(
     []
   );
@@ -708,7 +711,12 @@ export function useChatPage() {
     }
 
     if (requestedDraft !== null) {
-      setComposerPrefill({ scopeKey: targetDraftKey, text: requestedDraft });
+      storeComposerDraft(targetDraftKey, requestedDraft);
+      setComposerEntry((current) => ({
+        initialInput: requestedDraft,
+        revision: current.revision + 1,
+        scopeKey: targetDraftKey,
+      }));
     }
 
     navigate(buildChatBasePath(), { replace: true });
@@ -1127,8 +1135,7 @@ export function useChatPage() {
     chatStatus,
     composerDisabled,
     composerDraftKey,
-    composerPrefill,
-    consumeComposerPrefill,
+    composerEntry,
     contextUsage: isEmptyState ? null : contextUsage,
     currentModelSelection,
     error,
