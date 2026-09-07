@@ -2289,7 +2289,9 @@ export class AgentService {
         await this.persistChatgptOAuth(providerId, oauth);
       }
 
-      const entries = await fetchChatgptCodexModels(oauth);
+      const entries = await fetchChatgptCodexModels(oauth, (refreshed) =>
+        this.persistChatgptOAuth(providerId, refreshed)
+      );
       const models = catalogCustomModelsToCatalog(entries, [], "chatgpt");
 
       return {
