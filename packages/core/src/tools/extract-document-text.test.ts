@@ -10,7 +10,10 @@ import {
   getMailboxIdentity,
 } from "../mail/attachment-reference";
 import type { MailReader } from "../mail/types";
-import { runExtractDocumentText } from "./extract-document-text";
+import {
+  runExtractDocumentText,
+  UNTRUSTED_DOCUMENT_GUIDANCE,
+} from "./extract-document-text";
 
 process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??=
   "test-email-attachment-secret-32-chars";
@@ -94,6 +97,28 @@ describe("extract_document_text tool", () => {
       untrustedContent: true,
     });
     expect("text" in result && result.text.toLowerCase()).toContain("dummy");
+  });
+
+  test("ships the untrusted-content notice after the extracted text", async () => {
+    const documentRef = createAttachmentReference(context, {
+      attachmentId: "0",
+      folder: "INBOX",
+      mailboxId,
+      uid: 42,
+    });
+
+    const result = await runExtractDocumentText({ documentRef }, context, {
+      createReader: () => readerWith(SAMPLE_PDF),
+      loadConfig: async () => completeConfig,
+    });
+
+    // chat.ts serializes a tool result exactly like this, so key order decides
+    // whether the model reads the notice before or after the untrusted text.
+    const toolMessage = JSON.stringify(result);
+    expect(toolMessage).toContain(UNTRUSTED_DOCUMENT_GUIDANCE);
+    expect(toolMessage.indexOf(UNTRUSTED_DOCUMENT_GUIDANCE)).toBeGreaterThan(
+      toolMessage.indexOf('"text"')
+    );
   });
 
   test("extracts text from a DOCX attachment", async () => {
