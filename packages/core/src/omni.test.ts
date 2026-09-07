@@ -17,17 +17,19 @@ afterEach(() => {
 const REAL_PATH = process.env.PATH ?? "";
 
 describe("omni gating", () => {
-  test("off unless NAKAMA_OMNI=1", () => {
+  test("on unless NAKAMA_OMNI=0", () => {
     delete process.env.NAKAMA_OMNI;
-    expect(isOmniEnabled()).toBe(false);
-    process.env.NAKAMA_OMNI = "true";
-    expect(isOmniEnabled()).toBe(false);
+    expect(isOmniEnabled()).toBe(true);
     process.env.NAKAMA_OMNI = "1";
     expect(isOmniEnabled()).toBe(true);
+    process.env.NAKAMA_OMNI = "0";
+    expect(isOmniEnabled()).toBe(false);
+    process.env.NAKAMA_OMNI = " 0 ";
+    expect(isOmniEnabled()).toBe(false);
   });
 
   test("disabled returns the result untouched", async () => {
-    delete process.env.NAKAMA_OMNI;
+    process.env.NAKAMA_OMNI = "0";
     const result = { exitCode: 0, stdout: LONG };
     expect(await distillToolResult("bash", result, CTX)).toBe(result);
   });
