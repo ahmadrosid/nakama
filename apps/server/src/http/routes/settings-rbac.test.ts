@@ -14,6 +14,12 @@ const PASSWORD = "password123";
 // Provider and channel settings are workspace-global: whoever writes them
 // changes the config every org runs on.
 const GLOBAL_WRITES: Array<{ body?: unknown; method: string; path: string }> = [
+  { method: "POST", path: "/v1/xai-oauth/device/start" },
+  {
+    method: "POST",
+    path: "/v1/xai-oauth/device/complete",
+    body: { sessionId: "invalid" },
+  },
   { body: { provider: "openai" }, method: "POST", path: "/v1/providers" },
   {
     body: { baseUrl: "http://attacker.example.com/v1" },
@@ -215,4 +221,59 @@ describe("workspace-global settings writes require an org admin", () => {
     expect(response.status).not.toBe(403);
     expect(calls).toEqual(["updateProvider"]);
   });
+});
+
+test("an admin completes Grok device sign-in through authenticated HTTP routes", async () => {
+  const { app, session } = await login("admin");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input) => {
+    const url = String(input);
+    if (url.endsWith("/device/code")) {
+      return Response.json({
+        device_code: "private-device",
+        user_code: "CODE",
+        verification_uri: "https://accounts.x.ai/oauth2/device",
+        interval: 1,
+        expires_in: 60,
+      });
+    }
+    if (url.endsWith("/oauth2/token")) {
+      return Response.json({
+        access_token: "access",
+        refresh_token: "refresh",
+        expires_in: 900,
+      });
+    }
+    if (url.endsWith("/models-v2")) {
+      return Response.json({ models: [{ id: "grok-4.6" }] });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof fetch;
+  try {
+    const start = await callRoute(app, session, {
+      method: "POST",
+      path: "/v1/xai-oauth/device/start",
+    });
+    expect(start.status).toBe(200);
+    const body = (await start.json()) as { sessionId: string };
+    const result = await callRoute(app, session, {
+      method: "POST",
+      path: "/v1/xai-oauth/device/complete",
+      body,
+    });
+    expect(result.status).toBe(200);
+    expect(result.headers.get("Cache-Control")).toBe("no-store");
+    expect(await result.json()).toMatchObject({
+      xaiOAuth: { accessToken: "access", refreshToken: "refresh" },
+      models: [{ id: "grok-4.6" }],
+    });
+    const replay = await callRoute(app, session, {
+      method: "POST",
+      path: "/v1/xai-oauth/device/complete",
+      body,
+    });
+    expect(replay.status).toBe(400);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

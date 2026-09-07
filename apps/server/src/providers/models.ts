@@ -583,10 +583,9 @@ export function getDefaultModel(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): string {
-  if (isDiscoveryModelProvider(provider)) {
-    // Discovery providers fetch model lists live from the platform
-    // (/models) and store them as instance custom models — no hardcoded
-    // catalog.
+  if (isDiscoveryModelProvider(provider) || provider === "xai_oauth") {
+    // Discovery providers and Grok subscription fetch model lists live
+    // and store them as instance custom models — no hardcoded catalog.
     return resolveCompatibleDefaultModel(customModels);
   }
 
@@ -726,7 +725,8 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "opencode_go" ||
-      provider === "chatgpt")
+      provider === "chatgpt" ||
+      provider === "xai_oauth")
   ) {
     return trimmed;
   }
@@ -775,7 +775,9 @@ export function modelSupportsVision(
   if (
     provider === "openai" ||
     provider === "anthropic" ||
-    provider === "gemini"
+    provider === "gemini" ||
+    provider === "chatgpt" ||
+    provider === "xai_oauth"
   ) {
     return true;
   }

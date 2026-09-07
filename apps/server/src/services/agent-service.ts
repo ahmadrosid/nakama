@@ -103,11 +103,13 @@ import type {
   VisionSettingsResponse,
   WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
+  XaiOAuthCredentials,
 } from "@nakama/core";
 import {
   apiKeyEnvVarForProvider,
   appendOrgMemorySection,
   applyChatgptOAuthToInstance,
+  applyXaiOAuthToInstance,
   buildErrorReport,
   buildThinkingProviderOptions,
   buildToolExecutionContext,
@@ -160,6 +162,7 @@ import {
   readBundledSkillBody,
   readChatgptOAuthFromInstance,
   readEnvValue,
+  readXaiOAuthFromInstance,
   refreshErrorTrackingEnabled,
   regenerateDiscordHandshake,
   regenerateTelegramHandshake,
@@ -213,6 +216,10 @@ import {
 import { isAllowedImageGenerationSelection } from "../providers/models";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
+import {
+  fetchXaiOAuthModels,
+  resolveXaiOAuthCredentials,
+} from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createOrgMemoryTools } from "../tools/org-memory-tools";
 import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
@@ -2245,6 +2252,28 @@ export class AgentService {
       };
     }
 
+    if (instance.type === "xai_oauth") {
+      const oauth = await resolveXaiOAuthCredentials(
+        () =>
+          readXaiOAuthFromInstance(
+            findProviderInstance(this.userConfig, providerId)
+          ),
+        (refreshed) => this.persistXaiOAuth(providerId, refreshed)
+      );
+
+      const entries = await fetchXaiOAuthModels(oauth);
+      const models = catalogCustomModelsToCatalog(entries, [], "xai_oauth");
+
+      return {
+        catalog: AVAILABLE_MODELS,
+        currentProviderId: providerId,
+        customModels: entries,
+        displayName: instance.label,
+        models,
+        provider: "xai_oauth",
+        providers: [],
+      };
+    }
     if (instance.type === "chatgpt") {
       let oauth = readChatgptOAuthFromInstance(instance);
 
@@ -2424,6 +2453,30 @@ export class AgentService {
     return { defaultProviderId };
   }
 
+  async persistXaiOAuth(
+    providerId: string,
+    oauth: XaiOAuthCredentials
+  ): Promise<void> {
+    if (!this.userConfig) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const current = findProviderInstance(this.userConfig, providerId);
+
+    if (!current || current.type !== "xai_oauth") {
+      throw new Error("Grok provider not found.");
+    }
+
+    const updated = applyXaiOAuthToInstance(current, oauth);
+    this.userConfig = {
+      ...this.userConfig,
+      providers: this.userConfig.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      ),
+    };
+    await saveUserConfig(this.userConfig);
+    this.refreshHarness();
+  }
   async persistChatgptOAuth(
     providerId: string,
     oauth: ChatgptOAuthCredentials
@@ -3497,6 +3550,8 @@ export class AgentService {
           {
             onChatgptTokenRefresh: (instanceId, oauth) =>
               this.persistChatgptOAuth(instanceId, oauth),
+            onXaiTokenRefresh: (instanceId, oauth) =>
+              this.persistXaiOAuth(instanceId, oauth),
             resolveInstance: (instanceId) =>
               findProviderInstance(this.userConfig, instanceId),
           }
@@ -3817,6 +3872,8 @@ export class AgentService {
       {
         onChatgptTokenRefresh: (instanceId, oauth) =>
           this.persistChatgptOAuth(instanceId, oauth),
+        onXaiTokenRefresh: (instanceId, oauth) =>
+          this.persistXaiOAuth(instanceId, oauth),
         resolveInstance: (instanceId) =>
           findProviderInstance(this.userConfig, instanceId),
       }

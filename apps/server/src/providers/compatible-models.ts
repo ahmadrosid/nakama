@@ -128,6 +128,8 @@ export function catalogCustomModelsToCatalog(
     }
     if (entry.supportsVision !== undefined) {
       model.supportsVision = entry.supportsVision;
+    } else if (provider === "chatgpt" || provider === "xai_oauth") {
+      model.supportsVision = true;
     }
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
@@ -324,6 +326,7 @@ export function getModelsForProviderInstance(
   if (
     instance.type === "openai" ||
     instance.type === "chatgpt" ||
+    instance.type === "xai_oauth" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||

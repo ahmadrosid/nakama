@@ -95,6 +95,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     DOCX_MEDIA_TYPE,
   ]),
   xai: new Set<string>(),
+  xai_oauth: new Set<string>(),
   zhipu: new Set<string>(),
   zhipu_cn: new Set<string>(),
 };

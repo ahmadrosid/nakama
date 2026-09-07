@@ -56,6 +56,7 @@ export function formatProviderLabel(
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
     provider === "chatgpt" ||
+    provider === "xai_oauth" ||
     provider === "minimax" ||
     provider === "minimax_cn" ||
     provider === "zhipu" ||
@@ -72,6 +73,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
   [
     { id: "openai", label: "OpenAI" },
     { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
+    { id: "xai_oauth", label: "Grok (SuperGrok / Premium+)" },
     { id: "anthropic", label: "Anthropic" },
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
@@ -217,7 +219,7 @@ export function validateApiKeyForProvider(
     return null;
   }
 
-  if (provider === "chatgpt") {
+  if (provider === "chatgpt" || provider === "xai_oauth") {
     return null;
   }
 
@@ -589,12 +591,14 @@ export function buildCreateProviderRequest(options: {
   customModels?: ConfigureProviderRequest["customModels"];
   wireApi?: WireApi;
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
+  xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const request = buildConfigureProviderRequest(options);
 
   return {
     apiKey: request.apiKey,
     type: request.provider,
+    ...(options.xaiOAuth ? { xaiOAuth: options.xaiOAuth } : {}),
     ...(options.chatgptOAuth ? { chatgptOAuth: options.chatgptOAuth } : {}),
     ...(request.model ? { model: request.model } : {}),
     ...(options.displayName?.trim()
@@ -631,7 +635,10 @@ export function buildConfigureProviderRequest(options: {
     };
   }
 
-  if (options.provider === "openrouter" && options.customModels?.length) {
+  if (
+    (options.provider === "openrouter" || options.provider === "xai_oauth") &&
+    options.customModels?.length
+  ) {
     return {
       ...request,
       customModels: options.customModels,
