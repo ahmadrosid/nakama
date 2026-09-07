@@ -111,7 +111,9 @@ function AppShellHeader({
       )}
       <div
         className={cn(
-          "flex h-full min-w-0 shrink-0 items-stretch gap-2",
+          // Below sm the actions share the row with the menu button, so they
+          // give way and scroll instead of pushing the header wider.
+          "flex h-full min-w-0 items-stretch gap-2 sm:shrink-0",
           !hideTitle && "ml-auto"
         )}
         data-page-header-actions
