@@ -1506,7 +1506,7 @@ export class AgentService {
       input.orgId,
       input.profileId,
       profile.systemPrompt,
-      input.orgRole ?? "member"
+      input.orgRole
     );
     const childSystemPrompt = [
       systemPrompt.trim(),
@@ -1532,7 +1532,7 @@ export class AgentService {
         agentDepth: input.agentDepth,
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
-        orgRole: input.orgRole ?? "member",
+        orgRole: input.orgRole,
         profileId: input.profileId,
         recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
         recordTurnUsage: this.turnUsageRecorderFor(input.orgId),

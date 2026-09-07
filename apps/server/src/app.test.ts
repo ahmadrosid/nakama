@@ -154,8 +154,10 @@ describe("browser session auth", () => {
     const setupBody = (await setupResponse.json()) as {
       activeOrgId: string;
       email: string;
+      id: string;
     };
     expect(setupBody.activeOrgId).toStartWith("org_");
+    expect(setupBody.id).toStartWith("user_");
     const setCookies = extractSetCookies(setupResponse);
     expect(
       setCookies.some((cookie) => cookie.startsWith("nakama_session="))
@@ -174,10 +176,12 @@ describe("browser session auth", () => {
     expect(meResponse.status).toBe(200);
     const meBody = (await meResponse.json()) as {
       email: string;
+      id: string;
       activeOrgId?: string;
       isPlatformAdmin?: boolean;
       orgId?: string;
     };
+    expect(meBody.id).toBe(setupBody.id);
     expect(meBody.email).toBe("admin@example.com");
     expect(meBody.activeOrgId).toStartWith("org_");
     expect(meBody.orgId).toBe(meBody.activeOrgId);

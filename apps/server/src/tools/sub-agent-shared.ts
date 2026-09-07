@@ -12,7 +12,7 @@ export interface SubAgentRunInput {
   context?: string;
   onActivity?: (label: string) => void;
   orgId: string;
-  orgRole?: OrgRole | null;
+  orgRole?: OrgRole;
   profileId: string;
   sessionId?: string;
   task: string;

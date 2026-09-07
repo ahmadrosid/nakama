@@ -430,6 +430,7 @@ describe("OrgService", () => {
       phone: "",
     });
 
+    expect(updated.id).toBe(userId);
     expect(updated.name).toBe("Updated Admin");
     expect(updated.email).toBe("updated@acme.com");
     expect(updated.phone).toBeNull();

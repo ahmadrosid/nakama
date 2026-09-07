@@ -24,8 +24,8 @@ export function ChatPageContent(state: ChatPageState) {
     turnStartedAt,
     canStop,
     error,
-    composerDraft,
-    setComposerDraft,
+    composerDraftKey,
+    composerEntry,
     queuedMessages,
     branchingMessageId,
     showOfflineHint,
@@ -71,10 +71,7 @@ export function ChatPageContent(state: ChatPageState) {
   ) : null;
 
   const composer = (
-    <PromptInputProvider
-      initialInput={composerDraft}
-      key={composerDraft || "empty"}
-    >
+    <>
       {skillReviewBanner}
       {readOnlyBanner}
       <ChatComposer
@@ -90,16 +87,15 @@ export function ChatPageContent(state: ChatPageState) {
         contextUsage={contextUsage}
         currentModelSelection={currentModelSelection}
         disabled={composerDisabled}
+        draftStorageKey={composerDraftKey}
         error={error}
         onModelChange={handleModelChange}
         onNavigateSetup={navigateSetup}
         onStop={stopStreaming}
         onSubmit={(text, files) => {
-          setComposerDraft("");
           void sendMessage(text, files);
         }}
         onSubmitQuestionnaire={(answers) => {
-          setComposerDraft("");
           void sendMessage(
             formatAgentQuestionnaireAnswersMessage(answers),
             [],
@@ -123,29 +119,25 @@ export function ChatPageContent(state: ChatPageState) {
         thinkingEffortVisible={thinkingEffortVisible}
         todos={agentTodos}
       />
-    </PromptInputProvider>
+    </>
   );
 
-  if (isEmptyState) {
-    return (
-      <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
-        <ChatPageColumn centered>
-          <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-            <ChatWelcome
-              onProfileSwitch={handleProfileSwitch}
-              profile={activeProfile}
-              profileId={profileId}
-              profileSwitchDisabled={busy}
-              profiles={profiles}
-            />
-            {composer}
-          </div>
-        </ChatPageColumn>
-      </ChatAttachmentPanelProvider>
-    );
-  }
-
-  return (
+  const content = isEmptyState ? (
+    <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
+      <ChatPageColumn centered>
+        <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
+          <ChatWelcome
+            onProfileSwitch={handleProfileSwitch}
+            profile={activeProfile}
+            profileId={profileId}
+            profileSwitchDisabled={busy}
+            profiles={profiles}
+          />
+          {composer}
+        </div>
+      </ChatPageColumn>
+    </ChatAttachmentPanelProvider>
+  ) : (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <ChatPageColumn>
@@ -175,5 +167,14 @@ export function ChatPageContent(state: ChatPageState) {
         </div>
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
+  );
+
+  return (
+    <PromptInputProvider
+      initialInput={composerEntry.initialInput}
+      key={`${composerDraftKey}:${composerEntry.revision}`}
+    >
+      {content}
+    </PromptInputProvider>
   );
 }
