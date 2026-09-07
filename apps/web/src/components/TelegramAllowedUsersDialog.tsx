@@ -57,6 +57,10 @@ export function TelegramAllowedUsersDialog({
     nextUsers: AllowedTelegramUser[],
     afterSuccess?: () => void
   ) {
+    // Optimistic, so a failed save has to put the old list back. Otherwise the
+    // dialog shows a user as removed while the bot still answers them, which is
+    // the wrong direction to be wrong in for an access list.
+    const previousUsers = allowedUsers;
     onAllowedUsersChange(nextUsers);
     setFormError(null);
 
@@ -67,6 +71,7 @@ export function TelegramAllowedUsersDialog({
       },
       {
         onError: (err) => {
+          onAllowedUsersChange(previousUsers);
           const message = formatError(err);
           setFormError(message);
           onError?.(message);
@@ -143,10 +148,11 @@ export function TelegramAllowedUsersDialog({
     }
 
     const id = removeTarget.id;
-    saveAllowedUsers(
-      allowedUsers.filter((entry) => entry.id !== id),
-      () => setRemoveTarget(null)
-    );
+    // Closed before the save resolves on purpose: a failed save rolls the list
+    // back and renders its error in the dialog underneath, which nobody can
+    // read through an open confirm.
+    setRemoveTarget(null);
+    saveAllowedUsers(allowedUsers.filter((entry) => entry.id !== id));
   }
 
   return (
