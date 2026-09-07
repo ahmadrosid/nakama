@@ -29,6 +29,7 @@ import {
   maybeSendRequestedWhatsAppArtifactAttachment,
   maybeSendWhatsAppAttachOnlyCommand,
 } from "./channel-artifact-flow";
+import { isChannelDebugEnabled } from "./channel-log";
 import type { WhatsAppBridgeConfig } from "./config";
 import {
   HELP_TEXT,
@@ -97,14 +98,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         text: trimmed,
       })
     ) {
-      console.log(
-        [
-          "Ignored WhatsApp outbound echo",
-          `jid=${maskWhatsAppJid(jid)}`,
-          `fromMe=${inbound.fromMe ? "yes" : "no"}`,
-          `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
-        ].join(" ")
-      );
+      if (isChannelDebugEnabled()) {
+        console.log(
+          [
+            "Ignored WhatsApp outbound echo",
+            `jid=${maskWhatsAppJid(jid)}`,
+            `fromMe=${inbound.fromMe ? "yes" : "no"}`,
+            `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
+          ].join(" ")
+        );
+      }
       return;
     }
 
@@ -126,15 +129,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       : null;
 
     if (groupDecision && !groupDecision.shouldHandle) {
-      console.log(
-        [
-          "Ignored WhatsApp group message",
-          `reason=${groupDecision.reason}`,
-          `jid=${maskWhatsAppJid(jid)}`,
-          `sender=${maskWhatsAppJid(inbound.senderJid)}`,
-          `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
-        ].join(" ")
-      );
+      if (isChannelDebugEnabled()) {
+        console.log(
+          [
+            "Ignored WhatsApp group message",
+            `reason=${groupDecision.reason}`,
+            `jid=${maskWhatsAppJid(jid)}`,
+            `sender=${maskWhatsAppJid(inbound.senderJid)}`,
+            `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
+          ].join(" ")
+        );
+      }
       return;
     }
 
@@ -173,15 +178,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (!authorized) {
         if (!authStore.getConfig()?.pairingCode) {
-          console.log(
-            [
-              "Ignored WhatsApp message",
-              "reason=unauthorized",
-              `jid=${maskWhatsAppJid(jid)}`,
-              `sender=${maskWhatsAppJid(inbound.senderJid)}`,
-              `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
-            ].join(" ")
-          );
+          if (isChannelDebugEnabled()) {
+            console.log(
+              [
+                "Ignored WhatsApp message",
+                "reason=unauthorized",
+                `jid=${maskWhatsAppJid(jid)}`,
+                `sender=${maskWhatsAppJid(inbound.senderJid)}`,
+                `textBytes=${Buffer.byteLength(trimmed, "utf8")}`,
+              ].join(" ")
+            );
+          }
           return;
         }
 

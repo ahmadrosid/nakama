@@ -121,9 +121,11 @@ async function createPairedHandler(
 }
 
 describe("createChatHandler logging", () => {
-  test("logs message metadata without private content", async () => {
+  test("logs message metadata without private content when debug is on", async () => {
     await withTempHome(async (homeDir) => {
       const privateMessage = "private 🔒 message";
+      const previousDebug = process.env.NAKAMA_CH_DEBUG;
+      process.env.NAKAMA_CH_DEBUG = "1";
       const log = spyOn(console, "log").mockImplementation(() => {});
 
       try {
@@ -139,11 +141,37 @@ describe("createChatHandler logging", () => {
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
-        expect(output).not.toContain(dm.message.author.id);
-        expect(output).not.toContain("dm_channel_1");
-        expect(output).not.toContain("channelId=");
       } finally {
         log.mockRestore();
+        if (previousDebug === undefined) {
+          delete process.env.NAKAMA_CH_DEBUG;
+        } else {
+          process.env.NAKAMA_CH_DEBUG = previousDebug;
+        }
+      }
+    });
+  });
+
+  test("stays quiet on message handle when debug is off", async () => {
+    await withTempHome(async (homeDir) => {
+      const previousDebug = process.env.NAKAMA_CH_DEBUG;
+      delete process.env.NAKAMA_CH_DEBUG;
+      const log = spyOn(console, "log").mockImplementation(() => {});
+
+      try {
+        const { handleMessage } = await createPairedHandler(homeDir);
+        const dm = createDmMessage({ content: "hello there" });
+
+        await handleMessage(dm.message);
+
+        expect(log.mock.calls).toEqual([]);
+      } finally {
+        log.mockRestore();
+        if (previousDebug === undefined) {
+          delete process.env.NAKAMA_CH_DEBUG;
+        } else {
+          process.env.NAKAMA_CH_DEBUG = previousDebug;
+        }
       }
     });
   });

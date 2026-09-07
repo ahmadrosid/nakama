@@ -695,6 +695,14 @@ export interface DatabaseAdapter {
   deleteTool(id: string): Promise<boolean>;
   deleteWorkflow(id: string): Promise<boolean>;
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
+  /**
+   * Settles runs left `running` by a process that exited mid-run. Only a
+   * `finally` in the owning process completes a run, so a kill leaves the row
+   * claiming work nothing is doing. Call once at boot, before serving.
+   *
+   * Returns the number of automation and workflow runs settled.
+   */
+  failInterruptedRuns(): Promise<number>;
   getActiveArtifactShareByPath(
     orgId: string,
     profileId: string,

@@ -126,6 +126,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     getBotInfo = () => undefined,
   } = deps;
 
+  function debugLog(...args: unknown[]): void {
+    if (isChannelDebugEnabled()) {
+      console.log(...args);
+    }
+  }
+
   return {
     handleMessage,
     handleSlashCommand,
@@ -150,26 +156,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       ? explainGuildMessageHandling(message, botInfo, { botOwnsThread })
       : null;
 
-    console.log(
+    debugLog(
       "[discord] handle",
       groupDecision?.reason ?? (isGuild ? "none" : "dm"),
-      isChannelDebugEnabled()
-        ? { botId: botInfo?.id, botOwnsThread, channelId, isThread }
-        : { botOwnsThread, isThread }
+      { botId: botInfo?.id, botOwnsThread, channelId, isThread }
     );
 
     if (groupDecision && !groupDecision.shouldHandle) {
-      console.log("[discord] skip", groupDecision.reason);
+      debugLog("[discord] skip", groupDecision.reason);
       return;
     }
 
     if (isThread && groupDecision?.reason === "claim-thread") {
       await trackOwnedThread(channelId);
-      console.log(
-        isChannelDebugEnabled()
-          ? `[discord] claimed thread ${channelId}`
-          : "[discord] claimed thread"
-      );
+      debugLog(`[discord] claimed thread ${channelId}`);
     }
 
     const resolvedParentId = isThread
@@ -206,11 +206,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       isAuthorized = authStore.isAuthorized(userId);
 
       if (!isAuthorized) {
-        console.log(
-          isChannelDebugEnabled()
-            ? `[discord] unauthorized ${userId}`
-            : "[discord] unauthorized"
-        );
+        debugLog(`[discord] unauthorized ${userId}`);
         if (isGuild) {
           return;
         }
@@ -254,11 +250,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         orgGateText
       );
       if (!orgReady) {
-        console.log(
-          isChannelDebugEnabled()
-            ? `[discord] skip org-gate ${channelOrgKey}`
-            : "[discord] skip org-gate"
-        );
+        debugLog(`[discord] skip org-gate ${channelOrgKey}`);
         return;
       }
     }
@@ -329,19 +321,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         replyConversationKey = `g:${channelId}:t:${thread.id}`;
         replyMessenger = createDiscordMessenger(thread);
         replyIsThread = true;
-        console.log(
-          isChannelDebugEnabled()
-            ? `[discord] thread created ${thread.id}`
-            : "[discord] thread created"
-        );
+        debugLog(`[discord] thread created ${thread.id}`);
       } else {
-        console.log("[discord] thread create failed, falling back to channel");
+        debugLog("[discord] thread create failed, falling back to channel");
       }
     }
 
-    console.log(
+    debugLog(
       "[discord] chat start",
-      ...(isChannelDebugEnabled() ? [replyConversationKey] : []),
+      replyConversationKey,
       `messageId=${message.id ?? "unknown"}`,
       `textBytes=${Buffer.byteLength(messageText, "utf8")}`
     );
@@ -358,11 +346,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       );
     });
 
-    console.log(
-      isChannelDebugEnabled()
-        ? `[discord] chat done ${replyConversationKey}`
-        : "[discord] chat done"
-    );
+    debugLog(`[discord] chat done ${replyConversationKey}`);
   }
 
   async function createGuildThread(

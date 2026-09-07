@@ -70,9 +70,14 @@ export const OPTIMIZER_ID = "omni";
  */
 export const CONTROL_ID = "none";
 
-/** The server-wide default, used when no org has chosen. */
+/**
+ * The server-wide default, used when no org has chosen. On unless an operator
+ * sets `NAKAMA_OMNI=0`, matching `NAKAMA_OMNI_AUTO_INSTALL`: the image already
+ * carries the binary, folding is reversible through `omni_retrieve`, and an org
+ * that wants raw output switches it off in Integrations.
+ */
 export function isOmniEnabled(): boolean {
-  return process.env.NAKAMA_OMNI === "1";
+  return process.env.NAKAMA_OMNI?.trim() !== "0";
 }
 
 let installedProbe: Promise<boolean> | null = null;

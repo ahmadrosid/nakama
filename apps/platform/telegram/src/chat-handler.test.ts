@@ -68,6 +68,8 @@ describe("createChatHandler group chats", () => {
   test("ignores plain group messages without mention", async () => {
     await withTempHome(async (homeDir) => {
       const privateMessage = "private 🔒 message";
+      const previousDebug = process.env.NAKAMA_CH_DEBUG;
+      process.env.NAKAMA_CH_DEBUG = "1";
       const log = spyOn(console, "log").mockImplementation(() => {});
 
       try {
@@ -113,10 +115,15 @@ describe("createChatHandler group chats", () => {
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
-        expect(output).not.toContain("userId=42");
-        expect(output).not.toContain("chatId=-100123");
+        expect(output).toContain("userId=42");
+        expect(output).toContain("chatId=-100123");
       } finally {
         log.mockRestore();
+        if (previousDebug === undefined) {
+          delete process.env.NAKAMA_CH_DEBUG;
+        } else {
+          process.env.NAKAMA_CH_DEBUG = previousDebug;
+        }
       }
     });
   });

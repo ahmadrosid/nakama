@@ -8,6 +8,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
+import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
 
 export interface PublicShareMetadata {
   filename: string;
@@ -25,7 +26,7 @@ async function loadPublicArtifactShare(
   token: string
 ): Promise<PublicArtifactShareData> {
   const metaResponse = await fetch(
-    `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}?meta=1`
+    buildPublicArtifactShareUrl(client.baseUrl, token, "meta=1")
   );
 
   if (!metaResponse.ok) {
@@ -52,7 +53,7 @@ async function loadPublicArtifactShare(
   }
 
   const contentResponse = await fetch(
-    `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`
+    buildPublicArtifactShareUrl(client.baseUrl, token)
   );
 
   if (!contentResponse.ok) {

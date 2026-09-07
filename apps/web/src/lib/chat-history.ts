@@ -394,6 +394,42 @@ export function sessionStorageKey(profileId: string): string {
   return `nakama:session:${profileId}`;
 }
 
+export function lastChatModelStorageKey(profileId: string): string {
+  return `nakama:last-model:${profileId}`;
+}
+
+/**
+ * The model the user last picked by hand, per profile. A new chat resumes it
+ * instead of snapping back to the profile default.
+ */
+export function readLastChatModel(profileId: string): string | null {
+  if (typeof localStorage === "undefined" || !profileId) {
+    return null;
+  }
+
+  return (
+    localStorage.getItem(lastChatModelStorageKey(profileId))?.trim() || null
+  );
+}
+
+/** A falsy selection forgets the pick. */
+export function writeLastChatModel(
+  profileId: string,
+  selection: string | null
+): void {
+  if (typeof localStorage === "undefined" || !profileId) {
+    return;
+  }
+
+  const key = lastChatModelStorageKey(profileId);
+
+  if (selection) {
+    localStorage.setItem(key, selection);
+  } else {
+    localStorage.removeItem(key);
+  }
+}
+
 /**
  * Which channels the history panel lists. Total over `AgentChannel`, so a new
  * channel fails the typecheck here rather than dropping out of the list in

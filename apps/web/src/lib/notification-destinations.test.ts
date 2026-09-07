@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildNotificationWebhookUrl,
   formatTelegramDestinationLabel,
+  maskWebhookApiKey,
 } from "./notification-destinations";
 
 describe("buildNotificationWebhookUrl", () => {
@@ -21,5 +22,15 @@ describe("formatTelegramDestinationLabel", () => {
     expect(formatTelegramDestinationLabel({ chatId: 1001, topicId: 22 })).toBe(
       "Chat 1001 / Topic 22"
     );
+  });
+});
+
+describe("maskWebhookApiKey", () => {
+  test("masks long keys and keeps a short suffix", () => {
+    expect(maskWebhookApiKey("nk_live_abcdefghij")).toBe("••••ghij");
+  });
+
+  test("fully masks short keys", () => {
+    expect(maskWebhookApiKey("abc")).toBe("••••");
   });
 });
