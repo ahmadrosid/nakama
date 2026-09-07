@@ -4,9 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   ensureBundledSkillFiles,
+  type GenerateChatInput,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
   loadWhatsAppConfigFile,
+  type ToolContext,
+  type ToolDefinition,
 } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
@@ -16,6 +19,7 @@ import {
 } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
+import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillsService } from "./skills-service";
@@ -36,6 +40,70 @@ function createDefaultProfile(): StoredProfileRecord {
     updatedAt: now,
   };
 }
+
+describe("AgentService sub-agent roles", () => {
+  setupTestConfigDir("nakama-sub-agent-role-");
+
+  test("uses the inherited role for the child prompt and tool execution", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+    let promptRole: ToolContext["orgRole"];
+    let toolRole: ToolContext["orgRole"];
+    const tool: ToolDefinition = {
+      description: "Observe child context",
+      name: "observe_role",
+      parameters: { properties: {}, type: "object" },
+      run(_input, context) {
+        toolRole = context.orgRole;
+        return Promise.resolve({ ok: true });
+      },
+    };
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          streamChat(input: GenerateChatInput) {
+            const done = input.messages.at(-1)?.role === "tool";
+            const content = done ? "Done" : "";
+            const toolCalls = done
+              ? []
+              : [{ arguments: {}, id: "call_role", name: tool.name }];
+            return Promise.resolve({
+              assistantMessage: { content, role: "assistant", toolCalls },
+              content,
+              toolCalls,
+            });
+          },
+        },
+      }),
+      resolveProfileSystemPrompt: (
+        _orgId: string,
+        _profileId: string,
+        _prompt: string,
+        orgRole: ToolContext["orgRole"]
+      ) => {
+        promptRole = orgRole;
+        return Promise.resolve({ soulActive: false, systemPrompt: "Test" });
+      },
+      resolveProfileTools: () => Promise.resolve([tool]),
+    });
+
+    for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
+      const result = await service.runSubAgentPrompt({
+        agentDepth: 1,
+        orgId: ORG_ID,
+        orgRole,
+        profileId: "profile_default",
+        task: "Observe the child role",
+      });
+      expect(result.status).toBe("success");
+      expect(promptRole).toBe(orgRole);
+      expect(toolRole).toBe(orgRole);
+    }
+  });
+});
 
 describe("AgentService branching", () => {
   test("keeps model selection scoped to the chat session", async () => {

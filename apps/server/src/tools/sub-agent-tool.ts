@@ -87,6 +87,7 @@ export async function runSubAgentTool(
       context: scopedContext,
       onActivity: context.emitSubAgentActivity,
       orgId,
+      orgRole: context.orgRole,
       profileId,
       sessionId: context.sessionId,
       task,

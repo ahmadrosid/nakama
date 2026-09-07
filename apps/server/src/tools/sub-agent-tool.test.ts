@@ -76,6 +76,24 @@ describe("sub_agent tool", () => {
     expect(capturedTimeout).toBe(600_000);
   });
 
+  test("inherits the trusted parent role, not a role supplied in tool arguments", async () => {
+    for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
+      let captured: unknown;
+      const agent = createMockAgentService(async (input) => {
+        captured = input;
+        return { output: "ok", status: "success", summary: "ok" };
+      });
+
+      await runSubAgentTool(
+        { orgRole: "admin", task: "delegated" },
+        { ...TOOL_CONTEXT, orgRole },
+        agent
+      );
+
+      expect(captured).toMatchObject({ orgRole });
+    }
+  });
+
   test("is parallelSafe so sibling sub-agents can run concurrently from the parent", () => {
     const tool = createSubAgentTool(
       createMockAgentService(async () => ({
