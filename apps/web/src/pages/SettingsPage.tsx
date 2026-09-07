@@ -8,6 +8,7 @@ import { WebPublicUrlSettingsRow } from "@/components/settings/WebPublicUrlSetti
 import { WebSearchSettingsCard } from "@/components/settings/WebSearchSettingsCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { UserContextSettings } from "@/components/UserContextCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -61,6 +62,8 @@ export function SettingsPage() {
             <p className="font-medium text-foreground text-sm">Appearance</p>
             <ThemeToggle />
           </div>
+
+          <UserContextSettings />
 
           <div
             className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"

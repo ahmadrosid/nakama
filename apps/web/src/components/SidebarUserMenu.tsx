@@ -196,7 +196,6 @@ export function SidebarUserMenu() {
       />
 
       <UserContextEditorDialog
-        ensureExistsOnOpen
         onOpenChange={setPersonalisationOpen}
         open={personalisationOpen}
       />
