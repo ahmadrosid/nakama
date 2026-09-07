@@ -31,15 +31,22 @@ import {
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
-export function AppSidebar() {
+export function AppSidebar({
+  variant = "shell",
+}: {
+  /** `drawer` is the copy inside the mobile navigation drawer, where
+   * collapsing is pointless because the panel is dismissed instead. */
+  variant?: "drawer" | "shell";
+}) {
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
-  const { collapsed, toggle } = useSidebarCollapsed();
+  const { collapsed: shellCollapsed, toggle } = useSidebarCollapsed();
   const { collapsed: systemNavCollapsed, toggle: toggleSystemNav } =
     useSystemNavCollapsed();
+  const collapsed = variant === "shell" && shellCollapsed;
   const navGroups = useMemo(
     () =>
       visibleNavGroups({
@@ -52,10 +59,17 @@ export function AppSidebar() {
   return (
     <aside
       aria-label="Main navigation"
-      className="sidebar-shell flex h-full shrink-0 flex-col overflow-hidden border-border/50 border-r"
+      className={cn(
+        "sidebar-shell flex h-full shrink-0 flex-col overflow-hidden border-border/50 border-r",
+        variant === "drawer" && "w-full border-r-0"
+      )}
       data-collapsed={collapsed || undefined}
     >
-      <SidebarHeader collapsed={collapsed} onToggle={toggle} />
+      <SidebarHeader
+        collapsed={collapsed}
+        collapsible={variant === "shell"}
+        onToggle={toggle}
+      />
       <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
         {navGroups.map((group) => (
           <SidebarNavGroup
@@ -77,9 +91,11 @@ export function AppSidebar() {
 
 function SidebarHeader({
   collapsed,
+  collapsible,
   onToggle,
 }: {
   collapsed: boolean;
+  collapsible: boolean;
   onToggle: () => void;
 }) {
   if (collapsed) {
@@ -95,7 +111,7 @@ function SidebarHeader({
       <div className="flex min-w-0 flex-1">
         <OrgSwitcher collapsed={false} />
       </div>
-      <SidebarCollapseButton onToggle={onToggle} />
+      {collapsible ? <SidebarCollapseButton onToggle={onToggle} /> : null}
     </div>
   );
 }
