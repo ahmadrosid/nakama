@@ -95,6 +95,9 @@ function AppShellHeader({
     <header
       className={cn(
         "app-shell-header gap-2 bg-card px-3 sm:gap-4 sm:px-6",
+        // Standalone on iOS the shell owns the status bar, so the bar grows by
+        // the top inset and paints its own background under the notch.
+        "h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
         // Chat gives its whole column to the conversation on desktop; on a
         // phone the bar is the only way to reach navigation.
         page === "chat" && "sm:hidden"
