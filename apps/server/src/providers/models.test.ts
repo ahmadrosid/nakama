@@ -96,7 +96,10 @@ describe("resolveModel", () => {
     ).toBe("meta-llama/Llama-3.3-70B-Instruct-Turbo");
     expect(getDefaultModel("together")).toBe("openai/gpt-oss-120b");
     expect(getModelById("Qwen/Qwen3.5-9B")?.supportsVision).toBe(true);
+    expect(getModelById("Qwen/Qwen3.5-9B")?.supportsThinking).toBe(true);
     expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsVision).toBe(true);
+    expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsThinking).toBe(true);
+    expect(getModelById("MiniMaxAI/MiniMax-M3")?.contextWindow).toBe(1_048_576);
     expect(getModelById("openai/gpt-oss-120b")?.supportsThinking).toBe(true);
   });
 

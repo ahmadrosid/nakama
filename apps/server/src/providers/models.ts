@@ -220,6 +220,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     name: "Qwen3.5 9B",
     outputPerMillionUsd: 0.25,
     provider: "together",
+    supportsThinking: true,
     supportsVision: true,
   },
   {
@@ -234,13 +235,14 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsVision: false,
   },
   {
-    contextWindow: 524_288,
+    contextWindow: 1_048_576,
     id: "MiniMaxAI/MiniMax-M3",
     inputPerMillionUsd: 0.3,
     maxOutputTokens: 131_072,
     name: "MiniMax M3",
     outputPerMillionUsd: 1.2,
     provider: "together",
+    supportsThinking: true,
     supportsVision: true,
   },
   {
