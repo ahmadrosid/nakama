@@ -63,7 +63,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex h-svh items-center justify-center bg-background">
+    <div className="flex h-svh items-center justify-center bg-background px-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center text-center">
           <img
