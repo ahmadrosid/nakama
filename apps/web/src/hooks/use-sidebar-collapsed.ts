@@ -6,7 +6,7 @@ import {
   SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY,
 } from "@/lib/sidebar";
 
-function useLocalStorageFlag(key: string, getInitial: () => boolean) {
+export function useLocalStorageFlag(key: string, getInitial: () => boolean) {
   const [collapsed, setCollapsed] = useState(getInitial);
 
   useEffect(() => {
