@@ -112,14 +112,13 @@ describe("extract_document_text tool", () => {
       loadConfig: async () => completeConfig,
     });
 
-    // chat.ts serializes a tool result exactly like this, so key order decides
-    // whether the model reads the notice before or after the untrusted text.
-    // Pinning it here is what stops a later edit reordering the literal.
-    const toolMessage = JSON.stringify(result);
-    expect(toolMessage).toContain(UNTRUSTED_DOCUMENT_GUIDANCE);
-    expect(toolMessage.indexOf(UNTRUSTED_DOCUMENT_GUIDANCE)).toBeLessThan(
-      toolMessage.indexOf('"text"')
+    // The guidance has to be read before the document text, and the linter sorts
+    // object keys, so a separate field cannot hold that position. Asserting the
+    // prefix is the only form of this that a formatter cannot undo.
+    expect("text" in result && result.text).toStartWith(
+      `${UNTRUSTED_DOCUMENT_GUIDANCE}\n\n`
     );
+    expect("text" in result && result.text.toLowerCase()).toContain("dummy");
   });
 
   test("extracts text from a DOCX attachment", async () => {
