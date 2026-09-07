@@ -57,7 +57,16 @@ See [Providers](/providers) for supported backends and feature notes (web search
 
 ## Step 4: About you (optional)
 
-The wizard can ask for optional context about you and how you prefer agents to respond. Skip this step if you want to start chatting immediately.
+Four short screens, one question each, instead of a form:
+
+1. **What do you do?** Your name (pre-filled from the account you just created), then a grid of roles (engineer, designer, product manager, founder, data, DevOps, marketing, sales, support, student, writer, or your own words). The role sets how deep and how technical replies get.
+2. **What are you working on?** Current projects and your stack. The examples and one-tap quick picks follow the role you chose, so a designer sees Figma and Framer while an SRE sees Kubernetes and Terraform.
+3. **How should replies sound?** Pick a reply language (your browser language is suggested), a length (concise or detailed) and a tone (casual or formal), each shown with a sample sentence, plus one **Always** and one **Never** rule. The language is stored as an Always rule, so it applies on every channel.
+4. **What Nakama will remember.** The exact Markdown that gets saved as `USER.md`, editable by hand. Your timezone is set here too.
+
+Answers are saved per organization and added to every conversation, on every channel. See [How agent prompts work](/agent-prompt) for where they land in the prompt.
+
+Every field is optional and **Set up later** skips the whole step. Anything you had typed is kept as a draft in this browser and shows up again in **Settings → Personalisation**. Press Enter in any field to move to the next screen. You can fill this in or change it at any time from **Settings → Personalisation**, or from the account menu in the sidebar. That is also where to start if your install skipped the wizard through the [first-boot seed](/docker#first-boot-seed-optional).
 
 ## Send your first message
 
