@@ -18,26 +18,17 @@ export interface XaiProviderOptions {
 
 export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
   const model = options.model;
-  let cached: XaiOAuthCredentials | null = null;
-  let refreshedFrom: string | undefined;
 
   async function runChat(
     input: GenerateChatInput,
     handlers?: StreamChatHandlers
   ): Promise<ChatCompletionResult> {
-    const previous = options.getOAuth();
     const oauth = await resolveXaiOAuthCredentials(
-      () => {
-        const current = options.getOAuth();
-        return current?.refreshToken === refreshedFrom ? cached : current;
-      },
+      options.getOAuth,
       async (refreshed) => {
         await options.onTokenRefresh?.(refreshed);
       }
     );
-
-    refreshedFrom = previous?.refreshToken;
-    cached = oauth;
 
     return generateOpenAIResponsesChat({
       apiKey: oauth.accessToken,
