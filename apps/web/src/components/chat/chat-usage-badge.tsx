@@ -30,11 +30,9 @@ function ChatUsageIcon({ className }: { className?: string }) {
 export function ChatUsageBadge({
   usage,
   className,
-  id,
 }: {
   usage: ChatUsage;
   className?: string;
-  id?: string;
 }) {
   return (
     <span
@@ -42,7 +40,6 @@ export function ChatUsageBadge({
         "inline-flex items-center gap-1 text-muted-foreground text-xs tabular-nums",
         className
       )}
-      id={id}
       title={chatUsageTitle(usage)}
     >
       <ChatUsageIcon className="size-3.5 shrink-0" />

@@ -617,9 +617,7 @@ function AssistantMessageActions({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
-      {usage ? (
-        <ChatUsageBadge className="ml-1" id="chat-turn-usage" usage={usage} />
-      ) : null}
+      {usage ? <ChatUsageBadge className="ml-1" usage={usage} /> : null}
     </div>
   );
 }
