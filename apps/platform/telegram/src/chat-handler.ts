@@ -43,7 +43,6 @@ import {
 } from "./audio";
 import type { TelegramAuthStore } from "./auth-store";
 import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
-import { isChannelDebugEnabled } from "./channel-log";
 import type { TelegramBridgeConfig } from "./config";
 import { HELP_TEXT, splitTelegramMessage } from "./format";
 import {
@@ -122,24 +121,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       : null;
 
     if (groupDecision && !groupDecision.shouldHandle) {
-      const parts = [
-        "Ignored Telegram group message",
-        `reason=${groupDecision.reason}`,
-        `bot=@${botInfo?.username ?? "unknown"}`,
-        `messageId=${ctx.message?.message_id ?? "unknown"}`,
-        `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
-      ];
-      if (!isChannelDebugEnabled()) {
+      if (process.env.NAKAMA_CH_DEBUG !== "1") {
         return;
       }
-      parts.splice(
-        3,
-        0,
-        `botId=${botInfo?.id ?? "unknown"}`,
-        `chatId=${chatId}`,
-        `userId=${userId}`
+      console.log(
+        [
+          "Ignored Telegram group message",
+          `reason=${groupDecision.reason}`,
+          `bot=@${botInfo?.username ?? "unknown"}`,
+          `botId=${botInfo?.id ?? "unknown"}`,
+          `chatId=${chatId}`,
+          `userId=${userId}`,
+          `messageId=${ctx.message?.message_id ?? "unknown"}`,
+          `textBytes=${Buffer.byteLength(text ?? "", "utf8")}`,
+        ].join(" ")
       );
-      console.log(parts.join(" "));
       return;
     }
 

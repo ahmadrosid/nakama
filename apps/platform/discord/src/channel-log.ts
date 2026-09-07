@@ -3,7 +3,7 @@ export function isChannelDebugEnabled(): boolean {
   return process.env.NAKAMA_CH_DEBUG === "1";
 }
 
-/** Default Discord inbound log line — no user/channel ids unless debug. */
+/** Discord inbound log line — caller gates with `isChannelDebugEnabled`. */
 export function formatDiscordInboundMessageLog(message: {
   author: { id: string };
   channelId: string;
@@ -13,9 +13,8 @@ export function formatDiscordInboundMessageLog(message: {
   return [
     "[discord] message",
     `messageId=${message.id}`,
-    ...(isChannelDebugEnabled()
-      ? [`authorId=${message.author.id}`, `channelId=${message.channelId}`]
-      : []),
+    `authorId=${message.author.id}`,
+    `channelId=${message.channelId}`,
     `textBytes=${Buffer.byteLength(message.content ?? "", "utf8")}`,
   ].join(" ");
 }
