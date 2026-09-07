@@ -47,6 +47,7 @@ export function ChatPageContent(state: ChatPageState) {
     handleThinkingEffortChange,
     renderModelLabel,
     handleBranchMessage,
+    handleEditMessage,
     handleTryAgainMessage,
     sendMessage,
     stopStreaming,
@@ -161,6 +162,9 @@ export function ChatPageContent(state: ChatPageState) {
                   : null
               }
               onBranchMessage={(message) => void handleBranchMessage(message)}
+              onEditMessage={(message, text) =>
+                void handleEditMessage(message, text)
+              }
               onRetryMessage={(message) => void handleTryAgainMessage(message)}
               profileId={profileId}
               showThinking={showThinking}

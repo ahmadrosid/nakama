@@ -1087,6 +1087,29 @@ export function useChatPage() {
     [branchAndSendPrompt, busy, messages, profileId, sendMessage, session]
   );
 
+  /** Resend an edited user message; the reply is regenerated from it. */
+  const handleEditMessage = useCallback(
+    async (message: ChatListItem, text: string) => {
+      if (busy || !profileId) {
+        return;
+      }
+
+      const nextText = text.trim();
+
+      if (!nextText || nextText === message.content.trim()) {
+        return;
+      }
+
+      if (message.images?.length || message.documents?.length) {
+        setError("Editing is available for text-only messages.");
+        return;
+      }
+
+      await branchAndSendPrompt(message, nextText, message.id);
+    },
+    [branchAndSendPrompt, busy, profileId]
+  );
+
   const isEmptyState = messages.length === 0 && !busy;
   const composerDisabled =
     !profileId || readOnlySession || updateSessionMutation.isPending;
@@ -1107,6 +1130,7 @@ export function useChatPage() {
     currentModelSelection,
     error,
     handleBranchMessage,
+    handleEditMessage,
     handleModelChange,
     handleProfileSwitch,
     handleThinkingEffortChange,
