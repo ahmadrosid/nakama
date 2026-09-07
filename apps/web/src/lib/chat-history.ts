@@ -498,6 +498,24 @@ const READ_ONLY_SESSION_CHANNEL = {
   whatsapp: true,
 } as const satisfies Record<AgentChannel, boolean>;
 
+/**
+ * Text-only prompts that already live in server history are the ones Edit can
+ * branch and resend. Attachments and unsent/failed turns have no history index
+ * to branch from.
+ */
+export function isEditableUserMessage(message: ChatListItem): boolean {
+  return (
+    message.role === "user" &&
+    typeof message.historyIndex === "number" &&
+    !message.failed &&
+    !message.questionnaireAnswers?.length &&
+    !message.images?.length &&
+    !message.imageAttachments?.length &&
+    !message.documents?.length &&
+    message.content.trim().length > 0
+  );
+}
+
 export function isReadOnlySessionChannel(channel: AgentChannel): boolean {
   return READ_ONLY_SESSION_CHANNEL[channel];
 }
