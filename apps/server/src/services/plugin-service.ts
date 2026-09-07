@@ -699,6 +699,7 @@ export class PluginService {
         }
         throw new PluginHostError(
           "migration_failed",
+          false,
           lifecycleErrorMessage(error)
         );
       }
@@ -857,6 +858,7 @@ export class PluginService {
         }
         throw new PluginHostError(
           "migration_failed",
+          false,
           lifecycleErrorMessage(error)
         );
       }
@@ -2464,16 +2466,16 @@ function assertMigrationCompatibility(
   incoming: Array<{ checksum: string; id: string }>
 ): void {
   if (applied.length > incoming.length) {
-    throw new PluginHostError("incompatible", "migration downgrade");
+    throw new PluginHostError("incompatible", false, "migration downgrade");
   }
   const incomingById = new Map(incoming.map((row) => [row.id, row]));
   for (const row of applied) {
     const expected = incomingById.get(row.id);
     if (!expected) {
-      throw new PluginHostError("incompatible", "migration downgrade");
+      throw new PluginHostError("incompatible", false, "migration downgrade");
     }
     if (expected.checksum !== row.checksum) {
-      throw new PluginHostError("incompatible", "checksum_mismatch");
+      throw new PluginHostError("incompatible", false, "checksum_mismatch");
     }
   }
 }
@@ -2501,7 +2503,11 @@ function applyPluginMigrations(
     if (error instanceof PluginHostError) {
       throw error;
     }
-    throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
+    throw new PluginHostError(
+      "migration_failed",
+      false,
+      lifecycleErrorMessage(error)
+    );
   } finally {
     db.close();
   }
