@@ -166,6 +166,7 @@ export async function runTimedInstallCommand(
       // Its own process group, so a deadline can signal the whole install
       // rather than only the command we spawned. Installers shell out, and
       // those grandchildren outlive a kill aimed at the direct child.
+      detached: true,
       env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     });
