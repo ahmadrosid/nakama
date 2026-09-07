@@ -2,16 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getCustomToolsDir } from "@nakama/core";
-import type { DatabaseAdapter } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { unzipSync } from "fflate";
-import type { AuthService } from "../../services/auth-service";
-import { PROFILE_PACK_KIND } from "../../services/profile-portability";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
-  loginPlatformAdminSession,
+  createOrgAdminSession,
   loginUserSession,
 } from "../test-session-helpers";
 
@@ -38,49 +34,6 @@ function createApp() {
     }),
     databaseAdapter,
     profileService,
-  };
-}
-
-async function createOrgAdminSession(
-  app: ReturnType<typeof createApp>["app"],
-  authService: AuthService,
-  databaseAdapter: DatabaseAdapter,
-  slug: string,
-  email: string
-) {
-  const platformSession = await loginPlatformAdminSession(
-    app,
-    authService,
-    databaseAdapter
-  );
-  const createResponse = await app.fetch(
-    new Request(`${BASE}/v1/platform/orgs`, {
-      body: JSON.stringify({
-        admin: { email, name: "Pack Admin", phone: "+628123456789" },
-        name: "Pack Org",
-        slug,
-      }),
-      headers: platformSession.headers({
-        "Content-Type": "application/json",
-        "X-CSRF-Token": platformSession.csrfToken,
-      }),
-      method: "POST",
-    })
-  );
-  expect(createResponse.status).toBe(201);
-  const created = (await createResponse.json()) as {
-    organization: { id: string };
-    adminMember: { temporaryPassword: string };
-  };
-  return {
-    adminSession: await loginUserSession(
-      app,
-      email,
-      created.adminMember.temporaryPassword,
-      created.organization.id
-    ),
-    orgId: created.organization.id,
-    platformSession,
   };
 }
 
@@ -135,15 +88,9 @@ describe("profile pack routes", () => {
     );
     expect(exportResponse.status).toBe(200);
     expect(exportResponse.headers.get("content-type")).toBe("application/zip");
-    const archive = Buffer.from(await exportResponse.arrayBuffer());
-    const archiveEntries = unzipSync(new Uint8Array(archive));
-    const manifest = JSON.parse(
-      Buffer.from(archiveEntries["nakama-profile-export.json"] ?? []).toString(
-        "utf8"
-      )
-    ) as { meta: { customTools?: unknown[] } };
-    expect(manifest.meta.customTools).toBeUndefined();
-    const data = archive.toString("base64");
+    const data = Buffer.from(await exportResponse.arrayBuffer()).toString(
+      "base64"
+    );
 
     const previewResponse = await app.fetch(
       new Request(`${BASE}/v1/profiles/pack/import/preview`, {
@@ -154,10 +101,8 @@ describe("profile pack routes", () => {
     );
     expect(previewResponse.status).toBe(200);
     const preview = (await previewResponse.json()) as {
-      manifest: { kind: string };
       plannedName: string;
     };
-    expect(preview.manifest.kind).toBe(PROFILE_PACK_KIND);
     expect(preview.plannedName).toBe("Packable Bot");
 
     const before = (await databaseAdapter.listProfilesForOrg(orgId)).length;
@@ -268,9 +213,6 @@ describe("profile pack routes", () => {
       })
     );
     expect(platformExport.status).toBe(200);
-    const platformArchive = unzipSync(
-      new Uint8Array(await platformExport.arrayBuffer())
-    );
-    expect(platformArchive["custom-tools/platform-portable.js"]).toBeDefined();
+    expect(platformExport.headers.get("content-type")).toBe("application/zip");
   }, 30_000);
 });

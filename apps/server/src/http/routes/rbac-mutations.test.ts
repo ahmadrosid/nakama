@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { OrgRole } from "@nakama/core";
-import type { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession } from "../test-session-helpers";
+import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-rbac-mutations-test-");
 
@@ -46,36 +44,6 @@ function createApp() {
   });
 
   return { ...result, calls };
-}
-
-async function seedUser(
-  databaseAdapter: ReturnType<typeof createApp>["databaseAdapter"],
-  authService: AuthService,
-  email: string,
-  role: OrgRole
-) {
-  const now = new Date().toISOString();
-  const userId = `user_${role}`;
-  await databaseAdapter.createUser({
-    createdAt: now,
-    email,
-    id: userId,
-    passwordHash: await authService.hashPassword(PASSWORD),
-    updatedAt: now,
-  });
-  await databaseAdapter.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    slug: "test-org",
-    updatedAt: now,
-  });
-  await databaseAdapter.upsertOrgMember({
-    createdAt: now,
-    orgId: ORG_ID,
-    role,
-    userId,
-  });
 }
 
 // State-changing routes a viewer must not be able to reach.
@@ -124,12 +92,14 @@ describe("RBAC: viewer cannot reach state-changing automation/session routes", (
   for (const route of MUTATING_ROUTES) {
     test(`${route.method} ${route.path} -> 403 for viewer`, async () => {
       const { app, databaseAdapter, authService, calls } = createApp();
-      await seedUser(
-        databaseAdapter,
+      await seedOrgAdmin(databaseAdapter, {
         authService,
-        "viewer@example.com",
-        "viewer"
-      );
+        email: "viewer@example.com",
+        orgId: ORG_ID,
+        password: PASSWORD,
+        role: "viewer",
+        userId: "user_viewer",
+      });
       const viewer = await loginUserSession(
         app,
         "viewer@example.com",
@@ -155,7 +125,14 @@ describe("RBAC: viewer cannot reach state-changing automation/session routes", (
 describe("RBAC: admin can still reach the same routes (not a 403)", () => {
   test("POST /v1/automations is not forbidden for admin", async () => {
     const { app, databaseAdapter, authService } = createApp();
-    await seedUser(databaseAdapter, authService, "admin@example.com", "admin");
+    await seedOrgAdmin(databaseAdapter, {
+      authService,
+      email: "admin@example.com",
+      orgId: ORG_ID,
+      password: PASSWORD,
+      role: "admin",
+      userId: "user_admin",
+    });
     const admin = await loginUserSession(
       app,
       "admin@example.com",
