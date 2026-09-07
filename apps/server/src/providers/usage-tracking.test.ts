@@ -1,13 +1,60 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderClient } from "@nakama/core";
+import type { ChatCompletionResult, ProviderClient } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "../services/llm-usage-tracker";
+import { estimateUsageCostUsd } from "./pricing";
 import {
   estimateChatInputBreakdown,
   wrapProviderWithUsageTracking,
 } from "./usage-tracking";
 
+function providerReporting(
+  usage: NonNullable<ChatCompletionResult["usage"]>
+): ProviderClient {
+  const result: ChatCompletionResult = {
+    assistantMessage: { content: "Hello", role: "assistant" },
+    content: "Hello",
+    toolCalls: [],
+    usage,
+  };
+  return {
+    generateChat: () => Promise.resolve(result),
+    generateText: () => Promise.resolve({ content: "unused" }),
+    name: "openai",
+    streamChat: () => Promise.resolve(result),
+  };
+}
+
 describe("usage tracking", () => {
+  test("attaches the call cost to the result, absent without pricing", async () => {
+    const tracker = await LlmUsageTracker.create(
+      createInMemoryDatabaseAdapter()
+    );
+    const usage = { inputTokens: 123, outputTokens: 45, totalTokens: 168 };
+    const input = {
+      messages: [{ content: "hi", role: "user" as const }],
+      system: "system",
+    };
+
+    const priced = await wrapProviderWithUsageTracking(
+      providerReporting(usage),
+      tracker,
+      "gpt-4o"
+    ).generateChat(input);
+    expect(priced.usage?.costUsd).toBeCloseTo(
+      estimateUsageCostUsd("gpt-4o", 123, 45),
+      12
+    );
+
+    tracker.setPricingContext({ provider: "openai_compatible" });
+    const unpriced = await wrapProviderWithUsageTracking(
+      providerReporting(usage),
+      tracker,
+      "my-local-model"
+    ).generateChat(input);
+    expect(unpriced.usage).toEqual(usage);
+  });
+
   test("prefers provider-reported usage for chat calls", async () => {
     const tracker = await LlmUsageTracker.create(
       createInMemoryDatabaseAdapter()
@@ -149,6 +196,7 @@ describe("usage tracking", () => {
     });
 
     expect(result.usage).toEqual({
+      costUsd: estimateUsageCostUsd("gpt-4o", 123, 45),
       inputTokens: 123,
       outputTokens: 45,
       totalTokens: 168,
