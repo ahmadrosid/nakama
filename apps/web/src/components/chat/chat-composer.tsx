@@ -17,7 +17,7 @@ import {
   Image01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputBody,
@@ -68,6 +68,7 @@ import {
   type SkillSlashRange,
 } from "@/lib/chat-composer-skills";
 import type { ChatContextUsage } from "@/lib/chat-context-usage";
+import { storeComposerDraft } from "@/lib/chat-history";
 import {
   ALL_ATTACHMENT_ACCEPT,
   DOCUMENT_ACCEPT,
@@ -99,6 +100,7 @@ interface ChatComposerBaseProps {
   chatStatus: ChatStatus;
   className?: string;
   disabled?: boolean;
+  draftStorageKey?: string | null;
   error: string | null;
   footerClassName?: string;
   onStop?: () => void;
@@ -536,6 +538,32 @@ function ChatComposerMain({
 }
 
 export function ChatComposer(props: ChatComposerProps) {
+  const { textInput } = usePromptInputController();
+  useEffect(() => {
+    storeComposerDraft(props.draftStorageKey ?? null, textInput.value);
+  }, [props.draftStorageKey, textInput.value]);
+
+  function clearDraft() {
+    if (!props.draftStorageKey) {
+      return;
+    }
+    storeComposerDraft(props.draftStorageKey, "");
+    textInput.clear();
+  }
+
+  const composerProps: ChatComposerProps = {
+    ...props,
+    onSubmit: (text, files) => {
+      clearDraft();
+      props.onSubmit(text, files);
+    },
+    onSubmitQuestionnaire: props.onSubmitQuestionnaire
+      ? (answers) => {
+          clearDraft();
+          props.onSubmitQuestionnaire?.(answers);
+        }
+      : undefined,
+  };
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = props.error ?? attachmentError;
   const layout = resolveChatComposerLayout(props, displayError);
@@ -548,7 +576,7 @@ export function ChatComposer(props: ChatComposerProps) {
       <ChatComposerMain
         displayError={displayError}
         layout={layout}
-        props={props}
+        props={composerProps}
         setAttachmentError={setAttachmentError}
       />
     </div>
