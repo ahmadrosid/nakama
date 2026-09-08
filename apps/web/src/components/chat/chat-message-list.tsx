@@ -473,10 +473,10 @@ function ChatMessageRow({
         className="mr-0 ml-auto w-full min-w-0 max-w-full items-end justify-end overflow-visible"
         from="user"
       >
-        <div className="w-full space-y-2 rounded-2xl border border-border bg-muted/40 p-2">
+        <div className="flex w-full flex-col gap-3 rounded-[1.75rem] bg-muted px-5 pt-4 pb-3.5">
           <Textarea
             autoFocus
-            className="max-h-64 border-0 bg-transparent focus-visible:ring-0"
+            className="max-h-64 min-h-0 resize-none rounded-none border-0 bg-transparent p-0 text-sm leading-[1.55] tracking-[0.01em] shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -493,17 +493,17 @@ function ChatMessageRow({
           />
           <div className="flex justify-end gap-2">
             <Button
+              className="rounded-full px-4"
               onClick={() => setDraft(null)}
-              size="sm"
               type="button"
-              variant="ghost"
+              variant="outline"
             >
               Cancel
             </Button>
             <Button
+              className="rounded-full px-4"
               disabled={!trimmed || unchanged || busy || disabled}
               onClick={submit}
-              size="sm"
               type="button"
             >
               Send
