@@ -211,7 +211,8 @@ describe("coding-agent harness resolution", () => {
 
       const probed = await refreshCodingAgentHarnessProbe(
         db,
-        "coding-harness-claude-code"
+        "coding-harness-claude-code",
+        { probeTimeoutMs: 200 }
       );
 
       expect(probed.installed).toBe(true);
@@ -219,7 +220,7 @@ describe("coding-agent harness resolution", () => {
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
-  }, 45_000);
+  }, 5000);
 
   test("a harness that traps SIGTERM is killed once the version probe times out", async () => {
     const dir = await mkdtemp(

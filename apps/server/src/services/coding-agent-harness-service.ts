@@ -77,6 +77,7 @@ export interface CodingAgentWorkspaceSettings {
 const PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface CodingAgentHarnessProbeContext {
+  probeTimeoutMs?: number;
   profileModel?: string | null;
   providerPassthroughEnabled?: boolean;
   userConfig?: UserConfig | null;
@@ -757,6 +758,7 @@ async function probeHarnessExec(
     const result = await runProbeCommand(harness, tempDir, spawn.env, {
       model: piModel,
       provider: piProvider,
+      timeoutMs: probeContext?.probeTimeoutMs,
     });
     const combinedOutput = [result.stdout, result.stderr]
       .filter(Boolean)
@@ -824,7 +826,11 @@ async function runProbeCommand(
   harness: CodingAgentHarnessStatus,
   cwd: string,
   spawnEnv: Record<string, string> = {},
-  piOptions?: { provider?: string | null; model?: string | null }
+  piOptions?: {
+    model?: string | null;
+    provider?: string | null;
+    timeoutMs?: number;
+  }
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -832,7 +838,7 @@ async function runProbeCommand(
   timedOut: boolean;
 }> {
   const { spawn } = await import("node:child_process");
-  const timeoutMs = 15_000;
+  const timeoutMs = piOptions?.timeoutMs ?? 15_000;
   const prompt = "Reply with OK and nothing else.";
   const args = buildHarnessNonInteractiveArgs(harness.kind, {
     baseArgs: harness.args,
