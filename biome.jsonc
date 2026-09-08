@@ -62,6 +62,7 @@
         "noExportedImports": "off",
         "noIncrementDecrement": "off",
         "noMultiAssign": "off",
+        "noDescendingSpecificity": "off",
         "noNestedTernary": "off",
         "noNonNullAssertion": "off",
         "noParameterAssign": "off",

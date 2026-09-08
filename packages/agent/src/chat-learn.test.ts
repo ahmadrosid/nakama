@@ -27,7 +27,6 @@ function createCapturingProvider(
       return Promise.resolve(response);
     },
   };
-
   return provider;
 }
 

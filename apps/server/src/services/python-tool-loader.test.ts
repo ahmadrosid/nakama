@@ -1,39 +1,22 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { StoredToolRecord } from "@nakama/db";
 import { resolveCustomToolModulePath } from "./custom-tool-shared";
+import {
+  makeCustomToolRecord,
+  setupCustomToolsDir,
+} from "./custom-tool-test-helpers";
 import { loadPythonTool } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
-
-async function setupToolsDir(): Promise<{
-  configDir: string;
-  toolsDir: string;
-}> {
-  const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
-  process.env.NAKAMA_CONFIG_DIR = configDir;
-  const toolsDir = path.join(configDir, "tools");
-  await mkdir(toolsDir, { recursive: true });
-  return { configDir, toolsDir };
-}
-
-function makeRecord(
-  overrides: Partial<StoredToolRecord> = {}
-): StoredToolRecord {
-  return {
-    createdAt: new Date().toISOString(),
-    description: "Echo a message",
+const setupToolsDir = setupCustomToolsDir;
+const makeRecord = (overrides = {}) =>
+  makeCustomToolRecord({
     handlerConfig: { modulePath: "echo.py" },
     handlerType: "python",
-    id: "tool_echo",
-    name: "echo",
-    updatedAt: new Date().toISOString(),
     ...overrides,
-  };
-}
+  });
 
 describe("python tool loader", () => {
   let configDir = "";

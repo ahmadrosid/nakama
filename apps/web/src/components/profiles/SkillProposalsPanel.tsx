@@ -125,7 +125,7 @@ function ProposalReviewDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="gap-4 overflow-hidden p-4 sm:max-w-lg sm:p-6">
+      <DialogContent className="gap-4 overflow-hidden p-4 sm:max-w-2xl sm:p-6">
         <DialogHeader className="pr-8">
           <DialogTitle>
             {actionLabel(proposal.action)} skill &ldquo;{proposal.skillName}

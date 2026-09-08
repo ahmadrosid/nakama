@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
@@ -34,10 +34,6 @@ describe("SkillsService skill usage", () => {
       updatedAt: now,
     });
     await db.assignSkillToProfile(profileId, skillId);
-  });
-
-  afterEach(() => {
-    // in-memory adapter has no close hook
   });
 
   test("recordMatches increments use_count", async () => {

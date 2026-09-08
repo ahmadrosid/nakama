@@ -1,29 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../services/agent-service";
-import { AuthService } from "../services/auth-service";
-import { OrgService } from "../services/org-service";
-import { createHonoApp } from "./app";
+import { setupTestConfigDir } from "../test-config-dir";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   loginUserSession,
   setupFreshInstallSession,
 } from "./test-session-helpers";
 
+setupTestConfigDir("nakama-automation-worker-settings-test-");
+
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
-  const app = createHonoApp({
+  return createMinimalHonoApp({
     agent: new AgentService(null, null, databaseAdapter),
-    authService,
-    automationService: {} as never,
     databaseAdapter,
-    mcpService: {} as never,
-    orgService: new OrgService(databaseAdapter, authService),
-    systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-    webDistDir: null,
-    workerManager: {} as never,
   });
-  return { app, databaseAdapter };
 }
 
 describe("automation worker settings routes", () => {

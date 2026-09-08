@@ -79,6 +79,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   minimax: new Set<string>(),
   minimax_cn: new Set<string>(),
+  mistral: new Set<string>(),
   ollama: new Set<string>(),
   openai: new Set([
     "application/pdf",
@@ -96,6 +97,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   together: new Set<string>(),
   xai: new Set<string>(),
+  xai_oauth: new Set<string>(),
   zhipu: new Set<string>(),
   zhipu_cn: new Set<string>(),
 };

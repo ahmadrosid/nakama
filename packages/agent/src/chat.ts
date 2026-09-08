@@ -107,6 +107,7 @@ export interface ResolvePromptContextInput {
 }
 
 export interface AgentChatSessionOptions {
+  archiveHistory?: (history: readonly ChatMessage[]) => Promise<string>;
   channel?: AgentRequest["channel"];
   compaction?: CompactionConfig;
   enableToolLoop?: boolean;
@@ -267,16 +268,47 @@ export function createAgentChatSession(
       options.enableToolLoop !== false && localTools.length > 0
         ? toLlmToolDefinitions(localTools)
         : undefined;
+    // Compaction is copy-on-write; do not discard anything until archival succeeds.
+    const original = [...history];
+    const revision = historyRevision;
+    const compacted = [...original];
+    function assertUnchanged() {
+      if (
+        historyRevision !== revision ||
+        history.length !== original.length ||
+        history.some((message, index) => message !== original[index])
+      ) {
+        throw new Error("History changed during compaction. Try again.");
+      }
+    }
     const result = await compactHistory({
       compaction: options.compaction,
       force,
-      history,
+      history: compacted,
       provider: dependencies.provider,
       systemPrompt,
       tools: llmTools,
     });
 
     if (result.action !== "none") {
+      assertUnchanged();
+      const recovery = await options.archiveHistory?.(original);
+      assertUnchanged();
+      const index =
+        result.action === "summarized"
+          ? 0
+          : compacted.findIndex(
+              (message, position) =>
+                message.role === "tool" && message !== original[position]
+            );
+      const first = compacted[index];
+      if (recovery && first) {
+        compacted[index] = {
+          ...first,
+          content: `${first.content}\n\n${recovery}`,
+        };
+      }
+      history.splice(0, history.length, ...compacted);
       bumpHistoryRevision();
     }
 

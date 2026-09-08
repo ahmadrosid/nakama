@@ -27,11 +27,13 @@ Nakama supports these built-in provider types:
 |---|---|
 | OpenAI | GPT models; required for OpenAI audio transcription (Telegram voice notes) |
 | ChatGPT (Plus/Pro) | Sign in with ChatGPT; uses your plan quota via Codex (not API credits). One account per Nakama instance |
+| Grok (SuperGrok / Premium+) | Sign in with your xAI subscription; API eligibility depends on your plan |
 | Anthropic | Claude models |
 | OpenRouter | Route to many models through one API key |
 | Gemini | Google Gemini models |
 | DeepSeek | DeepSeek models |
 | Together AI | Open-source and hosted models via Together |
+| Mistral | Mistral models (Small 4, Medium 3.5, Large 3, Ministral 3) |
 | Cerebras | Cerebras models |
 | Cloudflare Worker AI | Workers AI models; add an API key and account ID in Settings (saved to `config.ini`). Llama 3.1 8B is the cheaper catalog option. `CLOUDFLARE_ACCOUNT_ID` is a fallback only |
 | Fireworks | Fireworks AI models |
@@ -65,6 +67,18 @@ ChatGPT Plus/Pro is **not** an OpenAI API key. In **Settings → LLM providers**
 - Usage comes from your ChatGPT plan quota, not pay-as-you-go API billing
 - Whisper transcription and image generation still need a regular OpenAI API key provider
 - Coding-agent provider passthrough does not apply to this provider type — use **Integrations → Coding agents → harness login** with `codex login` for Codex CLI subscription use
+
+## Grok (SuperGrok / Premium+)
+
+Connect your Grok subscription to chat with Grok models in Nakama without entering an API key.
+
+1. In **Settings → LLM providers → Add provider**, choose **Grok (SuperGrok / Premium+)**.
+2. Click **Sign in with Grok**, open the displayed link, and enter the code. For Premium+, use the xAI account linked to your X account.
+3. Approve access, choose a model, and click **Add provider**.
+
+Nakama refreshes the saved session automatically. Use **Reconnect Grok** if access is revoked. The connected account is shared across the Nakama instance.
+
+xAI controls subscription API eligibility and usage limits. A successful sign-in does not guarantee model access; a 402 or 403 response can indicate a quota or plan restriction.
 
 ## Next steps
 

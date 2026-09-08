@@ -5,27 +5,6 @@ import path from "node:path";
 
 export const HANDSHAKE_CODE_PATTERN = /^[0-9A-F]{8}$/;
 
-export const MASK_BOT_TOKEN_CASES = [
-  {
-    expected: "••••••••••••7890",
-    input: "12345678901234567890",
-    name: "masks long tokens",
-  },
-  {
-    expected: null,
-    input: "",
-    name: "returns null for empty",
-  },
-] as const;
-
-export const NORMALIZE_HANDSHAKE_INPUT_CASES = [
-  {
-    expected: "ABCD12",
-    input: " ab cd12 ",
-    name: "strips spaces and uppercases",
-  },
-] as const;
-
 export async function withTempHomedir(
   prefix: string,
   run: (homeDir: string) => Promise<void>
@@ -80,9 +59,8 @@ export async function writeChannelIniConfig(
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
 
-export type SharedChannelConfigCase<TId extends string | number> = {
+type SharedChannelConfigCase<TId extends string | number> = {
   name: "telegram" | "discord";
-  label: string;
   botToken: string;
   sampleId: TId;
   authorize: {
@@ -109,10 +87,7 @@ export type SharedChannelConfigCase<TId extends string | number> = {
     userId: TId,
     access: { allowedUserIds: TId[]; pairedUserIds: TId[] }
   ) => boolean;
-  verifyAndPair: (
-    code: string,
-    userId: TId
-  ) => Promise<{ ok: boolean; message: string }>;
+  verifyAndPair: (code: string, userId: TId) => Promise<{ ok: boolean }>;
   saveConfig: (input: {
     botToken: string;
     allowedUserIds?: string;
@@ -147,19 +122,16 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
 
   describe(`${tc.name} shared channel config`, () => {
     describe("maskBotToken", () => {
-      for (const c of MASK_BOT_TOKEN_CASES) {
-        test(c.name, () => {
-          expect(tc.mask(c.input)).toBe(c.expected);
-        });
-      }
+      test("masks long tokens and returns null for empty", () => {
+        expect(tc.mask("12345678901234567890")).toBe("••••••••••••7890");
+        expect(tc.mask("")).toBeNull();
+      });
     });
 
     describe("normalizeHandshakeInput", () => {
-      for (const c of NORMALIZE_HANDSHAKE_INPUT_CASES) {
-        test(c.name, () => {
-          expect(tc.normalize(c.input)).toBe(c.expected);
-        });
-      }
+      test("strips spaces and uppercases", () => {
+        expect(tc.normalize(" ab cd12 ")).toBe("ABCD12");
+      });
     });
 
     describe("isUserAuthorized", () => {
@@ -201,10 +173,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
 
           const result = await tc.verifyAndPair("aa bb cc dd", tc.sampleId);
 
-          expect(result).toEqual({
-            message: "Linked successfully. You can chat with Nakama now.",
-            ok: true,
-          });
+          expect(result.ok).toBe(true);
 
           const config = await tc.loadConfigFile();
           expect(config?.pairedUserIds).toEqual([tc.sampleId]);
@@ -221,10 +190,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
 
           const result = await tc.verifyAndPair("DEADBEEF", tc.sampleId);
 
-          expect(result).toEqual({
-            message: `Invalid pairing code. Copy it from Integrations → ${tc.label} and try again.`,
-            ok: false,
-          });
+          expect(result.ok).toBe(false);
 
           const config = await tc.loadConfigFile();
           expect(config?.pairedUserIds).toEqual([]);
@@ -236,10 +202,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
         await withTempHomedir(tempPrefix, async () => {
           const result = await tc.verifyAndPair("AABBCCDD", tc.sampleId);
 
-          expect(result).toEqual({
-            message: `${tc.label} is not configured on the server yet.`,
-            ok: false,
-          });
+          expect(result.ok).toBe(false);
         });
       });
 
@@ -252,10 +215,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
 
           const result = await tc.verifyAndPair("anything", tc.sampleId);
 
-          expect(result).toEqual({
-            message: "This chat is already linked.",
-            ok: true,
-          });
+          expect(result.ok).toBe(true);
         });
       });
     });

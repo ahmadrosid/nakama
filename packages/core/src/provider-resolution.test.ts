@@ -16,6 +16,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("mistral")).toBe("mistral");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
     expect(parseProviderName("minimax")).toBe("minimax");
@@ -39,6 +40,10 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("maps Together AI to its env key", () => {
     expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
+  });
+
+  test("mistral uses MISTRAL_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
   });
 });
 
@@ -114,6 +119,18 @@ describe("resolveProvider together", () => {
   });
 });
 
+describe("resolveProvider mistral", () => {
+  test("auto-resolves Mistral when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        MISTRAL_API_KEY: "ms-test",
+      },
+    });
+
+    expect(provider).toBe("mistral");
+  });
+});
+
 describe("resolveProvider cerebras", () => {
   test("auto-resolves Cerebras when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -151,6 +168,7 @@ describe("isDiscoveryModelProvider", () => {
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
     expect(isDiscoveryModelProvider("together")).toBe(false);
+    expect(isDiscoveryModelProvider("mistral")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
   });

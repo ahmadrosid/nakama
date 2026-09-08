@@ -1667,6 +1667,7 @@ export interface CreateProviderRequest {
   model?: string;
   type: ProviderName;
   wireApi?: WireApi;
+  xaiOAuth?: XaiOAuthCredentials;
 }
 
 export interface CreateProviderResponse {
@@ -1683,6 +1684,7 @@ export interface UpdateProviderRequest {
   hostMode?: OllamaHostMode;
   label?: string;
   wireApi?: WireApi;
+  xaiOAuth?: XaiOAuthCredentials;
 }
 
 export interface UpdateProviderResponse {
@@ -2209,6 +2211,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "mistral"
   | "cerebras"
   | "fireworks"
   | "ollama"
@@ -2216,6 +2219,7 @@ export type ProviderName =
   | "opencode_go"
   | "cloudflare"
   | "chatgpt"
+  | "xai_oauth"
   | "minimax"
   | "minimax_cn"
   | "zhipu"
@@ -2547,4 +2551,17 @@ export interface ComposioToolErrorResult {
   code: ComposioToolErrorCode;
   error: string;
   toolkitSlug?: string;
+}
+
+export interface XaiOAuthCredentials {
+  accessToken: string;
+  expiresAt: string;
+  refreshToken: string;
+}
+
+export type XaiOAuthDeviceStartResponse = ChatgptOAuthDeviceStartResponse;
+export type XaiOAuthDeviceCompleteRequest = ChatgptOAuthDeviceCompleteRequest;
+export interface XaiOAuthDeviceCompleteResponse {
+  models?: CustomModelEntry[];
+  xaiOAuth: XaiOAuthCredentials;
 }

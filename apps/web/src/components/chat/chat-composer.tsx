@@ -17,7 +17,14 @@ import {
   Image01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   PromptInput,
   PromptInputBody,
@@ -120,6 +127,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   availableSkills?: SkillSummary[];
   contextUsage?: ChatContextUsage | null;
   currentModelSelection: string | null;
+  headerNotice?: ReactNode;
   onModelChange: (selection: string) => void;
   onNavigateSetup?: () => void;
   onThinkingEffortChange?: (effort: ThinkingEffort) => void;
@@ -150,13 +158,18 @@ const EMPTY_SKILLS: SkillSummary[] = [];
 
 function ChatComposerNotice({
   error,
+  headerNotice,
   showTips,
 }: {
   error: string | null;
+  headerNotice?: ReactNode;
   showTips: boolean;
 }) {
   if (error) {
     return <ChatComposerError message={error} />;
+  }
+  if (headerNotice) {
+    return headerNotice;
   }
   if (showTips) {
     return <ChatTips />;
@@ -246,6 +259,7 @@ function ChatComposerStackedPrompt({
   disabled,
   displayError,
   footerClassName,
+  headerNotice,
   onStop,
   onSubmit,
   placeholder,
@@ -262,6 +276,7 @@ function ChatComposerStackedPrompt({
   disabled: boolean;
   displayError: string | null;
   footerClassName?: string;
+  headerNotice?: ReactNode;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder: string;
@@ -273,7 +288,11 @@ function ChatComposerStackedPrompt({
 }) {
   return (
     <>
-      <ChatComposerNotice error={displayError} showTips={showTips} />
+      <ChatComposerNotice
+        error={displayError}
+        headerNotice={headerNotice}
+        showTips={showTips}
+      />
       <PromptInput
         accept={ALL_ATTACHMENT_ACCEPT}
         className={composerShellClass}
@@ -329,6 +348,7 @@ function ChatComposerBarePrompt({
   disabled,
   displayError,
   footerClassName,
+  headerNotice,
   isMinimal,
   onStop,
   onSubmit,
@@ -346,6 +366,7 @@ function ChatComposerBarePrompt({
   disabled: boolean;
   displayError: string | null;
   footerClassName?: string;
+  headerNotice?: ReactNode;
   isMinimal: boolean;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
@@ -358,7 +379,11 @@ function ChatComposerBarePrompt({
 }) {
   return (
     <>
-      <ChatComposerNotice error={displayError} showTips={showTips} />
+      <ChatComposerNotice
+        error={displayError}
+        headerNotice={headerNotice}
+        showTips={showTips}
+      />
       <PromptInput
         accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
         className={isMinimal ? composerShellCompactClass : composerShellClass}
@@ -491,6 +516,7 @@ function ChatComposerMain({
     disabled: layout.disabled,
     displayError,
     footerClassName: props.footerClassName,
+    headerNotice: isFullComposer(props) ? props.headerNotice : undefined,
     onStop: props.onStop,
     onSubmit: props.onSubmit,
     placeholder: layout.placeholder,

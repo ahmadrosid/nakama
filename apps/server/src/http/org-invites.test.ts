@@ -8,13 +8,9 @@ import {
 
 setupTestConfigDir("nakama-org-invites-test-");
 
-function createApp() {
-  return createMinimalHonoApp();
-}
-
 describe("direct org member provisioning", () => {
   test("platform admin cannot access org data before the provisioned admin signs in", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -82,7 +78,7 @@ describe("direct org member provisioning", () => {
   });
 
   test("org admin can add a member and the member can change password", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
