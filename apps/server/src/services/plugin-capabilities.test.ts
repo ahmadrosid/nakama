@@ -13,7 +13,7 @@ import {
   createInMemoryDatabaseAdapter,
   seedOrgDefaultProfile,
 } from "@nakama/db";
-import { zipSync } from "fflate";
+import { pluginPackage } from "../testing/plugin-package-fixture";
 import { PluginHostError, PluginService } from "./plugin-service";
 import { SkillCuratorService } from "./skill-curator-service";
 import { SkillsService } from "./skills-service";
@@ -51,14 +51,6 @@ writeFileSync("/tmp/nakama-plugin-skill-imported", "imported");
 export async function run() { return { leaked: true }; }
 `;
 
-function encodeZip(files: Record<string, string>): Uint8Array {
-  const entries: Record<string, Uint8Array> = {};
-  for (const [name, value] of Object.entries(files)) {
-    entries[name] = Buffer.from(value);
-  }
-  return zipSync(entries);
-}
-
 function manifest(
   version: string,
   extras: Record<string, unknown> = {}
@@ -88,8 +80,8 @@ function manifest(
   };
 }
 
-function v1Bundle(): Uint8Array {
-  return encodeZip({
+function v1Bundle(): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/write.js": ACTION_JS,
     "nakama.plugin.json": JSON.stringify(manifest("1.0.0")),
     "skills/notes/SKILL.md": SKILL_MD,
@@ -97,8 +89,8 @@ function v1Bundle(): Uint8Array {
   });
 }
 
-function v2BundleWithoutWrite(): Uint8Array {
-  return encodeZip({
+function v2BundleWithoutWrite(): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/write.js": ACTION_JS,
     "nakama.plugin.json": JSON.stringify(
       manifest("1.1.0", {
@@ -229,7 +221,7 @@ describe("plugin capabilities", () => {
     const profile = await seedOrgDefaultProfile(db, ORG_ID);
     const plugins = new PluginService(db, configDir);
     await plugins.installPluginPackage(
-      encodeZip({
+      pluginPackage({
         "actions/write.js": ACTION_JS,
         "nakama.plugin.json": JSON.stringify(
           manifest("1.0.0", {

@@ -24,10 +24,13 @@
     "hono": "^4.13.5",
     "microsandbox": "0.6.15",
     "openai": "^7.5.0",
+    "pacote": "^22.0.0",
     "pm2": "^7.0.4",
+    "tar": "^7.5.22",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@types/pacote": "^11.1.8",
     "msw": "^2.15.0"
   }
 }

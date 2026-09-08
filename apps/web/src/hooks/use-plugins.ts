@@ -1,8 +1,10 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   DeleteRetainedPluginDataRequest,
+  InstallPluginPackageRequest,
   OrgPluginDetail,
   PluginPackagePreviewResponse,
+  PluginPackageRequest,
   UpdateOrgPluginRequest,
 } from "@nakama/core/contract";
 import {
@@ -127,13 +129,15 @@ function usePluginMutation<TVariables, TData>(
 }
 
 export function usePreviewPluginPackage() {
-  return usePluginMutation((file: Blob) => client.previewPluginPackage(file));
+  return usePluginMutation((request: PluginPackageRequest) =>
+    client.previewPluginPackage(request)
+  );
 }
 
 export function useInstallPluginPackage() {
   return usePluginMutation(
-    ({ expectedDigest, file }: { expectedDigest?: string; file: Blob }) =>
-      client.installPluginPackage(file, { expectedDigest }),
+    (request: InstallPluginPackageRequest) =>
+      client.installPluginPackage(request),
     async ({ orgId, queryClient }) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.plugins.releases,

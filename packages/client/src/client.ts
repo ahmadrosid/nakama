@@ -123,6 +123,7 @@ import type {
   PinOrgMemoryRequest,
   PluginContributionChangePreview,
   PluginPackagePreviewResponse,
+  PluginPackageRequest,
   PluginRevisionRequest,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
@@ -2130,43 +2131,22 @@ export class NakamaClient {
     );
   }
 
-  private async postPluginArchive<T>(
-    path: string,
-    data: Blob | BufferSource | string,
-    options: { expectedDigest?: string } = {}
-  ): Promise<T> {
-    const request: InstallPluginPackageRequest = {
-      data: await encodeArchiveData(data),
-    };
-    if (options.expectedDigest) {
-      request.expectedDigest = options.expectedDigest;
-    }
-    return this.request<T>(path, {
+  async previewPluginPackage(
+    request: PluginPackageRequest
+  ): Promise<PluginPackagePreviewResponse> {
+    return this.request("/v1/platform/plugins/releases/preview", {
       body: JSON.stringify(request),
       method: "POST",
     });
   }
 
-  async previewPluginPackage(
-    data: Blob | BufferSource | string,
-    options: { expectedDigest?: string } = {}
-  ): Promise<PluginPackagePreviewResponse> {
-    return this.postPluginArchive(
-      "/v1/platform/plugins/releases/preview",
-      data,
-      options
-    );
-  }
-
   async installPluginPackage(
-    data: Blob | BufferSource | string,
-    options: { expectedDigest?: string } = {}
+    request: InstallPluginPackageRequest
   ): Promise<InstallPluginPackageResponse> {
-    return this.postPluginArchive(
-      "/v1/platform/plugins/releases",
-      data,
-      options
-    );
+    return this.request("/v1/platform/plugins/releases", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
   }
 
   async listPluginReleases(): Promise<ListPluginReleasesResponse> {

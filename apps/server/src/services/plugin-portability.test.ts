@@ -12,7 +12,8 @@ import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
 } from "@nakama/db";
-import { unzipSync, zipSync } from "fflate";
+import { unzipSync } from "fflate";
+import { pluginPackage } from "../testing/plugin-package-fixture";
 import {
   createNakamaDataExport,
   restoreNakamaDataImport,
@@ -34,8 +35,8 @@ const ACTOR = { id: "admin_1", role: "admin" as const };
 const ORG = "org_src";
 const DEST = "org_dest";
 
-function notesBundle(): Uint8Array {
-  return zipSync({
+function notesBundle(): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/create.js": Buffer.from(
       "export function run(input) { return input; }"
     ),
@@ -72,8 +73,8 @@ function notesBundle(): Uint8Array {
   });
 }
 
-function hangBundle(): Uint8Array {
-  return zipSync({
+function hangBundle(): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/hang.js": Buffer.from(`
 export async function run() {
   await new Promise(() => {});
@@ -110,8 +111,8 @@ export async function run() {
   });
 }
 
-function slowWriteBundle(): Uint8Array {
-  return zipSync({
+function slowWriteBundle(): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/write.js": Buffer.from(`
 import { Database } from "bun:sqlite";
 export async function run(input, context) {

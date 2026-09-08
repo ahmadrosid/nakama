@@ -38,7 +38,12 @@ test("plugin client methods send expected org and revision fields", async () => 
     { input: { q: "n" } },
     "org_explicit"
   );
-  await client.installPluginPackage("Zm9v", { expectedDigest: "abc" });
+  await client.installPluginPackage({
+    expectedDigest: "abc",
+    expectedIntegrity: "sha512-abc",
+    packageName: "@team/notes",
+    version: "1.0.0",
+  });
 
   expect(String(fetchCalls[0]!.input)).toBe("http://localhost:4310/v1/plugins");
   expect(new Headers(fetchCalls[0]!.init?.headers).get("X-Org-Id")).toBe(
@@ -87,8 +92,10 @@ test("plugin client methods send expected org and revision fields", async () => 
     "http://localhost:4310/v1/platform/plugins/releases"
   );
   expect(JSON.parse(String(fetchCalls[5]!.init?.body))).toEqual({
-    data: "Zm9v",
     expectedDigest: "abc",
+    expectedIntegrity: "sha512-abc",
+    packageName: "@team/notes",
+    version: "1.0.0",
   });
 });
 

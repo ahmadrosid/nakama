@@ -1,10 +1,11 @@
 # Plugin authoring
 
-Nakama plugins are trusted ZIP packages. A platform admin installs the bytes. An organization admin activates them. Plugin code runs as ordinary Bun and browser JavaScript — there is no sandbox.
+Nakama plugins are trusted npm packages. A platform admin installs the bytes. An organization admin activates them. Plugin code runs as ordinary Bun and browser JavaScript — there is no sandbox.
 
 ## Package layout
 
 ```text
+package.json
 nakama.plugin.json
 actions/*.js
 skills/<key>/SKILL.md
@@ -13,9 +14,11 @@ ui/assets/*
 migrations/*.sql
 ```
 
-The archive may put those files at the root or inside one top-level folder. `PluginService` resolves that package root from the single `nakama.plugin.json`.
+Publish to the public npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. Tags, ranges, Git URLs, local paths, private registries, and archive uploads are not supported.
 
-Actions must be prebuilt, self-contained JavaScript. Do not rely on `node_modules` at runtime. Nakama starts plugin children with `--no-install`.
+Preview records the package digest and registry SHA-512 integrity. Installation rechecks both before publishing the release.
+
+Actions must be prebuilt, self-contained JavaScript. Declare build tools and libraries in `devDependencies` and bundle them into the output. Nonempty `dependencies`, `optionalDependencies`, and `peerDependencies` are rejected; Nakama never installs dependencies or runs package lifecycle scripts. Do not rely on `node_modules` at runtime. Nakama starts plugin children with `--no-install`.
 
 ## Manifest
 
@@ -85,14 +88,26 @@ parent.postMessage(
 3. Fetch `__nakama/bootstrap.json?theme=`.
 4. POST actions to `/v1/plugins/{pluginId}/actions/{key}` with `X-Org-Id` from bootstrap and `X-CSRF-Token` from the `nakama_csrf` cookie.
 
-## Build and pack
+## Build and publish
 
-From your plugin directory, build the UI into `ui/` and package the files declared by your manifest:
+Use a package manifest like this (omit unused capability directories):
+
+```json
+{
+  "name": "@your-team/nakama-notes",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["nakama.plugin.json", "actions", "skills", "ui", "migrations"]
+}
+```
+
+From your plugin directory, build the actions and UI, inspect the published files, then publish:
 
 ```bash
 bun install
 bun run build
-zip -r plugin-1.0.0.zip nakama.plugin.json actions skills ui migrations
+npm pack --dry-run
+npm publish --access public
 ```
 
-Include the built UI assets in the ZIP so installation does not need to run Vite. Omit directories for capabilities your plugin does not use.
+Include built UI assets and bundled JavaScript in the published package. In **System → Plugins**, preview `@your-team/nakama-notes` at `1.0.0`, then approve installation.

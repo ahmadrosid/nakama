@@ -2,7 +2,6 @@ import { createRoute, z } from "@hono/zod-openapi";
 import {
   type DeleteRetainedPluginDataRequest,
   type InstallOrgPluginRequest,
-  type InstallPluginPackageRequest,
   type InstallPluginPackageResponse,
   type InvokePluginActionRequest,
   type InvokePluginActionResponse,
@@ -66,10 +65,17 @@ export function registerPluginRoutes(
     actionKey: z.string().openapi({ param: { in: "path", name: "actionKey" } }),
     pluginId: z.string().openapi({ param: { in: "path", name: "pluginId" } }),
   });
-  const archiveRequestSchema = z
+  const packageRequestSchema = z
     .object({
-      data: z.string(),
-      expectedDigest: z.string().optional(),
+      packageName: z.string().min(1).max(214),
+      version: z.string().min(1).max(128),
+    })
+    .strict()
+    .openapi("PluginPackageRequest");
+  const installRequestSchema = packageRequestSchema
+    .extend({
+      expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      expectedIntegrity: z.string().regex(/^sha512-[A-Za-z0-9+/]+={0,2}$/),
     })
     .openapi("InstallPluginPackageRequest");
   const openapiBag = (name: string) => z.object({}).passthrough().openapi(name);
@@ -183,8 +189,8 @@ export function registerPluginRoutes(
     ok: jsonOk(previewResponseSchema, "Plugin package preview"),
     operationId: "previewPluginPackage",
     path: "/v1/platform/plugins/releases/preview",
-    request: { body: archiveRequestSchema },
-    summary: "Inspect an uploaded plugin archive without executing it",
+    request: { body: packageRequestSchema },
+    summary: "Inspect an npm plugin package without executing it",
     tags: platform,
   });
   pluginPath({
@@ -193,8 +199,8 @@ export function registerPluginRoutes(
     ok: jsonOk(installResponseSchema, "Installed plugin release"),
     operationId: "installPluginPackage",
     path: "/v1/platform/plugins/releases",
-    request: { body: archiveRequestSchema },
-    summary: "Install an uploaded plugin archive without executing it",
+    request: { body: installRequestSchema },
+    summary: "Install an npm plugin package without executing it",
     tags: platform,
   });
   pluginPath({
@@ -339,9 +345,15 @@ export function registerPluginRoutes(
   app.post("/v1/platform/plugins/releases/preview", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
-    const { archive } = await readPluginArchive(c.req.raw);
+    const parsed = packageRequestSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) {
+      throw new NakamaApiError(
+        "Package name and exact version are required.",
+        400
+      );
+    }
     try {
-      const preview = await plugins.previewPluginPackage(archive);
+      const preview = await plugins.previewPluginPackage(parsed.data);
       return json<PluginPackagePreviewResponse>(preview);
     } catch (error) {
       throwPluginHttpError(error);
@@ -351,11 +363,15 @@ export function registerPluginRoutes(
   app.post("/v1/platform/plugins/releases", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
-    const { archive, expectedDigest } = await readPluginArchive(c.req.raw);
+    const parsed = installRequestSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) {
+      throw new NakamaApiError("Preview approval is required.", 400);
+    }
     try {
-      const installed = await plugins.installPluginPackage(archive, {
-        expectedDigest,
-      });
+      const installed = await plugins.installPluginPackage(
+        parsed.data,
+        parsed.data
+      );
       return json<InstallPluginPackageResponse>({
         createdAt: installed.createdAt,
         digest: installed.digest,
@@ -644,42 +660,6 @@ function pluginActor(
   };
 }
 
-async function readPluginArchive(request: Request): Promise<{
-  archive: Uint8Array;
-  expectedDigest?: string;
-}> {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (contentType.includes("multipart/form-data")) {
-    const form = await request.formData();
-    const file = form.get("file") ?? form.get("data");
-    const digestValue = form.get("expectedDigest");
-    const expectedDigest =
-      typeof digestValue === "string" ? digestValue : undefined;
-    if (file instanceof File) {
-      return {
-        archive: new Uint8Array(await file.arrayBuffer()),
-        expectedDigest,
-      };
-    }
-    if (typeof file === "string" && file.trim()) {
-      return {
-        archive: Buffer.from(file.trim(), "base64"),
-        expectedDigest,
-      };
-    }
-    throw new NakamaApiError("Plugin archive is required.", 400);
-  }
-
-  const body = await readJson<InstallPluginPackageRequest>(request);
-  if (!body.data?.trim()) {
-    throw new NakamaApiError("Plugin archive is required.", 400);
-  }
-  return {
-    archive: Buffer.from(body.data.trim(), "base64"),
-    expectedDigest: body.expectedDigest,
-  };
-}
-
 function pluginUiAssetPath(
   requestPath: string,
   orgId: string,
@@ -720,6 +700,7 @@ const PLUGIN_ERROR_STATUS: Record<string, number> = {
   forbidden: 403,
   interrupted: 503,
   invalid_archive: 400,
+  invalid_package: 400,
   invalid_entry: 400,
   invalid_input: 400,
   invalid_manifest: 400,
