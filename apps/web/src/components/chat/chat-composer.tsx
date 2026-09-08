@@ -265,7 +265,6 @@ function ChatComposerStackedPrompt({
   chatStatus,
   disabled,
   displayError,
-  enableAddCommands,
   footerClassName,
   headerNotice,
   onAddCommand,
@@ -284,10 +283,9 @@ function ChatComposerStackedPrompt({
   chatStatus: ChatStatus;
   disabled: boolean;
   displayError: string | null;
-  enableAddCommands: boolean;
   footerClassName?: string;
   headerNotice?: ReactNode;
-  onAddCommand: (action: ComposerAddCommandAction) => void;
+  onAddCommand?: (action: ComposerAddCommandAction) => void;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder: string;
@@ -325,7 +323,6 @@ function ChatComposerStackedPrompt({
             availableSkills={availableSkills}
             className={FULL_TEXTAREA_CLASS}
             disabled={disabled}
-            enableAddCommands={enableAddCommands}
             key={skillPickerKey}
             longPasteWordThreshold={LONG_PASTE_WORD_THRESHOLD}
             onAddCommand={onAddCommand}
@@ -360,7 +357,6 @@ function ChatComposerBarePrompt({
   chatStatus,
   disabled,
   displayError,
-  enableAddCommands,
   footerClassName,
   headerNotice,
   isMinimal,
@@ -380,11 +376,10 @@ function ChatComposerBarePrompt({
   chatStatus: ChatStatus;
   disabled: boolean;
   displayError: string | null;
-  enableAddCommands: boolean;
   footerClassName?: string;
   headerNotice?: ReactNode;
   isMinimal: boolean;
-  onAddCommand: (action: ComposerAddCommandAction) => void;
+  onAddCommand?: (action: ComposerAddCommandAction) => void;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder: string;
@@ -428,7 +423,6 @@ function ChatComposerBarePrompt({
             availableSkills={availableSkills}
             className={isMinimal ? MINIMAL_TEXTAREA_CLASS : FULL_TEXTAREA_CLASS}
             disabled={disabled}
-            enableAddCommands={enableAddCommands}
             key={skillPickerKey}
             longPasteWordThreshold={
               isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD
@@ -538,10 +532,9 @@ function ChatComposerMain({
     chatStatus: props.chatStatus,
     disabled: layout.disabled,
     displayError,
-    enableAddCommands: layout.enableAddCommands,
     footerClassName: props.footerClassName,
     headerNotice: isFullComposer(props) ? props.headerNotice : undefined,
-    onAddCommand,
+    onAddCommand: layout.enableAddCommands ? onAddCommand : undefined,
     onStop: props.onStop,
     onSubmit: props.onSubmit,
     placeholder: layout.placeholder,
@@ -683,7 +676,6 @@ function ChatComposerTextarea({
   availableSkills,
   disabled,
   className,
-  enableAddCommands,
   onAddCommand,
   placeholder,
   longPasteWordThreshold,
@@ -691,8 +683,7 @@ function ChatComposerTextarea({
   availableSkills: SkillSummary[];
   disabled: boolean;
   className: string;
-  enableAddCommands: boolean;
-  onAddCommand: (action: ComposerAddCommandAction) => void;
+  onAddCommand?: (action: ComposerAddCommandAction) => void;
   placeholder: string;
   longPasteWordThreshold?: number;
 }) {
@@ -705,10 +696,10 @@ function ChatComposerTextarea({
     () =>
       slashRange
         ? filterComposerSlashSuggestions(availableSkills, slashRange.query, {
-            enableAddCommands,
+            enableAddCommands: onAddCommand != null,
           })
         : [],
-    [availableSkills, enableAddCommands, slashRange]
+    [availableSkills, onAddCommand, slashRange]
   );
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
   const safeActiveIndex =
@@ -735,7 +726,10 @@ function ChatComposerTextarea({
 
       const addAction =
         suggestion.kind === "command" ? suggestion.command.action : undefined;
-      if (addAction === "add-tool" || addAction === "add-mcp") {
+      if (
+        onAddCommand &&
+        (addAction === "add-tool" || addAction === "add-mcp")
+      ) {
         controller.textInput.setInput(
           `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
         );
