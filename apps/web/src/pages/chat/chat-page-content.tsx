@@ -93,7 +93,6 @@ export function ChatPageContent(state: ChatPageState) {
         currentModelSelection={currentModelSelection}
         disabled={composerDisabled}
         draftStorageKey={composerDraftKey}
-        enableAddCommands={!readOnlySession}
         error={error}
         headerNotice={skillReviewBanner}
         onModelChange={handleModelChange}

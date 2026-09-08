@@ -15,7 +15,7 @@ export interface SkillTokenRange {
 export type ComposerAddCommandAction = "add-mcp" | "add-tool";
 
 export interface ReservedSlashCommand {
-  action?: ComposerAddCommandAction | "insert";
+  action?: ComposerAddCommandAction;
   description: string;
   name: string;
 }
@@ -100,36 +100,14 @@ export function filterReservedSlashCommands(
   );
 }
 
-export function isComposerAddCommand(
-  command: Pick<ReservedSlashCommand, "action">
-): command is ReservedSlashCommand & { action: ComposerAddCommandAction } {
-  return command.action === "add-tool" || command.action === "add-mcp";
-}
-
 export function matchComposerAddCommand(
   text: string
 ): ComposerAddCommandAction | null {
-  const trimmed = text.trim();
-
-  if (trimmed === "/add-tool") {
-    return "add-tool";
-  }
-
-  if (trimmed === "/add-mcp") {
-    return "add-mcp";
-  }
-
-  return null;
-}
-
-export function consumeSlashRange(
-  value: string,
-  range: SkillSlashRange
-): { cursorIndex: number; value: string } {
-  return {
-    cursorIndex: range.start,
-    value: `${value.slice(0, range.start)}${value.slice(range.end)}`,
-  };
+  const token = text.trim();
+  const command = COMPOSER_ADD_SLASH_COMMANDS.find(
+    (item) => `/${item.name}` === token
+  );
+  return command?.action ?? null;
 }
 
 export function profileCanUseLearnCommand(skills: SkillSummary[]): boolean {

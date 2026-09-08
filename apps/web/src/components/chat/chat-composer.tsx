@@ -72,10 +72,8 @@ import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
   type ComposerSlashSuggestion,
-  consumeSlashRange,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
-  isComposerAddCommand,
   matchComposerAddCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
@@ -134,7 +132,6 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   availableSkills?: SkillSummary[];
   contextUsage?: ChatContextUsage | null;
   currentModelSelection: string | null;
-  enableAddCommands?: boolean;
   headerNotice?: ReactNode;
   onModelChange: (selection: string) => void;
   onNavigateSetup?: () => void;
@@ -483,7 +480,8 @@ function isFullComposer(
 
 function resolveChatComposerLayout(
   props: ChatComposerProps,
-  displayError: string | null
+  displayError: string | null,
+  enableAddCommands = false
 ) {
   const isMinimal = props.variant === "minimal";
   const todos = props.todos ?? EMPTY_TODOS;
@@ -500,10 +498,7 @@ function resolveChatComposerLayout(
   return {
     availableSkills,
     disabled: props.disabled ?? false,
-    enableAddCommands:
-      !isMinimal &&
-      props.enableAddCommands === true &&
-      Boolean(props.profileId),
+    enableAddCommands: !isMinimal && enableAddCommands,
     hasQuestionnaire,
     hasQueuedMessages,
     isMinimal,
@@ -617,13 +612,12 @@ export function ChatComposer(props: ChatComposerProps) {
 
   const canAddCapabilities =
     isFullComposer(props) &&
-    props.enableAddCommands === true &&
     Boolean(props.profileId) &&
+    !(props.disabled ?? false) &&
     user?.isPlatformAdmin === true;
 
   const composerProps: ChatComposerProps = {
     ...props,
-    ...(isFullComposer(props) ? { enableAddCommands: canAddCapabilities } : {}),
     onSubmit: (text, files) => {
       const addCommand = canAddCapabilities
         ? matchComposerAddCommand(text)
@@ -645,7 +639,11 @@ export function ChatComposer(props: ChatComposerProps) {
   };
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = props.error ?? attachmentError;
-  const layout = resolveChatComposerLayout(composerProps, displayError);
+  const layout = resolveChatComposerLayout(
+    composerProps,
+    displayError,
+    canAddCapabilities
+  );
 
   const addProfileId =
     isFullComposer(composerProps) && layout.enableAddCommands
@@ -735,15 +733,15 @@ function ChatComposerTextarea({
         return;
       }
 
-      if (
-        suggestion.kind === "command" &&
-        isComposerAddCommand(suggestion.command)
-      ) {
-        const next = consumeSlashRange(value, activeRange);
-        controller.textInput.setInput(next.value);
+      const addAction =
+        suggestion.kind === "command" ? suggestion.command.action : undefined;
+      if (addAction === "add-tool" || addAction === "add-mcp") {
+        controller.textInput.setInput(
+          `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
+        );
         setSlashRange(null);
         setActiveIndex(0);
-        onAddCommand(suggestion.command.action);
+        onAddCommand(addAction);
         return;
       }
 

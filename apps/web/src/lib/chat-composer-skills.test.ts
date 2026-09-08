@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillSummary } from "@nakama/core/contract";
 import {
-  consumeSlashRange,
   filterComposerSlashSuggestions,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
@@ -161,7 +160,12 @@ describe("filterComposerSlashSuggestions", () => {
     ).toEqual([]);
   });
 
-  test("lists /add-tool and /add-mcp when add commands are enabled", () => {
+  test("lists /add-tool and /add-mcp only when add commands are enabled", () => {
+    expect(
+      filterComposerSlashSuggestions([weatherSkill], "add").filter(
+        (item) => item.kind === "command"
+      )
+    ).toEqual([]);
     expect(
       filterComposerSlashSuggestions([weatherSkill], "add", {
         enableAddCommands: true,
@@ -177,14 +181,6 @@ describe("filterComposerSlashSuggestions", () => {
       )
     ).toEqual(["add-tool"]);
   });
-
-  test("hides add commands unless enabled", () => {
-    expect(
-      filterComposerSlashSuggestions([weatherSkill], "add").filter(
-        (item) => item.kind === "command"
-      )
-    ).toEqual([]);
-  });
 });
 
 describe("matchComposerAddCommand", () => {
@@ -192,17 +188,6 @@ describe("matchComposerAddCommand", () => {
     expect(matchComposerAddCommand("  /add-tool  ")).toBe("add-tool");
     expect(matchComposerAddCommand("/add-mcp")).toBe("add-mcp");
     expect(matchComposerAddCommand("/add-tool please")).toBeNull();
-  });
-});
-
-describe("consumeSlashRange", () => {
-  test("removes the active slash token", () => {
-    const range = findActiveSkillSlashRange("/add-tool", 9);
-    expect(range).not.toBeNull();
-    expect(consumeSlashRange("/add-tool", range!)).toEqual({
-      cursorIndex: 0,
-      value: "",
-    });
   });
 });
 
