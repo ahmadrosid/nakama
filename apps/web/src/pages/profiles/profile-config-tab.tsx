@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -210,10 +209,9 @@ function MoveProfileDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Change organization: {state.detail?.name}</DialogTitle>
-          <DialogDescription>
-            Automations pause. Connections and shared links reset.
-          </DialogDescription>
+          <DialogTitle>
+            Select organization for: {state.detail?.name}
+          </DialogTitle>
         </DialogHeader>
         <Select
           disabled={move.isPending || organizations.isPending}
@@ -224,7 +222,9 @@ function MoveProfileDialog({
             aria-label="Destination organization"
             className="w-full"
           >
-            <SelectValue placeholder="Choose organization" />
+            <SelectValue placeholder="Choose organization">
+              {destinations.find((org) => org.id === organizationId)?.name}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {destinations.map((org) => (
