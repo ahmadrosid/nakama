@@ -60,6 +60,23 @@ describe("resolveAllowedImagePath", () => {
       /outside allowed directories/i
     );
   });
+
+  test("rejects a sibling path that only shares a string prefix with cwd", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "nakama-cli-pfx-"));
+    const cwdRoot = join(parent, "fo");
+    const sibling = join(parent, "foo");
+    await mkdir(cwdRoot);
+    await mkdir(sibling);
+    process.chdir(cwdRoot);
+    process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+      join(tmpdir(), "nakama-cfg-")
+    );
+    await writeFile(join(sibling, "shot.png"), tinyPng);
+
+    expect(() =>
+      resolveAllowedImagePath(join(sibling, "shot.png"))
+    ).toThrow(/outside allowed directories/i);
+  });
 });
 
 describe("parseImageLine", () => {

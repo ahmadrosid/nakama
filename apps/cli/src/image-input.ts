@@ -67,13 +67,14 @@ function resolveAllowedRoots(): string[] {
 }
 
 function isWithinRoots(target: string, roots: string[]): boolean {
-  const normalized = target.endsWith(path.sep) ? target : target + path.sep;
   for (const root of roots) {
-    const rootEnd = root.endsWith(path.sep) ? root : root + path.sep;
-    if (normalized === rootEnd || normalized.startsWith(rootEnd)) {
+    if (target === root) {
       return true;
     }
-    if (target === root) {
+    // Compare target against `root + sep`, not `target + sep` against `root +
+    // sep` — otherwise cwd `/tmp/fo` would falsely allow `/tmp/foo/secret`.
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    if (target.startsWith(prefix)) {
       return true;
     }
   }
