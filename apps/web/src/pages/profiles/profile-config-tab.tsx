@@ -210,7 +210,7 @@ function MoveProfileDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Change organization</DialogTitle>
+          <DialogTitle>Change organization: {state.detail?.name}</DialogTitle>
           <DialogDescription>
             Automations pause. Connections and shared links reset.
           </DialogDescription>
