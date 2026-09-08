@@ -1,13 +1,69 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderClient } from "@nakama/core";
+import type { ChatCompletionResult, ProviderClient } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "../services/llm-usage-tracker";
+import { estimateUsageCostUsd } from "./pricing";
 import {
   estimateChatInputBreakdown,
   wrapProviderWithUsageTracking,
 } from "./usage-tracking";
 
+function providerReporting(
+  usage: NonNullable<ChatCompletionResult["usage"]>
+): ProviderClient {
+  const result: ChatCompletionResult = {
+    assistantMessage: { content: "Hello", role: "assistant" },
+    content: "Hello",
+    toolCalls: [],
+    usage,
+  };
+  return {
+    generateChat: () => Promise.resolve(result),
+    generateText: () => Promise.resolve({ content: "unused" }),
+    name: "openai",
+    streamChat: () => Promise.resolve(result),
+  };
+}
+
 describe("usage tracking", () => {
+  test("attaches the call cost to the result, absent without pricing", async () => {
+    const tracker = await LlmUsageTracker.create(
+      createInMemoryDatabaseAdapter()
+    );
+    const usage = { inputTokens: 123, outputTokens: 45, totalTokens: 168 };
+    const input = {
+      messages: [{ content: "hi", role: "user" as const }],
+      system: "system",
+    };
+
+    const priced = await wrapProviderWithUsageTracking(
+      providerReporting(usage),
+      tracker,
+      "claude-sonnet-4-6"
+    ).generateChat(input);
+    expect(priced.usage?.costUsd).toBeCloseTo(
+      estimateUsageCostUsd("claude-sonnet-4-6", 123, 45),
+      12
+    );
+
+    // Off the catalog, so the only rate available is the fallback one. The
+    // totals still count it; the result must not show it as money.
+    const offCatalog = await wrapProviderWithUsageTracking(
+      providerReporting(usage),
+      tracker,
+      "gpt-4o"
+    ).generateChat(input);
+    expect(offCatalog.usage).toEqual(usage);
+
+    tracker.setPricingContext({ provider: "openai_compatible" });
+    const unpriced = await wrapProviderWithUsageTracking(
+      providerReporting(usage),
+      tracker,
+      "my-local-model"
+    ).generateChat(input);
+    expect(unpriced.usage).toEqual(usage);
+  });
+
   test("prefers provider-reported usage for chat calls", async () => {
     const tracker = await LlmUsageTracker.create(
       createInMemoryDatabaseAdapter()

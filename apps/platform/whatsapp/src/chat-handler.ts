@@ -1,5 +1,9 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
-import { deliverTurnArtifactShares, isAttachOnlyCommand } from "@nakama/core";
+import {
+  extractPairedTurnArtifacts,
+  isAttachOnlyCommand,
+  pushDeliverableArtifact,
+} from "@nakama/core";
 import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
@@ -28,6 +32,7 @@ import type { WhatsAppAuthStore } from "./auth-store";
 import {
   maybeSendRequestedWhatsAppArtifactAttachment,
   maybeSendWhatsAppAttachOnlyCommand,
+  sendArtifactDocumentForPath,
 } from "./channel-artifact-flow";
 import { isChannelDebugEnabled } from "./channel-log";
 import type { WhatsAppBridgeConfig } from "./config";
@@ -429,7 +434,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const profileId = sessionStore.get(conversationKey)?.profileId;
     const socket = getSocket();
 
-    if (profileId && socket) {
+    // ponytail: imperative phrases only; use an explicit send tool for richer requests.
+    const createsArtifact =
+      /^\s*(?:(?:please|tolong)\s+)?(?:collect|create|generate|save|buat(?:kan)?|rekap(?:kan)?)\b/i.test(
+        attachUserText
+      );
+    if (profileId && socket && !createsArtifact) {
       const attached = await maybeSendRequestedWhatsAppArtifactAttachment({
         attachUserText,
         client,
@@ -518,26 +528,34 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (profileId) {
-      await deliverTurnArtifactShares({
-        conversationKey,
-        publish: (path) => client.publishProfileArtifactShare(profileId, path),
-        sendFooter: (footer) => sendText(jid, footer, { raw: true }),
-        session,
-        sessionStore,
+      const artifacts = extractPairedTurnArtifacts(await session.getMessages());
+      if (artifacts.length === 0) {
+        return;
+      }
+      let registry = sessionStore.getDeliverableArtifacts(conversationKey);
+      for (const artifact of artifacts) {
+        registry = pushDeliverableArtifact(registry, {
+          ...artifact,
+          sharePath: null,
+          shareUrl: null,
+        });
+      }
+      sessionStore.updateArtifactState(conversationKey, {
+        deliverableArtifacts: registry,
       });
+      await sessionStore.save();
 
-      // Same-turn "save and send me the file": registry is empty before the
-      // agent runs, so attach after shares are minted.
       const postTurnSocket = getSocket();
-      if (postTurnSocket) {
-        await maybeSendRequestedWhatsAppArtifactAttachment({
-          attachUserText,
+      if (!postTurnSocket) {
+        return;
+      }
+      for (const artifact of artifacts) {
+        await sendArtifactDocumentForPath({
+          ...artifact,
           client,
-          conversationKey,
           jid,
           profileId,
           sendPlain: (text) => sendText(jid, text),
-          sessionStore,
           socket: postTurnSocket,
         });
       }

@@ -307,6 +307,10 @@ import {
   toProviderInstanceSummary,
 } from "./provider-instance-helpers";
 import {
+  archiveSessionHistory,
+  copySessionHistoryArchive,
+  createReadSessionHistoryTool,
+  deleteSessionHistoryArchive,
   loadSessionHistory,
   replaceSessionHistory,
   wrapPersistedSession,
@@ -1831,6 +1835,7 @@ export class AgentService {
       userId: record.userId ?? null,
     });
 
+    await copySessionHistoryArchive(this.db, orgId, sessionId, nextSessionId);
     await replaceSessionHistory(
       this.db,
       nextSessionId,
@@ -1911,10 +1916,12 @@ export class AgentService {
       return false;
     }
 
+    this.sessions.get(sessionId)?.session.clear();
     this.sessions.delete(sessionId);
     this.superBotSessionState.clearSession(sessionId);
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
+    await deleteSessionHistoryArchive(orgId, sessionId);
     await this.db.deleteSession(sessionId);
     return true;
   }
@@ -2032,6 +2039,7 @@ export class AgentService {
       stored.session.clear();
     }
 
+    await deleteSessionHistoryArchive(orgId, sessionId);
     await this.db.deleteMessagesForSession(sessionId);
     await this.agentQuestionnaireState.clear(sessionId);
     return true;
@@ -2697,7 +2705,13 @@ export class AgentService {
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
-    return this.profileService.deleteProfile(orgId, profileId);
+    await this.profileService.deleteProfile(orgId, profileId);
+    for (const [sessionId, record] of this.sessions) {
+      if (record.profileId === profileId) {
+        record.session.clear();
+        this.sessions.delete(sessionId);
+      }
+    }
   }
 
   async listTools(): Promise<ListToolsResponse> {
@@ -3498,6 +3512,7 @@ export class AgentService {
       : profile.model;
     const compaction = this.resolveCompactionConfig(profile, selectedModel);
     const harness = this.createHarnessForProfile(profile, selectedModel);
+    tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
     const saveAttachment = createAttachmentSaver(this.db, {
       channel,
       orgId,
@@ -3511,6 +3526,12 @@ export class AgentService {
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
     const session = createAgentChatSession(harness, {
+      archiveHistory: (history) => {
+        if (this.sessions.get(sessionId)?.session !== persistedSession) {
+          throw new Error("Session changed during compaction. Try again.");
+        }
+        return archiveSessionHistory(this.db, orgId, sessionId, history);
+      },
       channel,
       compaction,
       enableToolLoop: true,
@@ -3670,12 +3691,13 @@ export class AgentService {
       userTimezone,
     });
 
-    return wrapPersistedSession(sessionId, session, this.db, {
+    const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
       onBeginTurn: (id) => {
         this.superBotSessionState.beginTurn(id);
         void this.agentQuestionnaireState.clear(id);
       },
     });
+    return persistedSession;
   }
 
   private async formatProfileAuthoringToolContext(): Promise<string> {

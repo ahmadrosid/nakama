@@ -13,7 +13,6 @@ import {
   mergeWorkspaceSettings,
 } from "@nakama/db";
 import {
-  ensureBunGlobalInstallDirs,
   ensureProcessPath,
   getToolExecutionEnv,
 } from "../lib/ensure-process-path";
@@ -22,8 +21,6 @@ import {
   CLI_SIGTERM_GRACE_MS,
   detectNpmOrBun,
   probeCliVersion,
-  runTimedInstallCommand,
-  summarizeInstallOutput,
 } from "./cli-package-install";
 import { buildHarnessNonInteractiveArgs } from "./coding-agent-command";
 import {
@@ -91,12 +88,6 @@ export interface ListCodingAgentHarnessStatusesOptions {
   /** When true, run live readiness probes for installed harnesses. Default false (use cache). */
   probe?: boolean;
   probeContext?: CodingAgentHarnessProbeContext;
-}
-
-export interface CodingAgentHarnessInstallProgress {
-  harnessId: string;
-  message: string;
-  name: string;
 }
 
 const DEFAULT_HARNESSES: StoredCodingAgentHarnessRecord[] = [
@@ -475,86 +466,6 @@ export async function resolveCodingAgentHarness(
   );
 }
 
-export async function verifyCodingAgentHarness(
-  db: DatabaseAdapter,
-  harnessId?: string | null,
-  probeContext?: CodingAgentHarnessProbeContext
-): Promise<{
-  ok: boolean;
-  harnessId: string | null;
-  name: string | null;
-  version: string | null;
-  installed: boolean;
-  authenticated: boolean | null;
-  ready: boolean;
-  nextStep: "install" | "retry" | null;
-  statusMessage: string | null;
-  error: string | null;
-}> {
-  const settings = await loadCodingAgentWorkspaceSettings(db);
-  const targetHarnessId =
-    harnessId ??
-    settings.selectedHarnessId ??
-    settings.harnesses.find((entry) => entry.enabled)?.id ??
-    null;
-
-  if (!targetHarnessId) {
-    return {
-      authenticated: null,
-      error: "No supported coding agent is installed yet.",
-      harnessId: harnessId ?? null,
-      installed: false,
-      name: null,
-      nextStep: "install",
-      ok: false,
-      ready: false,
-      statusMessage: "Install a supported coding agent first.",
-      version: null,
-    };
-  }
-
-  let harness: CodingAgentHarnessStatus;
-
-  try {
-    harness = await refreshCodingAgentHarnessProbe(
-      db,
-      targetHarnessId,
-      probeContext
-    );
-  } catch {
-    return {
-      authenticated: null,
-      error: "No supported coding agent is installed yet.",
-      harnessId: targetHarnessId,
-      installed: false,
-      name: null,
-      nextStep: "install",
-      ok: false,
-      ready: false,
-      statusMessage: "Install a supported coding agent first.",
-      version: null,
-    };
-  }
-
-  return {
-    authenticated: harness.authenticated,
-    error: harness.installed
-      ? harness.ready
-        ? null
-        : (harness.statusMessage ??
-          `Nakama could not verify ${harness.name} yet.`)
-      : `${harness.name} is not installed or could not be started with \`${harness.command} --version\`.`,
-    harnessId: harness.id,
-    installed: harness.installed,
-    name: harness.name,
-    nextStep: harness.nextStep,
-    ok: harness.ready,
-    ready: harness.ready,
-    statusMessage: harness.statusMessage,
-    version: harness.version,
-  };
-}
-
 function mergeHarnesses(
   storedHarnesses: StoredCodingAgentHarnessRecord[]
 ): StoredCodingAgentHarnessRecord[] {
@@ -743,80 +654,6 @@ export function getCodingHarnessInstallCommand(
   kind: StoredCodingAgentHarnessKind
 ): string {
   return buildCodingHarnessInstallPlan(kind).displayCommand;
-}
-
-export function getCodingHarnessInstallHint(
-  kind: StoredCodingAgentHarnessKind
-): string {
-  if (kind === "cursor_agent") {
-    return "Install and authenticate Cursor Agent CLI on this machine yourself (verify with `agent --version`), then check again.";
-  }
-
-  if (kind === "codex") {
-    return "Install the Codex CLI on this machine, then check again.";
-  }
-
-  if (kind === "claude_code") {
-    return "Install Claude Code on this machine, then check again.";
-  }
-
-  if (kind === "pi") {
-    return "Install pi CLI (@earendil-works/pi-coding-agent) on this machine, then check again.";
-  }
-
-  return "Install OpenCode on this machine, then check again.";
-}
-
-export async function installCodingAgentHarness(
-  db: DatabaseAdapter,
-  harnessId: string,
-  onProgress?: (progress: CodingAgentHarnessInstallProgress) => void
-): Promise<CodingAgentHarnessStatus> {
-  const settings = await loadCodingAgentWorkspaceSettings(db);
-  const harness = settings.harnesses.find((entry) => entry.id === harnessId);
-
-  if (!harness) {
-    throw new Error("Unknown coding harness.");
-  }
-
-  const installPlan = buildCodingHarnessInstallPlan(harness.kind);
-  if (installPlan.command === "bun") {
-    ensureBunGlobalInstallDirs();
-  }
-  const emitProgress = (message: string) => {
-    onProgress?.({
-      harnessId: harness.id,
-      message,
-      name: harness.name,
-    });
-  };
-
-  emitProgress(`Starting ${harness.name} install.`);
-  emitProgress(installPlan.displayCommand);
-
-  const result = await runTimedInstallCommand(installPlan, emitProgress);
-  const combinedOutput = [result.stdout, result.stderr]
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-
-  if (result.timedOut) {
-    throw new Error(`Install timed out while running ${harness.name}.`);
-  }
-
-  if (result.exitCode !== 0) {
-    throw new Error(
-      combinedOutput
-        ? `${harness.name} install failed: ${summarizeInstallOutput(combinedOutput)}`
-        : `${harness.name} install failed.`
-    );
-  }
-
-  emitProgress(`${harness.name} install finished. Refreshing readiness.`);
-
-  const updated = await refreshCodingAgentHarnessProbe(db, harness.id);
-
-  return updated;
 }
 
 async function probeHarnessLight(

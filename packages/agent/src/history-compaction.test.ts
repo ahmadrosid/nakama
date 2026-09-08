@@ -8,6 +8,7 @@ import {
   buildCompactionPrompt,
   type CompactionConfig,
   compactHistory,
+  estimateHistoryTokenBreakdown,
   estimateHistoryTokens,
   isOverflow,
   pruneToolOutputs,
@@ -288,6 +289,33 @@ describe("history compaction", () => {
     const estimate = estimateHistoryTokens(messages, "system prompt");
 
     expect(estimate).toBeGreaterThan(100);
+  });
+
+  test("splits the estimate into system, tools, and conversation", () => {
+    const messages: ChatMessage[] = [
+      { content: "x".repeat(400), role: "user" },
+    ];
+    const tools = [
+      {
+        description: "search",
+        name: "search",
+        parameters: { type: "object" },
+      },
+    ];
+    const breakdown = estimateHistoryTokenBreakdown(
+      messages,
+      "system prompt",
+      tools
+    );
+
+    expect(breakdown.systemPrompt).toBeGreaterThan(0);
+    expect(breakdown.conversation).toBeGreaterThan(0);
+    expect(breakdown.toolDefinitions).toBeGreaterThan(0);
+    expect(
+      breakdown.systemPrompt +
+        breakdown.conversation +
+        breakdown.toolDefinitions
+    ).toBe(estimateHistoryTokens(messages, "system prompt", tools));
   });
 
   test("counts providerContent once and keeps thinking (#340)", () => {

@@ -1698,13 +1698,16 @@ export function registerModelRoutes(
     requireOrgAdminFromContext(c);
 
     return streamAgentBrowserInstall(
-      async (send) => {
-        const status = await installAgentBrowser((progress) => {
-          send({
-            message: progress.message,
-            type: "progress",
-          });
-        });
+      async (send, signal) => {
+        const status = await installAgentBrowser(
+          (progress) => {
+            send({
+              message: progress.message,
+              type: "progress",
+            });
+          },
+          { signal }
+        );
 
         send({
           status,

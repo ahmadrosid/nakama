@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  activeChatProfileStorageKey,
   buildChatPath,
   buildNewChatPath,
   CHAT_DRAFT_STORAGE_PREFIX,
@@ -17,6 +18,7 @@ import {
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
   readRequestedProfileFromNewChatSearch,
+  readStoredActiveChatProfileId,
   resolveActiveProfileIdFromLocation,
   resolveDefaultProfileId,
   resolveHistoryProfileId,
@@ -335,6 +337,38 @@ describe("chat history route helpers", () => {
           search: "",
         })
       ).toBe("session-profile");
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: previousLocalStorage,
+      });
+    }
+  });
+
+  test("org-scoped active profile storage does not leak across orgs", () => {
+    const store = new Map<string, string>();
+    const previousLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+      },
+    });
+
+    try {
+      writeStoredActiveChatProfileId("super", "org-a");
+      writeStoredActiveChatProfileId("default", "org-b");
+
+      expect(readStoredActiveChatProfileId("org-a")).toBe("super");
+      expect(readStoredActiveChatProfileId("org-b")).toBe("default");
+      expect(readStoredActiveChatProfileId("org-c")).toBeNull();
+      expect(store.get(activeChatProfileStorageKey("org-a"))).toBe("super");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,

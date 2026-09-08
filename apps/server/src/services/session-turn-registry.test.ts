@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentTodo, StreamEvent } from "@nakama/core";
 import { SessionTurnRegistry } from "./session-turn-registry";
 
 describe("SessionTurnRegistry", () => {
@@ -34,6 +35,94 @@ describe("SessionTurnRegistry", () => {
 
     registry.endTurn("session_1", { reply: "hello world!", type: "done" });
     expect(registry.getStatus("session_1")).toEqual({ active: false });
+  });
+
+  test("replacing a todo snapshot preserves tool lifecycle order on replay", () => {
+    const registry = new SessionTurnRegistry();
+    registry.beginTurn("session_1");
+
+    const live: StreamEvent[] = [];
+    registry.subscribe("session_1", (event) => live.push(event));
+
+    const todos: AgentTodo[] = [
+      { content: "Read files", id: "todo_1", status: "in_progress" },
+    ];
+    const events: StreamEvent[] = [
+      { todos: [], type: "todos_updated" },
+      {
+        input: { todos },
+        tool: "todo_write",
+        toolCallId: "call_1",
+        type: "tool_start",
+      },
+      {
+        result: { todos },
+        tool: "todo_write",
+        toolCallId: "call_1",
+        type: "tool_end",
+      },
+      { todos, type: "todos_updated" },
+    ];
+    for (const event of events) {
+      registry.publish("session_1", event);
+    }
+
+    const replay: StreamEvent[] = [];
+    registry.subscribe("session_1", (event) => replay.push(event));
+
+    expect(live).toEqual(events);
+    expect(replay).toEqual(events.slice(1));
+
+    const chunk: StreamEvent = { delta: "Done", type: "chunk" };
+    registry.publish("session_1", chunk);
+    expect(live).toEqual([...events, chunk]);
+    expect(replay).toEqual([...events.slice(1), chunk]);
+  });
+
+  test("replays the latest interleaved tool inputs in publication order", () => {
+    const registry = new SessionTurnRegistry();
+    registry.beginTurn("session_1");
+
+    const first: StreamEvent = {
+      accumulatedArguments: "{",
+      delta: "{",
+      tool: "read_file",
+      toolCallId: "call_1",
+      type: "tool_input_delta",
+    };
+    const second: StreamEvent = { ...first, toolCallId: "call_2" };
+    const chunk: StreamEvent = { delta: "Reading files", type: "chunk" };
+    const firstUpdated: StreamEvent = {
+      ...first,
+      accumulatedArguments: '{"path":"a.txt"}',
+      delta: '"path":"a.txt"}',
+    };
+    const secondUpdated: StreamEvent = {
+      ...second,
+      accumulatedArguments: '{"path":',
+      delta: '"path":',
+    };
+    const secondComplete: StreamEvent = {
+      ...second,
+      accumulatedArguments: '{"path":"b.txt"}',
+      delta: '"b.txt"}',
+    };
+
+    for (const event of [
+      first,
+      second,
+      chunk,
+      firstUpdated,
+      secondUpdated,
+      secondComplete,
+    ]) {
+      registry.publish("session_1", event);
+    }
+
+    const replay: StreamEvent[] = [];
+    registry.subscribe("session_1", (event) => replay.push(event));
+
+    expect(replay).toEqual([chunk, firstUpdated, secondComplete]);
   });
 
   test("multiple subscribers each receive replay and live events", () => {

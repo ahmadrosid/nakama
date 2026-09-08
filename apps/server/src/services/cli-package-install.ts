@@ -146,6 +146,7 @@ export async function runTimedInstallCommand(
   options: {
     settleTimeoutMs?: number;
     sigtermGraceMs?: number;
+    signal?: AbortSignal;
     timeoutMs?: number;
   } = {}
 ): Promise<{
@@ -158,9 +159,14 @@ export async function runTimedInstallCommand(
   const timeoutMs = options.timeoutMs ?? CLI_INSTALL_TIMEOUT_MS;
   const sigtermGraceMs = options.sigtermGraceMs ?? CLI_SIGTERM_GRACE_MS;
   const settleTimeoutMs = options.settleTimeoutMs ?? CLI_SETTLE_TIMEOUT_MS;
+  const signal = options.signal;
 
   return new Promise((resolve) => {
     const child = spawn(plan.command, plan.args, {
+      // Its own process group, so a deadline can signal the whole install
+      // rather than only the command we spawned. Installers shell out, and
+      // those grandchildren outlive a kill aimed at the direct child.
+      detached: true,
       env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -177,6 +183,7 @@ export async function runTimedInstallCommand(
       clearTimeout(timeoutId);
       clearTimeout(killTimeoutId);
       clearTimeout(settleTimeoutId);
+      signal?.removeEventListener("abort", terminate);
     };
 
     /**
@@ -195,7 +202,29 @@ export async function runTimedInstallCommand(
       });
     };
 
-    const timeoutId = setTimeout(() => {
+    /**
+     * Signals the whole process group. The `detached` above is what makes the
+     * negative pid mean the group rather than the one child; the fallback
+     * covers a group that is already gone while the child is not.
+     */
+    const killTree = (killSignal: "SIGTERM" | "SIGKILL") => {
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, killSignal);
+          return;
+        } catch {
+          // Group already reaped, fall through to the direct child.
+        }
+      }
+
+      try {
+        child.kill(killSignal);
+      } catch {
+        // Already gone.
+      }
+    };
+
+    const terminate = () => {
       timedOut = true;
 
       // The process can already be gone with `close` still outstanding, held by
@@ -205,10 +234,20 @@ export async function runTimedInstallCommand(
         return;
       }
 
-      child.kill("SIGTERM");
-      killTimeoutId = setTimeout(() => child.kill("SIGKILL"), sigtermGraceMs);
+      killTree("SIGTERM");
+      killTimeoutId = setTimeout(() => killTree("SIGKILL"), sigtermGraceMs);
       settleTimeoutId = setTimeout(settleAsTimedOut, settleTimeoutMs);
-    }, timeoutMs);
+    };
+
+    const timeoutId = setTimeout(terminate, timeoutMs);
+
+    if (signal) {
+      if (signal.aborted) {
+        terminate();
+      } else {
+        signal.addEventListener("abort", terminate, { once: true });
+      }
+    }
 
     const emitLine = (prefix: "stdout" | "stderr", line: string) => {
       if (timedOut) {

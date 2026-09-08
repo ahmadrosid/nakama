@@ -61,9 +61,12 @@ export function formatProviderLabel(
     provider === "xai_oauth" ||
     provider === "minimax" ||
     provider === "minimax_cn" ||
+    provider === "moonshot" ||
+    provider === "moonshot_cn" ||
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
-    provider === "xai"
+    provider === "xai" ||
+    provider === "together"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -80,6 +83,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "together", label: "Together AI" },
     { id: "mistral", label: "Mistral" },
     { id: "perplexity", label: "Perplexity Sonar" },
     { id: "cerebras", label: "Cerebras" },
@@ -90,6 +94,8 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "minimax", label: "MiniMax" },
     { id: "xai", label: "xAI Grok" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
+    { id: "moonshot", label: "Moonshot Kimi" },
+    { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
     { id: "zhipu", label: "GLM (Z.ai)" },
     { id: "zhipu_cn", label: "GLM (CN)" },
     { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
@@ -271,12 +277,24 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
 }
 
 export function validateCustomModelsInput(
-  models: Array<{ id: string }>
+  models: Array<{
+    id: string;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }>
 ): string | null {
   const valid = models.filter((model) => model.id.trim());
 
   if (valid.length === 0) {
     return "Add at least one model.";
+  }
+
+  for (const row of valid) {
+    const hasInput = row.inputPerMillionUsd !== undefined;
+    const hasOutput = row.outputPerMillionUsd !== undefined;
+    if (hasInput !== hasOutput) {
+      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
+    }
   }
 
   return null;
@@ -299,12 +317,6 @@ export function validateOpenRouterModelsInput(
     if (slugError) {
       return slugError;
     }
-
-    const hasInput = row.inputPerMillionUsd !== undefined;
-    const hasOutput = row.outputPerMillionUsd !== undefined;
-    if (hasInput !== hasOutput) {
-      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
-    }
   }
 
   return null;
@@ -317,20 +329,7 @@ export function validateShortlistCapabilityModelsInput(
     outputPerMillionUsd?: number;
   }>
 ): string | null {
-  const listError = validateCustomModelsInput(models);
-  if (listError) {
-    return listError;
-  }
-
-  for (const row of models) {
-    const hasInput = row.inputPerMillionUsd !== undefined;
-    const hasOutput = row.outputPerMillionUsd !== undefined;
-    if (hasInput !== hasOutput) {
-      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
-    }
-  }
-
-  return null;
+  return validateCustomModelsInput(models);
 }
 
 export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
@@ -900,6 +899,7 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
+    model.provider === "together" ||
     model.provider === "mistral" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||
@@ -951,6 +951,7 @@ export function resolveModelVisionSupport(
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
+    model.provider === "together" ||
     model.provider === "mistral" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||

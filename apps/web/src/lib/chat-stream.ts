@@ -13,6 +13,7 @@ import {
   formatListWorkflowsToolResult,
   isListWorkflowsTool,
 } from "@/lib/chat-stream-workflow";
+import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
 import { cn } from "@/lib/utils";
 
@@ -683,6 +684,31 @@ export function buildStreamHandlers(
         }
 
         return [...next, toolMessage];
+      });
+    },
+    onUsage: (usage) => {
+      setMessages((current) => {
+        // Attach to the latest assistant message of the current turn; a
+        // tool-call-only step has no text bubble, so its usage lands on the
+        // shell that precedes it and the turn footer sums them all.
+        for (let index = current.length - 1; index >= 0; index -= 1) {
+          const message = current[index];
+
+          if (message?.role === "user") {
+            break;
+          }
+
+          if (message?.role === "assistant") {
+            const next = [...current];
+            next[index] = {
+              ...message,
+              usage: addChatUsage(message.usage, usage),
+            };
+            return next;
+          }
+        }
+
+        return current;
       });
     },
   };

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runTimedInstallCommand } from "./cli-package-install";
 
 const STALLING_PLAN = {
@@ -155,4 +158,53 @@ describe("runTimedInstallCommand", () => {
       timedOut: true,
     });
   });
+
+  /**
+   * The installer shells out and the grandchild outlives its parent. A kill
+   * aimed at the direct child leaves that grandchild running, which is what
+   * "the timeout does not cancel the install" meant in practice.
+   */
+  test("a timed-out install stops the processes it started, not just the one it spawned", async () => {
+    const marker = join(tmpdir(), `nakama-install-grandchild-${Date.now()}`);
+    rmSync(marker, { force: true });
+
+    const result = await runTimedInstallCommand(
+      {
+        args: [
+          "-c",
+          `sh -c 'sleep 1.2; echo alive > ${marker}' & echo started; wait`,
+        ],
+        command: "sh",
+        displayCommand: "sh -c 'grandchild'",
+      },
+      undefined,
+      { settleTimeoutMs: 1000, sigtermGraceMs: 100, timeoutMs: 200 }
+    );
+
+    expect(result.timedOut).toBe(true);
+
+    // Past the grandchild's own sleep: if the group was signalled it never
+    // wrote, and if only the direct child was signalled it has by now.
+    await Bun.sleep(1600);
+    const survived = existsSync(marker);
+    rmSync(marker, { force: true });
+    expect(survived).toBe(false);
+  }, 15_000);
+
+  test("an aborted signal ends the install without waiting for the deadline", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+
+    const startedAt = Date.now();
+    const result = await runTimedInstallCommand(STALLING_PLAN, undefined, {
+      settleTimeoutMs: 1000,
+      signal: controller.signal,
+      sigtermGraceMs: 100,
+      timeoutMs: 60_000,
+    });
+
+    // The 60s deadline never fired, so finishing at all is the abort working.
+    expect(result.timedOut).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(10_000);
+  }, 15_000);
 });

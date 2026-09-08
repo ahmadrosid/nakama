@@ -33,6 +33,7 @@ import { createOpenRouterProvider } from "./openrouter";
 import { createXaiProvider } from "./xai-oauth";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
 const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
 const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
@@ -88,6 +89,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         model,
         providerName: "deepseek",
       });
+    case "together":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_TOGETHER_BASE_URL,
+        model,
+        providerName: "together",
+      });
     case "mistral":
       return createOpenAIProvider({
         apiKey: options.apiKey,
@@ -104,6 +112,8 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       });
     case "minimax":
     case "minimax_cn":
+    case "moonshot":
+    case "moonshot_cn":
     case "zhipu":
     case "zhipu_cn":
       return createOpenAIProvider({

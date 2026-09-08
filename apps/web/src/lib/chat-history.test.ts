@@ -16,6 +16,45 @@ const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("chatMessagesToListItems", () => {
+  test("folds usage of hidden tool-call steps into the next rendered reply", () => {
+    const messages: ChatMessage[] = [
+      { content: "Hello", role: "user" },
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [{ arguments: {}, id: "tool_1", name: "ping" }],
+        usage: {
+          costUsd: 0.001,
+          inputTokens: 100,
+          outputTokens: 10,
+          totalTokens: 110,
+        },
+      },
+      { content: "{}", name: "ping", role: "tool", toolCallId: "tool_1" },
+      {
+        content: "Done",
+        role: "assistant",
+        usage: {
+          costUsd: 0.002,
+          inputTokens: 200,
+          outputTokens: 20,
+          totalTokens: 220,
+        },
+      },
+    ];
+
+    const reply = chatMessagesToListItems(messages).find(
+      (item) => item.role === "assistant"
+    );
+
+    expect(reply?.usage).toEqual({
+      costUsd: 0.003,
+      inputTokens: 300,
+      outputTokens: 30,
+      totalTokens: 330,
+    });
+  });
+
   test("preserves history index and metadata for rendered items", () => {
     const messages: ChatMessage[] = [
       { content: "Hello", role: "user" },

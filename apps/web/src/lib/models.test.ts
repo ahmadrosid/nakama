@@ -12,6 +12,7 @@ import {
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
+  validateCustomModelsInput,
 } from "./models";
 
 function group(
@@ -22,6 +23,7 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "together"
     | "mistral"
     | "perplexity"
     | "cerebras"
@@ -117,6 +119,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("ds-1", "model-1"),
         group("ds-1", "deepseek", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats together models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -242,6 +260,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(true);
   });
 
+  test("treats together models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats fireworks models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -345,6 +379,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "together",
           "mistral",
           "perplexity",
           "cerebras",
@@ -463,5 +498,22 @@ describe("hasOpenCodeZenProvider", () => {
         { baseUrl: "https://opencode.ai/zen/go/v1", type: "opencode_go" },
       ])
     ).toBe(false);
+  });
+});
+
+describe("validateCustomModelsInput", () => {
+  test("requires both $/1M rates or neither", () => {
+    expect(
+      validateCustomModelsInput([{ id: "m", inputPerMillionUsd: 1 }])
+    ).toContain("both input and output");
+    expect(
+      validateCustomModelsInput([
+        { id: "m", inputPerMillionUsd: 1, outputPerMillionUsd: 3 },
+      ])
+    ).toBeNull();
+    expect(validateCustomModelsInput([{ id: "m" }])).toBeNull();
+    expect(validateCustomModelsInput([{ id: " " }])).toBe(
+      "Add at least one model."
+    );
   });
 });

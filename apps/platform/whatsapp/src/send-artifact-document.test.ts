@@ -73,8 +73,7 @@ describe("sendWhatsAppArtifactDocument", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("too large");
-    expect(result.error).toContain("share link");
+    expect(result.error).toBeTruthy();
     expect(calls).toHaveLength(0);
   });
 

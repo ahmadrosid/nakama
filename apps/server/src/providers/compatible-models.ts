@@ -135,6 +135,7 @@ export function catalogCustomModelsToCatalog(
       model.supportsThinking = entry.supportsThinking;
     } else if (
       provider === "deepseek" ||
+      provider === "together" ||
       provider === "mistral" ||
       provider === "perplexity"
     ) {
@@ -149,13 +150,6 @@ export function catalogCustomModelsToCatalog(
 
     return model;
   });
-}
-
-export function openCodeGoCustomModelsToCatalog(
-  entries: CustomModelEntry[],
-  staticModels: ProviderModelOption[]
-): ProviderModelOption[] {
-  return catalogCustomModelsToCatalog(entries, staticModels, "opencode_go");
 }
 
 export function mergeOpenRouterCatalog(
@@ -334,6 +328,7 @@ export function getModelsForProviderInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "together" ||
     instance.type === "mistral" ||
     instance.type === "perplexity" ||
     instance.type === "opencode_go"
@@ -356,20 +351,6 @@ export function getModelsForProviderInstance(
   return annotate(
     AVAILABLE_MODELS.filter((model) => model.provider === instance.type)
   );
-}
-
-export function getModelsForConfiguredProvider(
-  provider: ProviderName | null,
-  instance: ProviderInstance | null | undefined,
-  currentModel?: string | null
-): ProviderModelOption[] {
-  if (!instance) {
-    return provider
-      ? AVAILABLE_MODELS.filter((model) => model.provider === provider)
-      : AVAILABLE_MODELS;
-  }
-
-  return getModelsForProviderInstance(instance, currentModel);
 }
 
 export function resolveOpenRouterDefaultModel(
@@ -643,11 +624,4 @@ export function compatibleModelSupportsThinking(
   customModels: CustomModelEntry[] | undefined
 ): boolean {
   return findCustomModel(customModels, modelId)?.supportsThinking === true;
-}
-
-export function compatibleModelSupportsVision(
-  modelId: string,
-  customModels: CustomModelEntry[] | undefined
-): boolean {
-  return findCustomModel(customModels, modelId)?.supportsVision === true;
 }

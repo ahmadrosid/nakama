@@ -58,8 +58,8 @@ If the user explicitly says “comment only” or “apply”, that overrides th
      try/finally when one hang + one failure already covers the lock)
 
    If nothing to cut:
-   - **Comment mode:** post one short approving comment like “Looks lean — ship.”
-   - **Apply mode:** reply in chat only (e.g. “Looks lean — nothing to cut.”). Do not post on the PR.
+   - **Comment mode:** post “LGTM” as a review comment and return “LGTM” with the review URL in chat.
+   - **Apply mode:** reply “LGTM — nothing to cut.” in chat only. Do not post on the PR.
    - Stop. Do not invent nits.
 
 3. Draft findings privately as:
@@ -105,7 +105,7 @@ gh api repos/OWNER/REPO/pulls/N/reviews --method POST --input review.json
 - Prefer 1–3 inline comments. Merge related points onto one anchor line.
 - Overall body stays short. Put the actionable detail on the lines.
 - Use `event: "COMMENT"` unless the user asked for approve / request changes.
-- After posting, return only the review URL.
+- After posting findings, return only the review URL. If there is nothing to cut, return “LGTM” with the review URL.
 
 ### Apply mode (my PR)
 

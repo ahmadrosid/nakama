@@ -35,6 +35,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "together", label: "Together AI" },
   { id: "mistral", label: "Mistral" },
   { id: "perplexity", label: "Perplexity Sonar" },
   { id: "xai", label: "xAI Grok" },
@@ -45,6 +46,8 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "minimax", label: "MiniMax" },
   { id: "minimax_cn", label: "MiniMax (CN)" },
+  { id: "moonshot", label: "Moonshot Kimi" },
+  { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
   { id: "zhipu", label: "GLM (Z.ai)" },
   { id: "zhipu_cn", label: "GLM (CN)" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
@@ -192,9 +195,12 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "opencode_go" ||
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
+    normalized === "moonshot" ||
+    normalized === "moonshot_cn" ||
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
-    normalized === "xai"
+    normalized === "xai" ||
+    normalized === "together"
   ) {
     return normalized;
   }

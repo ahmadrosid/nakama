@@ -63,16 +63,6 @@ export function extractOpenAITokenUsage(
   });
 }
 
-export function extractAnthropicTokenUsage(
-  value: unknown
-): ChatCompletionResult["usage"] | undefined {
-  const record = readRecord(value);
-  return buildTokenUsage({
-    inputTokens: record.input_tokens,
-    outputTokens: record.output_tokens,
-  });
-}
-
 export function extractGeminiTokenUsage(
   value: unknown
 ): ChatCompletionResult["usage"] | undefined {

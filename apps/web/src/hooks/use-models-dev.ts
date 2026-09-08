@@ -29,6 +29,7 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "openrouter",
   "opencode",
   "deepseek",
+  "together",
   "mistral",
   "perplexity",
 ]);
@@ -45,6 +46,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   opencode: "openai_compatible",
   openrouter: "openrouter",
   perplexity: "perplexity",
+  together: "together",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {
