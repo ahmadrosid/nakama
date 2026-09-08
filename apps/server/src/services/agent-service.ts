@@ -56,6 +56,7 @@ import type {
   ListSkillsResponse,
   ListToolsResponse,
   ModelsResponse,
+  MoveProfileRequest,
   PatchSkillRequest,
   ProfileResponse,
   ProviderChatOptions,
@@ -2702,6 +2703,24 @@ export class AgentService {
     }
 
     return response;
+  }
+
+  async moveProfile(
+    orgId: string,
+    profileId: string,
+    request: MoveProfileRequest
+  ): Promise<ProfileResponse> {
+    const result = await this.profileService.moveProfile(
+      orgId,
+      profileId,
+      request
+    );
+    for (const [sessionId, record] of this.sessions) {
+      if (record.profileId === profileId) {
+        this.sessions.delete(sessionId);
+      }
+    }
+    return result;
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {

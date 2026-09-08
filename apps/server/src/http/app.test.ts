@@ -144,11 +144,12 @@ describe("createHonoApp", () => {
       const records = output.mock.calls.map(([line]) =>
         JSON.parse(String(line))
       );
-      expect(records).toHaveLength(2);
-      expect(records.every((entry) => entry.requestId === "probe-123")).toBe(
-        true
-      );
-      expect(records.at(-1)).toMatchObject({ method: "GET", status: 401 });
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        message: "http.request",
+        method: "GET",
+        requestId: "probe-123",
+      });
       expect(JSON.stringify(records)).not.toContain("private-secret");
       expect(JSON.stringify(records)).not.toContain("hidden");
       const generated = await app.request("/healthz", {
