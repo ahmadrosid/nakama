@@ -361,8 +361,10 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
-    ...(provider === "perplexity"
-      ? buildPerplexityThinkingBody(options.thinking)
+    ...(provider === "perplexity" && options.thinking?.enabled
+      ? {
+          reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
+        }
       : {}),
     ...(hasTools
       ? {
@@ -375,16 +377,6 @@ async function buildChatCompletionRequestBody(options: {
         }
       : {}),
   };
-}
-
-function buildPerplexityThinkingBody(
-  thinking: ProviderChatOptions["thinking"] | undefined
-) {
-  if (!thinking?.enabled) {
-    return {};
-  }
-
-  return { reasoning_effort: normalizeThinkingEffort(thinking.effort) };
 }
 
 function formatPerplexityCitations(value: unknown): string {
