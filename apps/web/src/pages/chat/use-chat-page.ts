@@ -119,6 +119,42 @@ interface QueuedSend {
   text: string;
 }
 
+function useChatComposerDraft({
+  userId,
+  orgId,
+  profileId,
+  routeSession,
+  search,
+}: {
+  userId?: string;
+  orgId?: string;
+  profileId: string;
+  routeSession: ReturnType<typeof parseChatRouteParams>;
+  search: string;
+}) {
+  const composerDraftKey = chatComposerDraftKey(
+    userId,
+    orgId,
+    readRequestedProfileFromNewChatSearch(search) ??
+      routeSession?.profileId ??
+      profileId,
+    routeSession?.sessionId ?? null
+  );
+  const [composerEntry, setComposerEntry] = useState(() => ({
+    initialInput: readComposerDraft(composerDraftKey),
+    revision: 0,
+    scopeKey: composerDraftKey,
+  }));
+  if (composerEntry.scopeKey !== composerDraftKey) {
+    setComposerEntry({
+      initialInput: readComposerDraft(composerDraftKey),
+      revision: 0,
+      scopeKey: composerDraftKey,
+    });
+  }
+  return { composerDraftKey, composerEntry, setComposerEntry };
+}
+
 export function useChatPage() {
   const params = useParams();
   const location = useLocation();
@@ -160,26 +196,14 @@ export function useChatPage() {
   );
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const composerDraftKey = chatComposerDraftKey(
-    user?.id,
-    activeOrg?.id,
-    readRequestedProfileFromNewChatSearch(location.search) ??
-      routeSession?.profileId ??
+  const { composerDraftKey, composerEntry, setComposerEntry } =
+    useChatComposerDraft({
+      orgId: activeOrg?.id,
       profileId,
-    routeSession?.sessionId ?? null
-  );
-  const [composerEntry, setComposerEntry] = useState(() => ({
-    initialInput: readComposerDraft(composerDraftKey),
-    revision: 0,
-    scopeKey: composerDraftKey,
-  }));
-  if (composerEntry.scopeKey !== composerDraftKey) {
-    setComposerEntry({
-      initialInput: readComposerDraft(composerDraftKey),
-      revision: 0,
-      scopeKey: composerDraftKey,
+      routeSession,
+      search: location.search,
+      userId: user?.id,
     });
-  }
   const [queuedMessages, setQueuedMessages] = useState<QueuedComposerMessage[]>(
     []
   );
@@ -594,7 +618,7 @@ export function useChatPage() {
         setTurnStartedAt(null);
       }
     },
-    [profileId, syncChatUrl]
+    [profileId, setProfileId, syncChatUrl]
   );
 
   const handleBranchMessage = useCallback(
@@ -696,6 +720,8 @@ export function useChatPage() {
     navigate(buildChatBasePath(), { replace: true });
   }, [
     searchParams,
+    setComposerEntry,
+    setProfileId,
     navigate,
     location.search,
     restoreLastChatModel,
