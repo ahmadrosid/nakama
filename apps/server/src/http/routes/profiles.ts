@@ -10,6 +10,7 @@ import type {
   ListKnowledgeBaseResponse,
   ListProfileChangeHistoryResponse,
   ListProfilesResponse,
+  MoveProfileRequest,
   ProfileResponse,
   SoulStackResponse,
   SoulStatusResponse,
@@ -1050,6 +1051,42 @@ export function registerProfileRoutes(
     return json<ProfileResponse>(
       await agent.cloneProfile(orgId, profileId, body),
       201
+    );
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "moveProfile",
+      path: "/v1/profiles/{profileId}/move",
+      request: {
+        params: profileIdParam,
+        body: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: z.object({ organizationId: z.string().min(1) }),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Profile moved",
+          content: { "application/json": { schema: profileSchema } },
+        },
+      },
+      summary: "Move a profile to another organization",
+      tags: ["Profiles"],
+    })
+  );
+  app.post("/v1/profiles/:profileId/move", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const body = await readJson<MoveProfileRequest>(c.req.raw);
+    return json<ProfileResponse>(
+      await agent.moveProfile(orgId, profileId, body)
     );
   });
 

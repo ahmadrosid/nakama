@@ -1,12 +1,16 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
   createInMemoryDatabaseAdapter,
+  createSqliteDatabase,
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
 import { ProfileService } from "./profile-service";
+import { sessionHistoryArchivePath } from "./session-persistence";
+import { sessionTurnRegistry } from "./session-turn-registry";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -969,4 +973,317 @@ describe("profile service deleteProfile", () => {
       third.profile.id
     );
   });
+});
+
+describe("profile organization transfer", () => {
+  test("moves workspace and sessions without changing profile identity", async () => {
+    const configDir = await mkdtemp(path.join(os.tmpdir(), "profile-move-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    try {
+      const db = createInMemoryDatabaseAdapter();
+      const service = new ProfileService(db);
+      const now = new Date().toISOString();
+      for (const id of ["source", "destination"]) {
+        await db.upsertOrganization({
+          createdAt: now,
+          id,
+          name: id,
+          slug: id,
+          updatedAt: now,
+        });
+      }
+      const { profile } = await service.createProfile("source", {
+        name: "Moving bot",
+      });
+      const sourceDir = path.join(
+        configDir,
+        "orgs/source/profiles",
+        profile.id
+      );
+      const targetDir = path.join(
+        configDir,
+        "orgs/destination/profiles",
+        profile.id
+      );
+      await writeFile(path.join(sourceDir, "MEMORY.md"), "Remember me");
+      await db.upsertSession({
+        channel: "web",
+        createdAt: now,
+        id: "moving-session",
+        profileId: profile.id,
+      });
+      await service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      });
+      expect(await db.getProfileForOrg(profile.id, "source")).toBeNull();
+      expect((await db.getProfileForOrg(profile.id, "destination"))?.name).toBe(
+        "Moving bot"
+      );
+      expect((await db.getSession("moving-session"))?.profileId).toBe(
+        profile.id
+      );
+      expect(await readFile(path.join(targetDir, "MEMORY.md"), "utf8")).toBe(
+        "Remember me"
+      );
+      expect(await Bun.file(path.join(sourceDir, "MEMORY.md")).exists()).toBe(
+        false
+      );
+    } finally {
+      if (originalConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+      }
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+});
+
+test("profile transfer preserves related data and rolls back database and files on failure", async () => {
+  const configDir = await mkdtemp(
+    path.join(os.tmpdir(), "profile-transfer-data-")
+  );
+  process.env.NAKAMA_CONFIG_DIR = configDir;
+  const databasePath = path.join(configDir, "transfer.sqlite");
+  const database = await createSqliteDatabase(`file:${databasePath}`);
+  const raw = new Database(databasePath);
+  try {
+    const db = database.adapter;
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+    for (const id of ["source", "destination"]) {
+      await db.upsertOrganization({
+        createdAt: now,
+        id,
+        name: id,
+        slug: id,
+        updatedAt: now,
+      });
+    }
+    const { profile } = await service.createProfile("source", {
+      name: "Transfer data",
+    });
+    const { profile: successor } = await service.createProfile("source", {
+      name: "Successor",
+    });
+    const stored = (await db.getProfile(profile.id))!;
+    await db.upsertProfile({ ...stored, isDefault: true });
+    const sourceDir = path.join(configDir, "orgs/source/profiles", profile.id);
+    const targetDir = path.join(
+      configDir,
+      "orgs/destination/profiles",
+      profile.id
+    );
+    await writeFile(path.join(sourceDir, "MEMORY.md"), "Keep my memory");
+    await db.upsertSession({
+      channel: "web",
+      createdAt: now,
+      id: "transfer-session",
+      profileId: profile.id,
+    });
+    const archive = sessionHistoryArchivePath("source", "transfer-session");
+    await mkdir(path.dirname(archive), { recursive: true });
+    await writeFile(archive, "archived history");
+    raw
+      .query(
+        "INSERT INTO automations (id, name, version, definition, profile_id, org_id, enabled, created_at, updated_at) VALUES ('transfer-auto', 'Automation', 1, '{}', ?, 'source', 1, ?, ?)"
+      )
+      .run(profile.id, now, now);
+    raw
+      .query(
+        "INSERT INTO workflows (id, name, version, definition, profile_id, org_id, enabled, created_at, updated_at) VALUES ('transfer-flow', 'Workflow', 1, '{}', ?, 'source', 1, ?, ?)"
+      )
+      .run(profile.id, now, now);
+    raw
+      .query(
+        "INSERT INTO attachments (id, org_id, profile_id, channel, kind, media_type, size_bytes, storage_path, created_at) VALUES ('transfer-attachment', 'source', ?, 'web', 'image', 'image/png', 3, ?, ?)"
+      )
+      .run(
+        profile.id,
+        path.join(sourceDir, "attachments/transfer-attachment"),
+        now
+      );
+    raw
+      .query(
+        "INSERT INTO skills (id, name, description, source_path, org_id, created_at, updated_at) VALUES ('source-skill', 'Source skill', '', '/source/skill', 'source', ?, ?)"
+      )
+      .run(now, now);
+    await db.assignSkillToProfile(profile.id, "source-skill");
+    raw
+      .query(
+        "INSERT INTO composio_toolkits (id, org_id, toolkit_slug, display_name, status, created_at, updated_at) VALUES ('source-toolkit', 'source', 'gmail', 'Gmail', 'connected', ?, ?)"
+      )
+      .run(now, now);
+    raw
+      .query(
+        "INSERT INTO profile_composio_toolkits (profile_id, toolkit_id) VALUES (?, 'source-toolkit')"
+      )
+      .run(profile.id);
+    raw
+      .query(
+        "INSERT INTO skills (id, name, description, source_path, org_id, created_at, updated_at) VALUES ('local-skill', 'Local skill', '', ?, 'source', ?, ?)"
+      )
+      .run(path.join(sourceDir, "skills/local"), now, now);
+    await db.assignSkillToProfile(profile.id, "local-skill");
+    raw.exec(
+      "CREATE TRIGGER fail_transfer BEFORE UPDATE OF org_id ON attachments BEGIN SELECT RAISE(ABORT, 'test failure'); END"
+    );
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toThrow();
+    expect((await db.getProfile(profile.id))?.orgId).toBe("source");
+    expect((await db.getProfile(successor.id))?.isDefault).toBe(false);
+    expect(await readFile(path.join(sourceDir, "MEMORY.md"), "utf8")).toBe(
+      "Keep my memory"
+    );
+    expect(await readFile(archive, "utf8")).toBe("archived history");
+    expect(await Bun.file(path.join(targetDir, "MEMORY.md")).exists()).toBe(
+      false
+    );
+    raw.exec("DROP TRIGGER fail_transfer");
+    await mkdir(targetDir, { recursive: true });
+    await writeFile(path.join(targetDir, "existing.txt"), "Do not overwrite");
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await readFile(path.join(targetDir, "existing.txt"), "utf8")).toBe(
+      "Do not overwrite"
+    );
+    await rm(targetDir, { recursive: true });
+    await db.upsertProfile({
+      ...(await db.getProfile(successor.id))!,
+      isSuper: true,
+    });
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    await db.upsertProfile({
+      ...(await db.getProfile(successor.id))!,
+      isSuper: false,
+    });
+    await db.assignSkillToProfile(successor.id, "local-skill");
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    await db.unassignSkillFromProfile(successor.id, "local-skill");
+
+    sessionTurnRegistry.beginTurn("transfer-session");
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    sessionTurnRegistry.endTurn("transfer-session", {
+      reply: "",
+      type: "done",
+    });
+    raw
+      .query(
+        "INSERT INTO automation_runs (id, automation_id, status, started_at) VALUES ('active-transfer', 'transfer-auto', 'running', ?)"
+      )
+      .run(now);
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    raw.exec(
+      "UPDATE automation_runs SET status = 'completed' WHERE id = 'active-transfer'"
+    );
+    await service.moveProfile("source", profile.id, {
+      organizationId: "destination",
+    });
+    expect((await db.getProfile(successor.id))?.isDefault).toBe(true);
+    expect((await db.getProfile(profile.id))?.isDefault).toBe(false);
+    for (const table of [
+      "sessions",
+      "attachments",
+      "automations",
+      "workflows",
+    ]) {
+      expect(
+        raw
+          .query(`SELECT org_id FROM ${table} WHERE profile_id = ?`)
+          .get(profile.id)
+      ).toEqual({ org_id: "destination" });
+    }
+    expect((await db.getAutomation("transfer-auto"))?.enabled).toBe(false);
+    expect((await db.getWorkflow("transfer-flow"))?.enabled).toBe(false);
+    expect(await db.listProfileComposioToolkits(profile.id)).toHaveLength(0);
+    expect(
+      (await db.listSkillsForProfile(profile.id)).map((skill) => skill.id)
+    ).toEqual(["local-skill"]);
+    expect((await db.getSkill("local-skill"))?.sourcePath).toBe(
+      path.join(targetDir, "skills/local")
+    );
+    expect(
+      raw
+        .query(
+          "SELECT storage_path FROM attachments WHERE id = 'transfer-attachment'"
+        )
+        .get()
+    ).toEqual({
+      storage_path: path.join(targetDir, "attachments/transfer-attachment"),
+    });
+    expect(
+      await readFile(
+        sessionHistoryArchivePath("destination", "transfer-session"),
+        "utf8"
+      )
+    ).toBe("archived history");
+    expect(await Bun.file(archive).exists()).toBe(false);
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.moveProfile("destination", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.moveProfile("destination", profile.id, {
+        organizationId: "missing",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    raw.exec(
+      "UPDATE organizations SET archived_at = '2026-01-01' WHERE id = 'source'"
+    );
+    await expect(
+      service.moveProfile("destination", profile.id, {
+        organizationId: "source",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    raw.exec("UPDATE organizations SET archived_at = NULL WHERE id = 'source'");
+    await db.upsertProfile({
+      ...(await db.getProfile(profile.id))!,
+      isSuper: true,
+    });
+    await expect(
+      service.moveProfile("destination", profile.id, {
+        organizationId: "source",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await readFile(path.join(targetDir, "MEMORY.md"), "utf8")).toBe(
+      "Keep my memory"
+    );
+  } finally {
+    raw.close();
+    database.close();
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+    await rm(configDir, { force: true, recursive: true });
+  }
 });

@@ -902,6 +902,13 @@ export interface DatabaseAdapter {
     id: string,
     appliedAt: string
   ): Promise<boolean>;
+  moveProfile(
+    profileId: string,
+    sourceOrgId: string,
+    targetOrgId: string,
+    workspaceFrom: string,
+    workspaceTo: string
+  ): Promise<void>;
   replaceMessagesForSession(
     sessionId: string,
     messages: StoredSessionMessageRecord[]
