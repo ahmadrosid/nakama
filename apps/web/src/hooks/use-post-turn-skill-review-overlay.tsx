@@ -20,15 +20,16 @@ const POST_TURN_POLL_INTERVAL_MS = 3000;
 /**
  * Which channels the post-turn skill-review overlay polls. Total over
  * `AgentChannel` so a new channel fails the typecheck here rather than
- * silently skipping (#474 / #798). Keep aligned with
- * `HISTORY_SESSION_CHANNEL` ∩ !`READ_ONLY_SESSION_CHANNEL` in chat-history:
- * only a writable listed session has a web surface that can apply
- * suggestions. `cli` is false until history lists it (issue option 2);
- * telegram/whatsapp/discord stay false because they are read-only in web.
+ * silently skipping (#474 / #798).
+ *
+ * `web` and `cli`: poll — a cli session opens in the web chat route with
+ * `sessionChannel === "cli"` (history listing is separate; see #910).
+ * telegram/whatsapp/discord: false — read-only in web, so apply is blocked
+ * anyway. automation/task/subagent: false — server does not review them.
  */
 const POST_TURN_OVERLAY_POLL_CHANNEL = {
   automation: false,
-  cli: false,
+  cli: true,
   discord: false,
   subagent: false,
   task: false,
