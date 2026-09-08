@@ -138,30 +138,30 @@ describe("resolveModel", () => {
   });
 
   test("resolves catalog models for Doubao", () => {
-    expect(resolveModel("doubao", "doubao-seed-2.1-turbo")).toBe(
-      "doubao-seed-2.1-turbo"
+    expect(resolveModel("doubao", "doubao-seed-2-1-turbo-260628")).toBe(
+      "doubao-seed-2-1-turbo-260628"
     );
     expect(resolveModel("doubao", "doubao-seed-1-8-251228")).toBe(
       "doubao-seed-1-8-251228"
     );
-    expect(getDefaultModel("doubao")).toBe("doubao-seed-2.1-pro");
-    expect(getModelById("doubao-seed-2.1-pro")?.supportsThinking).toBe(true);
-    expect(getModelById("doubao-seed-2.1-pro")?.supportsVision).toBe(true);
-    expect(getModelById("doubao-seed-2.1-turbo")?.supportsVision).toBe(true);
+    expect(getDefaultModel("doubao")).toBe("doubao-seed-2-1-pro-260628");
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsThinking).toBe(true);
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsVision).toBe(true);
+    expect(getModelById("doubao-seed-2-1-turbo-260628")?.supportsVision).toBe(true);
     expect(getModelById("doubao-seed-1-8-251228")?.supportsVision).toBe(true);
-    expect(getModelById("doubao-seed-2.1-pro")?.contextWindow).toBe(256_000);
-    expect(getModelById("doubao-seed-2.1-pro")?.maxOutputTokens).toBe(32_768);
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.contextWindow).toBe(256_000);
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.maxOutputTokens).toBe(256_000);
   });
 
   test("uses doubao custom model shortlist when provided", () => {
     const customModels = [
-      { default: true, id: "doubao-seed-2.1-turbo", name: "Doubao Seed 2.1 Turbo" },
+      { default: true, id: "doubao-seed-2-1-turbo-260628", name: "Doubao Seed 2.1 Turbo" },
     ];
-    expect(resolveModel("doubao", "doubao-seed-2.1-turbo", customModels)).toBe(
-      "doubao-seed-2.1-turbo"
+    expect(resolveModel("doubao", "doubao-seed-2-1-turbo-260628", customModels)).toBe(
+      "doubao-seed-2-1-turbo-260628"
     );
     expect(resolveModel("doubao", "unknown-model", customModels)).toBe(
-      "doubao-seed-2.1-turbo"
+      "doubao-seed-2-1-turbo-260628"
     );
   });
 
@@ -363,8 +363,8 @@ describe("modelSupportsVision", () => {
   });
 
   test("reads Doubao vision flags from the curated catalog", () => {
-    expect(modelSupportsVision("doubao-seed-2.1-pro", "doubao")).toBe(true);
-    expect(modelSupportsVision("doubao-seed-2.1-turbo", "doubao")).toBe(true);
+    expect(modelSupportsVision("doubao-seed-2-1-pro-260628", "doubao")).toBe(true);
+    expect(modelSupportsVision("doubao-seed-2-1-turbo-260628", "doubao")).toBe(true);
     expect(modelSupportsVision("doubao-seed-1-8-251228", "doubao")).toBe(true);
   });
 });

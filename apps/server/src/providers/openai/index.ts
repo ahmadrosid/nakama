@@ -362,7 +362,7 @@ async function buildChatCompletionRequestBody(options: {
       options.messages,
       provider
     ),
-    ...(provider === "deepseek"
+    ...(provider === "deepseek" || provider === "doubao"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
     ...(hasTools

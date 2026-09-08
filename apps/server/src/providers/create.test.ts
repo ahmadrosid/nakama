@@ -147,14 +147,19 @@ describe("createProviderForInstance routing", () => {
     let seenPath = "";
     let seenAuth = "";
     let seenModel = "";
+    let seenThinking: unknown;
 
     const mock = Bun.serve({
       fetch: async (request) => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        const body = (await request.json()) as { model?: string };
+        const body = (await request.json()) as {
+          model?: string;
+          thinking?: unknown;
+        };
         seenModel = body.model ?? "";
+        seenThinking = body.thinking;
         return Response.json({
           choices: [
             {
@@ -187,19 +192,24 @@ describe("createProviderForInstance routing", () => {
         type: "doubao",
       };
 
-      const client = createProviderForInstance(instance, "doubao-seed-2.1-pro");
+      const client = createProviderForInstance(
+        instance,
+        "doubao-seed-2-1-pro-260628"
+      );
 
       expect(client).not.toBeNull();
       expect(client?.name).toBe("doubao");
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        providerOptions: { thinking: { effort: "high", enabled: true } },
       });
 
       expect(result.content).toBe("ok");
       expect(seenPath).toBe("/api/v3/chat/completions");
       expect(seenAuth).toBe("Bearer test-key");
-      expect(seenModel).toBe("doubao-seed-2.1-pro");
+      expect(seenModel).toBe("doubao-seed-2-1-pro-260628");
+      expect(seenThinking).toEqual({ type: "enabled" });
     } finally {
       mock.stop(true);
     }

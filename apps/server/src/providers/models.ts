@@ -193,22 +193,22 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 256_000,
     default: true,
-    id: "doubao-seed-2.1-pro",
-    inputPerMillionUsd: 0.8,
-    maxOutputTokens: 32_768,
+    id: "doubao-seed-2-1-pro-260628",
+    inputPerMillionUsd: 0.83,
+    maxOutputTokens: 256_000,
     name: "Doubao Seed 2.1 Pro",
-    outputPerMillionUsd: 2.0,
+    outputPerMillionUsd: 4.14,
     provider: "doubao",
     supportsThinking: true,
     supportsVision: true,
   },
   {
     contextWindow: 256_000,
-    id: "doubao-seed-2.1-turbo",
-    inputPerMillionUsd: 0.3,
-    maxOutputTokens: 32_768,
+    id: "doubao-seed-2-1-turbo-260628",
+    inputPerMillionUsd: 0.41,
+    maxOutputTokens: 256_000,
     name: "Doubao Seed 2.1 Turbo",
-    outputPerMillionUsd: 1.2,
+    outputPerMillionUsd: 2.07,
     provider: "doubao",
     supportsVision: true,
   },
@@ -216,7 +216,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     contextWindow: 256_000,
     id: "doubao-seed-1-8-251228",
     inputPerMillionUsd: 0.26,
-    maxOutputTokens: 32_768,
+    maxOutputTokens: 256_000,
     name: "Doubao Seed 1.8",
     outputPerMillionUsd: 0.67,
     provider: "doubao",
@@ -775,7 +775,7 @@ export function getDefaultModel(
           : provider === "deepseek"
             ? "deepseek-v4-flash"
             : provider === "doubao"
-              ? "doubao-seed-2.1-pro"
+              ? "doubao-seed-2-1-pro-260628"
               : provider === "together"
                 ? "openai/gpt-oss-120b"
                 : provider === "mistral"
