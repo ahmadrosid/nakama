@@ -54,6 +54,7 @@ import {
 import { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
+const MAX_TURN_OUTPUT_TOKENS = 200_000;
 
 export interface StreamHandlers {
   onChunk: (delta: string) => void;
@@ -568,8 +569,13 @@ async function runConversation(
   ) => void,
   signal?: AbortSignal
 ): Promise<string> {
+  let producedTokens = 0;
+  let stoppedReply = "";
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
+    if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
+      break;
+    }
 
     const result = await generateReply(
       provider,
@@ -618,12 +624,26 @@ async function runConversation(
     // message and never starts another tool batch.
     signal?.throwIfAborted();
 
+    producedTokens += Math.max(
+      result.usage?.outputTokens ?? 0,
+      estimateHistoryTokens([result.assistantMessage], "")
+    );
+    if (
+      enableToolLoop &&
+      producedTokens >= MAX_TURN_OUTPUT_TOKENS &&
+      result.toolCalls.length > 0
+    ) {
+      // Keep visible text, but not tool calls that will never execute.
+      stoppedReply = result.content;
+      break;
+    }
     history.push(result.assistantMessage);
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
       return result.content;
     }
 
+    const toolHistoryStart = history.length;
     await executeToolCalls(
       tools,
       result.toolCalls,
@@ -631,6 +651,21 @@ async function runConversation(
       handlers,
       toolContext
     );
+    // Check between batches: one batch can overshoot, but no next request runs.
+    producedTokens += estimateHistoryTokens(
+      history.slice(toolHistoryStart),
+      ""
+    );
+  }
+
+  if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
+    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached its output budget. Send another message to continue.`;
+    const content = stoppedReply + notice;
+    history.push({ content, role: "assistant" });
+    if (mode === "stream") {
+      handlers?.onChunk(notice);
+    }
+    return content;
   }
 
   const lastAssistant = [...history]
