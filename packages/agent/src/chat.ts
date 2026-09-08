@@ -43,7 +43,9 @@ import {
 import {
   type CompactionConfig,
   compactHistory,
+  estimateHistoryTokenBreakdown,
   estimateHistoryTokens,
+  type HistoryTokenBreakdown,
   providerReplaysThinking,
   usableContextTokens,
 } from "./history-compaction";
@@ -213,15 +215,29 @@ export function createAgentChatSession(
       : undefined;
   }
 
+  function currentTokenBreakdown(): HistoryTokenBreakdown {
+    const dateLine = `Today is ${formatCurrentDate()}.`;
+    return estimateHistoryTokenBreakdown(
+      history,
+      `${systemPrompt}\n\n${dateLine}`,
+      llmToolsForEstimate(),
+      dependencies.provider
+        ? providerReplaysThinking(dependencies.provider.name)
+        : true
+    );
+  }
+
   function buildContextUsage(
     usedTokens: number,
-    source: ChatContextUsage["source"]
+    source: ChatContextUsage["source"],
+    breakdown = currentTokenBreakdown()
   ): ChatContextUsage | null {
     if (!options.compaction) {
       return null;
     }
 
     return {
+      breakdown,
       // Reported only once an optimiser has actually removed something in this
       // session, so the chip stays silent rather than announcing a feature.
       bytesKeptOut: bytesKeptOut > 0 ? bytesKeptOut : undefined,
@@ -245,17 +261,14 @@ export function createAgentChatSession(
       return null;
     }
 
-    const dateLine = `Today is ${formatCurrentDate()}.`;
-    const usedTokens = estimateHistoryTokens(
-      history,
-      `${systemPrompt}\n\n${dateLine}`,
-      llmToolsForEstimate(),
-      dependencies.provider
-        ? providerReplaysThinking(dependencies.provider.name)
-        : true
+    const breakdown = currentTokenBreakdown();
+    return buildContextUsage(
+      breakdown.systemPrompt +
+        breakdown.conversation +
+        breakdown.toolDefinitions,
+      "estimate",
+      breakdown
     );
-
-    return buildContextUsage(usedTokens, "estimate");
   }
 
   async function runCompaction(force: boolean): Promise<CompactionResponse> {

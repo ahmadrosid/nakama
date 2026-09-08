@@ -1,5 +1,18 @@
 import type { ChatUsage } from "@nakama/core/contract";
-import { chatUsageTitle, formatChatUsage } from "@/lib/chat-usage";
+import { Cancel01Icon } from "hugeicons-react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  chatUsageTitle,
+  formatChatUsageCost,
+  formatCompactTokens,
+  formatUsd,
+} from "@/lib/chat-usage";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,7 +34,16 @@ function ChatUsageIcon({ className }: { className?: string }) {
   );
 }
 
-/** Icon + "1,234 in · 56 out · $0.0042" line shown under an assistant reply. */
+function UsageDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <li className="flex items-center justify-between gap-6">
+      <span>{label}</span>
+      <span className="text-muted-foreground tabular-nums">{value}</span>
+    </li>
+  );
+}
+
+/** Cost chip under an assistant reply. Click for in / out / total. */
 export function ChatUsageBadge({
   usage,
   className,
@@ -29,16 +51,65 @@ export function ChatUsageBadge({
   usage: ChatUsage;
   className?: string;
 }) {
+  const cost = formatChatUsageCost(usage);
+  const label = chatUsageTitle(usage);
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-muted-foreground text-xs tabular-nums",
-        className
-      )}
-      title={chatUsageTitle(usage)}
-    >
-      <ChatUsageIcon className="size-3.5 shrink-0" />
-      {formatChatUsage(usage)}
-    </span>
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            aria-label={label}
+            className={cn(
+              "inline-flex h-8 items-center gap-1 rounded-lg px-1.5 text-muted-foreground text-xs tabular-nums transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              className
+            )}
+            type="button"
+          >
+            <ChatUsageIcon className="size-3.5 shrink-0" />
+            {cost}
+          </button>
+        }
+      />
+      <PopoverContent
+        align="start"
+        className="w-56 min-w-56 p-3.5"
+        side="top"
+        sideOffset={8}
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <h2 className="font-medium text-sm leading-none">Usage</h2>
+          <PopoverClose
+            render={
+              <Button
+                className="-mt-1 -mr-1 size-7 text-muted-foreground"
+                size="icon-sm"
+                variant="ghost"
+              />
+            }
+          >
+            <Cancel01Icon className="size-3.5" />
+            <span className="sr-only">Close</span>
+          </PopoverClose>
+        </div>
+        <ul className="flex flex-col gap-2 text-sm">
+          <UsageDetailRow
+            label="In"
+            value={formatCompactTokens(usage.inputTokens)}
+          />
+          <UsageDetailRow
+            label="Out"
+            value={formatCompactTokens(usage.outputTokens)}
+          />
+          <UsageDetailRow
+            label="Total"
+            value={usage.totalTokens.toLocaleString()}
+          />
+          {usage.costUsd == null ? null : (
+            <UsageDetailRow label="Cost" value={formatUsd(usage.costUsd)} />
+          )}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }

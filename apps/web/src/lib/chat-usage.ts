@@ -2,12 +2,12 @@ import type { ChatUsage } from "@nakama/core/contract";
 
 export const CHAT_USAGE_VISIBLE_KEY = "nakama-chat-usage-visible";
 
-/** Defaults to visible; only an explicit "false" hides it. */
+/** Defaults to hidden; only an explicit "true" shows it. */
 export function getInitialChatUsageVisible(): boolean {
   try {
-    return localStorage.getItem(CHAT_USAGE_VISIBLE_KEY) !== "false";
+    return localStorage.getItem(CHAT_USAGE_VISIBLE_KEY) === "true";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -75,8 +75,16 @@ export function formatUsd(amount: number): string {
 const compactTokenFormat = new Intl.NumberFormat("en", { notation: "compact" });
 
 /** 945 · 1.2k · 12k · 1.2m · 1.5b · 2.3t */
-function formatCompactTokens(tokens: number): string {
+export function formatCompactTokens(tokens: number): string {
   return compactTokenFormat.format(tokens).toLowerCase();
+}
+
+export function formatChatUsageCost(usage: ChatUsage): string | null {
+  if (usage.costUsd == null) {
+    return null;
+  }
+
+  return `${usage.estimated ? "~" : ""}${formatUsd(usage.costUsd)}`;
 }
 
 export function formatChatUsage(usage: ChatUsage): string {
