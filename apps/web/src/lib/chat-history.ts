@@ -165,15 +165,8 @@ export function readStoredActiveChatProfileId(
     return null;
   }
 
-  if (orgId) {
-    const scoped = localStorage
-      .getItem(activeChatProfileStorageKey(orgId))
-      ?.trim();
-    return scoped || null;
-  }
-
   const profileId = localStorage
-    .getItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY)
+    .getItem(activeChatProfileStorageKey(orgId))
     ?.trim();
   return profileId || null;
 }

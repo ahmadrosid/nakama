@@ -10,7 +10,6 @@ export function useActiveChatProfile() {
     orgId,
     profileId,
     setProfileId,
-    switchChatProfile: setProfileId,
     syncForOrg,
   };
 }
