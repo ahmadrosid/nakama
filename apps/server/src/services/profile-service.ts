@@ -73,6 +73,7 @@ import {
   soulFieldFromFileName,
   withAssignmentChange,
 } from "./profile-change-history";
+import { deleteProfileWithHistoryArchives } from "./session-persistence";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
@@ -440,7 +441,11 @@ export class ProfileService {
       });
     }
 
-    const deleted = await this.db.deleteProfile(profileId);
+    const deleted = await deleteProfileWithHistoryArchives(
+      this.db,
+      orgId,
+      profileId
+    );
 
     if (!deleted) {
       throw new Error("Profile not found.");

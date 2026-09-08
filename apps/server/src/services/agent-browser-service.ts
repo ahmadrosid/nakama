@@ -70,7 +70,8 @@ export interface AgentBrowserInstallProgress {
 }
 
 export async function installAgentBrowser(
-  onProgress?: (progress: AgentBrowserInstallProgress) => void
+  onProgress?: (progress: AgentBrowserInstallProgress) => void,
+  options: { signal?: AbortSignal } = {}
 ): Promise<AgentBrowserStatusResponse> {
   const emitProgress = (message: string) => {
     onProgress?.({ message });
@@ -84,7 +85,9 @@ export async function installAgentBrowser(
   emitProgress("Starting agent-browser install.");
   emitProgress(cliPlan.displayCommand);
 
-  const cliResult = await runTimedInstallCommand(cliPlan, emitProgress);
+  const cliResult = await runTimedInstallCommand(cliPlan, emitProgress, {
+    signal: options.signal,
+  });
   const cliOutput = [cliResult.stdout, cliResult.stderr]
     .filter(Boolean)
     .join("\n")
@@ -106,6 +109,16 @@ export async function installAgentBrowser(
     );
   }
 
+  // The browser download is the long half, so starting it after the caller has
+  // gone is the case this guards. The abort is checked between the two commands
+  // as well as inside each one.
+  if (options.signal?.aborted) {
+    throw new NakamaApiError(
+      "Install cancelled before the agent-browser download started.",
+      502
+    );
+  }
+
   ensureProcessPath();
   emitProgress(`${AGENT_BROWSER_COMMAND} install`);
 
@@ -115,7 +128,8 @@ export async function installAgentBrowser(
       command: AGENT_BROWSER_COMMAND,
       displayCommand: `${AGENT_BROWSER_COMMAND} install`,
     },
-    emitProgress
+    emitProgress,
+    { signal: options.signal }
   );
   const browserOutput = [browserResult.stdout, browserResult.stderr]
     .filter(Boolean)

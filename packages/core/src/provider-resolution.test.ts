@@ -16,13 +16,17 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("mistral")).toBe("mistral");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
     expect(parseProviderName("minimax")).toBe("minimax");
     expect(parseProviderName("minimax_cn")).toBe("minimax_cn");
     expect(parseProviderName("zhipu")).toBe("zhipu");
     expect(parseProviderName("zhipu_cn")).toBe("zhipu_cn");
+    expect(parseProviderName("moonshot")).toBe("moonshot");
+    expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
+    expect(parseProviderName("together")).toBe("together");
   });
 
   test("rejects unknown values", () => {
@@ -34,6 +38,19 @@ describe("parseProviderName", () => {
 describe("apiKeyEnvVarForProvider", () => {
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
+  });
+
+  test("maps Together AI to its env key", () => {
+    expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
+  });
+
+  test("mistral uses MISTRAL_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
+  });
+
+  test("maps Moonshot regions to distinct env keys", () => {
+    expect(apiKeyEnvVarForProvider("moonshot")).toBe("MOONSHOT_API_KEY");
+    expect(apiKeyEnvVarForProvider("moonshot_cn")).toBe("MOONSHOT_CN_API_KEY");
   });
 });
 
@@ -97,6 +114,30 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
+describe("resolveProvider together", () => {
+  test("auto-resolves Together when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        TOGETHER_API_KEY: "tg-test",
+      },
+    });
+
+    expect(provider).toBe("together");
+  });
+});
+
+describe("resolveProvider mistral", () => {
+  test("auto-resolves Mistral when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        MISTRAL_API_KEY: "ms-test",
+      },
+    });
+
+    expect(provider).toBe("mistral");
+  });
+});
+
 describe("resolveProvider cerebras", () => {
   test("auto-resolves Cerebras when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -129,10 +170,14 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("zhipu")).toBe(true);
     expect(isDiscoveryModelProvider("zhipu_cn")).toBe(true);
     expect(isDiscoveryModelProvider("xai")).toBe(true);
+    expect(isDiscoveryModelProvider("moonshot")).toBe(true);
+    expect(isDiscoveryModelProvider("moonshot_cn")).toBe(true);
   });
 
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
+    expect(isDiscoveryModelProvider("together")).toBe(false);
+    expect(isDiscoveryModelProvider("mistral")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
   });
@@ -151,6 +196,12 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("zhipu_cn")).toBe(
       "https://open.bigmodel.cn/api/paas/v4"
+    );
+    expect(defaultDiscoveryBaseUrl("moonshot")).toBe(
+      "https://api.moonshot.ai/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("moonshot_cn")).toBe(
+      "https://api.moonshot.cn/v1"
     );
   });
 

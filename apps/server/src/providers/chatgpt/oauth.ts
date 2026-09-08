@@ -284,6 +284,7 @@ export function parseChatgptCodexModelsPayload(
         typeof item.display_name === "string" && item.display_name.trim()
           ? item.display_name.trim()
           : id,
+      supportsVision: true,
     });
   }
 
@@ -291,20 +292,45 @@ export function parseChatgptCodexModelsPayload(
 }
 
 export async function fetchChatgptCodexModels(
-  oauth: ChatgptOAuthCredentials
+  oauth: ChatgptOAuthCredentials,
+  onTokenRefresh?: (oauth: ChatgptOAuthCredentials) => Promise<void>
 ): Promise<CustomModelEntry[]> {
-  const response = await fetch(
-    `${CHATGPT_CODEX_BASE_URL}/models?client_version=1.0.0`,
-    {
+  const fetchModels = (credentials: ChatgptOAuthCredentials) =>
+    fetch(`${CHATGPT_CODEX_BASE_URL}/models?client_version=1.0.0`, {
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${oauth.accessToken}`,
-        "ChatGPT-Account-ID": oauth.accountId,
+        Authorization: `Bearer ${credentials.accessToken}`,
+        "ChatGPT-Account-ID": credentials.accountId,
         "OpenAI-Beta": "responses=v1",
         originator: "codex_cli_rs",
       },
+    });
+  let response = await fetchModels(oauth);
+
+  // The upstream can reject a token before its stored expiry. Refresh once,
+  // and persist rotated credentials before making another request.
+  if (response.status === 401 && onTokenRefresh) {
+    await response.body?.cancel();
+    let refreshed: ChatgptOAuthCredentials;
+    try {
+      refreshed = await refreshChatgptOAuthToken(oauth.refreshToken);
+    } catch {
+      throw new NakamaApiError(
+        "ChatGPT sign-in expired. Reconnect in Settings → LLM providers.",
+        400
+      );
     }
-  );
+    await onTokenRefresh(refreshed);
+    response = await fetchModels(refreshed);
+  }
+
+  if (response.status === 401) {
+    await response.body?.cancel();
+    throw new NakamaApiError(
+      "ChatGPT sign-in expired. Reconnect in Settings → LLM providers.",
+      400
+    );
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");

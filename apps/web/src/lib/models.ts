@@ -49,6 +49,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "mistral" ||
     provider === "cerebras" ||
     provider === "cloudflare" ||
     provider === "fireworks" ||
@@ -56,11 +57,15 @@ export function formatProviderLabel(
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
     provider === "chatgpt" ||
+    provider === "xai_oauth" ||
     provider === "minimax" ||
     provider === "minimax_cn" ||
+    provider === "moonshot" ||
+    provider === "moonshot_cn" ||
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
-    provider === "xai"
+    provider === "xai" ||
+    provider === "together"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -72,10 +77,13 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
   [
     { id: "openai", label: "OpenAI" },
     { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
+    { id: "xai_oauth", label: "Grok (SuperGrok / Premium+)" },
     { id: "anthropic", label: "Anthropic" },
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "together", label: "Together AI" },
+    { id: "mistral", label: "Mistral" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
     { id: "fireworks", label: "Fireworks" },
@@ -84,6 +92,8 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "minimax", label: "MiniMax" },
     { id: "xai", label: "xAI Grok" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
+    { id: "moonshot", label: "Moonshot Kimi" },
+    { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
     { id: "zhipu", label: "GLM (Z.ai)" },
     { id: "zhipu_cn", label: "GLM (CN)" },
     { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
@@ -217,7 +227,7 @@ export function validateApiKeyForProvider(
     return null;
   }
 
-  if (provider === "chatgpt") {
+  if (provider === "chatgpt" || provider === "xai_oauth") {
     return null;
   }
 
@@ -265,12 +275,24 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
 }
 
 export function validateCustomModelsInput(
-  models: Array<{ id: string }>
+  models: Array<{
+    id: string;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }>
 ): string | null {
   const valid = models.filter((model) => model.id.trim());
 
   if (valid.length === 0) {
     return "Add at least one model.";
+  }
+
+  for (const row of valid) {
+    const hasInput = row.inputPerMillionUsd !== undefined;
+    const hasOutput = row.outputPerMillionUsd !== undefined;
+    if (hasInput !== hasOutput) {
+      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
+    }
   }
 
   return null;
@@ -293,12 +315,6 @@ export function validateOpenRouterModelsInput(
     if (slugError) {
       return slugError;
     }
-
-    const hasInput = row.inputPerMillionUsd !== undefined;
-    const hasOutput = row.outputPerMillionUsd !== undefined;
-    if (hasInput !== hasOutput) {
-      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
-    }
   }
 
   return null;
@@ -311,20 +327,7 @@ export function validateShortlistCapabilityModelsInput(
     outputPerMillionUsd?: number;
   }>
 ): string | null {
-  const listError = validateCustomModelsInput(models);
-  if (listError) {
-    return listError;
-  }
-
-  for (const row of models) {
-    const hasInput = row.inputPerMillionUsd !== undefined;
-    const hasOutput = row.outputPerMillionUsd !== undefined;
-    if (hasInput !== hasOutput) {
-      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
-    }
-  }
-
-  return null;
+  return validateCustomModelsInput(models);
 }
 
 export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
@@ -589,12 +592,14 @@ export function buildCreateProviderRequest(options: {
   customModels?: ConfigureProviderRequest["customModels"];
   wireApi?: WireApi;
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
+  xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const request = buildConfigureProviderRequest(options);
 
   return {
     apiKey: request.apiKey,
     type: request.provider,
+    ...(options.xaiOAuth ? { xaiOAuth: options.xaiOAuth } : {}),
     ...(options.chatgptOAuth ? { chatgptOAuth: options.chatgptOAuth } : {}),
     ...(request.model ? { model: request.model } : {}),
     ...(options.displayName?.trim()
@@ -631,7 +636,10 @@ export function buildConfigureProviderRequest(options: {
     };
   }
 
-  if (options.provider === "openrouter" && options.customModels?.length) {
+  if (
+    (options.provider === "openrouter" || options.provider === "xai_oauth") &&
+    options.customModels?.length
+  ) {
     return {
       ...request,
       customModels: options.customModels,
@@ -889,6 +897,8 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
+    model.provider === "together" ||
+    model.provider === "mistral" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama"
@@ -938,6 +948,8 @@ export function resolveModelVisionSupport(
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
+    model.provider === "together" ||
+    model.provider === "mistral" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||

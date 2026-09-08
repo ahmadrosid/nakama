@@ -9,12 +9,38 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-09-08
+
+### Added
+
+- ChatGPT Plus/Pro via Codex OAuth ([#862])
+- Grok subscription OAuth ([#904])
+- `bash` can run in MicroSandbox with one sandbox per profile ([#663])
+- Workflow run status refreshes while the run is still going ([#880])
+- Composer drafts persist per user ([#876])
+- Error tracking reports a tool that exhausts its retry budget ([#893])
+
 ### Changed
 
-- Pinned tool-output optimiser bumped to 0.7.9: a fold always leaves part of the
-  result readable, and non-ASCII output no longer panics the cut ([#875])
 - The token optimiser is on by default; `NAKAMA_OMNI=0` or the Integrations
   toggle turns it off ([#881])
+- Pinned tool-output optimiser bumped to 0.7.9: a fold always leaves part of the
+  result readable, and non-ASCII output no longer panics the cut ([#875])
+
+### Fixed
+
+- OpenRouter serializes user multimodal content ([#863])
+- Interrupted runs settle after a restart ([#877])
+- Sub-agents inherit the parent role ([#884])
+- Approved org-memory bullets stay on one line ([#888])
+- Untrusted-document notice ships with the extraction result ([#889])
+- Telegram allowed-user remove asks for confirmation ([#892])
+- Bootstrap schema applies once ([#894])
+- Last-picked chat model and turn stamps stay consistent ([#839], [#867])
+- Artifact share origins are validated; revoked links recover ([#857], [#864])
+- Notification webhook secrets stay masked; channel worker logs stay quiet
+  unless `NAKAMA_CH_DEBUG` ([#865], [#866])
+- CLI pending chat messages are bounded ([#847])
 
 ## [0.4.8] - 2026-09-06
 
@@ -44,7 +70,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 - Legacy `users.user_context` is no longer read ([#816])
 - Skill-suggestion queries use one prepared statement ([#806], [#811])
 
-
+## [0.4.7] - 2026-08-30
 
 ### Added
 
@@ -694,7 +720,8 @@ First tagged release. The baseline it established:
 - Export and import for data portability
 - Docker image published from GitHub Actions, and a VitePress documentation site
 
-[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.8...main
+[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.9...main
+[0.4.9]: https://github.com/ahmadrosid/nakama/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/ahmadrosid/nakama/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/ahmadrosid/nakama/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/ahmadrosid/nakama/compare/v0.4.5...v0.4.6

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   CHATGPT_JWT_CLAIM_PATH,
+  fetchChatgptCodexModels,
   parseChatgptCodexModelsPayload,
   readChatgptAccountIdFromAccessToken,
 } from "./oauth";
@@ -20,6 +21,55 @@ describe("fetchChatgptCodexModels", () => {
     globalThis.fetch = originalFetch;
   });
 
+  test("refreshes a rejected token despite a future expiry and saves it before retrying", async () => {
+    const accessToken = buildJwt({
+      [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_account_id: "acct_1" },
+    });
+    let saved = false;
+    let modelRequests = 0;
+    let refreshRequests = 0;
+    globalThis.fetch = (async (input, init) => {
+      if (String(input).includes("/oauth/token")) {
+        refreshRequests++;
+        expect(
+          new URLSearchParams(String(init?.body)).get("refresh_token")
+        ).toBe("refresh");
+        return Response.json({
+          access_token: accessToken,
+          expires_in: 3600,
+          refresh_token: "replacement",
+        });
+      }
+      modelRequests++;
+      if (modelRequests === 1) {
+        return new Response(null, { status: 401 });
+      }
+      expect(saved).toBe(true);
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        `Bearer ${accessToken}`
+      );
+      return Response.json({ models: [{ slug: "gpt-5.4" }] });
+    }) as typeof fetch;
+
+    const models = await fetchChatgptCodexModels(
+      {
+        accessToken: "rejected-token",
+        accountId: "acct_1",
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        refreshToken: "refresh",
+      },
+      (oauth) => {
+        expect(oauth.accessToken).toBe(accessToken);
+        expect(oauth.refreshToken).toBe("replacement");
+        saved = true;
+        return Promise.resolve();
+      }
+    );
+    expect(models.map((model) => model.id)).toEqual(["gpt-5.4"]);
+    expect(modelRequests).toBe(2);
+    expect(refreshRequests).toBe(1);
+  });
+
   test("throws when Codex returns an error status", async () => {
     globalThis.fetch = (async () =>
       new Response("nope", { status: 403 })) as typeof fetch;
@@ -35,6 +85,49 @@ describe("fetchChatgptCodexModels", () => {
       })
     ).rejects.toThrow("ChatGPT models failed (403)");
   });
+
+  test.each(["refresh rejected", "retry rejected"])(
+    "stops when %s and asks for reconnection",
+    async (failure) => {
+      let modelRequests = 0;
+      let refreshRequests = 0;
+      let saved = 0;
+      globalThis.fetch = (async (input) => {
+        if (String(input).includes("/oauth/token")) {
+          refreshRequests++;
+          if (failure === "refresh rejected") {
+            return new Response(null, { status: 400 });
+          }
+          return Response.json({
+            access_token: buildJwt({
+              [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_account_id: "acct_1" },
+            }),
+            expires_in: 3600,
+            refresh_token: "replacement",
+          });
+        }
+        modelRequests++;
+        return new Response(null, { status: 401 });
+      }) as typeof fetch;
+      await expect(
+        fetchChatgptCodexModels(
+          {
+            accessToken: "rejected",
+            accountId: "acct_1",
+            expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+            refreshToken: "refresh",
+          },
+          () => {
+            saved++;
+            return Promise.resolve();
+          }
+        )
+      ).rejects.toMatchObject({ status: 400 });
+      expect(refreshRequests).toBe(1);
+      expect(modelRequests).toBe(failure === "refresh rejected" ? 1 : 2);
+      expect(saved).toBe(failure === "refresh rejected" ? 0 : 1);
+    }
+  );
 });
 
 describe("parseChatgptCodexModelsPayload", () => {
@@ -48,8 +141,8 @@ describe("parseChatgptCodexModelsPayload", () => {
         ],
       })
     ).toEqual([
-      { id: "gpt-5.4", name: "GPT-5.4" },
-      { id: "gpt-5.4-mini", name: "GPT-5.4 mini" },
+      { id: "gpt-5.4", name: "GPT-5.4", supportsVision: true },
+      { id: "gpt-5.4-mini", name: "GPT-5.4 mini", supportsVision: true },
     ]);
   });
 });

@@ -2,10 +2,14 @@ import type {
   ChatgptOAuthCredentials,
   ProviderInstanceSummary,
   WireApi,
+  XaiOAuthCredentials,
 } from "@nakama/core/contract";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { ChatgptSignInPanel } from "@/components/ChatgptSignInPanel";
+import {
+  ChatgptSignInPanel,
+  XaiSignInPanel,
+} from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { Button } from "@/components/ui/button";
@@ -32,7 +36,9 @@ export function ProviderReplaceKeyDialog({
   providerType,
   apiKey,
   showApiKey,
-  chatgptOAuth,
+  xaiOAuth = null,
+  onXaiOAuthChange,
+  chatgptOAuth = null,
   busy,
   dialogError,
   onOpenChange,
@@ -46,54 +52,75 @@ export function ProviderReplaceKeyDialog({
   providerType: SelectedProvider;
   apiKey: string;
   showApiKey: boolean;
+  xaiOAuth?: XaiOAuthCredentials | null;
+  onXaiOAuthChange: (oauth: XaiOAuthCredentials | null) => void;
   chatgptOAuth?: ChatgptOAuthCredentials | null;
   busy: boolean;
   dialogError: string | null;
   onOpenChange: (open: boolean) => void;
   onApiKeyChange: (value: string) => void;
-  onChatgptOAuthChange?: (oauth: ChatgptOAuthCredentials | null) => void;
+  onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
   onToggleShowApiKey: () => void;
   onSave: () => void;
 }) {
-  const isChatgpt = providerType === "chatgpt";
+  let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
+  let hasCredentials = Boolean(apiKey.trim());
+  let credentialField = (
+    <InputGroup>
+      <InputGroupInput
+        autoComplete="off"
+        disabled={busy}
+        onChange={(event) => onApiKeyChange(event.target.value)}
+        placeholder={apiKeyPlaceholder(providerType)}
+        type={showApiKey ? "text" : "password"}
+        value={apiKey}
+      />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          aria-label={showApiKey ? "Hide API key" : "Show API key"}
+          onClick={onToggleShowApiKey}
+          size="icon-sm"
+        >
+          {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
+  );
+
+  switch (providerType) {
+    case "xai_oauth":
+      title = `Reconnect ${instance.label}`;
+      hasCredentials = Boolean(xaiOAuth);
+      credentialField = (
+        <XaiSignInPanel
+          disabled={busy}
+          oauth={xaiOAuth}
+          onOAuthChange={onXaiOAuthChange}
+        />
+      );
+      break;
+    case "chatgpt":
+      title = `Reconnect ${instance.label}`;
+      hasCredentials = Boolean(chatgptOAuth);
+      credentialField = (
+        <ChatgptSignInPanel
+          disabled={busy}
+          oauth={chatgptOAuth}
+          onOAuthChange={onChatgptOAuthChange}
+        />
+      );
+      break;
+    default:
+      break;
+  }
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isChatgpt
-              ? `Reconnect ${instance.label}`
-              : `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`}
-          </DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {isChatgpt ? (
-          <ChatgptSignInPanel
-            disabled={busy}
-            oauth={chatgptOAuth ?? null}
-            onOAuthChange={onChatgptOAuthChange ?? (() => {})}
-          />
-        ) : (
-          <InputGroup>
-            <InputGroupInput
-              autoComplete="off"
-              disabled={busy}
-              onChange={(event) => onApiKeyChange(event.target.value)}
-              placeholder={apiKeyPlaceholder(providerType)}
-              type={showApiKey ? "text" : "password"}
-              value={apiKey}
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                onClick={onToggleShowApiKey}
-                size="icon-sm"
-              >
-                {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-        )}
+        {credentialField}
         {dialogError ? (
           <p className="text-destructive text-sm" role="alert">
             {dialogError}
@@ -109,7 +136,7 @@ export function ProviderReplaceKeyDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || (isChatgpt ? !chatgptOAuth : !apiKey.trim())}
+            disabled={busy || !hasCredentials}
             onClick={onSave}
             type="button"
           >

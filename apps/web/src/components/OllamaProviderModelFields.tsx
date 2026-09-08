@@ -55,7 +55,7 @@ export function OllamaProviderModelFields({
           provider="ollama"
         />
       )}
-      showPricing={false}
+      showPricing={hostMode === "cloud"}
       showThinking
       showVision
       toModelRow={(row: RemoteModelRow) => ({

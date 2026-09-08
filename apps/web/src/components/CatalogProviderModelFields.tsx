@@ -88,7 +88,7 @@ export function CatalogProviderModelFields({
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);
   const canDiscoverRemote =
-    (provider === "openai" || provider === "chatgpt") &&
+    ["openai", "chatgpt", "xai_oauth"].includes(provider) &&
     Boolean(providerInstanceId);
 
   const staticCatalog = useMemo(() => {
@@ -125,7 +125,7 @@ export function CatalogProviderModelFields({
     }
 
     return mergeBrowseModels(
-      provider === "chatgpt" ? [] : staticCatalog,
+      provider === "chatgpt" || provider === "xai_oauth" ? [] : staticCatalog,
       remoteResponse?.models ?? [],
       provider
     );
@@ -225,7 +225,9 @@ export function CatalogProviderModelFields({
           visionDefaultOn={
             provider === "openai" ||
             provider === "anthropic" ||
-            provider === "gemini"
+            provider === "gemini" ||
+            provider === "chatgpt" ||
+            provider === "xai_oauth"
           }
         />
       )}

@@ -76,7 +76,7 @@ export async function maybeSendWhatsAppAttachOnlyCommand(input: {
   });
 }
 
-async function sendArtifactDocumentForPath(input: {
+export async function sendArtifactDocumentForPath(input: {
   client: NakamaClient;
   profileId: string;
   path: string;

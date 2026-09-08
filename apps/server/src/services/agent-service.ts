@@ -103,11 +103,13 @@ import type {
   VisionSettingsResponse,
   WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
+  XaiOAuthCredentials,
 } from "@nakama/core";
 import {
   apiKeyEnvVarForProvider,
   appendOrgMemorySection,
   applyChatgptOAuthToInstance,
+  applyXaiOAuthToInstance,
   buildErrorReport,
   buildThinkingProviderOptions,
   buildToolExecutionContext,
@@ -160,6 +162,7 @@ import {
   readBundledSkillBody,
   readChatgptOAuthFromInstance,
   readEnvValue,
+  readXaiOAuthFromInstance,
   refreshErrorTrackingEnabled,
   regenerateDiscordHandshake,
   regenerateTelegramHandshake,
@@ -213,6 +216,10 @@ import {
 import { isAllowedImageGenerationSelection } from "../providers/models";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
+import {
+  fetchXaiOAuthModels,
+  resolveXaiOAuthCredentials,
+} from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createOrgMemoryTools } from "../tools/org-memory-tools";
 import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
@@ -301,6 +308,10 @@ import {
   toProviderInstanceSummary,
 } from "./provider-instance-helpers";
 import {
+  archiveSessionHistory,
+  copySessionHistoryArchive,
+  createReadSessionHistoryTool,
+  deleteSessionHistoryArchive,
   loadSessionHistory,
   replaceSessionHistory,
   wrapPersistedSession,
@@ -1833,6 +1844,7 @@ export class AgentService {
       userId: record.userId ?? null,
     });
 
+    await copySessionHistoryArchive(this.db, orgId, sessionId, nextSessionId);
     await replaceSessionHistory(
       this.db,
       nextSessionId,
@@ -1914,10 +1926,12 @@ export class AgentService {
       return false;
     }
 
+    this.sessions.get(sessionId)?.session.clear();
     this.sessions.delete(sessionId);
     this.superBotSessionState.clearSession(sessionId);
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
+    await deleteSessionHistoryArchive(orgId, sessionId);
     await this.db.deleteSession(sessionId);
     return true;
   }
@@ -2047,6 +2061,7 @@ export class AgentService {
       stored.session.clear();
     }
 
+    await deleteSessionHistoryArchive(orgId, sessionId);
     await this.db.deleteMessagesForSession(sessionId);
     await this.agentQuestionnaireState.clear(sessionId);
     return true;
@@ -2267,6 +2282,28 @@ export class AgentService {
       };
     }
 
+    if (instance.type === "xai_oauth") {
+      const oauth = await resolveXaiOAuthCredentials(
+        () =>
+          readXaiOAuthFromInstance(
+            findProviderInstance(this.userConfig, providerId)
+          ),
+        (refreshed) => this.persistXaiOAuth(providerId, refreshed)
+      );
+
+      const entries = await fetchXaiOAuthModels(oauth);
+      const models = catalogCustomModelsToCatalog(entries, [], "xai_oauth");
+
+      return {
+        catalog: AVAILABLE_MODELS,
+        currentProviderId: providerId,
+        customModels: entries,
+        displayName: instance.label,
+        models,
+        provider: "xai_oauth",
+        providers: [],
+      };
+    }
     if (instance.type === "chatgpt") {
       let oauth = readChatgptOAuthFromInstance(instance);
 
@@ -2282,7 +2319,9 @@ export class AgentService {
         await this.persistChatgptOAuth(providerId, oauth);
       }
 
-      const entries = await fetchChatgptCodexModels(oauth);
+      const entries = await fetchChatgptCodexModels(oauth, (refreshed) =>
+        this.persistChatgptOAuth(providerId, refreshed)
+      );
       const models = catalogCustomModelsToCatalog(entries, [], "chatgpt");
 
       return {
@@ -2446,6 +2485,30 @@ export class AgentService {
     return { defaultProviderId };
   }
 
+  async persistXaiOAuth(
+    providerId: string,
+    oauth: XaiOAuthCredentials
+  ): Promise<void> {
+    if (!this.userConfig) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const current = findProviderInstance(this.userConfig, providerId);
+
+    if (!current || current.type !== "xai_oauth") {
+      throw new Error("Grok provider not found.");
+    }
+
+    const updated = applyXaiOAuthToInstance(current, oauth);
+    this.userConfig = {
+      ...this.userConfig,
+      providers: this.userConfig.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      ),
+    };
+    await saveUserConfig(this.userConfig);
+    this.refreshHarness();
+  }
   async persistChatgptOAuth(
     providerId: string,
     oauth: ChatgptOAuthCredentials
@@ -2664,7 +2727,13 @@ export class AgentService {
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
-    return this.profileService.deleteProfile(orgId, profileId);
+    await this.profileService.deleteProfile(orgId, profileId);
+    for (const [sessionId, record] of this.sessions) {
+      if (record.profileId === profileId) {
+        record.session.clear();
+        this.sessions.delete(sessionId);
+      }
+    }
   }
 
   async listTools(orgId: string): Promise<ListToolsResponse> {
@@ -3485,6 +3554,7 @@ export class AgentService {
       : profile.model;
     const compaction = this.resolveCompactionConfig(profile, selectedModel);
     const harness = this.createHarnessForProfile(profile, selectedModel);
+    tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
     const saveAttachment = createAttachmentSaver(this.db, {
       channel,
       orgId,
@@ -3498,6 +3568,12 @@ export class AgentService {
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
     const session = createAgentChatSession(harness, {
+      archiveHistory: (history) => {
+        if (this.sessions.get(sessionId)?.session !== persistedSession) {
+          throw new Error("Session changed during compaction. Try again.");
+        }
+        return archiveSessionHistory(this.db, orgId, sessionId, history);
+      },
       channel,
       compaction,
       enableToolLoop: true,
@@ -3539,6 +3615,8 @@ export class AgentService {
           {
             onChatgptTokenRefresh: (instanceId, oauth) =>
               this.persistChatgptOAuth(instanceId, oauth),
+            onXaiTokenRefresh: (instanceId, oauth) =>
+              this.persistXaiOAuth(instanceId, oauth),
             resolveInstance: (instanceId) =>
               findProviderInstance(this.userConfig, instanceId),
           }
@@ -3657,12 +3735,13 @@ export class AgentService {
       userTimezone,
     });
 
-    return wrapPersistedSession(sessionId, session, this.db, {
+    const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
       onBeginTurn: (id) => {
         this.superBotSessionState.beginTurn(id);
         void this.agentQuestionnaireState.clear(id);
       },
     });
+    return persistedSession;
   }
 
   private async formatProfileAuthoringToolContext(
@@ -3868,6 +3947,8 @@ export class AgentService {
       {
         onChatgptTokenRefresh: (instanceId, oauth) =>
           this.persistChatgptOAuth(instanceId, oauth),
+        onXaiTokenRefresh: (instanceId, oauth) =>
+          this.persistXaiOAuth(instanceId, oauth),
         resolveInstance: (instanceId) =>
           findProviderInstance(this.userConfig, instanceId),
       }

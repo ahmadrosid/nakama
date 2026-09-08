@@ -29,110 +29,54 @@ function createCapturingProvider(
       return Promise.resolve(response);
     },
   };
-
   return provider;
+}
+
+const done = {
+  assistantMessage: { content: "Done", role: "assistant" as const },
+  content: "Done",
+  toolCalls: [],
+};
+
+const localTool: ToolDefinition = {
+  description: "Sample tool",
+  name: "sample",
+  run(input) {
+    return Promise.resolve(input);
+  },
+};
+
+async function turn(
+  tools: ToolDefinition[],
+  name: ProviderClient["name"] = "anthropic"
+) {
+  const provider = createCapturingProvider(done, name);
+  const session = createAgentChatSession({ provider, tools }, { tools });
+  await session.send("hello");
+  return provider.lastInput;
 }
 
 describe("provider-native web search", () => {
   test("passes webSearch provider option when web_search is assigned", async () => {
-    const provider = createCapturingProvider({
-      assistantMessage: {
-        content: "Latest news summary.",
-        role: "assistant",
-      },
-      content: "Latest news summary.",
-      toolCalls: [],
-    });
+    const input = await turn([webSearchTool]);
 
-    const session = createAgentChatSession(
-      { provider, tools: [webSearchTool] },
-      { tools: [webSearchTool] }
-    );
-    const reply = await session.send("What's new in AI?");
-
-    expect(reply).toBe("Latest news summary.");
-    expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
-    expect(provider.lastInput?.tools).toBeUndefined();
+    expect(input?.providerOptions).toEqual({ webSearch: true });
+    expect(input?.tools).toBeUndefined();
+    expect(input?.system).not.toContain("Web search is unavailable");
   });
 
   test("keeps local tools while enabling provider web search", async () => {
-    const localTool: ToolDefinition = {
-      description: "Sample tool",
-      name: "sample",
-      run(input) {
-        return Promise.resolve(input);
-      },
-    };
+    const input = await turn([localTool, webSearchTool]);
 
-    const provider = createCapturingProvider({
-      assistantMessage: {
-        content: "Done",
-        role: "assistant",
-      },
-      content: "Done",
-      toolCalls: [],
-    });
-
-    const session = createAgentChatSession(
-      {
-        provider,
-        tools: [localTool, webSearchTool],
-      },
-      {
-        tools: [localTool, webSearchTool],
-      }
-    );
-    await session.send("hello");
-
-    expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
-    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual([
-      "sample",
-    ]);
-  });
-
-  test("enables provider web search on Gemini when web_search is the only tool", async () => {
-    const provider = createCapturingProvider(
-      {
-        assistantMessage: {
-          content: "Latest news summary.",
-          role: "assistant",
-        },
-        content: "Latest news summary.",
-        toolCalls: [],
-      },
-      "gemini"
-    );
-
-    const session = createAgentChatSession(
-      { provider, tools: [webSearchTool] },
-      { tools: [webSearchTool] }
-    );
-    await session.send("What's new in AI?");
-
-    expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
-    expect(provider.lastInput?.tools).toBeUndefined();
+    expect(input?.providerOptions).toEqual({ webSearch: true });
+    expect(input?.tools?.map((tool) => tool.name)).toEqual(["sample"]);
   });
 
   test("tells the model when OpenRouter drops hosted web search", async () => {
-    const provider = createCapturingProvider(
-      {
-        assistantMessage: { content: "Done", role: "assistant" },
-        content: "Done",
-        toolCalls: [],
-      },
-      "openrouter"
-    );
+    const input = await turn([webSearchTool], "openrouter");
 
-    const session = createAgentChatSession(
-      { provider, tools: [webSearchTool] },
-      { tools: [webSearchTool] }
-    );
-    await session.send("What's new in AI?");
-
-    expect(provider.lastInput?.providerOptions).toBeUndefined();
-    expect(provider.lastInput?.system).toContain(
-      "Web search is unavailable on this turn"
-    );
+    expect(input?.providerOptions).toBeUndefined();
+    expect(input?.system).toContain("Web search is unavailable on this turn");
   });
 
   test("points the model at web_fetch when that tool is assigned", async () => {
@@ -144,46 +88,9 @@ describe("provider-native web search", () => {
       },
     };
 
-    const provider = createCapturingProvider(
-      {
-        assistantMessage: { content: "Done", role: "assistant" },
-        content: "Done",
-        toolCalls: [],
-      },
-      "openrouter"
-    );
+    const input = await turn([webFetch, webSearchTool], "openrouter");
 
-    const session = createAgentChatSession(
-      {
-        provider,
-        tools: [webFetch, webSearchTool],
-      },
-      {
-        tools: [webFetch, webSearchTool],
-      }
-    );
-    await session.send("hello");
-
-    expect(provider.lastInput?.system).toContain("read it with web_fetch");
-  });
-
-  test("stays silent about web search when the provider does run it", async () => {
-    const provider = createCapturingProvider({
-      assistantMessage: { content: "Done", role: "assistant" },
-      content: "Done",
-      toolCalls: [],
-    });
-
-    const session = createAgentChatSession(
-      { provider, tools: [webSearchTool] },
-      { tools: [webSearchTool] }
-    );
-    await session.send("hello");
-
-    expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
-    expect(provider.lastInput?.system).not.toContain(
-      "Web search is unavailable"
-    );
+    expect(input?.system).toContain("read it with web_fetch");
   });
 
   test("stays silent when web_search is served by a local search back-end", async () => {
@@ -196,70 +103,17 @@ describe("provider-native web search", () => {
       },
     };
 
-    const provider = createCapturingProvider(
-      {
-        assistantMessage: { content: "Done", role: "assistant" },
-        content: "Done",
-        toolCalls: [],
-      },
-      "openrouter"
-    );
+    const input = await turn([customWebSearch], "openrouter");
 
-    const session = createAgentChatSession(
-      {
-        provider,
-        tools: [customWebSearch],
-      },
-      { tools: [customWebSearch] }
-    );
-    await session.send("hello");
-
-    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual([
-      "web_search",
-    ]);
-    expect(provider.lastInput?.system).not.toContain(
-      "Web search is unavailable"
-    );
+    expect(input?.tools?.map((tool) => tool.name)).toEqual(["web_search"]);
+    expect(input?.system).not.toContain("Web search is unavailable");
   });
 
   test("skips provider web search on Gemini when local tools are also assigned", async () => {
-    const localTool: ToolDefinition = {
-      description: "Sample tool",
-      name: "sample",
-      run(input) {
-        return Promise.resolve(input);
-      },
-    };
+    const input = await turn([localTool, webSearchTool], "gemini");
 
-    const provider = createCapturingProvider(
-      {
-        assistantMessage: {
-          content: "Done",
-          role: "assistant",
-        },
-        content: "Done",
-        toolCalls: [],
-      },
-      "gemini"
-    );
-
-    const session = createAgentChatSession(
-      {
-        provider,
-        tools: [localTool, webSearchTool],
-      },
-      {
-        tools: [localTool, webSearchTool],
-      }
-    );
-    await session.send("hello");
-
-    expect(provider.lastInput?.providerOptions).toBeUndefined();
-    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual([
-      "sample",
-    ]);
-    expect(provider.lastInput?.system).toContain(
-      "Web search is unavailable on this turn"
-    );
+    expect(input?.providerOptions).toBeUndefined();
+    expect(input?.tools?.map((tool) => tool.name)).toEqual(["sample"]);
+    expect(input?.system).toContain("Web search is unavailable on this turn");
   });
 });

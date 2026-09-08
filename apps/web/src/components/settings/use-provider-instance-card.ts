@@ -4,6 +4,7 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
   WireApi,
+  XaiOAuthCredentials,
 } from "@nakama/core/contract";
 import {
   defaultDiscoveryBaseUrl,
@@ -54,6 +55,7 @@ export function useProviderInstanceCard({
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
+  const [xaiOAuth, setXaiOAuth] = useState<XaiOAuthCredentials | null>(null);
   const [chatgptOAuth, setChatgptOAuth] =
     useState<ChatgptOAuthCredentials | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -63,6 +65,7 @@ export function useProviderInstanceCard({
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
 
   const providerType = instance.type as SelectedProvider;
+  const isXaiOAuth = providerType === "xai_oauth";
   const isChatgpt = providerType === "chatgpt";
   const isOllama = providerType === "ollama";
   // Discovery providers (OpenAI-compatible, MiniMax, …) fetch model lists
@@ -148,6 +151,17 @@ export function useProviderInstanceCard({
   };
 
   const handleReplaceKey = async () => {
+    if (isXaiOAuth) {
+      if (!xaiOAuth) {
+        setDialogError("Sign in with Grok before saving.");
+        return;
+      }
+      await runUpdate({ xaiOAuth }, () => {
+        setReplaceKeyOpen(false);
+        setXaiOAuth(null);
+      });
+      return;
+    }
     if (isChatgpt) {
       if (!chatgptOAuth) {
         setDialogError("Sign in with ChatGPT before saving.");
@@ -271,6 +285,7 @@ export function useProviderInstanceCard({
     isOllama,
     isOpenRouter,
     isShortlistBrowse,
+    isXaiOAuth,
     manageModels,
     manageOpen,
     openEdit,
@@ -290,6 +305,8 @@ export function useProviderInstanceCard({
     setManageOpen,
     setReplaceKeyOpen,
     setShowApiKey,
+    setXaiOAuth,
     showApiKey,
+    xaiOAuth,
   };
 }

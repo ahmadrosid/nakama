@@ -3,10 +3,12 @@ import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
 import { AGENT_CHANNELS } from "@nakama/core/contract";
 import { extractTurnArtifacts } from "./chat-artifacts";
 import {
+  type ChatListItem,
   chatMessagesToListItems,
   formatSessionRelativeTime,
   formatSessionTimestamp,
   HISTORY_SESSION_CHANNELS,
+  isEditableUserMessage,
   isReadOnlySessionChannel,
 } from "./chat-history";
 
@@ -14,6 +16,45 @@ const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("chatMessagesToListItems", () => {
+  test("folds usage of hidden tool-call steps into the next rendered reply", () => {
+    const messages: ChatMessage[] = [
+      { content: "Hello", role: "user" },
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [{ arguments: {}, id: "tool_1", name: "ping" }],
+        usage: {
+          costUsd: 0.001,
+          inputTokens: 100,
+          outputTokens: 10,
+          totalTokens: 110,
+        },
+      },
+      { content: "{}", name: "ping", role: "tool", toolCallId: "tool_1" },
+      {
+        content: "Done",
+        role: "assistant",
+        usage: {
+          costUsd: 0.002,
+          inputTokens: 200,
+          outputTokens: 20,
+          totalTokens: 220,
+        },
+      },
+    ];
+
+    const reply = chatMessagesToListItems(messages).find(
+      (item) => item.role === "assistant"
+    );
+
+    expect(reply?.usage).toEqual({
+      costUsd: 0.003,
+      inputTokens: 300,
+      outputTokens: 30,
+      totalTokens: 330,
+    });
+  });
+
   test("preserves history index and metadata for rendered items", () => {
     const messages: ChatMessage[] = [
       { content: "Hello", role: "user" },
@@ -458,5 +499,76 @@ describe("session channel tables", () => {
     );
 
     expect(readOnly).toEqual(["telegram", "whatsapp", "discord"]);
+  });
+});
+
+describe("isEditableUserMessage", () => {
+  function userMessage(overrides: Partial<ChatListItem> = {}): ChatListItem {
+    return {
+      content: "What is the deploy command?",
+      historyIndex: 2,
+      id: "m1",
+      role: "user",
+      ...overrides,
+    };
+  }
+
+  test("accepts a stored text-only prompt", () => {
+    expect(isEditableUserMessage(userMessage())).toBe(true);
+  });
+
+  test("rejects a prompt that is not in server history yet", () => {
+    expect(
+      isEditableUserMessage(userMessage({ historyIndex: undefined }))
+    ).toBe(false);
+  });
+
+  test("rejects assistant and tool rows", () => {
+    expect(isEditableUserMessage(userMessage({ role: "assistant" }))).toBe(
+      false
+    );
+    expect(isEditableUserMessage(userMessage({ role: "tool" }))).toBe(false);
+  });
+
+  test("rejects a failed turn", () => {
+    expect(isEditableUserMessage(userMessage({ failed: true }))).toBe(false);
+  });
+
+  test("rejects blank content", () => {
+    expect(isEditableUserMessage(userMessage({ content: "   " }))).toBe(false);
+  });
+
+  test("rejects prompts carrying attachments", () => {
+    expect(
+      isEditableUserMessage(
+        userMessage({ images: [{ mediaType: "image/png", url: "blob:x" }] })
+      )
+    ).toBe(false);
+    expect(
+      isEditableUserMessage(
+        userMessage({
+          imageAttachments: [{ mediaType: "image/png", url: "blob:x" }],
+        })
+      )
+    ).toBe(false);
+    expect(
+      isEditableUserMessage(
+        userMessage({
+          documents: [{ filename: "spec.pdf", mediaType: "application/pdf" }],
+        })
+      )
+    ).toBe(false);
+  });
+
+  test("rejects a questionnaire answer bubble", () => {
+    expect(
+      isEditableUserMessage(
+        userMessage({
+          questionnaireAnswers: [
+            { answer: "yes", prompt: "Ship it?", questionId: "q1" },
+          ],
+        })
+      )
+    ).toBe(false);
   });
 });

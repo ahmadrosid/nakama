@@ -25,6 +25,7 @@ import {
   useRefreshSystemStatus,
   useSystemStatusQuery,
 } from "@/hooks/use-system-status";
+import { formatUsd } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatProviderLabel } from "@/lib/models";
 import { PAGE_PATHS } from "@/lib/navigation";
@@ -814,22 +815,6 @@ function StatusSkeleton() {
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString();
-}
-
-function formatUsd(amount: number): string {
-  if (amount === 0) {
-    return "$0.00";
-  }
-
-  if (amount < 0.01) {
-    return `$${amount.toFixed(4)}`;
-  }
-
-  if (amount < 1) {
-    return `$${amount.toFixed(3)}`;
-  }
-
-  return `$${amount.toFixed(2)}`;
 }
 
 function formatRelativeTime(value: string): string {

@@ -21,33 +21,51 @@ import { isPluginOwned } from "@/hooks/use-plugins";
 
 interface ToolAssignDialogProps {
   disabled?: boolean;
+  error?: string | null;
+  hideTrigger?: boolean;
   onAssign: (toolId: string) => void | Promise<void>;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
   tools: ToolSummary[];
 }
 
 export function ToolAssignDialog({
   tools,
   disabled = false,
+  error = null,
+  hideTrigger = false,
   onAssign,
+  onOpenChange,
+  open: openProp,
 }: ToolAssignDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = openProp ?? uncontrolledOpen;
 
-  if (tools.length === 0) {
+  function setOpen(nextOpen: boolean) {
+    onOpenChange?.(nextOpen);
+    if (openProp === undefined) {
+      setUncontrolledOpen(nextOpen);
+    }
+  }
+
+  if (tools.length === 0 && !hideTrigger) {
     return null;
   }
 
   return (
     <>
-      <Button
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
-        Add tool
-      </Button>
+      {hideTrigger ? null : (
+        <Button
+          disabled={disabled}
+          onClick={() => setOpen(true)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
+          Add tool
+        </Button>
+      )}
 
       <Dialog
         onOpenChange={(nextOpen) => {
@@ -61,6 +79,11 @@ export function ToolAssignDialog({
             <DialogDescription>
               Choose a tool to allow for this profile.
             </DialogDescription>
+            {error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
+            ) : null}
           </DialogHeader>
 
           <Command className="rounded-none bg-transparent">
@@ -68,7 +91,11 @@ export function ToolAssignDialog({
               <CommandInput placeholder="Search tools…" />
             </div>
             <CommandList className="max-h-72 p-1">
-              <CommandEmpty>No tools found.</CommandEmpty>
+              <CommandEmpty>
+                {tools.length === 0
+                  ? "All tools are already assigned."
+                  : "No tools found."}
+              </CommandEmpty>
               <CommandGroup>
                 {tools.map((tool) => (
                   <CommandItem

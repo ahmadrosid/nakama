@@ -239,11 +239,101 @@ function McpServerDialogCreateForm({
   );
 }
 
+function McpServerDialogHeader({
+  canAssignExisting,
+  error,
+  formDisabled,
+  idPrefix,
+  isEdit,
+  mode,
+  onAssign,
+  onModeChange,
+  transport,
+}: {
+  canAssignExisting: boolean;
+  error: string | null;
+  formDisabled: boolean;
+  idPrefix: string;
+  isEdit: boolean;
+  mode: AddMcpMode;
+  onAssign?: (serverId: string) => void;
+  onModeChange: (mode: AddMcpMode) => void;
+  transport: string;
+}) {
+  return (
+    <DialogHeader className="gap-2">
+      <DialogTitle>{isEdit ? "Edit MCP server" : "Add MCP server"}</DialogTitle>
+      <DialogDescription>
+        {mcpServerDialogDescription({
+          canAssignExisting,
+          isEdit,
+          onAssign,
+          transport,
+        })}
+      </DialogDescription>
+      {canAssignExisting ? (
+        <McpServerModeTabs
+          formDisabled={formDisabled}
+          idPrefix={idPrefix}
+          mode={mode}
+          onModeChange={onModeChange}
+        />
+      ) : null}
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </DialogHeader>
+  );
+}
+
+function McpServerDialogBody({
+  assignMode,
+  availableServers,
+  busy,
+  canAssignExisting,
+  onAssign,
+  onOpenChange,
+  state,
+}: {
+  assignMode: boolean;
+  availableServers: McpServerSummary[];
+  busy: boolean;
+  canAssignExisting: boolean;
+  onAssign?: (serverId: string) => void;
+  onOpenChange: (open: boolean) => void;
+  state: McpServerDialogState;
+}) {
+  if (canAssignExisting && onAssign) {
+    return (
+      <McpServerDialogPanels
+        assignMode={assignMode}
+        availableServers={availableServers}
+        busy={busy}
+        onAssign={onAssign}
+        onOpenChange={onOpenChange}
+        state={state}
+      />
+    );
+  }
+
+  return (
+    <McpServerDialogCreateForm
+      busy={busy}
+      onOpenChange={onOpenChange}
+      state={state}
+      submitLabel={state.isEdit ? "Save changes" : "Add server"}
+    />
+  );
+}
+
 export function McpServerDialog({
   open,
   busy,
   server,
   availableServers,
+  error = null,
   onOpenChange,
   onSubmit,
   onAssign,
@@ -252,6 +342,7 @@ export function McpServerDialog({
   busy: boolean;
   server?: McpServerSummary | null;
   availableServers?: McpServerSummary[];
+  error?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
   onAssign?: (serverId: string) => void;
@@ -271,51 +362,30 @@ export function McpServerDialog({
     }
   }
 
-  const assignMode = canAssignExisting && mode === "existing";
-
   return (
     <>
       <Dialog onOpenChange={onOpenChange} open={open}>
         <DialogContent className="gap-6 p-6 sm:max-w-lg">
-          <DialogHeader className="gap-2">
-            <DialogTitle>
-              {state.isEdit ? "Edit MCP server" : "Add MCP server"}
-            </DialogTitle>
-            <DialogDescription>
-              {mcpServerDialogDescription({
-                canAssignExisting,
-                isEdit: state.isEdit,
-                onAssign,
-                transport: state.transport,
-              })}
-            </DialogDescription>
-            {canAssignExisting ? (
-              <McpServerModeTabs
-                formDisabled={state.formDisabled}
-                idPrefix={state.idPrefix}
-                mode={mode}
-                onModeChange={setMode}
-              />
-            ) : null}
-          </DialogHeader>
-
-          {canAssignExisting && onAssign ? (
-            <McpServerDialogPanels
-              assignMode={assignMode}
-              availableServers={availableServers ?? []}
-              busy={busy}
-              onAssign={onAssign}
-              onOpenChange={onOpenChange}
-              state={state}
-            />
-          ) : (
-            <McpServerDialogCreateForm
-              busy={busy}
-              onOpenChange={onOpenChange}
-              state={state}
-              submitLabel={state.isEdit ? "Save changes" : "Add server"}
-            />
-          )}
+          <McpServerDialogHeader
+            canAssignExisting={canAssignExisting}
+            error={error}
+            formDisabled={state.formDisabled}
+            idPrefix={state.idPrefix}
+            isEdit={state.isEdit}
+            mode={mode}
+            onAssign={onAssign}
+            onModeChange={setMode}
+            transport={state.transport}
+          />
+          <McpServerDialogBody
+            assignMode={canAssignExisting && mode === "existing"}
+            availableServers={availableServers ?? []}
+            busy={busy}
+            canAssignExisting={canAssignExisting}
+            onAssign={onAssign}
+            onOpenChange={onOpenChange}
+            state={state}
+          />
         </DialogContent>
       </Dialog>
 

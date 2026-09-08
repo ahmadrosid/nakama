@@ -1,42 +1,18 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../services/agent-service";
-import { AuthService } from "../services/auth-service";
-import { OrgService } from "../services/org-service";
-import { createHonoApp } from "./app";
+import { setupTestConfigDir } from "../test-config-dir";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import { setupFreshInstallSession } from "./test-session-helpers";
 
+setupTestConfigDir("nakama-email-route-");
+
 describe("email settings routes", () => {
-  let configDir = "";
-
-  afterEach(async () => {
-    if (configDir) {
-      await rm(configDir, { force: true, recursive: true });
-      configDir = "";
-    }
-
-    delete process.env.NAKAMA_CONFIG_DIR;
-  });
-
   test("org admin can read and update email settings without exposing password", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "nakama-email-route-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
     const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
-    const app = createHonoApp({
+    const { app } = createMinimalHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
-      authService,
-      automationService: {} as any,
       databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      webDistDir: null,
-      workerManager: {} as any,
     });
 
     const session = await setupFreshInstallSession(app, databaseAdapter);

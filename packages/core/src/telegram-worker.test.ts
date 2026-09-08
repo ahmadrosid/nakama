@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  isHeartbeatAlive,
   parseTelegramWorkerHeartbeat,
   resolveTelegramWorkerStatus,
 } from "./telegram-worker";
@@ -65,33 +64,6 @@ describe("resolveTelegramWorkerStatus", () => {
       paired: true,
       running: true,
     });
-  });
-});
-
-describe("isHeartbeatAlive", () => {
-  test("rejects stale or invalid heartbeats", () => {
-    expect(isHeartbeatAlive(null)).toBe(false);
-    expect(
-      isHeartbeatAlive({
-        pid: process.pid,
-        updatedAt: new Date(Date.now() - 60_000).toISOString(),
-      })
-    ).toBe(false);
-    expect(
-      isHeartbeatAlive({
-        pid: process.pid,
-        updatedAt: "not-a-date",
-      })
-    ).toBe(false);
-  });
-
-  test("accepts a fresh heartbeat for the current process", () => {
-    expect(
-      isHeartbeatAlive({
-        pid: process.pid,
-        updatedAt: new Date().toISOString(),
-      })
-    ).toBe(true);
   });
 });
 
