@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { JsonSchema, ToolContext, ToolDefinition } from "../contract";
 import {
-  emailConfigToMailboxConfig,
   isEmailConfigComplete,
   loadEmailConfig,
+  toMailboxConfig,
 } from "../email-config";
 import {
   createAttachmentReference,
@@ -168,12 +168,8 @@ export interface EmailToolFailure {
 export type EmailToolResult = EmailToolSuccess | EmailToolFailure;
 
 export interface EmailToolDependencies {
-  createReader?: (
-    config: ReturnType<typeof emailConfigToMailboxConfig>
-  ) => MailReader;
-  createSender?: (
-    config: ReturnType<typeof emailConfigToMailboxConfig>
-  ) => MailSender;
+  createReader?: (config: ReturnType<typeof toMailboxConfig>) => MailReader;
+  createSender?: (config: ReturnType<typeof toMailboxConfig>) => MailSender;
   loadConfig?: typeof loadEmailConfig;
 }
 
@@ -197,7 +193,7 @@ export async function runEmailTool(
   }
 
   const parsed = parseEmailToolInput(input);
-  const mailboxConfig = emailConfigToMailboxConfig(config);
+  const mailboxConfig = toMailboxConfig(config);
 
   if (parsed.action === "send") {
     return sendEmail(parsed, mailboxConfig, dependencies.createSender);
@@ -248,7 +244,7 @@ export async function runEmailTool(
 
 async function sendEmail(
   input: Extract<EmailToolInput, { action: "send" }>,
-  mailboxConfig: ReturnType<typeof emailConfigToMailboxConfig>,
+  mailboxConfig: ReturnType<typeof toMailboxConfig>,
   createSender: EmailToolDependencies["createSender"]
 ): Promise<EmailToolResult> {
   const { to, subject, text, html } = input;

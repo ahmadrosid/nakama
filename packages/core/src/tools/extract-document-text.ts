@@ -8,9 +8,9 @@ import { LEGACY_DOC_UNSUPPORTED_MESSAGE } from "../artifact-mime";
 import type { ToolContext, ToolDefinition } from "../contract";
 import { looksLikeOleDocument } from "../docx-text";
 import {
-  emailConfigToMailboxConfig,
   isEmailConfigComplete,
   loadEmailConfig,
+  toMailboxConfig,
 } from "../email-config";
 import {
   getMailboxIdentity,
@@ -70,9 +70,7 @@ export type ExtractDocumentTextResult =
   | ExtractDocumentTextFailure;
 
 export interface ExtractDocumentTextDependencies {
-  createReader?: (
-    config: ReturnType<typeof emailConfigToMailboxConfig>
-  ) => MailReader;
+  createReader?: (config: ReturnType<typeof toMailboxConfig>) => MailReader;
   loadConfig?: typeof loadEmailConfig;
 }
 
@@ -135,7 +133,7 @@ export async function runExtractDocumentText(
         };
       }
 
-      const mailboxConfig = emailConfigToMailboxConfig(config);
+      const mailboxConfig = toMailboxConfig(config);
       let reference;
       try {
         reference = verifyAttachmentReference(

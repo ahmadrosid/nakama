@@ -36,9 +36,6 @@
   "overrides": {
     "libsignal": "6.0.0"
   },
-  "dependencies": {
-    "zustand": "^5.0.15"
-  },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@types/bun": "^1.3.14",

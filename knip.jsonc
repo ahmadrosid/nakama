@@ -138,7 +138,6 @@
     "apps/web/src/components/FireworksModelsBrowseList.tsx": ["types"],
     "apps/web/src/components/ModelBrowseShell.tsx": ["types"],
     "apps/web/src/lib/thinking-settings.ts": ["duplicates"],
-    "packages/core/src/email-config.ts": ["duplicates"],
     "docs/website/mdx-components.tsx": ["unlisted"]
   }
 }
