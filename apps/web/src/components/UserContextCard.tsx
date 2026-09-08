@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -99,10 +98,6 @@ export function UserContextEditorDialog({
       <DialogContent className="flex max-h-[min(90dvh,44rem)] w-[calc(100%-1.5rem)] flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Personalisation (USER.md)</DialogTitle>
-          <DialogDescription>
-            A quick note so the agent knows who you are in this org. Every
-            answer is optional.
-          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
@@ -110,7 +105,7 @@ export function UserContextEditorDialog({
             <Spinner />
           </div>
         ) : (
-          <div className="-mx-1 flex-1 overflow-y-auto px-1">
+          <div className="no-scrollbar -mx-1 flex-1 overflow-y-auto px-1">
             <UserContextForm
               disabled={busy}
               idPrefix="user-context-dialog"
