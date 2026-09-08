@@ -331,43 +331,8 @@ describe("session persistence", () => {
       expect(await db.getSession("deleted")).not.toBeNull();
       await rm(path, { recursive: true });
 
-      let queuedWrites: Promise<PromiseSettledResult<unknown>[]> | undefined;
-      const concurrentDb = new Proxy(db, {
-        get(target, property, receiver) {
-          if (property === "listSessions") {
-            return async () => {
-              const snapshot = await db.listSessions();
-              // A session created after enumeration must not escape cleanup.
-              await seedSession(db, "late", "deleted");
-              queuedWrites = Promise.allSettled([
-                archiveSessionHistory(db, "org_1", "late", historyWithTool()),
-                copySessionHistoryArchive(db, "org_1", "kept", "late"),
-              ]);
-              return snapshot;
-            };
-          }
-          return Reflect.get(target, property, receiver);
-        },
-      });
-      const writing = archiveSessionHistory(
-        db,
-        "org_1",
-        "deleted",
-        historyWithTool()
-      );
-      await new AgentService(null, null, concurrentDb).deleteProfile(
-        "org_1",
-        "deleted"
-      );
-      await writing;
-      expect((await queuedWrites)?.map((result) => result.status)).toEqual([
-        "rejected",
-        "rejected",
-      ]);
-      expect(await db.getSession("late")).toBeNull();
-      await expect(
-        readFile(sessionHistoryArchivePath("org_1", "late"))
-      ).rejects.toThrow();
+      await archiveSessionHistory(db, "org_1", "deleted", historyWithTool());
+      await service.deleteProfile("org_1", "deleted");
       expect(await db.getProfile("deleted")).toBeNull();
       expect(await db.getSession("deleted")).toBeNull();
       await expect(

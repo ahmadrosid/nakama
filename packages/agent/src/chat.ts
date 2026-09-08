@@ -294,22 +294,19 @@ export function createAgentChatSession(
       assertUnchanged();
       const recovery = await options.archiveHistory?.(original);
       assertUnchanged();
-      if (recovery) {
-        for (let index = 0; index < compacted.length; index += 1) {
-          const message = compacted[index];
-          if (
-            message &&
-            ((result.action === "summarized" && index === 0) ||
-              (result.action === "pruned" &&
-                message !== history[index] &&
-                message.role === "tool"))
-          ) {
-            compacted[index] = {
-              ...message,
-              content: `${message.content}\n\n${recovery}`,
-            };
-          }
-        }
+      const index =
+        result.action === "summarized"
+          ? 0
+          : compacted.findIndex(
+              (message, position) =>
+                message.role === "tool" && message !== original[position]
+            );
+      const first = compacted[index];
+      if (recovery && first) {
+        compacted[index] = {
+          ...first,
+          content: `${first.content}\n\n${recovery}`,
+        };
       }
       history.splice(0, history.length, ...compacted);
       bumpHistoryRevision();
