@@ -47,6 +47,7 @@ import {
   ChatMessageQueuePanel,
   type QueuedComposerMessage,
 } from "@/components/chat/ChatMessageQueuePanel";
+import { ChatAddCapabilitiesDialogs } from "@/components/chat/chat-add-capabilities-dialogs";
 import { composerActions } from "@/components/chat/chat-composer-actions";
 import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
@@ -66,11 +67,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAuth } from "@/context/use-auth";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
+  type ComposerAddCommandAction,
   type ComposerSlashSuggestion,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
+  matchComposerAddCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
@@ -133,6 +137,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   onNavigateSetup?: () => void;
   onThinkingEffortChange?: (effort: ThinkingEffort) => void;
   primarySupportsVision?: boolean;
+  profileId?: string | null;
   profileModelId?: string | null;
   providerConfigured?: boolean;
   providerModelGroups: Array<{
@@ -262,6 +267,7 @@ function ChatComposerStackedPrompt({
   displayError,
   footerClassName,
   headerNotice,
+  onAddCommand,
   onStop,
   onSubmit,
   placeholder,
@@ -279,6 +285,7 @@ function ChatComposerStackedPrompt({
   displayError: string | null;
   footerClassName?: string;
   headerNotice?: ReactNode;
+  onAddCommand?: (action: ComposerAddCommandAction) => void;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder: string;
@@ -318,6 +325,7 @@ function ChatComposerStackedPrompt({
             disabled={disabled}
             key={skillPickerKey}
             longPasteWordThreshold={LONG_PASTE_WORD_THRESHOLD}
+            onAddCommand={onAddCommand}
             placeholder={placeholder}
           />
         </PromptInputBody>
@@ -352,6 +360,7 @@ function ChatComposerBarePrompt({
   footerClassName,
   headerNotice,
   isMinimal,
+  onAddCommand,
   onStop,
   onSubmit,
   placeholder,
@@ -370,6 +379,7 @@ function ChatComposerBarePrompt({
   footerClassName?: string;
   headerNotice?: ReactNode;
   isMinimal: boolean;
+  onAddCommand?: (action: ComposerAddCommandAction) => void;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder: string;
@@ -417,6 +427,7 @@ function ChatComposerBarePrompt({
             longPasteWordThreshold={
               isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD
             }
+            onAddCommand={onAddCommand}
             placeholder={placeholder}
           />
         </PromptInputBody>
@@ -463,7 +474,8 @@ function isFullComposer(
 
 function resolveChatComposerLayout(
   props: ChatComposerProps,
-  displayError: string | null
+  displayError: string | null,
+  enableAddCommands = false
 ) {
   const isMinimal = props.variant === "minimal";
   const todos = props.todos ?? EMPTY_TODOS;
@@ -480,6 +492,7 @@ function resolveChatComposerLayout(
   return {
     availableSkills,
     disabled: props.disabled ?? false,
+    enableAddCommands: !isMinimal && enableAddCommands,
     hasQuestionnaire,
     hasQueuedMessages,
     isMinimal,
@@ -502,11 +515,13 @@ function resolveChatComposerLayout(
 function ChatComposerMain({
   displayError,
   layout,
+  onAddCommand,
   props,
   setAttachmentError,
 }: {
   displayError: string | null;
   layout: ReturnType<typeof resolveChatComposerLayout>;
+  onAddCommand: (action: ComposerAddCommandAction) => void;
   props: ChatComposerProps;
   setAttachmentError: (message: string | null) => void;
 }) {
@@ -519,6 +534,7 @@ function ChatComposerMain({
     displayError,
     footerClassName: props.footerClassName,
     headerNotice: isFullComposer(props) ? props.headerNotice : undefined,
+    onAddCommand: layout.enableAddCommands ? onAddCommand : undefined,
     onStop: props.onStop,
     onSubmit: props.onSubmit,
     placeholder: layout.placeholder,
@@ -566,7 +582,11 @@ function ChatComposerMain({
 }
 
 export function ChatComposer(props: ChatComposerProps) {
+  const { user } = useAuth();
   const { textInput } = usePromptInputController();
+  const [addDialog, setAddDialog] = useState<ComposerAddCommandAction | null>(
+    null
+  );
   useEffect(() => {
     storeComposerDraft(props.draftStorageKey ?? null, textInput.value);
   }, [props.draftStorageKey, textInput.value]);
@@ -579,9 +599,27 @@ export function ChatComposer(props: ChatComposerProps) {
     textInput.clear();
   }
 
+  const openAddCommand = useCallback((action: ComposerAddCommandAction) => {
+    setAddDialog(action);
+  }, []);
+
+  const canAddCapabilities =
+    isFullComposer(props) &&
+    Boolean(props.profileId) &&
+    !(props.disabled ?? false) &&
+    user?.isPlatformAdmin === true;
+
   const composerProps: ChatComposerProps = {
     ...props,
     onSubmit: (text, files) => {
+      const addCommand = canAddCapabilities
+        ? matchComposerAddCommand(text)
+        : null;
+      if (addCommand) {
+        clearDraft();
+        openAddCommand(addCommand);
+        return;
+      }
       clearDraft();
       props.onSubmit(text, files);
     },
@@ -594,7 +632,16 @@ export function ChatComposer(props: ChatComposerProps) {
   };
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = props.error ?? attachmentError;
-  const layout = resolveChatComposerLayout(props, displayError);
+  const layout = resolveChatComposerLayout(
+    composerProps,
+    displayError,
+    canAddCapabilities
+  );
+
+  const addProfileId =
+    isFullComposer(composerProps) && layout.enableAddCommands
+      ? (composerProps.profileId ?? null)
+      : null;
 
   return (
     <div className={cn("w-full shrink-0", props.className)}>
@@ -604,9 +651,23 @@ export function ChatComposer(props: ChatComposerProps) {
       <ChatComposerMain
         displayError={displayError}
         layout={layout}
+        onAddCommand={openAddCommand}
         props={composerProps}
         setAttachmentError={setAttachmentError}
       />
+      {addProfileId ? (
+        <ChatAddCapabilitiesDialogs
+          mcpOpen={addDialog === "add-mcp"}
+          onMcpOpenChange={(open) => {
+            setAddDialog(open ? "add-mcp" : null);
+          }}
+          onToolOpenChange={(open) => {
+            setAddDialog(open ? "add-tool" : null);
+          }}
+          profileId={addProfileId}
+          toolOpen={addDialog === "add-tool"}
+        />
+      ) : null}
     </div>
   );
 }
@@ -615,12 +676,14 @@ function ChatComposerTextarea({
   availableSkills,
   disabled,
   className,
+  onAddCommand,
   placeholder,
   longPasteWordThreshold,
 }: {
   availableSkills: SkillSummary[];
   disabled: boolean;
   className: string;
+  onAddCommand?: (action: ComposerAddCommandAction) => void;
   placeholder: string;
   longPasteWordThreshold?: number;
 }) {
@@ -632,9 +695,11 @@ function ChatComposerTextarea({
   const suggestions = useMemo(
     () =>
       slashRange
-        ? filterComposerSlashSuggestions(availableSkills, slashRange.query)
+        ? filterComposerSlashSuggestions(availableSkills, slashRange.query, {
+            enableAddCommands: onAddCommand != null,
+          })
         : [],
-    [availableSkills, slashRange]
+    [availableSkills, onAddCommand, slashRange]
   );
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
   const safeActiveIndex =
@@ -656,6 +721,21 @@ function ChatComposerTextarea({
         slashRange ?? findActiveSkillSlashRange(value, cursorIndex);
 
       if (!activeRange) {
+        return;
+      }
+
+      const addAction =
+        suggestion.kind === "command" ? suggestion.command.action : undefined;
+      if (
+        onAddCommand &&
+        (addAction === "add-tool" || addAction === "add-mcp")
+      ) {
+        controller.textInput.setInput(
+          `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
+        );
+        setSlashRange(null);
+        setActiveIndex(0);
+        onAddCommand(addAction);
         return;
       }
 
@@ -683,7 +763,7 @@ function ChatComposerTextarea({
         textareaRef.current?.focus();
       });
     },
-    [controller.textInput, slashRange]
+    [controller.textInput, onAddCommand, slashRange]
   );
 
   return (
