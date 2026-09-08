@@ -1,14 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { crc32 } from "node:zlib";
+import { gzipSync } from "node:zlib";
 import { getPluginReleaseDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { zipSync } from "fflate";
-import { PluginHostError, PluginService } from "./plugin-service";
+import {
+  approvedPluginPackage,
+  pluginPackage,
+  pluginTarball,
+} from "../testing/plugin-package-fixture";
+import { PluginService } from "./plugin-service";
 
 const SIDE_EFFECT_MARKER = join(tmpdir(), "nakama-plugin-side-effect-marker");
 
@@ -53,102 +56,22 @@ function notesManifest(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function encodeZip(
-  files: Record<string, string | Uint8Array>,
-  options?: Parameters<typeof zipSync>[1]
-): Uint8Array {
-  const entries: Record<string, Uint8Array> = {};
-  for (const [name, value] of Object.entries(files)) {
-    entries[name] = typeof value === "string" ? Buffer.from(value) : value;
-  }
-  return zipSync(entries, options);
-}
-
-function validBundle(overrides: Record<string, unknown> = {}): Uint8Array {
+function validBundle(
+  overrides: Record<string, unknown> = {},
+  options?: Parameters<typeof pluginPackage>[1]
+): ReturnType<typeof pluginPackage> {
   const manifest = notesManifest(overrides);
-  return encodeZip({
-    "actions/list.js": sideEffectJs,
-    "nakama.plugin.json": JSON.stringify(manifest),
-    "side-effect.js": sideEffectJs,
-    "skills/notes/SKILL.md": "# Notes\n",
-    "ui/assets/app.js": "export {}",
-    "ui/index.html": "<html></html>",
-  });
-}
-
-function digestOf(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-const UNIX_SYMLINK_ATTRS = 2_717_843_456;
-
-function storedZip(
-  entries: Array<{
-    attrs?: number;
-    data?: Uint8Array;
-    name: string;
-    os?: number;
-  }>
-): Uint8Array {
-  const locals: Uint8Array[] = [];
-  const centrals: Uint8Array[] = [];
-  let offset = 0;
-
-  for (const entry of entries) {
-    const data = entry.data ?? new Uint8Array(0);
-    const name = Buffer.from(entry.name, "utf8");
-    const crc = crc32(data);
-    const local = Buffer.alloc(30 + name.length + data.length);
-    local.writeUInt32LE(0x04_03_4b_50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
-    local.writeUInt16LE(0, 8);
-    local.writeUInt16LE(0, 10);
-    local.writeUInt16LE(0, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    local.writeUInt16LE(0, 28);
-    name.copy(local, 30);
-    Buffer.from(data).copy(local, 30 + name.length);
-    locals.push(local);
-
-    const central = Buffer.alloc(46 + name.length);
-    central.writeUInt32LE(0x02_01_4b_50, 0);
-    central.writeUInt16LE((entry.os ?? 0) * 256 + 20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0, 8);
-    central.writeUInt16LE(0, 10);
-    central.writeUInt16LE(0, 12);
-    central.writeUInt16LE(0, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(data.length, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt16LE(0, 30);
-    central.writeUInt16LE(0, 32);
-    central.writeUInt16LE(0, 34);
-    central.writeUInt16LE(0, 36);
-    central.writeUInt32LE(entry.attrs ?? 0, 38);
-    central.writeUInt32LE(offset, 42);
-    name.copy(central, 46);
-    centrals.push(central);
-    offset += local.length;
-  }
-
-  const centralSize = centrals.reduce((sum, part) => sum + part.length, 0);
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06_05_4b_50, 0);
-  eocd.writeUInt16LE(0, 4);
-  eocd.writeUInt16LE(0, 6);
-  eocd.writeUInt16LE(entries.length, 8);
-  eocd.writeUInt16LE(entries.length, 10);
-  eocd.writeUInt32LE(centralSize, 12);
-  eocd.writeUInt32LE(offset, 16);
-  eocd.writeUInt16LE(0, 20);
-
-  return Buffer.concat([...locals, ...centrals, eocd]);
+  return pluginPackage(
+    {
+      "actions/list.js": sideEffectJs,
+      "nakama.plugin.json": JSON.stringify(manifest),
+      "side-effect.js": sideEffectJs,
+      "skills/notes/SKILL.md": "# Notes\n",
+      "ui/assets/app.js": "export {}",
+      "ui/index.html": "<html></html>",
+    },
+    options
+  );
 }
 
 describe("PluginService", () => {
@@ -164,13 +87,13 @@ describe("PluginService", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("previews and installs a bundle without running top-level side-effect code", async () => {
+  test("previews and installs a npm package without running top-level side-effect code", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
     const archive = validBundle();
 
     const preview = await service.previewPluginPackage(archive);
-    expect(preview.digest).toBe(digestOf(archive));
+    expect(preview.digest).toBe(approvedPluginPackage(archive).expectedDigest);
     expect(preview.manifest.id).toBe("notes");
     expect(preview.contributions).toEqual({
       actionKeys: ["list"],
@@ -204,71 +127,187 @@ describe("PluginService", () => {
     const escapeProbe = join(parent, "nakama-plugin-escape.txt");
     await rm(escapeProbe, { force: true });
 
-    const cases: Uint8Array[] = [
-      storedZip([
-        {
-          data: Buffer.from(JSON.stringify(notesManifest())),
-          name: "nakama.plugin.json",
-        },
-        { data: Buffer.from("escaped"), name: "../nakama-plugin-escape.txt" },
-      ]),
-      storedZip([
-        {
-          data: Buffer.from(JSON.stringify(notesManifest())),
-          name: "nakama.plugin.json",
-        },
-        { data: Buffer.from("x"), name: "foo/%2e%2e/secret.js" },
-      ]),
-      storedZip([
-        {
-          data: Buffer.from(JSON.stringify(notesManifest())),
-          name: "nakama.plugin.json",
-        },
-        { data: Buffer.from("x"), name: "foo\\..\\secret.js" },
-      ]),
-      storedZip([
-        {
-          data: Buffer.from(JSON.stringify(notesManifest())),
-          name: "nakama.plugin.json",
-        },
-        {
-          attrs: UNIX_SYMLINK_ATTRS,
-          data: Buffer.from("target"),
-          name: "link",
-          os: 3,
-        },
-      ]),
-      storedZip([
-        { data: Buffer.from("one"), name: "a/b.txt" },
-        { data: Buffer.from("two"), name: "a//b.txt" },
-        {
-          data: Buffer.from(JSON.stringify(notesManifest())),
-          name: "nakama.plugin.json",
-        },
-      ]),
-      encodeZip({
-        "actions/list.js": sideEffectJs,
-        "nakama.plugin.json": JSON.stringify(notesManifest()),
-        "oversized.bin": new Uint8Array(20 * 1024 * 1024 + 1),
-        "skills/notes/SKILL.md": "# Notes\n",
-        "ui/assets/app.js": "export {}",
-        "ui/index.html": "<html></html>",
-      }),
+    const cases = [
+      ...[
+        "../nakama-plugin-escape.txt",
+        "foo/%2e%2e/secret.js",
+        "foo\\..\\secret.js",
+        "/absolute.txt",
+      ].map((name) => ({
+        code: "unsafe_path",
+        source: pluginPackage(
+          {},
+          {
+            archive: pluginTarball([
+              { data: Buffer.from("escaped"), name: `package/${name}` },
+            ]),
+          }
+        ),
+      })),
+      ...(["SymbolicLink", "Link"] as const).map((type) => ({
+        code: "unsupported_entry",
+        source: pluginPackage(
+          {},
+          { archive: pluginTarball([{ name: "package/link", type }]) }
+        ),
+      })),
+      {
+        code: "duplicate_entry",
+        source: pluginPackage(
+          {},
+          {
+            archive: pluginTarball([
+              { name: "package/a.txt" },
+              { name: "package/a.txt" },
+            ]),
+          }
+        ),
+      },
+      {
+        code: "expansion_limit",
+        source: pluginPackage({
+          "oversized.bin": new Uint8Array(20 * 1024 * 1024 + 1),
+        }),
+      },
+      {
+        code: "expansion_limit",
+        source: pluginPackage(
+          {},
+          {
+            archive: pluginTarball(
+              Array.from({ length: 2001 }, (_, index) => ({
+                name: `package/${index}.txt`,
+              }))
+            ),
+          }
+        ),
+      },
+      {
+        code: "archive_too_large",
+        source: pluginPackage(
+          {},
+          { archive: Buffer.alloc(20 * 1024 * 1024 + 1) }
+        ),
+      },
+      {
+        code: "invalid_archive",
+        source: pluginPackage(
+          {},
+          { archive: gzipSync(Buffer.alloc(100 * 1024 * 1024 + 1)) }
+        ),
+      },
+      {
+        code: "invalid_archive",
+        source: pluginPackage({}, { archive: Buffer.from("not a tarball") }),
+      },
     ];
 
-    for (const archive of cases) {
-      await expect(
-        service.previewPluginPackage(archive)
-      ).rejects.toBeInstanceOf(PluginHostError);
-      await expect(
-        service.installPluginPackage(archive)
-      ).rejects.toBeInstanceOf(PluginHostError);
+    for (const { source, code } of cases) {
+      await expect(service.previewPluginPackage(source)).rejects.toMatchObject({
+        code,
+      });
+      await expect(service.installPluginPackage(source)).rejects.toMatchObject({
+        code,
+      });
       expect(existsSync(escapeProbe)).toBe(false);
       expect(existsSync(getPluginReleaseDir("notes", "1.0.0", configDir))).toBe(
         false
       );
       expect(existsSync(join(configDir, "plugins", ".staging"))).toBe(false);
     }
+  });
+
+  test("only accepts registry package names and exact versions", async () => {
+    const service = new PluginService(
+      createInMemoryDatabaseAdapter(),
+      configDir
+    );
+    for (const packageName of [
+      "file:./plugin",
+      "https://example.com/a.tgz",
+      "github:user/repo",
+      "../local",
+      "@scope/name@1.0.0",
+    ]) {
+      await expect(
+        service.previewPluginPackage({ packageName, version: "1.0.0" })
+      ).rejects.toMatchObject({ code: "invalid_package" });
+    }
+    for (const version of ["latest", "^1.0.0", "1", "*", "1.0.0 || 2.0.0"]) {
+      await expect(
+        service.previewPluginPackage({ packageName: "notes", version })
+      ).rejects.toMatchObject({ code: "invalid_package" });
+    }
+  });
+
+  test("pins approved integrity and verifies downloaded bytes", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    const source = validBundle();
+    await expect(
+      service.installPluginPackage(source, {
+        ...approvedPluginPackage(source),
+        expectedIntegrity: `sha512-${Buffer.alloc(64).toString("base64")}`,
+      })
+    ).rejects.toMatchObject({ code: "digest_mismatch" });
+    const corrupted = validBundle(
+      {},
+      { integrity: `sha512-${Buffer.alloc(64).toString("base64")}` }
+    );
+    await expect(service.previewPluginPackage(corrupted)).rejects.toMatchObject(
+      { code: "package_unavailable" }
+    );
+    expect(await db.getPluginRelease("notes", "1.0.0")).toBeNull();
+    expect(existsSync(getPluginReleaseDir("notes", "1.0.0", configDir))).toBe(
+      false
+    );
+  });
+
+  test("requires bundled dependencies and matching package identity", async () => {
+    const service = new PluginService(
+      createInMemoryDatabaseAdapter(),
+      configDir
+    );
+    for (const packageJson of [
+      { dependencies: { lodash: "1.0.0" } },
+      { optionalDependencies: { lodash: "1.0.0" } },
+      { peerDependencies: { lodash: "1.0.0" } },
+      { name: "another-package" },
+      { version: "2.0.0" },
+    ]) {
+      await expect(
+        service.previewPluginPackage(validBundle({}, { packageJson }))
+      ).rejects.toMatchObject({ code: "invalid_manifest" });
+    }
+  });
+
+  test("does not run npm lifecycle scripts or install dev dependencies", async () => {
+    const service = new PluginService(
+      createInMemoryDatabaseAdapter(),
+      configDir
+    );
+    const command = `bun -e 'require("fs").writeFileSync(${JSON.stringify(SIDE_EFFECT_MARKER)}, "ran")'`;
+    const source = validBundle(
+      {},
+      {
+        packageJson: {
+          devDependencies: { "this-package-does-not-exist": "1.0.0" },
+          scripts: {
+            install: command,
+            postinstall: command,
+            preinstall: command,
+            prepare: command,
+          },
+        },
+      }
+    );
+    await service.previewPluginPackage(source);
+    const installed = await service.installPluginPackage(
+      source,
+      approvedPluginPackage(source)
+    );
+    expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
+    expect(existsSync(join(installed.releaseDir, "node_modules"))).toBe(false);
   });
 
   test("failed metadata write leaves no usable half-installation and keeps the existing release", async () => {
@@ -313,7 +352,7 @@ describe("PluginService", () => {
       service.installPluginPackage(archive),
     ]);
 
-    expect(first.digest).toBe(digestOf(archive));
+    expect(first.digest).toBe(approvedPluginPackage(archive).expectedDigest);
     expect(second.digest).toBe(first.digest);
     expect(first.releaseDir).toBe(second.releaseDir);
     expect((await db.getPluginRelease("notes", "1.0.0"))?.digest).toBe(
@@ -352,7 +391,7 @@ describe("PluginService", () => {
   test("rejects a missing referenced file during preview", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
-    const archive = encodeZip({
+    const archive = pluginPackage({
       "nakama.plugin.json": JSON.stringify(notesManifest()),
       "skills/notes/SKILL.md": "# Notes\n",
     });

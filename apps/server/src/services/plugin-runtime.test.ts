@@ -11,7 +11,7 @@ import {
   PLUGIN_MANIFEST_API_VERSION,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { zipSync } from "fflate";
+import { pluginPackage } from "../testing/plugin-package-fixture";
 import {
   PluginHostError,
   PluginService,
@@ -84,14 +84,6 @@ export async function run() {
 }
 `;
 
-function encodeZip(files: Record<string, string>): Uint8Array {
-  const entries: Record<string, Uint8Array> = {};
-  for (const [name, value] of Object.entries(files)) {
-    entries[name] = Buffer.from(value);
-  }
-  return zipSync(entries);
-}
-
 function manifest(id: string, extras: Record<string, unknown> = {}) {
   return {
     actions: [
@@ -126,8 +118,8 @@ function bundle(
   id: string,
   actionSource: string,
   extras: Record<string, unknown> = {}
-): Uint8Array {
-  return encodeZip({
+): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/echo.js": actionSource,
     "nakama.plugin.json": JSON.stringify(manifest(id, extras)),
   });

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import {
   assertConfigPathSegment,
   buildToolExecutionContext,
@@ -30,13 +31,15 @@ import {
   validatePluginJsonInstance,
   validatePluginManifest,
 } from "@nakama/core";
+import type { PluginPackageRequest } from "@nakama/core/contract";
 import type {
   DatabaseAdapter,
   StoredOrgPluginRecord,
   StoredSkillRecord,
   StoredToolRecord,
 } from "@nakama/db";
-import { Unzip, UnzipInflate, UnzipPassThrough } from "fflate";
+import * as pacote from "pacote";
+import { Parser } from "tar";
 import { spawnJsonTool } from "./custom-tool-subprocess";
 
 const MAX_COMPRESSED_BYTES = 20 * 1024 * 1024;
@@ -44,14 +47,6 @@ const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 2000;
 const MAX_PATH_BYTES = 240;
-const ZIP64_SENTINEL = 0xff_ff_ff_ff;
-const EOCD_SIGNATURE = 0x06_05_4b_50;
-const CD_SIGNATURE = 0x02_01_4b_50;
-const UNIX_OS = 3;
-const UNIX_IFDIR_MIN = 0x40_00;
-const UNIX_IFDIR_MAX = 0x4f_ff;
-const UNIX_IFREG_MIN = 0x80_00;
-const UNIX_IFREG_MAX = 0x8f_ff;
 
 export class PluginHostError extends Error {
   readonly retryable: boolean;
@@ -69,6 +64,7 @@ export class PluginHostError extends Error {
 export interface PluginPackagePreview {
   contributions: PluginContributionSummary;
   digest: string;
+  integrity: string;
   manifest: PluginManifest;
 }
 
@@ -84,6 +80,7 @@ export interface PluginPackageInstallResult {
 
 export interface InstallPluginPackageOptions {
   expectedDigest?: string;
+  expectedIntegrity?: string;
 }
 
 interface PluginContributionSummary {
@@ -93,20 +90,15 @@ interface PluginContributionSummary {
   skillKeys: string[];
 }
 
-interface CentralDirectoryEntry {
-  attrs: number;
-  name: string;
-  os: number;
-  uncompressedSize: number;
-}
-
 interface InspectedPackage {
   digest: string;
   files: Map<string, Uint8Array>;
+  integrity: string;
   manifest: PluginManifest;
 }
 
 const installLocks = new Map<string, Promise<unknown>>();
+const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
 const PLUGIN_RUNNER_PATH = fileURLToPath(
   new URL("./plugin-runner.js", import.meta.url)
@@ -303,18 +295,21 @@ export class PluginService {
   }
 
   async previewPluginPackage(
-    archive: Uint8Array
+    source: PluginPackageRequest
   ): Promise<PluginPackagePreview> {
-    const inspected = inspectPluginPackage(archive);
+    const inspected = await inspectPluginPackage(source);
     return toPreview(inspected);
   }
 
   async installPluginPackage(
-    archive: Uint8Array,
+    source: PluginPackageRequest,
     options: InstallPluginPackageOptions = {}
   ): Promise<PluginPackageInstallResult> {
     return withPluginMutation(async () => {
-      const inspected = inspectPluginPackage(archive);
+      const inspected = await inspectPluginPackage(
+        source,
+        options.expectedIntegrity
+      );
       if (
         options.expectedDigest !== undefined &&
         options.expectedDigest !== inspected.digest
@@ -540,7 +535,7 @@ export class PluginService {
     pluginId: string,
     version?: string
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const existing = await this.db.getOrgPlugin(orgId, pluginId);
       const release = await this.resolveApprovedRelease(pluginId, version);
       if (!release) {
@@ -592,7 +587,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -711,7 +706,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -758,7 +753,7 @@ export class PluginService {
     targetVersion: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -870,7 +865,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -901,7 +896,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<void> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -1317,6 +1312,22 @@ export class PluginService {
       },
       workspaceRoot: input.context.workspaceRoot,
     });
+  }
+
+  private withOrgPluginMutation<T>(
+    orgId: string,
+    pluginId: string,
+    work: () => Promise<T>
+  ): Promise<T> {
+    // Keep the lock through filesystem cleanup, after revision checks can no
+    // longer protect an installation whose database record has been deleted.
+    return withPluginMutation(() =>
+      withKeyedLock(
+        lifecycleLocks,
+        getOrgPluginDataDir(orgId, pluginId, this.configDir),
+        work
+      )
+    );
   }
 
   private openPluginAdmission(orgId: string, pluginId: string): void {
@@ -1823,224 +1834,197 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
       skillKeys: inspected.manifest.skills.map((skill) => skill.key),
     },
     digest: inspected.digest,
+    integrity: inspected.integrity,
     manifest: inspected.manifest,
   };
 }
 
-function inspectPluginPackage(archive: Uint8Array): InspectedPackage {
-  if (archive.byteLength > MAX_COMPRESSED_BYTES) {
-    throw new PluginHostError("archive_too_large");
+async function inspectPluginPackage(
+  source: PluginPackageRequest,
+  expectedIntegrity?: string
+): Promise<InspectedPackage> {
+  if (
+    !source ||
+    typeof source.packageName !== "string" ||
+    source.packageName.length > 214 ||
+    !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(
+      source.packageName
+    ) ||
+    typeof source.version !== "string" ||
+    source.version.length > 128 ||
+    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+      source.version
+    )
+  ) {
+    throw new PluginHostError("invalid_package");
   }
-
-  const central = parseCentralDirectory(archive);
-  if (central.length > MAX_FILES) {
-    throw new PluginHostError("expansion_limit");
-  }
-
-  const seen = new Set<string>();
-  let declaredTotal = 0;
-  for (const entry of central) {
-    if (Buffer.byteLength(entry.name, "utf8") > MAX_PATH_BYTES) {
-      throw new PluginHostError("unsafe_path");
-    }
-    const kind = classifyZipEntry(entry);
-    if (kind === "other") {
-      throw new PluginHostError("unsupported_entry");
-    }
-    const normalized = normalizeArchivePath(entry.name);
-    if (seen.has(normalized)) {
-      throw new PluginHostError("duplicate_entry");
-    }
-    seen.add(normalized);
-    if (kind === "file") {
-      if (entry.uncompressedSize > MAX_FILE_BYTES) {
-        throw new PluginHostError("expansion_limit");
-      }
-      declaredTotal += entry.uncompressedSize;
-      if (declaredTotal > MAX_UNCOMPRESSED_BYTES) {
-        throw new PluginHostError("expansion_limit");
-      }
-    }
-  }
-
-  const extracted = extractZipBounded(archive);
-  const packageRoot = resolvePackageRoot([...extracted.keys()]);
-  const files = new Map<string, Uint8Array>();
-  for (const [name, data] of extracted) {
-    const relative = toPackageRelativePath(name, packageRoot);
-    if (relative === null) {
-      continue;
-    }
-    files.set(relative, data);
-  }
-
-  const manifestBytes = files.get(PLUGIN_MANIFEST_FILENAME);
-  if (!manifestBytes) {
-    throw new PluginHostError("missing_manifest");
-  }
-
-  let parsed: unknown;
+  const spec = `${source.packageName}@${source.version}`;
+  const options = {
+    allowDirectory: "none",
+    allowFile: "none",
+    allowGit: "none",
+    allowRemote: "none",
+    fetchRetries: 0,
+    fullMetadata: true,
+    ignoreScripts: true,
+    preferOnline: true,
+    registry: "https://registry.npmjs.org/",
+    signal: AbortSignal.timeout(30_000),
+    timeout: 30_000,
+  } as const;
+  let archive: Buffer;
+  let integrity: string;
   try {
-    parsed = JSON.parse(Buffer.from(manifestBytes).toString("utf8"));
+    const metadata = await pacote.manifest(spec, options);
+    integrity = metadata.dist?.integrity ?? "";
+    const tarball = new URL(metadata.dist?.tarball ?? "");
+    if (
+      metadata.name !== source.packageName ||
+      metadata.version !== source.version ||
+      !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(integrity) ||
+      tarball.protocol !== "https:" ||
+      tarball.hostname !== "registry.npmjs.org" ||
+      tarball.port ||
+      tarball.username ||
+      tarball.password
+    ) {
+      throw new PluginHostError("invalid_package");
+    }
+    if (expectedIntegrity !== undefined && integrity !== expectedIntegrity) {
+      throw new PluginHostError("digest_mismatch");
+    }
+    archive = await pacote.tarball.stream(
+      tarball.href,
+      async (stream) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const chunk of stream) {
+          size += chunk.length;
+          if (size > MAX_COMPRESSED_BYTES) {
+            throw new PluginHostError("archive_too_large");
+          }
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks);
+      },
+      { ...options, allowRemote: "all", integrity }
+    );
+  } catch (error) {
+    if (error instanceof PluginHostError) {
+      throw error;
+    }
+    throw new PluginHostError("package_unavailable");
+  }
+
+  const files = await readNpmPackage(archive);
+  let manifest: unknown;
+  let packageJson: {
+    name?: string;
+    version?: string;
+    dependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
+  try {
+    manifest = JSON.parse(
+      Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME) ?? []).toString()
+    );
+    packageJson = JSON.parse(
+      Buffer.from(files.get("package.json") ?? []).toString()
+    );
   } catch {
     throw new PluginHostError("invalid_manifest");
   }
-
-  const validated = validatePluginManifest(parsed);
-  if (!validated.ok) {
+  const validated = validatePluginManifest(manifest);
+  if (
+    !validated.ok ||
+    validated.manifest.version !== source.version ||
+    !packageJson ||
+    packageJson.name !== source.packageName ||
+    packageJson.version !== source.version ||
+    [
+      packageJson.dependencies,
+      packageJson.optionalDependencies,
+      packageJson.peerDependencies,
+    ].some((deps) => Object.keys(deps ?? {}).length > 0)
+  ) {
     throw new PluginHostError("invalid_manifest");
   }
-
   assertReferencedFilesExist(validated.manifest, files);
-
   return {
     digest: digestArchive(archive),
     files,
+    integrity,
     manifest: validated.manifest,
   };
 }
 
-function extractZipBounded(archive: Uint8Array): Map<string, Uint8Array> {
-  const files = new Map<string, Uint8Array>();
-  let total = 0;
-  let failure: PluginHostError | undefined;
-  const unzipper = new Unzip();
-  unzipper.register(UnzipInflate);
-  unzipper.register(UnzipPassThrough);
-  unzipper.onfile = (file) => {
-    if (failure) {
-      file.terminate();
-      return;
-    }
-    if (file.name.endsWith("/")) {
-      return;
-    }
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    file.ondata = (error, chunk, final) => {
-      if (failure) {
-        return;
-      }
-      if (error) {
-        failure = new PluginHostError("invalid_archive");
-        return;
-      }
-      size += chunk.byteLength;
-      total += chunk.byteLength;
-      if (size > MAX_FILE_BYTES || total > MAX_UNCOMPRESSED_BYTES) {
-        failure = new PluginHostError("expansion_limit");
-        file.terminate();
-        return;
-      }
-      chunks.push(chunk);
-      if (final) {
-        if (files.size >= MAX_FILES) {
-          failure = new PluginHostError("expansion_limit");
-          file.terminate();
-          return;
-        }
-        normalizeArchivePath(file.name);
-        files.set(file.name, concatChunks(chunks));
-      }
-    };
-    try {
-      file.start();
-    } catch {
-      failure = new PluginHostError("unsupported_entry");
-    }
-  };
-
+async function readNpmPackage(
+  archive: Uint8Array
+): Promise<Map<string, Uint8Array>> {
+  let unpacked: Buffer;
   try {
-    unzipper.push(archive, true);
+    // Include tar headers and metadata in the expansion budget, not just file bodies.
+    unpacked = gunzipSync(archive, { maxOutputLength: MAX_UNCOMPRESSED_BYTES });
   } catch {
     throw new PluginHostError("invalid_archive");
   }
-  if (failure) {
-    throw failure;
-  }
-  return files;
-}
-
-function parseCentralDirectory(archive: Uint8Array): CentralDirectoryEntry[] {
-  const eocd = findEocdOffset(archive);
-  const totalEntries = readU16(archive, eocd + 10);
-  const cdSize = readU32(archive, eocd + 12);
-  const cdOffset = readU32(archive, eocd + 16);
-  if (cdOffset === ZIP64_SENTINEL || cdSize === ZIP64_SENTINEL) {
-    throw new PluginHostError("invalid_archive");
-  }
-  if (cdOffset + cdSize > archive.byteLength) {
-    throw new PluginHostError("invalid_archive");
-  }
-
-  const entries: CentralDirectoryEntry[] = [];
-  let cursor = cdOffset;
-  const end = cdOffset + cdSize;
-  while (cursor < end) {
-    if (readU32(archive, cursor) !== CD_SIGNATURE) {
-      throw new PluginHostError("invalid_archive");
-    }
-    const versionMadeBy = readU16(archive, cursor + 4);
-    const nameLength = readU16(archive, cursor + 28);
-    const extraLength = readU16(archive, cursor + 30);
-    const commentLength = readU16(archive, cursor + 32);
-    const nameStart = cursor + 46;
-    const nameEnd = nameStart + nameLength;
-    if (nameEnd + extraLength + commentLength > end) {
-      throw new PluginHostError("invalid_archive");
-    }
-    entries.push({
-      attrs: readU32(archive, cursor + 38),
-      name: Buffer.from(archive.subarray(nameStart, nameEnd)).toString("utf8"),
-      os: Math.floor(versionMadeBy / 256),
-      uncompressedSize: readU32(archive, cursor + 24),
+  const files = new Map<string, Uint8Array>();
+  const seen = new Set<string>();
+  let count = 0;
+  await new Promise<void>((resolveRead, reject) => {
+    const parser = new Parser({
+      filter(path, entry) {
+        try {
+          count += 1;
+          if (count > MAX_FILES || entry.size > MAX_FILE_BYTES) {
+            throw new PluginHostError("expansion_limit");
+          }
+          if (Buffer.byteLength(path) > MAX_PATH_BYTES) {
+            throw new PluginHostError("unsafe_path");
+          }
+          const name = normalizeArchivePath(path);
+          if (seen.has(name)) {
+            throw new PluginHostError("duplicate_entry");
+          }
+          seen.add(name);
+          if (
+            !("type" in entry) ||
+            (entry.type !== "File" && entry.type !== "Directory")
+          ) {
+            throw new PluginHostError("unsupported_entry");
+          }
+          if (
+            !(
+              (name === "package" && entry.type === "Directory") ||
+              name.startsWith("package/")
+            )
+          ) {
+            throw new PluginHostError("unsafe_path");
+          }
+          return entry.type === "File";
+        } catch (error) {
+          reject(error);
+          parser.abort(
+            error instanceof Error ? error : new Error(String(error))
+          );
+          return false;
+        }
+      },
+      onReadEntry(entry) {
+        const chunks: Buffer[] = [];
+        entry.on("data", (chunk: Buffer) => chunks.push(chunk));
+        entry.on("end", () =>
+          files.set(entry.path.slice("package/".length), Buffer.concat(chunks))
+        );
+      },
+      strict: true,
     });
-    cursor = nameEnd + extraLength + commentLength;
-  }
-
-  if (entries.length !== totalEntries) {
-    throw new PluginHostError("invalid_archive");
-  }
-  return entries;
-}
-
-function findEocdOffset(archive: Uint8Array): number {
-  const minimum = 22;
-  if (archive.byteLength < minimum) {
-    throw new PluginHostError("invalid_archive");
-  }
-  const maxComment = Math.min(0xff_ff, archive.byteLength - minimum);
-  for (let comment = 0; comment <= maxComment; comment += 1) {
-    const offset = archive.byteLength - minimum - comment;
-    if (readU32(archive, offset) !== EOCD_SIGNATURE) {
-      continue;
-    }
-    if (readU16(archive, offset + 20) === comment) {
-      return offset;
-    }
-  }
-  throw new PluginHostError("invalid_archive");
-}
-
-function classifyZipEntry(
-  entry: CentralDirectoryEntry
-): "directory" | "file" | "other" {
-  if (entry.name.endsWith("/")) {
-    return "directory";
-  }
-  if (entry.os === UNIX_OS) {
-    const mode = Math.floor(entry.attrs / 65_536);
-    if (mode >= UNIX_IFDIR_MIN && mode <= UNIX_IFDIR_MAX) {
-      return "directory";
-    }
-    if (mode !== 0 && (mode < UNIX_IFREG_MIN || mode > UNIX_IFREG_MAX)) {
-      return "other";
-    }
-  }
-  if (Math.floor(entry.attrs / 16) % 2 === 1) {
-    return "directory";
-  }
-  return "file";
+    parser.on("error", () => reject(new PluginHostError("invalid_archive")));
+    parser.on("end", resolveRead);
+    parser.end(unpacked);
+  });
+  return files;
 }
 
 function normalizeArchivePath(name: string): string {
@@ -2063,40 +2047,6 @@ function normalizeArchivePath(name: string): string {
     throw new PluginHostError("unsafe_path");
   }
   return parts.join("/");
-}
-
-function resolvePackageRoot(names: string[]): string {
-  const manifests = names.filter(
-    (name) =>
-      name === PLUGIN_MANIFEST_FILENAME ||
-      name.endsWith(`/${PLUGIN_MANIFEST_FILENAME}`)
-  );
-  if (manifests.length !== 1) {
-    throw new PluginHostError("missing_manifest");
-  }
-  const manifestName = manifests[0] ?? PLUGIN_MANIFEST_FILENAME;
-  if (manifestName === PLUGIN_MANIFEST_FILENAME) {
-    return "";
-  }
-  return manifestName.slice(0, -(PLUGIN_MANIFEST_FILENAME.length + 1));
-}
-
-function toPackageRelativePath(
-  name: string,
-  packageRoot: string
-): string | null {
-  const normalized = normalizeArchivePath(name);
-  if (!packageRoot) {
-    return normalized;
-  }
-  if (normalized === packageRoot) {
-    return null;
-  }
-  const prefix = `${packageRoot}/`;
-  if (!normalized.startsWith(prefix)) {
-    return null;
-  }
-  return normalized.slice(prefix.length);
 }
 
 function assertReferencedFilesExist(
@@ -2164,31 +2114,6 @@ async function cleanupAbandonedStaging(configDir: string): Promise<void> {
 
 function digestArchive(archive: Uint8Array): string {
   return createHash("sha256").update(archive).digest("hex");
-}
-
-function concatChunks(chunks: Uint8Array[]): Uint8Array {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
-}
-
-function readU16(buffer: Uint8Array, offset: number): number {
-  return new DataView(buffer.buffer, buffer.byteOffset + offset, 2).getUint16(
-    0,
-    true
-  );
-}
-
-function readU32(buffer: Uint8Array, offset: number): number {
-  return new DataView(buffer.buffer, buffer.byteOffset + offset, 4).getUint32(
-    0,
-    true
-  );
 }
 
 async function writePluginReleaseIntegrity(

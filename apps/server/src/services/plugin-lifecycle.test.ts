@@ -10,7 +10,7 @@ import {
   PLUGIN_MANIFEST_API_VERSION,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { zipSync } from "fflate";
+import { pluginPackage } from "../testing/plugin-package-fixture";
 import {
   PluginHostError,
   PluginService,
@@ -75,14 +75,6 @@ export async function run() {
 }
 `;
 
-function encodeZip(files: Record<string, string>): Uint8Array {
-  const entries: Record<string, Uint8Array> = {};
-  for (const [name, value] of Object.entries(files)) {
-    entries[name] = Buffer.from(value);
-  }
-  return zipSync(entries);
-}
-
 function baseManifest(
   id: string,
   version: string,
@@ -123,8 +115,8 @@ function baseManifest(
   };
 }
 
-function v1Bundle(id = "notes"): Uint8Array {
-  return encodeZip({
+function v1Bundle(id = "notes"): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/write.js": writeJs,
     "migrations/001_items.sql": MIGRATION_001,
     "nakama.plugin.json": JSON.stringify(baseManifest(id, "1.0.0")),
@@ -137,7 +129,7 @@ function v2Bundle(options: {
   failSecondMigration?: boolean;
   id?: string;
   version?: string;
-}): Uint8Array {
+}): ReturnType<typeof pluginPackage> {
   const id = options.id ?? "notes";
   const version = options.version ?? "1.1.0";
   const extras: Record<string, unknown> = {};
@@ -162,7 +154,7 @@ function v2Bundle(options: {
     ],
   };
   const manifest = baseManifest(id, version, extras);
-  return encodeZip({
+  return pluginPackage({
     "actions/extra.js": extraJs,
     "actions/write.js": writeJs,
     "migrations/001_items.sql": MIGRATION_001,
@@ -174,8 +166,8 @@ function v2Bundle(options: {
   });
 }
 
-function codeOnlyBundle(id = "notes"): Uint8Array {
-  return encodeZip({
+function codeOnlyBundle(id = "notes"): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/write.js": `${writeJs}\n`,
     "migrations/001_items.sql": MIGRATION_001,
     "nakama.plugin.json": JSON.stringify(baseManifest(id, "1.0.1")),
@@ -183,7 +175,7 @@ function codeOnlyBundle(id = "notes"): Uint8Array {
   });
 }
 
-function commitThenFailBundle(id = "notes"): Uint8Array {
+function commitThenFailBundle(id = "notes"): ReturnType<typeof pluginPackage> {
   const extras = {
     database: {
       migrations: [
@@ -192,7 +184,7 @@ function commitThenFailBundle(id = "notes"): Uint8Array {
       ],
     },
   };
-  return encodeZip({
+  return pluginPackage({
     "actions/write.js": writeJs,
     "migrations/001_items.sql": MIGRATION_001,
     "migrations/002_leaked.sql": MIGRATION_COMMIT_THEN_FAIL,
@@ -201,9 +193,9 @@ function commitThenFailBundle(id = "notes"): Uint8Array {
   });
 }
 
-function hangActionBundle(id = "notes"): Uint8Array {
+function hangActionBundle(id = "notes"): ReturnType<typeof pluginPackage> {
   const manifest = baseManifest(id, "1.0.0");
-  return encodeZip({
+  return pluginPackage({
     "actions/write.js": hangActionJs,
     "migrations/001_items.sql": MIGRATION_001,
     "nakama.plugin.json": JSON.stringify(manifest),
@@ -699,6 +691,60 @@ describe("plugin lifecycle", () => {
     );
     expect(updated.lifecycleState).toBe("disabled");
     expect(await db.listToolsForProfile("profile_1")).toHaveLength(1);
+  });
+
+  test("purging retained data blocks reinstall until cleanup finishes", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    await service.installPluginPackage(v1Bundle());
+    const installed = await added(service, "org_a", "notes");
+    const retained = await service.uninstallOrgPlugin(
+      "org_a",
+      "notes",
+      installed.revision
+    );
+    const deleted = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const deleteOrgPlugin = db.deleteOrgPlugin.bind(db);
+    db.deleteOrgPlugin = async (...args) => {
+      const result = await deleteOrgPlugin(...args);
+      deleted.resolve();
+      await resume.promise;
+      return result;
+    };
+
+    const purging = service.deleteRetainedPluginData(
+      "org_a",
+      "notes",
+      retained.revision
+    );
+    await deleted.promise;
+    const reinstalling = new PluginService(db, configDir).addOrgPlugin(
+      "org_a",
+      "notes"
+    );
+    try {
+      // Other organizations can install while org_a's cleanup is paused.
+      await added(service, "org_b", "notes");
+      expect(await db.getOrgPlugin("org_a", "notes")).toBeNull();
+    } finally {
+      resume.resolve();
+      await Promise.all([purging, reinstalling]);
+    }
+
+    const fresh = await reinstalling;
+    await service.enableOrgPlugin("org_a", "notes", fresh.revision);
+    const written = await service.invokePluginAction({
+      access: "ui",
+      actionKey: "write",
+      actor,
+      input: { body: "after reinstall", id: "new" },
+      orgId: "org_a",
+      pluginId: "notes",
+    });
+    expect(written.result).toMatchObject({
+      rows: [{ body: "after reinstall", id: "new" }],
+    });
   });
 
   test("reinstall from retained rejects a schema downgrade", async () => {

@@ -176,7 +176,7 @@ describe("plugin management authority and mutations", () => {
     ).toBe(true);
   });
 
-  test("upload install is a platform package call", async () => {
+  test("npm install is a platform package call", async () => {
     installPackage.mockResolvedValue({
       createdAt: "2026-09-07T00:00:00.000Z",
       digest: "abc",
@@ -216,7 +216,9 @@ describe("plugin management authority and mutations", () => {
 
     await mutate!({
       expectedDigest: "abc",
-      file: new Blob(["zip"]),
+      expectedIntegrity: "sha512-abc",
+      packageName: "@team/notes",
+      version: "1.0.0",
     });
     expect(installPackage).toHaveBeenCalled();
   });
@@ -428,6 +430,7 @@ describe("plugin ownership and update helpers", () => {
         skillKeys: [],
       },
       digest: "deadbeef",
+      integrity: "sha512-abc",
       manifest: {
         actions: [],
         apiVersion: 1,

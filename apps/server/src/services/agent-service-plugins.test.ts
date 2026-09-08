@@ -10,7 +10,7 @@ import {
   createInMemoryDatabaseAdapter,
   seedOrgDefaultProfile,
 } from "@nakama/db";
-import { zipSync } from "fflate";
+import { pluginPackage } from "../testing/plugin-package-fixture";
 import { AgentService } from "./agent-service";
 import { PluginService } from "./plugin-service";
 import { SkillsService } from "./skills-service";
@@ -27,16 +27,8 @@ export async function run(_input, context) {
 }
 `;
 
-function encodeZip(files: Record<string, string>): Uint8Array {
-  const entries: Record<string, Uint8Array> = {};
-  for (const [name, value] of Object.entries(files)) {
-    entries[name] = Buffer.from(value);
-  }
-  return zipSync(entries);
-}
-
-function bundle(): Uint8Array {
-  return encodeZip({
+function bundle(): ReturnType<typeof pluginPackage> {
+  return pluginPackage({
     "actions/write.js": ACTION_JS,
     "nakama.plugin.json": JSON.stringify({
       actions: [

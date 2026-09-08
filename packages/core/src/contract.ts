@@ -2636,6 +2636,11 @@ export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
 }
 
+export interface PluginPackageRequest {
+  packageName: string;
+  version: string;
+}
+
 export interface PluginPackagePreviewResponse {
   contributions: {
     actionKeys: string[];
@@ -2644,12 +2649,13 @@ export interface PluginPackagePreviewResponse {
     skillKeys: string[];
   };
   digest: string;
+  integrity: string;
   manifest: PluginManifest;
 }
 
-export interface InstallPluginPackageRequest {
-  data: string;
-  expectedDigest?: string;
+export interface InstallPluginPackageRequest extends PluginPackageRequest {
+  expectedDigest: string;
+  expectedIntegrity: string;
 }
 
 export interface InstallPluginPackageResponse {

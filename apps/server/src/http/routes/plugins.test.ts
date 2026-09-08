@@ -5,10 +5,13 @@ import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
 } from "@nakama/db";
-import { zipSync } from "fflate";
 import type { AuthService } from "../../services/auth-service";
 import { PluginService } from "../../services/plugin-service";
 import { setupTestConfigDir } from "../../test-config-dir";
+import {
+  approvedPluginPackage,
+  pluginPackage,
+} from "../../testing/plugin-package-fixture";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginPlatformAdminSession,
@@ -29,7 +32,7 @@ export async function run(input) {
 function pluginBundle(
   version = "1.0.0",
   extras: Record<string, string> = {}
-): Uint8Array {
+): ReturnType<typeof pluginPackage> {
   const manifest = {
     actions: [
       {
@@ -66,7 +69,7 @@ function pluginBundle(
     },
     version,
   };
-  return zipSync({
+  return pluginPackage({
     "actions/list.js": Buffer.from(echoJs),
     "actions/wipe.js": Buffer.from(echoJs),
     "private.js": Buffer.from(echoJs),
@@ -123,7 +126,7 @@ async function seedUser(
 }
 
 async function jsonRequest(
-  app: { fetch: typeof fetch },
+  app: ReturnType<typeof createApp>["app"],
   path: string,
   session: TestBrowserSession | null,
   init: RequestInit = {},
@@ -150,7 +153,7 @@ async function jsonRequest(
 }
 
 async function installRelease(
-  app: { fetch: typeof fetch },
+  app: ReturnType<typeof createApp>["app"],
   platform: TestBrowserSession,
   archive = pluginBundle()
 ) {
@@ -159,7 +162,7 @@ async function installRelease(
     "/v1/platform/plugins/releases",
     platform,
     {
-      body: JSON.stringify({ data: Buffer.from(archive).toString("base64") }),
+      body: JSON.stringify(approvedPluginPackage(archive)),
       method: "POST",
     }
   );
@@ -246,9 +249,7 @@ describe("plugin HTTP API", () => {
       "org_archived"
     );
 
-    const previewBody = {
-      data: Buffer.from(pluginBundle()).toString("base64"),
-    };
+    const previewBody = pluginBundle();
 
     expect(
       (
@@ -607,7 +608,7 @@ describe("plugin HTTP API", () => {
     });
   });
 
-  test("cookie-authenticated mutations require CSRF including package uploads", async () => {
+  test("cookie-authenticated mutations require CSRF including npm package installs", async () => {
     const { app, authService, databaseAdapter } = createApp();
     await setupFreshInstallSession(app, databaseAdapter);
     const platform = await loginPlatformAdminSession(
@@ -615,13 +616,13 @@ describe("plugin HTTP API", () => {
       authService,
       databaseAdapter
     );
-    const archive = Buffer.from(pluginBundle()).toString("base64");
+    const source = pluginBundle();
 
     const missingCsrf = await app.fetch(
       new Request(
         "http://localhost:4310/v1/platform/plugins/releases/preview",
         {
-          body: JSON.stringify({ data: archive }),
+          body: JSON.stringify(source),
           headers: platform.headers({ "Content-Type": "application/json" }),
           method: "POST",
         }
@@ -629,33 +630,32 @@ describe("plugin HTTP API", () => {
     );
     expect(missingCsrf.status).toBe(403);
 
-    const zipFile = () =>
-      new File([Buffer.from(pluginBundle())], "notes.zip", {
-        type: "application/zip",
-      });
-    const missingCsrfUpload = await app.fetch(
+    const missingCsrfInstall = await app.fetch(
       new Request("http://localhost:4310/v1/platform/plugins/releases", {
-        body: (() => {
-          const form = new FormData();
-          form.set("file", zipFile());
-          return form;
-        })(),
-        headers: platform.headers(),
+        body: JSON.stringify(approvedPluginPackage(source)),
+        headers: platform.headers({ "Content-Type": "application/json" }),
         method: "POST",
       })
     );
-    expect(missingCsrfUpload.status).toBe(403);
-
-    const withCsrf = await app.fetch(
-      new Request("http://localhost:4310/v1/platform/plugins/releases", {
-        body: (() => {
-          const form = new FormData();
-          form.set("file", zipFile());
-          return form;
-        })(),
-        headers: platform.headers({ "X-CSRF-Token": platform.csrfToken }),
+    expect(missingCsrfInstall.status).toBe(403);
+    const missingApproval = await jsonRequest(
+      app,
+      "/v1/platform/plugins/releases",
+      platform,
+      {
+        body: JSON.stringify(source),
         method: "POST",
-      })
+      }
+    );
+    expect(missingApproval.status).toBe(400);
+    const withCsrf = await jsonRequest(
+      app,
+      "/v1/platform/plugins/releases",
+      platform,
+      {
+        body: JSON.stringify(approvedPluginPackage(source)),
+        method: "POST",
+      }
     );
     expect(withCsrf.status).toBe(200);
   });

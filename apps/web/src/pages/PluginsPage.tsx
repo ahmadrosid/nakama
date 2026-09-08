@@ -2,8 +2,8 @@ import type {
   OrgPluginDetail,
   PluginContributionChangePreview,
   PluginPackagePreviewResponse,
+  PluginPackageRequest,
 } from "@nakama/core/contract";
-import { Add01Icon } from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import {
@@ -45,9 +46,9 @@ import {
 
 type PluginDialog =
   | {
-      file: Blob;
+      source: PluginPackageRequest;
       preview: PluginPackagePreviewResponse;
-      type: "upload";
+      type: "package";
     }
   | { plugin: OrgPluginDetail; type: "install" }
   | { plugin: OrgPluginDetail; type: "enable" }
@@ -66,10 +67,10 @@ export function PluginsPage() {
   const { user, activeOrg } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
-  const canUpload = canManagePluginReleases(isPlatformAdmin);
+  const canInstallPackages = canManagePluginReleases(isPlatformAdmin);
   const orgId = activeOrg?.id ?? "";
   const { data: plugins = [], isLoading, error } = useOrgPlugins();
-  const releasesQuery = usePluginReleases(canUpload);
+  const releasesQuery = usePluginReleases(canInstallPackages);
   const previewPackage = usePreviewPluginPackage();
   const installPackage = useInstallPluginPackage();
   const removeRelease = useRemovePluginRelease();
@@ -80,7 +81,8 @@ export function PluginsPage() {
   const updateOrg = useUpdateOrgPlugin();
   const uninstallOrg = useUninstallOrgPlugin();
   const purgeData = useDeleteRetainedPluginData();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [packageName, setPackageName] = useState("");
+  const [packageVersion, setPackageVersion] = useState("");
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -109,15 +111,18 @@ export function PluginsPage() {
     queueMicrotask(() => restoreFocusRef.current?.focus());
   }
 
-  async function handleUploadFile(file: File | undefined) {
-    if (!(file && canUpload)) {
+  async function previewNpmPackage() {
+    if (!canInstallPackages) {
       return;
     }
-
     setActionError(null);
+    const source = {
+      packageName: packageName.trim(),
+      version: packageVersion.trim(),
+    };
     try {
-      const preview = await previewPackage.mutateAsync(file);
-      setDialog({ file, preview, type: "upload" });
+      const preview = await previewPackage.mutateAsync(source);
+      setDialog({ preview, source, type: "package" });
     } catch (err) {
       setActionError(formatError(err));
     }
@@ -143,10 +148,11 @@ export function PluginsPage() {
 
     setActionError(null);
     try {
-      if (dialog.type === "upload") {
+      if (dialog.type === "package") {
         await installPackage.mutateAsync({
           expectedDigest: dialog.preview.digest,
-          file: dialog.file,
+          expectedIntegrity: dialog.preview.integrity,
+          ...dialog.source,
         });
       } else if (dialog.type === "install") {
         await installOrg.mutateAsync({ pluginId: dialog.plugin.pluginId });
@@ -204,39 +210,43 @@ export function PluginsPage() {
 
   return (
     <div className="min-w-0 p-4 sm:p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="type-section-title">Plugins</h2>
-        {canUpload ? (
-          <>
-            <Button
+        {canInstallPackages ? (
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              rememberFocus(document.activeElement);
+              void previewNpmPackage();
+            }}
+          >
+            <Input
+              aria-label="npm package name"
+              className="w-64"
               disabled={busy}
-              onClick={(event) => {
-                rememberFocus(event.currentTarget);
-                fileInputRef.current?.click();
-              }}
-              size="sm"
-              type="button"
-            >
-              <Add01Icon
-                aria-hidden
-                className="size-4"
-                data-icon="inline-start"
-              />
-              Upload plugin
-            </Button>
-            <input
-              accept=".zip,application/zip"
-              aria-label="Upload plugin package"
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                void handleUploadFile(file);
-              }}
-              ref={fileInputRef}
-              type="file"
+              onChange={(event) => setPackageName(event.target.value)}
+              placeholder="@team/nakama-notes"
+              required
+              value={packageName}
             />
-          </>
+            <Input
+              aria-label="Exact package version"
+              className="w-28"
+              disabled={busy}
+              onChange={(event) => setPackageVersion(event.target.value)}
+              placeholder="1.0.0"
+              required
+              value={packageVersion}
+            />
+            <Button
+              disabled={busy || !packageName.trim() || !packageVersion.trim()}
+              size="sm"
+              type="submit"
+            >
+              Preview package
+            </Button>
+          </form>
         ) : null}
       </div>
 
@@ -251,15 +261,17 @@ export function PluginsPage() {
 
       {plugins.length === 0 ? (
         <p className="py-10 text-center text-muted-foreground text-sm">
-          {canUpload ? "Upload a plugin package." : "No plugins in this org."}
+          {canInstallPackages
+            ? "No plugins installed."
+            : "No plugins in this org."}
         </p>
       ) : (
         <ul className="divide-y divide-border rounded-md border border-border">
           {plugins.map((plugin) => (
             <PluginRow
               busy={busy || isPluginLifecycleBusy(plugin)}
+              canInstallPackages={canInstallPackages}
               canManage={canManage}
-              canUpload={canUpload}
               key={plugin.pluginId}
               onAction={(type, event) => {
                 rememberFocus(event.currentTarget);
@@ -278,7 +290,7 @@ export function PluginsPage() {
         </ul>
       )}
 
-      {canUpload && (releasesQuery.data?.releases.length ?? 0) > 0 ? (
+      {canInstallPackages && (releasesQuery.data?.releases.length ?? 0) > 0 ? (
         <ul className="mt-6 divide-y divide-border rounded-md border border-border">
           {releasesQuery.data?.releases.map((release) => {
             const inUse = plugins.some(
@@ -337,16 +349,16 @@ function PluginRow({
   plugin,
   busy,
   canManage,
-  canUpload,
+  canInstallPackages,
   onAction,
 }: {
   plugin: OrgPluginDetail;
   busy: boolean;
   canManage: boolean;
-  canUpload: boolean;
+  canInstallPackages: boolean;
   onAction: (
     type:
-      | Exclude<PluginDialog["type"], "upload" | "remove-release" | "update">
+      | Exclude<PluginDialog["type"], "package" | "remove-release" | "update">
       | "update",
     event: MouseEvent<HTMLButtonElement>
   ) => void;
@@ -414,7 +426,9 @@ function PluginRow({
                 </Button>
               ))
           : null}
-        {canUpload ? <span className="sr-only">{plugin.revision}</span> : null}
+        {canInstallPackages ? (
+          <span className="sr-only">{plugin.revision}</span>
+        ) : null}
       </div>
     </li>
   );
@@ -446,9 +460,11 @@ function PluginConfirmDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {dialog?.type === "upload" ? (
+          {dialog?.type === "package" ? (
             <DialogDescription>
-              This package can run code and read files this org can reach.
+              Trust this author with the Nakama server and your signed-in
+              browser. Plugin code is not sandboxed and can access data across
+              organizations.
             </DialogDescription>
           ) : (
             <DialogDescription className="sr-only">{title}</DialogDescription>
@@ -481,9 +497,12 @@ function DialogBody({
   dialog: PluginDialog;
   orgId: string;
 }) {
-  if (dialog.type === "upload") {
+  if (dialog.type === "package") {
     return (
       <ul className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]">
+        <li>
+          {dialog.source.packageName}@{dialog.source.version}
+        </li>
         {formatPluginTrustLines(dialog.preview).map((line) => (
           <li key={line}>{line}</li>
         ))}
@@ -535,7 +554,7 @@ function dialogTitle(dialog: PluginDialog | null): string {
   if (!dialog) {
     return "Plugin";
   }
-  if (dialog.type === "upload") {
+  if (dialog.type === "package") {
     return "Install this package?";
   }
   if (dialog.type === "install") {
@@ -563,7 +582,7 @@ function confirmLabel(dialog: PluginDialog | null): string {
   if (!dialog) {
     return "Confirm";
   }
-  if (dialog.type === "upload" || dialog.type === "install") {
+  if (dialog.type === "package" || dialog.type === "install") {
     return "Install";
   }
   if (dialog.type === "enable") {
