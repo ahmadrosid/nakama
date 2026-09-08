@@ -1614,20 +1614,25 @@ describe("createChatHandler artifact delivery", () => {
     });
   }
 
-  test("posts a publish share link after a paired save-artifact turn", async () => {
+  test("sends a new artifact as a document on a conversational retry", async () => {
     await withArtifactChat({ messages: artifactMessages }, async (ctx) => {
-      await ctx.handleMessage({ jid: PAIRED_JID, text: "thanks" });
+      await ctx.handleMessage({
+        jid: PAIRED_JID,
+        text: "tolong coba lagi tadi masih belum berhasil",
+      });
 
-      expect(ctx.calls.publishProfileArtifactShare).toBe(1);
+      expect(ctx.calls.publishProfileArtifactShare).toBe(0);
+      expect(documentSendCount(ctx.sent)).toBe(1);
+      expect(ctx.sent.some((message) => message.text.includes("/s/"))).toBe(
+        false
+      );
       expect(
-        ctx.sent.some((message) =>
-          message.text.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+        ctx.sessionStore.getDeliverableArtifacts(PAIRED_JID).at(-1)?.path
+      ).toBe("report.md");
     });
   });
 
-  test("does not publish when the turn has no sidecar pair", async () => {
+  test("attaches a successful write without a sidecar", async () => {
     await withArtifactChat(
       {
         messages: [
@@ -1655,9 +1660,13 @@ describe("createChatHandler artifact delivery", () => {
         ],
       },
       async (ctx) => {
-        await ctx.handleMessage({ jid: PAIRED_JID, text: "thanks" });
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "tolong kirim csv file kesini please",
+        });
 
         expect(ctx.calls.publishProfileArtifactShare).toBe(0);
+        expect(documentSendCount(ctx.sent)).toBe(1);
         expect(ctx.sent.some((message) => message.text.includes("/s/"))).toBe(
           false
         );
@@ -1669,7 +1678,10 @@ describe("createChatHandler artifact delivery", () => {
     await withArtifactChat(
       { deliverableArtifacts: [SAMPLE_ARTIFACT] },
       async (ctx) => {
-        await ctx.handleMessage({ jid: PAIRED_JID, text: "send me the file" });
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "kirim file rekap-well-test.csv",
+        });
 
         expect(ctx.calls.readProfileArtifactContent).toBe(1);
         expect(documentSendCount(ctx.sent)).toBe(1);
@@ -1702,59 +1714,101 @@ describe("createChatHandler artifact delivery", () => {
         text: "save it and send me the file",
       });
 
-      expect(ctx.calls.publishProfileArtifactShare).toBe(1);
+      expect(ctx.calls.publishProfileArtifactShare).toBe(0);
       expect(ctx.calls.readProfileArtifactContent).toBe(1);
       expect(documentSendCount(ctx.sent)).toBe(1);
       expect(ctx.calls.sendStream).toBe(1);
     });
   });
 
-  test("attaches in a group when the user asks to send the file", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-      });
-
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      await sessionStore.load();
-      sessionStore.set(GROUP_JID, {
-        deliverableArtifacts: [SAMPLE_ARTIFACT],
-        profileId: "default",
-        sessionId: "session_test",
-        updatedAt: new Date().toISOString(),
-      });
-      await sessionStore.save();
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { sent, socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as never,
-        orgStore,
-        sessionStore,
-      });
-
-      await handleMessage(
-        groupInbound({
-          mentionedJids: [BOT_ME.id],
-          text: "@Nakama send me the file",
-        })
-      );
-
-      expect(calls.readProfileArtifactContent).toBe(1);
-      expect(documentSendCount(sent)).toBe(1);
-      expect(calls.sendStream).toBe(0);
-      expect(sent.some((message) => message.jid === GROUP_JID)).toBe(true);
-    });
+  test("creates the requested report before sending even with an older artifact", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: artifactMessages },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "collect the report from 01-09-2026 to 06-09-2026 in csv file then send it to this group",
+        });
+        expect(ctx.calls.sendStream).toBe(1);
+        expect(ctx.calls.publishProfileArtifactShare).toBe(0);
+        expect(documentSendCount(ctx.sent)).toBe(1);
+      }
+    );
   });
+
+  test("does not send an older artifact when report creation produces no file", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: [] },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "collect the report then send it to this group",
+        });
+        expect(ctx.calls.sendStream).toBe(1);
+        expect(documentSendCount(ctx.sent)).toBe(0);
+      }
+    );
+  });
+
+  test.each([false, true])(
+    "attaches in a group (new artifact on retry: %s)",
+    async (retry) => {
+      await withTempHome(async (homeDir) => {
+        await writeWhatsAppConfigIni(homeDir, {
+          pairedJid: PAIRED_JID,
+          phoneNumber: "1234567890",
+        });
+
+        const authStore = new WhatsAppAuthStore();
+        await authStore.reload();
+        const { client, calls } = createMockClient({
+          messages: retry ? artifactMessages : [],
+        });
+        const sessionStore = new SessionStore(
+          path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+        );
+        await sessionStore.load();
+        sessionStore.set(GROUP_JID, {
+          deliverableArtifacts: [SAMPLE_ARTIFACT],
+          profileId: "default",
+          sessionId: "session_test",
+          updatedAt: new Date().toISOString(),
+        });
+        await sessionStore.save();
+        const orgStore = createTestOrgStore(homeDir);
+        await orgStore.load();
+        const { sent, socket } = createMockSocket();
+        const handleMessage = createChatHandler({
+          authStore,
+          client,
+          config: { phoneNumber: "1234567890", profileId: "default" },
+          getSocket: () => socket as never,
+          orgStore,
+          sessionStore,
+        });
+
+        await handleMessage(
+          groupInbound({
+            mentionedJids: [BOT_ME.id],
+            text: retry
+              ? "@Nakama tolong coba lagi tadi masih belum berhasil"
+              : "@Nakama send me the file",
+          })
+        );
+
+        expect(calls.readProfileArtifactContent).toBe(1);
+        expect(documentSendCount(sent)).toBe(1);
+        expect(calls.sendStream).toBe(retry ? 1 : 0);
+        expect(calls.publishProfileArtifactShare).toBe(0);
+        const document = sent.find(
+          (message) => message.content.document !== undefined
+        );
+        expect(document?.jid).toBe(GROUP_JID);
+        expect(document?.content.fileName).toBe("report.md");
+        expect(Buffer.isBuffer(document?.content.document)).toBe(true);
+      });
+    }
+  );
 
   test("sends a document for /attach without an agent turn", async () => {
     await withArtifactChat(

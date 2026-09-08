@@ -2191,7 +2191,7 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 
-  test("does not publish when the turn has no sidecar pair", async () => {
+  test("publishes successful artifact writes without a sidecar", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
@@ -2251,8 +2251,8 @@ describe("createChatHandler artifact delivery", () => {
       });
       await handleMessage(ctx);
 
-      expect(calls.publishProfileArtifactShare).toBe(0);
-      expect(replies.some((reply) => reply.includes("/s/"))).toBe(false);
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(replies.some((reply) => reply.includes("/s/"))).toBe(true);
     });
   });
 
