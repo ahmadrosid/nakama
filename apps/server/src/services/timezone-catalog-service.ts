@@ -1,10 +1,14 @@
-import { readFileSync } from "node:fs";
+import * as fs from "node:fs";
 import type {
   ListTimezonesResponse,
   TimezoneCatalogEntry,
   TimezoneCatalogGroup,
 } from "@nakama/core";
 import { getTimezoneCityAliases } from "./timezone-city-aliases";
+import {
+  FALLBACK_ZONE_TAB,
+  ICU_TIMEZONE_ALIASES,
+} from "./timezone-iana-countries";
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
 
@@ -37,39 +41,78 @@ function gmtOffsetName(timeZone: string): string {
   return offset.replace(/^GMT/, "UTC");
 }
 
+function parseZoneTab(raw: string): Map<string, string> {
+  const map = new Map<string, string>();
+
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const columns = line.split("\t");
+    const countryCode =
+      columns.length >= 3
+        ? columns[0]?.split(",")[0]?.trim()
+        : columns[0]?.trim();
+    const zoneName =
+      columns.length >= 3 ? columns[2]?.trim() : columns[1]?.trim();
+    if (countryCode && zoneName) {
+      map.set(zoneName, countryCode);
+    }
+  }
+
+  return map;
+}
+
+function applyIcuAliases(map: Map<string, string>): void {
+  for (const [alias, canonical] of Object.entries(ICU_TIMEZONE_ALIASES)) {
+    const countryCode = map.get(alias) ?? map.get(canonical);
+    if (countryCode) {
+      map.set(alias, countryCode);
+      map.set(canonical, countryCode);
+    }
+  }
+}
+
 function loadCountryByZone(): Map<string, string> {
   if (cachedCountryByZone) {
     return cachedCountryByZone;
   }
 
-  const map = new Map<string, string>();
+  let map = new Map<string, string>();
 
   for (const tabPath of ZONE_TAB_PATHS) {
     try {
-      const raw = readFileSync(tabPath, "utf8");
-      for (const line of raw.split(/\r?\n/)) {
-        if (!line || line.startsWith("#")) {
-          continue;
-        }
-        const columns = line.split("\t");
-        const countries = columns[0]?.split(",")[0]?.trim();
-        const zoneName = columns[2]?.trim();
-        if (countries && zoneName) {
-          map.set(zoneName, countries);
-        }
+      map = parseZoneTab(fs.readFileSync(tabPath, "utf8"));
+      if (map.size > 0) {
+        break;
       }
-      break;
     } catch {
-      // try the next tzdata path
+      // try the next tzdata path, then the bundled fallback
     }
   }
 
+  if (map.size === 0) {
+    map = parseZoneTab(FALLBACK_ZONE_TAB);
+  }
+
+  applyIcuAliases(map);
   cachedCountryByZone = map;
   return map;
 }
 
-function toCatalogEntry(zoneName: string): TimezoneCatalogEntry {
-  const countryByZone = loadCountryByZone();
+function listZoneNames(countryByZone: Map<string, string>): string[] {
+  return [
+    ...new Set([
+      ...Intl.supportedValuesOf("timeZone"),
+      ...countryByZone.keys(),
+    ]),
+  ];
+}
+
+function toCatalogEntry(
+  zoneName: string,
+  countryByZone: Map<string, string>
+): TimezoneCatalogEntry {
   const countryCode = countryByZone.get(zoneName) ?? "ZZ";
   const city = cityFromZoneName(zoneName);
   const countryName =
@@ -97,10 +140,11 @@ export async function getTimezoneCatalog(): Promise<ListTimezonesResponse> {
     return cachedCatalog;
   }
 
+  const countryByZone = loadCountryByZone();
   const groups = new Map<string, TimezoneCatalogGroup>();
 
-  for (const zoneName of Intl.supportedValuesOf("timeZone")) {
-    const entry = toCatalogEntry(zoneName);
+  for (const zoneName of listZoneNames(countryByZone)) {
+    const entry = toCatalogEntry(zoneName, countryByZone);
     const existing = groups.get(entry.countryCode);
 
     if (existing) {
