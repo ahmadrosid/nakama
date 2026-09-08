@@ -100,13 +100,22 @@ function loadCountryByZone(): Map<string, string> {
   return map;
 }
 
+function isSupportedTimeZone(zoneName: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: zoneName });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function listZoneNames(countryByZone: Map<string, string>): string[] {
   return [
     ...new Set([
       ...Intl.supportedValuesOf("timeZone"),
       ...countryByZone.keys(),
     ]),
-  ];
+  ].filter(isSupportedTimeZone);
 }
 
 function toCatalogEntry(

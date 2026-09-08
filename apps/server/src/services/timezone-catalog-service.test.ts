@@ -24,6 +24,20 @@ test("groups IANA zones by tzdata country", async () => {
   expect(newYork?.aliases).toContain("NYC");
 });
 
+test("skips zone.tab ids the runtime ICU does not accept", async () => {
+  const catalog = await getTimezoneCatalog();
+  const ids = catalog.groups.flatMap((group) =>
+    group.timezones.map((zone) => zone.id)
+  );
+
+  expect(ids.length).toBeGreaterThan(0);
+  for (const id of ids) {
+    expect(
+      () => new Intl.DateTimeFormat(undefined, { timeZone: id })
+    ).not.toThrow();
+  }
+});
+
 test("includes IANA zones that Intl omits", async () => {
   const unitedStates = await usZones();
   const ids = new Set(unitedStates?.map((zone) => zone.id));
