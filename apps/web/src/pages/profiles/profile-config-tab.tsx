@@ -1,6 +1,12 @@
 import type { ProfileSummary } from "@nakama/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CloudDownloadIcon, Copy01Icon, Delete02Icon } from "hugeicons-react";
+import {
+  Building06Icon,
+  CloudDownloadIcon,
+  Copy01Icon,
+  Delete02Icon,
+  MoreHorizontalIcon,
+} from "hugeicons-react";
 import { useState } from "react";
 import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
@@ -13,6 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -64,35 +76,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             profileName={detail.name}
           />
           {canCreateProfile && selectedId ? (
-            <>
-              <MoveProfileButton key={selectedId} state={state} />
-              <Button
-                aria-label="Clone profile"
-                disabled={busy}
-                onClick={() => state.openCloneDialog(selectedId)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <Copy01Icon aria-hidden className="size-3.5" />
-                <span>Clone</span>
-              </Button>
-              <Button
-                aria-label="Delete profile"
-                className="text-destructive hover:text-destructive"
-                disabled={
-                  busy ||
-                  (detail.isDefault === true && state.profiles.length < 3)
-                }
-                onClick={() => state.openDeleteDialog(selectedId)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <Delete02Icon aria-hidden className="size-3.5" />
-                <span>Delete</span>
-              </Button>
-            </>
+            <ProfileAdminMenu key={selectedId} state={state} />
           ) : null}
         </div>
       ) : null}
@@ -103,9 +87,83 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
   );
 }
 
-function MoveProfileButton({ state }: { state: ProfilesPageState }) {
+function ProfileAdminMenu({ state }: { state: ProfilesPageState }) {
+  const [moveOpen, setMoveOpen] = useState(false);
+  const { busy, detail, selectedId } = state;
+  const deleteDisabled =
+    busy || (detail?.isDefault === true && state.profiles.length < 3);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label="More profile actions"
+              disabled={busy}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            />
+          }
+        >
+          <MoreHorizontalIcon aria-hidden className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuItem
+            className="cursor-pointer"
+            disabled={busy}
+            onClick={() => setMoveOpen(true)}
+          >
+            <Building06Icon aria-hidden />
+            Change organization
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            disabled={busy}
+            onClick={() => {
+              if (selectedId) {
+                state.openCloneDialog(selectedId);
+              }
+            }}
+          >
+            <Copy01Icon aria-hidden />
+            Clone
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            disabled={deleteDisabled}
+            onClick={() => {
+              if (selectedId) {
+                state.openDeleteDialog(selectedId);
+              }
+            }}
+            variant="destructive"
+          >
+            <Delete02Icon aria-hidden />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <MoveProfileDialog
+        onOpenChange={setMoveOpen}
+        open={moveOpen}
+        state={state}
+      />
+    </>
+  );
+}
+
+function MoveProfileDialog({
+  onOpenChange,
+  open,
+  state,
+}: {
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  state: ProfilesPageState;
+}) {
   const { activeOrg } = useAuth();
-  const [open, setOpen] = useState(false);
   const [organizationId, setOrganizationId] = useState("");
   const queryClient = useQueryClient();
   const organizations = useQuery({
@@ -117,7 +175,7 @@ function MoveProfileButton({ state }: { state: ProfilesPageState }) {
     mutationFn: async () => {
       const profileId = state.detail!.id;
       if (!(await state.flushSave())) {
-        throw new Error("Save profile changes before moving.");
+        throw new Error("Save profile changes before changing organization.");
       }
       return client.moveProfile(profileId, { organizationId });
     },
@@ -132,8 +190,8 @@ function MoveProfileButton({ state }: { state: ProfilesPageState }) {
         queryKey: queryKeys.profiles.detail(profileId),
       });
       state.setSelectedId(null);
-      setOpen(false);
-      toast("Profile moved.");
+      onOpenChange(false);
+      toast("Organization changed.");
       await queryClient.invalidateQueries();
     },
   });
@@ -142,83 +200,70 @@ function MoveProfileButton({ state }: { state: ProfilesPageState }) {
       (org) => org.id !== activeOrg?.id && !org.archivedAt
     ) ?? [];
   return (
-    <>
-      <Button
-        disabled={state.busy || move.isPending}
-        onClick={() => setOpen(true)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        Move
-      </Button>
-      <Dialog
-        onOpenChange={(next) => {
-          if (!move.isPending) {
-            setOpen(next);
-          }
-        }}
-        open={open}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Move {state.detail?.name}</DialogTitle>
-            <DialogDescription>
-              Move this profile, workspace, and chats to another organization.
-              Automations and workflows move paused. Organization connections
-              need reconnecting, and shared links are revoked.
-            </DialogDescription>
-          </DialogHeader>
-          <Select
-            disabled={move.isPending || organizations.isPending}
-            onValueChange={(value) => setOrganizationId(value ?? "")}
-            value={organizationId}
+    <Dialog
+      onOpenChange={(next) => {
+        if (!move.isPending) {
+          onOpenChange(next);
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change organization</DialogTitle>
+          <DialogDescription>
+            Automations pause. Connections and shared links reset.
+          </DialogDescription>
+        </DialogHeader>
+        <Select
+          disabled={move.isPending || organizations.isPending}
+          onValueChange={(value) => setOrganizationId(value ?? "")}
+          value={organizationId}
+        >
+          <SelectTrigger
+            aria-label="Destination organization"
+            className="w-full"
           >
-            <SelectTrigger
-              aria-label="Destination organization"
-              className="w-full"
-            >
-              <SelectValue placeholder="Choose organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {destinations.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {organizations.isError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {formatError(organizations.error)}
-            </p>
-          ) : null}
-          {!(organizations.isPending || organizations.isError) &&
-          destinations.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No other organizations available.
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button
-              disabled={move.isPending}
-              onClick={() => setOpen(false)}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                move.isPending ||
-                !destinations.some((org) => org.id === organizationId)
-              }
-              onClick={() => move.mutate()}
-            >
-              {move.isPending ? "Moving…" : "Move profile"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+            <SelectValue placeholder="Choose organization" />
+          </SelectTrigger>
+          <SelectContent>
+            {destinations.map((org) => (
+              <SelectItem key={org.id} value={org.id}>
+                {org.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {organizations.isError ? (
+          <p className="text-destructive text-sm" role="alert">
+            {formatError(organizations.error)}
+          </p>
+        ) : null}
+        {!(organizations.isPending || organizations.isError) &&
+        destinations.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No other organizations available.
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            disabled={move.isPending}
+            onClick={() => onOpenChange(false)}
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              move.isPending ||
+              !destinations.some((org) => org.id === organizationId)
+            }
+            onClick={() => move.mutate()}
+          >
+            {move.isPending ? "Changing…" : "Change organization"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
