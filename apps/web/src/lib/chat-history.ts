@@ -152,9 +152,24 @@ export function isChatSessionPath(pathname: string): boolean {
 
 export const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
 
-export function readStoredActiveChatProfileId(): string | null {
+export function activeChatProfileStorageKey(orgId?: string | null): string {
+  return orgId
+    ? `${ACTIVE_CHAT_PROFILE_STORAGE_KEY}:${orgId}`
+    : ACTIVE_CHAT_PROFILE_STORAGE_KEY;
+}
+
+export function readStoredActiveChatProfileId(
+  orgId?: string | null
+): string | null {
   if (typeof localStorage === "undefined") {
     return null;
+  }
+
+  if (orgId) {
+    const scoped = localStorage
+      .getItem(activeChatProfileStorageKey(orgId))
+      ?.trim();
+    return scoped || null;
   }
 
   const profileId = localStorage
@@ -163,11 +178,17 @@ export function readStoredActiveChatProfileId(): string | null {
   return profileId || null;
 }
 
-export function writeStoredActiveChatProfileId(profileId: string): void {
+export function writeStoredActiveChatProfileId(
+  profileId: string,
+  orgId?: string | null
+): void {
   if (typeof localStorage === "undefined") {
     return;
   }
 
+  if (orgId) {
+    localStorage.setItem(activeChatProfileStorageKey(orgId), profileId);
+  }
   localStorage.setItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY, profileId);
 }
 
@@ -187,6 +208,7 @@ export function pickKnownProfileId(
 /** Initial profile for draft `/chat` before profiles list loads. */
 export function readInitialDraftChatProfileId(input: {
   search: string;
+  orgId?: string | null;
   routeProfileId?: string | null;
 }): string {
   if (input.routeProfileId) {
@@ -195,7 +217,7 @@ export function readInitialDraftChatProfileId(input: {
 
   return (
     readRequestedProfileFromNewChatSearch(input.search) ??
-    readStoredActiveChatProfileId() ??
+    readStoredActiveChatProfileId(input.orgId) ??
     ""
   );
 }

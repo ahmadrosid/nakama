@@ -49,7 +49,6 @@ import {
   isEditableUserMessage,
   isReadOnlySessionChannel,
   parseChatRouteParams,
-  pickKnownProfileId,
   readComposerDraft,
   readFailedChatTurn,
   readInitialDraftChatProfileId,
@@ -57,8 +56,6 @@ import {
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
   readRequestedProfileFromNewChatSearch,
-  readStoredActiveChatProfileId,
-  resolveDefaultProfileId,
   sessionStorageKey,
   storeComposerDraft,
   storeFailedChatTurn,
@@ -131,17 +128,18 @@ export function useChatPage() {
   const { health, models } = useAppContext();
   const { user, activeOrg } = useAuth();
   const {
-    profileId: liveChatProfileId,
-    setProfileId: setLiveChatProfileId,
-    registerChatProfileSwitchHandler,
+    profileId: storeProfileId,
+    setProfileId,
+    syncForOrg,
   } = useActiveChatProfile();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
-  const [profileId, setProfileId] = useState(() =>
+  const profileId =
+    storeProfileId ??
     readInitialDraftChatProfileId({
+      orgId: activeOrg?.id,
       routeProfileId: parseChatRouteParams(params)?.profileId,
       search: location.search,
-    })
-  );
+    });
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
@@ -201,14 +199,6 @@ export function useChatPage() {
   useEffect(() => {
     busyRef.current = busy;
   }, [busy]);
-
-  // Composer / in-page switches update profileId first; push to shared context.
-  useEffect(() => {
-    if (!profileId || profileId === liveChatProfileId) {
-      return;
-    }
-    setLiveChatProfileId(profileId);
-  }, [profileId, liveChatProfileId, setLiveChatProfileId]);
 
   const syncChatUrl = useCallback(
     (nextProfileId: string, sessionId: string) => {
@@ -370,28 +360,6 @@ export function useChatPage() {
     ]
   );
 
-  const loadProfiles = useCallback(async () => {
-    try {
-      const response = await client.listProfiles();
-      setProfiles(response.profiles);
-      if (!routeSession && response.profiles.length > 0) {
-        setProfileId((current) => {
-          const resolved = pickKnownProfileId(
-            response.profiles,
-            current,
-            readStoredActiveChatProfileId()
-          );
-          if (resolved) {
-            return resolved;
-          }
-          return resolveDefaultProfileId(response.profiles) ?? "";
-        });
-      }
-    } catch (err) {
-      setError(formatError(err));
-    }
-  }, [routeSession]);
-
   const enterDraftChat = useCallback(
     (nextProfileId: string) => {
       streamAbortRef.current?.abort();
@@ -419,6 +387,26 @@ export function useChatPage() {
     },
     [location.pathname, navigate, restoreLastChatModel]
   );
+
+  const loadProfiles = useCallback(async () => {
+    try {
+      const response = await client.listProfiles();
+      setProfiles(response.profiles);
+      if (response.profiles.length === 0) {
+        return;
+      }
+      const resolved = syncForOrg({
+        orgId: activeOrg?.id ?? null,
+        preferredProfileId: routeSession?.profileId,
+        profiles: response.profiles,
+      });
+      if (routeSession && resolved && routeSession.profileId !== resolved) {
+        enterDraftChat(resolved);
+      }
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }, [activeOrg?.id, enterDraftChat, routeSession, syncForOrg]);
 
   const handleThinkingEffortChange = useCallback(
     (effort: ThinkingEffort) => {
@@ -645,23 +633,7 @@ export function useChatPage() {
       setProfileId(nextProfileId);
       enterDraftChat(nextProfileId);
     },
-    [enterDraftChat]
-  );
-
-  useEffect(
-    () =>
-      registerChatProfileSwitchHandler((nextProfileId) => {
-        if (
-          !nextProfileId ||
-          nextProfileId === profileIdRef.current ||
-          busyRef.current
-        ) {
-          return;
-        }
-        setProfileId(nextProfileId);
-        enterDraftChat(nextProfileId);
-      }),
-    [registerChatProfileSwitchHandler, enterDraftChat]
+    [enterDraftChat, setProfileId]
   );
 
   // Layout effect so session is cleared before the syncChatUrl effect can
