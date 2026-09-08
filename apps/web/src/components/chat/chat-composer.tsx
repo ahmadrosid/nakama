@@ -45,7 +45,6 @@ import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { ChatThinkingEffortControl } from "@/components/chat/chat-thinking-effort-control";
-import { ChatSessionUsageChip } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { Button } from "@/components/ui/button";
@@ -726,10 +725,10 @@ function ChatComposerFullFooter({
         role="toolbar"
       >
         {props.contextUsage ? (
-          <ChatContextUsageRing usage={props.contextUsage} />
-        ) : null}
-        {props.sessionUsage ? (
-          <ChatSessionUsageChip usage={props.sessionUsage} />
+          <ChatContextUsageRing
+            sessionUsage={props.sessionUsage}
+            usage={props.contextUsage}
+          />
         ) : null}
 
         {props.providerConfigured ? (

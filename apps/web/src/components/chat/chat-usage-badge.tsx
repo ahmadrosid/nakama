@@ -1,9 +1,4 @@
 import type { ChatUsage } from "@nakama/core/contract";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { chatUsageTitle, formatChatUsage } from "@/lib/chat-usage";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +21,7 @@ function ChatUsageIcon({ className }: { className?: string }) {
   );
 }
 
-/** Icon + "1,234 in · 56 out · $0.0042" line used under a reply and in the composer. */
+/** Icon + "1,234 in · 56 out · $0.0042" line shown under an assistant reply. */
 export function ChatUsageBadge({
   usage,
   className,
@@ -45,34 +40,5 @@ export function ChatUsageBadge({
       <ChatUsageIcon className="size-3.5 shrink-0" />
       {formatChatUsage(usage)}
     </span>
-  );
-}
-
-/** Session total in the composer toolbar; sits beside the context-usage ring. */
-export function ChatSessionUsageChip({ usage }: { usage: ChatUsage }) {
-  const label = formatChatUsage(usage);
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            aria-label={`Session usage: ${label}`}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground text-xs tabular-nums transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            id="chat-session-usage"
-            type="button"
-          >
-            <ChatUsageIcon className="size-3.5" />
-            <span className="hidden sm:inline">{label}</span>
-            {usage.costUsd == null ? null : (
-              <span className="sm:hidden">{label.split(" · ").at(-1)}</span>
-            )}
-          </button>
-        }
-      />
-      <TooltipContent className="text-xs" side="top">
-        Session total · {chatUsageTitle(usage).replace("for this reply", "")}
-      </TooltipContent>
-    </Tooltip>
   );
 }
