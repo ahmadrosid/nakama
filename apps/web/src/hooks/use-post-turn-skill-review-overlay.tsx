@@ -17,6 +17,27 @@ import { canAccessSystemPage } from "@/lib/navigation";
 const POST_TURN_POLL_WINDOW_MS = 45_000;
 const POST_TURN_POLL_INTERVAL_MS = 3000;
 
+/**
+ * Which channels the post-turn skill-review overlay polls. Total over
+ * `AgentChannel` so a new channel fails the typecheck here rather than
+ * silently skipping (#474 / #798).
+ *
+ * `web` and `cli`: poll — a cli session opens in the web chat route with
+ * `sessionChannel === "cli"` (history listing is separate; see #910).
+ * telegram/whatsapp/discord: false — read-only in web, so apply is blocked
+ * anyway. automation/task/subagent: false — server does not review them.
+ */
+const POST_TURN_OVERLAY_POLL_CHANNEL = {
+  automation: false,
+  cli: true,
+  discord: false,
+  subagent: false,
+  task: false,
+  telegram: false,
+  web: true,
+  whatsapp: false,
+} as const satisfies Record<AgentChannel, boolean>;
+
 interface UsePostTurnSkillReviewOverlayArgs {
   lastSuccessfulTurnAt: number | null;
   profile: ProfileSummary | undefined;
@@ -42,7 +63,7 @@ function canPollPostTurnReview({
     reviewEnabled &&
     Boolean(activeOrgId) &&
     Boolean(sessionId) &&
-    sessionChannel === "web" &&
+    POST_TURN_OVERLAY_POLL_CHANNEL[sessionChannel] &&
     !readOnlySession
   );
 }
