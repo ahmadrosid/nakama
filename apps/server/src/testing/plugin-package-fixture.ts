@@ -62,7 +62,6 @@ const registry = setupServer(
     });
   })
 );
-registry.listen({ onUnhandledRequest: "bypass" });
 
 export function pluginPackage(
   files: Record<string, string | Uint8Array>,
@@ -72,6 +71,9 @@ export function pluginPackage(
     integrity?: string;
   } = {}
 ): PluginPackageRequest {
+  // Other MSW servers can dispose the shared interceptors between test files.
+  registry.close();
+  registry.listen({ onUnhandledRequest: "bypass" });
   const hash = createHash("sha256");
   for (const [name, data] of Object.entries(files)) {
     hash.update(name).update(data);
