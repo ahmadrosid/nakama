@@ -37,7 +37,9 @@ Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always 
 
 ## Browser automation
 
-Use `agent-browser` only for routine UI checks. Do not add Playwright for that path.
+Use `gh pr edit <number> --attach <image-path>` to upload a screenshot and embed it in the PR description.
+
+Run browser checks only when explicitly requested, using `agent-browser`; otherwise use tests, type checks, and builds. Do not add Playwright.
 
 ```bash
 bun run agent:ui

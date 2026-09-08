@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ToolContext } from "@nakama/core";
+import {
+  type ErrorReport,
+  refreshErrorTrackingEnabled,
+  setErrorSink,
+  type ToolContext,
+} from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import {
   CUSTOM_TOOL_HANDLERS,
@@ -32,6 +37,46 @@ function makeRecord(
   };
 }
 
+let reportedErrors: ErrorReport[] = [];
+let firstReport: Promise<ErrorReport>;
+let queueDir = "";
+const realConsoleError = console.error;
+
+beforeEach(async () => {
+  // reportError queues before it sends, and that queue is a read-modify-write on
+  // one file under NAKAMA_CONFIG_DIR. Without a temp dir here the suite trims
+  // the real queue on whatever machine runs it.
+  queueDir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-report-"));
+  process.env.NAKAMA_CONFIG_DIR = queueDir;
+  process.env.NAKAMA_ERROR_TRACKING_DSN = "https://key@errors.example.test/7";
+  await refreshErrorTrackingEnabled();
+  reportedErrors = [];
+  let resolveFirst: (report: ErrorReport) => void = () => undefined;
+  firstReport = new Promise<ErrorReport>((resolve) => {
+    resolveFirst = resolve;
+  });
+  setErrorSink((report) => {
+    reportedErrors.push(report);
+    resolveFirst(report);
+    return true;
+  });
+  // reportError logs the failure locally whatever the sink does.
+  console.error = () => undefined;
+});
+
+afterEach(async () => {
+  delete process.env.NAKAMA_ERROR_TRACKING_DSN;
+  if (originalConfigDir === undefined) {
+    delete process.env.NAKAMA_CONFIG_DIR;
+  } else {
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+  }
+  await refreshErrorTrackingEnabled();
+  setErrorSink(null);
+  console.error = realConsoleError;
+  await rm(queueDir, { force: true, recursive: true });
+});
+
 describe("withToolRetries", () => {
   test("succeeds on the first attempt without extra calls", async () => {
     let attempts = 0;
@@ -40,7 +85,7 @@ describe("withToolRetries", () => {
       return { ok: true };
     };
 
-    const result = await withToolRetries(run)({}, ctx());
+    const result = await withToolRetries(run, "flaky")({}, ctx());
 
     expect(result).toEqual({ ok: true });
     expect(attempts).toBe(1);
@@ -56,10 +101,12 @@ describe("withToolRetries", () => {
       return { ok: true };
     };
 
-    const result = await withToolRetries(run)({}, ctx());
+    const result = await withToolRetries(run, "flaky")({}, ctx());
 
     expect(result).toEqual({ ok: true });
     expect(attempts).toBe(3);
+    // A recovered failure is not the operator's problem, so nothing is sent.
+    expect(reportedErrors).toEqual([]);
   });
 
   test("stops after two retries and re-throws the last error unchanged", async () => {
@@ -71,8 +118,17 @@ describe("withToolRetries", () => {
       throw new Error(message);
     };
 
-    await expect(withToolRetries(run)({}, ctx())).rejects.toThrow(message);
+    await expect(withToolRetries(run, "flaky")({}, ctx())).rejects.toThrow(
+      message
+    );
     expect(attempts).toBe(TOOL_RETRY_LIMIT + 1);
+
+    // Awaiting the sink rather than a timer: reportError is not awaited by the
+    // wrapper, so this is the boundary that says the send actually happened.
+    const report = await firstReport;
+    expect(report.source).toBe("tool:flaky");
+    expect(report.kind).toBe("tool");
+    expect(reportedErrors).toHaveLength(1);
   });
 
   test("an aborted signal during the run stops immediately and is never retried", async () => {
@@ -85,10 +141,11 @@ describe("withToolRetries", () => {
       throw new Error("boom");
     };
 
-    await expect(withToolRetries(run)({}, ctx(controller.signal))).rejects.toBe(
-      cancellation
-    );
+    await expect(
+      withToolRetries(run, "flaky")({}, ctx(controller.signal))
+    ).rejects.toBe(cancellation);
     expect(attempts).toBe(1);
+    expect(reportedErrors).toEqual([]);
   });
 
   test("an already-aborted signal never starts the run", async () => {
@@ -101,10 +158,11 @@ describe("withToolRetries", () => {
       return { ok: true };
     };
 
-    await expect(withToolRetries(run)({}, ctx(controller.signal))).rejects.toBe(
-      cancellation
-    );
+    await expect(
+      withToolRetries(run, "flaky")({}, ctx(controller.signal))
+    ).rejects.toBe(cancellation);
     expect(attempts).toBe(0);
+    expect(reportedErrors).toEqual([]);
   });
 
   test("aborting during the backoff cancels the retry", async () => {
@@ -119,12 +177,13 @@ describe("withToolRetries", () => {
       return { ok: true };
     };
 
-    const pending = withToolRetries(run)({}, ctx(controller.signal));
+    const pending = withToolRetries(run, "flaky")({}, ctx(controller.signal));
     setTimeout(() => controller.abort(cancellation), 25);
 
     await expect(pending).rejects.toBe(cancellation);
     // Never reached the second attempt.
     expect(attempts).toBe(1);
+    expect(reportedErrors).toEqual([]);
   });
 });
 
@@ -192,6 +251,47 @@ if __name__ == "__main__":
       // policy reaches the python loader, not just the seam wrapper.
       expect(result.ok).toBe(true);
       expect(result.attempts).toBe(3);
+    } finally {
+      if (originalConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+      }
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("an exhausted tool reports under the record's own name", async () => {
+    const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const toolsDir = path.join(configDir, "tools");
+    const wsDir = path.join(configDir, "ws");
+    await mkdir(toolsDir, { recursive: true });
+    await mkdir(wsDir, { recursive: true });
+
+    await writeFile(
+      path.join(toolsDir, "doomed.js"),
+      `export async function run() {
+  process.exit(3);
+}
+`,
+      "utf8"
+    );
+
+    try {
+      const tool = await getCustomToolHandler("javascript")!.load(
+        makeRecord({
+          handlerConfig: { modulePath: "doomed.js" },
+          handlerType: "javascript",
+          name: "doomed_tool",
+        })
+      );
+
+      await expect(tool!.run({}, { workspaceRoot: wsDir })).rejects.toThrow();
+
+      // The seam passes definition.name, not the module path or the record id,
+      // and only running it end to end says which one arrived.
+      expect((await firstReport).source).toBe("tool:doomed_tool");
     } finally {
       if (originalConfigDir === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;

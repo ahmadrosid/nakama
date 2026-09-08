@@ -5,6 +5,8 @@ import {
   parseDocumentDataUrl,
 } from "@nakama/core/message-content";
 
+import { readFileAsDataUrl } from "./read-file-as-data-url";
+
 export const KNOWLEDGE_BASE_ACCEPT = `.pdf,.docx,.txt,.md,.csv,application/pdf,${DOCX_MEDIA_TYPE},text/plain,text/csv,text/markdown`;
 
 const KB_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv"]);
@@ -27,21 +29,10 @@ export function isKnowledgeBaseFile(file: File): boolean {
 export function fileToDocumentAttachment(
   file: File
 ): Promise<DocumentAttachment | null> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = typeof reader.result === "string" ? reader.result : null;
-      if (!result) {
-        resolve(null);
-        return;
-      }
-
-      const filename = file.name.trim() || "document";
-      resolve(parseDocumentDataUrl(result, filename));
-    };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
+  return readFileAsDataUrl(file).then(
+    (data) => parseDocumentDataUrl(data, file.name.trim() || "document"),
+    () => null
+  );
 }
 
 export function formatBytes(bytes: number): string {

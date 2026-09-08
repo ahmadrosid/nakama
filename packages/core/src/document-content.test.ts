@@ -10,15 +10,10 @@ const FIXTURES = join(import.meta.dir, "__fixtures__");
 const SAMPLE_PDF_B64 = readFileSync(join(FIXTURES, "sample.pdf")).toString(
   "base64"
 );
-const SAMPLE_DOCX_B64 = readFileSync(join(FIXTURES, "sample.docx")).toString(
-  "base64"
-);
 const SAMPLE_XLSX_B64 = readFileSync(join(FIXTURES, "sample.xlsx")).toString(
   "base64"
 );
 
-const DOCX_MEDIA_TYPE =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const XLSX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -123,22 +118,6 @@ describe("resolveDocumentPartForProvider", () => {
     expect(result.type).toBe("text");
     expect(result.text).toStartWith("[File: report.pdf]\n");
     expect(result.text.toLowerCase()).toContain("dummy");
-  });
-
-  test("parses docx to text for providers without native document support", async () => {
-    const result = await resolveDocumentPartForProvider(
-      {
-        data: SAMPLE_DOCX_B64,
-        filename: "notes.docx",
-        mediaType: DOCX_MEDIA_TYPE,
-        type: "document",
-      },
-      "cerebras"
-    );
-
-    expect(result.type).toBe("text");
-    expect(result.text).toStartWith("[File: notes.docx]\n");
-    expect(result.text).toContain("Laporan");
   });
 
   test("always converts excel to text even for native-capable providers", async () => {

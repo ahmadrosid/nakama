@@ -639,6 +639,8 @@ export interface DatabaseAdapter {
     organization: StoredOrganizationRecord;
     user: StoredUserRecord;
   }): Promise<boolean>;
+  /** Verify the live connection can read the migrated schema. */
+  checkHealth(): Promise<void>;
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
@@ -978,6 +980,13 @@ export interface DatabaseAdapter {
     id: string,
     appliedAt: string
   ): Promise<boolean>;
+  moveProfile(
+    profileId: string,
+    sourceOrgId: string,
+    targetOrgId: string,
+    workspaceFrom: string,
+    workspaceTo: string
+  ): Promise<void>;
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;

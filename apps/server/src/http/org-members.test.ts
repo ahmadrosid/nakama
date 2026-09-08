@@ -8,13 +8,9 @@ import {
 
 setupTestConfigDir("nakama-org-members-test-");
 
-function createApp() {
-  return createMinimalHonoApp();
-}
-
 describe("org member management (AE2)", () => {
   test("viewer can read org data but not list or manage members", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -115,7 +111,7 @@ describe("org member management (AE2)", () => {
   });
 
   test("org admin can list, edit, change role, and remove members", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -245,7 +241,7 @@ describe("org member management (AE2)", () => {
   });
 
   test("remove member rejects invalid userId shape with 400", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,

@@ -1,7 +1,8 @@
 import type { SessionSummary } from "@nakama/core/contract";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
+import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
@@ -15,6 +16,7 @@ import { HistorySessionsPanel } from "@/pages/history-sessions-panel";
 
 export function HistoryPage() {
   const { navigateToPage, navigateToChat } = useAppNavigation();
+  const { activeOrg } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const { profileId: liveChatProfileId, setProfileId: setLiveChatProfileId } =
     useActiveChatProfile();
@@ -23,14 +25,16 @@ export function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
-  const profileInitializedRef = useRef(false);
+  const sessionProfileId = profiles.some((profile) => profile.id === profileId)
+    ? profileId
+    : "";
   const {
     data: sessions = [],
     isLoading: initialLoading,
     isFetching: refreshing,
     error: sessionsError,
     refetch: refetchSessions,
-  } = useHistorySessionsQuery(profileId);
+  } = useHistorySessionsQuery(sessionProfileId);
   const purgeMutation = usePurgeSessionMutation();
   const busy = purgeMutation.isPending;
   const trimmedSearch = searchQuery.trim();
@@ -64,34 +68,31 @@ export function HistoryPage() {
   }, [profilesError, sessionsError]);
 
   useEffect(() => {
-    if (profiles.length === 0 || profileInitializedRef.current) {
+    if (profiles.length === 0) {
+      if (profileId) {
+        setProfileIdState("");
+      }
       return;
     }
 
-    profileInitializedRef.current = true;
     const resolvedProfileId = resolveHistoryProfileId({
       liveChatProfileId,
+      orgId: activeOrg?.id,
       profiles,
       search: searchParams.toString(),
     });
-    if (resolvedProfileId) {
+    if (resolvedProfileId && resolvedProfileId !== profileId) {
+      setError(null);
       setProfileId(resolvedProfileId);
     }
-  }, [liveChatProfileId, profiles, searchParams, setProfileId]);
-
-  // Sync from URL when the profile rail switches the active profile after init.
-  useEffect(() => {
-    if (!profileInitializedRef.current) {
-      return;
-    }
-    const fromUrl = searchParams.get("profile");
-    if (!fromUrl || fromUrl === profileId) {
-      return;
-    }
-    if (profiles.some((profile) => profile.id === fromUrl)) {
-      setProfileId(fromUrl);
-    }
-  }, [searchParams, profileId, profiles, setProfileId]);
+  }, [
+    activeOrg?.id,
+    liveChatProfileId,
+    profileId,
+    profiles,
+    searchParams,
+    setProfileId,
+  ]);
 
   const filteredSessions = useMemo(() => {
     const query = trimmedSearch.toLowerCase();

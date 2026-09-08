@@ -87,6 +87,56 @@ describe("resolveModel", () => {
     expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
   });
 
+  test("resolves catalog models for Together AI", () => {
+    expect(resolveModel("together", "openai/gpt-oss-120b")).toBe(
+      "openai/gpt-oss-120b"
+    );
+    expect(
+      resolveModel("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
+    ).toBe("meta-llama/Llama-3.3-70B-Instruct-Turbo");
+    expect(getDefaultModel("together")).toBe("openai/gpt-oss-120b");
+    expect(getModelById("Qwen/Qwen3.5-9B")?.supportsVision).toBe(true);
+    expect(getModelById("Qwen/Qwen3.5-9B")?.supportsThinking).toBe(true);
+    expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsVision).toBe(true);
+    expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsThinking).toBe(true);
+    expect(getModelById("MiniMaxAI/MiniMax-M3")?.contextWindow).toBe(1_048_576);
+    expect(getModelById("openai/gpt-oss-120b")?.supportsThinking).toBe(true);
+  });
+
+  test("uses together custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "Qwen/Qwen3.5-9B", name: "Qwen3.5 9B" },
+    ];
+    expect(resolveModel("together", "Qwen/Qwen3.5-9B", customModels)).toBe(
+      "Qwen/Qwen3.5-9B"
+    );
+    expect(resolveModel("together", "unknown-model", customModels)).toBe(
+      "Qwen/Qwen3.5-9B"
+    );
+  });
+
+  test("resolves catalog models for Mistral", () => {
+    expect(resolveModel("mistral", "mistral-large-2512")).toBe(
+      "mistral-large-2512"
+    );
+    expect(getDefaultModel("mistral")).toBe("mistral-small-2603");
+    expect(getModelById("mistral-small-2603")?.supportsThinking).toBe(true);
+    expect(getModelById("mistral-small-2603")?.supportsVision).toBe(true);
+    expect(getModelById("ministral-3b-2512")?.supportsVision).toBe(true);
+  });
+
+  test("uses mistral custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "mistral-small-2603", name: "Mistral Small 4" },
+    ];
+    expect(resolveModel("mistral", "mistral-small-2603", customModels)).toBe(
+      "mistral-small-2603"
+    );
+    expect(resolveModel("mistral", "unknown-model", customModels)).toBe(
+      "mistral-small-2603"
+    );
+  });
+
   test("resolves catalog models for Cerebras", () => {
     expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
     expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
@@ -184,6 +234,37 @@ describe("resolveModel", () => {
       "glm-5.2"
     );
   });
+
+  test("resolves Moonshot models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "kimi-k2.5-turbo-preview" },
+      { id: "kimi-k2.5" },
+      { id: "moonshot-v1-128k" },
+    ];
+
+    expect(resolveModel("moonshot", "kimi-k2.5", customModels)).toBe(
+      "kimi-k2.5"
+    );
+    expect(getDefaultModel("moonshot", customModels)).toBe(
+      "kimi-k2.5-turbo-preview"
+    );
+    expect(getDefaultModel("moonshot_cn", customModels)).toBe(
+      "kimi-k2.5-turbo-preview"
+    );
+  });
+
+  test("keeps Moonshot region catalogs independent", () => {
+    // Both platforms expose overlapping ids, so an id discovered on one
+    // instance still resolves against that instance's own list.
+    const cnModels = [{ default: true, id: "moonshot-v1-8k-vision-preview" }];
+
+    expect(
+      resolveModel("moonshot_cn", "moonshot-v1-8k-vision-preview", cnModels)
+    ).toBe("moonshot-v1-8k-vision-preview");
+    expect(resolveModel("moonshot", "not-a-real-model", cnModels)).toBe(
+      "moonshot-v1-8k-vision-preview"
+    );
+  });
 });
 
 describe("modelSupportsVision", () => {
@@ -207,6 +288,22 @@ describe("modelSupportsVision", () => {
     ).toBe(true);
   });
 
+  test("keeps Moonshot models opt-in only (discovered lists)", () => {
+    // Intl K2.x is text-only; the CN platform exposes vision variants, so
+    // vision comes from discovered metadata, never from the id.
+    expect(modelSupportsVision("kimi-k2.5", "moonshot")).toBe(false);
+    expect(
+      modelSupportsVision("moonshot-v1-8k-vision-preview", "moonshot_cn", [
+        { id: "moonshot-v1-8k-vision-preview" },
+      ])
+    ).toBe(false);
+
+    expect(
+      modelSupportsVision("moonshot-v1-8k-vision-preview", "moonshot_cn", [
+        { id: "moonshot-v1-8k-vision-preview", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
   test("treats openai-compatible models as opt-in only", () => {
     expect(
       modelSupportsVision("qwen-vl", "openai_compatible", [{ id: "qwen-vl" }])
@@ -223,5 +320,17 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("opencode-go/kimi-k2.7-code", "opencode_go")
     ).toBe(false);
+  });
+
+  test("reads Together AI vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("openai/gpt-oss-120b", "together")).toBe(false);
+    expect(modelSupportsVision("Qwen/Qwen3.5-9B", "together")).toBe(true);
+    expect(modelSupportsVision("MiniMaxAI/MiniMax-M3", "together")).toBe(true);
+  });
+
+  test("reads Mistral vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("mistral-small-2603", "mistral")).toBe(true);
+    expect(modelSupportsVision("mistral-large-2512", "mistral")).toBe(true);
+    expect(modelSupportsVision("ministral-14b-2512", "mistral")).toBe(true);
   });
 });

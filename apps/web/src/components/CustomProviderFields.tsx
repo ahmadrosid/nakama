@@ -154,6 +154,7 @@ export function CustomProviderFields({
           density={density}
           disabled={disabled}
           fieldId="provider-models"
+          footerHint="$/1M rates are USD per million tokens and drive the cost shown in chat. Leave both blank if unknown."
           modelsError={modelsError}
           onCustomModelsChange={onCustomModelsChange}
           renderBrowse={({ multiSelect, onAddMany, onSelect }) =>
@@ -183,7 +184,6 @@ export function CustomProviderFields({
               />
             )
           }
-          showPricing={false}
           showThinking
           showVision
           toModelRow={(row: ModelListRow) => row}

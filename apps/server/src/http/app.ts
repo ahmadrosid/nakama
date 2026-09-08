@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { formatServerError, NakamaApiError } from "@nakama/core";
+import { formatServerError, log, NakamaApiError } from "@nakama/core";
+import { requestId } from "hono/request-id";
 import { tryServeStaticWeb } from "../static-web";
 import { createAuthMiddleware } from "./auth-middleware";
 import type { ServerOptions } from "./context";
@@ -53,6 +54,33 @@ const THEME_BOOTSTRAP_SCRIPT_HASH =
 
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
+  const metricsEnabled = process.env.NAKAMA_METRICS === "true";
+  let requests = 0;
+  let serverErrors = 0;
+
+  app.use("*", requestId());
+  app.use("*", async (c, next) => {
+    const fields = { method: c.req.method, requestId: c.get("requestId") };
+    const start = performance.now();
+    log("debug", "http.request", fields);
+    await next();
+    c.header("X-Request-Id", fields.requestId);
+    const status = c.res.status;
+    if (metricsEnabled) {
+      requests += 1;
+      if (status >= 500) {
+        serverErrors += 1;
+      }
+    }
+    if (status >= 500) {
+      // Never log raw URLs: paths and queries can contain share/OAuth tokens.
+      log("error", "http.response", {
+        ...fields,
+        durationMs: Math.round(performance.now() - start),
+        status,
+      });
+    }
+  });
 
   app.onError((err) => {
     if (err instanceof NakamaApiError) {
@@ -119,6 +147,40 @@ export function createHonoApp(options: ServerOptions) {
     // Apply security headers to the final response
     const finalResponse = c.res;
     c.res = applySecurityHeaders(finalResponse);
+  });
+
+  // Probes must work before setup/login; they reveal no tenant or config data.
+  app.get("/healthz", (c) => c.json({ ok: true }));
+  app.get("/readyz", async (c) => {
+    c.header("Cache-Control", "no-store");
+    try {
+      if (!options.databaseAdapter) {
+        return c.json({ ok: false }, 503);
+      }
+      // Startup/reopen run migrations before exposing the adapter.
+      await options.databaseAdapter.checkHealth();
+      return c.json({ ok: true });
+    } catch {
+      return c.json({ ok: false }, 503);
+    }
+  });
+  app.get("/metrics", (c) => {
+    if (!metricsEnabled) {
+      return c.notFound();
+    }
+    c.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    c.header("Cache-Control", "no-store");
+    return c.body(
+      [
+        "# HELP nakama_http_requests_total HTTP responses served by this process.",
+        "# TYPE nakama_http_requests_total counter",
+        `nakama_http_requests_total ${requests}`,
+        "# HELP nakama_http_server_errors_total HTTP responses with a 5xx status.",
+        "# TYPE nakama_http_server_errors_total counter",
+        `nakama_http_server_errors_total ${serverErrors}`,
+        "",
+      ].join("\n")
+    );
   });
 
   app.use("*", createAuthMiddleware(options));

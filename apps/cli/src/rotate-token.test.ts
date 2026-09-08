@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  getLocalAuthTokenPath,
   loadLocalAuthToken,
   verifyLocalAuthToken,
 } from "@nakama/core/local-auth";
@@ -28,13 +29,20 @@ describe("rotate-token command", () => {
       }
 
       const rotated = await loadLocalAuthToken();
+      const tokenPath = getLocalAuthTokenPath();
       expect(rotated).toStartWith("tc_local_");
       expect(rotated).not.toBe(original);
       await expect(verifyLocalAuthToken(original!)).resolves.toBeNull();
       await expect(verifyLocalAuthToken(rotated!)).resolves.toEqual({
         email: "local-client@nakama.internal",
       });
-      expect(logs.some((line) => line.includes(rotated!))).toBe(true);
+      expect(
+        logs.some((line) => line.includes("Local auth token rotated."))
+      ).toBe(true);
+      expect(
+        logs.some((line) => line.includes(`Token file: ${tokenPath}`))
+      ).toBe(true);
+      expect(logs.some((line) => line.includes(rotated!))).toBe(false);
     } finally {
       delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { force: true, recursive: true });

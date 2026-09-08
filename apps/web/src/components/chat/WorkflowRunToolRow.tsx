@@ -1,10 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import {
+  CancelCircleIcon,
   CheckmarkCircle02Icon,
   DashedLineCircleIcon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { useQuery } from "@tanstack/react-query";
-import { CancelCircleIcon } from "hugeicons-react";
+} from "hugeicons-react";
 import type { ChatListItem } from "@/lib/chat-history";
 import {
   buildWorkflowRunCard,
@@ -140,8 +139,9 @@ function renderStepMark(
   }
 
   const completed = status === "completed";
+  const Icon = completed ? CheckmarkCircle02Icon : DashedLineCircleIcon;
   return (
-    <HugeiconsIcon
+    <Icon
       aria-hidden
       className={cn(
         "size-4 shrink-0",
@@ -150,7 +150,6 @@ function renderStepMark(
         className
       )}
       color="currentColor"
-      icon={completed ? CheckmarkCircle02Icon : DashedLineCircleIcon}
       size={16}
       strokeWidth={1.5}
     />

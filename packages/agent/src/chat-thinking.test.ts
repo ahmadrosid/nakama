@@ -7,7 +7,11 @@ import type {
 import { createAgentChatSession } from "./index";
 
 function createCapturingProvider(
-  response: ChatCompletionResult
+  response: ChatCompletionResult,
+  options: {
+    name?: ProviderClient["name"];
+    thinking?: string;
+  } = {}
 ): ProviderClient & { lastInput?: GenerateChatInput } {
   const provider: ProviderClient & { lastInput?: GenerateChatInput } = {
     generateChat(input) {
@@ -17,11 +21,15 @@ function createCapturingProvider(
     generateText() {
       return Promise.resolve({ content: "{}" });
     },
-    name: "anthropic",
+    name: options.name ?? "anthropic",
     streamChat(input, handlers) {
       provider.lastInput = input;
-      handlers.onThinking?.("trace ");
-      handlers.onChunk(response.content);
+      if (options.thinking) {
+        handlers.onThinking?.(options.thinking);
+      }
+      if (response.content) {
+        handlers.onChunk(response.content);
+      }
       return Promise.resolve(response);
     },
   };
@@ -29,12 +37,16 @@ function createCapturingProvider(
   return provider;
 }
 
+const textReply = (content: string): ChatCompletionResult => ({
+  assistantMessage: { content, role: "assistant" },
+  content,
+  toolCalls: [],
+});
+
 describe("thinking provider options", () => {
   test("merges thinking with web search options", async () => {
-    const provider = createCapturingProvider({
-      assistantMessage: { content: "Answer", role: "assistant" },
-      content: "Answer",
-      toolCalls: [],
+    const provider = createCapturingProvider(textReply("Answer"), {
+      thinking: "trace ",
     });
 
     const session = createAgentChatSession(
@@ -60,11 +72,7 @@ describe("thinking provider options", () => {
   });
 
   test("disables thinking for multimodal turns", async () => {
-    const provider = createCapturingProvider({
-      assistantMessage: { content: "Seen", role: "assistant" },
-      content: "Seen",
-      toolCalls: [],
-    });
+    const provider = createCapturingProvider(textReply("Seen"));
 
     const session = createAgentChatSession(
       {

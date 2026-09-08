@@ -2,7 +2,7 @@ import type { WASocket } from "@whiskeysockets/baileys";
 
 /**
  * Memory/Buffer safety budget for in-process Baileys document uploads.
- * Not a claim about WhatsApp's absolute document ceiling — share link remains the fallback.
+ * Not a claim about WhatsApp's absolute document ceiling.
  */
 export const WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES = 16 * 1024 * 1024;
 
@@ -18,7 +18,7 @@ export interface SendWhatsAppArtifactDocumentResult {
 }
 
 export function formatWhatsAppArtifactOversizeError(bytes: number): string {
-  return `File is too large for WhatsApp attach (${formatMegabytes(bytes)}; max ${formatMegabytes(WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES)}). Use the share link instead.`;
+  return `File is too large for WhatsApp attach (${formatMegabytes(bytes)}; max ${formatMegabytes(WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES)}). Download it from Artifacts in Nakama.`;
 }
 
 export async function sendWhatsAppArtifactDocument(

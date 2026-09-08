@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { maskSecret } from "./email-config";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
+import { maskTrailingSecret } from "./secret-mask";
 import { getUserConfigDir } from "./user-config";
 
 export interface ComposioConfigFile {
@@ -76,7 +76,7 @@ export function toComposioSettingsPublic(
   }
 
   return {
-    apiKeyMasked: maskSecret(file.apiKey),
+    apiKeyMasked: maskTrailingSecret(file.apiKey),
     configured: Boolean(file.apiKey.trim()),
   };
 }

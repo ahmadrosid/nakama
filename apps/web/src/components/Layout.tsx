@@ -18,7 +18,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ActiveChatProfileProvider } from "@/context/active-chat-profile-context";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
@@ -49,30 +48,28 @@ export function Layout() {
 
   return (
     <TooltipProvider delay={0}>
-      <ActiveChatProfileProvider>
-        <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
-          <ProfileRail />
-          <AppShellSidebar shell={shell} />
-          <div
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            data-app-shell-content=""
-          >
-            <AppShellHeader
-              label={shell.headerLabel}
-              page={shell.page}
-              pluginId={shell.activePluginId}
-            />
-            <AppShellError error={shell.error} />
-            <main className={appShellMainClassName(shell.page, shell.pathname)}>
-              <RouteBoundary resetKey={shell.pathname}>
-                <Outlet />
-              </RouteBoundary>
-            </main>
-          </div>
+      <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
+        <ProfileRail />
+        <AppShellSidebar shell={shell} />
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          data-app-shell-content=""
+        >
+          <AppShellHeader
+            label={shell.headerLabel}
+            page={shell.page}
+            pluginId={shell.activePluginId}
+          />
+          <AppShellError error={shell.error} />
+          <main className={appShellMainClassName(shell.page, shell.pathname)}>
+            <RouteBoundary resetKey={shell.pathname}>
+              <Outlet />
+            </RouteBoundary>
+          </main>
         </div>
-        <NarrowViewportNotice />
-        <CommandPalette />
-      </ActiveChatProfileProvider>
+      </div>
+      <NarrowViewportNotice />
+      <CommandPalette />
     </TooltipProvider>
   );
 }

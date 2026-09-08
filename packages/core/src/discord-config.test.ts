@@ -178,7 +178,6 @@ describeSharedChannelConfigTests({
   },
   generateHandshakeCode,
   isUserAuthorized: isDiscordUserAuthorized,
-  label: "Discord",
   loadConfigFile: loadDiscordConfigFile,
   mask: maskBotToken,
   name: "discord",

@@ -128,10 +128,16 @@ export function catalogCustomModelsToCatalog(
     }
     if (entry.supportsVision !== undefined) {
       model.supportsVision = entry.supportsVision;
+    } else if (provider === "chatgpt" || provider === "xai_oauth") {
+      model.supportsVision = true;
     }
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
-    } else if (provider === "deepseek") {
+    } else if (
+      provider === "deepseek" ||
+      provider === "together" ||
+      provider === "mistral"
+    ) {
       model.supportsThinking = false;
     }
     if (entry.inputPerMillionUsd !== undefined) {
@@ -143,13 +149,6 @@ export function catalogCustomModelsToCatalog(
 
     return model;
   });
-}
-
-export function openCodeGoCustomModelsToCatalog(
-  entries: CustomModelEntry[],
-  staticModels: ProviderModelOption[]
-): ProviderModelOption[] {
-  return catalogCustomModelsToCatalog(entries, staticModels, "opencode_go");
 }
 
 export function mergeOpenRouterCatalog(
@@ -324,9 +323,12 @@ export function getModelsForProviderInstance(
   if (
     instance.type === "openai" ||
     instance.type === "chatgpt" ||
+    instance.type === "xai_oauth" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "together" ||
+    instance.type === "mistral" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];
@@ -347,20 +349,6 @@ export function getModelsForProviderInstance(
   return annotate(
     AVAILABLE_MODELS.filter((model) => model.provider === instance.type)
   );
-}
-
-export function getModelsForConfiguredProvider(
-  provider: ProviderName | null,
-  instance: ProviderInstance | null | undefined,
-  currentModel?: string | null
-): ProviderModelOption[] {
-  if (!instance) {
-    return provider
-      ? AVAILABLE_MODELS.filter((model) => model.provider === provider)
-      : AVAILABLE_MODELS;
-  }
-
-  return getModelsForProviderInstance(instance, currentModel);
 }
 
 export function resolveOpenRouterDefaultModel(
@@ -634,11 +622,4 @@ export function compatibleModelSupportsThinking(
   customModels: CustomModelEntry[] | undefined
 ): boolean {
   return findCustomModel(customModels, modelId)?.supportsThinking === true;
-}
-
-export function compatibleModelSupportsVision(
-  modelId: string,
-  customModels: CustomModelEntry[] | undefined
-): boolean {
-  return findCustomModel(customModels, modelId)?.supportsVision === true;
 }

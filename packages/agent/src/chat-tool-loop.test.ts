@@ -53,6 +53,24 @@ function takeResponse(
   return response;
 }
 
+function toolTurn(
+  toolCalls: NonNullable<ChatCompletionResult["toolCalls"]>
+): ChatCompletionResult {
+  return {
+    assistantMessage: { content: "", role: "assistant", toolCalls },
+    content: "",
+    toolCalls,
+  };
+}
+
+function textReply(content: string): ChatCompletionResult {
+  return {
+    assistantMessage: { content, role: "assistant" },
+    content,
+    toolCalls: [],
+  };
+}
+
 const sampleTool: ToolDefinition = {
   description: "Sample tool for tests",
   name: "sample",
@@ -68,30 +86,178 @@ const sampleTool: ToolDefinition = {
   },
 };
 
+function delayedTool(
+  name: string,
+  options: {
+    delayMs: number;
+    parallelSafe?: boolean;
+    track?: { active: number; max: number };
+  }
+): ToolDefinition {
+  return {
+    description: name,
+    name,
+    parallelSafe: options.parallelSafe,
+    async run(input) {
+      if (options.track) {
+        options.track.active += 1;
+        options.track.max = Math.max(options.track.max, options.track.active);
+      }
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      if (options.track) {
+        options.track.active -= 1;
+      }
+      return input;
+    },
+  };
+}
+
 describe("agent chat tool loop", () => {
-  test("handles a single tool call then a final reply", async () => {
+  test("stream stops accumulating large tool results before another provider call and resets the budget next turn", async () => {
+    let providerCalls = 0;
+    let toolRuns = 0;
+    const tool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        toolRuns += 1;
+        return "x".repeat(128_000);
+      },
+    };
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      async generateChat() {
+        providerCalls += 1;
+        const toolCalls =
+          providerCalls <= 8
+            ? [
+                {
+                  arguments: {},
+                  id: `call_${providerCalls}`,
+                  name: tool.name,
+                },
+              ]
+            : [];
+        return {
+          assistantMessage: { content: "", role: "assistant", toolCalls },
+          content: "",
+          toolCalls,
+        };
+      },
+      streamChat(input) {
+        return this.generateChat(input);
+      },
+    };
+    const session = createAgentChatSession({ provider }, { tools: [tool] });
+    let streamed = "";
+    const reply = await session.sendStream("Read the files", {
+      onChunk: (chunk) => {
+        streamed += chunk;
+      },
+    });
+    expect(providerCalls).toBe(7);
+    expect(toolRuns).toBe(7);
+    expect(reply.length).toBeGreaterThan(0);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: reply,
+      role: "assistant",
+    });
+    expect(
+      session.getHistory().filter((message) => message.role === "tool")
+    ).toHaveLength(7);
+    expect(streamed).toBe(reply);
+    await session.send("Continue");
+    expect(providerCalls).toBe(9);
+    expect(toolRuns).toBe(8);
+  });
+
+  test("counts every result in a batch", async () => {
+    const tool: ToolDefinition = {
+      ...sampleTool,
+      parallelSafe: true,
+      async run() {
+        return "x".repeat(450_000);
+      },
+    };
+    const toolCalls = ["first", "second"].map((id) => ({
+      arguments: {},
+      id,
+      name: tool.name,
+    }));
     const provider = createMockProvider([
       {
-        assistantMessage: {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            { arguments: { message: "hi" }, id: "call_1", name: "sample" },
-          ],
-        },
+        assistantMessage: { content: "", role: "assistant", toolCalls },
         content: "",
-        toolCalls: [
-          { arguments: { message: "hi" }, id: "call_1", name: "sample" },
-        ],
+        toolCalls,
       },
-      {
-        assistantMessage: {
-          content: "Done",
-          role: "assistant",
+    ]);
+    const session = createAgentChatSession({ provider }, { tools: [tool] });
+    const reply = await session.send("Read both files");
+    expect(reply.length).toBeGreaterThan(0);
+    expect(
+      session
+        .getHistory()
+        .filter((message) => message.role === "tool")
+        .map((message) => message.toolCallId)
+    ).toEqual(["first", "second"]);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: reply,
+      role: "assistant",
+    });
+  });
+
+  test.each(["reported", "estimated"])(
+    "%s assistant output consumes the budget before tools execute",
+    async (source) => {
+      let toolRuns = 0;
+      const tool: ToolDefinition = {
+        ...sampleTool,
+        async run() {
+          toolRuns += 1;
+          return {};
         },
-        content: "Done",
-        toolCalls: [],
-      },
+      };
+      const toolCalls = [{ arguments: {}, id: "unexecuted", name: tool.name }];
+      const partialReply = "Here is what the analysis found.";
+      const provider = createMockProvider([
+        {
+          assistantMessage: {
+            content: partialReply,
+            role: "assistant",
+            thinking: source === "estimated" ? "x".repeat(800_000) : "",
+            toolCalls,
+          },
+          content: partialReply,
+          toolCalls,
+          usage:
+            source === "reported"
+              ? { inputTokens: 1, outputTokens: 200_000, totalTokens: 200_001 }
+              : undefined,
+        },
+      ]);
+      const session = createAgentChatSession({ provider }, { tools: [tool] });
+      let streamed = "";
+      const reply = await session.sendStream("Think first", {
+        onChunk: (chunk) => {
+          streamed += chunk;
+        },
+      });
+      expect(toolRuns).toBe(0);
+      expect(reply.startsWith(partialReply)).toBe(true);
+      expect(reply.length).toBeGreaterThan(partialReply.length);
+      expect(streamed).toBe(reply);
+      expect(session.getHistory()).toEqual([
+        { content: "Think first", role: "user" },
+        { content: reply, role: "assistant" },
+      ]);
+    }
+  );
+
+  test("handles a single tool call then a final reply", async () => {
+    const provider = createMockProvider([
+      toolTurn([
+        { arguments: { message: "hi" }, id: "call_1", name: "sample" },
+      ]),
+      textReply("Done"),
     ]);
 
     const session = createAgentChatSession(
@@ -117,27 +283,10 @@ describe("agent chat tool loop", () => {
 
   test("fires tool stream handlers", async () => {
     const provider = createMockProvider([
-      {
-        assistantMessage: {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            { arguments: { message: "ping" }, id: "call_1", name: "sample" },
-          ],
-        },
-        content: "",
-        toolCalls: [
-          { arguments: { message: "ping" }, id: "call_1", name: "sample" },
-        ],
-      },
-      {
-        assistantMessage: {
-          content: "done",
-          role: "assistant",
-        },
-        content: "done",
-        toolCalls: [],
-      },
+      toolTurn([
+        { arguments: { message: "ping" }, id: "call_1", name: "sample" },
+      ]),
+      textReply("done"),
     ]);
 
     const session = createAgentChatSession(
@@ -155,57 +304,20 @@ describe("agent chat tool loop", () => {
     expect(events).toEqual(["start:sample", "end:sample", "chunk:done"]);
   });
 
-  test("fires parallel tool stream handlers", async () => {
-    const parallelTool: ToolDefinition = {
-      description: "Parallel-safe sample tool",
-      name: "parallel_sample",
+  test("runs parallelSafe tool calls concurrently and preserves history order", async () => {
+    const track = { active: 0, max: 0 };
+    const parallelTool = delayedTool("parallel_sample", {
+      delayMs: 20,
       parallelSafe: true,
-      async run(input) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        return input;
-      },
-    };
+      track,
+    });
 
     const provider = createMockProvider([
-      {
-        assistantMessage: {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            {
-              arguments: { message: "a" },
-              id: "call_a",
-              name: "parallel_sample",
-            },
-            {
-              arguments: { message: "b" },
-              id: "call_b",
-              name: "parallel_sample",
-            },
-          ],
-        },
-        content: "",
-        toolCalls: [
-          {
-            arguments: { message: "a" },
-            id: "call_a",
-            name: "parallel_sample",
-          },
-          {
-            arguments: { message: "b" },
-            id: "call_b",
-            name: "parallel_sample",
-          },
-        ],
-      },
-      {
-        assistantMessage: {
-          content: "done",
-          role: "assistant",
-        },
-        content: "done",
-        toolCalls: [],
-      },
+      toolTurn([
+        { arguments: { message: "a" }, id: "call_a", name: "parallel_sample" },
+        { arguments: { message: "b" }, id: "call_b", name: "parallel_sample" },
+      ]),
+      textReply("Done"),
     ]);
 
     const session = createAgentChatSession(
@@ -213,87 +325,19 @@ describe("agent chat tool loop", () => {
       { tools: [parallelTool] }
     );
     const events: string[] = [];
-
-    await session.sendStream("go", {
+    const reply = await session.sendStream("run both", {
       onChunk: (delta) => events.push(`chunk:${delta}`),
       onToolEnd: (event) => events.push(`end:${event.toolCallId}`),
       onToolStart: (event) => events.push(`start:${event.toolCallId}`),
     });
 
+    expect(reply).toBe("Done");
+    expect(track.max).toBe(2);
     expect(events.filter((event) => event.startsWith("start:"))).toHaveLength(
       2
     );
     expect(events.filter((event) => event.startsWith("end:"))).toHaveLength(2);
-    expect(events.at(-1)).toBe("chunk:done");
-  });
-
-  test("runs parallelSafe tool calls concurrently and preserves history order", async () => {
-    let active = 0;
-    let maxActive = 0;
-
-    const parallelTool: ToolDefinition = {
-      description: "Parallel-safe delayed sample tool",
-      name: "parallel_sample",
-      parallelSafe: true,
-      async run(input) {
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        active -= 1;
-        return input;
-      },
-    };
-
-    const provider = createMockProvider([
-      {
-        assistantMessage: {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            {
-              arguments: { message: "a" },
-              id: "call_a",
-              name: "parallel_sample",
-            },
-            {
-              arguments: { message: "b" },
-              id: "call_b",
-              name: "parallel_sample",
-            },
-          ],
-        },
-        content: "",
-        toolCalls: [
-          {
-            arguments: { message: "a" },
-            id: "call_a",
-            name: "parallel_sample",
-          },
-          {
-            arguments: { message: "b" },
-            id: "call_b",
-            name: "parallel_sample",
-          },
-        ],
-      },
-      {
-        assistantMessage: {
-          content: "Done",
-          role: "assistant",
-        },
-        content: "Done",
-        toolCalls: [],
-      },
-    ]);
-
-    const session = createAgentChatSession(
-      { provider, tools: [parallelTool] },
-      { tools: [parallelTool] }
-    );
-    const reply = await session.send("run both");
-
-    expect(reply).toBe("Done");
-    expect(maxActive).toBe(2);
+    expect(events.at(-1)).toBe("chunk:Done");
 
     const history = session.getHistory() as ChatMessage[];
     expect(history[2]).toMatchObject({
@@ -309,74 +353,27 @@ describe("agent chat tool loop", () => {
   });
 
   test("falls back to sequential execution when any tool is not parallelSafe", async () => {
-    let active = 0;
-    let maxActive = 0;
-
-    const parallelTool: ToolDefinition = {
-      description: "Parallel-safe delayed sample tool",
-      name: "parallel_sample",
+    const track = { active: 0, max: 0 };
+    const parallelTool = delayedTool("parallel_sample", {
+      delayMs: 10,
       parallelSafe: true,
-      async run(input) {
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        active -= 1;
-        return input;
-      },
-    };
-
-    const sequentialTool: ToolDefinition = {
-      description: "Sequential sample tool",
-      name: "sequential_sample",
-      async run(input) {
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        active -= 1;
-        return input;
-      },
-    };
+      track,
+    });
+    const sequentialTool = delayedTool("sequential_sample", {
+      delayMs: 10,
+      track,
+    });
 
     const provider = createMockProvider([
-      {
-        assistantMessage: {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            {
-              arguments: { message: "a" },
-              id: "call_a",
-              name: "parallel_sample",
-            },
-            {
-              arguments: { message: "b" },
-              id: "call_b",
-              name: "sequential_sample",
-            },
-          ],
+      toolTurn([
+        { arguments: { message: "a" }, id: "call_a", name: "parallel_sample" },
+        {
+          arguments: { message: "b" },
+          id: "call_b",
+          name: "sequential_sample",
         },
-        content: "",
-        toolCalls: [
-          {
-            arguments: { message: "a" },
-            id: "call_a",
-            name: "parallel_sample",
-          },
-          {
-            arguments: { message: "b" },
-            id: "call_b",
-            name: "sequential_sample",
-          },
-        ],
-      },
-      {
-        assistantMessage: {
-          content: "Done",
-          role: "assistant",
-        },
-        content: "Done",
-        toolCalls: [],
-      },
+      ]),
+      textReply("Done"),
     ]);
 
     const session = createAgentChatSession(
@@ -390,24 +387,14 @@ describe("agent chat tool loop", () => {
     );
     await session.send("run mixed");
 
-    expect(maxActive).toBe(1);
+    expect(track.max).toBe(1);
   });
 
   test("rolls back incomplete tool turns when follow-up provider call fails", async () => {
     const provider = createMockProvider([
-      {
-        assistantMessage: {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            { arguments: { message: "hi" }, id: "call_1", name: "sample" },
-          ],
-        },
-        content: "",
-        toolCalls: [
-          { arguments: { message: "hi" }, id: "call_1", name: "sample" },
-        ],
-      },
+      toolTurn([
+        { arguments: { message: "hi" }, id: "call_1", name: "sample" },
+      ]),
     ]);
 
     const session = createAgentChatSession(
@@ -426,10 +413,7 @@ describe("agent chat tool loop", () => {
     const provider: ProviderClient = {
       generateChat(input) {
         systems.push(input.system);
-        return Promise.resolve({
-          assistantMessage: { content: "done", role: "assistant" },
-          content: "done",
-        });
+        return Promise.resolve(textReply("done"));
       },
       generateText() {
         return Promise.resolve({ content: "{}" });
@@ -438,10 +422,7 @@ describe("agent chat tool loop", () => {
       streamChat(input, handlers) {
         systems.push(input.system);
         handlers.onChunk("done");
-        return Promise.resolve({
-          assistantMessage: { content: "done", role: "assistant" },
-          content: "done",
-        });
+        return Promise.resolve(textReply("done"));
       },
     };
 

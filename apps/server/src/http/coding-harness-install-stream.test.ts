@@ -117,4 +117,26 @@ describe("streamInstallEvents", () => {
 
     expect(thrown).toEqual([]);
   });
+
+  test("the deadline aborts the signal the executor was handed", async () => {
+    const seen: string[] = [];
+    let abortedDuringRun = false;
+
+    const response = streamInstallEvents<TestEvent>(
+      async (send, signal) => {
+        seen.push(`aborted-at-start:${signal.aborted}`);
+        await Bun.sleep(OUTLIVES_TIMEOUT_MS);
+        abortedDuringRun = signal.aborted;
+        send({ message: "late", type: "progress" });
+      },
+      { timeoutMs: TIMEOUT_MS }
+    );
+
+    const events = await readEvents(response);
+    await Bun.sleep(OUTLIVES_TIMEOUT_MS);
+
+    expect(seen[0]).toBe("aborted-at-start:false");
+    expect(abortedDuringRun).toBe(true);
+    expect(events.at(-1)?.type).toBe("error");
+  });
 });

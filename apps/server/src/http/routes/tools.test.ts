@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
-import type { DatabaseAdapter } from "@nakama/db";
-import type { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
+  createOrgAdminSession,
   loginPlatformAdminSession,
   loginUserSession,
 } from "../test-session-helpers";
@@ -38,55 +37,6 @@ function createApp(agentOverrides: Record<string, unknown> = {}) {
       ...agentOverrides,
     },
   });
-}
-
-async function createOrgAdminSession(
-  app: ReturnType<typeof createApp>["app"],
-  authService: AuthService,
-  databaseAdapter: DatabaseAdapter,
-  slug: string,
-  email: string
-) {
-  const platformSession = await loginPlatformAdminSession(
-    app,
-    authService,
-    databaseAdapter
-  );
-
-  const createResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/platform/orgs", {
-      body: JSON.stringify({
-        admin: {
-          email,
-          name: "Acme Admin",
-          phone: "+628123456789",
-        },
-        name: "Acme",
-        slug,
-      }),
-      headers: platformSession.headers({
-        "Content-Type": "application/json",
-        "X-CSRF-Token": platformSession.csrfToken,
-      }),
-      method: "POST",
-    })
-  );
-
-  expect(createResponse.status).toBe(201);
-  const created = (await createResponse.json()) as {
-    organization: { id: string };
-    adminMember: { temporaryPassword: string };
-  };
-
-  return {
-    adminSession: await loginUserSession(
-      app,
-      email,
-      created.adminMember.temporaryPassword,
-      created.organization.id
-    ),
-    orgId: created.organization.id,
-  };
 }
 
 describe("tool playground routes", () => {

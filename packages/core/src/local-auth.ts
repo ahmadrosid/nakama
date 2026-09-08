@@ -31,7 +31,7 @@ function hashLocalAuthToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function getLocalAuthTokenPath(): string {
+export function getLocalAuthTokenPath(): string {
   return join(getUserConfigDir(), LOCAL_AUTH_TOKEN_FILENAME);
 }
 

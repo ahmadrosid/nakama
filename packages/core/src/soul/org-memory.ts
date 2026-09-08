@@ -20,8 +20,21 @@ export interface ParsedOrgMemory {
   sections: MemorySection[];
 }
 
+/**
+ * A bullet is one line of `MEMORY.md`, and collapsing whitespace is what keeps
+ * it one. Without this, an approved proposal carrying a newline and a second
+ * `- ` split into two bullets, so a reviewer who approved one line published
+ * two and the extra one reached the system prompt unreviewed.
+ */
+export function normalizeOrgMemoryBullet(bullet: string): string {
+  return bullet
+    .replace(/^\s*-\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function normalizeOrgMemoryDedupKey(bullet: string): string {
-  return bullet.trim().replace(/^-\s+/, "").trim().toLowerCase();
+  return normalizeOrgMemoryBullet(bullet).toLowerCase();
 }
 
 export function detectOrgMemoryInjectionWarnings(bullet: string): string[] {
@@ -29,7 +42,9 @@ export function detectOrgMemoryInjectionWarnings(bullet: string): string[] {
   if (/ignore (all )?previous/i.test(bullet)) {
     warnings.push("Contains instruction-like phrasing.");
   }
-  if (/^system:/im.test(bullet)) {
+  // The list marker is part of the evasion, not decoration: `- system:` reads to
+  // a model exactly like `system:` and slipped past a bare `^system:` anchor.
+  if (/^\s*(?:[-*+]\s+)?system:/im.test(bullet)) {
     warnings.push("Contains a system-style prefix.");
   }
   if (/^##\s/m.test(bullet)) {
@@ -249,7 +264,7 @@ export function applyApprovedOrgMemoryBullet(
 ): string {
   const pin = options.pin ?? false;
   const dateUtc = options.dateUtc ?? new Date().toISOString().slice(0, 10);
-  const text = bullet.trim().replace(/^-\s+/, "").trim();
+  const text = normalizeOrgMemoryBullet(bullet);
   const parsed = normalizeParsedOrgMemory(parseOrgMemoryContent(content ?? ""));
   const dedupKey = normalizeOrgMemoryDedupKey(text);
 
@@ -366,7 +381,7 @@ export function previewOrgMemoryAfterApprove(
 ): OrgMemoryApprovePreview {
   const pin = options.pin ?? false;
   const dateUtc = options.dateUtc ?? new Date().toISOString().slice(0, 10);
-  const text = bullet.trim().replace(/^-\s+/, "").trim();
+  const text = normalizeOrgMemoryBullet(bullet);
   const rebuilt = applyApprovedOrgMemoryBullet(liveContent, bullet, {
     dateUtc,
     pin,

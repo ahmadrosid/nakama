@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { AuthService as AuthServiceType } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
-  loginPlatformAdminSession,
+  createOrgAdminSession,
   loginUserSession,
   setupFreshInstallSession,
 } from "../test-session-helpers";
@@ -57,55 +56,6 @@ function createApp() {
     ...createMinimalHonoApp({ agent }),
     readCalls,
     writeCalls,
-  };
-}
-
-async function createOrgAdminSession(
-  app: ReturnType<typeof createApp>["app"],
-  authService: AuthServiceType,
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
-  slug: string,
-  email: string
-) {
-  const platformSession = await loginPlatformAdminSession(
-    app,
-    authService,
-    databaseAdapter
-  );
-
-  const createResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/platform/orgs", {
-      body: JSON.stringify({
-        admin: {
-          email,
-          name: "Acme Admin",
-          phone: "+628123456789",
-        },
-        name: "Acme",
-        slug,
-      }),
-      headers: platformSession.headers({
-        "Content-Type": "application/json",
-        "X-CSRF-Token": platformSession.csrfToken,
-      }),
-      method: "POST",
-    })
-  );
-
-  expect(createResponse.status).toBe(201);
-  const created = (await createResponse.json()) as {
-    organization: { id: string };
-    adminMember: { temporaryPassword: string };
-  };
-
-  return {
-    adminSession: await loginUserSession(
-      app,
-      email,
-      created.adminMember.temporaryPassword,
-      created.organization.id
-    ),
-    orgId: created.organization.id,
   };
 }
 

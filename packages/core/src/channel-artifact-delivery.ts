@@ -17,7 +17,7 @@ export interface PublishArtifactShareResult {
 }
 
 const ATTACH_NOUN =
-  "file|document|attachment|artifact|pdf|csv|zip|image|photo|screenshot|report|deck";
+  "file|document|attachment|artifact|pdf|csv|zip|image|photo|screenshot|report|deck|dokumen|lampiran|laporan";
 
 /** Phrase matching for Telegram (and legacy callers). Discord natural-language
  * sends use the send_discord_artifact tool instead. */
@@ -32,6 +32,8 @@ const ATTACH_INTENT_PATTERNS = [
   ),
   /\bsend\s+(?:me\s+)?(?:the\s+)?\S+\.(?:pdf|csv|png|jpe?g|gif|webp|zip|txt|md)\b/i,
   /\battach\s+it\b/i,
+  /\bsend\s+it\s+(?:to\s+(?:this|the)\s+(?:group|chat)|here)\b/i,
+  new RegExp(String.raw`\bkirim(?:kan)?\s+(?:${ATTACH_NOUN})(?:nya)?\b`, "i"),
   /^\/attach(?:@\w+)?(?:\s|$)/i,
 ];
 
@@ -46,6 +48,10 @@ export interface ListedArtifactCandidate {
 export function isAttachIntent(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) {
+    return false;
+  }
+
+  if (/\b(?:jangan|tidak\s+usah)\s+kirim(?:kan)?\b/i.test(normalized)) {
     return false;
   }
 
