@@ -1,6 +1,10 @@
 import { join } from "node:path";
 import { NakamaClient } from "@nakama/client";
-import { installErrorHandlers, installErrorTrackingSink } from "@nakama/core";
+import {
+  installErrorHandlers,
+  installErrorTrackingSink,
+  log,
+} from "@nakama/core";
 import { hasActiveStreams } from "@nakama/core/channel-active-stream";
 import {
   ChannelOrgStore,
@@ -109,7 +113,7 @@ try {
     sessionStore,
   });
 
-  console.log("Nakama Telegram bridge running (long polling).");
+  log("info", "worker.started", { worker: "telegram" });
   console.log(`Server: ${serverUrl}`);
   console.log(`Profile: ${config.profileId}`);
   const authConfig = authStore.getConfig();

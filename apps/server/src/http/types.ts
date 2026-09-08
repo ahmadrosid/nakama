@@ -1,8 +1,9 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
+import type { RequestIdVariables } from "hono/request-id";
 import type { RequestAuthContext } from "./shared";
 
 export type AppEnv = {
-  Variables: {
+  Variables: RequestIdVariables & {
     auth: RequestAuthContext;
   };
 };

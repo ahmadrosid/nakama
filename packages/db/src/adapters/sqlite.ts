@@ -1857,6 +1857,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return bootstrapInitialSetupTransaction.immediate(input);
     },
 
+    async checkHealth() {
+      // Prepare afresh: cached statements can outlive SQLite's closed handle.
+      using statement = db.prepare("SELECT 1 FROM users LIMIT 1");
+      statement.get();
+    },
+
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID) as {
         count: number;
