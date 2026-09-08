@@ -2238,7 +2238,8 @@ export type ProviderName =
   | "moonshot_cn"
   | "zhipu"
   | "zhipu_cn"
-  | "xai";
+  | "xai"
+  | "together";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

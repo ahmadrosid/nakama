@@ -20,6 +20,7 @@ const BUILTIN_LABELS: Record<
   openai: "OpenAI",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",

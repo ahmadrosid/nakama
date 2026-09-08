@@ -23,6 +23,7 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "together"
     | "mistral"
     | "cerebras"
     | "fireworks",
@@ -117,6 +118,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("ds-1", "model-1"),
         group("ds-1", "deepseek", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats together models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -226,6 +243,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(true);
   });
 
+  test("treats together models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats fireworks models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -329,6 +362,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "together",
           "mistral",
           "cerebras",
           "cloudflare",

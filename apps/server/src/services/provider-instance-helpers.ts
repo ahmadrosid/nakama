@@ -155,6 +155,7 @@ export function modelExistsOnInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "together" ||
     instance.type === "mistral"
   ) {
     if (instance.customModels?.length) {
@@ -354,6 +355,7 @@ export function applyProviderInstanceUpdate(
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
+      instance.type === "together" ||
       instance.type === "mistral"
     ) {
       next.customModels = validateCustomModels(request.customModels);

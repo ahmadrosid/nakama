@@ -26,6 +26,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("moonshot")).toBe("moonshot");
     expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
+    expect(parseProviderName("together")).toBe("together");
   });
 
   test("rejects unknown values", () => {
@@ -37,6 +38,10 @@ describe("parseProviderName", () => {
 describe("apiKeyEnvVarForProvider", () => {
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
+  });
+
+  test("maps Together AI to its env key", () => {
+    expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
   });
 
   test("mistral uses MISTRAL_API_KEY", () => {
@@ -109,6 +114,18 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
+describe("resolveProvider together", () => {
+  test("auto-resolves Together when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        TOGETHER_API_KEY: "tg-test",
+      },
+    });
+
+    expect(provider).toBe("together");
+  });
+});
+
 describe("resolveProvider mistral", () => {
   test("auto-resolves Mistral when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -159,6 +176,8 @@ describe("isDiscoveryModelProvider", () => {
 
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
+    expect(isDiscoveryModelProvider("together")).toBe(false);
+    expect(isDiscoveryModelProvider("mistral")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
   });

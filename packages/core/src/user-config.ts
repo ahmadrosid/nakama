@@ -99,6 +99,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",
