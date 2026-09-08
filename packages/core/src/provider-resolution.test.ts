@@ -17,6 +17,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("mistral")).toBe("mistral");
+    expect(parseProviderName("perplexity")).toBe("perplexity");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
     expect(parseProviderName("minimax")).toBe("minimax");
@@ -39,6 +40,10 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("mistral uses MISTRAL_API_KEY", () => {
     expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
+  });
+
+  test("perplexity uses PERPLEXITY_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("perplexity")).toBe("PERPLEXITY_API_KEY");
   });
 });
 
@@ -111,6 +116,18 @@ describe("resolveProvider mistral", () => {
     });
 
     expect(provider).toBe("mistral");
+  });
+});
+
+describe("resolveProvider perplexity", () => {
+  test("auto-resolves Perplexity when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        PERPLEXITY_API_KEY: "pplx-test",
+      },
+    });
+
+    expect(provider).toBe("perplexity");
   });
 });
 

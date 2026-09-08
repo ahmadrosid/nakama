@@ -80,4 +80,79 @@ describe("createProviderForInstance routing", () => {
       mock.stop(true);
     }
   });
+
+  test("routes perplexity chat and keeps citations while omitting local tools", async () => {
+    let seenPath = "";
+    let seenAuth = "";
+    const seenBodies: Array<Record<string, unknown>> = [];
+
+    const mock = Bun.serve({
+      fetch: async (request) => {
+        seenPath = new URL(request.url).pathname;
+        seenAuth = request.headers.get("authorization") ?? "";
+        seenBodies.push((await request.json()) as Record<string, unknown>);
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: {
+                content: "Grounded answer.[1][2]",
+                role: "assistant",
+              },
+            },
+          ],
+          citations: ["https://one.test/a", "https://two.test/b"],
+          model: "sonar",
+          usage: {
+            completion_tokens: 3,
+            prompt_tokens: 2,
+            total_tokens: 5,
+          },
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        baseUrl: `http://127.0.0.1:${mock.port}`,
+        createdAt: new Date().toISOString(),
+        id: "inst_perplexity",
+        label: "Perplexity Sonar",
+        type: "perplexity",
+      };
+      const client = createProviderForInstance(instance, "sonar");
+
+      const result = await client!.generateChat({
+        messages: [{ content: "What changed?", role: "user" }],
+        system: "Answer with sources.",
+        tools: [
+          {
+            description: "Look up a local record",
+            name: "lookup",
+            parameters: { type: "object" },
+          },
+        ],
+      });
+
+      expect(client?.name).toBe("perplexity");
+      expect(seenPath).toBe("/chat/completions");
+      expect(seenAuth).toBe("Bearer test-key");
+      expect(seenBodies[0]?.model).toBe("sonar");
+      expect(seenBodies[0]?.tools).toBeUndefined();
+      expect(result.content).toContain("Grounded answer.[1][2]");
+      expect(result.content).toContain("1. <https://one.test/a>");
+      expect(result.content).toContain("2. <https://two.test/b>");
+
+      await client!.generateText({
+        prompt: "Return JSON",
+        system: "Return a result.",
+      });
+      expect(seenBodies[1]?.response_format).toBeUndefined();
+    } finally {
+      mock.stop(true);
+    }
+  });
 });
