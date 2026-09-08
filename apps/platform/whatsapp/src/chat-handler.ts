@@ -429,7 +429,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const profileId = sessionStore.get(conversationKey)?.profileId;
     const socket = getSocket();
 
-    if (profileId && socket) {
+    // ponytail: imperative phrases only; use an explicit send tool for richer requests.
+    const createsArtifact =
+      /^\s*(?:(?:please|tolong)\s+)?(?:collect|create|generate|save|buat(?:kan)?|rekap(?:kan)?)\b/i.test(
+        attachUserText
+      );
+    if (profileId && socket && !createsArtifact) {
       const attached = await maybeSendRequestedWhatsAppArtifactAttachment({
         attachUserText,
         client,
@@ -518,7 +523,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (profileId) {
-      await deliverTurnArtifactShares({
+      const artifacts = await deliverTurnArtifactShares({
         conversationKey,
         publish: (path) => client.publishProfileArtifactShare(profileId, path),
         sendFooter: (footer) => sendText(jid, footer, { raw: true }),
@@ -526,10 +531,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         sessionStore,
       });
 
-      // Same-turn "save and send me the file": registry is empty before the
-      // agent runs, so attach after shares are minted.
+      // Creation requests attach only if this turn actually produced an artifact.
       const postTurnSocket = getSocket();
-      if (postTurnSocket) {
+      if (postTurnSocket && (!createsArtifact || artifacts.length > 0)) {
         await maybeSendRequestedWhatsAppArtifactAttachment({
           attachUserText,
           client,

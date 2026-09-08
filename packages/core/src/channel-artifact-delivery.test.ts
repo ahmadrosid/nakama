@@ -20,11 +20,19 @@ describe("isAttachIntent", () => {
     expect(isAttachIntent("send me the csv")).toBe(true);
     expect(isAttachIntent("attach the image")).toBe(true);
     expect(isAttachIntent("send nakama-pitch-deck.pdf")).toBe(true);
+    expect(isAttachIntent("tolong kirim csv file kesini please")).toBe(true);
+    expect(
+      isAttachIntent(
+        "collect the report from 01-09-2026 to 06-09-2026 in csv file then send it to this group"
+      )
+    ).toBe(true);
   });
 
   test("does not match unrelated text", () => {
     expect(isAttachIntent("thanks")).toBe(false);
     expect(isAttachIntent("save a report")).toBe(false);
+    expect(isAttachIntent("jangan kirim csv ke grup")).toBe(false);
+    expect(isAttachIntent("tidak usah kirimkan file")).toBe(false);
   });
 });
 

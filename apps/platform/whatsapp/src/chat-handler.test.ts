@@ -1627,7 +1627,7 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 
-  test("does not publish when the turn has no sidecar pair", async () => {
+  test("publishes and attaches a successful write without a sidecar", async () => {
     await withArtifactChat(
       {
         messages: [
@@ -1655,11 +1655,15 @@ describe("createChatHandler artifact delivery", () => {
         ],
       },
       async (ctx) => {
-        await ctx.handleMessage({ jid: PAIRED_JID, text: "thanks" });
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "tolong kirim csv file kesini please",
+        });
 
-        expect(ctx.calls.publishProfileArtifactShare).toBe(0);
+        expect(ctx.calls.publishProfileArtifactShare).toBe(1);
+        expect(documentSendCount(ctx.sent)).toBe(1);
         expect(ctx.sent.some((message) => message.text.includes("/s/"))).toBe(
-          false
+          true
         );
       }
     );
@@ -1669,7 +1673,10 @@ describe("createChatHandler artifact delivery", () => {
     await withArtifactChat(
       { deliverableArtifacts: [SAMPLE_ARTIFACT] },
       async (ctx) => {
-        await ctx.handleMessage({ jid: PAIRED_JID, text: "send me the file" });
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "kirim file rekap-well-test.csv",
+        });
 
         expect(ctx.calls.readProfileArtifactContent).toBe(1);
         expect(documentSendCount(ctx.sent)).toBe(1);
@@ -1707,6 +1714,35 @@ describe("createChatHandler artifact delivery", () => {
       expect(documentSendCount(ctx.sent)).toBe(1);
       expect(ctx.calls.sendStream).toBe(1);
     });
+  });
+
+  test("creates the requested report before sending even with an older artifact", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: artifactMessages },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "collect the report from 01-09-2026 to 06-09-2026 in csv file then send it to this group",
+        });
+        expect(ctx.calls.sendStream).toBe(1);
+        expect(ctx.calls.publishProfileArtifactShare).toBe(1);
+        expect(documentSendCount(ctx.sent)).toBe(1);
+      }
+    );
+  });
+
+  test("does not send an older artifact when report creation produces no file", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: [] },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "collect the report then send it to this group",
+        });
+        expect(ctx.calls.sendStream).toBe(1);
+        expect(documentSendCount(ctx.sent)).toBe(0);
+      }
+    );
   });
 
   test("attaches in a group when the user asks to send the file", async () => {

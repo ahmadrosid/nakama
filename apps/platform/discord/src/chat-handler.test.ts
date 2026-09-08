@@ -493,7 +493,7 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 
-  test("does not publish when the turn has no sidecar pair", async () => {
+  test("publishes successful artifact writes without a sidecar", async () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, calls, sessionStore } = await createPairedHandler(
         homeDir,
@@ -536,8 +536,8 @@ describe("createChatHandler artifact delivery", () => {
       });
       await handleMessage(message);
 
-      expect(calls.publishProfileArtifactShare).toBe(0);
-      expect(sentMessages.some((reply) => reply.includes("/s/"))).toBe(false);
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(sentMessages.some((reply) => reply.includes("/s/"))).toBe(true);
     });
   });
 

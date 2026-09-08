@@ -93,7 +93,7 @@ describe("extractPairedTurnArtifacts", () => {
     ]);
   });
 
-  test("returns empty when content write has no sidecar", () => {
+  test("derives metadata from a successful artifact write without a sidecar", () => {
     const contentPath = `${ARTIFACTS_ROOT}/draft.md`;
 
     expect(
@@ -113,7 +113,68 @@ describe("extractPairedTurnArtifacts", () => {
           result: { bytesWritten: 5, path: contentPath },
         }),
       ])
-    ).toEqual([]);
+    ).toEqual([
+      {
+        filename: "draft.md",
+        mimeType: "text/markdown",
+        path: "draft.md",
+        savedAt: "",
+        sizeBytes: 5,
+      },
+    ]);
+  });
+
+  test("delivers CSV with incomplete metadata and the resolved filename", () => {
+    const contentPath = `${ARTIFACTS_ROOT}/report-2026-09-08.csv`;
+    const messages: ChatMessage[] = [
+      { content: "tolong kirim csv file kesini please", role: "user" },
+      assistantWithToolCalls([
+        {
+          arguments: {
+            content: '{"mimeType":"text/csv"}',
+            path: "artifacts/report.csv.nakama-meta.json",
+          },
+          id: "meta",
+          name: "write_file",
+        },
+      ]),
+      toolMessage({
+        id: "content",
+        input: {},
+        name: "write_file",
+        result: { bytesWritten: 934, path: contentPath },
+      }),
+      toolMessage({
+        id: "meta",
+        input: {},
+        name: "write_file",
+        result: { bytesWritten: 23, path: `${contentPath}.nakama-meta.json` },
+      }),
+    ];
+    expect(extractPairedTurnArtifacts(messages)).toEqual([
+      {
+        filename: "report-2026-09-08.csv",
+        mimeType: "text/csv",
+        path: "report-2026-09-08.csv",
+        savedAt: "",
+        sizeBytes: 934,
+      },
+    ]);
+  });
+
+  test("does not infer artifacts without a valid byte count", () => {
+    for (const bytesWritten of [undefined, -1, 1.5, "934"]) {
+      expect(
+        extractPairedTurnArtifacts([
+          toolMessage({
+            id: "content",
+            input: {},
+            name: "write_file",
+            result: { bytesWritten, path: `${ARTIFACTS_ROOT}/report.csv` },
+          }),
+        ])
+      ).toEqual([]);
+    }
   });
 
   test("ignores failed writes", () => {
