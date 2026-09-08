@@ -2234,6 +2234,8 @@ export type ProviderName =
   | "xai_oauth"
   | "minimax"
   | "minimax_cn"
+  | "moonshot"
+  | "moonshot_cn"
   | "zhipu"
   | "zhipu_cn"
   | "xai";

@@ -23,6 +23,8 @@ describe("parseProviderName", () => {
     expect(parseProviderName("minimax_cn")).toBe("minimax_cn");
     expect(parseProviderName("zhipu")).toBe("zhipu");
     expect(parseProviderName("zhipu_cn")).toBe("zhipu_cn");
+    expect(parseProviderName("moonshot")).toBe("moonshot");
+    expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
   });
 
@@ -39,6 +41,11 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("mistral uses MISTRAL_API_KEY", () => {
     expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
+  });
+
+  test("maps Moonshot regions to distinct env keys", () => {
+    expect(apiKeyEnvVarForProvider("moonshot")).toBe("MOONSHOT_API_KEY");
+    expect(apiKeyEnvVarForProvider("moonshot_cn")).toBe("MOONSHOT_CN_API_KEY");
   });
 });
 
@@ -146,6 +153,8 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("zhipu")).toBe(true);
     expect(isDiscoveryModelProvider("zhipu_cn")).toBe(true);
     expect(isDiscoveryModelProvider("xai")).toBe(true);
+    expect(isDiscoveryModelProvider("moonshot")).toBe(true);
+    expect(isDiscoveryModelProvider("moonshot_cn")).toBe(true);
   });
 
   test("excludes catalog providers", () => {
@@ -168,6 +177,12 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("zhipu_cn")).toBe(
       "https://open.bigmodel.cn/api/paas/v4"
+    );
+    expect(defaultDiscoveryBaseUrl("moonshot")).toBe(
+      "https://api.moonshot.ai/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("moonshot_cn")).toBe(
+      "https://api.moonshot.cn/v1"
     );
   });
 

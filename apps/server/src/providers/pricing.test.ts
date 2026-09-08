@@ -39,6 +39,14 @@ const fireworksInstance = {
   type: "fireworks" as const,
 };
 
+const moonshotInstance = {
+  apiKey: "sk-moonshot-test",
+  baseUrl: "https://api.moonshot.ai/v1",
+  createdAt: "2026-09-08T10:00:00.000Z",
+  id: "ms-1",
+  label: "Moonshot Kimi",
+  type: "moonshot" as const,
+};
 describe("estimateUsageCostUsd", () => {
   test("computes cost from catalog pricing", () => {
     const cost = estimateUsageCostUsd(
@@ -148,6 +156,40 @@ describe("estimateUsageCostUsd", () => {
     );
 
     expect(cost).toBeCloseTo(2.5, 5);
+  });
+
+  test("uses saved pricing for moonshot discovered models", () => {
+    const cost = estimateUsageCostUsd("kimi-k2.5", 1_000_000, 1_000_000, {
+      provider: "moonshot",
+      providerInstance: {
+        ...moonshotInstance,
+        customModels: [
+          {
+            id: "kimi-k2.5",
+            inputPerMillionUsd: 0.6,
+            outputPerMillionUsd: 2.5,
+          },
+        ],
+      },
+    });
+
+    expect(cost).toBeCloseTo(3.1, 5);
+  });
+
+  test("does not estimate discovery-provider models without saved pricing", () => {
+    // Discovery catalogs are fetched at runtime, so there is no bundled entry
+    // to price against: report unknown instead of DEFAULT_PRICING.
+    expect(
+      getModelPricing("kimi-k2.5", {
+        provider: "moonshot",
+        providerInstance: {
+          ...moonshotInstance,
+          customModels: [{ id: "kimi-k2.5" }],
+        },
+      })
+    ).toBeNull();
+    expect(getModelPricing("MiniMax-M3", { provider: "minimax" })).toBeNull();
+    expect(getModelPricing("glm-5.2", { provider: "zhipu_cn" })).toBeNull();
   });
 
   test("does not estimate compatible models without user pricing", () => {
