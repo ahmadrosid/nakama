@@ -13,7 +13,7 @@ import {
   formatContextUsageLabel,
   formatTokenCountDetailed,
 } from "@/lib/chat-context-usage";
-import { formatChatUsage } from "@/lib/chat-usage";
+import { formatChatUsageCost } from "@/lib/chat-usage";
 import { cn } from "@/lib/utils";
 
 /** Match BrainIcon / select chevron visual weight in the composer toolbar. */
@@ -38,7 +38,6 @@ export function ChatContextUsageRing({
   className,
 }: {
   usage: ChatContextUsage;
-  /** Session token total, folded in here rather than shown beside the ring. */
   sessionUsage?: ChatUsage | null;
   className?: string;
 }) {
@@ -48,9 +47,7 @@ export function ChatContextUsageRing({
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - ratio);
   const label = formatContextUsageLabel(usage);
-  const sessionLabel = sessionUsage
-    ? `Session · ${formatChatUsage(sessionUsage)}`
-    : null;
+  const sessionCost = sessionUsage ? formatChatUsageCost(sessionUsage) : null;
   const segments = contextUsageSegments(usage);
   const segmentTotal = segments.reduce(
     (sum, segment) => sum + segment.tokens,
@@ -67,7 +64,7 @@ export function ChatContextUsageRing({
       <PopoverTrigger
         render={
           <button
-            aria-label={sessionLabel ? `${label} · ${sessionLabel}` : label}
+            aria-label={sessionCost ? `${label} · ${sessionCost}` : label}
             className={cn(
               "inline-flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               className
@@ -163,14 +160,21 @@ export function ChatContextUsageRing({
               </span>
             </li>
           ))}
+          {sessionCost ? (
+            <li className="flex items-center justify-between gap-3">
+              <span>Cost</span>
+              <span className="text-muted-foreground tabular-nums">
+                {sessionCost}
+              </span>
+            </li>
+          ) : null}
         </ul>
 
-        {usage.source === "estimate" || sessionLabel || optimizedNote ? (
+        {usage.source === "estimate" || optimizedNote ? (
           <div className="mt-3 space-y-1 text-muted-foreground text-xs">
             {usage.source === "estimate" ? (
               <p>Estimated from prompt size</p>
             ) : null}
-            {sessionLabel ? <p>{sessionLabel}</p> : null}
             {optimizedNote ? <p>{optimizedNote}</p> : null}
           </div>
         ) : null}
