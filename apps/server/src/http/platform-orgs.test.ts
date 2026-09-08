@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   browserSessionFromResponse,
   loginPlatformAdminSession,
+  loginUserSession,
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-platform-orgs-test-");
@@ -364,5 +366,207 @@ describe("platform org routes", () => {
       )
     );
     expect(members.status).toBe(404);
+  });
+
+  test("platform admin can disable and re-enable a member; org admin cannot", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: {
+            email: "admin-disable@acme.com",
+            name: "Acme Admin",
+            phone: "+628123456789",
+          },
+          name: "Acme Disable",
+          slug: "acme-disable",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      organization: { id: string };
+      adminMember: { temporaryPassword: string };
+    };
+    const orgId = created.organization.id;
+
+    const adminSession = await loginUserSession(
+      app,
+      "admin-disable@acme.com",
+      created.adminMember.temporaryPassword
+    );
+
+    const addMemberResponse = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
+        body: JSON.stringify({
+          email: "member-disable@acme.com",
+          name: "Member Disable",
+          phone: "+628987654321",
+          role: "member",
+        }),
+        headers: adminSession.headers(
+          { "X-CSRF-Token": adminSession.csrfToken },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(addMemberResponse.status).toBe(201);
+    const added = (await addMemberResponse.json()) as {
+      member: { userId: string };
+      temporaryPassword: string;
+    };
+    const memberSession = await loginUserSession(
+      app,
+      "member-disable@acme.com",
+      added.temporaryPassword,
+      orgId
+    );
+
+    // Org admin is not enough, disabling an account is platform-admin only.
+    const orgAdminAttempt = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgId}/members/${added.member.userId}/disable`,
+        {
+          headers: adminSession.headers({
+            "X-CSRF-Token": adminSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(orgAdminAttempt.status).toBe(403);
+
+    const disableResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgId}/members/${added.member.userId}/disable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(disableResponse.status).toBe(204);
+
+    // The disabled member's existing session dies immediately, not just at next login.
+    const staleSessionResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: memberSession.headers({}, orgId),
+      })
+    );
+    expect(staleSessionResponse.status).toBe(401);
+
+    const loginAttempt = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: "member-disable@acme.com",
+          password: added.temporaryPassword,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(loginAttempt.status).toBe(403);
+    await expect(loginAttempt.json()).resolves.toEqual({
+      error: "Account disabled",
+    });
+
+    const enableResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgId}/members/${added.member.userId}/enable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(enableResponse.status).toBe(204);
+
+    const loginAfterEnable = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: "member-disable@acme.com",
+          password: added.temporaryPassword,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(loginAfterEnable.status).toBe(200);
+  });
+
+  test("disabling the last org admin is blocked", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: {
+            email: "sole-admin@acme.com",
+            name: "Sole Admin",
+            phone: "+628123456789",
+          },
+          name: "Acme Sole",
+          slug: "acme-sole-admin",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      organization: { id: string };
+      adminMember: { member: { userId: string } };
+    };
+    const orgId = created.organization.id;
+
+    // Every new org also seats the local-client account as admin, so the human
+    // admin has to go first before local-client becomes the last remaining one.
+    const disableHumanAdmin = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgId}/members/${created.adminMember.member.userId}/disable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(disableHumanAdmin.status).toBe(204);
+
+    const disableLastAdmin = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgId}/members/${LOCAL_CLIENT_USER_ID}/disable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(disableLastAdmin.status).toBe(409);
   });
 });

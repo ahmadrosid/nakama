@@ -584,6 +584,57 @@ export class OrgService {
     );
   }
 
+  async disableMember(orgId: string, userId: string): Promise<void> {
+    assertOrgMemberUserIdShape(userId);
+    await this.requireActiveOrganization(orgId);
+
+    const member = await this.databaseAdapter.getOrgMember(orgId, userId);
+    if (!member) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    // assertCanChangeAdminMembership only counts org_members rows, which a
+    // disable never touches: a disabled admin still counts as "admin" there,
+    // so that guard alone would let every admin be disabled one by one. Count
+    // admins who are actually usable (not already disabled) instead.
+    if (member.role === "admin") {
+      const members = await this.databaseAdapter.listOrgMembers(orgId);
+      const otherAdmins = members.filter(
+        (entry) => entry.role === "admin" && entry.userId !== userId
+      );
+      const otherAdminUsers = await Promise.all(
+        otherAdmins.map((entry) =>
+          this.databaseAdapter.getUserById(entry.userId)
+        )
+      );
+      const hasUsableAdmin = otherAdminUsers.some(
+        (user) => user && !user.disabledAt
+      );
+      if (!hasUsableAdmin) {
+        throw new NakamaApiError(
+          "Cannot disable the last active org admin.",
+          409
+        );
+      }
+    }
+
+    const now = new Date().toISOString();
+    await this.databaseAdapter.disableUser(userId, now);
+    await this.databaseAdapter.revokeBrowserSessionsForUser(userId, now);
+  }
+
+  async enableMember(orgId: string, userId: string): Promise<void> {
+    assertOrgMemberUserIdShape(userId);
+    await this.requireActiveOrganization(orgId);
+
+    const member = await this.databaseAdapter.getOrgMember(orgId, userId);
+    if (!member) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    await this.databaseAdapter.enableUser(userId);
+  }
+
   async updateMember(
     orgId: string,
     userId: string,

@@ -279,6 +279,7 @@ function migrateUsersTable(db: Database): void {
       name TEXT,
       phone TEXT,
       is_platform_admin INTEGER DEFAULT 0 NOT NULL,
+      disabled_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -306,6 +307,10 @@ function migrateUsersTable(db: Database): void {
 
   if (!columnNames.has("user_context")) {
     db.exec("ALTER TABLE users ADD COLUMN user_context TEXT;");
+  }
+
+  if (!columnNames.has("disabled_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN disabled_at TEXT;");
   }
 }
 

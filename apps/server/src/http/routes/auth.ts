@@ -465,6 +465,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Invalid credentials", 401);
     }
 
+    if (user.disabledAt) {
+      return errorResponse("Account disabled", 403);
+    }
+
     const response = await createBrowserSessionResponse(
       authService,
       databaseAdapter,

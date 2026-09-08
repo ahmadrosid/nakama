@@ -383,6 +383,7 @@ export interface StoredMcpServerRecord {
 
 export interface StoredUserRecord {
   createdAt: string;
+  disabledAt?: string | null;
   email: string;
   id: string;
   isPlatformAdmin?: boolean;
@@ -631,6 +632,8 @@ export interface DatabaseAdapter {
   deleteTool(id: string): Promise<boolean>;
   deleteWorkflow(id: string): Promise<boolean>;
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
+  disableUser(id: string, disabledAt: string): Promise<void>;
+  enableUser(id: string): Promise<void>;
   /**
    * Settles runs left `running` by a process that exited mid-run. Only a
    * `finally` in the owning process completes a run, so a kill leaves the row

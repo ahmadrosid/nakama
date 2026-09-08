@@ -312,6 +312,7 @@ interface McpServerRow {
 
 interface UserRow {
   created_at: string;
+  disabled_at?: string | null;
   email: string;
   id: string;
   is_platform_admin?: number | null;
@@ -1503,6 +1504,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET password_hash = ?, updated_at = ?
     WHERE id = ?
   `);
+  const disableUserStmt = db.prepare(`
+    UPDATE users
+    SET disabled_at = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  const enableUserStmt = db.prepare(`
+    UPDATE users
+    SET disabled_at = NULL, updated_at = ?
+    WHERE id = ?
+  `);
   // Per-org context lives on org_members only. users.user_context is a legacy
   // column left in place for existing installs; migrateLegacyUserContextToOrgMembers
   // copies any remaining values once, and this read path must not use it (#550).
@@ -2246,6 +2257,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteWorkflowRun(workflowId, runId) {
       const result = deleteWorkflowRunStmt.run(workflowId, runId);
       return result.changes > 0;
+    },
+
+    async disableUser(id, disabledAt) {
+      disableUserStmt.run(disabledAt, disabledAt, id);
+    },
+
+    async enableUser(id) {
+      enableUserStmt.run(new Date().toISOString(), id);
     },
 
     async failInterruptedRuns() {
@@ -3999,6 +4018,7 @@ function toProfileComposioToolkitRecord(
 function toUserRecord(row: UserRow): StoredUserRecord {
   return {
     createdAt: row.created_at,
+    disabledAt: row.disabled_at ?? null,
     email: row.email,
     id: row.id,
     isPlatformAdmin: Boolean(row.is_platform_admin),
