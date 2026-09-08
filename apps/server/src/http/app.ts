@@ -71,12 +71,14 @@ export function createHonoApp(options: ServerOptions) {
         serverErrors += 1;
       }
     }
-    // Never log raw URLs: paths and queries can contain share/OAuth tokens.
-    log(status >= 500 ? "error" : "info", "http.response", {
-      ...fields,
-      durationMs: Math.round(performance.now() - start),
-      status,
-    });
+    if (status >= 500) {
+      // Never log raw URLs: paths and queries can contain share/OAuth tokens.
+      log("error", "http.response", {
+        ...fields,
+        durationMs: Math.round(performance.now() - start),
+        status,
+      });
+    }
   });
 
   app.onError((err) => {
