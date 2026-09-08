@@ -71,10 +71,18 @@ export function resolvePythonBin(
   }
 
   if (
-    !ALLOWED_PYTHON_PATH_PREFIXES.some(
-      (prefix) =>
-        resolved === prefix.slice(0, -1) || resolved.startsWith(prefix)
-    )
+    !ALLOWED_PYTHON_PATH_PREFIXES.some((prefix) => {
+      if (prefix.endsWith("/")) {
+        return resolved === prefix.slice(0, -1) || resolved.startsWith(prefix);
+      }
+      // Homebrew Cellar formula dirs are `python` or `python@3.x` — require a
+      // path boundary so `…/Cellar/pythonfoo` cannot sneak through.
+      return (
+        resolved === prefix ||
+        resolved.startsWith(`${prefix}/`) ||
+        resolved.startsWith(`${prefix}@`)
+      );
+    })
   ) {
     throw new Error(
       `NAKAMA_PYTHON_BIN path is not on the server allowlist: "${value}".`

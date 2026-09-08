@@ -51,6 +51,18 @@ describe("resolvePythonBin", () => {
   test("rejects absolute paths outside the allowlist", () => {
     expect(() => resolvePythonBin("/tmp/python3")).toThrow(/allowlist/i);
     expect(() => resolvePythonBin("/bin/bash")).toThrow(/basename/i);
+    expect(() =>
+      resolvePythonBin("/opt/homebrew/Cellar/pythonfoo/bin/python3")
+    ).toThrow(/allowlist/i);
+  });
+
+  test("accepts Homebrew Cellar python and python@ paths by prefix", () => {
+    expect(
+      resolvePythonBin("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3")
+    ).toBe("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3");
+    expect(
+      resolvePythonBin("/opt/homebrew/Cellar/python/3.12.0/bin/python3")
+    ).toBe("/opt/homebrew/Cellar/python/3.12.0/bin/python3");
   });
 
   test("accepts /usr/bin/python3 when present", () => {
