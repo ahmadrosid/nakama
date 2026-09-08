@@ -244,6 +244,7 @@ export function McpServerDialog({
   busy,
   server,
   availableServers,
+  error = null,
   onOpenChange,
   onSubmit,
   onAssign,
@@ -252,6 +253,7 @@ export function McpServerDialog({
   busy: boolean;
   server?: McpServerSummary | null;
   availableServers?: McpServerSummary[];
+  error?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
   onAssign?: (serverId: string) => void;
@@ -296,6 +298,11 @@ export function McpServerDialog({
                 mode={mode}
                 onModeChange={setMode}
               />
+            ) : null}
+            {error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
             ) : null}
           </DialogHeader>
 

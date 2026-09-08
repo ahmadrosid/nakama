@@ -93,6 +93,7 @@ export function ChatPageContent(state: ChatPageState) {
         currentModelSelection={currentModelSelection}
         disabled={composerDisabled}
         draftStorageKey={composerDraftKey}
+        enableAddCommands={!readOnlySession}
         error={error}
         headerNotice={skillReviewBanner}
         onModelChange={handleModelChange}
@@ -112,6 +113,7 @@ export function ChatPageContent(state: ChatPageState) {
         }}
         onThinkingEffortChange={handleThinkingEffortChange}
         primarySupportsVision={activeModelSupportsVision}
+        profileId={profileId}
         profileModelId={extractModelId(currentModelSelection)}
         providerConfigured={health?.providerConfigured}
         providerModelGroups={providerModelGroups}
