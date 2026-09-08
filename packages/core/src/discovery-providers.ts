@@ -12,6 +12,8 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
     "openai_compatible",
     "minimax",
     "minimax_cn",
+    "moonshot",
+    "moonshot_cn",
     "xai",
     "zhipu",
     "zhipu_cn",
@@ -25,6 +27,8 @@ export const DISCOVERY_PROVIDER_BASE_URLS: Readonly<
 > = {
   minimax: "https://api.minimax.io/v1",
   minimax_cn: "https://api.minimaxi.com/v1",
+  moonshot: "https://api.moonshot.ai/v1",
+  moonshot_cn: "https://api.moonshot.cn/v1",
   zhipu: "https://api.z.ai/api/paas/v4",
   zhipu_cn: "https://open.bigmodel.cn/api/paas/v4",
 };

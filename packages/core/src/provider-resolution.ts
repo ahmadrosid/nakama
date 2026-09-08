@@ -20,6 +20,8 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "xai_oauth",
   "minimax",
   "minimax_cn",
+  "moonshot",
+  "moonshot_cn",
   "zhipu",
   "zhipu_cn",
   "xai",
@@ -53,6 +55,8 @@ export function parseProviderName(
     normalized === "xai_oauth" ||
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
+    normalized === "moonshot" ||
+    normalized === "moonshot_cn" ||
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
     normalized === "xai"
@@ -98,6 +102,10 @@ export function apiKeyEnvVarForProvider(
       return "MINIMAX_API_KEY";
     case "minimax_cn":
       return "MINIMAX_CN_API_KEY";
+    case "moonshot":
+      return "MOONSHOT_API_KEY";
+    case "moonshot_cn":
+      return "MOONSHOT_CN_API_KEY";
     case "zhipu":
       return "ZHIPU_API_KEY";
     case "zhipu_cn":

@@ -30,6 +30,7 @@ import {
 } from "./ollama-provider-config";
 import {
   apiKeyEnvVarForProvider,
+  isDiscoveryModelProvider,
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
@@ -91,6 +92,8 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
   mistral: "Mistral",
+  moonshot: "Moonshot Kimi",
+  moonshot_cn: "Moonshot Kimi (CN)",
   ollama: "Ollama",
   openai: "OpenAI",
   openai_compatible: "Custom",
@@ -634,7 +637,7 @@ function loadProvidersFromSections(
       ? normalizeBaseUrl(values.base_url)
       : undefined;
     const customModels =
-      type === "openai_compatible" ||
+      isDiscoveryModelProvider(type) ||
       type === "openrouter" ||
       type === "cerebras" ||
       type === "fireworks" ||
