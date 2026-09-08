@@ -627,10 +627,6 @@ export function validateOpenCodeGoCustomModels(
   return models;
 }
 
-export function getAvailableModels(): ProviderModelOption[] {
-  return AVAILABLE_MODELS;
-}
-
 export function getModelById(modelId: string): ProviderModelOption | undefined {
   return AVAILABLE_MODELS.find((model) => model.id === modelId);
 }
