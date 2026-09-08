@@ -1,5 +1,10 @@
 import { join } from "node:path";
-import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
+import {
+  getUserConfigDir,
+  parseIni,
+  readTextOrNull,
+  writeTextFile,
+} from "@nakama/core";
 
 const CLI_CONFIG_KEYS = new Set(["org_id", "profile_id"]);
 
@@ -48,7 +53,9 @@ async function readCliConfigValues(): Promise<Record<string, string>> {
     return {};
   }
 
-  return parseIni(raw);
+  return Object.fromEntries(
+    Object.entries(parseIni(raw)).filter(([key]) => CLI_CONFIG_KEYS.has(key))
+  );
 }
 
 async function writeCliConfig(values: Record<string, string>): Promise<void> {
@@ -67,33 +74,4 @@ async function writeCliConfig(values: Record<string, string>): Promise<void> {
   await writeTextFile(getCliConfigPath(), lines.join("\n"), {
     ensureDir: getUserConfigDir(),
   });
-}
-
-function parseIni(raw: string): Record<string, string> {
-  const values: Record<string, string> = {};
-
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) {
-      continue;
-    }
-
-    const separator = trimmed.indexOf("=");
-
-    if (separator <= 0) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separator).trim();
-
-    if (!CLI_CONFIG_KEYS.has(key)) {
-      continue;
-    }
-
-    const value = trimmed.slice(separator + 1).trim();
-    values[key] = value;
-  }
-
-  return values;
 }

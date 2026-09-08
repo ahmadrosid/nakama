@@ -123,7 +123,6 @@ import {
   DEFAULT_THINKING_ENABLED,
   defaultOllamaBaseUrl,
   deleteArtifactFile,
-  emailConfigToMailboxConfig,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
@@ -183,6 +182,7 @@ import {
   saveUserTimezone,
   saveWebSearchConfig,
   saveWhatsAppConfig,
+  toMailboxConfig,
   USER_CONTEXT_TEMPLATE,
   WRITABLE_SOUL_FILES,
   writeArtifactFile,
@@ -1299,7 +1299,7 @@ export class AgentService {
       throw new Error("Recipient email is required.");
     }
 
-    const sender = createSmtpSender(emailConfigToMailboxConfig(config));
+    const sender = createSmtpSender(toMailboxConfig(config));
     const result = await sender.send({
       subject: "Nakama test email",
       text: "This is a test email from your Nakama deployment.",

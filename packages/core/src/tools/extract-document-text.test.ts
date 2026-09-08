@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  type EmailConfigFile,
-  emailConfigToMailboxConfig,
-} from "../email-config";
+import { type EmailConfigFile, toMailboxConfig } from "../email-config";
 import {
   createAttachmentReference,
   getMailboxIdentity,
@@ -39,9 +36,7 @@ const context = {
   profileId: "profile_test",
   sessionId: "session_test",
 };
-const mailboxId = getMailboxIdentity(
-  emailConfigToMailboxConfig(completeConfig)
-);
+const mailboxId = getMailboxIdentity(toMailboxConfig(completeConfig));
 
 function readerWith(
   data: Buffer,
