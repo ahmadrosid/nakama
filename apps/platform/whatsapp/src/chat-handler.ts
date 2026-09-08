@@ -1,5 +1,9 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
-import { deliverTurnArtifactShares, isAttachOnlyCommand } from "@nakama/core";
+import {
+  extractPairedTurnArtifacts,
+  isAttachOnlyCommand,
+  pushDeliverableArtifact,
+} from "@nakama/core";
 import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
@@ -28,6 +32,7 @@ import type { WhatsAppAuthStore } from "./auth-store";
 import {
   maybeSendRequestedWhatsAppArtifactAttachment,
   maybeSendWhatsAppAttachOnlyCommand,
+  sendArtifactDocumentForPath,
 } from "./channel-artifact-flow";
 import { isChannelDebugEnabled } from "./channel-log";
 import type { WhatsAppBridgeConfig } from "./config";
@@ -523,25 +528,34 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (profileId) {
-      const artifacts = await deliverTurnArtifactShares({
-        conversationKey,
-        publish: (path) => client.publishProfileArtifactShare(profileId, path),
-        sendFooter: (footer) => sendText(jid, footer, { raw: true }),
-        session,
-        sessionStore,
+      const artifacts = extractPairedTurnArtifacts(await session.getMessages());
+      if (artifacts.length === 0) {
+        return;
+      }
+      let registry = sessionStore.getDeliverableArtifacts(conversationKey);
+      for (const artifact of artifacts) {
+        registry = pushDeliverableArtifact(registry, {
+          ...artifact,
+          sharePath: null,
+          shareUrl: null,
+        });
+      }
+      sessionStore.updateArtifactState(conversationKey, {
+        deliverableArtifacts: registry,
       });
+      await sessionStore.save();
 
-      // Creation requests attach only if this turn actually produced an artifact.
       const postTurnSocket = getSocket();
-      if (postTurnSocket && (!createsArtifact || artifacts.length > 0)) {
-        await maybeSendRequestedWhatsAppArtifactAttachment({
-          attachUserText,
+      if (!postTurnSocket) {
+        return;
+      }
+      for (const artifact of artifacts) {
+        await sendArtifactDocumentForPath({
+          ...artifact,
           client,
-          conversationKey,
           jid,
           profileId,
           sendPlain: (text) => sendText(jid, text),
-          sessionStore,
           socket: postTurnSocket,
         });
       }
