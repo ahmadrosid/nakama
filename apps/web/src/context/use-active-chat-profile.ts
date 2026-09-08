@@ -1,12 +1,15 @@
-import { useContext } from "react";
-import { ActiveChatProfileContext } from "@/context/active-chat-profile-context-shared";
+import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 
 export function useActiveChatProfile() {
-  const context = useContext(ActiveChatProfileContext);
-  if (!context) {
-    throw new Error(
-      "useActiveChatProfile must be used within ActiveChatProfileProvider"
-    );
-  }
-  return context;
+  const orgId = useActiveChatProfileStore((state) => state.orgId);
+  const profileId = useActiveChatProfileStore((state) => state.profileId);
+  const setProfileId = useActiveChatProfileStore((state) => state.setProfileId);
+  const syncForOrg = useActiveChatProfileStore((state) => state.syncForOrg);
+
+  return {
+    orgId,
+    profileId,
+    setProfileId,
+    syncForOrg,
+  };
 }
