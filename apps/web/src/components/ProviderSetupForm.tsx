@@ -2,7 +2,10 @@ import type { CreateProviderResponse } from "@nakama/core/contract";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useState } from "react";
-import { ChatgptSignInPanel } from "@/components/ChatgptSignInPanel";
+import {
+  ChatgptSignInPanel,
+  XaiSignInPanel,
+} from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { OllamaProviderModelFields } from "@/components/OllamaProviderModelFields";
@@ -55,11 +58,14 @@ export function ProviderSetupForm({
   const apiKeyOptional =
     form.selectedProvider === "openai_compatible" ||
     form.selectedProvider === "chatgpt" ||
+    form.selectedProvider === "xai_oauth" ||
     (form.selectedProvider === "ollama" && !ollamaKeyRequired);
   const canConnect =
-    form.selectedProvider === "chatgpt"
-      ? Boolean(form.chatgptOAuth)
-      : apiKeyOptional || form.apiKey.trim().length > 0;
+    form.selectedProvider === "xai_oauth"
+      ? Boolean(form.xaiOAuth)
+      : form.selectedProvider === "chatgpt"
+        ? Boolean(form.chatgptOAuth)
+        : apiKeyOptional || form.apiKey.trim().length > 0;
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
@@ -428,12 +434,20 @@ function ProviderSetupDetails({
 }) {
   return (
     <>
-      {form.selectedProvider === "chatgpt" ? (
+      {form.selectedProvider === "xai_oauth" ? (
+        <XaiSignInPanel
+          density="compact"
+          disabled={form.busy}
+          oauth={form.xaiOAuth}
+          onModelsChange={form.handleSubscriptionModelsChange}
+          onOAuthChange={form.setXaiOAuth}
+        />
+      ) : form.selectedProvider === "chatgpt" ? (
         <ChatgptSignInPanel
           density={density}
           disabled={form.busy}
           oauth={form.chatgptOAuth}
-          onModelsChange={form.handleChatgptModelsChange}
+          onModelsChange={form.handleSubscriptionModelsChange}
           onOAuthChange={form.setChatgptOAuth}
         />
       ) : (

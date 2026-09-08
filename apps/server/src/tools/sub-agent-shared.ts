@@ -1,3 +1,5 @@
+import type { OrgRole } from "@nakama/core";
+
 export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 300_000;
 export const MAX_SUB_AGENT_TIMEOUT_MS = 600_000;
 export const MAX_SUB_AGENT_OUTPUT_CHARS = 32_000;
@@ -10,6 +12,7 @@ export interface SubAgentRunInput {
   context?: string;
   onActivity?: (label: string) => void;
   orgId: string;
+  orgRole?: OrgRole;
   profileId: string;
   sessionId?: string;
   task: string;

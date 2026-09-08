@@ -2,6 +2,7 @@ import type { ChatUsage } from "@nakama/core/contract";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
+  Edit03Icon,
   File01Icon,
   GitBranchIcon,
   MoreHorizontalIcon,
@@ -29,14 +30,20 @@ import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.sha
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
-import { type ChatListItem, formatSessionTimestamp } from "@/lib/chat-history";
+import {
+  type ChatListItem,
+  formatSessionTimestamp,
+  isEditableUserMessage,
+} from "@/lib/chat-history";
 import {
   followOutputBehavior,
   listOverflowsViewport,
@@ -101,6 +108,7 @@ interface ChatMessageListProps {
   messages: ChatListItem[];
   modelLabel?: string | null;
   onBranchMessage?: (message: ChatListItem) => void;
+  onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   profileId?: string | null;
   showThinking?: boolean;
@@ -127,6 +135,7 @@ function ChatMessageListSession({
   streamActive = false,
   turnStartedAt = null,
   onBranchMessage,
+  onEditMessage,
   onRetryMessage,
   emptyMessage,
   className,
@@ -244,7 +253,12 @@ function ChatMessageListSession({
       if (turn.kind === "user") {
         return (
           <div className={itemClassName}>
-            <ChatMessageRow message={turn.message} />
+            <ChatMessageRow
+              busy={branchingMessageId != null || streamActive}
+              disabled={actionsDisabled}
+              message={turn.message}
+              onEditMessage={onEditMessage}
+            />
           </div>
         );
       }
@@ -438,7 +452,79 @@ function TurnAwaitingElapsed({ startedAt }: { startedAt?: string | null }) {
   );
 }
 
-function ChatMessageRow({ message }: { message: ChatListItem }) {
+function ChatMessageRow({
+  message,
+  busy = false,
+  disabled = false,
+  onEditMessage,
+}: {
+  message: ChatListItem;
+  busy?: boolean;
+  disabled?: boolean;
+  onEditMessage?: (message: ChatListItem, text: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const canEdit =
+    Boolean(onEditMessage) && !disabled && isEditableUserMessage(message);
+
+  if (draft !== null && onEditMessage) {
+    const trimmed = draft.trim();
+    const unchanged = trimmed === message.content.trim();
+
+    function submit() {
+      if (!trimmed || unchanged) {
+        return;
+      }
+      setDraft(null);
+      onEditMessage?.(message, trimmed);
+    }
+
+    return (
+      <Message
+        className="mr-0 ml-auto w-full min-w-0 max-w-full items-end justify-end overflow-visible"
+        from="user"
+      >
+        <div className="flex w-full flex-col gap-3 rounded-[1.75rem] bg-muted px-5 pt-4 pb-3.5">
+          <Textarea
+            autoFocus
+            className="max-h-64 min-h-0 resize-none rounded-none border-0 bg-transparent p-0 text-sm leading-[1.55] tracking-[0.01em] shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setDraft(null);
+                return;
+              }
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            value={draft}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              className="rounded-full px-4"
+              onClick={() => setDraft(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-full px-4"
+              disabled={!trimmed || unchanged || busy || disabled}
+              onClick={submit}
+              type="button"
+            >
+              Send
+            </Button>
+          </div>
+        </div>
+      </Message>
+    );
+  }
+
   return (
     <Message
       className="mr-0 ml-auto min-w-0 max-w-full items-end justify-end overflow-visible"
@@ -447,6 +533,18 @@ function ChatMessageRow({ message }: { message: ChatListItem }) {
       <MessageContent className="ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto">
         <UserMessageContent message={message} />
       </MessageContent>
+      {canEdit ? (
+        <button
+          aria-label="Edit message"
+          className="mr-1 inline-flex size-8 items-center justify-center self-end rounded-lg text-muted-foreground opacity-0 transition-colors transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40 group-focus-within:opacity-100 group-hover:opacity-60 group-hover:hover:opacity-100"
+          disabled={busy}
+          onClick={() => setDraft(message.content)}
+          title="Edit message"
+          type="button"
+        >
+          <Edit03Icon aria-hidden className="size-4" />
+        </button>
+      ) : null}
     </Message>
   );
 }
@@ -560,7 +658,7 @@ function AssistantMessageActions({
       <button
         aria-label={copied ? "Copied" : "Copy response"}
         className={cn(
-          "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+          "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
           copied && "text-emerald-600 dark:text-emerald-400"
         )}
         disabled={!copyContent.trim()}
@@ -577,7 +675,7 @@ function AssistantMessageActions({
       {onRetryMessage ? (
         <button
           aria-label="Try again"
-          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
           disabled={busy || actionsDisabled}
           onClick={() => onRetryMessage(message)}
           title="Try again"
@@ -593,7 +691,7 @@ function AssistantMessageActions({
               <button
                 aria-label="Message actions"
                 className={cn(
-                  "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   busy && "pointer-events-none opacity-60"
                 )}
                 type="button"

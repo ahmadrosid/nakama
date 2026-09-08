@@ -128,10 +128,12 @@ export function catalogCustomModelsToCatalog(
     }
     if (entry.supportsVision !== undefined) {
       model.supportsVision = entry.supportsVision;
+    } else if (provider === "chatgpt" || provider === "xai_oauth") {
+      model.supportsVision = true;
     }
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
-    } else if (provider === "deepseek") {
+    } else if (provider === "deepseek" || provider === "mistral") {
       model.supportsThinking = false;
     }
     if (entry.inputPerMillionUsd !== undefined) {
@@ -324,9 +326,11 @@ export function getModelsForProviderInstance(
   if (
     instance.type === "openai" ||
     instance.type === "chatgpt" ||
+    instance.type === "xai_oauth" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "mistral" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];

@@ -3,6 +3,7 @@ import {
   buildChatPath,
   buildNewChatPath,
   CHAT_DRAFT_STORAGE_PREFIX,
+  chatComposerDraftKey,
   chatProfileIdFromPath,
   consumeStoredChatDraft,
   isChatSessionPath,
@@ -10,6 +11,7 @@ import {
   lastChatModelStorageKey,
   parseChatRouteParams,
   pickKnownProfileId,
+  readComposerDraft,
   readInitialDraftChatProfileId,
   readLastChatModel,
   readRequestedDraftFromNewChatSearch,
@@ -20,11 +22,52 @@ import {
   resolveHistoryProfileId,
   resolveProfilesPageProfileId,
   storeChatDraft,
+  storeComposerDraft,
   writeLastChatModel,
   writeStoredActiveChatProfileId,
 } from "./chat-history";
 
 describe("chat history route helpers", () => {
+  test("composer drafts restore without consuming, isolate identities and clear", () => {
+    const store = new Map<string, string>();
+    const previous = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        removeItem: (key: string) => store.delete(key),
+        setItem: (key: string, value: string) => store.set(key, value),
+      },
+    });
+    try {
+      const key = chatComposerDraftKey("alice", "org", "profile", "session");
+      storeComposerDraft(key, "unfinished thought");
+      expect(readComposerDraft(key)).toBe("unfinished thought");
+      expect(readComposerDraft(key)).toBe("unfinished thought");
+      for (const other of [
+        chatComposerDraftKey("bob", "org", "profile", "session"),
+        chatComposerDraftKey("alice", "other-org", "profile", "session"),
+        chatComposerDraftKey("alice", "org", "other-profile", "session"),
+        chatComposerDraftKey("alice", "org", "profile", "other-session"),
+        chatComposerDraftKey("alice", "org", "profile", null),
+      ]) {
+        expect(readComposerDraft(other)).toBe("");
+      }
+      expect(
+        chatComposerDraftKey(undefined, "org", "profile", null)
+      ).toBeNull();
+      storeComposerDraft(null, "not authenticated");
+      storeComposerDraft(key, "");
+      expect(store.size).toBe(0);
+      expect(readComposerDraft(key)).toBe("");
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: previous,
+      });
+    }
+  });
+
   test("builds and parses chat routes consistently", () => {
     expect(buildChatPath("profile 1", "session/2")).toBe(
       "/chat/profile%201/session%2F2"

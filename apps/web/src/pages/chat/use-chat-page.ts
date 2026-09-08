@@ -25,6 +25,7 @@ import {
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
 import {
   buildThinkingSettingsPayload,
   useProfileQuery,
@@ -41,20 +42,25 @@ import {
   buildChatPath,
   buildNewChatPath,
   type ChatListItem,
+  chatComposerDraftKey,
   chatMessagesToListItems,
   clearFailedChatTurn,
   consumeStoredChatDraft,
+  isEditableUserMessage,
   isReadOnlySessionChannel,
   parseChatRouteParams,
   pickKnownProfileId,
+  readComposerDraft,
   readFailedChatTurn,
   readInitialDraftChatProfileId,
   readLastChatModel,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
+  readRequestedProfileFromNewChatSearch,
   readStoredActiveChatProfileId,
   resolveDefaultProfileId,
   sessionStorageKey,
+  storeComposerDraft,
   storeFailedChatTurn,
   writeLastChatModel,
 } from "@/lib/chat-history";
@@ -94,12 +100,13 @@ import {
 } from "@/lib/thinking-settings";
 import {
   appendFailedTurnIfNeeded,
+  editedPromptText,
   findFailedRetryPrompt,
-  findRetryCheckpoint,
   findRetryPrompt,
   markStreamingTurnFailed,
   messagesWithoutFailedTurn,
   nextSuccessfulTurnAt,
+  planPromptBranch,
 } from "@/pages/chat/chat-page.shared";
 
 interface SendMessageOptions {
@@ -122,6 +129,7 @@ export function useChatPage() {
   const [searchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
+  const { user, activeOrg } = useAuth();
   const {
     profileId: liveChatProfileId,
     setProfileId: setLiveChatProfileId,
@@ -154,7 +162,26 @@ export function useChatPage() {
   );
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [composerDraft, setComposerDraft] = useState("");
+  const composerDraftKey = chatComposerDraftKey(
+    user?.id,
+    activeOrg?.id,
+    readRequestedProfileFromNewChatSearch(location.search) ??
+      routeSession?.profileId ??
+      profileId,
+    routeSession?.sessionId ?? null
+  );
+  const [composerEntry, setComposerEntry] = useState(() => ({
+    initialInput: readComposerDraft(composerDraftKey),
+    revision: 0,
+    scopeKey: composerDraftKey,
+  }));
+  if (composerEntry.scopeKey !== composerDraftKey) {
+    setComposerEntry({
+      initialInput: readComposerDraft(composerDraftKey),
+      revision: 0,
+      scopeKey: composerDraftKey,
+    });
+  }
   const [queuedMessages, setQueuedMessages] = useState<QueuedComposerMessage[]>(
     []
   );
@@ -644,14 +671,25 @@ export function useChatPage() {
       return;
     }
     const requestedProfile = searchParams.get("profile")?.trim() || null;
+    const targetProfileId = requestedProfile || profileId;
+    const targetDraftKey = chatComposerDraftKey(
+      user?.id,
+      activeOrg?.id,
+      targetProfileId,
+      null
+    );
+    if (!targetDraftKey) {
+      return;
+    }
     const inlineDraft = readRequestedDraftFromNewChatSearch(location.search);
     const draftKey = readRequestedDraftKeyFromNewChatSearch(location.search);
     const storedDraft = draftKey ? consumeStoredChatDraft(draftKey) : null;
     const requestedDraft = inlineDraft ?? storedDraft;
-    const targetProfileId = requestedProfile || profileIdRef.current;
 
-    if (targetProfileId) {
+    try {
       localStorage.removeItem(sessionStorageKey(targetProfileId));
+    } catch {
+      // Starting a new chat must still work when browser storage is disabled.
     }
     skipNextProfileSessionRef.current = true;
     loadedRouteRef.current = null;
@@ -674,12 +712,25 @@ export function useChatPage() {
       setProfileId(requestedProfile);
     }
 
-    if (requestedDraft) {
-      setComposerDraft(requestedDraft);
+    if (requestedDraft !== null) {
+      storeComposerDraft(targetDraftKey, requestedDraft);
+      setComposerEntry((current) => ({
+        initialInput: requestedDraft,
+        revision: current.revision + 1,
+        scopeKey: targetDraftKey,
+      }));
     }
 
     navigate(buildChatBasePath(), { replace: true });
-  }, [searchParams, navigate, location.search, restoreLastChatModel]);
+  }, [
+    searchParams,
+    navigate,
+    location.search,
+    restoreLastChatModel,
+    profileId,
+    user?.id,
+    activeOrg?.id,
+  ]);
 
   useEffect(() => {
     if (!profileId || routeSession) {
@@ -956,6 +1007,76 @@ export function useChatPage() {
     [executeSend, profileId, readOnlySession]
   );
 
+  /**
+   * Branch the session at the checkpoint before `prompt`, then send `text` into
+   * the branch.
+   */
+  const branchAndSendPrompt = useCallback(
+    async (prompt: ChatListItem, text: string, anchorId: string) => {
+      // Branch before send, so a read-only session must bail here: sendMessage
+      // no-ops on those and would strand the user in an empty branch.
+      if (!profileId || readOnlySession) {
+        return;
+      }
+
+      const plan = planPromptBranch(messages, prompt);
+
+      if (plan && !session) {
+        setError(
+          "Chat session is unavailable. Please send a new message instead."
+        );
+        return;
+      }
+
+      setBranchingMessageId(anchorId);
+      setError(null);
+
+      try {
+        let retrySession: RemoteChatSession;
+        let initialMessages: ChatListItem[] = [];
+
+        if (plan && session) {
+          const result = await branchSessionMutation.mutateAsync({
+            channel: "web",
+            messageIndex: plan.messageIndex,
+            profileId,
+            sessionId: session.id,
+          });
+          retrySession = client.createChatSession(result.sessionId, "web");
+          initialMessages = plan.initialMessages;
+        } else {
+          retrySession = await client.createSession("web", {
+            model: sessionModel ?? undefined,
+            profileId,
+          });
+        }
+
+        localStorage.setItem(sessionStorageKey(profileId), retrySession.id);
+        setSession(retrySession);
+        syncChatUrl(profileId, retrySession.id);
+
+        await sendMessage(text, [], {
+          initialMessages,
+          sessionOverride: retrySession,
+        });
+      } catch (err) {
+        setError(formatError(err));
+      } finally {
+        setBranchingMessageId(null);
+      }
+    },
+    [
+      branchSessionMutation,
+      messages,
+      profileId,
+      readOnlySession,
+      sendMessage,
+      session,
+      sessionModel,
+      syncChatUrl,
+    ]
+  );
+
   const handleTryAgainMessage = useCallback(
     async (message: ChatListItem) => {
       if (busy || !profileId) {
@@ -1008,66 +1129,34 @@ export function useChatPage() {
         return;
       }
 
-      const checkpoint = findRetryCheckpoint(messages, prompt);
+      await branchAndSendPrompt(prompt, prompt.content, message.id);
+    },
+    [branchAndSendPrompt, busy, messages, profileId, sendMessage, session]
+  );
 
-      if (checkpoint && !session) {
-        setError(
-          "Chat session is unavailable. Please send a new message instead."
-        );
+  /** Resend an edited user message; the reply is regenerated from it. */
+  const handleEditMessage = useCallback(
+    async (message: ChatListItem, text: string) => {
+      if (busy || !profileId) {
         return;
       }
 
-      setBranchingMessageId(message.id);
-      setError(null);
+      const nextText = editedPromptText(message, text);
 
-      try {
-        let retrySession: RemoteChatSession;
-        let initialMessages: ChatListItem[] = [];
-
-        if (checkpoint && session) {
-          const result = await branchSessionMutation.mutateAsync({
-            channel: "web",
-            messageIndex: checkpoint.historyIndex!,
-            profileId,
-            sessionId: session.id,
-          });
-          retrySession = client.createChatSession(result.sessionId, "web");
-          initialMessages = messages.filter(
-            (item) =>
-              typeof item.historyIndex === "number" &&
-              item.historyIndex <= checkpoint.historyIndex!
-          );
-        } else {
-          retrySession = await client.createSession("web", {
-            model: sessionModel ?? undefined,
-            profileId,
-          });
-        }
-
-        localStorage.setItem(sessionStorageKey(profileId), retrySession.id);
-        setSession(retrySession);
-        syncChatUrl(profileId, retrySession.id);
-
-        await sendMessage(prompt.content, [], {
-          initialMessages,
-          sessionOverride: retrySession,
-        });
-      } catch (err) {
-        setError(formatError(err));
-      } finally {
-        setBranchingMessageId(null);
+      if (nextText === null) {
+        return;
       }
+
+      // The list only offers Edit on eligible rows. The handler repeats the
+      // check so an attachment or an unsent turn can never reach the branch.
+      if (!isEditableUserMessage(message)) {
+        setError("Editing is available for text-only messages already sent.");
+        return;
+      }
+
+      await branchAndSendPrompt(message, nextText, message.id);
     },
-    [
-      branchSessionMutation,
-      busy,
-      messages,
-      profileId,
-      sendMessage,
-      session,
-      sessionModel,
-      syncChatUrl,
-    ]
+    [branchAndSendPrompt, busy, profileId]
   );
 
   const isEmptyState = messages.length === 0 && !busy;
@@ -1085,11 +1174,13 @@ export function useChatPage() {
     canStop,
     chatStatus,
     composerDisabled,
-    composerDraft,
+    composerDraftKey,
+    composerEntry,
     contextUsage: isEmptyState ? null : contextUsage,
     currentModelSelection,
     error,
     handleBranchMessage,
+    handleEditMessage,
     handleModelChange,
     handleProfileSwitch,
     handleThinkingEffortChange,
@@ -1108,7 +1199,6 @@ export function useChatPage() {
     sendMessage,
     session,
     sessionChannel,
-    setComposerDraft,
     showOfflineHint,
     showThinking,
     stopStreaming,

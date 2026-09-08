@@ -49,6 +49,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "mistral" ||
     provider === "cerebras" ||
     provider === "cloudflare" ||
     provider === "fireworks" ||
@@ -56,6 +57,7 @@ export function formatProviderLabel(
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
     provider === "chatgpt" ||
+    provider === "xai_oauth" ||
     provider === "minimax" ||
     provider === "minimax_cn" ||
     provider === "zhipu" ||
@@ -72,10 +74,12 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
   [
     { id: "openai", label: "OpenAI" },
     { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
+    { id: "xai_oauth", label: "Grok (SuperGrok / Premium+)" },
     { id: "anthropic", label: "Anthropic" },
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "mistral", label: "Mistral" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
     { id: "fireworks", label: "Fireworks" },
@@ -217,7 +221,7 @@ export function validateApiKeyForProvider(
     return null;
   }
 
-  if (provider === "chatgpt") {
+  if (provider === "chatgpt" || provider === "xai_oauth") {
     return null;
   }
 
@@ -582,12 +586,14 @@ export function buildCreateProviderRequest(options: {
   customModels?: ConfigureProviderRequest["customModels"];
   wireApi?: WireApi;
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
+  xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const request = buildConfigureProviderRequest(options);
 
   return {
     apiKey: request.apiKey,
     type: request.provider,
+    ...(options.xaiOAuth ? { xaiOAuth: options.xaiOAuth } : {}),
     ...(options.chatgptOAuth ? { chatgptOAuth: options.chatgptOAuth } : {}),
     ...(request.model ? { model: request.model } : {}),
     ...(options.displayName?.trim()
@@ -624,7 +630,10 @@ export function buildConfigureProviderRequest(options: {
     };
   }
 
-  if (options.provider === "openrouter" && options.customModels?.length) {
+  if (
+    (options.provider === "openrouter" || options.provider === "xai_oauth") &&
+    options.customModels?.length
+  ) {
     return {
       ...request,
       customModels: options.customModels,
@@ -882,6 +891,7 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
+    model.provider === "mistral" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama"
@@ -931,6 +941,7 @@ export function resolveModelVisionSupport(
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
+    model.provider === "mistral" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||

@@ -4,9 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   ensureBundledSkillFiles,
+  type GenerateChatInput,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
   loadWhatsAppConfigFile,
+  type ToolContext,
+  type ToolDefinition,
 } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
@@ -16,6 +19,7 @@ import {
 } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
+import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillsService } from "./skills-service";
@@ -36,6 +40,70 @@ function createDefaultProfile(): StoredProfileRecord {
     updatedAt: now,
   };
 }
+
+describe("AgentService sub-agent roles", () => {
+  setupTestConfigDir("nakama-sub-agent-role-");
+
+  test("uses the inherited role for the child prompt and tool execution", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+    let promptRole: ToolContext["orgRole"];
+    let toolRole: ToolContext["orgRole"];
+    const tool: ToolDefinition = {
+      description: "Observe child context",
+      name: "observe_role",
+      parameters: { properties: {}, type: "object" },
+      run(_input, context) {
+        toolRole = context.orgRole;
+        return Promise.resolve({ ok: true });
+      },
+    };
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          streamChat(input: GenerateChatInput) {
+            const done = input.messages.at(-1)?.role === "tool";
+            const content = done ? "Done" : "";
+            const toolCalls = done
+              ? []
+              : [{ arguments: {}, id: "call_role", name: tool.name }];
+            return Promise.resolve({
+              assistantMessage: { content, role: "assistant", toolCalls },
+              content,
+              toolCalls,
+            });
+          },
+        },
+      }),
+      resolveProfileSystemPrompt: (
+        _orgId: string,
+        _profileId: string,
+        _prompt: string,
+        orgRole: ToolContext["orgRole"]
+      ) => {
+        promptRole = orgRole;
+        return Promise.resolve({ soulActive: false, systemPrompt: "Test" });
+      },
+      resolveProfileTools: () => Promise.resolve([tool]),
+    });
+
+    for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
+      const result = await service.runSubAgentPrompt({
+        agentDepth: 1,
+        orgId: ORG_ID,
+        orgRole,
+        profileId: "profile_default",
+        task: "Observe the child role",
+      });
+      expect(result.status).toBe("success");
+      expect(promptRole).toBe(orgRole);
+      expect(toolRole).toBe(orgRole);
+    }
+  });
+});
 
 describe("AgentService branching", () => {
   test("keeps model selection scoped to the chat session", async () => {
@@ -406,43 +474,6 @@ describe("AgentService vision settings", () => {
       vision: { model: "p-openai-1::gpt-4o-mini" },
     });
   });
-
-  test("does not reset coding-agent passthrough when vision is saved", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [],
-      codingAgentProviderPassthrough: false,
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
-    const service = new AgentService(
-      {
-        defaultProviderId: "p-openai-1",
-        providers: [
-          {
-            apiKey: "test-key",
-            createdAt: new Date().toISOString(),
-            id: "p-openai-1",
-            label: "OpenAI",
-            type: "openai",
-          },
-        ],
-      },
-      null,
-      db
-    );
-
-    await service.setVisionSettings({ model: "p-openai-1::gpt-4o-mini" });
-
-    expect(await db.getWorkspaceSettings()).toMatchObject({
-      codingAgentProviderPassthrough: false,
-      visionModel: "p-openai-1::gpt-4o-mini",
-    });
-  });
 });
 
 describe("AgentService transcription settings", () => {
@@ -480,44 +511,58 @@ describe("AgentService transcription settings", () => {
     });
   });
 
-  test("does not reset coding-agent passthrough when transcription is saved", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [],
-      codingAgentProviderPassthrough: false,
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
-    const service = new AgentService(
-      {
-        defaultProviderId: "p-openai-1",
-        providers: [
-          {
-            apiKey: "test-key",
-            createdAt: new Date().toISOString(),
-            id: "p-openai-1",
-            label: "OpenAI",
-            type: "openai",
-          },
-        ],
-      },
-      null,
-      db
-    );
-
-    await service.setTranscriptionSettings({
+  test.each([
+    {
+      field: "visionModel",
+      model: "p-openai-1::gpt-4o-mini",
+      save: (service: AgentService) =>
+        service.setVisionSettings({ model: "p-openai-1::gpt-4o-mini" }),
+    },
+    {
+      field: "transcriptionModel",
       model: "p-openai-1::whisper-1",
-    });
+      save: (service: AgentService) =>
+        service.setTranscriptionSettings({ model: "p-openai-1::whisper-1" }),
+    },
+  ] as const)(
+    "does not reset coding-agent passthrough when $field is saved",
+    async ({ field, model, save }) => {
+      const db = createInMemoryDatabaseAdapter();
+      await db.upsertWorkspaceSettings({
+        codingAgentHarnesses: [],
+        codingAgentProviderPassthrough: false,
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      });
+      const service = new AgentService(
+        {
+          defaultProviderId: "p-openai-1",
+          providers: [
+            {
+              apiKey: "test-key",
+              createdAt: new Date().toISOString(),
+              id: "p-openai-1",
+              label: "OpenAI",
+              type: "openai",
+            },
+          ],
+        },
+        null,
+        db
+      );
 
-    expect(await db.getWorkspaceSettings()).toMatchObject({
-      codingAgentProviderPassthrough: false,
-      transcriptionModel: "p-openai-1::whisper-1",
-    });
-  });
+      await save(service);
+
+      expect(await db.getWorkspaceSettings()).toMatchObject({
+        codingAgentProviderPassthrough: false,
+        [field]: model,
+      });
+    }
+  );
 });
 
 describe("AgentService coding delegation context", () => {

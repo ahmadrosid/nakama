@@ -23,6 +23,7 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "mistral"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -116,6 +117,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("ds-1", "model-1"),
         group("ds-1", "deepseek", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats mistral models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("mi-1", "model-1"),
+        group("mi-1", "mistral")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("mi-1", "model-1"),
+        group("mi-1", "mistral", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -307,10 +324,12 @@ describe("firstAvailableProviderOption", () => {
         new Set([
           "openai",
           "chatgpt",
+          "xai_oauth",
           "anthropic",
           "openrouter",
           "gemini",
           "deepseek",
+          "mistral",
           "cerebras",
           "cloudflare",
           "fireworks",

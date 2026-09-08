@@ -105,6 +105,40 @@ export function storeChatDraft(draft: string): string {
   return key;
 }
 
+export function chatComposerDraftKey(
+  userId: string | undefined,
+  orgId: string | undefined,
+  profileId: string,
+  sessionId: string | null
+): string | null {
+  return userId && orgId && profileId
+    ? `nakama:composer-draft:${JSON.stringify([userId, orgId, profileId, sessionId])}`
+    : null;
+}
+
+export function readComposerDraft(key: string | null): string {
+  try {
+    return key ? (localStorage.getItem(key) ?? "") : "";
+  } catch {
+    return "";
+  }
+}
+
+export function storeComposerDraft(key: string | null, text: string): void {
+  if (!key) {
+    return;
+  }
+  try {
+    if (text) {
+      localStorage.setItem(key, text);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be disabled or full; the composer must still work.
+  }
+}
+
 export const MAX_URL_CHAT_DRAFT_LENGTH = 1500;
 
 export function chatProfileIdFromPath(pathname: string): string | null {
@@ -467,6 +501,24 @@ const READ_ONLY_SESSION_CHANNEL = {
   web: false,
   whatsapp: true,
 } as const satisfies Record<AgentChannel, boolean>;
+
+/**
+ * Text-only prompts that already live in server history are the ones Edit can
+ * branch and resend. Attachments and unsent/failed turns have no history index
+ * to branch from.
+ */
+export function isEditableUserMessage(message: ChatListItem): boolean {
+  return (
+    message.role === "user" &&
+    typeof message.historyIndex === "number" &&
+    !message.failed &&
+    !message.questionnaireAnswers?.length &&
+    !message.images?.length &&
+    !message.imageAttachments?.length &&
+    !message.documents?.length &&
+    message.content.trim().length > 0
+  );
+}
 
 export function isReadOnlySessionChannel(channel: AgentChannel): boolean {
   return READ_ONLY_SESSION_CHANNEL[channel];

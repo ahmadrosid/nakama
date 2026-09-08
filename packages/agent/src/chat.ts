@@ -55,6 +55,7 @@ import {
 import { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
+const MAX_TURN_OUTPUT_TOKENS = 200_000;
 
 export interface StreamHandlers {
   onChunk: (delta: string) => void;
@@ -110,6 +111,7 @@ export interface ResolvePromptContextInput {
 }
 
 export interface AgentChatSessionOptions {
+  archiveHistory?: (history: readonly ChatMessage[]) => Promise<string>;
   channel?: AgentRequest["channel"];
   compaction?: CompactionConfig;
   enableToolLoop?: boolean;
@@ -270,16 +272,47 @@ export function createAgentChatSession(
       options.enableToolLoop !== false && localTools.length > 0
         ? toLlmToolDefinitions(localTools)
         : undefined;
+    // Compaction is copy-on-write; do not discard anything until archival succeeds.
+    const original = [...history];
+    const revision = historyRevision;
+    const compacted = [...original];
+    function assertUnchanged() {
+      if (
+        historyRevision !== revision ||
+        history.length !== original.length ||
+        history.some((message, index) => message !== original[index])
+      ) {
+        throw new Error("History changed during compaction. Try again.");
+      }
+    }
     const result = await compactHistory({
       compaction: options.compaction,
       force,
-      history,
+      history: compacted,
       provider: dependencies.provider,
       systemPrompt,
       tools: llmTools,
     });
 
     if (result.action !== "none") {
+      assertUnchanged();
+      const recovery = await options.archiveHistory?.(original);
+      assertUnchanged();
+      const index =
+        result.action === "summarized"
+          ? 0
+          : compacted.findIndex(
+              (message, position) =>
+                message.role === "tool" && message !== original[position]
+            );
+      const first = compacted[index];
+      if (recovery && first) {
+        compacted[index] = {
+          ...first,
+          content: `${first.content}\n\n${recovery}`,
+        };
+      }
+      history.splice(0, history.length, ...compacted);
       bumpHistoryRevision();
     }
 
@@ -539,8 +572,13 @@ async function runConversation(
   ) => void,
   signal?: AbortSignal
 ): Promise<string> {
+  let producedTokens = 0;
+  let stoppedReply = "";
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
+    if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
+      break;
+    }
 
     const result = await generateReply(
       provider,
@@ -592,6 +630,19 @@ async function runConversation(
     if (result.usage) {
       handlers?.onUsage?.(result.usage);
     }
+    producedTokens += Math.max(
+      result.usage?.outputTokens ?? 0,
+      estimateHistoryTokens([result.assistantMessage], "")
+    );
+    if (
+      enableToolLoop &&
+      producedTokens >= MAX_TURN_OUTPUT_TOKENS &&
+      result.toolCalls.length > 0
+    ) {
+      // Keep visible text, but not tool calls that will never execute.
+      stoppedReply = result.content;
+      break;
+    }
     history.push(
       result.usage
         ? { ...result.assistantMessage, usage: result.usage }
@@ -602,6 +653,7 @@ async function runConversation(
       return result.content;
     }
 
+    const toolHistoryStart = history.length;
     await executeToolCalls(
       tools,
       result.toolCalls,
@@ -609,6 +661,21 @@ async function runConversation(
       handlers,
       toolContext
     );
+    // Check between batches: one batch can overshoot, but no next request runs.
+    producedTokens += estimateHistoryTokens(
+      history.slice(toolHistoryStart),
+      ""
+    );
+  }
+
+  if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
+    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached its output budget. Send another message to continue.`;
+    const content = stoppedReply + notice;
+    history.push({ content, role: "assistant" });
+    if (mode === "stream") {
+      handlers?.onChunk(notice);
+    }
+    return content;
   }
 
   const lastAssistant = [...history]

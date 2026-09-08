@@ -493,6 +493,43 @@ describe("schema path resolution", () => {
   });
 });
 
+describe("schema bootstrap version", () => {
+  test("applies schema.sql once while compatibility migrations keep running", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec("DROP TABLE artifact_shares; DROP TABLE attachments;");
+
+      migrateDatabase(db);
+
+      const artifactSharesTable = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifact_shares'"
+        )
+        .get();
+      const attachmentsTable = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'attachments'"
+        )
+        .get();
+      expect(artifactSharesTable).toBeNull();
+      expect(attachmentsTable).toEqual({ name: "attachments" });
+
+      const schemaVersion = db
+        .prepare("SELECT version FROM schema_version")
+        .get() as { version: number };
+      const foreignKeys = db.prepare("PRAGMA foreign_keys").get() as {
+        foreign_keys: number;
+      };
+      expect(schemaVersion.version).toBe(1);
+      expect(foreignKeys.foreign_keys).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("chat session schema", () => {
   test("adds a model override to legacy sessions", () => {
     const db = new Database(":memory:");

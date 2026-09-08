@@ -13,11 +13,13 @@ const BUILTIN_LABELS: Record<
   gemini: "Gemini",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
+  mistral: "Mistral",
   ollama: "Ollama",
   openai: "OpenAI",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
   xai: "xAI Grok",
+  xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };

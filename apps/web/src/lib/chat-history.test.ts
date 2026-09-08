@@ -3,10 +3,12 @@ import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
 import { AGENT_CHANNELS } from "@nakama/core/contract";
 import { extractTurnArtifacts } from "./chat-artifacts";
 import {
+  type ChatListItem,
   chatMessagesToListItems,
   formatSessionRelativeTime,
   formatSessionTimestamp,
   HISTORY_SESSION_CHANNELS,
+  isEditableUserMessage,
   isReadOnlySessionChannel,
 } from "./chat-history";
 
@@ -497,5 +499,76 @@ describe("session channel tables", () => {
     );
 
     expect(readOnly).toEqual(["telegram", "whatsapp", "discord"]);
+  });
+});
+
+describe("isEditableUserMessage", () => {
+  function userMessage(overrides: Partial<ChatListItem> = {}): ChatListItem {
+    return {
+      content: "What is the deploy command?",
+      historyIndex: 2,
+      id: "m1",
+      role: "user",
+      ...overrides,
+    };
+  }
+
+  test("accepts a stored text-only prompt", () => {
+    expect(isEditableUserMessage(userMessage())).toBe(true);
+  });
+
+  test("rejects a prompt that is not in server history yet", () => {
+    expect(
+      isEditableUserMessage(userMessage({ historyIndex: undefined }))
+    ).toBe(false);
+  });
+
+  test("rejects assistant and tool rows", () => {
+    expect(isEditableUserMessage(userMessage({ role: "assistant" }))).toBe(
+      false
+    );
+    expect(isEditableUserMessage(userMessage({ role: "tool" }))).toBe(false);
+  });
+
+  test("rejects a failed turn", () => {
+    expect(isEditableUserMessage(userMessage({ failed: true }))).toBe(false);
+  });
+
+  test("rejects blank content", () => {
+    expect(isEditableUserMessage(userMessage({ content: "   " }))).toBe(false);
+  });
+
+  test("rejects prompts carrying attachments", () => {
+    expect(
+      isEditableUserMessage(
+        userMessage({ images: [{ mediaType: "image/png", url: "blob:x" }] })
+      )
+    ).toBe(false);
+    expect(
+      isEditableUserMessage(
+        userMessage({
+          imageAttachments: [{ mediaType: "image/png", url: "blob:x" }],
+        })
+      )
+    ).toBe(false);
+    expect(
+      isEditableUserMessage(
+        userMessage({
+          documents: [{ filename: "spec.pdf", mediaType: "application/pdf" }],
+        })
+      )
+    ).toBe(false);
+  });
+
+  test("rejects a questionnaire answer bubble", () => {
+    expect(
+      isEditableUserMessage(
+        userMessage({
+          questionnaireAnswers: [
+            { answer: "yes", prompt: "Ship it?", questionId: "q1" },
+          ],
+        })
+      )
+    ).toBe(false);
   });
 });

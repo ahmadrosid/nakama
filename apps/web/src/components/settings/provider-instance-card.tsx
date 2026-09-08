@@ -139,13 +139,17 @@ function ProviderInstanceTableRow({
           ) : null}
           <ProviderActionButton
             label={
-              card.isChatgpt
+              card.isXaiOAuth
                 ? instance.hasApiKey
-                  ? "Reconnect ChatGPT"
-                  : "Connect ChatGPT"
-                : instance.hasApiKey
-                  ? "Update key"
-                  : "Add key"
+                  ? "Reconnect Grok"
+                  : "Connect Grok"
+                : card.isChatgpt
+                  ? instance.hasApiKey
+                    ? "Reconnect ChatGPT"
+                    : "Connect ChatGPT"
+                  : instance.hasApiKey
+                    ? "Update key"
+                    : "Add key"
             }
             onClick={() => card.setReplaceKeyOpen(true)}
           >
@@ -263,9 +267,11 @@ function ProviderInstanceCardDialogs({
         onOpenChange={card.setReplaceKeyOpen}
         onSave={() => void card.handleReplaceKey()}
         onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
+        onXaiOAuthChange={card.setXaiOAuth}
         open={card.replaceKeyOpen}
         providerType={card.providerType}
         showApiKey={card.showApiKey}
+        xaiOAuth={card.xaiOAuth}
       />
 
       {card.isCompatibleLike ? (

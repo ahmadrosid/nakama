@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../services/auth-service";
-import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
-import { createHonoApp } from "./app";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   browserSessionFromResponse,
   loginPlatformAdminSession,
@@ -12,25 +9,7 @@ import {
 setupTestConfigDir("nakama-platform-orgs-test-");
 
 function createPlatformApp() {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
-  return {
-    app: createHonoApp({
-      agent: {
-        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
-      } as any,
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      webDistDir: null,
-      workerManager: {} as any,
-    }),
-    authService,
-    databaseAdapter,
-  };
+  return createMinimalHonoApp();
 }
 
 describe("platform org routes", () => {

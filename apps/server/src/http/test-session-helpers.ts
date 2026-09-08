@@ -155,6 +155,7 @@ export type SeedOrgAdminOptions = {
   password?: string;
   /** When set, also upserts a default profile with this id. */
   profileId?: string;
+  role?: OrgRole;
   userId?: string;
 };
 
@@ -166,6 +167,7 @@ export async function seedOrgAdmin(
   const password = opts.password ?? "password123";
   const orgId = opts.orgId ?? "org_test";
   const userId = opts.userId ?? "user_admin";
+  const role = opts.role ?? "admin";
   const authService = opts.authService ?? new AuthService();
   const now = new Date().toISOString();
 
@@ -186,7 +188,7 @@ export async function seedOrgAdmin(
   await databaseAdapter.upsertOrgMember({
     createdAt: now,
     orgId,
-    role: "admin",
+    role,
     userId,
   });
 
@@ -208,6 +210,60 @@ export async function seedOrgAdmin(
     orgId,
     password,
     profileId: opts.profileId,
+    role,
     userId,
+  };
+}
+
+export async function createOrgAdminSession(
+  app: AppFetch,
+  authService: AuthService,
+  databaseAdapter: DatabaseAdapter,
+  slug: string,
+  email: string
+): Promise<{
+  adminSession: TestBrowserSession;
+  orgId: string;
+  platformSession: TestBrowserSession;
+}> {
+  const platformSession = await loginPlatformAdminSession(
+    app,
+    authService,
+    databaseAdapter
+  );
+  const createResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      body: JSON.stringify({
+        admin: {
+          email,
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug,
+      }),
+      headers: platformSession.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": platformSession.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+
+  expect(createResponse.status).toBe(201);
+  const created = (await createResponse.json()) as {
+    organization: { id: string };
+    adminMember: { temporaryPassword: string };
+  };
+
+  return {
+    adminSession: await loginUserSession(
+      app,
+      email,
+      created.adminMember.temporaryPassword,
+      created.organization.id
+    ),
+    orgId: created.organization.id,
+    platformSession,
   };
 }

@@ -16,9 +16,8 @@ function requireOrgId(context: ToolContext): string {
 
 /**
  * Deny-by-default role gate for org-memory tools. Viewers are blocked; an
- * undefined role (no user context) also blocks — callers that genuinely act
- * with member privileges (automation/task/sub-agent runners) pass an explicit
- * `orgRole: "member"` in the tool context.
+ * undefined role (no user context) also blocks. Automation/task runners pass
+ * an explicit `orgRole: "member"`; sub-agents inherit the parent role.
  */
 function requireOrgMemoryAccess(context: ToolContext): {
   orgId: string;
