@@ -223,99 +223,148 @@ describe("coding-agent harness resolution", () => {
   }, 5000);
 
   test("a harness that traps SIGTERM is killed once the version probe times out", async () => {
-    const dir = await mkdtemp(
-      path.join(tmpdir(), "nakama-sigterm-proof-harness-")
-    );
-    const command = path.join(dir, "stubborn-version");
-    const pidFile = path.join(dir, "pid");
-    // Hangs on --version and swallows SIGTERM, so only the SIGKILL escalation
-    // ends it. It records its own pid because the probe never exposes the child.
-    await writeFile(
-      command,
-      [
-        `#!${process.execPath}`,
-        `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
-        'process.on("SIGTERM", () => {});',
-        "setInterval(() => {}, 1000);",
-        "",
-      ].join("\n"),
-      { mode: 0o755 }
-    );
-
-    try {
-      const db = createInMemoryDatabaseAdapter();
-      await db.upsertWorkspaceSettings({
-        codingAgentHarnesses: [
-          {
-            args: [],
-            command,
-            enabled: true,
-            id: "coding-harness-claude-code",
-            kind: "claude_code",
-            name: "Claude Code",
-          },
-        ],
-        id: "workspace-settings",
-        imageModel: null,
-        selectedCodingAgentHarness: "coding-harness-claude-code",
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      });
-
-      const statuses = await listCodingAgentHarnessStatuses(db);
-      expect(
-        statuses.find((harness) => harness.id === "coding-harness-claude-code")
-          ?.installed
-      ).toBe(false);
-
-      const pid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
-      expect(Number.isInteger(pid)).toBe(true);
-      expect(await waitForExit(pid, 15_000)).toBe(true);
-    } finally {
-      await rm(dir, { force: true, recursive: true });
-    }
-  }, 45_000);
-
-  test("a harness that hangs on --version resolves as not installed", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "nakama-hanging-harness-"));
-    // exec, so SIGTERM reaches sleep itself rather than orphaning it under sh.
-    const command = path.join(dir, "hangs");
-    await writeFile(command, "#!/bin/sh\nexec sleep 600\n", { mode: 0o755 });
-
-    try {
-      const db = createInMemoryDatabaseAdapter();
-      await db.upsertWorkspaceSettings({
-        codingAgentHarnesses: [
-          {
-            args: [],
-            command,
-            enabled: true,
-            id: "coding-harness-claude-code",
-            kind: "claude_code",
-            name: "Claude Code",
-          },
-        ],
-        id: "workspace-settings",
-        imageModel: null,
-        selectedCodingAgentHarness: "coding-harness-claude-code",
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      });
-
-      const probed = await refreshCodingAgentHarnessProbe(
-        db,
-        "coding-harness-claude-code"
+    await withFastCliProbes(async () => {
+      const dir = await mkdtemp(
+        path.join(tmpdir(), "nakama-sigterm-proof-harness-")
+      );
+      const command = path.join(dir, "stubborn-version");
+      const pidFile = path.join(dir, "pid");
+      // Hangs on --version and swallows SIGTERM, so only the SIGKILL escalation
+      // ends it. It records its own pid because the probe never exposes the child.
+      await writeFile(
+        command,
+        [
+          `#!${process.execPath}`,
+          `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+          'process.on("SIGTERM", () => {});',
+          "setInterval(() => {}, 1000);",
+          "",
+        ].join("\n"),
+        { mode: 0o755 }
       );
 
-      expect(probed.installed).toBe(false);
-      expect(probed.ready).toBe(false);
-    } finally {
-      await rm(dir, { force: true, recursive: true });
-    }
-  }, 20_000);
+      try {
+        const db = createInMemoryDatabaseAdapter();
+        await db.upsertWorkspaceSettings({
+          codingAgentHarnesses: [
+            {
+              args: [],
+              command,
+              enabled: true,
+              id: "coding-harness-claude-code",
+              kind: "claude_code",
+              name: "Claude Code",
+            },
+          ],
+          id: "workspace-settings",
+          imageModel: null,
+          selectedCodingAgentHarness: "coding-harness-claude-code",
+          transcriptionModel: null,
+          updatedAt: new Date().toISOString(),
+          visionModel: null,
+        });
+
+        const statusesPromise = listCodingAgentHarnessStatuses(db);
+        const pid = await waitForPidFile(pidFile, 2000);
+        const statuses = await statusesPromise;
+        expect(
+          statuses.find(
+            (harness) => harness.id === "coding-harness-claude-code"
+          )?.installed
+        ).toBe(false);
+        expect(await waitForExit(pid, 2000)).toBe(true);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    });
+  }, 5000);
+
+  test("a harness that hangs on --version resolves as not installed", async () => {
+    await withFastCliProbes(async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "nakama-hanging-harness-"));
+      // exec, so SIGTERM reaches sleep itself rather than orphaning it under sh.
+      const command = path.join(dir, "hangs");
+      await writeFile(command, "#!/bin/sh\nexec sleep 600\n", { mode: 0o755 });
+
+      try {
+        const db = createInMemoryDatabaseAdapter();
+        await db.upsertWorkspaceSettings({
+          codingAgentHarnesses: [
+            {
+              args: [],
+              command,
+              enabled: true,
+              id: "coding-harness-claude-code",
+              kind: "claude_code",
+              name: "Claude Code",
+            },
+          ],
+          id: "workspace-settings",
+          imageModel: null,
+          selectedCodingAgentHarness: "coding-harness-claude-code",
+          transcriptionModel: null,
+          updatedAt: new Date().toISOString(),
+          visionModel: null,
+        });
+
+        const probed = await refreshCodingAgentHarnessProbe(
+          db,
+          "coding-harness-claude-code"
+        );
+
+        expect(probed.installed).toBe(false);
+        expect(probed.ready).toBe(false);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    });
+  }, 5000);
 });
+
+async function withFastCliProbes<T>(run: () => Promise<T>): Promise<T> {
+  const previous = {
+    grace: process.env.NAKAMA_CLI_SIGTERM_GRACE_MS,
+    timeout: process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS,
+  };
+  process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = "1000";
+  process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = "100";
+  try {
+    return await run();
+  } finally {
+    if (previous.timeout === undefined) {
+      delete process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS;
+    } else {
+      process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = previous.timeout;
+    }
+    if (previous.grace === undefined) {
+      delete process.env.NAKAMA_CLI_SIGTERM_GRACE_MS;
+    } else {
+      process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = previous.grace;
+    }
+  }
+}
+
+async function waitForPidFile(
+  pidFile: string,
+  timeoutMs: number
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const pid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
+      if (Number.isInteger(pid)) {
+        return pid;
+      }
+    } catch {
+      // Child has not written the pid yet.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  throw new Error(`pid file was not written: ${pidFile}`);
+}
 
 async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
