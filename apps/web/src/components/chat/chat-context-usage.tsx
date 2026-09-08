@@ -1,10 +1,8 @@
 import type { ChatUsage } from "@nakama/core/contract";
-import { Cancel01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
 import {
   Popover,
-  PopoverClose,
   PopoverContent,
+  PopoverHeader,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
@@ -115,21 +113,7 @@ export function ChatContextUsageRing({
         side="top"
         sideOffset={8}
       >
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <h2 className="font-medium text-sm leading-none">Context Usage</h2>
-          <PopoverClose
-            render={
-              <Button
-                className="-mt-1 -mr-1 size-7 text-muted-foreground"
-                size="icon-sm"
-                variant="ghost"
-              />
-            }
-          >
-            <Cancel01Icon className="size-3.5" />
-            <span className="sr-only">Close</span>
-          </PopoverClose>
-        </div>
+        <PopoverHeader title="Context Usage" />
 
         <div className="mb-2 flex items-baseline justify-between gap-3 text-muted-foreground text-xs">
           <span>{percent}% Full</span>
