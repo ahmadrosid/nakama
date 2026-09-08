@@ -1,15 +1,19 @@
 import type { ChatUsage } from "@nakama/core/contract";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverHeader,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   type ChatContextUsage,
   contextUsageRatio,
+  contextUsageSegments,
+  formatBytes,
   formatContextUsageLabel,
+  formatTokenCountDetailed,
 } from "@/lib/chat-context-usage";
-import { formatChatUsage } from "@/lib/chat-usage";
+import { formatChatUsageCost } from "@/lib/chat-usage";
 import { cn } from "@/lib/utils";
 
 /** Match BrainIcon / select chevron visual weight in the composer toolbar. */
@@ -34,25 +38,33 @@ export function ChatContextUsageRing({
   className,
 }: {
   usage: ChatContextUsage;
-  /** Session token total, folded in here rather than shown beside the ring. */
   sessionUsage?: ChatUsage | null;
   className?: string;
 }) {
   const ratio = contextUsageRatio(usage);
+  const percent = Math.round(ratio * 100);
   const radius = (RING_SIZE - STROKE_WIDTH) / 2;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - ratio);
   const label = formatContextUsageLabel(usage);
-  const sessionLabel = sessionUsage
-    ? `Session · ${formatChatUsage(sessionUsage)}`
-    : null;
+  const sessionCost = sessionUsage ? formatChatUsageCost(sessionUsage) : null;
+  const segments = contextUsageSegments(usage);
+  const segmentTotal = segments.reduce(
+    (sum, segment) => sum + segment.tokens,
+    0
+  );
+  const fillRatio = ratio;
+  const optimizedNote =
+    usage.bytesKeptOut && usage.bytesProduced
+      ? `${formatBytes(usage.bytesKeptOut)} of tool output saved (${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}%)`
+      : null;
 
   return (
-    <Tooltip>
-      <TooltipTrigger
+    <Popover>
+      <PopoverTrigger
         render={
           <button
-            aria-label={sessionLabel ? `${label} · ${sessionLabel}` : label}
+            aria-label={sessionCost ? `${label} · ${sessionCost}` : label}
             className={cn(
               "inline-flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               className
@@ -92,15 +104,81 @@ export function ChatContextUsageRing({
           </button>
         }
       />
-      <TooltipContent
-        className="flex-col items-start gap-0.5 text-xs"
+      <PopoverContent
+        align="start"
+        className="w-80 min-w-80 p-3.5"
         side="top"
+        sideOffset={8}
       >
-        <span>{label}</span>
-        {sessionLabel ? (
-          <span className="text-background/70">{sessionLabel}</span>
+        <PopoverHeader title="Context Usage" />
+
+        <div className="mb-2 flex items-baseline justify-between gap-3 text-muted-foreground text-xs">
+          <span>{percent}% Full</span>
+          <span>
+            ~{formatTokenCountDetailed(usage.usedTokens)} /{" "}
+            {formatTokenCountDetailed(usage.usableContextTokens)} Tokens
+          </span>
+        </div>
+
+        <div
+          aria-hidden
+          className="mb-3 flex h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          {segments.map((segment) => (
+            <div
+              className={cn("h-full min-w-px", segment.colorClass)}
+              key={segment.id}
+              style={{
+                width: `${
+                  segmentTotal > 0 && fillRatio > 0
+                    ? (segment.tokens / segmentTotal) * fillRatio * 100
+                    : 0
+                }%`,
+              }}
+            />
+          ))}
+        </div>
+
+        <ul className="flex flex-col gap-2 text-sm">
+          {segments.map((segment) => (
+            <li
+              className="flex items-center justify-between gap-3"
+              key={segment.id}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "size-2.5 shrink-0 rounded-[3px]",
+                    segment.colorClass
+                  )}
+                />
+                <span className="truncate">{segment.label}</span>
+              </span>
+              <span className="text-muted-foreground tabular-nums">
+                {formatTokenCountDetailed(segment.tokens)}
+              </span>
+            </li>
+          ))}
+          {sessionCost ? (
+            <li className="flex items-center justify-between gap-3">
+              <span>Cost</span>
+              <span className="text-muted-foreground tabular-nums">
+                {sessionCost}
+              </span>
+            </li>
+          ) : null}
+        </ul>
+
+        {usage.source === "estimate" || optimizedNote ? (
+          <div className="mt-3 space-y-1 text-muted-foreground text-xs">
+            {usage.source === "estimate" ? (
+              <p>Estimated from prompt size</p>
+            ) : null}
+            {optimizedNote ? <p>{optimizedNote}</p> : null}
+          </div>
         ) : null}
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }

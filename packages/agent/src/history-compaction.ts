@@ -131,16 +131,39 @@ function estimateMessageTokens(
   return total;
 }
 
+export interface HistoryTokenBreakdown {
+  conversation: number;
+  systemPrompt: number;
+  toolDefinitions: number;
+}
+
+export function estimateHistoryTokenBreakdown(
+  messages: readonly ChatMessage[],
+  systemPrompt: string,
+  tools?: LlmToolDefinition[],
+  replaysThinking = true
+): HistoryTokenBreakdown {
+  return {
+    conversation: estimateMessageTokens(messages, replaysThinking),
+    systemPrompt: estimateTokens(systemPrompt),
+    toolDefinitions: estimateTokens(JSON.stringify(tools ?? [])),
+  };
+}
+
 export function estimateHistoryTokens(
   messages: readonly ChatMessage[],
   systemPrompt: string,
   tools?: LlmToolDefinition[],
   replaysThinking = true
 ): number {
+  const breakdown = estimateHistoryTokenBreakdown(
+    messages,
+    systemPrompt,
+    tools,
+    replaysThinking
+  );
   return (
-    estimateTokens(systemPrompt) +
-    estimateMessageTokens(messages, replaysThinking) +
-    estimateTokens(JSON.stringify(tools ?? []))
+    breakdown.systemPrompt + breakdown.conversation + breakdown.toolDefinitions
   );
 }
 

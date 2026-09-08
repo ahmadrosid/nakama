@@ -66,16 +66,11 @@ export function SettingsPage() {
             className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             id="chat-usage-setting"
           >
-            <div className="min-w-0 space-y-0.5">
-              <p className="font-medium text-foreground text-sm">
-                Token usage in chat
-              </p>
-              <p className="text-muted-foreground text-xs">
-                Show tokens and estimated cost under each reply.
-              </p>
-            </div>
+            <p className="font-medium text-foreground text-sm">
+              Token usage in chat
+            </p>
             <Switch
-              aria-label="Show token usage in chat"
+              aria-label="Token usage in chat"
               checked={chatUsage.visible}
               onCheckedChange={chatUsage.toggle}
             />

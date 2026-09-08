@@ -655,6 +655,7 @@ function AssistantMessageActions({
 
   return (
     <div className="flex items-center gap-1 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 group-active:opacity-100">
+      {usage ? <ChatUsageBadge usage={usage} /> : null}
       <button
         aria-label={copied ? "Copied" : "Copy response"}
         className={cn(
@@ -715,7 +716,6 @@ function AssistantMessageActions({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
-      {usage ? <ChatUsageBadge className="ml-1" usage={usage} /> : null}
     </div>
   );
 }

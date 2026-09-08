@@ -60,10 +60,7 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const { visible: showUsage } = useChatUsageVisible();
-  const sessionUsage = useMemo(
-    () => (showUsage ? sumChatUsage(messages) : undefined),
-    [messages, showUsage]
-  );
+  const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);
   const { banner: skillReviewBanner } = usePostTurnSkillReviewOverlay({
     lastSuccessfulTurnAt,
     profile: activeProfile,

@@ -141,7 +141,6 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
     models: ProviderModelOption[];
   }>;
   renderModelLabel: (selection: string | null) => string | null;
-  /** Tokens and cost of the whole session; hidden by the Settings toggle. */
   sessionUsage?: ChatUsage | null;
   showOfflineHint?: boolean;
   showTips?: boolean;

@@ -935,7 +935,18 @@ export interface SessionMessageMeta {
 /** How full the model context window is for the current chat session. */
 export type ChatContextUsageSource = "provider" | "estimate";
 
+export interface ChatContextUsageBreakdown {
+  conversation: number;
+  systemPrompt: number;
+  toolDefinitions: number;
+}
+
 export interface ChatContextUsage {
+  /**
+   * Estimated composition of the prompt (system + tools + history). Token
+   * total may differ from `usedTokens` when the provider reports input size.
+   */
+  breakdown?: ChatContextUsageBreakdown;
   /**
    * Bytes an optimiser kept out of this session's context so far. Absent until
    * something is actually removed, so the UI reports a measurement rather than

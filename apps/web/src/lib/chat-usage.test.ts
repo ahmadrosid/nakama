@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   addChatUsage,
+  CHAT_USAGE_VISIBLE_KEY,
   chatUsageTitle,
   formatChatUsage,
+  formatChatUsageCost,
+  getInitialChatUsageVisible,
   sumChatUsage,
 } from "./chat-usage";
 
@@ -51,6 +54,25 @@ describe("chat usage", () => {
     expect(sumChatUsage([{ role: "assistant" }])).toBeUndefined();
   });
 
+  test("shows only the dollar amount on the cost chip", () => {
+    expect(
+      formatChatUsageCost({
+        costUsd: 0.0027,
+        inputTokens: 12_000,
+        outputTokens: 265,
+        totalTokens: 12_265,
+      })
+    ).toBe("$0.0027");
+    expect(
+      formatChatUsageCost({
+        estimated: true,
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      })
+    ).toBeNull();
+  });
+
   test("formats tokens, cost and the estimate marker", () => {
     expect(
       formatChatUsage({
@@ -85,6 +107,31 @@ describe("chat usage", () => {
     expect(compacted(1_234_567)).toBe("1.2m");
     expect(compacted(1_500_000_000)).toBe("1.5b");
     expect(compacted(2_300_000_000_000)).toBe("2.3t");
+  });
+
+  test("hides token usage until the setting is turned on", () => {
+    const previous = globalThis.localStorage;
+    const store = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+      },
+    });
+
+    try {
+      expect(getInitialChatUsageVisible()).toBe(false);
+      store.set(CHAT_USAGE_VISIBLE_KEY, "true");
+      expect(getInitialChatUsageVisible()).toBe(true);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: previous,
+      });
+    }
   });
 
   test("keeps the exact count in the hover title", () => {

@@ -111,12 +111,13 @@ describe("chat context usage", () => {
 
     await session.send("hi");
 
-    expect(session.getContextUsage()).toEqual({
-      contextWindow: 100_000,
-      source: "provider",
-      usableContextTokens: 92_000,
-      usedTokens: 12_000,
-    });
+    const usage = session.getContextUsage();
+    expect(usage?.contextWindow).toBe(100_000);
+    expect(usage?.source).toBe("provider");
+    expect(usage?.usableContextTokens).toBe(92_000);
+    expect(usage?.usedTokens).toBe(12_000);
+    expect(usage?.breakdown?.conversation).toBeGreaterThan(0);
+    expect(usage?.breakdown?.systemPrompt).toBeGreaterThanOrEqual(0);
   });
 
   test("falls back to an estimate when provider omits usage", async () => {
