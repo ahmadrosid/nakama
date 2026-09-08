@@ -70,22 +70,17 @@ function removeEventAt(turn: ActiveTurn, index: number): StreamEvent {
     throw new Error("Snapshot index must reference a buffered event.");
   }
 
-  const lastIndex = turn.events.length - 1;
-
-  if (index !== lastIndex) {
-    const lastEvent = turn.events[lastIndex]!;
-    turn.events[index] = lastEvent;
-    const movedKey = snapshotKey(lastEvent);
-    if (movedKey) {
-      turn.snapshotIndexes.set(movedKey, index);
-    }
-  }
-
-  turn.events.pop();
+  turn.events.splice(index, 1);
 
   const removedKey = snapshotKey(removed);
   if (removedKey) {
     turn.snapshotIndexes.delete(removedKey);
+  }
+
+  for (const [key, snapshotIndex] of turn.snapshotIndexes) {
+    if (snapshotIndex > index) {
+      turn.snapshotIndexes.set(key, snapshotIndex - 1);
+    }
   }
 
   return removed;

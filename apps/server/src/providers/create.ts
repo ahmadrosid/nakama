@@ -96,6 +96,8 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       });
     case "minimax":
     case "minimax_cn":
+    case "moonshot":
+    case "moonshot_cn":
     case "zhipu":
     case "zhipu_cn":
       return createOpenAIProvider({

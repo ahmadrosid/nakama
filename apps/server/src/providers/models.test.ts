@@ -206,6 +206,37 @@ describe("resolveModel", () => {
       "glm-5.2"
     );
   });
+
+  test("resolves Moonshot models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "kimi-k2.5-turbo-preview" },
+      { id: "kimi-k2.5" },
+      { id: "moonshot-v1-128k" },
+    ];
+
+    expect(resolveModel("moonshot", "kimi-k2.5", customModels)).toBe(
+      "kimi-k2.5"
+    );
+    expect(getDefaultModel("moonshot", customModels)).toBe(
+      "kimi-k2.5-turbo-preview"
+    );
+    expect(getDefaultModel("moonshot_cn", customModels)).toBe(
+      "kimi-k2.5-turbo-preview"
+    );
+  });
+
+  test("keeps Moonshot region catalogs independent", () => {
+    // Both platforms expose overlapping ids, so an id discovered on one
+    // instance still resolves against that instance's own list.
+    const cnModels = [{ default: true, id: "moonshot-v1-8k-vision-preview" }];
+
+    expect(
+      resolveModel("moonshot_cn", "moonshot-v1-8k-vision-preview", cnModels)
+    ).toBe("moonshot-v1-8k-vision-preview");
+    expect(resolveModel("moonshot", "not-a-real-model", cnModels)).toBe(
+      "moonshot-v1-8k-vision-preview"
+    );
+  });
 });
 
 describe("modelSupportsVision", () => {
@@ -229,6 +260,22 @@ describe("modelSupportsVision", () => {
     ).toBe(true);
   });
 
+  test("keeps Moonshot models opt-in only (discovered lists)", () => {
+    // Intl K2.x is text-only; the CN platform exposes vision variants, so
+    // vision comes from discovered metadata, never from the id.
+    expect(modelSupportsVision("kimi-k2.5", "moonshot")).toBe(false);
+    expect(
+      modelSupportsVision("moonshot-v1-8k-vision-preview", "moonshot_cn", [
+        { id: "moonshot-v1-8k-vision-preview" },
+      ])
+    ).toBe(false);
+
+    expect(
+      modelSupportsVision("moonshot-v1-8k-vision-preview", "moonshot_cn", [
+        { id: "moonshot-v1-8k-vision-preview", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
   test("treats openai-compatible models as opt-in only", () => {
     expect(
       modelSupportsVision("qwen-vl", "openai_compatible", [{ id: "qwen-vl" }])

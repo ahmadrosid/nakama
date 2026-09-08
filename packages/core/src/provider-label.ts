@@ -14,6 +14,8 @@ const BUILTIN_LABELS: Record<
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
   mistral: "Mistral",
+  moonshot: "Moonshot Kimi",
+  moonshot_cn: "Moonshot Kimi (CN)",
   ollama: "Ollama",
   openai: "OpenAI",
   opencode_go: "OpenCode Go",

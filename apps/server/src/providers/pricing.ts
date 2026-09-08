@@ -3,6 +3,7 @@ import {
   type ProviderInstance,
   type ProviderName,
 } from "@nakama/core";
+import { DISCOVERY_MODEL_PROVIDERS } from "@nakama/core/discovery-providers";
 import { getModelById, IMAGE_GENERATION_MODEL_ID } from "./models";
 
 export interface ModelPricing {
@@ -56,12 +57,17 @@ function getCustomModelPricing(
   return null;
 }
 
-/** Providers whose rates only ever come from what the user typed in. */
+/**
+ * Providers whose rates only ever come from what the user typed in. Discovery
+ * providers belong here by construction: their catalogs are fetched from the
+ * platform at runtime, so there is never a bundled entry to price against and
+ * DEFAULT_PRICING would be a guess presented as a rate.
+ */
 const USER_PRICED_PROVIDERS = new Set<ProviderName>([
+  ...DISCOVERY_MODEL_PROVIDERS,
   "cerebras",
   "fireworks",
   "ollama",
-  "openai_compatible",
   "openrouter",
 ]);
 
