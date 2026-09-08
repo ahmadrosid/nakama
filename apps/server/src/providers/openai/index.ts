@@ -362,9 +362,11 @@ async function buildChatCompletionRequestBody(options: {
       options.messages,
       provider
     ),
-    ...(provider === "deepseek" || provider === "doubao"
+    ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
-      : {}),
+      : provider === "doubao"
+        ? buildDoubaoThinkingBody(options.thinking)
+        : {}),
     ...(hasTools
       ? {
           tool_choice: "auto",
@@ -397,6 +399,21 @@ function buildDeepSeekThinkingBody(
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
   };
+}
+
+/** Ark Seed models: `thinking.type` only — no DeepSeek `reasoning_effort`. */
+function buildDoubaoThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled === false) {
+    return { thinking: { type: "disabled" as const } };
+  }
+
+  if (!thinking?.enabled) {
+    return {};
+  }
+
+  return { thinking: { type: "enabled" as const } };
 }
 
 function readReasoningContent(

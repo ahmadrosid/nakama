@@ -148,6 +148,7 @@ describe("createProviderForInstance routing", () => {
     let seenAuth = "";
     let seenModel = "";
     let seenThinking: unknown;
+    let seenReasoningEffort: unknown;
 
     const mock = Bun.serve({
       fetch: async (request) => {
@@ -156,10 +157,12 @@ describe("createProviderForInstance routing", () => {
         seenAuth = request.headers.get("authorization") ?? "";
         const body = (await request.json()) as {
           model?: string;
+          reasoning_effort?: unknown;
           thinking?: unknown;
         };
         seenModel = body.model ?? "";
         seenThinking = body.thinking;
+        seenReasoningEffort = body.reasoning_effort;
         return Response.json({
           choices: [
             {
@@ -210,6 +213,7 @@ describe("createProviderForInstance routing", () => {
       expect(seenAuth).toBe("Bearer test-key");
       expect(seenModel).toBe("doubao-seed-2-1-pro-260628");
       expect(seenThinking).toEqual({ type: "enabled" });
+      expect(seenReasoningEffort).toBeUndefined();
     } finally {
       mock.stop(true);
     }
