@@ -155,6 +155,7 @@ export function modelExistsOnInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "doubao" ||
     instance.type === "together" ||
     instance.type === "mistral"
   ) {
@@ -355,6 +356,7 @@ export function applyProviderInstanceUpdate(
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
+      instance.type === "doubao" ||
       instance.type === "together" ||
       instance.type === "mistral"
     ) {

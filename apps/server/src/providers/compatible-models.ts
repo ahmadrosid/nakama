@@ -135,6 +135,7 @@ export function catalogCustomModelsToCatalog(
       model.supportsThinking = entry.supportsThinking;
     } else if (
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
       provider === "mistral"
     ) {
@@ -327,6 +328,7 @@ export function getModelsForProviderInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "doubao" ||
     instance.type === "together" ||
     instance.type === "mistral" ||
     instance.type === "opencode_go"

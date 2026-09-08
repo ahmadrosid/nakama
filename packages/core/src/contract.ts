@@ -2223,6 +2223,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "doubao"
   | "mistral"
   | "cerebras"
   | "fireworks"

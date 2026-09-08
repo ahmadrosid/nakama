@@ -137,6 +137,34 @@ describe("resolveModel", () => {
     );
   });
 
+  test("resolves catalog models for Doubao", () => {
+    expect(resolveModel("doubao", "doubao-seed-2.1-turbo")).toBe(
+      "doubao-seed-2.1-turbo"
+    );
+    expect(resolveModel("doubao", "doubao-seed-1-8-251228")).toBe(
+      "doubao-seed-1-8-251228"
+    );
+    expect(getDefaultModel("doubao")).toBe("doubao-seed-2.1-pro");
+    expect(getModelById("doubao-seed-2.1-pro")?.supportsThinking).toBe(true);
+    expect(getModelById("doubao-seed-2.1-pro")?.supportsVision).toBe(true);
+    expect(getModelById("doubao-seed-2.1-turbo")?.supportsVision).toBe(true);
+    expect(getModelById("doubao-seed-1-8-251228")?.supportsVision).toBe(true);
+    expect(getModelById("doubao-seed-2.1-pro")?.contextWindow).toBe(256_000);
+    expect(getModelById("doubao-seed-2.1-pro")?.maxOutputTokens).toBe(32_768);
+  });
+
+  test("uses doubao custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "doubao-seed-2.1-turbo", name: "Doubao Seed 2.1 Turbo" },
+    ];
+    expect(resolveModel("doubao", "doubao-seed-2.1-turbo", customModels)).toBe(
+      "doubao-seed-2.1-turbo"
+    );
+    expect(resolveModel("doubao", "unknown-model", customModels)).toBe(
+      "doubao-seed-2.1-turbo"
+    );
+  });
+
   test("resolves catalog models for Cerebras", () => {
     expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
     expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
@@ -332,5 +360,11 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("mistral-small-2603", "mistral")).toBe(true);
     expect(modelSupportsVision("mistral-large-2512", "mistral")).toBe(true);
     expect(modelSupportsVision("ministral-14b-2512", "mistral")).toBe(true);
+  });
+
+  test("reads Doubao vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("doubao-seed-2.1-pro", "doubao")).toBe(true);
+    expect(modelSupportsVision("doubao-seed-2.1-turbo", "doubao")).toBe(true);
+    expect(modelSupportsVision("doubao-seed-1-8-251228", "doubao")).toBe(true);
   });
 });

@@ -23,6 +23,7 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "doubao"
     | "together"
     | "mistral"
     | "cerebras"
@@ -154,6 +155,22 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats doubao models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -255,6 +272,22 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("tg-1", "model-1"),
         group("tg-1", "together", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats doubao models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -362,6 +395,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "doubao",
           "together",
           "mistral",
           "cerebras",

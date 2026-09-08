@@ -191,6 +191,38 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
   },
   {
+    contextWindow: 256_000,
+    default: true,
+    id: "doubao-seed-2.1-pro",
+    inputPerMillionUsd: 0.8,
+    maxOutputTokens: 32_768,
+    name: "Doubao Seed 2.1 Pro",
+    outputPerMillionUsd: 2.0,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 256_000,
+    id: "doubao-seed-2.1-turbo",
+    inputPerMillionUsd: 0.3,
+    maxOutputTokens: 32_768,
+    name: "Doubao Seed 2.1 Turbo",
+    outputPerMillionUsd: 1.2,
+    provider: "doubao",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 256_000,
+    id: "doubao-seed-1-8-251228",
+    inputPerMillionUsd: 0.26,
+    maxOutputTokens: 32_768,
+    name: "Doubao Seed 1.8",
+    outputPerMillionUsd: 0.67,
+    provider: "doubao",
+    supportsVision: true,
+  },
+  {
     contextWindow: 262_144,
     default: true,
     id: "mistral-small-2603",
@@ -723,6 +755,7 @@ export function getDefaultModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
       provider === "mistral" ||
       provider === "opencode_go") &&
@@ -741,19 +774,21 @@ export function getDefaultModel(
           ? "gemini-2.5-flash"
           : provider === "deepseek"
             ? "deepseek-v4-flash"
-            : provider === "together"
-              ? "openai/gpt-oss-120b"
-              : provider === "mistral"
-                ? "mistral-small-2603"
-                : provider === "cerebras"
-                  ? "gpt-oss-120b"
-                  : provider === "fireworks"
-                    ? "accounts/fireworks/models/kimi-k2p6"
-                    : provider === "opencode_go"
-                      ? "opencode-go/kimi-k2.7-code"
-                      : provider === "cloudflare"
-                        ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                        : "gpt-5.4";
+            : provider === "doubao"
+              ? "doubao-seed-2.1-pro"
+              : provider === "together"
+                ? "openai/gpt-oss-120b"
+                : provider === "mistral"
+                  ? "mistral-small-2603"
+                  : provider === "cerebras"
+                    ? "gpt-oss-120b"
+                    : provider === "fireworks"
+                      ? "accounts/fireworks/models/kimi-k2p6"
+                      : provider === "opencode_go"
+                        ? "opencode-go/kimi-k2.7-code"
+                        : provider === "cloudflare"
+                          ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                          : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -817,6 +852,7 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
       provider === "mistral" ||
       provider === "cerebras" ||

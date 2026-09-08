@@ -9,6 +9,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openrouter",
   "gemini",
   "deepseek",
+  "doubao",
   "mistral",
   "cerebras",
   "fireworks",
@@ -45,6 +46,7 @@ export function parseProviderName(
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "doubao" ||
     normalized === "mistral" ||
     normalized === "cerebras" ||
     normalized === "fireworks" ||
@@ -81,6 +83,8 @@ export function apiKeyEnvVarForProvider(
       return "GEMINI_API_KEY";
     case "deepseek":
       return null;
+    case "doubao":
+      return "DOUBAO_API_KEY";
     case "mistral":
       return "MISTRAL_API_KEY";
     case "cerebras":

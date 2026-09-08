@@ -49,6 +49,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "doubao" ||
     provider === "mistral" ||
     provider === "cerebras" ||
     provider === "cloudflare" ||
@@ -82,6 +83,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "doubao", label: "Doubao (Volcengine)" },
     { id: "together", label: "Together AI" },
     { id: "mistral", label: "Mistral" },
     { id: "cerebras", label: "Cerebras" },
@@ -897,6 +899,7 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
+    model.provider === "doubao" ||
     model.provider === "together" ||
     model.provider === "mistral" ||
     model.provider === "cerebras" ||
@@ -948,6 +951,7 @@ export function resolveModelVisionSupport(
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
+    model.provider === "doubao" ||
     model.provider === "together" ||
     model.provider === "mistral" ||
     model.provider === "cerebras" ||

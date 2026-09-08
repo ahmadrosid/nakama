@@ -35,6 +35,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "doubao", label: "Doubao (Volcengine)" },
   { id: "together", label: "Together AI" },
   { id: "mistral", label: "Mistral" },
   { id: "xai", label: "xAI Grok" },
@@ -184,6 +185,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "doubao" ||
     normalized === "mistral" ||
     normalized === "cerebras" ||
     normalized === "cloudflare" ||

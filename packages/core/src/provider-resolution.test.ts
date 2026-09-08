@@ -16,6 +16,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("doubao")).toBe("doubao");
     expect(parseProviderName("mistral")).toBe("mistral");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
@@ -46,6 +47,10 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("mistral uses MISTRAL_API_KEY", () => {
     expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
+  });
+
+  test("doubao uses DOUBAO_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("doubao")).toBe("DOUBAO_API_KEY");
   });
 
   test("maps Moonshot regions to distinct env keys", () => {
@@ -138,6 +143,18 @@ describe("resolveProvider mistral", () => {
   });
 });
 
+describe("resolveProvider doubao", () => {
+  test("auto-resolves Doubao when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        DOUBAO_API_KEY: "db-test",
+      },
+    });
+
+    expect(provider).toBe("doubao");
+  });
+});
+
 describe("resolveProvider cerebras", () => {
   test("auto-resolves Cerebras when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -176,6 +193,7 @@ describe("isDiscoveryModelProvider", () => {
 
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
+    expect(isDiscoveryModelProvider("doubao")).toBe(false);
     expect(isDiscoveryModelProvider("together")).toBe(false);
     expect(isDiscoveryModelProvider("mistral")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
