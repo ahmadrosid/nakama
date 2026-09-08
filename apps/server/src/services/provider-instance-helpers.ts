@@ -35,6 +35,7 @@ import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,
   getModelById,
+  getModelsForProvider,
   getModelsForProviderInstance,
   isCompatibleModelId,
   isOpenRouterModelSlug,
@@ -156,15 +157,22 @@ export function modelExistsOnInstance(
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
     instance.type === "together" ||
-    instance.type === "mistral"
+    instance.type === "mistral" ||
+    instance.type === "qwen" ||
+    instance.type === "qwen_cn"
   ) {
     if (instance.customModels?.length) {
       return findCustomModel(instance.customModels, trimmed) !== undefined;
     }
-    return Boolean(getModelById(trimmed)?.provider === instance.type);
+    // Region variants (qwen / qwen_cn) share model ids — scope by provider.
+    return getModelsForProvider(instance.type).some(
+      (model) => model.id === trimmed
+    );
   }
 
-  return Boolean(getModelById(trimmed)?.provider === instance.type);
+  return getModelsForProvider(instance.type).some(
+    (model) => model.id === trimmed
+  );
 }
 
 export function resolveDefaultModelForInstance(
@@ -356,7 +364,9 @@ export function applyProviderInstanceUpdate(
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
       instance.type === "together" ||
-      instance.type === "mistral"
+      instance.type === "mistral" ||
+      instance.type === "qwen" ||
+      instance.type === "qwen_cn"
     ) {
       next.customModels = validateCustomModels(request.customModels);
     }

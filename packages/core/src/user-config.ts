@@ -99,6 +99,8 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  qwen: "Qwen (DashScope)",
+  qwen_cn: "Qwen (DashScope CN)",
   together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",

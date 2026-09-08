@@ -25,6 +25,8 @@ function group(
     | "deepseek"
     | "together"
     | "mistral"
+    | "qwen"
+    | "qwen_cn"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -154,6 +156,29 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats qwen models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen", { supportsThinking: true })
+      )
+    ).toBe(true);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-cn-1", "model-1"),
+        group("qw-cn-1", "qwen_cn", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -255,6 +280,22 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("tg-1", "model-1"),
         group("tg-1", "together", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats qwen models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -364,6 +405,8 @@ describe("firstAvailableProviderOption", () => {
           "deepseek",
           "together",
           "mistral",
+          "qwen",
+          "qwen_cn",
           "cerebras",
           "cloudflare",
           "fireworks",

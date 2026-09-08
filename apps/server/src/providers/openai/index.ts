@@ -156,6 +156,14 @@ function providerLabel(providerName: ProviderName): string {
     return "Mistral";
   }
 
+  if (providerName === "qwen") {
+    return "Qwen (DashScope)";
+  }
+
+  if (providerName === "qwen_cn") {
+    return "Qwen (DashScope CN)";
+  }
+
   return "OpenAI";
 }
 

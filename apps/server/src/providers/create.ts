@@ -35,6 +35,10 @@ import { createXaiProvider } from "./xai-oauth";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
 const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
+const DEFAULT_QWEN_BASE_URL =
+  "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+const DEFAULT_QWEN_CN_BASE_URL =
+  "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
 export interface CreateProviderOptions {
@@ -101,6 +105,20 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_MISTRAL_BASE_URL,
         model,
         providerName: "mistral",
+      });
+    case "qwen":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_QWEN_BASE_URL,
+        model,
+        providerName: "qwen",
+      });
+    case "qwen_cn":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_QWEN_CN_BASE_URL,
+        model,
+        providerName: "qwen_cn",
       });
     case "minimax":
     case "minimax_cn":

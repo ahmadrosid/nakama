@@ -27,6 +27,8 @@ describe("parseProviderName", () => {
     expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
     expect(parseProviderName("together")).toBe("together");
+    expect(parseProviderName("qwen")).toBe("qwen");
+    expect(parseProviderName("qwen_cn")).toBe("qwen_cn");
   });
 
   test("rejects unknown values", () => {
@@ -42,6 +44,11 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("maps Together AI to its env key", () => {
     expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
+  });
+
+  test("maps Qwen regions to distinct env keys", () => {
+    expect(apiKeyEnvVarForProvider("qwen")).toBe("QWEN_API_KEY");
+    expect(apiKeyEnvVarForProvider("qwen_cn")).toBe("QWEN_CN_API_KEY");
   });
 
   test("mistral uses MISTRAL_API_KEY", () => {
@@ -126,6 +133,28 @@ describe("resolveProvider together", () => {
   });
 });
 
+describe("resolveProvider qwen", () => {
+  test("auto-resolves Qwen intl when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        QWEN_API_KEY: "qwen-test",
+      },
+    });
+
+    expect(provider).toBe("qwen");
+  });
+
+  test("auto-resolves Qwen CN when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        QWEN_CN_API_KEY: "qwen-cn-test",
+      },
+    });
+
+    expect(provider).toBe("qwen_cn");
+  });
+});
+
 describe("resolveProvider mistral", () => {
   test("auto-resolves Mistral when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -178,6 +207,8 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
     expect(isDiscoveryModelProvider("together")).toBe(false);
     expect(isDiscoveryModelProvider("mistral")).toBe(false);
+    expect(isDiscoveryModelProvider("qwen")).toBe(false);
+    expect(isDiscoveryModelProvider("qwen_cn")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
   });

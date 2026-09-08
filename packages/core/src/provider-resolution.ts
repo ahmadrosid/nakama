@@ -26,6 +26,8 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "zhipu_cn",
   "xai",
   "together",
+  "qwen",
+  "qwen_cn",
 ] as const;
 
 export {
@@ -61,7 +63,9 @@ export function parseProviderName(
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
-    normalized === "together"
+    normalized === "together" ||
+    normalized === "qwen" ||
+    normalized === "qwen_cn"
   ) {
     return normalized;
   }
@@ -116,6 +120,10 @@ export function apiKeyEnvVarForProvider(
       return "XAI_API_KEY";
     case "together":
       return "TOGETHER_API_KEY";
+    case "qwen":
+      return "QWEN_API_KEY";
+    case "qwen_cn":
+      return "QWEN_CN_API_KEY";
   }
 }
 

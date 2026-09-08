@@ -142,4 +142,120 @@ describe("createProviderForInstance routing", () => {
       mock.stop(true);
     }
   });
+
+  test("routes qwen instances to the DashScope compatible-mode path with auth", async () => {
+    let seenPath = "";
+    let seenAuth = "";
+    let seenModel = "";
+
+    const mock = Bun.serve({
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        seenPath = url.pathname;
+        seenAuth = request.headers.get("authorization") ?? "";
+        const body = (await request.json()) as { model?: string };
+        seenModel = body.model ?? "";
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { content: "ok", role: "assistant" },
+            },
+          ],
+          created: 1,
+          id: "mock",
+          model: seenModel,
+          object: "chat.completion",
+          usage: {
+            completion_tokens: 1,
+            prompt_tokens: 1,
+            total_tokens: 2,
+          },
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        baseUrl: `http://127.0.0.1:${mock.port}/compatible-mode/v1`,
+        createdAt: new Date().toISOString(),
+        id: "inst_qwen",
+        label: "Qwen (DashScope)",
+        type: "qwen",
+      };
+
+      const client = createProviderForInstance(instance, "qwen3.7-plus");
+
+      expect(client).not.toBeNull();
+      expect(client?.name).toBe("qwen");
+
+      const result = await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+      });
+
+      expect(result.content).toBe("ok");
+      expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
+      expect(seenAuth).toBe("Bearer test-key");
+      expect(seenModel).toBe("qwen3.7-plus");
+    } finally {
+      mock.stop(true);
+    }
+  });
+
+  test("routes qwen_cn instances to the DashScope CN compatible-mode path", async () => {
+    let seenPath = "";
+
+    const mock = Bun.serve({
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        seenPath = url.pathname;
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { content: "ok", role: "assistant" },
+            },
+          ],
+          created: 1,
+          id: "mock",
+          model: "qwen3.7-plus",
+          object: "chat.completion",
+          usage: {
+            completion_tokens: 1,
+            prompt_tokens: 1,
+            total_tokens: 2,
+          },
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "cn-key",
+        baseUrl: `http://127.0.0.1:${mock.port}/compatible-mode/v1`,
+        createdAt: new Date().toISOString(),
+        id: "inst_qwen_cn",
+        label: "Qwen (DashScope CN)",
+        type: "qwen_cn",
+      };
+
+      const client = createProviderForInstance(instance, "qwen3.7-plus");
+
+      expect(client).not.toBeNull();
+      expect(client?.name).toBe("qwen_cn");
+
+      await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+      });
+
+      expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
+    } finally {
+      mock.stop(true);
+    }
+  });
 });

@@ -20,6 +20,8 @@ const BUILTIN_LABELS: Record<
   openai: "OpenAI",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  qwen: "Qwen (DashScope)",
+  qwen_cn: "Qwen (DashScope CN)",
   together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",

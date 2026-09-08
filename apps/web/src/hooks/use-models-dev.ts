@@ -31,6 +31,8 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "deepseek",
   "together",
   "mistral",
+  "alibaba",
+  "qwen",
 ]);
 
 const NPM_MAP: Record<string, SelectedProvider> = {
@@ -40,10 +42,12 @@ const NPM_MAP: Record<string, SelectedProvider> = {
 };
 
 const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
+  alibaba: "qwen",
   deepseek: "deepseek",
   mistral: "mistral",
   opencode: "openai_compatible",
   openrouter: "openrouter",
+  qwen: "qwen",
   together: "together",
 };
 

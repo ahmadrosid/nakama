@@ -9,6 +9,8 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "deepseek",
   "together",
   "mistral",
+  "qwen",
+  "qwen_cn",
   "opencode_go",
 ] as const;
 

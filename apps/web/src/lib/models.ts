@@ -65,7 +65,9 @@ export function formatProviderLabel(
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
     provider === "xai" ||
-    provider === "together"
+    provider === "together" ||
+    provider === "qwen" ||
+    provider === "qwen_cn"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -84,6 +86,8 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "deepseek", label: "DeepSeek" },
     { id: "together", label: "Together AI" },
     { id: "mistral", label: "Mistral" },
+    { id: "qwen", label: "Qwen (DashScope)" },
+    { id: "qwen_cn", label: "Qwen (DashScope CN)" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
     { id: "fireworks", label: "Fireworks" },
@@ -899,6 +903,8 @@ export function resolveModelThinkingSupport(
     model.provider === "deepseek" ||
     model.provider === "together" ||
     model.provider === "mistral" ||
+    model.provider === "qwen" ||
+    model.provider === "qwen_cn" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama"
@@ -950,6 +956,8 @@ export function resolveModelVisionSupport(
     model.provider === "deepseek" ||
     model.provider === "together" ||
     model.provider === "mistral" ||
+    model.provider === "qwen" ||
+    model.provider === "qwen_cn" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||
