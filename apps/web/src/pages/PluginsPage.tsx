@@ -448,7 +448,9 @@ function PluginConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           {dialog?.type === "upload" ? (
             <DialogDescription>
-              This package can run code and read files this org can reach.
+              Trust this author with the Nakama server and your signed-in
+              browser. Plugin code is not sandboxed and can access data across
+              organizations.
             </DialogDescription>
           ) : (
             <DialogDescription className="sr-only">{title}</DialogDescription>

@@ -701,6 +701,60 @@ describe("plugin lifecycle", () => {
     expect(await db.listToolsForProfile("profile_1")).toHaveLength(1);
   });
 
+  test("purging retained data blocks reinstall until cleanup finishes", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    await service.installPluginPackage(v1Bundle());
+    const installed = await added(service, "org_a", "notes");
+    const retained = await service.uninstallOrgPlugin(
+      "org_a",
+      "notes",
+      installed.revision
+    );
+    const deleted = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const deleteOrgPlugin = db.deleteOrgPlugin.bind(db);
+    db.deleteOrgPlugin = async (...args) => {
+      const result = await deleteOrgPlugin(...args);
+      deleted.resolve();
+      await resume.promise;
+      return result;
+    };
+
+    const purging = service.deleteRetainedPluginData(
+      "org_a",
+      "notes",
+      retained.revision
+    );
+    await deleted.promise;
+    const reinstalling = new PluginService(db, configDir).addOrgPlugin(
+      "org_a",
+      "notes"
+    );
+    try {
+      // Other organizations can install while org_a's cleanup is paused.
+      await added(service, "org_b", "notes");
+      expect(await db.getOrgPlugin("org_a", "notes")).toBeNull();
+    } finally {
+      resume.resolve();
+      await Promise.all([purging, reinstalling]);
+    }
+
+    const fresh = await reinstalling;
+    await service.enableOrgPlugin("org_a", "notes", fresh.revision);
+    const written = await service.invokePluginAction({
+      access: "ui",
+      actionKey: "write",
+      actor,
+      input: { body: "after reinstall", id: "new" },
+      orgId: "org_a",
+      pluginId: "notes",
+    });
+    expect(written.result).toMatchObject({
+      rows: [{ body: "after reinstall", id: "new" }],
+    });
+  });
+
   test("reinstall from retained rejects a schema downgrade", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);

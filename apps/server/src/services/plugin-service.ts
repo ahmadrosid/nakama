@@ -107,6 +107,7 @@ interface InspectedPackage {
 }
 
 const installLocks = new Map<string, Promise<unknown>>();
+const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
 const PLUGIN_RUNNER_PATH = fileURLToPath(
   new URL("./plugin-runner.js", import.meta.url)
@@ -540,7 +541,7 @@ export class PluginService {
     pluginId: string,
     version?: string
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const existing = await this.db.getOrgPlugin(orgId, pluginId);
       const release = await this.resolveApprovedRelease(pluginId, version);
       if (!release) {
@@ -592,7 +593,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -711,7 +712,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -758,7 +759,7 @@ export class PluginService {
     targetVersion: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -870,7 +871,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<StoredOrgPluginRecord> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -901,7 +902,7 @@ export class PluginService {
     pluginId: string,
     expectedRevision: number
   ): Promise<void> {
-    return withPluginMutation(async () => {
+    return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
@@ -1317,6 +1318,22 @@ export class PluginService {
       },
       workspaceRoot: input.context.workspaceRoot,
     });
+  }
+
+  private withOrgPluginMutation<T>(
+    orgId: string,
+    pluginId: string,
+    work: () => Promise<T>
+  ): Promise<T> {
+    // Keep the lock through filesystem cleanup, after revision checks can no
+    // longer protect an installation whose database record has been deleted.
+    return withPluginMutation(() =>
+      withKeyedLock(
+        lifecycleLocks,
+        getOrgPluginDataDir(orgId, pluginId, this.configDir),
+        work
+      )
+    );
   }
 
   private openPluginAdmission(orgId: string, pluginId: string): void {
