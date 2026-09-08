@@ -849,7 +849,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
       for (const table of ["automations", "workflows"]) {
         db.query(
-          `UPDATE ${table} SET org_id = ?, enabled = 0, definition = json_set(definition, '$.enabled', json('false')), updated_at = ? WHERE profile_id = ?`
+          `UPDATE ${table} SET org_id = ?, enabled = 0, updated_at = ? WHERE profile_id = ?`
         ).run(targetOrgId, now, profileId);
       }
       db.query(
