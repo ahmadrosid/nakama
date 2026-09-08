@@ -131,12 +131,9 @@ export function SetupStepUserContext({
               </li>
             ))}
           </ol>
-          <div className="space-y-0.5">
-            <h2 className="font-semibold text-base text-foreground">
-              {section.title}
-            </h2>
-            <p className="text-muted-foreground text-sm">{section.subtitle}</p>
-          </div>
+          <h2 className="font-semibold text-base text-foreground">
+            {section.title}
+          </h2>
         </div>
 
         {isLoading ? (

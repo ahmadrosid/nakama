@@ -67,7 +67,6 @@ function splitList(raw: string): string[] {
 function AnswerInput({
   answers,
   disabled,
-  hint,
   idPrefix,
   fieldKey,
   placeholder,
@@ -76,7 +75,6 @@ function AnswerInput({
   answers: UserContextAnswers;
   disabled: boolean;
   fieldKey: string;
-  hint?: string;
   idPrefix: string;
   placeholder?: string;
   setAnswer: (key: string, next: string) => void;
@@ -85,14 +83,7 @@ function AnswerInput({
   const inputId = `${idPrefix}-${field.key}`;
 
   return (
-    <FormField
-      density="compact"
-      footer={
-        hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null
-      }
-      id={inputId}
-      label={field.label}
-    >
+    <FormField density="compact" id={inputId} label={field.label}>
       <Input
         autoComplete="off"
         disabled={disabled}
@@ -197,7 +188,6 @@ function AboutSection({ value, onChange, disabled, idPrefix }: SectionProps) {
         answers={answers}
         disabled={disabled}
         fieldKey="name"
-        hint="How Nakama should address you."
         idPrefix={idPrefix}
         setAnswer={setAnswer}
       />
@@ -226,9 +216,6 @@ function AboutSection({ value, onChange, disabled, idPrefix }: SectionProps) {
               <span className="font-medium text-foreground text-sm leading-tight">
                 {preset.label}
               </span>
-              <span className="text-muted-foreground text-xs leading-snug">
-                {preset.hint}
-              </span>
             </ChoiceCard>
           ))}
 
@@ -247,9 +234,6 @@ function AboutSection({ value, onChange, disabled, idPrefix }: SectionProps) {
             </span>
             <span className="font-medium text-foreground text-sm leading-tight">
               Something else
-            </span>
-            <span className="text-muted-foreground text-xs leading-snug">
-              Say it in your own words.
             </span>
           </ChoiceCard>
         </div>
@@ -294,7 +278,6 @@ function WorkSection({ value, onChange, disabled, idPrefix }: SectionProps) {
         answers={answers}
         disabled={disabled}
         fieldKey="projects"
-        hint="Nakama keeps this in mind so you do not have to re-explain it every chat."
         idPrefix={idPrefix}
         placeholder={hints.projects}
         setAnswer={setAnswer}
@@ -305,7 +288,6 @@ function WorkSection({ value, onChange, disabled, idPrefix }: SectionProps) {
           answers={answers}
           disabled={disabled}
           fieldKey="stack"
-          hint={hints.stackHint}
           idPrefix={idPrefix}
           placeholder={hints.stack}
           setAnswer={setAnswer}
@@ -418,16 +400,17 @@ function StyleSection({ value, onChange, disabled, idPrefix }: SectionProps) {
             value={knownLanguage ? "" : language}
           />
         ) : null}
-        <p className="text-muted-foreground text-xs">
-          Saved as an Always rule, so it applies on every channel.
-        </p>
       </div>
 
       <div className="space-y-2">
         <p className="font-medium text-foreground text-sm">Length</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group">
+        <div
+          aria-label="Length"
+          className="flex flex-wrap gap-1.5"
+          role="group"
+        >
           {REPLY_LENGTH.map((option) => (
-            <ChoiceCard
+            <Chip
               disabled={disabled}
               key={option.value}
               onClick={() =>
@@ -438,22 +421,17 @@ function StyleSection({ value, onChange, disabled, idPrefix }: SectionProps) {
               }
               selected={length?.value === option.value}
             >
-              <span className="font-medium text-foreground text-sm">
-                {option.label}
-              </span>
-              <span className="text-muted-foreground text-xs italic leading-snug">
-                "{option.example}"
-              </span>
-            </ChoiceCard>
+              {option.label}
+            </Chip>
           ))}
         </div>
       </div>
 
       <div className="space-y-2">
         <p className="font-medium text-foreground text-sm">Tone</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group">
+        <div aria-label="Tone" className="flex flex-wrap gap-1.5" role="group">
           {REPLY_TONE.map((option) => (
-            <ChoiceCard
+            <Chip
               disabled={disabled}
               key={option.value}
               onClick={() =>
@@ -464,13 +442,8 @@ function StyleSection({ value, onChange, disabled, idPrefix }: SectionProps) {
               }
               selected={tone?.value === option.value}
             >
-              <span className="font-medium text-foreground text-sm">
-                {option.label}
-              </span>
-              <span className="text-muted-foreground text-xs italic leading-snug">
-                "{option.example}"
-              </span>
-            </ChoiceCard>
+              {option.label}
+            </Chip>
           ))}
         </div>
       </div>
@@ -495,11 +468,6 @@ function StyleSection({ value, onChange, disabled, idPrefix }: SectionProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField
           density="compact"
-          footer={
-            <p className="text-muted-foreground text-xs">
-              A rule for every reply, on top of the language above.
-            </p>
-          }
           id={`${idPrefix}-always`}
           label={fieldByKey("always").label}
         >
@@ -518,7 +486,6 @@ function StyleSection({ value, onChange, disabled, idPrefix }: SectionProps) {
           answers={answers}
           disabled={disabled}
           fieldKey="never"
-          hint="A line Nakama should not cross."
           idPrefix={idPrefix}
           setAnswer={setAnswer}
         />
@@ -532,32 +499,15 @@ function StyleSection({ value, onChange, disabled, idPrefix }: SectionProps) {
 /* ------------------------------------------------------------------ */
 
 function ReviewSection({ value, onChange, disabled }: SectionProps) {
-  const { answers } = parseUserContext(value);
-  const name = answers.name?.trim();
-  const empty = value.trim() === "";
-
   return (
-    <div className="space-y-3">
-      <p className="text-muted-foreground text-sm">
-        {name ? `Nice to meet you, ${name}. ` : ""}
-        This is the exact text Nakama reads at the start of every chat, on every
-        channel. Edit it freely.
-      </p>
-      <Textarea
-        aria-label="USER.md content"
-        className="min-h-48 font-mono text-sm"
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Nothing yet. Go back and pick a role, or skip for now."
-        value={value}
-      />
-      {empty ? null : (
-        <p className="text-muted-foreground text-xs">
-          Notes you add outside the bullets are kept when you use the guided
-          steps again.
-        </p>
-      )}
-    </div>
+    <Textarea
+      aria-label="USER.md content"
+      className="min-h-48 font-mono text-sm"
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder="Nothing yet."
+      value={value}
+    />
   );
 }
 
@@ -639,25 +589,21 @@ export const USER_CONTEXT_SECTIONS = [
   {
     Component: AboutSection,
     id: "about",
-    subtitle: "Nakama adjusts depth and vocabulary to who is asking.",
     title: "What do you do?",
   },
   {
     Component: WorkSection,
     id: "work",
-    subtitle: "So answers land in your context, not a generic one.",
     title: "What are you working on?",
   },
   {
     Component: StyleSection,
     id: "style",
-    subtitle: "Pick what you actually want to read, every time.",
     title: "How should replies sound?",
   },
   {
     Component: ReviewSection,
     id: "review",
-    subtitle: "Plain Markdown, saved for this organization.",
     title: "What Nakama will remember",
   },
 ] as const;
@@ -698,12 +644,9 @@ export function UserContextForm({
     <div className="space-y-6">
       {questionSections.map((section) => (
         <section className="space-y-3" key={section.id}>
-          <div className="space-y-0.5">
-            <h3 className="font-medium text-foreground text-sm">
-              {section.title}
-            </h3>
-            <p className="text-muted-foreground text-xs">{section.subtitle}</p>
-          </div>
+          <h3 className="font-medium text-foreground text-sm">
+            {section.title}
+          </h3>
           <section.Component
             disabled={disabled}
             idPrefix={idPrefix}

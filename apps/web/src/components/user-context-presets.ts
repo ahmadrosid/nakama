@@ -24,57 +24,46 @@ import {
 
 export const ROLE_PRESETS = [
   {
-    hint: "Code first, fewer basics explained.",
     Icon: SourceCodeIcon,
     label: "Software engineer",
   },
   {
-    hint: "Thinks in flows, components, and copy.",
     Icon: PaintBrush01Icon,
     label: "Designer",
   },
   {
-    hint: "Frames answers as tradeoffs and user impact.",
     Icon: Target01Icon,
     label: "Product manager",
   },
   {
-    hint: "Short summaries, decisions, next steps.",
     Icon: Briefcase01Icon,
     label: "Founder / Leader",
   },
   {
-    hint: "Comfortable with stats, notebooks, pipelines.",
     Icon: ChartLineData01Icon,
     label: "Data / ML",
   },
   {
-    hint: "Assumes shell, infra, and incident context.",
     Icon: CloudServerIcon,
     label: "DevOps / SRE",
   },
   {
-    hint: "Audience, message, and channel come first.",
     Icon: Megaphone01Icon,
     label: "Marketing",
   },
   {
-    hint: "Customer-ready wording you can paste.",
     Icon: MoneyBag01Icon,
     label: "Sales / Customer success",
   },
   {
-    hint: "Step by step, checklist friendly.",
     Icon: CustomerSupportIcon,
     label: "Support / Operations",
   },
   {
-    hint: "Explains the why, not just the what.",
     Icon: Mortarboard01Icon,
     label: "Student / Researcher",
   },
   {
-    hint: "Cares about voice, structure, clarity.",
     Icon: QuillWrite01Icon,
     label: "Writer / Content",
   },
@@ -92,14 +81,12 @@ interface WorkHints {
   chips: readonly string[];
   projects: string;
   stack: string;
-  stackHint: string;
 }
 
 const GENERIC_WORK: WorkHints = {
   chips: ["Notion", "Google Workspace", "Slack", "Excel", "Figma", "Python"],
   projects: "What you are spending most of your week on",
   stack: "The tools and languages you actually use",
-  stackHint: "Tools count too. Examples come back in these.",
 };
 
 const WORK_BY_ROLE: Record<string, WorkHints> = {
@@ -116,7 +103,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Churn model for the growth team",
     stack: "Python, SQL, dbt",
-    stackHint: "Snippets come back in these, not in something random.",
   },
   Designer: {
     chips: [
@@ -130,7 +116,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Redesigning the onboarding flow",
     stack: "Figma, Framer, Tailwind",
-    stackHint: "Design tools and any frontend stack you hand off to.",
   },
   "DevOps / SRE": {
     chips: [
@@ -146,7 +131,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Moving the cluster to Kubernetes without downtime",
     stack: "Kubernetes, Terraform, AWS",
-    stackHint: "Commands and manifests come back for this stack.",
   },
   "Founder / Leader": {
     chips: [
@@ -159,7 +143,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Closing the seed round, hiring the first engineers",
     stack: "Notion, Slack, Stripe",
-    stackHint: "The tools your team lives in.",
   },
   Marketing: {
     chips: [
@@ -173,7 +156,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Launch campaign for the new pricing",
     stack: "HubSpot, Google Analytics, Canva",
-    stackHint: "Channels and tools. Drafts land in the right format.",
   },
   "Product manager": {
     chips: [
@@ -187,7 +169,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Q3 roadmap for the payments team",
     stack: "Linear, Figma, Amplitude",
-    stackHint: "Where specs, tickets, and metrics live.",
   },
   "Sales / Customer success": {
     chips: [
@@ -200,7 +181,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Closing the Q3 enterprise pipeline",
     stack: "Salesforce, Gong, Sheets",
-    stackHint: "CRM and outreach tools, so drafts fit your workflow.",
   },
   "Software engineer": {
     chips: [
@@ -218,20 +198,16 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Moving the billing API off the monolith",
     stack: "Go, Postgres, Kubernetes",
-    stackHint:
-      "Examples come back in these languages, not in something random.",
   },
   "Student / Researcher": {
     chips: ["Python", "R", "LaTeX", "Zotero", "Jupyter", "MATLAB", "Excel"],
     projects: "Thesis on urban air quality sensors",
     stack: "Python, LaTeX, Zotero",
-    stackHint: "Tools you write and analyse with.",
   },
   "Support / Operations": {
     chips: ["Zendesk", "Intercom", "Freshdesk", "Notion", "Sheets", "Zapier"],
     projects: "Cutting first-response time in half",
     stack: "Zendesk, Notion, Zapier",
-    stackHint: "Helpdesk and ops tools. Macros and steps match them.",
   },
   "Writer / Content": {
     chips: [
@@ -244,7 +220,6 @@ const WORK_BY_ROLE: Record<string, WorkHints> = {
     ],
     projects: "Weekly newsletter and the product docs refresh",
     stack: "Google Docs, WordPress, Substack",
-    stackHint: "Where drafts live and get published.",
   },
 };
 
@@ -258,13 +233,10 @@ export function workHintsForRole(role: string): WorkHints {
 
 export const REPLY_LENGTH = [
   {
-    example: "Use PUT /v1/user/context with { content }. Done.",
     label: "Concise",
     value: "concise",
   },
   {
-    example:
-      "There are two ways to do this. PUT replaces the whole file, which matters because...",
     label: "Detailed",
     value: "detailed",
   },
@@ -272,12 +244,10 @@ export const REPLY_LENGTH = [
 
 export const REPLY_TONE = [
   {
-    example: "Yep, that works. One gotcha though:",
     label: "Casual",
     value: "casual",
   },
   {
-    example: "This approach is viable. One caveat applies:",
     label: "Formal",
     value: "formal",
   },
