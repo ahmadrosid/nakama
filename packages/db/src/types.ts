@@ -582,6 +582,8 @@ export interface DatabaseAdapter {
     organization: StoredOrganizationRecord;
     user: StoredUserRecord;
   }): Promise<boolean>;
+  /** Verify the live connection can read the migrated schema. */
+  checkHealth(): Promise<void>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(

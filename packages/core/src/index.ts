@@ -77,6 +77,7 @@ export * from "./ids";
 export * from "./image-content";
 export * from "./knowledge-base";
 export * from "./local-auth";
+export { log } from "./logger";
 export { createImapReader } from "./mail/imap-reader";
 export { createSmtpSender } from "./mail/smtp-sender";
 export * from "./message-content";
