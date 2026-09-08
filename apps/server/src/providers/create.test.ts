@@ -147,14 +147,19 @@ describe("createProviderForInstance routing", () => {
     let seenPath = "";
     let seenAuth = "";
     let seenModel = "";
+    let seenEnableThinking: unknown;
 
     const mock = Bun.serve({
       fetch: async (request) => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        const body = (await request.json()) as { model?: string };
+        const body = (await request.json()) as {
+          enable_thinking?: unknown;
+          model?: string;
+        };
         seenModel = body.model ?? "";
+        seenEnableThinking = body.enable_thinking;
         return Response.json({
           choices: [
             {
@@ -194,12 +199,14 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        providerOptions: { thinking: { effort: "medium", enabled: true } },
       });
 
       expect(result.content).toBe("ok");
       expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
       expect(seenAuth).toBe("Bearer test-key");
       expect(seenModel).toBe("qwen3.7-plus");
+      expect(seenEnableThinking).toBe(true);
     } finally {
       mock.stop(true);
     }

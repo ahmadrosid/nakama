@@ -368,7 +368,9 @@ async function buildChatCompletionRequestBody(options: {
     ),
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
-      : {}),
+      : provider === "qwen" || provider === "qwen_cn"
+        ? buildQwenThinkingBody(options.thinking)
+        : {}),
     ...(hasTools
       ? {
           tool_choice: "auto",
@@ -401,6 +403,20 @@ function buildDeepSeekThinkingBody(
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
   };
+}
+
+function buildQwenThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled === false) {
+    return { enable_thinking: false };
+  }
+
+  if (!thinking?.enabled) {
+    return {};
+  }
+
+  return { enable_thinking: true };
 }
 
 function readReasoningContent(
