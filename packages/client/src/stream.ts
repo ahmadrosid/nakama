@@ -131,6 +131,10 @@ export async function readStreamEvents(
         handlers.onQuestionnaireUpdated?.(payload.questionnaire);
       }
 
+      if (payload.type === "usage") {
+        handlers.onUsage?.(payload.usage);
+      }
+
       if (payload.type === "done") {
         if (payload.contextUsage) {
           handlers.onContextUsage?.(payload.contextUsage);

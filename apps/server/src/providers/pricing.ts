@@ -56,7 +56,27 @@ function getCustomModelPricing(
   return null;
 }
 
-export function getModelPricing(
+/** Providers whose rates only ever come from what the user typed in. */
+const USER_PRICED_PROVIDERS = new Set<ProviderName>([
+  "cerebras",
+  "fireworks",
+  "ollama",
+  "openai_compatible",
+  "openrouter",
+]);
+
+function isUserPriced(context: PricingContext): boolean {
+  const provider = context.provider ?? context.providerInstance?.type ?? null;
+  return provider !== null && USER_PRICED_PROVIDERS.has(provider);
+}
+
+/**
+ * Rates somebody actually published for this model: the image table, the
+ * catalog entry, or what the user typed for a custom model. Null when the only
+ * number available would be DEFAULT_PRICING, so a caller that shows money to a
+ * user can tell a real rate from a house guess.
+ */
+export function getExplicitModelPricing(
   modelId: string,
   context: PricingContext = {}
 ): ModelPricing | null {
@@ -65,15 +85,7 @@ export function getModelPricing(
     return imagePricing;
   }
 
-  const provider = context.provider ?? context.providerInstance?.type ?? null;
-
-  if (
-    provider === "openai_compatible" ||
-    provider === "openrouter" ||
-    provider === "cerebras" ||
-    provider === "fireworks" ||
-    provider === "ollama"
-  ) {
+  if (isUserPriced(context)) {
     return getCustomModelPricing(modelId, context);
   }
 
@@ -89,7 +101,20 @@ export function getModelPricing(
     };
   }
 
-  return DEFAULT_PRICING;
+  return null;
+}
+
+export function getModelPricing(
+  modelId: string,
+  context: PricingContext = {}
+): ModelPricing | null {
+  const explicit = getExplicitModelPricing(modelId, context);
+
+  if (explicit) {
+    return explicit;
+  }
+
+  return isUserPriced(context) ? null : DEFAULT_PRICING;
 }
 
 export function estimateUsageCostUsd(

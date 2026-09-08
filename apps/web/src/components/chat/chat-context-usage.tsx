@@ -1,3 +1,4 @@
+import type { ChatUsage } from "@nakama/core/contract";
 import {
   Tooltip,
   TooltipContent,
@@ -8,6 +9,7 @@ import {
   contextUsageRatio,
   formatContextUsageLabel,
 } from "@/lib/chat-context-usage";
+import { formatChatUsage } from "@/lib/chat-usage";
 import { cn } from "@/lib/utils";
 
 /** Match BrainIcon / select chevron visual weight in the composer toolbar. */
@@ -28,9 +30,12 @@ function progressStrokeClass(ratio: number): string {
 
 export function ChatContextUsageRing({
   usage,
+  sessionUsage,
   className,
 }: {
   usage: ChatContextUsage;
+  /** Session token total, folded in here rather than shown beside the ring. */
+  sessionUsage?: ChatUsage | null;
   className?: string;
 }) {
   const ratio = contextUsageRatio(usage);
@@ -38,13 +43,16 @@ export function ChatContextUsageRing({
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - ratio);
   const label = formatContextUsageLabel(usage);
+  const sessionLabel = sessionUsage
+    ? `Session · ${formatChatUsage(sessionUsage)}`
+    : null;
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <button
-            aria-label={label}
+            aria-label={sessionLabel ? `${label} · ${sessionLabel}` : label}
             className={cn(
               "inline-flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               className
@@ -84,8 +92,14 @@ export function ChatContextUsageRing({
           </button>
         }
       />
-      <TooltipContent className="text-xs" side="top">
-        {label}
+      <TooltipContent
+        className="flex-col items-start gap-0.5 text-xs"
+        side="top"
+      >
+        <span>{label}</span>
+        {sessionLabel ? (
+          <span className="text-background/70">{sessionLabel}</span>
+        ) : null}
       </TooltipContent>
     </Tooltip>
   );

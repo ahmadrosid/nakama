@@ -1067,6 +1067,7 @@ export type StreamEvent =
       parentToolCallId: string;
       label: string;
     }
+  | { type: "usage"; usage: ChatUsage }
   | { type: "done"; reply: string; contextUsage?: ChatContextUsage }
   | { type: "error"; error: string };
 
@@ -2299,20 +2300,26 @@ export type ChatMessage =
       toolCalls?: ToolCall[];
       /** Provider-specific assistant payload for multi-turn replay (Anthropic blocks, OpenAI response items). */
       providerContent?: unknown[];
+      /** Tokens and estimated cost of the LLM call that produced this message. */
+      usage?: ChatUsage;
     }
   | { role: "tool"; toolCallId: string; name: string; content: string };
+
+export interface ChatUsage {
+  /** Absent when the model has no known pricing. */
+  costUsd?: number;
+  /** True when input/output tokens were estimated rather than reported by the provider. */
+  estimated?: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
 
 export interface ChatCompletionResult {
   assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
   content: string;
   toolCalls: ToolCall[];
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    /** True when input/output tokens were estimated rather than reported by the provider. */
-    estimated?: boolean;
-  };
+  usage?: ChatUsage;
 }
 
 export interface GenerateTextResult {

@@ -1,11 +1,14 @@
 import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
+import { useMemo } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
+import { sumChatUsage } from "@/lib/chat-usage";
 import { extractModelId } from "@/lib/models";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
@@ -56,6 +59,11 @@ export function ChatPageContent(state: ChatPageState) {
     agentQuestionnaire,
   } = state;
 
+  const { visible: showUsage } = useChatUsageVisible();
+  const sessionUsage = useMemo(
+    () => (showUsage ? sumChatUsage(messages) : undefined),
+    [messages, showUsage]
+  );
   const { banner: skillReviewBanner } = usePostTurnSkillReviewOverlay({
     lastSuccessfulTurnAt,
     profile: activeProfile,
@@ -113,6 +121,7 @@ export function ChatPageContent(state: ChatPageState) {
         questionnaire={agentQuestionnaire}
         queuedMessages={queuedMessages}
         renderModelLabel={renderModelLabel}
+        sessionUsage={sessionUsage}
         showOfflineHint={showOfflineHint}
         showTips={isEmptyState}
         thinkingEffort={thinkingEffort}
@@ -160,6 +169,7 @@ export function ChatPageContent(state: ChatPageState) {
               onRetryMessage={(message) => void handleTryAgainMessage(message)}
               profileId={profileId}
               showThinking={showThinking}
+              showUsage={showUsage}
               streamActive={busy}
               turnStartedAt={turnStartedAt}
             />

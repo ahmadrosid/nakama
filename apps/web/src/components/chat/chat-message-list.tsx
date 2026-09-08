@@ -1,3 +1,4 @@
+import type { ChatUsage } from "@nakama/core/contract";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -26,6 +27,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import { AssistantTurnSegmentView } from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
+import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,7 @@ import {
   turnKey,
 } from "@/lib/chat-message-turns";
 import { awaitingModelLabel, isAwaitingModelResponse } from "@/lib/chat-stream";
+import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
 import { cn } from "@/lib/utils";
@@ -109,6 +112,8 @@ interface ChatMessageListProps {
   onRetryMessage?: (message: ChatListItem) => void;
   profileId?: string | null;
   showThinking?: boolean;
+  /** Show tokens and estimated cost under each completed assistant turn. */
+  showUsage?: boolean;
   /** True while the assistant reply SSE stream is in flight. */
   streamActive?: boolean;
   turnStartedAt?: string | null;
@@ -123,6 +128,7 @@ function ChatMessageListSession({
   messages,
   profileId,
   showThinking = true,
+  showUsage = false,
   modelLabel,
   branchingMessageId,
   actionsDisabled = false,
@@ -271,6 +277,7 @@ function ChatMessageListSession({
               turnIndex === turns.length - 1 && awaitingLabel === "Working…"
             }
             showThinking={showThinking}
+            showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
           />
@@ -342,6 +349,7 @@ function AssistantTurn({
   messages,
   profileId,
   showThinking,
+  showUsage = false,
   modelLabel,
   branchingMessageId,
   actionsDisabled,
@@ -354,6 +362,7 @@ function AssistantTurn({
   messages: IndexedMessage[];
   profileId?: string | null;
   showThinking: boolean;
+  showUsage?: boolean;
   modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
@@ -378,6 +387,7 @@ function AssistantTurn({
     !anchorMessage.failed;
   const retryDisabled =
     actionsDisabled || branchingMessageId === anchorMessage?.id;
+  const turnUsage = showUsage ? sumChatUsage(turnMessages) : undefined;
 
   return (
     <div className="group mr-auto ml-0 flex w-full max-w-full flex-col items-start justify-start gap-3">
@@ -421,6 +431,7 @@ function AssistantTurn({
           message={anchorMessage}
           onBranchMessage={onBranchMessage}
           onRetryMessage={onRetryMessage}
+          usage={turnUsage}
         />
       ) : null}
     </div>
@@ -594,6 +605,7 @@ function AssistantMessageActions({
   actionsDisabled = false,
   onBranchMessage,
   onRetryMessage,
+  usage,
 }: {
   message: ChatListItem;
   copyContent: string;
@@ -601,6 +613,7 @@ function AssistantMessageActions({
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  usage?: ChatUsage;
 }) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -702,6 +715,7 @@ function AssistantMessageActions({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
+      {usage ? <ChatUsageBadge className="ml-1" usage={usage} /> : null}
     </div>
   );
 }

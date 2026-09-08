@@ -12,6 +12,7 @@ import {
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
+  validateCustomModelsInput,
 } from "./models";
 
 function group(
@@ -445,5 +446,22 @@ describe("hasOpenCodeZenProvider", () => {
         { baseUrl: "https://opencode.ai/zen/go/v1", type: "opencode_go" },
       ])
     ).toBe(false);
+  });
+});
+
+describe("validateCustomModelsInput", () => {
+  test("requires both $/1M rates or neither", () => {
+    expect(
+      validateCustomModelsInput([{ id: "m", inputPerMillionUsd: 1 }])
+    ).toContain("both input and output");
+    expect(
+      validateCustomModelsInput([
+        { id: "m", inputPerMillionUsd: 1, outputPerMillionUsd: 3 },
+      ])
+    ).toBeNull();
+    expect(validateCustomModelsInput([{ id: "m" }])).toBeNull();
+    expect(validateCustomModelsInput([{ id: " " }])).toBe(
+      "Add at least one model."
+    );
   });
 });

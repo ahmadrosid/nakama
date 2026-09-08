@@ -4,6 +4,7 @@ import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
   AgentTodo,
+  ChatUsage,
   ProviderModelOption,
   SkillSummary,
   ThinkingEffort,
@@ -140,6 +141,8 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
     models: ProviderModelOption[];
   }>;
   renderModelLabel: (selection: string | null) => string | null;
+  /** Tokens and cost of the whole session; hidden by the Settings toggle. */
+  sessionUsage?: ChatUsage | null;
   showOfflineHint?: boolean;
   showTips?: boolean;
   thinkingEffort?: ThinkingEffort;
@@ -776,7 +779,10 @@ function ChatComposerFullFooter({
         role="toolbar"
       >
         {props.contextUsage ? (
-          <ChatContextUsageRing usage={props.contextUsage} />
+          <ChatContextUsageRing
+            sessionUsage={props.sessionUsage}
+            usage={props.contextUsage}
+          />
         ) : null}
 
         {props.providerConfigured ? (
