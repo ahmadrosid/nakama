@@ -100,6 +100,7 @@ import type {
   MarkAutomationRunsReadResponse,
   McpServerResponse,
   ModelsResponse,
+  MoveProfileRequest,
   NotificationDestinationSummary,
   NotificationDestinationWithSecret,
   OrganizationResponse,
@@ -209,6 +210,9 @@ import type {
   WorkerLogsResponse,
   WorkflowResponse,
   WorkflowSqliteInspectResponse,
+  XaiOAuthDeviceCompleteRequest,
+  XaiOAuthDeviceCompleteResponse,
+  XaiOAuthDeviceStartResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
@@ -570,6 +574,26 @@ export class NakamaClient {
     );
   }
 
+  async startXaiOAuthDevice(): Promise<XaiOAuthDeviceStartResponse> {
+    return this.request<XaiOAuthDeviceStartResponse>(
+      "/v1/xai-oauth/device/start",
+      { method: "POST" }
+    );
+  }
+
+  async completeXaiOAuthDevice(
+    request: XaiOAuthDeviceCompleteRequest,
+    signal?: AbortSignal
+  ): Promise<XaiOAuthDeviceCompleteResponse> {
+    return this.request<XaiOAuthDeviceCompleteResponse>(
+      "/v1/xai-oauth/device/complete",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+        signal,
+      }
+    );
+  }
   async startChatgptOAuthDevice(): Promise<ChatgptOAuthDeviceStartResponse> {
     return this.request<ChatgptOAuthDeviceStartResponse>(
       "/v1/chatgpt-oauth/device/start",
@@ -746,6 +770,19 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "PUT",
+      }
+    );
+  }
+
+  async moveProfile(
+    profileId: string,
+    request: MoveProfileRequest
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/move`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
       }
     );
   }

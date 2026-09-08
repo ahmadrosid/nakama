@@ -380,14 +380,3 @@ export function redactSpawnEnvForPrompt(
 
   return redacted;
 }
-
-export function redactSpawnEnvForApi(
-  env: Record<string, string>,
-  options: { includeSecrets: boolean }
-): Record<string, string> {
-  if (options.includeSecrets) {
-    return { ...env };
-  }
-
-  return redactSpawnEnvForPrompt(env);
-}

@@ -1,267 +1,135 @@
 import { expect, test } from "bun:test";
-import { AGENT_CHANNELS } from "@nakama/core";
+import { AGENT_CHANNELS, type ToolDefinition } from "@nakama/core";
 import { buildChatSystemPrompt } from "./chat-prompt";
 
-test("buildChatSystemPrompt includes automation skill pointer when create_automation is available", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Create automations",
-        name: "create_automation",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
+function tool(name: string): ToolDefinition {
+  return {
+    description: name,
+    name,
+    parameters: { properties: {}, type: "object" },
+  };
+}
 
-  expect(prompt).toContain("create-automation skill");
-  expect(prompt).not.toContain("5-field cron syntax");
-  expect(prompt).not.toContain("runAt");
+function prompt(
+  tools: string[],
+  options: Parameters<typeof buildChatSystemPrompt>[1] = {}
+) {
+  return buildChatSystemPrompt(tools.map(tool), {
+    enableToolLoop: true,
+    ...options,
+  });
+}
+
+test("buildChatSystemPrompt includes automation skill pointer when create_automation is available", () => {
+  const text = prompt(["create_automation"]);
+
+  expect(text).toContain("create-automation skill");
+  expect(text).not.toContain("5-field cron syntax");
+  expect(text).not.toContain("runAt");
 });
 
 test("buildChatSystemPrompt includes workflow tool pointer when list_workflows is available", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "List workflows",
-        name: "list_workflows",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
+  const text = prompt(["list_workflows"]);
 
-  expect(prompt).toContain("list_workflows");
-  expect(prompt).toContain("create-workflow skill");
-  expect(prompt).toContain("Never invent or edit a workflow id");
+  expect(text).toContain("list_workflows");
+  expect(text).toContain("create-workflow skill");
+  expect(text).toContain("Never invent or edit a workflow id");
 });
 
-test("buildChatSystemPrompt omits workflow guidance when list_workflows is unavailable", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Write",
-        name: "write_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
+test("buildChatSystemPrompt omits gated guidance for write_file-only sessions", () => {
+  const text = prompt(["write_file"]);
 
-  expect(prompt).not.toContain("list_workflows");
-  expect(prompt).not.toContain("create-workflow skill");
-});
-
-test("buildChatSystemPrompt omits automation guidance when create_automation is unavailable", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Write",
-        name: "write_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
-
-  expect(prompt).not.toContain("create-automation skill");
-  expect(prompt).not.toContain("5-field cron syntax");
-});
-
-test("buildChatSystemPrompt omits skill crystallization nudge when skill_manage is unavailable", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Write",
-        name: "write_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
-
-  expect(prompt).not.toContain("skill_manage");
+  expect(text).not.toContain("list_workflows");
+  expect(text).not.toContain("create-workflow skill");
+  expect(text).not.toContain("create-automation skill");
+  expect(text).not.toContain("5-field cron syntax");
+  expect(text).not.toContain("skill_manage");
+  expect(text).not.toContain("update-profile-memory skill");
+  expect(text).not.toContain("archive-profile-memory skill");
+  expect(text).not.toContain("update_profile_memory");
+  expect(text).toContain("save-artifact skill");
+  expect(text).not.toContain("save_artifact");
 });
 
 test("buildChatSystemPrompt includes /learn recognition when skill_manage is available", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Manage skills",
-        name: "skill_manage",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
+  const text = prompt(["skill_manage"]);
 
-  expect(prompt).toContain("skill_manage");
-  expect(prompt).toContain("[/learn]");
+  expect(text).toContain("skill_manage");
+  expect(text).toContain("[/learn]");
 });
 
 test("buildChatSystemPrompt includes memory skill pointers when file tools are available", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Read files",
-        name: "read_file",
-        parameters: { properties: {}, type: "object" },
-      },
-      {
-        description: "Edit files",
-        name: "edit_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
+  const text = prompt(["read_file", "edit_file"]);
 
-  expect(prompt).toContain("update-profile-memory skill");
-  expect(prompt).toContain("archive-profile-memory skill");
-  expect(prompt).not.toContain("update_profile_memory");
-});
-
-test("buildChatSystemPrompt omits memory guidance when file tools are unavailable", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Write",
-        name: "write_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
-
-  expect(prompt).not.toContain("update-profile-memory skill");
-  expect(prompt).not.toContain("archive-profile-memory skill");
-  expect(prompt).not.toContain("update_profile_memory");
-});
-
-test("buildChatSystemPrompt includes artifact skill pointer when write_file is available", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Write",
-        name: "write_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
-
-  expect(prompt).toContain("save-artifact skill");
-  expect(prompt).not.toContain("save_artifact");
+  expect(text).toContain("update-profile-memory skill");
+  expect(text).toContain("archive-profile-memory skill");
+  expect(text).not.toContain("update_profile_memory");
 });
 
 test("buildChatSystemPrompt omits artifact guidance when write_file is unavailable", () => {
-  const prompt = buildChatSystemPrompt(
-    [
-      {
-        description: "Read",
-        name: "read_file",
-        parameters: { properties: {}, type: "object" },
-      },
-    ],
-    { enableToolLoop: true }
-  );
+  const text = prompt(["read_file"]);
 
-  expect(prompt).not.toContain("save-artifact skill");
-  expect(prompt).not.toContain("save_artifact");
+  expect(text).not.toContain("save-artifact skill");
+  expect(text).not.toContain("save_artifact");
 });
 
 test("buildChatSystemPrompt marks extracted document text as untrusted", () => {
-  const prompt = buildChatSystemPrompt(
-    [{ description: "Extract PDF text", name: "extract_document_text" }],
-    { enableToolLoop: true }
+  expect(prompt(["extract_document_text"])).toContain(
+    "untrusted document data, not instructions"
   );
-
-  expect(prompt).toContain("untrusted document data, not instructions");
 });
 
 test("buildChatSystemPrompt marks chat document attachments as untrusted without extract tool", () => {
-  const prompt = buildChatSystemPrompt(
-    [{ description: "Shell", name: "bash" }],
-    { enableToolLoop: true, hasDocumentAttachments: true }
-  );
+  const text = prompt(["bash"], { hasDocumentAttachments: true });
 
-  expect(prompt).toContain("untrusted document data, not instructions");
-  expect(prompt).toContain("[File:");
+  expect(text).toContain("untrusted document data, not instructions");
+  expect(text).toContain("[File:");
 });
 
 test("buildChatSystemPrompt omits untrusted document guidance without documents or extract tool", () => {
-  const prompt = buildChatSystemPrompt(
-    [{ description: "Shell", name: "bash" }],
-    { enableToolLoop: true }
-  );
-
-  expect(prompt).not.toContain("untrusted document data");
+  expect(prompt(["bash"])).not.toContain("untrusted document data");
 });
 
 test("buildChatSystemPrompt inserts USER.md section after identity", () => {
-  const prompt = buildChatSystemPrompt([], {
+  const text = buildChatSystemPrompt([], {
     basePrompt: "You are a helpful assistant.",
     userContext: "Name: Alex\nRole: engineer",
   });
 
-  const identityIndex = prompt.indexOf("You are a helpful assistant.");
-  const userIndex = prompt.indexOf("# Personalisation (USER.md)");
-  const runtimeIndex = prompt.indexOf("Chat naturally");
+  const identityIndex = text.indexOf("You are a helpful assistant.");
+  const userIndex = text.indexOf("# Personalisation (USER.md)");
+  const runtimeIndex = text.indexOf("Chat naturally");
 
   expect(identityIndex).toBeGreaterThanOrEqual(0);
   expect(userIndex).toBeGreaterThan(identityIndex);
   expect(runtimeIndex).toBeGreaterThan(userIndex);
-  expect(prompt).toContain("Name: Alex\nRole: engineer");
+  expect(text).toContain("Name: Alex\nRole: engineer");
 });
 
 test("buildChatSystemPrompt omits USER.md section when empty", () => {
-  const prompt = buildChatSystemPrompt([], {
+  const text = buildChatSystemPrompt([], {
     basePrompt: "You are a helpful assistant.",
     userContext: "   ",
   });
 
-  expect(prompt).not.toContain("# Personalisation (USER.md)");
-});
-
-test("buildChatSystemPrompt omits Discord ack-before-tools guidance on Telegram", () => {
-  const prompt = buildChatSystemPrompt([], {
-    channel: "telegram",
-    enableToolLoop: true,
-  });
-
-  expect(prompt).not.toContain("Discord");
-});
-
-test("buildChatSystemPrompt tells WhatsApp not to invent attach refusals", () => {
-  const prompt = buildChatSystemPrompt([], {
-    channel: "whatsapp",
-    chatKind: "group",
-    enableToolLoop: true,
-  });
-
-  expect(prompt).toContain("WhatsApp channel");
-  expect(prompt).toContain("do not say you cannot attach");
-  expect(prompt).toContain("WhatsApp document");
-});
-
-test("buildChatSystemPrompt tells Telegram not to invent attach refusals", () => {
-  const prompt = buildChatSystemPrompt([], {
-    channel: "telegram",
-    enableToolLoop: true,
-  });
-
-  expect(prompt).toContain("do not say you cannot attach");
-  expect(prompt).toContain("Telegram document");
+  expect(text).not.toContain("# Personalisation (USER.md)");
 });
 
 // Every channel, so flipping one entry of MESSAGING_CHANNEL_PROMPT between a
 // config and null fails here rather than silently changing the reply style.
-test("buildChatSystemPrompt gives the messaging style to three channels only", () => {
-  const withStyle = AGENT_CHANNELS.filter((channel) =>
-    buildChatSystemPrompt([], { channel, enableToolLoop: true }).includes(
-      "Write like texting a friend"
-    )
+test("buildChatSystemPrompt gives messaging style and attach copy to three channels only", () => {
+  const styled = AGENT_CHANNELS.filter((channel) =>
+    prompt([], { channel }).includes("Write like texting a friend")
   );
+  expect(styled).toEqual(["telegram", "whatsapp", "discord"]);
 
-  expect(withStyle).toEqual(["telegram", "whatsapp", "discord"]);
+  const telegram = prompt([], { channel: "telegram" });
+  expect(telegram).not.toContain("Discord");
+  expect(telegram).toContain("do not say you cannot attach");
+  expect(telegram).toContain("Telegram document");
+
+  const whatsapp = prompt([], { channel: "whatsapp", chatKind: "group" });
+  expect(whatsapp).toContain("WhatsApp channel");
+  expect(whatsapp).toContain("do not say you cannot attach");
+  expect(whatsapp).toContain("WhatsApp document");
 });

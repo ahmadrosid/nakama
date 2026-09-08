@@ -1,5 +1,6 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
-
+import { Cancel01Icon } from "hugeicons-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
@@ -44,4 +45,28 @@ function PopoverContent({
   );
 }
 
-export { Popover, PopoverContent, PopoverTrigger };
+function PopoverClose({ ...props }: PopoverPrimitive.Close.Props) {
+  return <PopoverPrimitive.Close data-slot="popover-close" {...props} />;
+}
+
+function PopoverHeader({ title }: { title: string }) {
+  return (
+    <div className="mb-2 flex items-start justify-between gap-2">
+      <h2 className="font-medium text-sm leading-none">{title}</h2>
+      <PopoverClose
+        render={
+          <Button
+            className="-mt-1 -mr-1 size-7 text-muted-foreground"
+            size="icon-sm"
+            variant="ghost"
+          />
+        }
+      >
+        <Cancel01Icon className="size-3.5" />
+        <span className="sr-only">Close</span>
+      </PopoverClose>
+    </div>
+  );
+}
+
+export { Popover, PopoverContent, PopoverHeader, PopoverTrigger };

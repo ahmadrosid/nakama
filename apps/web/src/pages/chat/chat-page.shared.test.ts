@@ -7,10 +7,12 @@ import {
 } from "@/lib/chat-history";
 import {
   appendFailedTurnIfNeeded,
+  editedPromptText,
   findFailedRetryPrompt,
   markStreamingTurnFailed,
   messagesWithoutFailedTurn,
   nextSuccessfulTurnAt,
+  planPromptBranch,
 } from "@/pages/chat/chat-page.shared";
 
 function user(
@@ -193,5 +195,72 @@ describe("nextSuccessfulTurnAt", () => {
 
   test("stays monotonic when wall clock moves backwards", () => {
     expect(nextSuccessfulTurnAt(1000, 999)).toBe(1001);
+  });
+});
+
+describe("the edit flow", () => {
+  /** Two finished turns, so editing the second prompt has somewhere to branch. */
+  function transcript(): ChatListItem[] {
+    return [
+      user("deploy command?", { historyIndex: 0 }),
+      assistant("bun run deploy", { historyIndex: 1 }),
+      user("and for staging?", { historyIndex: 2 }),
+      assistant("bun run deploy:staging", { historyIndex: 3 }),
+    ];
+  }
+
+  test("branches before the edited prompt and carries the turns before it", () => {
+    const messages = transcript();
+    const edited = messages[2]!;
+
+    const plan = planPromptBranch(messages, edited);
+
+    expect(plan?.messageIndex).toBe(1);
+    expect(
+      plan?.initialMessages.map((message) => message.historyIndex)
+    ).toEqual([0, 1]);
+  });
+
+  test("sends the trimmed edit, not the original text", () => {
+    const messages = transcript();
+    const edited = messages[2]!;
+
+    expect(editedPromptText(edited, "  and for production?  ")).toBe(
+      "and for production?"
+    );
+  });
+
+  test("stops before branching when the text did not change", () => {
+    const messages = transcript();
+    const edited = messages[2]!;
+
+    expect(editedPromptText(edited, "and for staging?")).toBeNull();
+    expect(editedPromptText(edited, "  and for staging?  ")).toBeNull();
+    expect(editedPromptText(edited, "   ")).toBeNull();
+  });
+
+  test("starts a fresh session when the edited prompt opens the session", () => {
+    const messages = transcript();
+
+    expect(planPromptBranch(messages, messages[0]!)).toBeNull();
+  });
+
+  test("starts a fresh session for a prompt that is not in history yet", () => {
+    const messages = transcript();
+
+    expect(planPromptBranch(messages, user("not sent yet"))).toBeNull();
+  });
+
+  test("ignores rows the branch cannot replay", () => {
+    const messages = [
+      ...transcript(),
+      user("unsent follow-up"),
+      assistant("failed", { failed: true }),
+    ];
+    const edited = messages[2]!;
+
+    const plan = planPromptBranch(messages, edited);
+
+    expect(plan?.initialMessages).toHaveLength(2);
   });
 });

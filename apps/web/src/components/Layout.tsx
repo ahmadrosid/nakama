@@ -5,7 +5,6 @@ import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ActiveChatProfileProvider } from "@/context/active-chat-profile-context";
 import { useAppContext } from "@/context/use-app-context";
 import {
   findNavItem,
@@ -21,29 +20,27 @@ export function Layout() {
 
   return (
     <TooltipProvider delay={0}>
-      <ActiveChatProfileProvider>
-        <div className="flex h-svh overflow-hidden bg-background pl-[env(safe-area-inset-left)]">
-          {/* The rail and sidebar cost a fixed 296px, so on a phone they live
-              in MobileNavDrawer instead of the layout. */}
-          <div className="hidden h-full sm:flex">
-            <ProfileRail />
-            <AppSidebar />
-          </div>
-          <div
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
-            data-app-shell-content=""
-          >
-            <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
-            <AppShellError error={shell.error} />
-            <main className={appShellMainClassName(shell.page, shell.pathname)}>
-              <RouteBoundary resetKey={shell.pathname}>
-                <Outlet />
-              </RouteBoundary>
-            </main>
-          </div>
+      <div className="flex h-svh overflow-hidden bg-background pl-[env(safe-area-inset-left)]">
+        {/* The rail and sidebar cost a fixed 296px, so on a phone they live
+            in MobileNavDrawer instead of the layout. */}
+        <div className="hidden h-full sm:flex">
+          <ProfileRail />
+          <AppSidebar />
         </div>
-        <CommandPalette />
-      </ActiveChatProfileProvider>
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
+          data-app-shell-content=""
+        >
+          <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
+          <AppShellError error={shell.error} />
+          <main className={appShellMainClassName(shell.page, shell.pathname)}>
+            <RouteBoundary resetKey={shell.pathname}>
+              <Outlet />
+            </RouteBoundary>
+          </main>
+        </div>
+      </div>
+      <CommandPalette />
     </TooltipProvider>
   );
 }

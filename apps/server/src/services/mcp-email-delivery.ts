@@ -1,9 +1,9 @@
 import {
   createSmtpSender,
   type EmailOutboundAdapter,
-  emailConfigToMailboxConfig,
   isEmailConfigComplete,
   loadEmailConfig,
+  toMailboxConfig,
 } from "@nakama/core";
 import type {
   CachedMcpTool,
@@ -80,7 +80,7 @@ export function createMcpAwareEmailOutboundAdapter(
         const config = await loadConfig();
 
         if (isEmailConfigComplete(config)) {
-          const sender = createSmtpSender(emailConfigToMailboxConfig(config));
+          const sender = createSmtpSender(toMailboxConfig(config));
           await sender.send({
             subject: input.subject,
             text: input.text,

@@ -1,16 +1,34 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import fixPath from "fix-path";
 
 let ensured = false;
+
+/** GUI apps on macOS inherit a stripped PATH. Copy the login-shell PATH once. */
+function applyLoginShellPath(): void {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  const shell = process.env.SHELL?.trim() || "/bin/zsh";
+  const result = spawnSync(shell, ["-l", "-c", 'printf %s "$PATH"'], {
+    encoding: "utf8",
+    timeout: 3000,
+  });
+  const shellPath = result.stdout?.trim();
+
+  if (result.status === 0 && shellPath) {
+    process.env.PATH = shellPath;
+  }
+}
 
 export function ensureProcessPath(): void {
   if (ensured || process.env.NAKAMA_DISABLE_FIX_PATH === "1") {
     return;
   }
 
-  fixPath();
+  applyLoginShellPath();
   ensured = true;
 }
 

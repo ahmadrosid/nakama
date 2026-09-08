@@ -935,7 +935,18 @@ export interface SessionMessageMeta {
 /** How full the model context window is for the current chat session. */
 export type ChatContextUsageSource = "provider" | "estimate";
 
+export interface ChatContextUsageBreakdown {
+  conversation: number;
+  systemPrompt: number;
+  toolDefinitions: number;
+}
+
 export interface ChatContextUsage {
+  /**
+   * Estimated composition of the prompt (system + tools + history). Token
+   * total may differ from `usedTokens` when the provider reports input size.
+   */
+  breakdown?: ChatContextUsageBreakdown;
   /**
    * Bytes an optimiser kept out of this session's context so far. Absent until
    * something is actually removed, so the UI reports a measurement rather than
@@ -1067,6 +1078,7 @@ export type StreamEvent =
       parentToolCallId: string;
       label: string;
     }
+  | { type: "usage"; usage: ChatUsage }
   | { type: "done"; reply: string; contextUsage?: ChatContextUsage }
   | { type: "error"; error: string };
 
@@ -1667,6 +1679,7 @@ export interface CreateProviderRequest {
   model?: string;
   type: ProviderName;
   wireApi?: WireApi;
+  xaiOAuth?: XaiOAuthCredentials;
 }
 
 export interface CreateProviderResponse {
@@ -1683,6 +1696,7 @@ export interface UpdateProviderRequest {
   hostMode?: OllamaHostMode;
   label?: string;
   wireApi?: WireApi;
+  xaiOAuth?: XaiOAuthCredentials;
 }
 
 export interface UpdateProviderResponse {
@@ -1796,6 +1810,10 @@ export interface SkillResponse {
 
 export interface AssignSkillRequest {
   skillId: string;
+}
+
+export interface MoveProfileRequest {
+  organizationId: string;
 }
 
 export interface CloneProfileRequest {
@@ -2209,6 +2227,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "mistral"
   | "cerebras"
   | "fireworks"
   | "ollama"
@@ -2216,11 +2235,15 @@ export type ProviderName =
   | "opencode_go"
   | "cloudflare"
   | "chatgpt"
+  | "xai_oauth"
   | "minimax"
   | "minimax_cn"
+  | "moonshot"
+  | "moonshot_cn"
   | "zhipu"
   | "zhipu_cn"
-  | "xai";
+  | "xai"
+  | "together";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;
@@ -2295,20 +2318,26 @@ export type ChatMessage =
       toolCalls?: ToolCall[];
       /** Provider-specific assistant payload for multi-turn replay (Anthropic blocks, OpenAI response items). */
       providerContent?: unknown[];
+      /** Tokens and estimated cost of the LLM call that produced this message. */
+      usage?: ChatUsage;
     }
   | { role: "tool"; toolCallId: string; name: string; content: string };
+
+export interface ChatUsage {
+  /** Absent when the model has no known pricing. */
+  costUsd?: number;
+  /** True when input/output tokens were estimated rather than reported by the provider. */
+  estimated?: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
 
 export interface ChatCompletionResult {
   assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
   content: string;
   toolCalls: ToolCall[];
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    /** True when input/output tokens were estimated rather than reported by the provider. */
-    estimated?: boolean;
-  };
+  usage?: ChatUsage;
 }
 
 export interface GenerateTextResult {
@@ -2546,4 +2575,17 @@ export interface ComposioToolErrorResult {
   code: ComposioToolErrorCode;
   error: string;
   toolkitSlug?: string;
+}
+
+export interface XaiOAuthCredentials {
+  accessToken: string;
+  expiresAt: string;
+  refreshToken: string;
+}
+
+export type XaiOAuthDeviceStartResponse = ChatgptOAuthDeviceStartResponse;
+export type XaiOAuthDeviceCompleteRequest = ChatgptOAuthDeviceCompleteRequest;
+export interface XaiOAuthDeviceCompleteResponse {
+  models?: CustomModelEntry[];
+  xaiOAuth: XaiOAuthCredentials;
 }

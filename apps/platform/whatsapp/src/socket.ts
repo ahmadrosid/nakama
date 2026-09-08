@@ -1,9 +1,12 @@
 import { getWhatsAppConfigDir } from "@nakama/core/whatsapp-config";
 import {
+  DEFAULT_CONNECTION_CONFIG,
   DisconnectReason,
   extractMessageContent,
   fetchLatestBaileysVersion,
   getContentType,
+  jidDecode,
+  jidEncode,
   makeWASocket,
   type WASocket,
 } from "@whiskeysockets/baileys";
@@ -66,6 +69,55 @@ export async function createWhatsAppSocket(
         browser: ["Nakama", "Chrome", "4.0.0"] as [string, string, string],
         connectTimeoutMs: 30_000,
         logger: baileysLogger,
+        makeSignalRepository(auth) {
+          const repository =
+            DEFAULT_CONNECTION_CONFIG.makeSignalRepository(auth);
+          const decrypt = repository.decryptMessage.bind(repository);
+          const recovered = new Map<string, string>();
+          // Baileys 6 looks up PN and LID sessions separately. Only our own
+          // credentials provide a trusted identity pair without stanza metadata.
+          repository.decryptMessage = async (message) => {
+            const sender = jidDecode(message.jid);
+            const pn = jidDecode(state.creds.me?.id);
+            const lid = jidDecode(state.creds.me?.lid);
+            const alternate =
+              sender?.server === "lid" && sender.user === lid?.user
+                ? pn
+                : sender?.server === "s.whatsapp.net" &&
+                    sender.user === pn?.user
+                  ? lid
+                  : undefined;
+            if (!(sender && alternate)) {
+              return decrypt(message);
+            }
+            const alternateJid = jidEncode(
+              alternate.user,
+              alternate.server,
+              sender.device
+            );
+            const primary = recovered.get(message.jid) ?? message.jid;
+            try {
+              return await decrypt({ ...message, jid: primary });
+            } catch (error) {
+              if (
+                !(error instanceof Error) ||
+                (error.name !== "SessionError" && error.message !== "Bad MAC")
+              ) {
+                throw error;
+              }
+              const fallback =
+                primary === message.jid ? alternateJid : message.jid;
+              try {
+                const plaintext = await decrypt({ ...message, jid: fallback });
+                recovered.set(message.jid, fallback);
+                return plaintext;
+              } catch {
+                throw error;
+              }
+            }
+          };
+          return repository;
+        },
         markOnlineOnConnect: false,
         printQRInTerminal: false,
         retryRequestDelayMs: 2000,

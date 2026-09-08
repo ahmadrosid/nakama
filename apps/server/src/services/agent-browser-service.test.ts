@@ -59,20 +59,21 @@ describe("agent-browser service", () => {
   });
 
   test("a CLI that traps SIGTERM is killed once the version probe times out", async () => {
-    await installFakeBinary(tempBinDir, "agent-browser", "stubborn");
-    const pidFile = join(tempBinDir, "pid");
+    await withFastCliProbes(async () => {
+      await installFakeBinary(tempBinDir, "agent-browser", "stubborn");
+      const pidFile = join(tempBinDir, "pid");
 
-    const started = Date.now();
-    const status = await getAgentBrowserStatus();
+      const started = Date.now();
+      const statusPromise = getAgentBrowserStatus();
+      const pid = await waitForPidFile(pidFile, 2000);
+      const status = await statusPromise;
 
-    expect(status.installed).toBe(false);
-    expect(status.ready).toBe(false);
-    expect(Date.now() - started).toBeLessThan(15_000);
-
-    const pid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
-    expect(Number.isInteger(pid)).toBe(true);
-    expect(await waitForExit(pid, 15_000)).toBe(true);
-  }, 45_000);
+      expect(status.installed).toBe(false);
+      expect(status.ready).toBe(false);
+      expect(Date.now() - started).toBeLessThan(2000);
+      expect(await waitForExit(pid, 2000)).toBe(true);
+    });
+  }, 5000);
 });
 
 describe("agent-browser settings routes", () => {
@@ -149,40 +150,42 @@ describe("agent-browser settings routes", () => {
   });
 
   test("org admin status request returns when agent-browser hangs", async () => {
-    await installFakeBinary(tempBinDir, "agent-browser", "hangs");
+    await withFastCliProbes(async () => {
+      await installFakeBinary(tempBinDir, "agent-browser", "hangs");
 
-    const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
-    const app = createHonoApp({
-      agent: new AgentService(null, null, databaseAdapter),
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      webDistDir: null,
-      workerManager: {} as any,
+      const databaseAdapter = createInMemoryDatabaseAdapter();
+      const authService = new AuthService();
+      const app = createHonoApp({
+        agent: new AgentService(null, null, databaseAdapter),
+        authService,
+        automationService: {} as any,
+        databaseAdapter,
+        mcpService: {} as any,
+        orgService: new OrgService(databaseAdapter, authService),
+        systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+        webDistDir: null,
+        workerManager: {} as any,
+      });
+
+      const session = await setupFreshInstallSession(app, databaseAdapter);
+      const started = Date.now();
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/settings/agent-browser", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        installed: boolean;
+        ready: boolean;
+      };
+      expect(body.installed).toBe(false);
+      expect(body.ready).toBe(false);
+      expect(Date.now() - started).toBeLessThan(2000);
     });
-
-    const session = await setupFreshInstallSession(app, databaseAdapter);
-    const started = Date.now();
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/settings/agent-browser", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      installed: boolean;
-      ready: boolean;
-    };
-    expect(body.installed).toBe(false);
-    expect(body.ready).toBe(false);
-    expect(Date.now() - started).toBeLessThan(15_000);
-  }, 20_000);
+  }, 5000);
 
   test("install stream emits progress events", async () => {
     await installFakeBinary(tempBinDir, "npm", "noop");
@@ -288,6 +291,51 @@ setInterval(() => {}, 1000);
 
   await writeFile(scriptPath, script, "utf8");
   await chmod(scriptPath, 0o755);
+}
+
+async function withFastCliProbes<T>(run: () => Promise<T>): Promise<T> {
+  const previous = {
+    grace: process.env.NAKAMA_CLI_SIGTERM_GRACE_MS,
+    timeout: process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS,
+  };
+  process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = "1000";
+  process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = "100";
+  try {
+    return await run();
+  } finally {
+    if (previous.timeout === undefined) {
+      delete process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS;
+    } else {
+      process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = previous.timeout;
+    }
+    if (previous.grace === undefined) {
+      delete process.env.NAKAMA_CLI_SIGTERM_GRACE_MS;
+    } else {
+      process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = previous.grace;
+    }
+  }
+}
+
+async function waitForPidFile(
+  pidFile: string,
+  timeoutMs: number
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const pid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
+      if (Number.isInteger(pid)) {
+        return pid;
+      }
+    } catch {
+      // Child has not written the pid yet.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  throw new Error(`pid file was not written: ${pidFile}`);
 }
 
 async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {

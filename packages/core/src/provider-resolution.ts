@@ -9,6 +9,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openrouter",
   "gemini",
   "deepseek",
+  "mistral",
   "cerebras",
   "fireworks",
   "ollama",
@@ -16,11 +17,15 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "opencode_go",
   "cloudflare",
   "chatgpt",
+  "xai_oauth",
   "minimax",
   "minimax_cn",
+  "moonshot",
+  "moonshot_cn",
   "zhipu",
   "zhipu_cn",
   "xai",
+  "together",
 ] as const;
 
 export {
@@ -40,6 +45,7 @@ export function parseProviderName(
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "mistral" ||
     normalized === "cerebras" ||
     normalized === "fireworks" ||
     normalized === "ollama" ||
@@ -47,11 +53,15 @@ export function parseProviderName(
     normalized === "opencode_go" ||
     normalized === "cloudflare" ||
     normalized === "chatgpt" ||
+    normalized === "xai_oauth" ||
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
+    normalized === "moonshot" ||
+    normalized === "moonshot_cn" ||
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
-    normalized === "xai"
+    normalized === "xai" ||
+    normalized === "together"
   ) {
     return normalized;
   }
@@ -71,6 +81,8 @@ export function apiKeyEnvVarForProvider(
       return "GEMINI_API_KEY";
     case "deepseek":
       return null;
+    case "mistral":
+      return "MISTRAL_API_KEY";
     case "cerebras":
       return "CEREBRAS_API_KEY";
     case "fireworks":
@@ -85,18 +97,25 @@ export function apiKeyEnvVarForProvider(
       return "OPENCODE_GO_API_KEY";
     case "cloudflare":
       return "CLOUDFLARE_API_KEY";
+    case "xai_oauth":
     case "chatgpt":
       return null;
     case "minimax":
       return "MINIMAX_API_KEY";
     case "minimax_cn":
       return "MINIMAX_CN_API_KEY";
+    case "moonshot":
+      return "MOONSHOT_API_KEY";
+    case "moonshot_cn":
+      return "MOONSHOT_CN_API_KEY";
     case "zhipu":
       return "ZHIPU_API_KEY";
     case "zhipu_cn":
       return "ZHIPU_CN_API_KEY";
     case "xai":
       return "XAI_API_KEY";
+    case "together":
+      return "TOGETHER_API_KEY";
   }
 }
 

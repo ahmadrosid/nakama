@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { maskSecret } from "./email-config";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
+import { maskTrailingSecret } from "./secret-mask";
 import { getUserConfigDir } from "./user-config";
 
 export interface ErrorTrackingConfig {
@@ -91,6 +91,6 @@ export async function loadErrorTrackingSettingsPublic(): Promise<ErrorTrackingSe
 
   return {
     configured: Boolean(dsn),
-    dsnMasked: dsn ? maskSecret(dsn) : null,
+    dsnMasked: dsn ? maskTrailingSecret(dsn) : null,
   };
 }

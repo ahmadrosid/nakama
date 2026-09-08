@@ -1,7 +1,14 @@
 import { existsSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 
-const API_PREFIXES = ["/v1/", "/health", "/docs", "/openapi.json"] as const;
+const API_PREFIXES = [
+  "/v1/",
+  "/health",
+  "/readyz",
+  "/metrics",
+  "/docs",
+  "/openapi.json",
+] as const;
 
 const CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",

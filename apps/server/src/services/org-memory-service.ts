@@ -12,6 +12,7 @@ import {
   getOrgMemoryHistoryEntry,
   listOrgMemoryHistory,
   NakamaApiError,
+  normalizeOrgMemoryBullet,
   normalizeOrgMemoryDedupKey,
   ORG_MEMORY_PREAMBLE,
   type OrgMemoryChangeAction,
@@ -59,7 +60,6 @@ export interface ProposeOrgMemoryResult {
   message: string;
   outcome: ProposeOrgMemoryOutcome;
   proposalId?: string;
-  warnings?: string[];
 }
 
 export interface ProposeOrgMemoryInput {
@@ -78,6 +78,29 @@ export interface OrgMemoryChangeContext {
   actorUserId?: string | null;
   label: string;
   restoredFromId?: string | null;
+}
+
+/**
+ * Both sides on purpose. Normalization collapses newlines, so the raw bullet is
+ * the only place a line-anchored pattern can still be seen: `x\n## Pinned`
+ * matches raw and not normalized. The reverse is also true, since collapsing
+ * joins a pattern split across a newline: `ignore all\nprevious` matches
+ * normalized and not raw. Checking one side leaves the other open.
+ */
+function assertNoOrgMemoryInjection(raw: string, normalized: string): void {
+  const injection = [
+    ...new Set([
+      ...detectOrgMemoryInjectionWarnings(raw),
+      ...detectOrgMemoryInjectionWarnings(normalized),
+    ]),
+  ];
+
+  if (injection.length > 0) {
+    throw new NakamaApiError(
+      `Memory bullet rejected. ${injection.join(" ")}`,
+      400
+    );
+  }
 }
 
 export class OrgMemoryService {
@@ -445,7 +468,6 @@ export class OrgMemoryService {
     input: ProposeOrgMemoryInput
   ): Promise<ProposeOrgMemoryResult> {
     const text = this.normalizeProposalBullet(input.bullet);
-    const warnings = detectOrgMemoryInjectionWarnings(text);
     const content = await this.getMemory(orgId);
     const parsed = parseOrgMemoryContent(content);
     const dedupKey = normalizeOrgMemoryDedupKey(text);
@@ -481,7 +503,6 @@ export class OrgMemoryService {
         message: "This fact is already awaiting admin approval.",
         outcome: "already_pending",
         proposalId: pending.id,
-        warnings: warnings.length > 0 ? warnings : undefined,
       };
     }
 
@@ -505,7 +526,6 @@ export class OrgMemoryService {
       message: `Recorded for admin review (proposal ${proposal.id}).`,
       outcome: "created",
       proposalId: proposal.id,
-      warnings: warnings.length > 0 ? warnings : undefined,
     };
   }
 
@@ -525,6 +545,15 @@ export class OrgMemoryService {
     if (proposal.status !== "pending") {
       throw new NakamaApiError("Only pending proposals can be approved.", 400);
     }
+
+    // A proposal created before propose_org_memory started rejecting these can
+    // still be sitting in the queue, and approving is the write that matters.
+    // An admin who wants the text anyway can reject this and add the fact
+    // through POST /memory/facts, which is the path meant for a person.
+    assertNoOrgMemoryInjection(
+      proposal.bullet,
+      normalizeOrgMemoryBullet(proposal.bullet)
+    );
 
     const pin = options.pin ?? false;
     const dateUtc = utcDateString();
@@ -673,7 +702,7 @@ export class OrgMemoryService {
   }
 
   private normalizeBullet(bullet: string): string {
-    const text = bullet.trim().replace(/^-\s+/, "").trim();
+    const text = normalizeOrgMemoryBullet(bullet);
     if (text.length === 0) {
       throw new NakamaApiError("Memory bullet must not be empty.", 400);
     }
@@ -688,18 +717,11 @@ export class OrgMemoryService {
         400
       );
     }
-    if (text.includes("\n\n")) {
-      throw new NakamaApiError(
-        "Memory bullet must not contain multiple blank lines.",
-        400
-      );
-    }
-    if (/^##\s/m.test(text)) {
-      throw new NakamaApiError(
-        "Memory bullet must not contain markdown headings.",
-        400
-      );
-    }
+    // Rejected here and not in normalizeBullet on purpose: this is the path the
+    // agent reaches through propose_org_memory, so the content is whatever a
+    // document or a message talked it into. An org admin adding a fact through
+    // POST /memory/facts is a person who meant it, and still gets through.
+    assertNoOrgMemoryInjection(bullet, text);
     return text;
   }
 

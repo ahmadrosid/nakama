@@ -12,6 +12,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as baileys from "@whiskeysockets/baileys";
+import { usePrivateMultiFileAuthState } from "./auth-state";
 
 const sockets: Array<{
   end: ReturnType<typeof mock>;
@@ -21,7 +22,7 @@ const delays: number[] = [];
 const endOrder: string[] = [];
 let endResolvers: Array<() => void> = [];
 
-const createSocket = mock(() => {
+const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
   const ev = new EventEmitter();
   let endResolve: (() => void) | null = null;
   const endPromise = new Promise<void>((resolve) => {
@@ -168,6 +169,117 @@ describe("WhatsApp socket reconnect", () => {
     expect(createSocket).toHaveBeenCalledTimes(1);
     expect(delays).toEqual([]);
   });
+
+  test.each([
+    ["123:2@s.whatsapp.net", "456:2@lid"],
+    ["456:2@lid", "123:2@s.whatsapp.net"],
+  ])(
+    "decrypts linked-device messages after %s switches to %s",
+    async (originalJid, migratedJid) => {
+      const handle = await createWhatsAppSocket({ onMessage: async () => {} });
+      await handle.start();
+      const config = createSocket.mock.calls[0]![0];
+      const receiver = config.auth!;
+      receiver.creds.me = { id: "123:9@s.whatsapp.net", lid: "456:9@lid" };
+      const { state: sender } = await usePrivateMultiFileAuthState(
+        join(tempConfigDir, "sender")
+      );
+      const makeRepository =
+        baileys.DEFAULT_CONNECTION_CONFIG.makeSignalRepository;
+      const sending = makeRepository(sender);
+      const receiving = config.makeSignalRepository!(receiver);
+      const destination = "123:9@s.whatsapp.net";
+      const { creds } = receiver;
+      const preKey = baileys.Curve.generateKeyPair();
+      await receiver.keys.set({ "pre-key": { "1": preKey } });
+      await sending.injectE2ESession({
+        jid: destination,
+        session: {
+          identityKey: baileys.generateSignalPubKey(
+            creds.signedIdentityKey.public
+          ),
+          preKey: {
+            keyId: 1,
+            publicKey: baileys.generateSignalPubKey(preKey.public),
+          },
+          registrationId: creds.registrationId,
+          signedPreKey: {
+            keyId: creds.signedPreKey.keyId,
+            publicKey: baileys.generateSignalPubKey(
+              creds.signedPreKey.keyPair.public
+            ),
+            signature: creds.signedPreKey.signature,
+          },
+        },
+      });
+      const first = await sending.encryptMessage({
+        data: Buffer.from("first"),
+        jid: destination,
+      });
+      await receiving.decryptMessage({ jid: originalJid, ...first });
+      const ack = await receiving.encryptMessage({
+        data: Buffer.from("ack"),
+        jid: originalJid,
+      });
+      await sending.decryptMessage({ jid: destination, ...ack });
+
+      // A stale session at the new address fails MAC verification; the original still works.
+      const stale = await sender.keys.get("session", [
+        sending.jidToSignalProtocolAddress(destination),
+      ]);
+      await receiver.keys.set({
+        session: {
+          [receiving.jidToSignalProtocolAddress(migratedJid)]:
+            stale[sending.jidToSignalProtocolAddress(destination)],
+        },
+      });
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const message = await sending.encryptMessage({
+          data: Buffer.from("after migration"),
+          jid: destination,
+        });
+        expect(message.type).toBe("msg");
+        await expect(
+          receiving.decryptMessage({ jid: "456:3@lid", ...message })
+        ).rejects.toThrow();
+        await expect(
+          receiving.decryptMessage({ jid: "789:2@lid", ...message })
+        ).rejects.toThrow();
+        const corrupted = Buffer.from(message.ciphertext);
+        corrupted[corrupted.length - 1] += 1;
+        await expect(
+          receiving.decryptMessage({
+            ...message,
+            ciphertext: corrupted,
+            jid: migratedJid,
+          })
+        ).rejects.toThrow();
+        const plaintext = await receiving.decryptMessage({
+          jid: migratedJid,
+          ...message,
+        });
+        expect(Buffer.from(plaintext).toString()).toBe("after migration");
+        const errorsAfterRecovery = errorSpy.mock.calls.length;
+        const next = await sending.encryptMessage({
+          data: Buffer.from("next"),
+          jid: destination,
+        });
+        expect(
+          Buffer.from(
+            await receiving.decryptMessage({ jid: migratedJid, ...next })
+          ).toString()
+        ).toBe("next");
+        expect(errorSpy.mock.calls.length).toBe(errorsAfterRecovery);
+        // The alternate session must retain replay protection and device isolation.
+        await expect(
+          receiving.decryptMessage({ jid: migratedJid, ...next })
+        ).rejects.toThrow();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    }
+  );
 
   test("clears old-socket listeners on reconnect so upserts cannot leak", async () => {
     const received: string[] = [];

@@ -1,7 +1,11 @@
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
-import { getUserMessageText, PRIVATE_FILE_MODE } from "@nakama/core";
+import {
+  getUserMessageText,
+  NakamaApiError,
+  PRIVATE_FILE_MODE,
+} from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
@@ -730,6 +734,146 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runUpsertProfileStmt(record);
     }
   );
+  const moveProfileTransaction = db.transaction(
+    (
+      profileId: string,
+      sourceOrgId: string,
+      targetOrgId: string,
+      workspaceFrom: string,
+      workspaceTo: string
+    ) => {
+      const profile = getProfileForOrgStmt.get(
+        profileId,
+        sourceOrgId
+      ) as ProfileRow | null;
+      if (!profile) {
+        throw new NakamaApiError("Profile not found.", 404);
+      }
+      if (sourceOrgId === targetOrgId) {
+        throw new NakamaApiError("Choose another organization.", 400);
+      }
+      if (profile.is_super) {
+        throw new NakamaApiError("Super Bot cannot be moved.", 400);
+      }
+      const target = db
+        .query(
+          "SELECT id FROM organizations WHERE id = ? AND archived_at IS NULL"
+        )
+        .get(targetOrgId);
+      if (!target) {
+        throw new NakamaApiError(
+          "Destination organization is unavailable.",
+          404
+        );
+      }
+      for (const [runs, owners, foreignKey] of [
+        ["automation_runs", "automations", "automation_id"],
+        ["workflow_runs", "workflows", "workflow_id"],
+      ]) {
+        if (
+          db
+            .query(
+              `SELECT 1 FROM ${runs} r JOIN ${owners} o ON o.id = r.${foreignKey} WHERE o.profile_id = ? AND r.status = 'running' LIMIT 1`
+            )
+            .get(profileId)
+        ) {
+          throw new NakamaApiError(
+            "Wait for running automations and workflows to finish.",
+            409
+          );
+        }
+      }
+      if (profile.is_default) {
+        const successor = db
+          .query(
+            "SELECT id FROM profiles WHERE org_id = ? AND id != ? AND is_super = 0 ORDER BY created_at LIMIT 1"
+          )
+          .get(sourceOrgId, profileId) as { id: string } | null;
+        if (!successor) {
+          throw new NakamaApiError(
+            "Create another profile before moving the default profile.",
+            409
+          );
+        }
+        db.query("UPDATE profiles SET is_default = 1 WHERE id = ?").run(
+          successor.id
+        );
+      }
+      const workspacePrefix = `${workspaceFrom}/`;
+      if (
+        db
+          .query(
+            "SELECT 1 FROM skills s JOIN profile_skills ps ON ps.skill_id = s.id WHERE substr(s.source_path, 1, length(?)) = ? AND ps.profile_id != ? LIMIT 1"
+          )
+          .get(workspacePrefix, workspacePrefix, profileId)
+      ) {
+        throw new NakamaApiError(
+          "Unassign this profile's local skills from other profiles before moving.",
+          409
+        );
+      }
+      db.query(
+        "UPDATE skills SET org_id = ?, source_path = ? || substr(source_path, length(?) + 1) WHERE substr(source_path, 1, length(?)) = ?"
+      ).run(
+        targetOrgId,
+        workspaceTo,
+        workspaceFrom,
+        workspacePrefix,
+        workspacePrefix
+      );
+      const now = new Date().toISOString();
+      db.query(
+        "UPDATE profiles SET org_id = ?, is_default = 0, updated_at = ? WHERE id = ?"
+      ).run(targetOrgId, now, profileId);
+      for (const table of [
+        "sessions",
+        "attachments",
+        "profile_change_events",
+        "profile_skill_usage",
+        "skill_proposals",
+        "skill_suggestions",
+      ]) {
+        db.query(`UPDATE ${table} SET org_id = ? WHERE profile_id = ?`).run(
+          targetOrgId,
+          profileId
+        );
+      }
+      db.query(
+        "UPDATE attachments SET storage_path = ? || substr(storage_path, length(?) + 1) WHERE profile_id = ? AND substr(storage_path, 1, length(?)) = ?"
+      ).run(
+        workspaceTo,
+        workspaceFrom,
+        profileId,
+        workspacePrefix,
+        workspacePrefix
+      );
+      for (const table of ["automations", "workflows"]) {
+        db.query(
+          `UPDATE ${table} SET org_id = ?, enabled = 0, updated_at = ? WHERE profile_id = ?`
+        ).run(targetOrgId, now, profileId);
+      }
+      db.query(
+        "DELETE FROM automation_run_read_state WHERE automation_id IN (SELECT id FROM automations WHERE profile_id = ?)"
+      ).run(profileId);
+      // Existing public links must not grant access after a transfer.
+      db.query(
+        "UPDATE artifact_shares SET revoked_at = ? WHERE profile_id = ? AND revoked_at IS NULL"
+      ).run(now, profileId);
+      db.query(
+        "DELETE FROM profile_composio_toolkits WHERE profile_id = ?"
+      ).run(profileId);
+      for (const [table, resources, key] of [
+        ["profile_tools", "tools", "tool_id"],
+        ["profile_mcp_servers", "mcp_servers", "server_id"],
+        ["profile_skills", "skills", "skill_id"],
+      ]) {
+        db.query(
+          `DELETE FROM ${table} WHERE profile_id = ? AND ${key} IN (SELECT id FROM ${resources} WHERE org_id IS NOT NULL AND org_id != ?)`
+        ).run(profileId, targetOrgId);
+      }
+    }
+  );
+
   const deleteProfileStmt = db.prepare("DELETE FROM profiles WHERE id = ?");
 
   const listToolsStmt = db.prepare("SELECT * FROM tools");
@@ -1857,6 +2001,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return bootstrapInitialSetupTransaction.immediate(input);
     },
 
+    async checkHealth() {
+      // Prepare afresh: cached statements can outlive SQLite's closed handle.
+      using statement = db.prepare("SELECT 1 FROM users LIMIT 1");
+      statement.get();
+    },
+
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID) as {
         count: number;
@@ -2898,6 +3048,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async markSkillSuggestionApplied(orgId, id, appliedAt) {
       const result = markSkillSuggestionAppliedStmt.run(appliedAt, orgId, id);
       return result.changes > 0;
+    },
+
+    async moveProfile(
+      profileId,
+      sourceOrgId,
+      targetOrgId,
+      workspaceFrom,
+      workspaceTo
+    ) {
+      moveProfileTransaction.immediate(
+        profileId,
+        sourceOrgId,
+        targetOrgId,
+        workspaceFrom,
+        workspaceTo
+      );
     },
 
     async replaceMessagesForSession(sessionId, messages) {

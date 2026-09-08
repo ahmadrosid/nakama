@@ -12,6 +12,7 @@ import {
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
+  validateCustomModelsInput,
 } from "./models";
 
 function group(
@@ -22,6 +23,8 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "together"
+    | "mistral"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -119,6 +122,38 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats together models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats mistral models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("mi-1", "model-1"),
+        group("mi-1", "mistral")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("mi-1", "model-1"),
+        group("mi-1", "mistral", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -204,6 +239,22 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("cb-1", "model-1"),
         group("cb-1", "cerebras", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats together models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -306,10 +357,13 @@ describe("firstAvailableProviderOption", () => {
         new Set([
           "openai",
           "chatgpt",
+          "xai_oauth",
           "anthropic",
           "openrouter",
           "gemini",
           "deepseek",
+          "together",
+          "mistral",
           "cerebras",
           "cloudflare",
           "fireworks",
@@ -426,5 +480,22 @@ describe("hasOpenCodeZenProvider", () => {
         { baseUrl: "https://opencode.ai/zen/go/v1", type: "opencode_go" },
       ])
     ).toBe(false);
+  });
+});
+
+describe("validateCustomModelsInput", () => {
+  test("requires both $/1M rates or neither", () => {
+    expect(
+      validateCustomModelsInput([{ id: "m", inputPerMillionUsd: 1 }])
+    ).toContain("both input and output");
+    expect(
+      validateCustomModelsInput([
+        { id: "m", inputPerMillionUsd: 1, outputPerMillionUsd: 3 },
+      ])
+    ).toBeNull();
+    expect(validateCustomModelsInput([{ id: "m" }])).toBeNull();
+    expect(validateCustomModelsInput([{ id: " " }])).toBe(
+      "Add at least one model."
+    );
   });
 });

@@ -1,11 +1,14 @@
 import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
+import { useMemo } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
+import { sumChatUsage } from "@/lib/chat-usage";
 import { extractModelId } from "@/lib/models";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
@@ -47,6 +50,7 @@ export function ChatPageContent(state: ChatPageState) {
     handleThinkingEffortChange,
     renderModelLabel,
     handleBranchMessage,
+    handleEditMessage,
     handleTryAgainMessage,
     sendMessage,
     stopStreaming,
@@ -55,6 +59,8 @@ export function ChatPageContent(state: ChatPageState) {
     agentQuestionnaire,
   } = state;
 
+  const { visible: showUsage } = useChatUsageVisible();
+  const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);
   const { banner: skillReviewBanner } = usePostTurnSkillReviewOverlay({
     lastSuccessfulTurnAt,
     profile: activeProfile,
@@ -72,7 +78,6 @@ export function ChatPageContent(state: ChatPageState) {
 
   const composer = (
     <>
-      {skillReviewBanner}
       {readOnlyBanner}
       <ChatComposer
         availableSkills={availableSkills}
@@ -89,6 +94,7 @@ export function ChatPageContent(state: ChatPageState) {
         disabled={composerDisabled}
         draftStorageKey={composerDraftKey}
         error={error}
+        headerNotice={skillReviewBanner}
         onModelChange={handleModelChange}
         onNavigateSetup={navigateSetup}
         onStop={stopStreaming}
@@ -106,12 +112,14 @@ export function ChatPageContent(state: ChatPageState) {
         }}
         onThinkingEffortChange={handleThinkingEffortChange}
         primarySupportsVision={activeModelSupportsVision}
+        profileId={profileId}
         profileModelId={extractModelId(currentModelSelection)}
         providerConfigured={health?.providerConfigured}
         providerModelGroups={providerModelGroups}
         questionnaire={agentQuestionnaire}
         queuedMessages={queuedMessages}
         renderModelLabel={renderModelLabel}
+        sessionUsage={sessionUsage}
         showOfflineHint={showOfflineHint}
         showTips={isEmptyState}
         thinkingEffort={thinkingEffort}
@@ -153,9 +161,13 @@ export function ChatPageContent(state: ChatPageState) {
                   : null
               }
               onBranchMessage={(message) => void handleBranchMessage(message)}
+              onEditMessage={(message, text) =>
+                void handleEditMessage(message, text)
+              }
               onRetryMessage={(message) => void handleTryAgainMessage(message)}
               profileId={profileId}
               showThinking={showThinking}
+              showUsage={showUsage}
               streamActive={busy}
               turnStartedAt={turnStartedAt}
             />

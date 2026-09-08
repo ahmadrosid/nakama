@@ -19,7 +19,7 @@ export function findRetryPrompt(
   );
 }
 
-export function findRetryCheckpoint(
+function findRetryCheckpoint(
   messages: ChatListItem[],
   promptMessage: ChatListItem
 ): ChatListItem | null {
@@ -34,6 +34,57 @@ export function findRetryCheckpoint(
         message.historyIndex < promptMessage.historyIndex!
     ) ?? null
   );
+}
+
+/** Where to branch a session when resending a prompt, and what the branch keeps. */
+export interface PromptBranchPlan {
+  /** Messages already in history that the branch starts with. */
+  initialMessages: ChatListItem[];
+  /** History index the branch is cut at. */
+  messageIndex: number;
+}
+
+/**
+ * Plan for resending `prompt`: branch at the row before it and carry everything
+ * up to that row. Null when nothing precedes the prompt in history, which means
+ * a fresh session rather than a branch.
+ */
+export function planPromptBranch(
+  messages: ChatListItem[],
+  prompt: ChatListItem
+): PromptBranchPlan | null {
+  const checkpoint = findRetryCheckpoint(messages, prompt);
+  const messageIndex = checkpoint?.historyIndex;
+
+  if (typeof messageIndex !== "number") {
+    return null;
+  }
+
+  return {
+    initialMessages: messages.filter(
+      (item) =>
+        typeof item.historyIndex === "number" &&
+        item.historyIndex <= messageIndex
+    ),
+    messageIndex,
+  };
+}
+
+/**
+ * The text an edit should resend, or null when the edit changes nothing and the
+ * flow should stop before branching.
+ */
+export function editedPromptText(
+  message: ChatListItem,
+  text: string
+): string | null {
+  const next = text.trim();
+
+  if (!next || next === message.content.trim()) {
+    return null;
+  }
+
+  return next;
 }
 
 function buildFailedAssistantMessage(error: string): ChatListItem {

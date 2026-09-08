@@ -1,6 +1,6 @@
 /**
  * Common city names that share an IANA zone with a different canonical city.
- * Keys are IANA zone IDs from @countrystatecity/timezones.
+ * Keys are IANA zone IDs from `Intl.supportedValuesOf("timeZone")`.
  */
 export const TIMEZONE_CITY_ALIASES: Readonly<
   Record<string, readonly string[]>

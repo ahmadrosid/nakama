@@ -1,4 +1,5 @@
 import { NakamaClient } from "@nakama/client";
+import { log } from "@nakama/core";
 import {
   clearAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
@@ -63,7 +64,7 @@ try {
 
   await writeAutomationWorkerHeartbeat(true, 0);
 
-  console.log("Nakama automation worker running.");
+  log("info", "worker.started", { worker: "automation" });
   console.log(`Server: ${serverUrl}`);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

@@ -11,8 +11,10 @@ import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
+import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
 import { getBrowserTimezone } from "@/lib/timezones";
@@ -27,6 +29,7 @@ export function SettingsPage() {
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
   const { data: savedTimezone } = useUserTimezone();
   const saveTimezoneMutation = useSaveUserTimezone();
+  const chatUsage = useChatUsageVisible();
   const version = health?.version?.trim();
 
   useEffect(() => {
@@ -57,6 +60,20 @@ export function SettingsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <p className="font-medium text-foreground text-sm">Appearance</p>
             <ThemeToggle />
+          </div>
+
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            id="chat-usage-setting"
+          >
+            <p className="font-medium text-foreground text-sm">
+              Token usage in chat
+            </p>
+            <Switch
+              aria-label="Token usage in chat"
+              checked={chatUsage.visible}
+              onCheckedChange={chatUsage.toggle}
+            />
           </div>
 
           {version ? (

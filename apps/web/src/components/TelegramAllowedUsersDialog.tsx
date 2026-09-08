@@ -49,11 +49,18 @@ export function TelegramAllowedUsersDialog({
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<AllowedTelegramUser | null>(
+    null
+  );
 
   function saveAllowedUsers(
     nextUsers: AllowedTelegramUser[],
     afterSuccess?: () => void
   ) {
+    // Optimistic, so a failed save has to put the old list back. Otherwise the
+    // dialog shows a user as removed while the bot still answers them, which is
+    // the wrong direction to be wrong in for an access list.
+    const previousUsers = allowedUsers;
     onAllowedUsersChange(nextUsers);
     setFormError(null);
 
@@ -64,6 +71,7 @@ export function TelegramAllowedUsersDialog({
       },
       {
         onError: (err) => {
+          onAllowedUsersChange(previousUsers);
           const message = formatError(err);
           setFormError(message);
           onError?.(message);
@@ -134,7 +142,16 @@ export function TelegramAllowedUsersDialog({
     });
   }
 
-  function removeAllowedUserId(id: string) {
+  function confirmRemoveAllowedUser() {
+    if (!removeTarget) {
+      return;
+    }
+
+    const id = removeTarget.id;
+    // Closed before the save resolves on purpose: a failed save rolls the list
+    // back and renders its error in the dialog underneath, which nobody can
+    // read through an open confirm.
+    setRemoveTarget(null);
     saveAllowedUsers(allowedUsers.filter((entry) => entry.id !== id));
   }
 
@@ -223,7 +240,7 @@ export function TelegramAllowedUsersDialog({
                     <Button
                       aria-label={`Remove Telegram user ID ${user.id}`}
                       disabled={saveMutation.isPending}
-                      onClick={() => removeAllowedUserId(user.id)}
+                      onClick={() => setRemoveTarget(user)}
                       size="icon-sm"
                       type="button"
                       variant="ghost"
@@ -307,6 +324,41 @@ export function TelegramAllowedUsersDialog({
               type="button"
             >
               Add user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(next) => !next && setRemoveTarget(null)}
+        open={removeTarget !== null}
+      >
+        <DialogContent className="gap-5 p-6 sm:max-w-lg">
+          <DialogHeader className="gap-2">
+            <DialogTitle>Remove Telegram user</DialogTitle>
+            <DialogDescription>
+              {removeTarget?.username
+                ? `@${removeTarget.username} (${removeTarget.id})`
+                : removeTarget?.id}{" "}
+              loses access to this profile as soon as this is saved.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
+            <Button
+              onClick={() => setRemoveTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={saveMutation.isPending}
+              onClick={confirmRemoveAllowedUser}
+              type="button"
+              variant="destructive"
+            >
+              Remove
             </Button>
           </DialogFooter>
         </DialogContent>

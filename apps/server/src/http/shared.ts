@@ -6,6 +6,7 @@ import {
   type AgentQuestionnaire,
   type AgentTodo,
   type ApiErrorResponse,
+  type ChatUsage,
   formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
@@ -520,6 +521,7 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
         toolCallId: event.toolCallId,
         type: "tool_start",
       }),
+    onUsage: (usage: ChatUsage) => send({ type: "usage", usage }),
   };
 }
 

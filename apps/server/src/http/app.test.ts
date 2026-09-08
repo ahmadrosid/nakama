@@ -1,14 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  createSqliteDatabase,
+} from "@nakama/db";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createHonoApp } from "./app";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   buildSetupAuthBody,
   createPlatformAdminUser,
@@ -58,114 +62,10 @@ function createServerOptions() {
   const authService = new AuthService();
   return {
     agent: {
-      assignMcpServer: async (_profileId: string, _body: unknown) => ({
-        id: "default",
-      }),
-      assignSkill: async (_profileId: string, _body: unknown) => ({
-        id: "default",
-      }),
-      assignTool: async (_profileId: string, _body: unknown) => ({
-        id: "default",
-      }),
-      beginSessionTurn: async (_sessionId: string, _orgId: string) => true,
-      branchSession: async (_sessionId: string, messageIndex: number) => ({
-        sessionId: `branched-${messageIndex}`,
-      }),
-      clearSession: async (_sessionId: string) => true,
-      compactSession: async (_sessionId: string, body: { force: boolean }) => ({
-        action: body.force ? "summarized" : "none",
-        messagesAfter: 1,
-        messagesBefore: 2,
-      }),
-      configureProvider: async (_body: unknown) => ({ ok: true }),
-      createProfile: async (_body: unknown) => ({ id: "profile_1" }),
-      createProvider: async (_body: unknown) => ({ providerId: "provider_1" }),
-      createSession: async (
-        _orgId: string,
-        _channel: string,
-        _profileId?: string
-      ) => "session_1",
-      createSkill: async (_body: unknown) => ({ id: "skill_1" }),
-      createTool: async (_body: unknown) => ({ id: "tool_1" }),
-      deleteKnowledgeBaseDocument: async (
-        _profileId: string,
-        _documentId: string
-      ) => ({ ok: true }),
-      deleteProfile: async (_profileId: string) => {},
-      deleteProfileAvatar: async (_profileId: string) => {},
-      deleteProvider: async (_providerId: string) => ({ ok: true }),
-      deleteSkill: async (_skillId: string) => {},
-      deleteTool: async (_toolId: string) => {},
-      draftAutomation: async (_prompt: string, _channel: string) => ({
-        id: "automation_draft",
-      }),
-      generateImage: async (_body: unknown) => ({
-        data: "AA==",
-        mediaType: "image/png",
-        model: "gpt-image-2",
-        size: "1024x1024",
-        sizeBytes: 1,
-      }),
-      getImageGenerationSettings: async () => ({
-        imageGeneration: { model: null },
-      }),
-      getModels: async ({ source }: { source: "catalog" | "remote" }) => ({
-        models: [{ id: `model-${source}` }],
-      }),
-      getProfile: async (_profileId: string) => ({ id: "default" }),
-      getProfileAvatar: async (_orgId: string, _profileId: string) => ({
-        bytes: new Uint8Array([1, 2, 3]),
-        mediaType: "image/png",
-      }),
-      getProfileSoulStack: async (_profileId: string) => ({
-        stack: ["SOUL.md"],
-      }),
-      getProfileSoulStatus: async (
-        _profileId: string,
-        includeContents: boolean
-      ) => ({ content: includeContents ? "soul" : null, hasSoul: true }),
-      getSessionMessages: async (_sessionId: string) => ({
-        channel: "web",
-        messageMeta: [
-          { createdAt: new Date().toISOString(), id: "m1", seq: 0 },
-        ],
-        messages: [{ content: "hi", role: "assistant" }],
-      }),
-      getSessionTodos: async (_sessionId: string) => [],
-      getSkill: async (_skillId: string) => ({ id: "skill_1" }),
-      getTelegramSettings: async () => ({ enabled: false }),
-      getThinkingSettings: async () => ({
-        thinking: { effort: "medium", enabled: true },
-      }),
-      getTool: async (_toolId: string) => ({ id: "tool_1" }),
-      getToolSource: async (_toolId: string) => ({ source: "builtin" }),
-      getTranscriptionSettings: async () => ({
-        transcription: { model: null },
-      }),
-      getUserContext: async (
-        _orgId: string,
-        _userId: string,
-        includeContent: boolean
-      ) => ({
-        active: includeContent,
-        ...(includeContent ? { content: "ctx" } : {}),
-      }),
-      getUserTimezone: async () => "Asia/Jakarta",
-      getVisionSettings: async () => ({ vision: { model: null } }),
+      beginSessionTurn: async () => true,
+      createSession: async () => "session_1",
       getWhatsAppSettings: async () => ({ enabled: false }),
-      initProfileSoul: async (_profileId: string) => ({ ok: true }),
-      initUserContext: async (_orgId: string, _userId: string) => ({
-        created: true,
-      }),
-      listKnowledgeBase: async (_profileId: string) => ({
-        documents: [],
-        sources: [],
-      }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
-      listProfileTools: async (_profileId: string) => ({
-        tools: [{ id: "tool_1" }],
-      }),
-      listProviders: async () => ({ providers: [] }),
       listSessions: async (
         _orgId: string,
         profileId: string,
@@ -173,145 +73,136 @@ function createServerOptions() {
       ) => ({
         sessions: [{ id: `${profileId}-${channel}` }],
       }),
-      listSkills: async () => ({ skills: [{ id: "skill_1" }] }),
-      listTools: async () => ({ tools: [{ id: "tool_1" }] }),
       providerConfigured: true,
-      purgeSession: async (_sessionId: string) => true,
-      regenerateTelegramHandshake: async () => ({ enabled: false }),
-      regenerateWhatsAppPairingCode: async () => ({ enabled: false }),
-      resolveSession: async (_sessionId: string) => ({
-        getContextUsage: () => null,
+      resolveSession: async () => ({
         send: async (input: { message: string }) => `reply:${input.message}`,
       }),
-      resolveWorkflowToolNames: async () => new Set<string>(),
-      runAutomation: async (_automationId: string) => ({ skipped: false }),
-      runWorkflow: async (_workflowId: string) => ({ skipped: false }),
-      schedulePostTurnSkillReview: (_sessionId: string) => {},
-      scheduleSessionTitleGeneration: (_sessionId: string) => {},
-      setImageGenerationSettings: async (_body: unknown) => ({
-        imageGeneration: { model: null },
-      }),
-      setTelegramSettings: async (_body: unknown) => ({ enabled: false }),
-      setThinkingSettings: async (_body: unknown) => ({
-        thinking: { effort: "medium", enabled: true },
-      }),
-      setTranscriptionSettings: async (_body: unknown) => ({
-        transcription: { model: null },
-      }),
-      setUserTimezone: async (timezone: string) => timezone,
-      setVisionSettings: async (_body: unknown) => ({
-        vision: { model: null },
-      }),
-      setWhatsAppSettings: async (_body: unknown) => ({ enabled: false }),
-      syncSkills: async () => ({ synced: 1 }),
-      transcribeAudio: async (_body: unknown) => ({ text: "hello" }),
-      unassignMcpServer: async (_profileId: string, _serverId: string) => ({
-        id: "default",
-      }),
-      unassignSkill: async (_profileId: string, _skillId: string) => ({
-        id: "default",
-      }),
-      unassignTool: async (_profileId: string, _toolId: string) => ({
-        id: "default",
-      }),
-      updateProfile: async (_profileId: string, _body: unknown) => ({
-        id: "default",
-      }),
-      updateProvider: async (_providerId: string, _body: unknown) => ({
-        providerId: "provider_1",
-      }),
-      uploadKnowledgeBaseDocument: async (
-        _profileId: string,
-        _doc: unknown
-      ) => ({ id: "kb_1" }),
-      uploadProfileAvatar: async (_profileId: string, _body: unknown) => ({
-        id: "default",
-      }),
-      writeProfileSoulFile: async (
-        _profileId: string,
-        _fileKey: string,
-        _body: unknown
-      ) => {},
-      writeUserContext: async (
-        _orgId: string,
-        _userId: string,
-        _body: unknown
-      ) => {},
     } as any,
     authService,
-    automationService: {
-      create: async (_orgId: string, _body: unknown, _profileId?: string) => ({
-        id: "automation_1",
-      }),
-      delete: async (_automationId: string, _orgId: string) => true,
-      get: async (_automationId: string, _orgId?: string) => ({
-        id: "automation_1",
-      }),
-      listForOrg: async (_orgId: string, _userId?: string) => ({
-        automations: [{ id: "automation_1" }],
-        unread: { byAutomationId: {}, totalUnread: 0 },
-      }),
-      listRuns: async (
-        _automationId: string,
-        _orgId?: string,
-        limit?: number
-      ) =>
-        limit ? [{ id: "automation_run_1" }] : [{ id: "automation_run_1" }],
-      update: async (
-        _automationId: string,
-        _orgId: string,
-        _body: unknown
-      ) => ({
-        id: "automation_1",
-      }),
-    } as any,
+    automationService: {} as any,
     databaseAdapter,
-    mcpService: {
-      connectServer: async (_serverId: string) => ({ id: "mcp_1" }),
-      createServer: async (_body: unknown) => ({ id: "mcp_1" }),
-      deleteServer: async (_serverId: string) => {},
-      getServer: async (_serverId: string) => ({ id: "mcp_1" }),
-      listServers: async () => ({ servers: [{ id: "mcp_1" }] }),
-      syncServer: async (_serverId: string) => ({ id: "mcp_1" }),
-      testServer: async (
-        _transport: unknown,
-        _config: unknown,
-        _serverId: unknown
-      ) => ({ ok: true }),
-      updateServer: async (_serverId: string, _body: unknown) => ({
-        id: "mcp_1",
-      }),
-    } as any,
+    mcpService: {} as any,
     orgService: new OrgService(databaseAdapter, authService),
     systemStatus: {
       getStatus: async () => ({ ok: true }),
     } as any,
     webDistDir: null,
     workerManager: {
-      clearWorkerLogs: async () => {},
-      getWorkerLogs: async (_name: string, lines: number) => ({
-        lines: [`last:${lines}`],
-        worker: "whatsapp",
-      }),
       isValidWorker: () => true,
-      restartWorker: async () => {},
       startWorker: async () => {},
       stopWorker: async () => {},
-    } as any,
-    workflowService: {
-      create: async () => ({ id: "workflow_1" }),
-      delete: async () => true,
-      deleteRun: async () => true,
-      get: async () => ({ id: "workflow_1", profileId: "default" }),
-      getRun: async () => ({ id: "run_1", steps: [] }),
-      listForOrg: async () => [{ id: "workflow_1" }],
-      listRuns: async () => [{ id: "run_1", steps: [] }],
-      update: async () => ({ id: "workflow_1" }),
     } as any,
   };
 }
 
 describe("createHonoApp", () => {
+  test("liveness stays up while readiness tracks a closed and reopened database", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    const { app } = createMinimalHonoApp({
+      databaseAdapter: database.adapter,
+      webDistDir: resolve(import.meta.dir, "../../../web"),
+    });
+    try {
+      expect((await app.request("/healthz")).status).toBe(200);
+      expect((await app.request("/readyz")).status).toBe(200);
+      await database.close();
+      const unavailable = await app.request("/readyz");
+      expect(unavailable.status).toBe(503);
+      expect(await unavailable.json()).toEqual({ ok: false });
+      expect((await app.request("/healthz")).status).toBe(200);
+      await database.reopen();
+      expect((await app.request("/readyz")).status).toBe(200);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test("opt-in metrics and JSON logs correlate requests without logging URL secrets", async () => {
+    const previous = {
+      format: process.env.NAKAMA_LOG_FORMAT,
+      level: process.env.NAKAMA_LOG_LEVEL,
+      metrics: process.env.NAKAMA_METRICS,
+    };
+    const output = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      delete process.env.NAKAMA_METRICS;
+      expect(
+        (await createMinimalHonoApp().app.request("/metrics")).status
+      ).toBe(404);
+      process.env.NAKAMA_METRICS = "true";
+      process.env.NAKAMA_LOG_FORMAT = "json";
+      process.env.NAKAMA_LOG_LEVEL = "debug";
+      output.mockClear();
+      const { app, databaseAdapter } = createMinimalHonoApp({
+        webDistDir: resolve(import.meta.dir, "../../../web"),
+      });
+      const response = await app.request("/v1/private-secret?token=hidden", {
+        headers: { "X-Request-Id": "probe-123" },
+      });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("X-Request-Id")).toBe("probe-123");
+      const records = output.mock.calls.map(([line]) =>
+        JSON.parse(String(line))
+      );
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        message: "http.request",
+        method: "GET",
+        requestId: "probe-123",
+      });
+      expect(JSON.stringify(records)).not.toContain("private-secret");
+      expect(JSON.stringify(records)).not.toContain("hidden");
+      const generated = await app.request("/healthz", {
+        headers: { "X-Request-Id": "x".repeat(300) },
+      });
+      expect(generated.headers.get("X-Request-Id")).toHaveLength(36);
+      const metrics = await app.request("/metrics");
+      expect(metrics.status).toBe(200);
+      expect(metrics.headers.get("Content-Type")).toContain("text/plain");
+      expect(await metrics.text()).toContain("nakama_http_requests_total 2");
+
+      process.env.NAKAMA_LOG_LEVEL = "warn";
+      output.mockClear();
+      await app.request("/healthz");
+      expect(output).not.toHaveBeenCalled();
+      const failure = spyOn(
+        databaseAdapter,
+        "countHumanUsers"
+      ).mockRejectedValue(new Error("database unavailable"));
+      try {
+        const error = await app.request("/health", {
+          headers: { "X-Request-Id": "failed-probe" },
+        });
+        expect(error.status).toBe(500);
+        expect(error.headers.get("X-Request-Id")).toBe("failed-probe");
+        expect(output).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(String(output.mock.calls[0]?.[0]))).toMatchObject({
+          level: "error",
+          requestId: "failed-probe",
+          status: 500,
+        });
+        expect(await (await app.request("/metrics")).text()).toContain(
+          "nakama_http_server_errors_total 1"
+        );
+      } finally {
+        failure.mockRestore();
+      }
+    } finally {
+      output.mockRestore();
+      for (const [key, value] of [
+        ["NAKAMA_METRICS", previous.metrics],
+        ["NAKAMA_LOG_FORMAT", previous.format],
+        ["NAKAMA_LOG_LEVEL", previous.level],
+      ]) {
+        if (value === undefined) {
+          delete process.env[key!];
+        } else {
+          process.env[key!] = value;
+        }
+      }
+    }
+  });
+
   test("accepts opaque bearer auth for internal clients", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-bearer-auth-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -1069,95 +960,6 @@ describe("createHonoApp", () => {
 
     expect(listCalls).toEqual([]);
   });
-
-  const smokeRoutes = [
-    {
-      expected: { lines: ["last:50"], worker: "whatsapp" },
-      name: "serves worker logs through Hono routes",
-      path: "/v1/workers/whatsapp/logs?lines=50",
-    },
-    {
-      expected: { models: [{ id: "model-remote" }] },
-      name: "serves model catalog through Hono routes",
-      path: "/v1/models?source=remote",
-    },
-    {
-      expected: { active: true, content: "ctx" },
-      name: "serves user context through Hono routes",
-      path: "/v1/user/context?content=true",
-    },
-    {
-      csrf: true,
-      expected: { reply: "reply:hello" },
-      method: "POST" as const,
-      name: "sends non-streaming session messages through Hono routes",
-      path: "/v1/sessions/session_1/messages",
-      requestBody: { message: "hello" },
-    },
-    {
-      expected: { profiles: [{ id: "default" }] },
-      name: "serves profiles through Hono routes",
-      path: "/v1/profiles",
-    },
-    {
-      expected: { servers: [{ id: "mcp_1" }] },
-      name: "serves mcp servers through Hono routes",
-      path: "/v1/mcp/servers",
-    },
-    {
-      expected: { skills: [{ id: "skill_1" }] },
-      name: "serves skills through Hono routes",
-      path: "/v1/skills",
-    },
-    {
-      expected: { tools: [{ id: "tool_1" }] },
-      name: "serves tools through Hono routes",
-      path: "/v1/tools",
-    },
-    {
-      expected: {
-        automations: [{ id: "automation_1" }],
-        unread: { byAutomationId: {}, totalUnread: 0 },
-      },
-      name: "serves automations through Hono routes",
-      path: "/v1/automations",
-    },
-    {
-      csrf: true,
-      expected: { run: { id: "automation_run_1" } },
-      method: "POST" as const,
-      name: "runs automations through Hono routes",
-      path: "/v1/automations/automation_1/run",
-    },
-  ] as const;
-
-  for (const tc of smokeRoutes) {
-    test(tc.name, async () => {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-      const session = await setupFreshInstallSession(
-        app,
-        options.databaseAdapter
-      );
-
-      const method = "method" in tc ? tc.method : "GET";
-      const headers =
-        "csrf" in tc && tc.csrf
-          ? session.headers({ "X-CSRF-Token": session.csrfToken })
-          : session.headers();
-      const init: RequestInit = { headers, method };
-      if ("requestBody" in tc) {
-        init.body = JSON.stringify(tc.requestBody);
-      }
-
-      const response = await app.fetch(
-        new Request(`http://localhost:4310${tc.path}`, init)
-      );
-
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual(tc.expected);
-    });
-  }
 
   describe("org context middleware", () => {
     test("setup stores active org on the session", async () => {

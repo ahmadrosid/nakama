@@ -26,16 +26,12 @@
     "apps/server/src/providers/compatible-models.ts": ["exports"],
     "apps/server/src/providers/anthropic/index.ts": ["exports"],
     "apps/server/src/providers/models.ts": ["exports"],
-    "apps/server/src/providers/shared.ts": ["exports"],
     "apps/server/src/providers/usage-tracking.ts": ["exports", "types"],
     "apps/server/src/http/org-guards.ts": ["exports"],
     "apps/server/src/http/public-routes.ts": ["exports"],
     "apps/server/src/services/skills-service.ts": ["exports"],
     "apps/server/src/services/coding-agent-bash-env.ts": ["exports"],
-    "apps/server/src/services/coding-agent-harness-service.ts": [
-      "exports",
-      "types"
-    ],
+    "apps/server/src/services/coding-agent-harness-service.ts": ["exports"],
     "apps/server/src/services/coding-agent-spawn-env.ts": ["exports"],
     "apps/server/src/services/composio-api-client.ts": ["exports", "types"],
     "apps/server/src/services/data-portability.ts": ["exports"],
@@ -142,7 +138,6 @@
     "apps/web/src/components/FireworksModelsBrowseList.tsx": ["types"],
     "apps/web/src/components/ModelBrowseShell.tsx": ["types"],
     "apps/web/src/lib/thinking-settings.ts": ["duplicates"],
-    "packages/core/src/email-config.ts": ["duplicates"],
     "docs/website/mdx-components.tsx": ["unlisted"]
   }
 }

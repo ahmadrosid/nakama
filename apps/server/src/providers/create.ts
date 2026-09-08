@@ -8,9 +8,13 @@ import {
   type ProviderName,
   readChatgptOAuthFromInstance,
   readEnvValue,
+  readXaiOAuthFromInstance,
   type UserConfig,
 } from "@nakama/core";
-import type { ChatgptOAuthCredentials } from "@nakama/core/contract";
+import type {
+  ChatgptOAuthCredentials,
+  XaiOAuthCredentials,
+} from "@nakama/core/contract";
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
@@ -26,8 +30,11 @@ import { createOpenAIProvider } from "./openai";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
+import { createXaiProvider } from "./xai-oauth";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
+const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
 export interface CreateProviderOptions {
@@ -81,8 +88,24 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         model,
         providerName: "deepseek",
       });
+    case "together":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_TOGETHER_BASE_URL,
+        model,
+        providerName: "together",
+      });
+    case "mistral":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_MISTRAL_BASE_URL,
+        model,
+        providerName: "mistral",
+      });
     case "minimax":
     case "minimax_cn":
+    case "moonshot":
+    case "moonshot_cn":
     case "zhipu":
     case "zhipu_cn":
       return createOpenAIProvider({
@@ -185,6 +208,10 @@ export interface CreateProviderForInstanceOptions {
     instanceId: string,
     oauth: ChatgptOAuthCredentials
   ) => Promise<void>;
+  onXaiTokenRefresh?: (
+    instanceId: string,
+    oauth: XaiOAuthCredentials
+  ) => Promise<void>;
   resolveInstance?: (instanceId: string) => ProviderInstance | null;
 }
 
@@ -194,6 +221,27 @@ export function createProviderForInstance(
   env: Record<string, string | undefined> = process.env,
   options?: CreateProviderForInstanceOptions
 ): ProviderClient | null {
+  if (instance.type === "xai_oauth") {
+    if (!readXaiOAuthFromInstance(instance)) {
+      return null;
+    }
+
+    return createXaiProvider({
+      getOAuth: () => {
+        const latest = options?.resolveInstance
+          ? options.resolveInstance(instance.id)
+          : instance;
+        return readXaiOAuthFromInstance(latest);
+      },
+      model,
+      ...(options?.onXaiTokenRefresh
+        ? {
+            onTokenRefresh: (oauth) =>
+              options.onXaiTokenRefresh!(instance.id, oauth),
+          }
+        : {}),
+    });
+  }
   if (instance.type === "chatgpt") {
     if (!isChatgptProviderConnected(instance)) {
       return null;

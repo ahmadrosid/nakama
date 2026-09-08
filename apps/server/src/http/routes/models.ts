@@ -49,6 +49,11 @@ import {
   fetchChatgptCodexModels,
   startChatgptOAuthDeviceSession,
 } from "../../providers/chatgpt/oauth";
+import {
+  completeXaiOAuthDeviceSession,
+  fetchXaiOAuthModels,
+  startXaiOAuthDeviceSession,
+} from "../../providers/xai-oauth/oauth";
 import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
@@ -79,6 +84,75 @@ export function registerModelRoutes(
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+  const xaiOAuthSchema = z.object({
+    accessToken: z.string(),
+    refreshToken: z.string(),
+    expiresAt: z.string(),
+  });
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      path: "/v1/xai-oauth/device/start",
+      operationId: "startXaiOAuthDevice",
+      tags: ["Models"],
+      summary: "Start Grok subscription sign-in",
+      responses: {
+        200: {
+          description: "Device sign-in code",
+          content: {
+            "application/json": {
+              schema: z.object({
+                sessionId: z.string(),
+                userCode: z.string(),
+                verificationUri: z.string(),
+                intervalSeconds: z.number(),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Sign-in failed",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      path: "/v1/xai-oauth/device/complete",
+      operationId: "completeXaiOAuthDevice",
+      tags: ["Models"],
+      summary: "Complete Grok subscription sign-in",
+      request: {
+        body: {
+          required: true,
+          content: {
+            "application/json": { schema: z.object({ sessionId: z.string() }) },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Grok credentials and language models",
+          content: {
+            "application/json": {
+              schema: z.object({
+                xaiOAuth: xaiOAuthSchema,
+                models: z.array(
+                  z.object({ id: z.string(), name: z.string().optional() })
+                ),
+              }),
+            },
+          },
+        },
+        400: {
+          description: "Sign-in failed",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+    })
+  );
   const providerIdParam = z.object({
     providerId: z
       .string()
@@ -1323,6 +1397,55 @@ export function registerModelRoutes(
     );
   });
 
+  app.post("/v1/xai-oauth/device/start", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
+
+    try {
+      return json(await startXaiOAuthDeviceSession(owner));
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/xai-oauth/device/complete", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
+    const body = await readJson<{ sessionId?: string }>(c.req.raw);
+    const sessionId =
+      typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+
+    if (!sessionId) {
+      return errorResponse("sessionId is required.", 400);
+    }
+
+    try {
+      const xaiOAuth = await completeXaiOAuthDeviceSession(
+        sessionId,
+        owner,
+        c.req.raw.signal
+      );
+      const models = await fetchXaiOAuthModels(xaiOAuth).catch(() => []);
+      return json(
+        { xaiOAuth, models },
+        200,
+        new Headers({ "Cache-Control": "no-store" })
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
   app.post("/v1/chatgpt-oauth/device/start", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
 
@@ -1575,13 +1698,16 @@ export function registerModelRoutes(
     requireOrgAdminFromContext(c);
 
     return streamAgentBrowserInstall(
-      async (send) => {
-        const status = await installAgentBrowser((progress) => {
-          send({
-            message: progress.message,
-            type: "progress",
-          });
-        });
+      async (send, signal) => {
+        const status = await installAgentBrowser(
+          (progress) => {
+            send({
+              message: progress.message,
+              type: "progress",
+            });
+          },
+          { signal }
+        );
 
         send({
           status,

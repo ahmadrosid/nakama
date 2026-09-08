@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -24,15 +25,22 @@ import { cn } from "@/lib/utils";
 
 export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: profiles = [] } = useProfilesQuery();
-  const { user } = useAuth();
+  const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
   const {
     profileId: liveChatProfileId,
     setProfileId: setLiveChatProfileId,
-    switchChatProfile,
+    syncForOrg,
   } = useActiveChatProfile();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (profiles.length === 0) {
+      return;
+    }
+    syncForOrg({ orgId: activeOrg?.id ?? null, profiles });
+  }, [activeOrg?.id, profiles, syncForOrg]);
 
   const logoSrc = ditherLogoSrc(resolvedTheme);
   const orderedProfiles = profiles.toSorted(
@@ -84,9 +92,9 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       return;
     }
 
-    // Draft /chat: reset in place via the mounted ChatPage handler.
+    // Draft /chat: store update; ChatPage enters a new draft for this id.
     if (location.pathname === buildChatBasePath()) {
-      switchChatProfile(profileId);
+      setLiveChatProfileId(profileId);
       return;
     }
 
