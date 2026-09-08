@@ -473,10 +473,10 @@ function ChatMessageRow({
         className="mr-0 ml-auto w-full min-w-0 max-w-full items-end justify-end overflow-visible"
         from="user"
       >
-        <div className="w-full space-y-2 rounded-2xl border border-border bg-muted/40 p-2">
+        <div className="flex w-full flex-col gap-3 rounded-[1.75rem] bg-muted px-5 pt-4 pb-3.5">
           <Textarea
             autoFocus
-            className="max-h-64 border-0 bg-transparent focus-visible:ring-0"
+            className="max-h-64 min-h-0 resize-none rounded-none border-0 bg-transparent p-0 text-sm leading-[1.55] tracking-[0.01em] shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -493,17 +493,17 @@ function ChatMessageRow({
           />
           <div className="flex justify-end gap-2">
             <Button
+              className="rounded-full px-4"
               onClick={() => setDraft(null)}
-              size="sm"
               type="button"
-              variant="ghost"
+              variant="outline"
             >
               Cancel
             </Button>
             <Button
+              className="rounded-full px-4"
               disabled={!trimmed || unchanged || busy || disabled}
               onClick={submit}
-              size="sm"
               type="button"
             >
               Send
@@ -525,7 +525,7 @@ function ChatMessageRow({
       {canEdit ? (
         <button
           aria-label="Edit message"
-          className="mr-1 inline-flex size-8 items-center justify-center self-end rounded-full text-muted-foreground opacity-0 transition-colors transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40 group-focus-within:opacity-100 group-hover:opacity-60 group-hover:hover:opacity-100"
+          className="mr-1 inline-flex size-8 items-center justify-center self-end rounded-lg text-muted-foreground opacity-0 transition-colors transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40 group-focus-within:opacity-100 group-hover:opacity-60 group-hover:hover:opacity-100"
           disabled={busy}
           onClick={() => setDraft(message.content)}
           title="Edit message"
@@ -645,7 +645,7 @@ function AssistantMessageActions({
       <button
         aria-label={copied ? "Copied" : "Copy response"}
         className={cn(
-          "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+          "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
           copied && "text-emerald-600 dark:text-emerald-400"
         )}
         disabled={!copyContent.trim()}
@@ -662,7 +662,7 @@ function AssistantMessageActions({
       {onRetryMessage ? (
         <button
           aria-label="Try again"
-          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
           disabled={busy || actionsDisabled}
           onClick={() => onRetryMessage(message)}
           title="Try again"
@@ -678,7 +678,7 @@ function AssistantMessageActions({
               <button
                 aria-label="Message actions"
                 className={cn(
-                  "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   busy && "pointer-events-none opacity-60"
                 )}
                 type="button"
