@@ -183,7 +183,7 @@ export async function runTimedInstallCommand(
       clearTimeout(timeoutId);
       clearTimeout(killTimeoutId);
       clearTimeout(settleTimeoutId);
-      signal?.removeEventListener("abort", onAbort);
+      signal?.removeEventListener("abort", terminate);
     };
 
     /**
@@ -225,6 +225,8 @@ export async function runTimedInstallCommand(
     };
 
     const terminate = () => {
+      timedOut = true;
+
       // The process can already be gone with `close` still outstanding, held by
       // whatever the installer left running. There is nothing left to wait for.
       if (exited) {
@@ -237,21 +239,13 @@ export async function runTimedInstallCommand(
       settleTimeoutId = setTimeout(settleAsTimedOut, settleTimeoutMs);
     };
 
-    const onAbort = () => {
-      timedOut = true;
-      terminate();
-    };
-
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      terminate();
-    }, timeoutMs);
+    const timeoutId = setTimeout(terminate, timeoutMs);
 
     if (signal) {
       if (signal.aborted) {
-        onAbort();
+        terminate();
       } else {
-        signal.addEventListener("abort", onAbort, { once: true });
+        signal.addEventListener("abort", terminate, { once: true });
       }
     }
 
