@@ -1859,12 +1859,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async checkHealth() {
       // Prepare afresh: cached statements can outlive SQLite's closed handle.
-      const statement = db.prepare("SELECT 1 FROM users LIMIT 1");
-      try {
-        statement.get();
-      } finally {
-        statement.finalize();
-      }
+      using statement = db.prepare("SELECT 1 FROM users LIMIT 1");
+      statement.get();
     },
 
     async countHumanUsers() {
