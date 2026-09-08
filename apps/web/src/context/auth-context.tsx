@@ -21,8 +21,13 @@ import {
   nextOrgIdAfterArchive,
 } from "@/lib/org-archive";
 import { queryClient } from "@/lib/query-client";
+import { queryKeys } from "@/lib/query-keys";
 
 function refreshAuthenticatedQueries(): void {
+  queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
+  queryClient.removeQueries({
+    predicate: (query) => query.queryKey[0] === "sessions",
+  });
   void queryClient.invalidateQueries();
 }
 

@@ -3307,7 +3307,7 @@ export class AgentService {
     const profile = await this.db.getProfileForOrg(profileId, orgId);
 
     if (!profile) {
-      throw new Error("Profile not found.");
+      throw new NakamaApiError("Profile not found.", 404);
     }
 
     return profile;

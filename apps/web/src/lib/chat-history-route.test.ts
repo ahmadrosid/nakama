@@ -286,6 +286,14 @@ describe("chat history route helpers", () => {
           search: "",
         })
       ).toBe("default");
+
+      expect(
+        resolveHistoryProfileId({
+          liveChatProfileId: "from-other-org",
+          profiles: [{ id: "org-b" }],
+          search: "?profile=D2jz2yFd3vuHS04T6wmTu",
+        })
+      ).toBe("org-b");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
