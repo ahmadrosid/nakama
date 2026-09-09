@@ -79,7 +79,9 @@ export function parseUserContext(
       line.startsWith(bulletPrefix(field))
     );
 
-    if (prefix) {
+    // A repeated bullet keeps the first line as the answer and falls through to
+    // extra, so a hand-written USER.md with two `Always:` rules loses neither.
+    if (prefix && !Object.hasOwn(answers, prefix.key)) {
       // Drop the single separating space, so a trailing space survives a round trip.
       answers[prefix.key] = line
         .slice(bulletPrefix(prefix).length)

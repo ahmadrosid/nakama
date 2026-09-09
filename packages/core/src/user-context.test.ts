@@ -121,6 +121,28 @@ test("parse and render round-trip a trailing space in an answer", () => {
   );
 });
 
+test("parseUserContext keeps a repeated bullet instead of overwriting it", () => {
+  const parsed = parseUserContext(`# About Me
+
+- Always: Answer in English
+- Always: Use metric units
+`);
+  expect(parsed.answers.always).toBe("Answer in English");
+  expect(parsed.extra).toBe("- Always: Use metric units");
+
+  const rendered = renderUserContext(parsed.answers, parsed.extra);
+  expect(rendered).toBe(`# About Me
+
+- Always: Answer in English
+
+- Always: Use metric units
+`);
+
+  // The moved line stays put from here on, so saving twice loses nothing.
+  const reparsed = parseUserContext(rendered);
+  expect(renderUserContext(reparsed.answers, reparsed.extra)).toBe(rendered);
+});
+
 test("parseUserContext tolerates missing content", () => {
   expect(parseUserContext(null)).toEqual({ answers: {}, extra: "" });
   expect(parseUserContext(undefined)).toEqual({ answers: {}, extra: "" });
