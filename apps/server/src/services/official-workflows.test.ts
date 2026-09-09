@@ -211,7 +211,8 @@ test("official dependencies are checked before publishing or changing org state"
     })
   ).rejects.toThrow();
   expect(await db.getOrgPlugin("org_a", "workflows")).toBeNull();
-  expect(await db.getPluginRelease("workflows", "1.0.0")).toBeNull();
+  const [official] = await service.listOfficialPlugins();
+  expect(await db.getPluginRelease("workflows", official!.version)).toBeNull();
 });
 
 test("failed official setup disables the new installation and can be retried", async () => {

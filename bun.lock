@@ -154,7 +154,7 @@
     },
     "packages/plugins/workflows": {
       "name": "@nakama/plugin-workflows",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "@nakama/core": "workspace:*",
         "@types/react": "^19.1.6",

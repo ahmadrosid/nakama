@@ -41,7 +41,7 @@ describe("native plugin activation", () => {
       },
     });
     const html = renderToString(createElement(Page));
-    expect(html).toContain("<h1>Workflows</h1>");
+    expect(html).not.toContain("<h1");
     expect(html).toContain('role="status"');
     expect(html).not.toContain("<iframe");
     expect(stylesheet).toContain('[data-plugin-id="workflows"]');

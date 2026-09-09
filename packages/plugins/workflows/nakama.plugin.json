@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "workflows",
   "name": "Workflows",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minNakamaVersion": "0.4.10",
   "author": "Nakama",
   "license": "MIT",
