@@ -6,6 +6,7 @@ import { createAuthMiddleware } from "./auth-middleware";
 import type { ServerOptions } from "./context";
 import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
+import { createRateLimitMiddleware } from "./rate-limit-middleware";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerAutomationWorkerSettingsRoutes } from "./routes/automation-worker-settings";
@@ -50,6 +51,11 @@ import type { HonoApp } from "./types";
  */
 const THEME_BOOTSTRAP_SCRIPT_HASH =
   "sha256-rQ5OTxagyMHDDSQ6k5wlUK8gtuYxXBrpQGqjAcYBz2w=";
+
+function readPositiveEnv(name: string): number | undefined {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
@@ -171,6 +177,17 @@ export function createHonoApp(options: ServerOptions) {
       ].join("\n")
     );
   });
+
+  // Ahead of auth so an unauthenticated flood is refused before it reaches
+  // bcrypt or the database.
+  app.use(
+    "*",
+    createRateLimitMiddleware({
+      authMax: readPositiveEnv("NAKAMA_RATE_LIMIT_AUTH_MAX"),
+      max: readPositiveEnv("NAKAMA_RATE_LIMIT_MAX"),
+      trustProxy: process.env.NAKAMA_TRUST_PROXY === "true",
+    })
+  );
 
   app.use("*", createAuthMiddleware(options));
   registerInternalAutomationRoutes(app, options);
