@@ -161,7 +161,8 @@ export function SetupStepUserContext({
             <div className="space-y-0.5">
               <p className="font-medium text-foreground text-sm">Timezone</p>
               <p className="text-muted-foreground text-xs">
-                For scheduled automations and local time awareness
+                Saved on its own, not part of USER.md. Used for scheduled
+                automations and local time awareness.
               </p>
             </div>
             <TimezoneSelect
