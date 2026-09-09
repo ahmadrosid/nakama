@@ -361,7 +361,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
       outputPerMillionUsd: 1.6,
       provider,
       supportsThinking: true,
-      supportsVision: false,
+      supportsVision: true,
     },
     {
       contextWindow: 131_072,
@@ -371,6 +371,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
       name: "Qwen Plus",
       outputPerMillionUsd: 1.2,
       provider,
+      supportsThinking: true,
       supportsVision: false,
     },
     {

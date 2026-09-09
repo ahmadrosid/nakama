@@ -450,18 +450,15 @@ function buildDeepSeekThinkingBody(
   };
 }
 
+/** DashScope hybrid models default thinking on — opt out unless UI enables. */
 function buildQwenThinkingBody(
   thinking: ProviderChatOptions["thinking"] | undefined
 ) {
-  if (thinking?.enabled === false) {
-    return { enable_thinking: false };
+  if (thinking?.enabled) {
+    return { enable_thinking: true };
   }
 
-  if (!thinking?.enabled) {
-    return {};
-  }
-
-  return { enable_thinking: true };
+  return { enable_thinking: false };
 }
 
 function readReasoningContent(

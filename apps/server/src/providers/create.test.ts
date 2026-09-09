@@ -223,6 +223,11 @@ describe("createProviderForInstance routing", () => {
         expect(seenAuth).toBe(`Bearer ${apiKey}`);
         expect(seenModel).toBe("qwen3.7-plus");
         expect(seenEnableThinking).toBe(true);
+
+        await client!.generateChat({
+          messages: [{ content: "ping", role: "user" }],
+        });
+        expect(seenEnableThinking).toBe(false);
       } finally {
         mock.stop(true);
       }

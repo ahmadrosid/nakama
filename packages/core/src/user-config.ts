@@ -640,15 +640,11 @@ function loadProvidersFromSections(
     const baseUrl = values.base_url?.trim()
       ? normalizeBaseUrl(values.base_url)
       : undefined;
-    const customModels =
-      isDiscoveryModelProvider(type) ||
-      type === "openrouter" ||
-      type === "cerebras" ||
-      type === "fireworks" ||
-      type === "ollama" ||
-      type === "opencode_go"
-        ? parseCustomModelsJson(values.models_json)
-        : undefined;
+    // Writer persists models_json for every type that has a shortlist/catalog
+    // override; load any present JSON so restarts keep shortlists.
+    const customModels = values.models_json?.trim()
+      ? parseCustomModelsJson(values.models_json)
+      : undefined;
     const hostMode =
       type === "ollama"
         ? (parseOllamaHostMode(values.host_mode) ?? undefined)

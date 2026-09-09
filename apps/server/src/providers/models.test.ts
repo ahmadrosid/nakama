@@ -145,6 +145,7 @@ describe("resolveModel", () => {
     expect(getDefaultModel("qwen_cn")).toBe("qwen3.7-plus");
     expect(getModelById("qwen3.7-plus")?.supportsThinking).toBe(true);
     expect(getModelById("qwen3.7-plus")?.contextWindow).toBe(1_000_000);
+    expect(getModelById("qwen3.7-plus")?.supportsVision).toBe(true);
     expect(getModelById("qwen3-vl-plus")?.supportsVision).toBe(true);
     expect(getModelById("qwen3-vl-plus")?.supportsThinking).toBe(true);
     expect(getModelById("qwen-flash")?.inputPerMillionUsd).toBe(0.05);
@@ -373,7 +374,7 @@ describe("modelSupportsVision", () => {
   });
 
   test("reads Qwen DashScope vision flags from the curated catalog", () => {
-    expect(modelSupportsVision("qwen3.7-plus", "qwen")).toBe(false);
+    expect(modelSupportsVision("qwen3.7-plus", "qwen")).toBe(true);
     expect(modelSupportsVision("qwen-plus", "qwen")).toBe(false);
     expect(modelSupportsVision("qwen3-vl-plus", "qwen")).toBe(true);
     expect(modelSupportsVision("qwen3-vl-plus", "qwen_cn")).toBe(true);
