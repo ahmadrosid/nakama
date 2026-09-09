@@ -461,6 +461,7 @@ function PluginRow({
       <div className="flex flex-wrap items-center justify-end gap-1.5">
         {canOpen ? (
           <Button
+            nativeButton={false}
             render={<Link to={pluginPagePath(plugin.pluginId)} />}
             size="sm"
           >
@@ -470,6 +471,7 @@ function PluginRow({
         {plugin.lifecycleState === "enabled" ? (
           <Button
             disabled={busy}
+            nativeButton={false}
             render={<Link to={PAGE_PATHS.profiles} />}
             size="sm"
             variant="outline"
