@@ -283,14 +283,12 @@ export async function runTimedInstallCommand(
       return nextBuffer;
     };
 
-    child.stdout?.on("data", (chunk) => {
-      const text = chunk.toString();
+    child.stdout?.setEncoding("utf8").on("data", (text: string) => {
       stdout += text;
       stdoutBuffer += text;
       stdoutBuffer = flushBuffer(stdoutBuffer, "stdout");
     });
-    child.stderr?.on("data", (chunk) => {
-      const text = chunk.toString();
+    child.stderr?.setEncoding("utf8").on("data", (text: string) => {
       stderr += text;
       stderrBuffer += text;
       stderrBuffer = flushBuffer(stderrBuffer, "stderr");
