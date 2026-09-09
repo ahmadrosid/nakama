@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  claimLegacyTelegramConfig,
   generateHandshakeCode,
+  getTelegramConfigDir,
   isTelegramUserAuthorized,
+  listTelegramConfigOrgIds,
   loadTelegramConfigFile,
   maskBotToken,
   normalizeHandshakeInput,
@@ -10,7 +13,10 @@ import {
   saveTelegramConfig,
   verifyAndPairTelegramUser,
 } from "./telegram-config";
-import { describeSharedChannelConfigTests } from "./testing/channel-config-fixtures";
+import {
+  describeSharedChannelConfigTests,
+  withTempHomedir,
+} from "./testing/channel-config-fixtures";
 
 describe("parseAllowedUserIds", () => {
   test("parses comma-separated ids", () => {
@@ -43,7 +49,7 @@ describeSharedChannelConfigTests({
   },
   generateHandshakeCode,
   isUserAuthorized: isTelegramUserAuthorized,
-  loadConfigFile: loadTelegramConfigFile,
+  loadConfigFile: () => loadTelegramConfigFile(null),
   mask: maskBotToken,
   name: "telegram",
   normalize: normalizeHandshakeInput,
@@ -53,6 +59,47 @@ describeSharedChannelConfigTests({
     pairedUserIds: [1],
   },
   sampleId: 9001,
-  saveConfig: saveTelegramConfig,
-  verifyAndPair: verifyAndPairTelegramUser,
+  saveConfig: (input) => saveTelegramConfig(null, input),
+  verifyAndPair: (handshakeInput, userId) =>
+    verifyAndPairTelegramUser(null, handshakeInput, userId),
+});
+
+describe("per-org telegram config", () => {
+  test("keeps each org's credentials out of the other scopes", async () => {
+    await withTempHomedir("nakama-telegram-org-", async () => {
+      await saveTelegramConfig("org_a", { botToken: "111:AAA" });
+
+      expect(await loadTelegramConfigFile("org_b")).toBeNull();
+      expect(await loadTelegramConfigFile(null)).toBeNull();
+      expect((await loadTelegramConfigFile("org_a"))?.botToken).toBe("111:AAA");
+      expect(await listTelegramConfigOrgIds()).toEqual(["org_a"]);
+    });
+  });
+
+  test("refuses a bot token another scope already runs", async () => {
+    await withTempHomedir("nakama-telegram-dup-", async () => {
+      await saveTelegramConfig(null, { botToken: "111:AAA" });
+
+      await expect(
+        saveTelegramConfig("org_b", { botToken: "111:AAA" })
+      ).rejects.toThrow("already in use by another organization");
+    });
+  });
+
+  test("claims the install-wide config for a sole org, once", async () => {
+    await withTempHomedir("nakama-telegram-claim-", async () => {
+      await saveTelegramConfig(null, { botToken: "111:AAA" });
+
+      expect(await claimLegacyTelegramConfig("org_a")).toBe(true);
+      expect((await loadTelegramConfigFile("org_a"))?.botToken).toBe("111:AAA");
+      expect(await loadTelegramConfigFile(null)).toBeNull();
+      expect(await claimLegacyTelegramConfig("org_a")).toBe(false);
+    });
+  });
+
+  test("rejects an org id that would escape the config dir", () => {
+    expect(() => getTelegramConfigDir("../../etc")).toThrow(
+      "Invalid organization id"
+    );
+  });
 });

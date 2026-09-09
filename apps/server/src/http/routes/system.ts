@@ -12,7 +12,7 @@ import {
 } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
-import { errorResponse, readJson } from "../shared";
+import { errorResponse, getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const DOCS_HTML = `<!doctype html>
@@ -199,7 +199,10 @@ export function registerSystemRoutes(
   });
 
   app.openapi(systemStatusRoute, async (c) =>
-    c.json(await systemStatus.getStatus(), 200)
+    c.json(
+      await systemStatus.getStatus(getRequestAuth(c).activeOrgId ?? null),
+      200
+    )
   );
 
   app.openapi(getWebPublicUrlRoute, async (c) => {

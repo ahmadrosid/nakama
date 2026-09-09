@@ -34,6 +34,7 @@ import {
   NAKAMA_API_VERSION,
   writeRuntimeServerUrl,
 } from "@nakama/core";
+import { claimLegacyTelegramConfig } from "@nakama/core/telegram-config";
 import {
   createDatabase,
   type Database,
@@ -116,6 +117,21 @@ await seedDatabase(database.adapter);
 const interruptedRuns = await database.adapter.failInterruptedRuns();
 if (interruptedRuns > 0) {
   console.log(`Settled ${interruptedRuns} run(s) interrupted by a restart`);
+}
+
+// Channel credentials used to be install-wide. On a single-org install that
+// config can only belong to that org, so claim it once before any scope-exact
+// read reports the org as unconfigured.
+const [soleOrganization, ...otherOrganizations] =
+  await database.adapter.listOrganizations();
+if (soleOrganization && otherOrganizations.length === 0) {
+  const claimed = await claimLegacyTelegramConfig(soleOrganization.id);
+
+  if (claimed) {
+    console.log(
+      `Moved the Telegram config into organization ${soleOrganization.id}; restart the Telegram worker.`
+    );
+  }
 }
 
 const authService = new AuthService();

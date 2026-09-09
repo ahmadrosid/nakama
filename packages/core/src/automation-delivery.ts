@@ -5,7 +5,10 @@ import type {
 } from "./contract";
 import { isDiscordSnowflake, loadDiscordConfigFile } from "./discord-config";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
-import { loadTelegramConfigFile } from "./telegram-config";
+import {
+  loadTelegramConfigFile,
+  resolveTelegramScopeForOrg,
+} from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -140,18 +143,21 @@ export function shouldDeliverForRun(
 
 export interface ValidateAutomationDeliveryOptions {
   isEmailConfigured?: () => Promise<boolean> | boolean;
+  orgId: string;
 }
 
 export async function validateAutomationDelivery(
   delivery: AutomationDelivery | undefined,
-  options: ValidateAutomationDeliveryOptions = {}
+  options: ValidateAutomationDeliveryOptions
 ): Promise<void> {
   if (!delivery) {
     return;
   }
 
   if (delivery.channel === "telegram") {
-    const config = await loadTelegramConfigFile();
+    const config = await loadTelegramConfigFile(
+      await resolveTelegramScopeForOrg(options.orgId)
+    );
 
     if (!config?.botToken.trim()) {
       throw new Error(

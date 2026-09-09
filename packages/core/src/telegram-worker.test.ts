@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
-  parseTelegramWorkerHeartbeat,
+  createTelegramWorkerHeartbeat,
   resolveTelegramWorkerStatus,
 } from "./telegram-worker";
+import { withTempHomedir } from "./testing/channel-config-fixtures";
 
 describe("resolveTelegramWorkerStatus", () => {
   test("is ok when telegram is not configured", () => {
@@ -67,17 +68,19 @@ describe("resolveTelegramWorkerStatus", () => {
   });
 });
 
-describe("parseTelegramWorkerHeartbeat", () => {
-  test("parses valid JSON", () => {
-    expect(
-      parseTelegramWorkerHeartbeat(
-        JSON.stringify({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z" })
-      )
-    ).toEqual({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z" });
-  });
+describe("createTelegramWorkerHeartbeat", () => {
+  test("claims each identity separately", async () => {
+    await withTempHomedir("nakama-telegram-hb-", async () => {
+      const legacy = createTelegramWorkerHeartbeat(null);
+      const orgA = createTelegramWorkerHeartbeat("org_a");
 
-  test("returns null for invalid payloads", () => {
-    expect(parseTelegramWorkerHeartbeat("not json")).toBeNull();
-    expect(parseTelegramWorkerHeartbeat("{}")).toBeNull();
+      await legacy.write({
+        pid: process.pid,
+        updatedAt: new Date().toISOString(),
+      });
+
+      expect(await legacy.isRunning()).toBe(true);
+      expect(await orgA.isRunning()).toBe(false);
+    });
   });
 });
