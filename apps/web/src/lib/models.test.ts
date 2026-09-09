@@ -25,6 +25,7 @@ function group(
     | "deepseek"
     | "together"
     | "mistral"
+    | "perplexity"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -150,6 +151,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("mi-1", "model-1"),
         group("mi-1", "mistral", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats perplexity models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -364,6 +381,7 @@ describe("firstAvailableProviderOption", () => {
           "deepseek",
           "together",
           "mistral",
+          "perplexity",
           "cerebras",
           "cloudflare",
           "fireworks",

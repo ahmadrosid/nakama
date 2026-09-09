@@ -113,6 +113,10 @@ export function AttachmentDetailPanel({
         fullscreen
           ? "left-0 w-full min-w-0 flex-1"
           : "max-w-[50vw] lg:max-w-[75vw]",
+        // As a resizable column this clamps to about 195px on a phone, so
+        // there it takes the screen whatever the caller asked for. `w-full!`
+        // is what beats the inline width below.
+        "max-sm:left-0 max-sm:w-full! max-sm:min-w-0 max-sm:max-w-none max-sm:flex-1",
         className
       )}
       data-slot="attachment-detail-panel"
@@ -122,7 +126,7 @@ export function AttachmentDetailPanel({
         <div
           aria-label="Resize panel"
           aria-orientation="vertical"
-          className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize touch-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent hover:before:bg-border active:before:bg-border"
+          className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize touch-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent hover:before:bg-border active:before:bg-border max-sm:hidden"
           onPointerCancel={handleResizePointerUp}
           onPointerDown={handleResizePointerDown}
           onPointerMove={handleResizePointerMove}

@@ -182,7 +182,10 @@ export function registerProfilePortabilityRoutes(
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
-    const body = await readJson<{ data: string; name?: string }>(c.req.raw);
+    const body = await readJson<{ data: string; name?: string }>(
+      c.req.raw,
+      importRequestSchema
+    );
 
     try {
       const preview = await previewProfilePackImport(
@@ -205,7 +208,10 @@ export function registerProfilePortabilityRoutes(
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
-    const body = await readJson<ProfilePackImportRequest>(c.req.raw);
+    const body = await readJson<ProfilePackImportRequest>(
+      c.req.raw,
+      restoreRequestSchema
+    );
 
     try {
       const imported = await importProfilePack(

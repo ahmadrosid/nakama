@@ -47,6 +47,24 @@ function createApp() {
 const BASE = "http://localhost:4310";
 
 describe("skill suggestion routes (v1)", () => {
+  test("rejects an unknown status filter", async () => {
+    const { app, databaseAdapter } = createApp();
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "status-admin@org.com"
+    );
+    const orgId = adminSession.orgId!;
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/skill-suggestions?status=unknown`, {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   test("admin can list and apply suggestions; member can too; viewer is forbidden", async () => {
     const { app, databaseAdapter, skillSuggestionService } = createApp();
     const adminSession = await setupFreshInstallSession(

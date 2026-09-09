@@ -2238,6 +2238,7 @@ export type ProviderName =
   | "gemini"
   | "deepseek"
   | "mistral"
+  | "perplexity"
   | "cerebras"
   | "fireworks"
   | "ollama"

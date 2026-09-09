@@ -81,7 +81,7 @@ export function SystemPage() {
         ? createPortal(
             <div
               aria-label="System"
-              className="flex h-full min-w-0 items-stretch"
+              className="no-scrollbar flex h-full min-w-0 items-stretch overflow-x-auto"
               role="tablist"
             >
               {visibleTabs.map((item) => (

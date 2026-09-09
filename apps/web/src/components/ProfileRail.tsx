@@ -23,7 +23,7 @@ import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-export function ProfileRail() {
+export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: profiles = [] } = useProfilesQuery();
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
@@ -58,6 +58,8 @@ export function ProfileRail() {
   });
 
   function handleSelectProfile(profileId: string) {
+    onNavigate?.();
+
     if (profileId === activeProfileId) {
       return;
     }
@@ -165,6 +167,8 @@ export function ProfileRail() {
           <ProfileAdminPlusButton
             label={onProfilesPage ? "New profile" : "Manage profiles"}
             onClick={() => {
+              onNavigate?.();
+
               if (!onProfilesPage) {
                 navigate(pathForPage("profiles"));
                 return;

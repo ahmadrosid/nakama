@@ -35,6 +35,14 @@ import {
 } from "../shared";
 import type { HonoApp } from "../types";
 
+/**
+ * A real bcrypt hash at the cost the app uses, kept only so a login for an
+ * unknown email costs the same as one for a known email. Nothing verifies
+ * against it successfully; it exists to be slow.
+ */
+const ABSENT_ACCOUNT_PASSWORD_HASH =
+  "$2b$10$IJnCe7uf5MN2/Vo89wb4ReF6yVI5SNnLdjIbiZ4Uwj4/r7zcqrWLm";
+
 export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   const { authService, databaseAdapter, orgService } = options;
   const authCredentialsSchema = z
@@ -452,6 +460,12 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const body = await readJson<{ email: string; password: string }>(c.req.raw);
     const user = await databaseAdapter.getUserByEmail(body.email);
     if (!user) {
+      // Spend the same bcrypt work an existing account would, so the response
+      // time stops answering "does this email have an account here".
+      await authService.verifyPassword(
+        body.password?.trim() ?? "",
+        ABSENT_ACCOUNT_PASSWORD_HASH
+      );
       return errorResponse("Invalid credentials", 401);
     }
 
