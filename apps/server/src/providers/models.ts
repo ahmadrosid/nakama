@@ -221,6 +221,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     name: "Doubao Seed 1.8",
     outputPerMillionUsd: 0.67,
     provider: "doubao",
+    supportsThinking: true,
     supportsVision: true,
   },
   {

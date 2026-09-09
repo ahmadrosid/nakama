@@ -154,6 +154,7 @@ describe("resolveModel", () => {
     expect(getModelById("doubao-seed-2-1-turbo-260628")?.supportsVision).toBe(
       true
     );
+    expect(getModelById("doubao-seed-1-8-251228")?.supportsThinking).toBe(true);
     expect(getModelById("doubao-seed-1-8-251228")?.supportsVision).toBe(true);
     expect(getModelById("doubao-seed-2-1-pro-260628")?.contextWindow).toBe(
       256_000
