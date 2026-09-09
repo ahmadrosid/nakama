@@ -1,8 +1,16 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { getProfileSoulDir } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -941,6 +949,25 @@ describe("profile service deleteProfile", () => {
     ).rejects.toThrow(/at least 3 profiles/);
 
     expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
+  });
+
+  test("removes the deleted profile workspace without touching another profile", async () => {
+    const { db, service } = await setup();
+    const removed = await service.createProfile(ORG_ID, { name: "Removed" });
+    const kept = await service.createProfile(ORG_ID, { name: "Kept" });
+    const removedDir = getProfileSoulDir(ORG_ID, removed.profile.id);
+    const keptDir = getProfileSoulDir(ORG_ID, kept.profile.id);
+    const artifactDir = path.join(removedDir, "artifacts");
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(path.join(artifactDir, "report.md"), "private data");
+
+    await service.deleteProfile(ORG_ID, removed.profile.id);
+
+    expect(await db.getProfile(removed.profile.id)).toBeNull();
+    await expect(access(removedDir)).rejects.toThrow();
+    expect(
+      (await readFile(path.join(keptDir, "SOUL.md"), "utf8")).length
+    ).toBeGreaterThan(0);
   });
 
   test("deletes the default when the org has 3 profiles and promotes a successor", async () => {

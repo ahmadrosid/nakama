@@ -2,7 +2,12 @@ import { copyFile, mkdir, open, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AgentChatSession } from "@nakama/agent";
 import type { ChatMessage, ToolDefinition } from "@nakama/core";
-import { createId, getUserConfigDir, jsonSchemaFromZod } from "@nakama/core";
+import {
+  createId,
+  getProfileSoulDir,
+  getUserConfigDir,
+  jsonSchemaFromZod,
+} from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 
@@ -93,7 +98,12 @@ export function deleteProfileWithHistoryArchives(
           });
         }
       }
-      // Keep session IDs available for retry if filesystem cleanup fails.
+      // Keep the profile and session IDs available for retry when filesystem
+      // cleanup fails instead of leaving unreachable files after the cascade.
+      await rm(getProfileSoulDir(orgId, profileId), {
+        force: true,
+        recursive: true,
+      });
       return db.deleteProfile(profileId);
     }
   );
