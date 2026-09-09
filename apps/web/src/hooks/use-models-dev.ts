@@ -47,6 +47,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   openrouter: "openrouter",
   perplexity: "perplexity",
   together: "together",
+  xiaomi: "xiaomi",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {

@@ -24,6 +24,7 @@ function group(
     | "openrouter"
     | "deepseek"
     | "together"
+    | "xiaomi"
     | "mistral"
     | "perplexity"
     | "cerebras"
@@ -135,6 +136,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("tg-1", "model-1"),
         group("tg-1", "together", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats xiaomi models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -276,6 +293,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(true);
   });
 
+  test("treats xiaomi models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats fireworks models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -380,6 +413,7 @@ describe("firstAvailableProviderOption", () => {
           "gemini",
           "deepseek",
           "together",
+          "xiaomi",
           "mistral",
           "perplexity",
           "cerebras",

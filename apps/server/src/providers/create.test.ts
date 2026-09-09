@@ -81,6 +81,68 @@ describe("createProviderForInstance routing", () => {
     }
   });
 
+  test("routes xiaomi instances to the configured base URL with auth", async () => {
+    let seenPath = "";
+    let seenAuth = "";
+    let seenModel = "";
+
+    const mock = Bun.serve({
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        seenPath = url.pathname;
+        seenAuth = request.headers.get("authorization") ?? "";
+        const body = (await request.json()) as { model?: string };
+        seenModel = body.model ?? "";
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { content: "ok", role: "assistant" },
+            },
+          ],
+          created: 1,
+          id: "mock",
+          model: seenModel,
+          object: "chat.completion",
+          usage: {
+            completion_tokens: 1,
+            prompt_tokens: 1,
+            total_tokens: 2,
+          },
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        baseUrl: `http://127.0.0.1:${mock.port}/v1`,
+        createdAt: new Date().toISOString(),
+        id: "inst_xiaomi",
+        label: "Xiaomi MiMo",
+        type: "xiaomi",
+      };
+
+      const client = createProviderForInstance(instance, "mimo-v2.5-pro");
+
+      expect(client).not.toBeNull();
+      expect(client?.name).toBe("xiaomi");
+
+      const result = await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+      });
+
+      expect(result.content).toBe("ok");
+      expect(seenPath).toBe("/v1/chat/completions");
+      expect(seenAuth).toBe("Bearer test-key");
+      expect(seenModel).toBe("mimo-v2.5-pro");
+    } finally {
+      mock.stop(true);
+    }
+  });
+
   test("routes mistral instances to the configured base URL with auth", async () => {
     let seenPath = "";
     let seenAuth = "";

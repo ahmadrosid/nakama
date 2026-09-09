@@ -152,6 +152,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Together AI";
   }
 
+  if (providerName === "xiaomi") {
+    return "Xiaomi MiMo";
+  }
+
   if (providerName === "mistral") {
     return "Mistral";
   }

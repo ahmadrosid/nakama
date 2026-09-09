@@ -28,6 +28,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
     expect(parseProviderName("together")).toBe("together");
+    expect(parseProviderName("xiaomi")).toBe("xiaomi");
   });
 
   test("rejects unknown values", () => {
@@ -43,6 +44,10 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("maps Together AI to its env key", () => {
     expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
+  });
+
+  test("maps Xiaomi MiMo to its env key", () => {
+    expect(apiKeyEnvVarForProvider("xiaomi")).toBe("XIAOMI_API_KEY");
   });
 
   test("mistral uses MISTRAL_API_KEY", () => {
@@ -131,6 +136,18 @@ describe("resolveProvider together", () => {
   });
 });
 
+describe("resolveProvider xiaomi", () => {
+  test("auto-resolves Xiaomi MiMo when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        XIAOMI_API_KEY: "xm-test",
+      },
+    });
+
+    expect(provider).toBe("xiaomi");
+  });
+});
+
 describe("resolveProvider mistral", () => {
   test("auto-resolves Mistral when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -194,6 +211,7 @@ describe("isDiscoveryModelProvider", () => {
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
     expect(isDiscoveryModelProvider("together")).toBe(false);
+    expect(isDiscoveryModelProvider("xiaomi")).toBe(false);
     expect(isDiscoveryModelProvider("mistral")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);

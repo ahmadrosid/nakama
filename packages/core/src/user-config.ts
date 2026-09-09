@@ -103,6 +103,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
+  xiaomi: "Xiaomi MiMo",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };

@@ -8,6 +8,7 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "gemini",
   "deepseek",
   "together",
+  "xiaomi",
   "mistral",
   "perplexity",
   "opencode_go",

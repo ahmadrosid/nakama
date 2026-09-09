@@ -24,6 +24,7 @@ const BUILTIN_LABELS: Record<
   together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
+  xiaomi: "Xiaomi MiMo",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };

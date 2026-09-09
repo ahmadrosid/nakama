@@ -2244,7 +2244,8 @@ export type ProviderName =
   | "zhipu"
   | "zhipu_cn"
   | "xai"
-  | "together";
+  | "together"
+  | "xiaomi";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

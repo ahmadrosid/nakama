@@ -101,6 +101,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   together: new Set<string>(),
   xai: new Set<string>(),
   xai_oauth: new Set<string>(),
+  xiaomi: new Set<string>(),
   zhipu: new Set<string>(),
   zhipu_cn: new Set<string>(),
 };

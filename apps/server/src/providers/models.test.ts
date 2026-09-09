@@ -115,6 +115,25 @@ describe("resolveModel", () => {
     );
   });
 
+  test("resolves catalog models for Xiaomi MiMo", () => {
+    expect(resolveModel("xiaomi", "mimo-v2.5-pro")).toBe("mimo-v2.5-pro");
+    expect(resolveModel("xiaomi", "mimo-v2.5")).toBe("mimo-v2.5");
+    expect(getDefaultModel("xiaomi")).toBe("mimo-v2.5-pro");
+    expect(getModelById("mimo-v2.5-pro")?.supportsVision).toBe(false);
+    expect(getModelById("mimo-v2.5")?.supportsVision).toBe(true);
+    expect(getModelById("mimo-v2.5-pro")?.contextWindow).toBe(1_048_576);
+  });
+
+  test("uses xiaomi custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "mimo-v2.5", name: "MiMo V2.5" },
+    ];
+    expect(resolveModel("xiaomi", "mimo-v2.5", customModels)).toBe("mimo-v2.5");
+    expect(resolveModel("xiaomi", "unknown-model", customModels)).toBe(
+      "mimo-v2.5"
+    );
+  });
+
   test("resolves catalog models for Mistral", () => {
     expect(resolveModel("mistral", "mistral-large-2512")).toBe(
       "mistral-large-2512"
@@ -338,6 +357,11 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("openai/gpt-oss-120b", "together")).toBe(false);
     expect(modelSupportsVision("Qwen/Qwen3.5-9B", "together")).toBe(true);
     expect(modelSupportsVision("MiniMaxAI/MiniMax-M3", "together")).toBe(true);
+  });
+
+  test("reads Xiaomi MiMo vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("mimo-v2.5-pro", "xiaomi")).toBe(false);
+    expect(modelSupportsVision("mimo-v2.5", "xiaomi")).toBe(true);
   });
 
   test("reads Mistral vision flags from the curated catalog", () => {
