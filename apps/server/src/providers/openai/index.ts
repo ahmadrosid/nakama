@@ -447,19 +447,15 @@ function buildDeepSeekThinkingBody(
   };
 }
 
-/** Ark Seed models: `thinking.type` only — no DeepSeek `reasoning_effort`. */
+/** Ark Seed: `thinking.type` only. Default is on for many Seed models — opt out unless UI enables. */
 function buildDoubaoThinkingBody(
   thinking: ProviderChatOptions["thinking"] | undefined
 ) {
-  if (thinking?.enabled === false) {
-    return { thinking: { type: "disabled" as const } };
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
   }
 
-  if (!thinking?.enabled) {
-    return {};
-  }
-
-  return { thinking: { type: "enabled" as const } };
+  return { thinking: { type: "disabled" as const } };
 }
 
 function readReasoningContent(

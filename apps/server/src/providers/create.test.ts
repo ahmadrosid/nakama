@@ -214,6 +214,12 @@ describe("createProviderForInstance routing", () => {
       expect(seenModel).toBe("doubao-seed-2-1-pro-260628");
       expect(seenThinking).toEqual({ type: "enabled" });
       expect(seenReasoningEffort).toBeUndefined();
+
+      await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+      });
+      expect(seenThinking).toEqual({ type: "disabled" });
+      expect(seenReasoningEffort).toBeUndefined();
     } finally {
       mock.stop(true);
     }
