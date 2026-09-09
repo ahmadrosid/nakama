@@ -85,20 +85,29 @@ describe("createProviderForInstance routing", () => {
     let seenPath = "";
     let seenAuth = "";
     let seenModel = "";
+    let seenReasoning: unknown;
 
     const mock = Bun.serve({
       fetch: async (request) => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        const body = (await request.json()) as { model?: string };
+        const body = (await request.json()) as {
+          model?: string;
+          reasoning?: unknown;
+        };
         seenModel = body.model ?? "";
+        seenReasoning = body.reasoning;
         return Response.json({
           choices: [
             {
               finish_reason: "stop",
               index: 0,
-              message: { content: "ok", role: "assistant" },
+              message: {
+                content: "ok",
+                reasoning: "because",
+                role: "assistant",
+              },
             },
           ],
           created: 1,
@@ -132,12 +141,15 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        providerOptions: { thinking: { effort: "medium", enabled: true } },
       });
 
       expect(result.content).toBe("ok");
+      expect(result.thinking).toBe("because");
       expect(seenPath).toBe("/v1/chat/completions");
       expect(seenAuth).toBe("Bearer test-key");
       expect(seenModel).toBe("openai/gpt-4o-mini");
+      expect(seenReasoning).toEqual({ effort: "medium", enabled: true });
     } finally {
       mock.stop(true);
     }
