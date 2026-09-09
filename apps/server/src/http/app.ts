@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { formatServerError, log, NakamaApiError } from "@nakama/core";
+import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { tryServeStaticWeb } from "../static-web";
 import { createAuthMiddleware } from "./auth-middleware";
@@ -50,6 +51,18 @@ import type { HonoApp } from "./types";
  */
 const THEME_BOOTSTRAP_SCRIPT_HASH =
   "sha256-rQ5OTxagyMHDDSQ6k5wlUK8gtuYxXBrpQGqjAcYBz2w=";
+// Regular JSON can carry a 5 MiB attachment after base64 expansion. Full-data
+// imports accept a 100 MiB archive, which expands to roughly 134 MiB as base64.
+export const DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+export const MAX_HTTP_REQUEST_BODY_LIMIT_BYTES = 140 * 1024 * 1024;
+const LARGE_BODY_ROUTES = new Set([
+  "/v1/auth/setup/import/preview",
+  "/v1/auth/setup/import/restore",
+  "/v1/platform/data/import/preview",
+  "/v1/platform/data/import/restore",
+  "/v1/profiles/pack/import",
+  "/v1/profiles/pack/import/preview",
+]);
 
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
@@ -136,6 +149,23 @@ export function createHonoApp(options: ServerOptions) {
     // Apply security headers to the final response
     const finalResponse = c.res;
     c.res = applySecurityHeaders(finalResponse);
+  });
+
+  const rejectOversizedBody = () =>
+    errorResponse("Request body is too large.", 413);
+  const defaultBodyLimit = bodyLimit({
+    maxSize: DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES,
+    onError: rejectOversizedBody,
+  });
+  const importBodyLimit = bodyLimit({
+    maxSize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
+    onError: rejectOversizedBody,
+  });
+  app.use("*", (c, next) => {
+    const limit = LARGE_BODY_ROUTES.has(c.req.path)
+      ? importBodyLimit
+      : defaultBodyLimit;
+    return limit(c, next);
   });
 
   // Probes must work before setup/login; they reveal no tenant or config data.

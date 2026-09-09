@@ -160,7 +160,10 @@ export function registerDataPortabilityRoutes(
 
   app.post("/v1/platform/data/import/preview", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<PreviewDataImportRequest>(c.req.raw);
+    const body = await readJson<PreviewDataImportRequest>(
+      c.req.raw,
+      importRequestSchema
+    );
     // Decoded outside the catch so an oversized archive keeps its 413.
     const archive = decodeArchiveRequestData(body.data);
 
@@ -174,7 +177,10 @@ export function registerDataPortabilityRoutes(
 
   app.post("/v1/platform/data/import/restore", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<RestoreDataImportRequest>(c.req.raw);
+    const body = await readJson<RestoreDataImportRequest>(
+      c.req.raw,
+      restoreRequestSchema
+    );
     const archive = decodeArchiveRequestData(body.data);
 
     let restore;

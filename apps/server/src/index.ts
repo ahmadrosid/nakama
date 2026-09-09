@@ -39,7 +39,7 @@ import {
   ensureBundledSkillsAssigned,
   seedDatabase,
 } from "@nakama/db";
-import { createHonoApp } from "./http/app";
+import { createHonoApp, MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./http/app";
 import {
   disableBunIdleTimeoutForLongHeldRequest,
   disableBunIdleTimeoutForSse,
@@ -388,6 +388,7 @@ function startServer(options: {
         },
         hostname: options.host,
         idleTimeout: 255,
+        maxRequestBodySize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
         port,
       });
     } catch (error) {
