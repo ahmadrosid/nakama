@@ -1,113 +1,137 @@
-import { useEffect, useRef, useState } from "react";
+import type { OrgPluginDetail } from "@nakama/core/contract";
+import { type ComponentType, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Spinner } from "@/components/ui/spinner";
+import { RouteBoundary } from "@/components/RouteBoundary";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import {
   apiErrorStatus,
-  isNakamaPluginReadyMessage,
-  PLUGIN_READY_TIMEOUT_MS,
   pluginPageStateMessage,
-  pluginUiDocumentUrl,
+  pluginUiModuleUrl,
   resolvePluginPageView,
   useOrgPlugin,
 } from "@/hooks/use-plugins";
+import { client } from "@/lib/client";
 import {
   canAccessSystemPage,
   PAGE_PATHS,
   pluginsSystemPath,
 } from "@/lib/navigation";
+import { activatePlugin, type PluginClientModule } from "@/lib/plugin-runtime";
 
 export function PluginPage() {
   const { pluginId } = useParams<{ pluginId: string }>();
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
-  const orgId = activeOrg?.id ?? "";
-  const orgRole = activeOrg?.role;
+  const query = useOrgPlugin(pluginId);
   const canManage = canAccessSystemPage(
     user?.isPlatformAdmin === true,
-    orgRole
+    activeOrg?.role
   );
-  const query = useOrgPlugin(pluginId);
-  const [iframeReady, setIframeReady] = useState(false);
-  const [loadTimedOut, setLoadTimedOut] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  useEffect(() => {
-    setIframeReady(false);
-    setLoadTimedOut(false);
-  }, [orgId, pluginId, resolvedTheme]);
-
   const view = resolvePluginPageView({
     errorStatus: apiErrorStatus(query.error),
-    iframeReady,
-    loadTimedOut,
-    orgRole,
+    orgRole: activeOrg?.role,
     plugin: query.data,
     queryStatus: query.status,
   });
-
-  const pageLabel = query.data?.ui?.pageLabel ?? pluginId ?? "Plugin";
-  const frameSrc =
-    orgId && pluginId
-      ? pluginUiDocumentUrl(orgId, pluginId, resolvedTheme)
-      : "";
-
-  useEffect(() => {
-    if (view !== "frame" || iframeReady || !pluginId) {
-      return;
-    }
-
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
-        return;
-      }
-      if (event.source !== iframeRef.current?.contentWindow) {
-        return;
-      }
-      if (isNakamaPluginReadyMessage(event.data, pluginId)) {
-        setIframeReady(true);
-      }
-    };
-
-    window.addEventListener("message", onMessage);
-    const timer = window.setTimeout(() => {
-      setLoadTimedOut(true);
-    }, PLUGIN_READY_TIMEOUT_MS);
-
-    return () => {
-      window.removeEventListener("message", onMessage);
-      window.clearTimeout(timer);
-    };
-  }, [iframeReady, pluginId, view]);
-
-  if (!pluginId || view !== "frame") {
-    return (
-      <PluginPageState
-        canManage={canManage}
-        kind={pluginId ? view : "unavailable"}
+  if (view !== "page" || !activeOrg || !query.data) {
+    return <PluginPageState canManage={canManage} kind={view} />;
+  }
+  const key = `${activeOrg.id}:${pluginId}:${query.data.selectedVersion}:${query.data.revision}:${resolvedTheme}`;
+  return (
+    <RouteBoundary resetKey={key}>
+      <PluginPageSlot
+        key={key}
+        orgId={activeOrg.id}
+        plugin={query.data}
+        theme={resolvedTheme}
       />
+    </RouteBoundary>
+  );
+}
+
+function PluginPageSlot({
+  orgId,
+  plugin,
+  theme,
+}: {
+  orgId: string;
+  plugin: OrgPluginDetail;
+  theme: "dark" | "light";
+}) {
+  const [Page, setPage] = useState<ComponentType | null>(null);
+  const [failed, setFailed] = useState(false);
+  const { pluginId, revision, selectedVersion } = plugin;
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      controller.abort(new Error("Plugin startup timed out."));
+      setFailed(true);
+    }, 12_000);
+    let dispose: (() => void) | undefined;
+    const load = async () => {
+      const url = pluginUiModuleUrl(orgId, pluginId, revision, selectedVersion);
+      const module = (await import(
+        /* @vite-ignore */ url
+      )) as PluginClientModule;
+      const runtime = await activatePlugin(module, {
+        host: {
+          async call(action, input) {
+            const response = await client.invokePluginAction(
+              pluginId,
+              action,
+              { input },
+              orgId,
+              controller.signal
+            );
+            return response.result;
+          },
+        },
+        orgId,
+        pluginId,
+        signal: controller.signal,
+        theme,
+      });
+      dispose = runtime.dispose;
+      if (controller.signal.aborted) {
+        dispose();
+        return;
+      }
+      setPage(() => runtime.Page);
+    };
+    load()
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setFailed(true);
+        }
+      })
+      .finally(() => window.clearTimeout(timer));
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+      dispose?.();
+    };
+  }, [orgId, pluginId, revision, selectedVersion, theme]);
+  if (failed) {
+    return (
+      <p className="p-6" role="alert">
+        {pluginPageStateMessage("failed")}
+      </p>
     );
   }
-
+  if (!Page) {
+    return (
+      <p className="p-6" role="status">
+        Loading plugin
+      </p>
+    );
+  }
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {iframeReady ? null : (
-        <div className="flex items-center gap-2 px-6 py-3 text-muted-foreground text-sm">
-          <Spinner className="size-4" />
-          Loading plugin
-        </div>
-      )}
-      {frameSrc ? (
-        // eslint-disable-next-line react-doctor/iframe-missing-sandbox -- Admin-approved same-origin code requires browser authority; see docs/plugins.md#trust-model. Revisit if untrusted plugins are supported.
-        <iframe
-          className="min-h-0 min-w-0 flex-1 border-0 bg-background"
-          key={`${orgId}:${pluginId}:${resolvedTheme}`}
-          ref={iframeRef}
-          src={frameSrc}
-          title={pageLabel}
-        />
-      ) : null}
+    <div
+      className="min-h-0 min-w-0 flex-1 overflow-auto"
+      data-plugin-id={pluginId}
+    >
+      <Page />
     </div>
   );
 }

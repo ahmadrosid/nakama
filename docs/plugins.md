@@ -12,7 +12,7 @@ Official catalog entries declare required host support and an optional setup act
 
 This follows the declared-dependency and reversible-effect ideas described in [DeepSeek Harness's Cordis primer](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md). Nakama uses its existing package and organization lifecycle for these guarantees.
 
-Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated bundled action in the change. Runtime images include the package under `packages/plugins`; source development and built server entrypoints use the same catalog.
+Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated action and UI bundles in the change. Runtime images include the package under `packages/plugins`; source development and built server entrypoints use the same catalog.
 
 ## Package layout
 
@@ -21,7 +21,7 @@ package.json
 nakama.plugin.json
 actions/*.js
 skills/<key>/SKILL.md
-ui/index.html
+ui/app.js
 ui/assets/*
 migrations/*.sql
 ```
@@ -93,22 +93,48 @@ Platform approval is an authorization gate, not a sandbox. Installed plugin code
 
 If a package directory or selected database file is missing, the plugin stays manageable and is marked unavailable. Reinstall the same approved release, or enable after the files are restored. Backup ZIP restore leaves plugins disabled; an admin enables them again. See [Backup and restore](./website/content/docs/backup-restore.mdx) for operator steps.
 
-## React page
+## Native React pages
 
-Bundle your own React and React DOM. Do not import the host app.
+Plugin UI follows DeepSeek Harness's component-slot approach: Nakama imports the browser module and runs its `apply(ctx)`. The plugin registers a React component in its own `page` slot. Nakama mounts that component directly inside the dashboard with the host's React instance.
 
-1. Set Vite `base: "./"` so assets work under `/v1/plugins/ui/{orgId}/{pluginId}/`.
-2. After mount, send:
+Declare the module in the manifest:
 
-```js
-parent.postMessage(
-  { type: "nakama-plugin-ready", pluginId: "notes" },
-  window.location.origin
-);
+```json
+"ui": { "entryModule": "ui/app.js", "assetsDir": "ui", "pageLabel": "Notes" }
 ```
 
-3. Fetch `__nakama/bootstrap.json?theme=`.
-4. POST actions to `/v1/plugins/{pluginId}/actions/{key}` with `X-Org-Id` from bootstrap and `X-CSRF-Token` from the `nakama_csrf` cookie.
+The module must export `inject` and `apply`:
+
+```js
+export const inject = ["slots", "host"];
+export function apply(ctx) {
+  const React = ctx.React;
+  function NotesPage() {
+    const [notes, setNotes] = React.useState([]);
+    React.useEffect(() => {
+      let active = true;
+      ctx.host.call("list", {}).then(result => {
+        if (active) setNotes(result);
+      }).catch(console.error);
+      return () => { active = false; };
+    }, []);
+    return React.createElement("pre", null, JSON.stringify(notes));
+  }
+  ctx.slots.register("page", NotesPage);
+}
+```
+
+Services must be declared in `inject`; unavailable or undeclared services fail activation:
+
+- `slots.register("page", Component)` registers exactly one page for this plugin.
+- `host.call(actionKey, input)` invokes this plugin's backend action. Nakama supplies authentication, CSRF, and the activation's org; plugins do not build raw API requests.
+- `styles(css)` adds a stylesheet and removes it on unload. Scope selectors under `[data-plugin-id="your-plugin-id"]` so they do not affect the dashboard.
+
+Every context also receives `React`, `orgId`, `pluginId`, `theme`, `signal`, and `effect(setup)`. An effect's setup must return a cleanup function. Cleanup runs on navigation, org/theme/revision changes, failed activation, or unmount. React render failures are contained by the page error boundary. Startup has a 12-second deadline.
+
+Bundle browser code as one self-contained ESM module without bundling React or React DOM. Use `ctx.React.createElement`, or compile JSX in classic mode against a local `React = ctx.React`. The official Workflows source is an example. Do not import Nakama's internal modules. Module URLs include the package version and org installation revision; keep top-level code free of side effects and register effects inside `apply`.
+
+This replaces the pre-release HTML/iframe UI contract. Convert `entryHtml` to `entryModule` and replace bootstrap/ready messages with `inject`/`apply`. Backend actions and stored plugin data keep their existing contract. These are trusted browser modules; declared services and effect cleanup are lifecycle controls, not a JavaScript security sandbox. The first supported UI slot is the plugin page; this does not introduce DeepSeek's dynamic code-authoring tools or its full runtime.
 
 ## Build and publish
 

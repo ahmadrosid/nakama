@@ -24,7 +24,6 @@ import {
   type PluginExecutionContext,
   type PluginManifest,
   type PluginReleaseSummary,
-  type PluginUiBootstrap,
   type PluginUiContribution,
   pathExists,
   resolvePluginReleaseEntry,
@@ -49,15 +48,11 @@ const MAX_FILES = 2000;
 const MAX_PATH_BYTES = 240;
 
 export class PluginHostError extends Error {
-  readonly retryable: boolean;
-
   constructor(
     readonly code: string,
-    retryable = false,
     message = code
   ) {
     super(message);
-    this.retryable = retryable;
   }
 }
 
@@ -341,7 +336,6 @@ export class PluginService {
     if (official.requiresHost && !this.options.onHostRequest) {
       throw new PluginHostError(
         "package_unavailable",
-        false,
         "This plugin requires agent host capabilities."
       );
     }
@@ -843,7 +837,6 @@ export class PluginService {
         }
         throw new PluginHostError(
           "migration_failed",
-          false,
           lifecycleErrorMessage(error)
         );
       }
@@ -1002,7 +995,6 @@ export class PluginService {
         }
         throw new PluginHostError(
           "migration_failed",
-          false,
           lifecycleErrorMessage(error)
         );
       }
@@ -1129,7 +1121,7 @@ export class PluginService {
       ui: manifest?.ui
         ? {
             assetsDir: manifest.ui.assetsDir,
-            entryHtml: manifest.ui.entryHtml,
+            entryModule: manifest.ui.entryModule,
             pageLabel: manifest.ui.pageLabel,
           }
         : null,
@@ -1189,10 +1181,10 @@ export class PluginService {
       return null;
     }
 
-    const uiDirectory = dirname(ui.entryHtml);
+    const uiDirectory = dirname(ui.entryModule);
     const relativePath =
       assetPath === ""
-        ? ui.entryHtml
+        ? ui.entryModule
         : uiDirectory === "."
           ? assetPath
           : `${uiDirectory}/${assetPath}`;
@@ -1211,38 +1203,12 @@ export class PluginService {
         return null;
       }
       return {
-        isDocument:
-          relativePath === ui.entryHtml || relativePath.endsWith(".html"),
+        isDocument: relativePath.endsWith(".html"),
         path: resolved,
       };
     } catch {
       return null;
     }
-  }
-
-  async getEnabledUiBootstrap(
-    orgId: string,
-    pluginId: string,
-    theme: "dark" | "light"
-  ): Promise<PluginUiBootstrap | null> {
-    const install = await this.db.getOrgPlugin(orgId, pluginId);
-    if (
-      !(
-        install &&
-        install.lifecycleState === "enabled" &&
-        install.selectedVersion
-      )
-    ) {
-      return null;
-    }
-
-    return {
-      actionBaseUrl: `/v1/plugins/${pluginId}/actions`,
-      orgId,
-      pluginId,
-      pluginVersion: install.selectedVersion,
-      theme,
-    };
   }
 
   async recoverInterruptedPluginOperations(): Promise<void> {
@@ -1320,7 +1286,7 @@ export class PluginService {
         throw new PluginHostError("not_enabled");
       }
       if (gate.active >= MAX_PLUGIN_INVOCATIONS) {
-        throw new PluginHostError("busy", true);
+        throw new PluginHostError("busy");
       }
 
       const release = await this.db.getPluginRelease(
@@ -1445,14 +1411,13 @@ export class PluginService {
     await ensureDir(input.context.dataDir);
 
     return spawnJsonTool({
-      args: [PLUGIN_RUNNER_PATH, entryPath],
+      args: ["--no-install", PLUGIN_RUNNER_PATH, entryPath],
       bin: BUN_BIN,
       context: { signal: input.signal },
       cwd: input.releaseDir,
-      input: input.input,
+      input: { context: input.context, input: input.input },
       label: input.label,
       transport: {
-        extraArgs: ["--no-install"],
         includeConfigDir: false,
         onHostRequest: this.options.onHostRequest
           ? (request, signal) =>
@@ -1462,10 +1427,6 @@ export class PluginService {
                 mergeAbortSignals(input.signal, signal)
               )
           : undefined,
-        stdin: {
-          context: input.context,
-          input: input.input,
-        },
         timeoutMs:
           input.context.pluginId === "workflows" &&
           input.context.actionKey === "run_workflow"
@@ -1980,7 +1941,7 @@ function isUiReleasePath(
   ui: PluginUiContribution,
   relativePath: string
 ): boolean {
-  if (relativePath === ui.entryHtml) {
+  if (relativePath === ui.entryModule) {
     return true;
   }
   const assetsDir = ui.assetsDir.replace(/\/+$/, "");
@@ -2228,7 +2189,7 @@ function assertReferencedFilesExist(
   if (
     manifest.ui &&
     !(
-      files.has(manifest.ui.entryHtml) &&
+      files.has(manifest.ui.entryModule) &&
       hasPrefix(files, manifest.ui.assetsDir)
     )
   ) {
@@ -2553,16 +2514,16 @@ function assertMigrationCompatibility(
   incoming: Array<{ checksum: string; id: string }>
 ): void {
   if (applied.length > incoming.length) {
-    throw new PluginHostError("incompatible", false, "migration downgrade");
+    throw new PluginHostError("incompatible", "migration downgrade");
   }
   const incomingById = new Map(incoming.map((row) => [row.id, row]));
   for (const row of applied) {
     const expected = incomingById.get(row.id);
     if (!expected) {
-      throw new PluginHostError("incompatible", false, "migration downgrade");
+      throw new PluginHostError("incompatible", "migration downgrade");
     }
     if (expected.checksum !== row.checksum) {
-      throw new PluginHostError("incompatible", false, "checksum_mismatch");
+      throw new PluginHostError("incompatible", "checksum_mismatch");
     }
   }
 }
@@ -2590,11 +2551,7 @@ function applyPluginMigrations(
     if (error instanceof PluginHostError) {
       throw error;
     }
-    throw new PluginHostError(
-      "migration_failed",
-      false,
-      lifecycleErrorMessage(error)
-    );
+    throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
   } finally {
     db.close();
   }

@@ -76,7 +76,7 @@ export interface PluginActionContribution {
 
 export interface PluginUiContribution {
   assetsDir: string;
-  entryHtml: string;
+  entryModule: string;
   pageLabel: string;
 }
 
@@ -624,7 +624,7 @@ function parseUi(
   if (
     !(
       isNonEmptyString(value.pageLabel) &&
-      isNonEmptyString(value.entryHtml) &&
+      isNonEmptyString(value.entryModule) &&
       isNonEmptyString(value.assetsDir)
     )
   ) {
@@ -632,17 +632,20 @@ function parseUi(
   }
   if (
     !(
-      isRelativePluginPath(value.entryHtml) &&
+      isRelativePluginPath(value.entryModule) &&
       isRelativePluginPath(value.assetsDir)
     )
   ) {
+    return fail("invalid_path");
+  }
+  if (!/\.(?:m?js)$/.test(value.entryModule)) {
     return fail("invalid_path");
   }
   return {
     ok: true,
     ui: {
       assetsDir: value.assetsDir,
-      entryHtml: value.entryHtml,
+      entryModule: value.entryModule,
       pageLabel: value.pageLabel,
     },
   };

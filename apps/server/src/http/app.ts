@@ -120,24 +120,14 @@ export function createHonoApp(options: ServerOptions) {
     const applySecurityHeaders = (response: Response) => {
       const headers = new Headers(response.headers);
       headers.set("X-Content-Type-Options", "nosniff");
-      const contentType = headers.get("Content-Type") ?? "";
-      const pluginDocument =
-        new URL(c.req.url).pathname.startsWith("/v1/plugins/ui/") &&
-        contentType.includes("text/html");
-      if (pluginDocument) {
-        headers.set("X-Frame-Options", "SAMEORIGIN");
-      } else {
-        headers.set("X-Frame-Options", "DENY");
-      }
+      headers.set("X-Frame-Options", "DENY");
       // Only set Referrer-Policy if it's not already set
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       }
       headers.set(
         "Content-Security-Policy",
-        pluginDocument
-          ? `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';`
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
+        `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
       );
       // Also true behind a TLS terminator, which is where HSTS matters most.
       if (isSecureRequest(c.req.raw)) {

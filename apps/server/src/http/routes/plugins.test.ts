@@ -65,7 +65,7 @@ function pluginBundle(
     skills: [],
     ui: {
       assetsDir: "ui/assets",
-      entryHtml: "ui/index.html",
+      entryModule: "ui/index.js",
       pageLabel: "Notes",
     },
     version,
@@ -78,8 +78,8 @@ function pluginBundle(
     "nakama.plugin.json": Buffer.from(JSON.stringify(manifest)),
     "secret.txt": Buffer.from("backend-secret"),
     "ui/assets/app.js": Buffer.from("export {}"),
-    "ui/index.html": Buffer.from(
-      '<html><body>notes<script src="./assets/app.js" type="module"></script></body></html>'
+    "ui/index.js": Buffer.from(
+      'export const inject = ["slots"]; export function apply(ctx) { ctx.slots.register("page", () => ctx.React.createElement("p", null, "Notes")); }'
     ),
     ...Object.fromEntries(
       Object.entries(extras).map(([key, value]) => [key, Buffer.from(value)])
@@ -390,21 +390,19 @@ describe("plugin HTTP API", () => {
       admin
     );
     expect(document.status).toBe(200);
-    const html = await document.text();
-    const scriptSrc = html.match(/src="([^"]+)"/)?.[1];
-    expect(scriptSrc).toBeDefined();
-    const scriptUrl = new URL(
-      scriptSrc!,
-      `http://localhost${redirect.headers.get("location")}`
+    expect(await document.text()).toContain("export function apply");
+    const asset = await jsonRequest(
+      app,
+      `/v1/plugins/ui/${orgId}/notes/assets/app.js`,
+      admin
     );
-    const asset = await jsonRequest(app, scriptUrl.pathname, admin);
     expect(asset.status).toBe(200);
 
     const forbidden = [
       `/v1/plugins/ui/${orgId}/notes/secret.txt`,
       `/v1/plugins/ui/${orgId}/notes/private.js`,
       `/v1/plugins/ui/${orgId}/notes/migrations/001.sql`,
-      `/v1/plugins/ui/${orgId}/notes/../1.0.1/ui/index.html`,
+      `/v1/plugins/ui/${orgId}/notes/../1.0.1/ui/index.js`,
       `/v1/plugins/ui/${orgId}/notes/%2e%2e/secret.txt`,
       `/v1/plugins/ui/${orgId}/notes/assets/../../secret.txt`,
     ];
@@ -426,7 +424,7 @@ describe("plugin HTTP API", () => {
     ).toBe(401);
   });
 
-  test("plugin documents allow same-origin embedding; other pages keep DENY", async () => {
+  test("plugin modules use JavaScript MIME and retain frame protection", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
     const platform = await loginPlatformAdminSession(
@@ -443,8 +441,9 @@ describe("plugin HTTP API", () => {
       `/v1/plugins/ui/${admin.orgId}/notes/`,
       admin
     );
-    expect(document.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
-    expect(document.headers.get("Content-Security-Policy") ?? "").toContain(
+    expect(document.headers.get("Content-Type")).toContain("javascript");
+    expect(document.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(document.headers.get("Content-Security-Policy") ?? "").not.toContain(
       "frame-ancestors 'self'"
     );
 
@@ -475,7 +474,7 @@ describe("plugin HTTP API", () => {
     expect(health.headers.get("X-Frame-Options")).toBe("DENY");
   });
 
-  test("iframe path org and action header org do not fall back to another cookie org", async () => {
+  test("module path org and action header org do not fall back to another cookie org", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
     const orgA = admin.orgId!;

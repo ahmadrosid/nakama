@@ -2616,7 +2616,7 @@ export interface PluginActionDescription {
 
 export interface PluginUiSummary {
   assetsDir: string;
-  entryHtml: string;
+  entryModule: string;
   pageLabel: string;
 }
 
@@ -2703,14 +2703,6 @@ export interface InvokePluginActionRequest {
 export interface InvokePluginActionResponse {
   invocationId: string;
   result: unknown;
-}
-
-export interface PluginUiBootstrap {
-  actionBaseUrl: string;
-  orgId: string;
-  pluginId: string;
-  pluginVersion: string;
-  theme: "dark" | "light";
 }
 
 export interface XaiOAuthCredentials {

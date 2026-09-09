@@ -2321,13 +2321,15 @@ export class NakamaClient {
     pluginId: string,
     actionKey: string,
     request: InvokePluginActionRequest = {},
-    orgId?: string
+    orgId?: string,
+    signal?: AbortSignal
   ): Promise<InvokePluginActionResponse> {
     return this.request<InvokePluginActionResponse>(
       `/v1/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(actionKey)}`,
       {
         body: JSON.stringify(request),
         method: "POST",
+        signal,
         ...withDisabledFetchIdle({}),
         ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }

@@ -300,7 +300,7 @@
     ]
   },
   "ui": {
-    "entryHtml": "ui/index.html",
+    "entryModule": "ui/app.js",
     "assetsDir": "ui",
     "pageLabel": "Workflows"
   }

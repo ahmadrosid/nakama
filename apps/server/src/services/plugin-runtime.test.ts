@@ -451,7 +451,6 @@ describe("plugin runtime", () => {
     await expect(excess).rejects.toBeInstanceOf(PluginHostError);
     await expect(excess).rejects.toMatchObject({
       code: "busy",
-      retryable: true,
     });
     await Promise.all(started);
 
