@@ -2383,16 +2383,7 @@ function mergeAbortSignals(
   left?: AbortSignal,
   right?: AbortSignal
 ): AbortSignal | undefined {
-  const signals = [left, right].filter((signal): signal is AbortSignal =>
-    Boolean(signal)
-  );
-  if (signals.length === 0) {
-    return undefined;
-  }
-  if (signals.length === 1) {
-    return signals[0];
-  }
-  return AbortSignal.any(signals);
+  return left && right ? AbortSignal.any([left, right]) : (left ?? right);
 }
 
 function serializePending(pending: PendingPluginOperation): string {

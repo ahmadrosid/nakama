@@ -102,23 +102,14 @@ export function usePluginReleases(enabled: boolean) {
 
 function invalidateOrgPlugins(
   queryClient: ReturnType<typeof useQueryClient>,
-  orgId: string,
-  pluginId?: string
+  orgId: string
 ) {
-  const tasks = [
+  return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.plugins.all(orgId) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.tools.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-  ];
-  if (pluginId) {
-    tasks.push(
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.detail(orgId, pluginId),
-      })
-    );
-  }
-  return Promise.all(tasks);
+  ]);
 }
 
 function usePluginMutation<TVariables, TData>(
@@ -184,8 +175,8 @@ export function useInstallOrgPlugin() {
   return usePluginMutation(
     ({ pluginId, version }: { pluginId: string; version?: string }, orgId) =>
       client.installOrgPlugin(pluginId, version ? { version } : {}, orgId),
-    async ({ data, orgId, queryClient }) => {
-      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    async ({ orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId);
     }
   );
 }
@@ -199,8 +190,8 @@ export function useEnableOrgPlugin() {
       }: { expectedRevision: number; pluginId: string },
       orgId
     ) => client.enableOrgPlugin(pluginId, expectedRevision, orgId),
-    async ({ data, orgId, queryClient }) => {
-      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    async ({ orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId);
     }
   );
 }
@@ -214,8 +205,8 @@ export function useDisableOrgPlugin() {
       }: { expectedRevision: number; pluginId: string },
       orgId
     ) => client.disableOrgPlugin(pluginId, expectedRevision, orgId),
-    async ({ data, orgId, queryClient }) => {
-      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    async ({ orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId);
     }
   );
 }
@@ -238,8 +229,8 @@ export function useUpdateOrgPlugin() {
       }: { pluginId: string; request: UpdateOrgPluginRequest },
       orgId
     ) => client.updateOrgPlugin(pluginId, request, orgId),
-    async ({ data, orgId, queryClient }) => {
-      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    async ({ orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId);
     }
   );
 }
@@ -253,8 +244,8 @@ export function useUninstallOrgPlugin() {
       }: { expectedRevision: number; pluginId: string },
       orgId
     ) => client.uninstallOrgPlugin(pluginId, expectedRevision, orgId),
-    async ({ data, orgId, queryClient }) => {
-      await invalidateOrgPlugins(queryClient, orgId, data.pluginId);
+    async ({ orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId);
     }
   );
 }
@@ -264,11 +255,7 @@ export function useDeleteRetainedPluginData() {
     (request: DeleteRetainedPluginDataRequest) =>
       client.deleteRetainedPluginData(request),
     async ({ queryClient, variables }) => {
-      await invalidateOrgPlugins(
-        queryClient,
-        variables.orgId,
-        variables.pluginId
-      );
+      await invalidateOrgPlugins(queryClient, variables.orgId);
     }
   );
 }
@@ -336,10 +323,6 @@ export function resolvePluginPageView(input: {
     return "unavailable";
   }
 
-  if (input.queryStatus === "error" && !input.plugin) {
-    return "unavailable";
-  }
-
   const plugin = input.plugin;
   if (!plugin) {
     return "unavailable";
@@ -354,10 +337,6 @@ export function resolvePluginPageView(input: {
 
   if (plugin.lifecycleState !== "enabled") {
     return "disabled";
-  }
-
-  if (plugin.ui === null) {
-    return "unavailable";
   }
 
   return "page";
