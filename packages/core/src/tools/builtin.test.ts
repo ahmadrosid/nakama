@@ -336,6 +336,129 @@ describe("file builtin tools", () => {
     expect(result.toString("utf8")).toBe("\uFEFFhello new");
   });
 
+  test.each([
+    {
+      content: "  old\nold\n",
+      edits: [{ newText: "new\n", oldText: "  old\n" }],
+      expected: "new\nold\n",
+      name: "keeps indentation and boundary newlines in oldText",
+    },
+    {
+      content: "😀 Ａ ﬁ \u201Bhi\u201F \u2212 \u2009x\n",
+      edits: [{ newText: "done", oldText: "A fi 'hi\" -  x" }],
+      expected: "😀 done\n",
+      name: "matches compatibility Unicode and emoji offsets",
+    },
+    {
+      content: "keep “this”  \nleft “quote” old  \nnext Ａ  \nkeep ‘that’\t\n",
+      edits: [
+        { newText: "new", oldText: "old" },
+        { newText: "B", oldText: "A" },
+      ],
+      expected: 'keep “this”  \nleft "quote" new\nnext B\nkeep ‘that’\t\n',
+      name: "normalizes only touched lines in mixed exact and fuzzy edits",
+    },
+    {
+      content: "keep  \nＡ and Ｂ  \ntail\t\n",
+      edits: [
+        { newText: "one", oldText: "A" },
+        { newText: "two", oldText: "B" },
+      ],
+      expected: "keep  \none and two\ntail\t\n",
+      name: "merges two replacements touching the same normalized line",
+    },
+    {
+      content: 'same “text”  \nsame "text"\t\nＡ\n',
+      edits: [{ newText: "B", oldText: "A" }],
+      expected: 'same “text”  \nsame "text"\t\nB\n',
+      name: "preserves the right duplicate normalized line",
+    },
+    {
+      content: "before\rold\rafter\r",
+      edits: [{ newText: "new", oldText: "before\nold" }],
+      expected: "new\nafter\n",
+      name: "normalizes lone CR to LF",
+    },
+    {
+      content: "first\r\nold\nlast\n",
+      edits: [{ newText: "new", oldText: "old" }],
+      expected: "first\r\nnew\r\nlast\r\n",
+      name: "uses the first newline style for a mixed-ending file",
+    },
+    {
+      content: "one two",
+      edits: [
+        { newText: "one", oldText: "one" },
+        { newText: "three", oldText: "two" },
+      ],
+      expected: "one three",
+      name: "permits unchanged entries when the batch changes content",
+    },
+    {
+      content: "\t",
+      edits: [{ newText: " ", oldText: "\t" }],
+      expected: " ",
+      name: "matches whitespace-only oldText exactly",
+    },
+  ])("edit_file $name", async ({ content, edits, expected }) => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, content);
+    await runEditFile({ edits, path: targetPath }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
+    expect(await readFile(targetPath, "utf8")).toBe(expected);
+  });
+
+  test.each([
+    {
+      content: "one two three",
+      edits: [{ newText: "-", oldText: " " }],
+      name: "rejects ambiguous whitespace-only searches",
+    },
+    {
+      content: "Ａ A",
+      edits: [{ newText: "B", oldText: "A" }],
+      name: "rejects normalized duplicates even with one exact match",
+    },
+    {
+      content: "ＡＢＣ",
+      edits: [
+        { newText: "x", oldText: "AB" },
+        { newText: "y", oldText: "BC" },
+      ],
+      name: "rejects overlapping fuzzy matches",
+    },
+    {
+      content: "old\r\nline",
+      edits: [{ newText: "old\r\nline", oldText: "old\nline" }],
+      name: "rejects a no-op after newline normalization",
+    },
+    {
+      content: "Ａ present",
+      edits: [
+        { newText: "B", oldText: "A" },
+        { newText: "new", oldText: "missing" },
+      ],
+      name: "rejects a missing edit without applying valid siblings",
+    },
+    {
+      content: "old",
+      edits: [{ newText: "new", oldText: "" }],
+      name: "rejects empty oldText",
+    },
+  ])("edit_file $name without writing", async ({ content, edits }) => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, content);
+    await expect(
+      runEditFile({ edits, path: targetPath }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow();
+    expect(await readFile(targetPath, "utf8")).toBe(content);
+  });
+
   test("edit_file rejects missing oldText", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
