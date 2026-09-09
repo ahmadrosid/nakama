@@ -46,6 +46,24 @@ Open **Integrations → Telegram** in the Nakama web app, then:
 
 When you save for the first time, Nakama can generate a pairing code for linking your Telegram account.
 
+## One bot per organization
+
+Each organization saves its own bot token under **Integrations → Telegram**, and a
+bot answers for exactly one organization. Org A's token is never readable from Org
+B, and a save is refused when another organization already runs that token, because
+Telegram delivers each update to one poller only.
+
+The bridge starts one bot per configured organization, so a single
+`bun run dev:telegram` covers all of them. Credentials live in
+`~/.nakama/orgs/<org id>/telegram/config.ini`.
+
+Installs configured before this existed keep one config at
+`~/.nakama/telegram/config.ini`. With a single organization the server moves it into
+that org on the next start and logs a line asking you to restart the bridge. With
+several organizations it keeps serving every org as the shared bot until an admin
+saves a token of their own, and `/org` still picks which organization a chat
+belongs to.
+
 ## Step 3: Enable audio transcription for voice chat
 
 Telegram voice notes and audio files are turned into text before they are sent to the agent.
