@@ -29,7 +29,10 @@ test("official workflow install imports once, executes through IPC, isolates org
   };
   const seen: string[] = [];
   const service = new PluginService(db, dir, {
-    officialPackagesDir: resolve("packages/plugins"),
+    officialPackagesDir: resolve(
+      import.meta.dir,
+      "../../../../packages/plugins"
+    ),
     onHostRequest: async (value, context) => {
       const request = value as Record<string, unknown>;
       seen.push(`${context.orgId}:${request.op}`);
@@ -196,7 +199,10 @@ test("official dependencies are checked before publishing or changing org state"
   directories.push(dir);
   const db = createInMemoryDatabaseAdapter();
   const service = new PluginService(db, dir, {
-    officialPackagesDir: resolve("packages/plugins"),
+    officialPackagesDir: resolve(
+      import.meta.dir,
+      "../../../../packages/plugins"
+    ),
   });
   await expect(
     service.installOfficialPlugin("org_a", "workflows", {
@@ -214,7 +220,10 @@ test("failed official setup disables the new installation and can be retried", a
   const db = createInMemoryDatabaseAdapter();
   let failSetup = true;
   const service = new PluginService(db, dir, {
-    officialPackagesDir: resolve("packages/plugins"),
+    officialPackagesDir: resolve(
+      import.meta.dir,
+      "../../../../packages/plugins"
+    ),
     onHostRequest: async () => {
       if (failSetup) {
         throw new Error("Legacy data is temporarily unavailable.");

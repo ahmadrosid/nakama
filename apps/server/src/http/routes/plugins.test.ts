@@ -774,7 +774,10 @@ describe("plugin HTTP API", () => {
 
   test("org admin installs official workflows with one request; member and CSRF failures are blocked", async () => {
     const { app, authService, databaseAdapter } = createApp({
-      officialPackagesDir: resolve("packages/plugins"),
+      officialPackagesDir: resolve(
+        import.meta.dir,
+        "../../../../../packages/plugins"
+      ),
       onHostRequest: async () => [],
     });
     const admin = await setupFreshInstallSession(app, databaseAdapter);
