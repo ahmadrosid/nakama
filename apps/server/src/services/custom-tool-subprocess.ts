@@ -39,11 +39,8 @@ function buildAllowlistedSubprocessEnv(
 }
 
 interface SpawnJsonToolTransport {
-  extraArgs?: string[];
   includeConfigDir?: boolean;
   onHostRequest?: (request: unknown, signal: AbortSignal) => Promise<unknown>;
-  /** When set, written to stdin instead of `input`. Legacy callers omit this. */
-  stdin?: unknown;
   timeoutMs?: number;
 }
 
@@ -77,15 +74,12 @@ export async function spawnJsonTool(
     transport?.includeConfigDir ?? true
   );
   const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
-  const childArgs = [...(transport?.extraArgs ?? []), ...args];
-  const stdinPayload =
-    transport && "stdin" in transport ? transport.stdin : input;
 
   const result = await new Promise<{ stderr: string; stdout: string }>(
     (resolve, reject) => {
       // Node SIGTERMs the child when the turn is cancelled, so a stopped chat
       // does not leave a tool process holding the session open.
-      const child = spawn(bin, childArgs, {
+      const child = spawn(bin, args, {
         cwd,
         env,
         stdio: transport?.onHostRequest
@@ -170,20 +164,8 @@ export async function spawnJsonTool(
       }
 
       const sigtermTimer = setTimeout(() => {
-        hostAbort.abort();
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // already exited
-        }
+        killChild();
         timedOut = true;
-        setTimeout(() => {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            // already exited
-          }
-        }, SIGKILL_GRACE_MS).unref();
       }, timeoutMs);
 
       child.stdout?.on("data", (chunk: Buffer | string) => {
@@ -237,7 +219,7 @@ export async function spawnJsonTool(
       // Write the input payload and close stdin so the child can finish
       // reading and proceed to run().
       try {
-        child.stdin?.end(JSON.stringify(stdinPayload ?? {}));
+        child.stdin?.end(JSON.stringify(input ?? {}));
       } catch (error) {
         clearTimeout(sigtermTimer);
         reject(error);

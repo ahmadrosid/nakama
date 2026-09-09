@@ -49,15 +49,11 @@ const MAX_FILES = 2000;
 const MAX_PATH_BYTES = 240;
 
 export class PluginHostError extends Error {
-  readonly retryable: boolean;
-
   constructor(
     readonly code: string,
-    retryable = false,
     message = code
   ) {
     super(message);
-    this.retryable = retryable;
   }
 }
 
@@ -341,7 +337,6 @@ export class PluginService {
     if (official.requiresHost && !this.options.onHostRequest) {
       throw new PluginHostError(
         "package_unavailable",
-        false,
         "This plugin requires agent host capabilities."
       );
     }
@@ -843,7 +838,6 @@ export class PluginService {
         }
         throw new PluginHostError(
           "migration_failed",
-          false,
           lifecycleErrorMessage(error)
         );
       }
@@ -1002,7 +996,6 @@ export class PluginService {
         }
         throw new PluginHostError(
           "migration_failed",
-          false,
           lifecycleErrorMessage(error)
         );
       }
@@ -1320,7 +1313,7 @@ export class PluginService {
         throw new PluginHostError("not_enabled");
       }
       if (gate.active >= MAX_PLUGIN_INVOCATIONS) {
-        throw new PluginHostError("busy", true);
+        throw new PluginHostError("busy");
       }
 
       const release = await this.db.getPluginRelease(
@@ -1445,14 +1438,13 @@ export class PluginService {
     await ensureDir(input.context.dataDir);
 
     return spawnJsonTool({
-      args: [PLUGIN_RUNNER_PATH, entryPath],
+      args: ["--no-install", PLUGIN_RUNNER_PATH, entryPath],
       bin: BUN_BIN,
       context: { signal: input.signal },
       cwd: input.releaseDir,
-      input: input.input,
+      input: { context: input.context, input: input.input },
       label: input.label,
       transport: {
-        extraArgs: ["--no-install"],
         includeConfigDir: false,
         onHostRequest: this.options.onHostRequest
           ? (request, signal) =>
@@ -1462,10 +1454,6 @@ export class PluginService {
                 mergeAbortSignals(input.signal, signal)
               )
           : undefined,
-        stdin: {
-          context: input.context,
-          input: input.input,
-        },
         timeoutMs:
           input.context.pluginId === "workflows" &&
           input.context.actionKey === "run_workflow"
@@ -2553,16 +2541,16 @@ function assertMigrationCompatibility(
   incoming: Array<{ checksum: string; id: string }>
 ): void {
   if (applied.length > incoming.length) {
-    throw new PluginHostError("incompatible", false, "migration downgrade");
+    throw new PluginHostError("incompatible", "migration downgrade");
   }
   const incomingById = new Map(incoming.map((row) => [row.id, row]));
   for (const row of applied) {
     const expected = incomingById.get(row.id);
     if (!expected) {
-      throw new PluginHostError("incompatible", false, "migration downgrade");
+      throw new PluginHostError("incompatible", "migration downgrade");
     }
     if (expected.checksum !== row.checksum) {
-      throw new PluginHostError("incompatible", false, "checksum_mismatch");
+      throw new PluginHostError("incompatible", "checksum_mismatch");
     }
   }
 }
@@ -2590,11 +2578,7 @@ function applyPluginMigrations(
     if (error instanceof PluginHostError) {
       throw error;
     }
-    throw new PluginHostError(
-      "migration_failed",
-      false,
-      lifecycleErrorMessage(error)
-    );
+    throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
   } finally {
     db.close();
   }
