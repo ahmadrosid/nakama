@@ -11,10 +11,10 @@ declare const self: ServiceWorkerGlobalScope;
 
 /** Both are replaced by `scripts/build-sw.ts` at build time. */
 declare const __SW_VERSION__: string;
-declare const __SW_PRECACHE__: string;
+declare const __SW_PRECACHE__: string[];
 
 const VERSION = __SW_VERSION__;
-const PRECACHE_URLS = JSON.parse(__SW_PRECACHE__) as string[];
+const PRECACHE_URLS = __SW_PRECACHE__;
 const CACHE_NAME = cacheNameFor(VERSION);
 const SHELL_URL = "/";
 

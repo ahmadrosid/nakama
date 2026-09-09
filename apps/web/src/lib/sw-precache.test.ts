@@ -18,7 +18,7 @@ const MANIFEST: ViteManifest = {
 };
 
 describe("precacheUrls", () => {
-  test("precaches the shell plus the entry chunk and its static imports", () => {
+  test("precaches the shell, the entry chunk and its static imports, nothing lazy", () => {
     expect(precacheUrls(MANIFEST, [])).toEqual([
       "/",
       "/assets/index-css111.css",
@@ -26,12 +26,6 @@ describe("precacheUrls", () => {
       "/assets/vendor-css222.css",
       "/assets/vendor-js222.js",
     ]);
-  });
-
-  test("leaves lazily loaded page chunks to the runtime cache", () => {
-    expect(precacheUrls(MANIFEST, [])).not.toContain(
-      "/assets/SettingsPage-js333.js"
-    );
   });
 
   test("adds extra urls once, sorted with the rest", () => {

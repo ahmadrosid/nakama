@@ -34,7 +34,7 @@ const version = buildVersion(precache);
 
 const result = await Bun.build({
   define: {
-    __SW_PRECACHE__: JSON.stringify(JSON.stringify(precache)),
+    __SW_PRECACHE__: JSON.stringify(precache),
     __SW_VERSION__: JSON.stringify(version),
   },
   entrypoints: [join(webRoot, "sw/service-worker.ts")],
