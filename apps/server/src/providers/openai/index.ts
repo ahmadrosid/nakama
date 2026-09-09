@@ -369,6 +369,7 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
+    ...(provider === "xiaomi" ? buildXiaomiThinkingBody(options.thinking) : {}),
     ...(provider === "perplexity" && options.thinking?.enabled
       ? {
           reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
@@ -442,6 +443,17 @@ function buildDeepSeekThinkingBody(
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
   };
+}
+
+/** MiMo: `thinking.type` only. API defaults to enabled — opt out unless UI asks. */
+function buildXiaomiThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
+  }
+
+  return { thinking: { type: "disabled" as const } };
 }
 
 function readReasoningContent(

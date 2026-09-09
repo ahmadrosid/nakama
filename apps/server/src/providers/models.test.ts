@@ -119,9 +119,12 @@ describe("resolveModel", () => {
     expect(resolveModel("xiaomi", "mimo-v2.5-pro")).toBe("mimo-v2.5-pro");
     expect(resolveModel("xiaomi", "mimo-v2.5")).toBe("mimo-v2.5");
     expect(getDefaultModel("xiaomi")).toBe("mimo-v2.5-pro");
+    expect(getModelById("mimo-v2.5-pro")?.supportsThinking).toBe(true);
+    expect(getModelById("mimo-v2.5")?.supportsThinking).toBe(true);
     expect(getModelById("mimo-v2.5-pro")?.supportsVision).toBe(false);
     expect(getModelById("mimo-v2.5")?.supportsVision).toBe(true);
     expect(getModelById("mimo-v2.5-pro")?.contextWindow).toBe(1_048_576);
+    expect(getModelById("mimo-v2.5")?.maxOutputTokens).toBe(32_768);
   });
 
   test("uses xiaomi custom model shortlist when provided", () => {

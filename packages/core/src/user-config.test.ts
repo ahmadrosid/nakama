@@ -325,6 +325,41 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("glm-5.2");
   });
 
+  test("round-trips catalog shortlist models_json for Xiaomi MiMo", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const xiaomiId = createProviderInstanceId();
+
+    await saveUserConfig({
+      defaultProviderId: xiaomiId,
+      providers: [
+        {
+          apiKey: "sk-xiaomi-test",
+          createdAt: "2026-09-09T10:00:00.000Z",
+          customModels: [
+            {
+              default: true,
+              id: "mimo-v2.5",
+              name: "MiMo V2.5",
+              supportsThinking: true,
+              supportsVision: true,
+            },
+          ],
+          id: xiaomiId,
+          label: "Xiaomi MiMo",
+          type: "xiaomi",
+        },
+      ],
+    });
+
+    const loaded = await loadUserConfig();
+    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe("mimo-v2.5");
+    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(
+      true
+    );
+  });
+
   test("repairs literal undefined label on load", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

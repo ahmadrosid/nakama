@@ -85,14 +85,19 @@ describe("createProviderForInstance routing", () => {
     let seenPath = "";
     let seenAuth = "";
     let seenModel = "";
+    let seenThinking: unknown;
 
     const mock = Bun.serve({
       fetch: async (request) => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        const body = (await request.json()) as { model?: string };
+        const body = (await request.json()) as {
+          model?: string;
+          thinking?: unknown;
+        };
         seenModel = body.model ?? "";
+        seenThinking = body.thinking;
         return Response.json({
           choices: [
             {
@@ -132,12 +137,19 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        providerOptions: { thinking: { effort: "high", enabled: true } },
       });
 
       expect(result.content).toBe("ok");
       expect(seenPath).toBe("/v1/chat/completions");
       expect(seenAuth).toBe("Bearer test-key");
       expect(seenModel).toBe("mimo-v2.5-pro");
+      expect(seenThinking).toEqual({ type: "enabled" });
+
+      await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+      });
+      expect(seenThinking).toEqual({ type: "disabled" });
     } finally {
       mock.stop(true);
     }
