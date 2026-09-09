@@ -61,7 +61,7 @@ export const editFileInputSchema = z
         z
           .object({
             newText: z.string({ error: "newText is required." }),
-            oldText: requiredTrimmedString("oldText"),
+            oldText: z.string({ error: "oldText is required." }).min(1),
           })
           .strict()
       )
@@ -486,13 +486,39 @@ export async function runEditFile(
     rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
   const content = rawBuffer.toString("utf8", hasBom ? 3 : 0);
   const lineEnding = detectLineEnding(content);
-  const plans = parsed.edits
-    .map((edit, index) => planEdit(content, edit, index, lineEnding))
+  const normalizedContent = normalizeToLF(content);
+  const edits = parsed.edits.map((edit) => ({
+    newText: normalizeToLF(edit.newText),
+    oldText: normalizeToLF(edit.oldText),
+  }));
+  const fuzzyMatches = edits.filter(
+    (edit) =>
+      !normalizedContent.includes(edit.oldText) &&
+      normalizeForEditMatch(normalizedContent).includes(
+        normalizeForEditMatch(edit.oldText)
+      )
+  ).length;
+  const base =
+    fuzzyMatches > 0
+      ? normalizeForEditMatch(normalizedContent)
+      : normalizedContent;
+  const plans = edits
+    .map((edit, index) => planEdit(base, edit, index))
     .sort((a, b) => a.start - b.start);
   assertNoOverlappingEdits(plans);
 
-  const nextContent = applyEditPlans(content, plans);
-  const outputContent = hasBom ? `\uFEFF${nextContent}` : nextContent;
+  const nextContent =
+    fuzzyMatches > 0
+      ? applyEditsPreservingLines(normalizedContent, base, plans)
+      : applyEditPlans(base, plans);
+  if (nextContent === normalizedContent) {
+    throw new Error(
+      "No changes made: replacements produced identical content."
+    );
+  }
+  const restored =
+    lineEnding === "\r\n" ? nextContent.replace(/\n/g, "\r\n") : nextContent;
+  const outputContent = hasBom ? `\uFEFF${restored}` : restored;
   const bytesWritten = Buffer.byteLength(outputContent, "utf8");
 
   await guardFilePath(
@@ -505,15 +531,15 @@ export async function runEditFile(
 
   return {
     bytesWritten,
-    fuzzyMatches: plans.filter((plan) => plan.fuzzy).length,
+    fuzzyMatches,
     path: filePath,
     replacements: plans.length,
   };
 }
 
+// Matching semantics follow Pi's edit-diff.ts (ce5ec9ca355a852fb1f25c088cf409df47a95213).
 interface PlannedEdit {
   end: number;
-  fuzzy: boolean;
   index: number;
   newText: string;
   start: number;
@@ -522,217 +548,105 @@ interface PlannedEdit {
 function planEdit(
   content: string,
   edit: EditFileInput["edits"][number],
-  index: number,
-  lineEnding: string
+  index: number
 ): PlannedEdit {
-  if (edit.oldText === edit.newText) {
-    throw new Error(
-      `Edit ${index + 1} makes no change: oldText and newText are identical.`
-    );
+  const exactStart = content.indexOf(edit.oldText);
+  const normalizedSearch = normalizeForEditMatch(edit.oldText);
+  const normalizedContent = normalizeForEditMatch(content);
+  const fuzzyStart = normalizedContent.indexOf(normalizedSearch);
+  if (exactStart === -1 && (fuzzyStart === -1 || !normalizedSearch)) {
+    throw new Error(`Edit ${index + 1} oldText not found in file.`);
   }
-
-  const exactMatches = findAllOccurrences(content, edit.oldText);
-
-  if (exactMatches.length > 1) {
-    throw new Error(
-      `Edit ${index + 1} is ambiguous: oldText matched ${exactMatches.length} times.`
-    );
-  }
-
-  const [exactStart] = exactMatches;
-  if (exactStart !== undefined) {
-    return {
-      end: exactStart + edit.oldText.length,
-      fuzzy: false,
-      index,
-      newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
-      start: exactStart,
-    };
-  }
-
-  const fuzzyMatches = findNormalizedMatches(content, edit.oldText);
-
-  if (fuzzyMatches.length > 1) {
+  if (normalizedContent.split(normalizedSearch).length - 1 > 1) {
     throw new Error(
       `Edit ${index + 1} is ambiguous after normalized matching.`
     );
   }
-
-  const [match] = fuzzyMatches;
-  if (!match) {
-    throw new Error(`Edit ${index + 1} oldText not found in file.`);
-  }
-
+  const start = exactStart === -1 ? fuzzyStart : exactStart;
   return {
-    end: match.end,
-    fuzzy: true,
+    end:
+      start +
+      (exactStart === -1 ? normalizedSearch.length : edit.oldText.length),
     index,
-    newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
-    start: match.start,
+    newText: edit.newText,
+    start,
   };
 }
 
 function detectLineEnding(content: string): string {
-  const crlf = content.match(/\r\n/g)?.length ?? 0;
-  const lf = content.match(/(?<!\r)\n/g)?.length ?? 0;
-  const cr = content.match(/\r(?!\n)/g)?.length ?? 0;
-
-  if (crlf >= lf && crlf >= cr && crlf > 0) {
-    return "\r\n";
-  }
-
-  if (cr > lf && cr > 0) {
-    return "\r";
-  }
-
-  return "\n";
+  const lf = content.indexOf("\n");
+  const crlf = content.indexOf("\r\n");
+  return lf !== -1 && crlf !== -1 && crlf < lf ? "\r\n" : "\n";
 }
 
-function normalizeReplacementLineEndings(
-  value: string,
-  lineEnding: string
+function normalizeToLF(value: string): string {
+  return value.replace(/\r\n|\r/g, "\n");
+}
+
+function normalizeForEditMatch(value: string): string {
+  return value
+    .normalize("NFKC")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
+}
+
+function applyEditsPreservingLines(
+  original: string,
+  base: string,
+  plans: PlannedEdit[]
 ): string {
-  return value.replace(/\r\n|\r|\n/g, lineEnding);
-}
-
-function findAllOccurrences(content: string, search: string): number[] {
-  const matches: number[] = [];
-  let index = 0;
-
-  while (true) {
-    index = content.indexOf(search, index);
-    if (index === -1) {
-      return matches;
+  const originalLines = original.match(/[^\n]*\n|[^\n]+/g) ?? [];
+  const baseLines = base.match(/[^\n]*\n|[^\n]+/g) ?? [];
+  if (originalLines.length !== baseLines.length) {
+    throw new Error(
+      "Cannot preserve unchanged lines: normalization changed the line count."
+    );
+  }
+  // Widen replacements to touched lines, copying every other line from the original.
+  let offset = 0;
+  const spans = baseLines.map((line) => {
+    const start = offset;
+    offset += line.length;
+    return { end: offset, start };
+  });
+  const groups: { first: number; last: number; plans: PlannedEdit[] }[] = [];
+  for (const plan of plans) {
+    const first = spans.findIndex(
+      (span) => plan.start >= span.start && plan.start < span.end
+    );
+    const last = spans.findIndex((span) => plan.end <= span.end);
+    if (first === -1 || last < first) {
+      throw new Error("Replacement range is outside the file.");
     }
-    matches.push(index);
-    index += search.length;
-  }
-}
-
-interface NormalizedMatch {
-  end: number;
-  start: number;
-}
-
-interface NormalizedChar {
-  char: string;
-  end: number;
-  start: number;
-}
-
-function findNormalizedMatches(
-  content: string,
-  search: string
-): NormalizedMatch[] {
-  const normalizedContent = normalizeForEditMatch(content);
-  const normalizedSearch = normalizeForEditMatch(search);
-  const needle = normalizedSearch.text;
-
-  if (!needle) {
-    return [];
-  }
-
-  const matches: NormalizedMatch[] = [];
-  let index = 0;
-
-  while (true) {
-    index = normalizedContent.text.indexOf(needle, index);
-    if (index === -1) {
-      return matches;
+    const previous = groups.at(-1);
+    if (previous && first <= previous.last) {
+      previous.last = Math.max(previous.last, last);
+      previous.plans.push(plan);
+    } else {
+      groups.push({ first, last, plans: [plan] });
     }
-
-    const firstChar = normalizedContent.chars[index];
-    const lastChar = normalizedContent.chars[index + needle.length - 1];
-
-    if (firstChar && lastChar) {
-      matches.push({ end: lastChar.end, start: firstChar.start });
-    }
-
-    index += needle.length;
   }
-}
-
-function normalizeForEditMatch(value: string): {
-  text: string;
-  chars: NormalizedChar[];
-} {
-  const chars: NormalizedChar[] = [];
-
-  for (let index = 0; index < value.length; ) {
-    const start = index;
-    const codePoint = value.codePointAt(index);
-
-    if (codePoint === undefined) {
-      break;
-    }
-
-    const rawChar = String.fromCodePoint(codePoint);
-    index += rawChar.length;
-    const normalizedChar = normalizeEditChar(rawChar);
-
-    if (normalizedChar === null) {
-      continue;
-    }
-
-    chars.push({ char: normalizedChar, end: index, start });
+  let cursor = 0;
+  let result = "";
+  for (const group of groups) {
+    result += originalLines.slice(cursor, group.first).join("");
+    const start = spans[group.first].start;
+    result += applyEditPlans(
+      base.slice(start, spans[group.last].end),
+      group.plans.map((plan) => ({
+        ...plan,
+        end: plan.end - start,
+        start: plan.start - start,
+      }))
+    );
+    cursor = group.last + 1;
   }
-
-  const filteredChars = removeTrailingWhitespaceTokens(chars);
-
-  return {
-    chars: filteredChars,
-    text: filteredChars.map((char) => char.char).join(""),
-  };
-}
-
-function normalizeEditChar(char: string): string | null {
-  if (char === "\r") {
-    return null;
-  }
-
-  if (char === "\u00A0") {
-    return " ";
-  }
-
-  if (char === "\u2018" || char === "\u2019") {
-    return "'";
-  }
-
-  if (char === "\u201C" || char === "\u201D") {
-    return '"';
-  }
-
-  if (char === "\u2013" || char === "\u2014") {
-    return "-";
-  }
-
-  return char;
-}
-
-function removeTrailingWhitespaceTokens(
-  chars: NormalizedChar[]
-): NormalizedChar[] {
-  const keep = new Array<boolean>(chars.length).fill(true);
-  let runStart: number | null = null;
-
-  for (let index = 0; index <= chars.length; index += 1) {
-    const char = chars[index]?.char;
-
-    if (char === " " || char === "\t") {
-      runStart ??= index;
-      continue;
-    }
-
-    if ((char === "\n" || char === undefined) && runStart !== null) {
-      for (let runIndex = runStart; runIndex < index; runIndex += 1) {
-        keep[runIndex] = false;
-      }
-    }
-
-    runStart = null;
-  }
-
-  return chars.filter((_char, index) => keep[index]);
+  return result + originalLines.slice(cursor).join("");
 }
 
 function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
