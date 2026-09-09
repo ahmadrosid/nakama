@@ -1165,6 +1165,60 @@ describe("createHonoApp", () => {
     });
   });
 
+  describe("auth request bodies", () => {
+    test("rejects wrong-typed setup fields before invoking auth services", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify({
+            admin: {
+              email: "admin@example.com",
+              name: true,
+              password: "password123",
+            },
+            organization: { name: "Acme", slug: "acme" },
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    test("rejects missing required setup fields", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify({
+            admin: {
+              email: "admin@example.com",
+              name: "Admin",
+            },
+            organization: { name: "Acme", slug: "acme" },
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    test("keeps malformed auth JSON as a bad request", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: "{",
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+    });
+  });
+
   describe("platform admin routes", () => {
     test("allows profile list for org members but blocks profile management", async () => {
       const options = createServerOptions();
