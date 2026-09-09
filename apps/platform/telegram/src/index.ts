@@ -37,7 +37,7 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 const started: StartedIdentity[] = [];
 
 registerCleanupHandlers(() => {
-  stopAll();
+  void stopAll();
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -112,9 +112,8 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
-  stopAll();
   // Await before exit: void + process.exit can leave a stale heartbeat file.
-  await Promise.all(started.map((identity) => identity.clearHeartbeat()));
+  await stopAll();
   stopSpawnedServer(spawnedChild);
   process.exit(1);
 } finally {
@@ -190,16 +189,18 @@ async function startIdentity(
   });
 }
 
-function stopAll(): void {
+async function stopAll(): Promise<void> {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
 
-  for (const identity of started) {
-    identity.stop();
-    void identity.clearHeartbeat();
-  }
+  await Promise.all(
+    started.map((identity) => {
+      identity.stop();
+      return identity.clearHeartbeat();
+    })
+  );
 }
 
 function registerCleanupHandlers(cleanup: () => void): void {
