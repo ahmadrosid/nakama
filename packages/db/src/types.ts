@@ -841,6 +841,8 @@ export interface DatabaseAdapter {
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
 
+  listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
+
   listProfileChangeEvents(
     orgId: string,
     profileId: string,

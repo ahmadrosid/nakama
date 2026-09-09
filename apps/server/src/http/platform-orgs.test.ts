@@ -661,4 +661,63 @@ describe("platform org routes", () => {
     );
     expect(disableThroughOrgB.status).toBe(409);
   });
+
+  test("disabling the install's only platform admin is blocked even when they are just a plain org member", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const platformAdminUser = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+    if (!platformAdminUser) {
+      throw new Error("platform admin user not found");
+    }
+
+    const createOrgResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: {
+            email: "org-owner@acme.com",
+            name: "Org Owner",
+            phone: "+628123456789",
+          },
+          name: "Acme Platform Admin Member",
+          slug: "acme-platform-admin-member",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createOrgResponse.status).toBe(201);
+    const created = (await createOrgResponse.json()) as {
+      organization: { id: string };
+    };
+
+    // The platform admin has no admin role anywhere, only a plain membership
+    // here, so the org-admin loop above never looks at them.
+    await databaseAdapter.upsertOrgMember({
+      createdAt: new Date().toISOString(),
+      orgId: created.organization.id,
+      role: "member",
+      userId: platformAdminUser.id,
+    });
+
+    const disableResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${created.organization.id}/members/${platformAdminUser.id}/disable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(disableResponse.status).toBe(409);
+  });
 });

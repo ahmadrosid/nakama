@@ -626,6 +626,25 @@ export class OrgService {
       }
     }
 
+    // Same shape as the org-admin check: is_platform_admin is also install-wide
+    // and unrelated to org membership, so a platform admin who is a plain
+    // member (or not a member) everywhere would otherwise slip past the loop
+    // above and could be the install's only platform admin.
+    const targetUser = await this.databaseAdapter.getUserById(userId);
+    if (targetUser?.isPlatformAdmin) {
+      const platformAdmins =
+        await this.databaseAdapter.listPlatformAdminUsers();
+      const hasUsablePlatformAdmin = platformAdmins.some(
+        (admin) => admin.id !== userId && !admin.disabledAt
+      );
+      if (!hasUsablePlatformAdmin) {
+        throw new NakamaApiError(
+          "Cannot disable the last active platform admin.",
+          409
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     await this.databaseAdapter.disableUser(userId, now);
     await this.databaseAdapter.revokeBrowserSessionsForUser(userId, now);

@@ -1531,6 +1531,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const countHumanUsersStmt = db.prepare(
     "SELECT COUNT(*) as count FROM users WHERE id != ?"
   );
+  const listPlatformAdminUsersStmt = db.prepare(
+    "SELECT * FROM users WHERE is_platform_admin = 1"
+  );
 
   const createBrowserSessionStmt = db.prepare(`
     INSERT INTO browser_sessions (
@@ -2877,6 +2880,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : listAllOrgMemoryProposalsStmt.all(orgId)
       ) as OrgMemoryProposalRow[];
       return rows.map(toOrgMemoryProposalRecord);
+    },
+
+    async listPlatformAdminUsers() {
+      const rows = listPlatformAdminUsersStmt.all() as UserRow[];
+      return rows.map(toUserRecord);
     },
 
     async listProfileChangeEvents(orgId, profileId, options = {}) {
