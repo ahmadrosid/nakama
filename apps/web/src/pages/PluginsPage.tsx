@@ -3,6 +3,7 @@ import type {
   PluginContributionChangePreview,
   PluginPackagePreviewResponse,
   PluginPackageRequest,
+  PluginReleaseSummary,
 } from "@nakama/core/contract";
 import { type MouseEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -85,8 +86,6 @@ export function PluginsPage() {
   const uninstallOrg = useUninstallOrgPlugin();
   const purgeData = useDeleteRetainedPluginData();
   const reinstallOfficial = useReinstallOfficialPlugin();
-  const [packageName, setPackageName] = useState("");
-  const [packageVersion, setPackageVersion] = useState("");
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -116,15 +115,11 @@ export function PluginsPage() {
     queueMicrotask(() => restoreFocusRef.current?.focus());
   }
 
-  async function previewNpmPackage() {
+  async function previewNpmPackage(source: PluginPackageRequest) {
     if (!canInstallPackages) {
       return;
     }
     setActionError(null);
-    const source = {
-      packageName: packageName.trim(),
-      version: packageVersion.trim(),
-    };
     try {
       const preview = await previewPackage.mutateAsync(source);
       setDialog({ preview, source, type: "package" });
@@ -218,40 +213,13 @@ export function PluginsPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="type-section-title">Plugins</h2>
         {canInstallPackages ? (
-          <form
-            className="flex flex-wrap items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
+          <PluginPackageForm
+            busy={busy}
+            onPreview={(source) => {
               rememberFocus(document.activeElement);
-              void previewNpmPackage();
+              void previewNpmPackage(source);
             }}
-          >
-            <Input
-              aria-label="npm package name"
-              className="w-64"
-              disabled={busy}
-              onChange={(event) => setPackageName(event.target.value)}
-              placeholder="@team/nakama-notes"
-              required
-              value={packageName}
-            />
-            <Input
-              aria-label="Exact package version"
-              className="w-28"
-              disabled={busy}
-              onChange={(event) => setPackageVersion(event.target.value)}
-              placeholder="1.0.0"
-              required
-              value={packageVersion}
-            />
-            <Button
-              disabled={busy || !packageName.trim() || !packageVersion.trim()}
-              size="sm"
-              type="submit"
-            >
-              Preview package
-            </Button>
-          </form>
+          />
         ) : null}
       </div>
 
@@ -314,48 +282,20 @@ export function PluginsPage() {
         </ul>
       )}
 
-      {canInstallPackages && (releasesQuery.data?.releases.length ?? 0) > 0 ? (
-        <ul className="mt-6 divide-y divide-border rounded-md border border-border">
-          {releasesQuery.data?.releases.map((release) => {
-            const inUse = plugins.some(
-              (plugin) =>
-                plugin.pluginId === release.pluginId &&
-                plugin.selectedVersion === release.version &&
-                plugin.installed
-            );
-            return (
-              <li
-                className="flex items-center justify-between gap-3 px-4 py-3"
-                key={`${release.pluginId}@${release.version}`}
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-sm">
-                    {release.manifest.name} {release.version}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {release.pluginId}
-                  </p>
-                </div>
-                <Button
-                  disabled={busy || inUse}
-                  onClick={(event) => {
-                    rememberFocus(event.currentTarget);
-                    setDialog({
-                      pluginId: release.pluginId,
-                      type: "remove-release",
-                      version: release.version,
-                    });
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Remove release
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
+      {canInstallPackages ? (
+        <PluginReleasesList
+          busy={busy}
+          onRemove={(release, event) => {
+            rememberFocus(event.currentTarget);
+            setDialog({
+              pluginId: release.pluginId,
+              type: "remove-release",
+              version: release.version,
+            });
+          }}
+          plugins={plugins}
+          releases={releasesQuery.data?.releases ?? []}
+        />
       ) : null}
 
       <PluginConfirmDialog
@@ -366,6 +306,109 @@ export function PluginsPage() {
         orgId={orgId}
       />
     </div>
+  );
+}
+
+function PluginPackageForm({
+  busy,
+  onPreview,
+}: {
+  busy: boolean;
+  onPreview(source: PluginPackageRequest): void;
+}) {
+  const [packageName, setPackageName] = useState("");
+  const [packageVersion, setPackageVersion] = useState("");
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onPreview({
+          packageName: packageName.trim(),
+          version: packageVersion.trim(),
+        });
+      }}
+    >
+      <Input
+        aria-label="npm package name"
+        className="w-64"
+        disabled={busy}
+        onChange={(event) => setPackageName(event.target.value)}
+        placeholder="@team/nakama-notes"
+        required
+        value={packageName}
+      />
+      <Input
+        aria-label="Exact package version"
+        className="w-28"
+        disabled={busy}
+        onChange={(event) => setPackageVersion(event.target.value)}
+        placeholder="1.0.0"
+        required
+        value={packageVersion}
+      />
+      <Button
+        disabled={busy || !packageName.trim() || !packageVersion.trim()}
+        size="sm"
+        type="submit"
+      >
+        Preview package
+      </Button>
+    </form>
+  );
+}
+
+function PluginReleasesList({
+  busy,
+  plugins,
+  releases,
+  onRemove,
+}: {
+  busy: boolean;
+  plugins: OrgPluginDetail[];
+  releases: PluginReleaseSummary[];
+  onRemove(release: PluginReleaseSummary, event: MouseEvent<HTMLElement>): void;
+}) {
+  if (releases.length === 0) {
+    return null;
+  }
+  return (
+    <ul className="mt-6 divide-y divide-border rounded-md border border-border">
+      {releases.map((release) => {
+        const inUse = plugins.some(
+          (plugin) =>
+            plugin.pluginId === release.pluginId &&
+            plugin.selectedVersion === release.version &&
+            plugin.installed
+        );
+        return (
+          <li
+            className="flex items-center justify-between gap-3 px-4 py-3"
+            key={`${release.pluginId}@${release.version}`}
+          >
+            <div className="min-w-0">
+              <p className="font-medium text-sm">
+                {release.manifest.name} {release.version}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {release.pluginId}
+              </p>
+            </div>
+            <Button
+              disabled={busy || inUse}
+              onClick={(event) => {
+                onRemove(release, event);
+              }}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Remove release
+            </Button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
