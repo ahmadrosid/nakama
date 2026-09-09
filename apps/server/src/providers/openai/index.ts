@@ -368,9 +368,10 @@ async function buildChatCompletionRequestBody(options: {
     ),
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
-      : provider === "doubao"
-        ? buildDoubaoThinkingBody(options.thinking)
-        : {}),
+      : {}),
+    ...(provider === "doubao"
+      ? buildDoubaoThinkingBody(options.thinking)
+      : {}),
     ...(provider === "perplexity" && options.thinking?.enabled
       ? {
           reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
