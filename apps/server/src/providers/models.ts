@@ -393,6 +393,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
       name: "Qwen Flash",
       outputPerMillionUsd: 0.4,
       provider,
+      supportsThinking: true,
       supportsVision: false,
     },
   ]),

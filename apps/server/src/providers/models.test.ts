@@ -148,6 +148,7 @@ describe("resolveModel", () => {
     expect(getModelById("qwen3.7-plus")?.supportsVision).toBe(true);
     expect(getModelById("qwen3-vl-plus")?.supportsVision).toBe(true);
     expect(getModelById("qwen3-vl-plus")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen-flash")?.supportsThinking).toBe(true);
     expect(getModelById("qwen-flash")?.inputPerMillionUsd).toBe(0.05);
   });
 
