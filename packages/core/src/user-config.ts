@@ -236,6 +236,18 @@ export function validateTimezone(
   return value;
 }
 
+// Org id reaches this as a path segment, so anything that could climb out of
+// the config dir is rejected here rather than at each caller.
+const ORG_ID_SEGMENT = /^[A-Za-z0-9][\w.-]{0,63}$/;
+
+export function getOrgConfigDir(orgId: string): string {
+  if (!ORG_ID_SEGMENT.test(orgId)) {
+    throw new Error(`Invalid organization id: ${orgId}`);
+  }
+
+  return join(getUserConfigDir(), "orgs", orgId);
+}
+
 export function getUserConfigDir(): string {
   const override = process.env.NAKAMA_CONFIG_DIR?.trim();
 

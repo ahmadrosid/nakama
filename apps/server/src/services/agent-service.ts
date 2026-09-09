@@ -1091,14 +1091,15 @@ export class AgentService {
     };
   }
 
-  async getTelegramSettings(): Promise<TelegramSettingsResponse> {
-    return loadTelegramSettingsPublic();
+  async getTelegramSettings(orgId: string): Promise<TelegramSettingsResponse> {
+    return loadTelegramSettingsPublic(orgId);
   }
 
   async setTelegramSettings(
+    orgId: string,
     input: UpdateTelegramSettingsRequest
   ): Promise<TelegramSettingsResponse> {
-    const existing = await loadTelegramSettingsPublic();
+    const existing = await loadTelegramSettingsPublic(orgId);
     const botToken =
       input.botToken !== undefined && input.botToken.trim()
         ? input.botToken.trim()
@@ -1131,7 +1132,7 @@ export class AgentService {
       }
     }
 
-    return saveTelegramConfig({
+    return saveTelegramConfig(orgId, {
       ...(botToken ? { botToken } : {}),
       ...(input.allowedUserIds === undefined
         ? existing.allowedUserIds.length > 0
@@ -1142,8 +1143,10 @@ export class AgentService {
     });
   }
 
-  async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
-    return regenerateTelegramHandshake();
+  async regenerateTelegramHandshake(
+    orgId: string
+  ): Promise<TelegramSettingsResponse> {
+    return regenerateTelegramHandshake(orgId);
   }
 
   async getDiscordSettings(): Promise<DiscordSettingsResponse> {

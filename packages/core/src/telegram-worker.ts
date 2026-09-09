@@ -2,6 +2,8 @@ import type { TelegramWorkerStatus } from "./contract";
 import {
   getTelegramConfigDir,
   loadTelegramSettingsPublic,
+  resolveTelegramScopeForOrg,
+  type TelegramConfigScope,
   type TelegramSettingsPublic,
 } from "./telegram-config";
 import {
@@ -13,15 +15,12 @@ import {
 export type { WorkerHeartbeatBase as TelegramWorkerHeartbeat } from "./worker-heartbeat";
 export { isHeartbeatAlive, isProcessAlive };
 
-const store = createWorkerHeartbeatStore({
-  getDir: getTelegramConfigDir,
-});
-
-export const getTelegramWorkerHeartbeatPath = store.getPath;
-export const parseTelegramWorkerHeartbeat = store.parse;
-export const readTelegramWorkerHeartbeat = store.read;
-export const clearTelegramWorkerHeartbeat = store.clear;
-export const isTelegramWorkerRunning = store.isRunning;
+/** One heartbeat per identity: the file lives beside the config it belongs to. */
+export function createTelegramWorkerHeartbeat(orgId: TelegramConfigScope) {
+  return createWorkerHeartbeatStore({
+    getDir: () => getTelegramConfigDir(orgId),
+  });
+}
 
 export function resolveTelegramWorkerStatus(
   settings: TelegramSettingsPublic,
@@ -34,16 +33,12 @@ export function resolveTelegramWorkerStatus(
   return { configured, ok, paired, running };
 }
 
-export async function writeTelegramWorkerHeartbeat(
-  pid = process.pid,
-  updatedAt = new Date().toISOString()
-): Promise<void> {
-  await store.write({ pid, updatedAt });
-}
-
-export async function getTelegramWorkerStatus(): Promise<TelegramWorkerStatus> {
-  const settings = await loadTelegramSettingsPublic();
-  const running = await isTelegramWorkerRunning();
+export async function getTelegramWorkerStatus(
+  orgId: string | null
+): Promise<TelegramWorkerStatus> {
+  const scope = orgId === null ? null : await resolveTelegramScopeForOrg(orgId);
+  const settings = await loadTelegramSettingsPublic(scope);
+  const running = await createTelegramWorkerHeartbeat(scope).isRunning();
 
   return resolveTelegramWorkerStatus(settings, running);
 }

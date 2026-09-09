@@ -22,7 +22,7 @@ describe("createTelegramOutboundAdapter", () => {
   async function useTempHome(run: () => Promise<void>): Promise<void> {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-tg-outbound-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
-    await saveTelegramConfig({ botToken: "1234567890:TEST" });
+    await saveTelegramConfig(null, { botToken: "1234567890:TEST" });
     await run();
   }
 

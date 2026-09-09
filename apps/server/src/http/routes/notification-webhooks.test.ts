@@ -22,7 +22,7 @@ describe("notification webhook routes", () => {
   async function createApp() {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-notify-webhook-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
-    await saveTelegramConfig({ botToken: "1234567890:TEST" });
+    await saveTelegramConfig(null, { botToken: "1234567890:TEST" });
 
     return createMinimalHonoApp({
       agent: {},

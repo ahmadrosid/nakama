@@ -1,4 +1,7 @@
-import { loadTelegramConfigFile } from "../telegram-config";
+import {
+  loadTelegramConfigFile,
+  resolveTelegramScopeForOrg,
+} from "../telegram-config";
 import { splitTelegramChunks } from "./message-format";
 import { renderTelegramRichText } from "./telegram-rich-text";
 import type { ChannelSendResult, TelegramOutboundAdapter } from "./types";
@@ -15,7 +18,9 @@ export function createTelegramOutboundAdapter(
   return {
     async send(input): Promise<ChannelSendResult> {
       try {
-        const config = await loadTelegramConfigFile();
+        const config = await loadTelegramConfigFile(
+          input.orgId ? await resolveTelegramScopeForOrg(input.orgId) : null
+        );
         const token = config?.botToken.trim();
 
         if (!token) {
