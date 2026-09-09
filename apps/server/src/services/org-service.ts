@@ -593,12 +593,20 @@ export class OrgService {
       throw new NakamaApiError("Not found", 404);
     }
 
-    // assertCanChangeAdminMembership only counts org_members rows, which a
-    // disable never touches: a disabled admin still counts as "admin" there,
-    // so that guard alone would let every admin be disabled one by one. Count
-    // admins who are actually usable (not already disabled) instead.
-    if (member.role === "admin") {
-      const members = await this.databaseAdapter.listOrgMembers(orgId);
+    // disabled_at is install-wide, not per-org, so this has to check every org
+    // the user administers, not just the org named in the URL: a user can be
+    // a plain member of orgId while being the sole admin of a different org,
+    // and disabling never touches org_members rows, so assertCanChangeAdminMembership
+    // (which only looks at one org) would miss that entirely.
+    const memberships =
+      await this.databaseAdapter.listUserOrganizations(userId);
+    const adminMemberships = memberships.filter(
+      (membership) => membership.role === "admin"
+    );
+    for (const membership of adminMemberships) {
+      const members = await this.databaseAdapter.listOrgMembers(
+        membership.organization.id
+      );
       const otherAdmins = members.filter(
         (entry) => entry.role === "admin" && entry.userId !== userId
       );
@@ -612,7 +620,7 @@ export class OrgService {
       );
       if (!hasUsableAdmin) {
         throw new NakamaApiError(
-          "Cannot disable the last active org admin.",
+          "Cannot disable the last active admin of an organization.",
           409
         );
       }

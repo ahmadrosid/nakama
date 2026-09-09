@@ -569,4 +569,96 @@ describe("platform org routes", () => {
     );
     expect(disableLastAdmin.status).toBe(409);
   });
+
+  test("disabling a user via one org is blocked if it would leave another org with no usable admin", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const createOrgA = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: {
+            email: "cross-org-admin@acme.com",
+            name: "Cross Org Admin",
+            phone: "+628123456789",
+          },
+          name: "Acme Cross A",
+          slug: "acme-cross-a",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createOrgA.status).toBe(201);
+    const orgA = (await createOrgA.json()) as {
+      organization: { id: string };
+      adminMember: { member: { userId: string } };
+    };
+
+    const createOrgB = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: {
+            email: "other-admin@acme.com",
+            name: "Other Admin",
+            phone: "+628999888777",
+          },
+          name: "Acme Cross B",
+          slug: "acme-cross-b",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createOrgB.status).toBe(201);
+    const orgB = (await createOrgB.json()) as { organization: { id: string } };
+
+    // org A's human admin also joins org B as a plain member.
+    await databaseAdapter.upsertOrgMember({
+      createdAt: new Date().toISOString(),
+      orgId: orgB.organization.id,
+      role: "member",
+      userId: orgA.adminMember.member.userId,
+    });
+
+    // Local-client is org A's only other admin, so disabling it first leaves
+    // the human as org A's sole usable admin, while staying a plain member of
+    // org B.
+    const disableLocalClientInOrgA = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgA.organization.id}/members/${LOCAL_CLIENT_USER_ID}/disable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(disableLocalClientInOrgA.status).toBe(204);
+
+    // Disabling the human through org B, where they are only a member, must
+    // still be blocked: disabled_at is install-wide, and org A would be left
+    // with no usable admin.
+    const disableThroughOrgB = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${orgB.organization.id}/members/${orgA.adminMember.member.userId}/disable`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+    expect(disableThroughOrgB.status).toBe(409);
+  });
 });
