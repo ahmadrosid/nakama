@@ -1,8 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { appendFile, cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { StoredWorkflow, WorkflowRunRecord } from "@nakama/core";
+import {
+  getPluginReleaseDir,
+  type StoredWorkflow,
+  type WorkflowRunRecord,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { PluginService } from "./plugin-service";
 
@@ -16,6 +20,12 @@ afterEach(async () => {
 test("official workflow install imports once, executes through IPC, isolates orgs, and disables", async () => {
   const dir = await mkdtemp(join(tmpdir(), "official-workflows-"));
   directories.push(dir);
+  const officialPackagesDir = join(dir, "official");
+  await cp(
+    resolve(import.meta.dir, "../../../../packages/plugins/workflows"),
+    join(officialPackagesDir, "workflows"),
+    { recursive: true }
+  );
   const db = createInMemoryDatabaseAdapter();
   const legacy: StoredWorkflow = {
     description: "",
@@ -29,10 +39,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   };
   const seen: string[] = [];
   const service = new PluginService(db, dir, {
-    officialPackagesDir: resolve(
-      import.meta.dir,
-      "../../../../packages/plugins"
-    ),
+    officialPackagesDir,
     onHostRequest: async (value, context) => {
       const request = value as Record<string, unknown>;
       seen.push(`${context.orgId}:${request.op}`);
@@ -102,6 +109,76 @@ test("official workflow install imports once, executes through IPC, isolates org
   await expect(
     invoke("run_workflow", { workflowId: workflow.id }, "org_b")
   ).rejects.toThrow();
+  const before = (await db.getOrgPlugin("org_a", "workflows"))!;
+  const savedWorkflows = await invoke("list_workflows");
+  const otherOrg = await db.getOrgPlugin("org_b", "workflows");
+  const originalUi = await readFile(
+    join(
+      getPluginReleaseDir("workflows", before.selectedVersion!, dir),
+      "ui/app.js"
+    ),
+    "utf8"
+  );
+  await appendFile(
+    join(officialPackagesDir, "workflows/ui/app.js"),
+    "\n// rebuilt for development\n"
+  );
+  await expect(
+    service.installOfficialPlugin("org_a", "workflows", actor, {
+      expectedRevision: before.revision - 1,
+    })
+  ).rejects.toThrow();
+  await expect(
+    service.installOfficialPlugin(
+      "org_a",
+      "workflows",
+      { id: "member", role: "member" },
+      { expectedRevision: before.revision }
+    )
+  ).rejects.toThrow();
+  expect(await db.getOrgPlugin("org_a", "workflows")).toEqual(before);
+  const reinstalled = await service.installOfficialPlugin(
+    "org_a",
+    "workflows",
+    actor,
+    { expectedRevision: before.revision }
+  );
+  expect(reinstalled.lifecycleState).toBe("enabled");
+  expect(reinstalled.selectedVersion).not.toBe(before.selectedVersion);
+  expect(reinstalled.revision).toBeGreaterThan(before.revision);
+  expect(
+    await readFile(
+      join(
+        getPluginReleaseDir("workflows", reinstalled.selectedVersion!, dir),
+        "ui/app.js"
+      ),
+      "utf8"
+    )
+  ).toBe(`${originalUi}\n// rebuilt for development\n`);
+  expect(
+    await readFile(
+      join(
+        getPluginReleaseDir("workflows", before.selectedVersion!, dir),
+        "ui/app.js"
+      ),
+      "utf8"
+    )
+  ).toBe(originalUi);
+  expect(await db.getOrgPlugin("org_b", "workflows")).toEqual(otherOrg);
+  expect(await invoke("list_workflows")).toEqual(savedWorkflows);
+  expect(
+    (
+      (await invoke("runs", { workflowId: workflow.id })) as WorkflowRunRecord[]
+    )[0]?.id
+  ).toBe(result.run.id);
+  const repeated = await service.installOfficialPlugin(
+    "org_a",
+    "workflows",
+    actor,
+    { expectedRevision: reinstalled.revision }
+  );
+  expect(repeated.selectedVersion).toBe(reinstalled.selectedVersion);
+  expect(repeated.revision).toBeGreaterThan(reinstalled.revision);
   await expect(
     service.installOfficialPlugin("org_a", "workflows", {
       id: "member",
@@ -121,6 +198,39 @@ test("official workflow install imports once, executes through IPC, isolates org
   const install = await db.getOrgPlugin("org_a", "workflows");
   await service.disableOrgPlugin("org_a", "workflows", install!.revision);
   await expect(invoke("list_workflows")).rejects.toThrow();
+  const disabled = (await db.getOrgPlugin("org_a", "workflows"))!;
+  await appendFile(
+    join(officialPackagesDir, "workflows/ui/app.js"),
+    "\n// another development build\n"
+  );
+  const refreshedDisabled = await service.installOfficialPlugin(
+    "org_a",
+    "workflows",
+    actor,
+    { expectedRevision: disabled.revision }
+  );
+  expect(refreshedDisabled.lifecycleState).toBe("disabled");
+  expect(refreshedDisabled.selectedVersion).not.toBe(disabled.selectedVersion);
+  const ready = await service.enableOrgPlugin(
+    "org_a",
+    "workflows",
+    refreshedDisabled.revision
+  );
+  await appendFile(
+    join(officialPackagesDir, "workflows/migrations/001-workflows.sql"),
+    "\nINVALID MIGRATION;\n"
+  );
+  await expect(
+    service.installOfficialPlugin("org_a", "workflows", actor, {
+      expectedRevision: ready.revision,
+    })
+  ).rejects.toThrow();
+  const failedReinstall = (await db.getOrgPlugin("org_a", "workflows"))!;
+  expect(failedReinstall.lifecycleState).toBe("disabled");
+  expect(failedReinstall.selectedVersion).toBe(ready.selectedVersion);
+  expect(failedReinstall.databaseGeneration).toBe(ready.databaseGeneration);
+  await service.enableOrgPlugin("org_a", "workflows", failedReinstall.revision);
+  expect(await invoke("list_workflows")).toEqual(savedWorkflows);
 }, 20_000);
 
 test("host capabilities enforce profile tenancy, Super Bot access, and tool assignment", async () => {

@@ -30,7 +30,10 @@ import {
   validatePluginJsonInstance,
   validatePluginManifest,
 } from "@nakama/core";
-import type { PluginPackageRequest } from "@nakama/core/contract";
+import type {
+  PluginPackageRequest,
+  PluginRevisionRequest,
+} from "@nakama/core/contract";
 import type {
   DatabaseAdapter,
   StoredOrgPluginRecord,
@@ -324,7 +327,8 @@ export class PluginService {
   async installOfficialPlugin(
     orgId: string,
     pluginId: string,
-    actor: PluginExecutionActor
+    actor: PluginExecutionActor,
+    reinstall?: PluginRevisionRequest
   ) {
     if (actor.role !== "admin") {
       throw new PluginHostError("forbidden");
@@ -339,11 +343,30 @@ export class PluginService {
         "This plugin requires agent host capabilities."
       );
     }
-    const inspected = await this.inspectOfficialPlugin(pluginId);
+    const inspected = await this.inspectOfficialPlugin(
+      pluginId,
+      Boolean(reinstall)
+    );
     return withKeyedLock(
       officialInstallLocks,
       `${this.configDir}:${orgId}:${pluginId}`,
       async () => {
+        let install = await this.db.getOrgPlugin(orgId, pluginId);
+        if (reinstall) {
+          if (
+            !(
+              install &&
+              ["enabled", "disabled"].includes(install.lifecycleState)
+            )
+          ) {
+            throw new PluginHostError("invalid_state");
+          }
+          if (install.revision !== reinstall.expectedRevision) {
+            throw new PluginHostError("stale_revision");
+          }
+        }
+        const shouldEnable =
+          !reinstall || install?.lifecycleState === "enabled";
         await withPluginMutation(() =>
           withKeyedLock(
             installLocks,
@@ -354,13 +377,31 @@ export class PluginService {
               )
           )
         );
-        let install = await this.db.getOrgPlugin(orgId, pluginId);
         if (!install || install.lifecycleState === "retained") {
           install = await this.addOrgPlugin(
             orgId,
             pluginId,
             inspected.manifest.version
           );
+        } else if (reinstall) {
+          if (install.lifecycleState === "enabled") {
+            install = await this.disableOrgPlugin(
+              orgId,
+              pluginId,
+              install.revision
+            );
+          }
+          if (install.selectedVersion !== inspected.manifest.version) {
+            install = await this.updateOrgPlugin(
+              orgId,
+              pluginId,
+              inspected.manifest.version,
+              install.revision
+            );
+          }
+          if (!shouldEnable) {
+            return install;
+          }
         }
         const enabledByInstall = install.lifecycleState === "disabled";
         if (enabledByInstall) {
@@ -396,7 +437,8 @@ export class PluginService {
   }
 
   private async inspectOfficialPlugin(
-    pluginId: string
+    pluginId: string,
+    developmentSnapshot = false
   ): Promise<InspectedPackage> {
     // This allowlist is shipped with Nakama; package metadata cannot grant official status.
     if (!(OFFICIAL_PLUGINS.has(pluginId) && this.options.officialPackagesDir)) {
@@ -429,14 +471,26 @@ export class PluginService {
       throw new PluginHostError("invalid_manifest");
     }
     assertReferencedFilesExist(validated.manifest, files);
-    const hash = createHash("sha256");
-    for (const [name, data] of [...files].sort(([a], [b]) =>
-      a.localeCompare(b)
-    )) {
-      hash.update(JSON.stringify([name, data.byteLength])).update(data);
+    const digestFiles = () => {
+      const hash = createHash("sha256");
+      for (const [name, data] of [...files].sort(([a], [b]) =>
+        a.localeCompare(b)
+      )) {
+        hash.update(JSON.stringify([name, data.byteLength])).update(data);
+      }
+      return hash.digest("hex");
+    };
+    if (developmentSnapshot) {
+      // New bytes get their own release; other organizations keep their selected copy.
+      const version = `${validated.manifest.version.split("+")[0]}+dev.${digestFiles().slice(0, 12)}`;
+      validated.manifest.version = version;
+      for (const file of ["package.json", PLUGIN_MANIFEST_FILENAME]) {
+        const metadata = JSON.parse(Buffer.from(files.get(file)!).toString());
+        files.set(file, Buffer.from(JSON.stringify({ ...metadata, version })));
+      }
     }
     return {
-      digest: hash.digest("hex"),
+      digest: digestFiles(),
       files,
       integrity: "bundled",
       manifest: validated.manifest,

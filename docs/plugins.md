@@ -14,6 +14,8 @@ This follows the declared-dependency and reversible-effect ideas described in [D
 
 Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated action and UI bundles in the change. Runtime images include the package under `packages/plugins`; source development and built server entrypoints use the same catalog.
 
+For local development, rebuild the plugin, then choose **System → Plugins → Official plugins → Reinstall**. Organization admins can reload the bundled files without manually bumping the package version. Reinstall preserves workflows, run history, and the enabled/disabled state. It creates an immutable development release for changed content and switches only the active organization; other organizations keep their selected code. Unchanged content reuses its development release. If an update or migration fails, the plugin remains disabled with its previous data available for recovery.
+
 ## Package layout
 
 ```text

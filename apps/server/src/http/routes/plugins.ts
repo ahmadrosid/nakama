@@ -201,6 +201,40 @@ export function registerPluginRoutes(
   const plugins = ["Plugins"];
 
   pluginPath({
+    extra: { 400: errorResponse, 403: errorResponse, 409: errorResponse },
+    method: "post",
+    ok: jsonOk(
+      openapiBag("ReinstallOfficialPluginResponse"),
+      "Reinstalled official plugin"
+    ),
+    operationId: "reinstallOfficialPlugin",
+    path: "/v1/plugins/official/{pluginId}/reinstall",
+    request: { body: revisionRequestSchema, params: pluginIdParam },
+    summary:
+      "Reload a bundled official plugin while preserving organization data",
+    tags: plugins,
+  });
+  app.post("/v1/plugins/official/:pluginId/reinstall", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const body = await readJson<PluginRevisionRequest>(c.req.raw);
+    if (!Number.isSafeInteger(body?.expectedRevision)) {
+      return json({ error: "expectedRevision is required" }, 400);
+    }
+    try {
+      const install = await requirePluginService(options).installOfficialPlugin(
+        orgId,
+        c.req.param("pluginId"),
+        { id: auth.user.id, role: "admin" },
+        body
+      );
+      return json({ install });
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
+
+  pluginPath({
     extra: { 400: errorResponse, 403: errorResponse },
     method: "post",
     ok: jsonOk(previewResponseSchema, "Plugin package preview"),

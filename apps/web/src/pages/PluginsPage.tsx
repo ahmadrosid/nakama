@@ -34,6 +34,7 @@ import {
   usePluginReleases,
   usePreviewOrgPluginUpdate,
   usePreviewPluginPackage,
+  useReinstallOfficialPlugin,
   useRemovePluginRelease,
   useUninstallOrgPlugin,
   useUpdateOrgPlugin,
@@ -83,6 +84,7 @@ export function PluginsPage() {
   const updateOrg = useUpdateOrgPlugin();
   const uninstallOrg = useUninstallOrgPlugin();
   const purgeData = useDeleteRetainedPluginData();
+  const reinstallOfficial = useReinstallOfficialPlugin();
   const [packageName, setPackageName] = useState("");
   const [packageVersion, setPackageVersion] = useState("");
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -100,6 +102,7 @@ export function PluginsPage() {
     updateOrg,
     uninstallOrg,
     purgeData,
+    reinstallOfficial,
   ].some((mutation) => mutation.isPending);
 
   function rememberFocus(target: EventTarget | null) {
@@ -264,8 +267,20 @@ export function PluginsPage() {
       <OfficialPluginsCatalog
         busy={busy}
         canManage={canManage}
+        onAction={(plugin, action) => {
+          setActionError(null);
+          const mutation =
+            action === "reinstall" ? reinstallOfficial : enableOrg;
+          void mutation
+            .mutateAsync({
+              expectedRevision: plugin.revision,
+              pluginId: plugin.pluginId,
+            })
+            .catch((error) => setActionError(formatError(error)));
+        }}
         onError={setActionError}
         plugins={plugins}
+        reinstalling={reinstallOfficial.isPending}
       />
 
       {plugins.length === 0 ? (
@@ -359,11 +374,15 @@ function OfficialPluginsCatalog({
   busy,
   canManage,
   onError,
+  onAction,
+  reinstalling,
 }: {
   plugins: OrgPluginDetail[];
   busy: boolean;
   canManage: boolean;
   onError(error: string | null): void;
+  onAction(plugin: OrgPluginDetail, action: "enable" | "reinstall"): void;
+  reinstalling: boolean;
 }) {
   const officialQuery = useOfficialPlugins();
   const installOfficial = useInstallOfficialPlugin();
@@ -398,22 +417,43 @@ function OfficialPluginsCatalog({
             key={item.id}
           >
             <span className="font-medium">{item.name}</span>
-            {installed?.lifecycleState === "enabled" ? (
-              <Link
-                className="text-sm underline underline-offset-4"
-                to={pluginPagePath(item.id)}
-              >
-                Open
-              </Link>
-            ) : (
-              <Button
-                disabled={installing || !canManage}
-                onClick={() => onInstall(item.id)}
-                type="button"
-              >
-                {installing ? "Installing…" : installed ? "Enable" : "Install"}
-              </Button>
-            )}
+            <div className="flex items-center gap-3">
+              {installed?.lifecycleState === "enabled" ? (
+                <Link
+                  className="text-sm underline underline-offset-4"
+                  to={pluginPagePath(item.id)}
+                >
+                  Open
+                </Link>
+              ) : (
+                <Button
+                  disabled={installing || !canManage}
+                  onClick={() =>
+                    installed
+                      ? onAction(installed, "enable")
+                      : onInstall(item.id)
+                  }
+                  type="button"
+                >
+                  {installing
+                    ? "Installing…"
+                    : installed
+                      ? "Enable"
+                      : "Install"}
+                </Button>
+              )}
+              {installed && canManage && (
+                <Button
+                  disabled={installing || isPluginLifecycleBusy(installed)}
+                  onClick={() => onAction(installed, "reinstall")}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {reinstalling ? "Reinstalling…" : "Reinstall"}
+                </Button>
+              )}
+            </div>
           </div>
         );
       })}

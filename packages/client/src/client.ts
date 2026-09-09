@@ -1623,6 +1623,21 @@ export class NakamaClient {
     );
   }
 
+  async reinstallOfficialPlugin(
+    pluginId: string,
+    expectedRevision: number,
+    orgId?: string
+  ): Promise<unknown> {
+    return this.request(
+      `/v1/plugins/official/${encodeURIComponent(pluginId)}/reinstall`,
+      {
+        body: JSON.stringify({ expectedRevision }),
+        method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
+      }
+    );
+  }
+
   async getTimezone(): Promise<string> {
     const response = await this.request<TimezoneSettingsResponse>(
       "/v1/settings/timezone"

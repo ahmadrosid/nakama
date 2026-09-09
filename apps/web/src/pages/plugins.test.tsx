@@ -19,6 +19,7 @@ import {
   resolvePluginPageView,
   useEnableOrgPlugin,
   useInstallPluginPackage,
+  useReinstallOfficialPlugin,
 } from "@/hooks/use-plugins";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -27,6 +28,7 @@ import { PluginsPage } from "@/pages/PluginsPage";
 
 const enable = spyOn(client, "enableOrgPlugin");
 const installPackage = spyOn(client, "installPluginPackage");
+const reinstallOfficial = spyOn(client, "reinstallOfficialPlugin");
 const queryClient = new QueryClient({
   defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
 });
@@ -34,12 +36,14 @@ const queryClient = new QueryClient({
 afterEach(() => {
   enable.mockReset();
   installPackage.mockReset();
+  reinstallOfficial.mockReset();
   queryClient.clear();
 });
 
 afterAll(() => {
   enable.mockRestore();
   installPackage.mockRestore();
+  reinstallOfficial.mockRestore();
 });
 
 function plugin(overrides: Partial<OrgPluginDetail> = {}): OrgPluginDetail {
@@ -103,6 +107,92 @@ function renderEnable() {
 }
 
 describe("plugin management authority and mutations", () => {
+  test.each(["admin", "member"] as const)(
+    "official reinstall is limited to admins: %s",
+    (role) => {
+      queryClient.setQueryData(["official-plugins"], {
+        plugins: [
+          {
+            description: "",
+            id: "workflows",
+            name: "Workflows",
+            version: "1.0.1",
+          },
+        ],
+      });
+      queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
+        plugins: [
+          plugin({
+            lifecycleState: "enabled",
+            name: "Workflows",
+            pluginId: "workflows",
+          }),
+        ],
+      });
+      const html = renderToString(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider
+            value={{
+              ...authValue,
+              activeOrg: { ...authValue.activeOrg!, role },
+              user: { ...authValue.user!, isPlatformAdmin: false },
+            }}
+          >
+            <MemoryRouter>
+              <PluginsPage />
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      expect(html.includes(">Reinstall</button>")).toBe(role === "admin");
+    }
+  );
+  test.each([false, true])(
+    "official reinstall refreshes state even when failure=%s",
+    async (fails) => {
+      if (fails) {
+        reinstallOfficial.mockRejectedValue(new Error("Migration failed"));
+      } else {
+        reinstallOfficial.mockResolvedValue({ install: {} });
+      }
+      queryClient.setQueryData(queryKeys.plugins.all("org-a"), { plugins: [] });
+      queryClient.setQueryData(
+        queryKeys.plugins.detail("org-a", "workflows"),
+        plugin()
+      );
+      queryClient.setQueryData(queryKeys.plugins.releases, { releases: [] });
+      let mutate!: ReturnType<typeof useReinstallOfficialPlugin>["mutateAsync"];
+      function Probe() {
+        mutate = useReinstallOfficialPlugin().mutateAsync;
+        return null;
+      }
+      renderToString(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={authValue}>
+            <Probe />
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      const result = mutate({ expectedRevision: 7, pluginId: "workflows" });
+      if (fails) {
+        await expect(result).rejects.toThrow();
+      } else {
+        await result;
+      }
+      expect(reinstallOfficial).toHaveBeenCalledWith("workflows", 7, "org-a");
+      expect(
+        queryClient.getQueryState(queryKeys.plugins.all("org-a"))?.isInvalidated
+      ).toBe(true);
+      expect(
+        queryClient.getQueryState(
+          queryKeys.plugins.detail("org-a", "workflows")
+        )?.isInvalidated
+      ).toBe(true);
+      expect(
+        queryClient.getQueryState(queryKeys.plugins.releases)?.isInvalidated
+      ).toBe(true);
+    }
+  );
   test.each([
     {
       actions: ["Enable", "Update", "Uninstall"],

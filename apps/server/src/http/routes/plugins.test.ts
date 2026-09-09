@@ -807,7 +807,45 @@ describe("plugin HTTP API", () => {
     ).toBe(403);
     const installed = await jsonRequest(app, path, admin, { method: "POST" });
     expect(installed.status).toBe(200);
-    expect((await installed.json()).install.lifecycleState).toBe("enabled");
+    const install = (await installed.json()).install;
+    expect(install.lifecycleState).toBe("enabled");
+    const reinstallPath = "/v1/plugins/official/workflows/reinstall";
+    const reinstallRequest = {
+      method: "POST",
+      body: JSON.stringify({ expectedRevision: install.revision }),
+    };
+    expect(
+      (await jsonRequest(app, reinstallPath, member, reinstallRequest)).status
+    ).toBe(403);
+    expect(
+      (
+        await jsonRequest(app, reinstallPath, admin, {
+          ...reinstallRequest,
+          headers: { "X-CSRF-Token": "invalid" },
+        })
+      ).status
+    ).toBe(403);
+    expect(
+      (
+        await jsonRequest(app, reinstallPath, admin, {
+          method: "POST",
+          body: "{}",
+        })
+      ).status
+    ).toBe(400);
+    const reinstalled = await jsonRequest(
+      app,
+      reinstallPath,
+      admin,
+      reinstallRequest
+    );
+    expect(reinstalled.status).toBe(200);
+    const refreshed = (await reinstalled.json()).install;
+    expect(refreshed.lifecycleState).toBe("enabled");
+    expect(refreshed.selectedVersion).not.toBe(install.selectedVersion);
+    expect(
+      (await jsonRequest(app, reinstallPath, admin, reinstallRequest)).status
+    ).toBe(409);
     const listed = await jsonRequest(app, "/v1/plugins", member);
     expect(
       (await listed.json()).plugins.some(
@@ -828,6 +866,9 @@ describe("plugin HTTP API", () => {
     };
     expect(spec.paths["/v1/platform/plugins/releases"]).toBeTruthy();
     expect(spec.paths["/v1/plugins"]).toBeTruthy();
+    expect(
+      spec.paths["/v1/plugins/official/{pluginId}/reinstall"]
+    ).toBeTruthy();
     expect(
       spec.paths["/v1/plugins/{pluginId}/actions/{actionKey}"]
     ).toBeTruthy();

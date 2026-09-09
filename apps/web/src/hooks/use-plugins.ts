@@ -82,6 +82,27 @@ export function useInstallOfficialPlugin() {
   );
 }
 
+export function useReinstallOfficialPlugin() {
+  const queryClient = useQueryClient();
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+  return useMutation({
+    mutationFn: (input: { pluginId: string; expectedRevision: number }) =>
+      client.reinstallOfficialPlugin(
+        input.pluginId,
+        input.expectedRevision,
+        orgId
+      ),
+    onMutate: () => ({ orgId }),
+    onSettled: async (_data, _error, _variables, context) => {
+      await invalidateOrgPlugins(queryClient, context?.orgId ?? orgId);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.plugins.releases,
+      });
+    },
+  });
+}
+
 export function useOrgPlugin(pluginId: string | undefined) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
