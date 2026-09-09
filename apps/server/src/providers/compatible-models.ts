@@ -136,7 +136,8 @@ export function catalogCustomModelsToCatalog(
     } else if (
       provider === "deepseek" ||
       provider === "together" ||
-      provider === "mistral"
+      provider === "mistral" ||
+      provider === "perplexity"
     ) {
       model.supportsThinking = false;
     }
@@ -329,6 +330,7 @@ export function getModelsForProviderInstance(
     instance.type === "deepseek" ||
     instance.type === "together" ||
     instance.type === "mistral" ||
+    instance.type === "perplexity" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];

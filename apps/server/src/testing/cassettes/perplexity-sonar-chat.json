@@ -1,0 +1,261 @@
+{
+  "name": "perplexity-sonar-chat",
+  "recordedAt": "2026-09-08T14:37:48.206Z",
+  "request": {
+    "body": {
+      "model": "sonar",
+      "messages": [
+        {
+          "content": "Use current web sources and keep the answer concise.",
+          "role": "system"
+        },
+        {
+          "content": "What command installs project dependencies with Bun? Answer in one short sentence.",
+          "role": "user"
+        }
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.perplexity.ai/chat/completions"
+  },
+  "response": {
+    "body": {
+      "choices": [
+        {
+          "delta": {
+            "content": "",
+            "role": "assistant"
+          },
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "Use `bun install` to install a project’s dependencies.[1]",
+            "role": "assistant"
+          }
+        }
+      ],
+      "citations": [
+        "https://bun.com/docs/pm/cli/install",
+        "https://bun.com/guides/install/add",
+        "https://bun.com/guides/install/add-dev",
+        "https://bun.com/docs/guides/install/add",
+        "https://www.commands.sh/bun",
+        "https://bun.com/guides/install/from-npm-install-to-bun-install",
+        "https://bun.com/docs/installation",
+        "https://bun.com/package-manager",
+        "https://bun.com/blog/bun-v1.3",
+        "https://github.com/oven-sh/bun",
+        "https://bun.com/docs/pm/workspaces",
+        "https://bun.sh/docs/project/contributing",
+        "https://www.deployhq.com/cheatsheets/bun",
+        "https://bun.com/guides/install/trusted",
+        "https://github.com/oven-sh/bun/blob/7d1c9fa1a471d180c078a860c4885478f334bdf5/README.md",
+        "https://bun.com/docs",
+        "https://bun.com/get",
+        "https://bun.com/",
+        "https://ploi.io/documentation/server/how-to-install-bun-package-manager",
+        "https://bun.com/docs/pm/cli/update"
+      ],
+      "created": 1788878268,
+      "id": "0ea5f866-548a-46d4-b1be-f69a1a3fb049",
+      "model": "sonar",
+      "object": "chat.completion",
+      "search_results": [
+        {
+          "date": null,
+          "last_updated": "2026-08-22",
+          "place_metadata": null,
+          "snippet": "The `bun` CLI contains a Node.js-compatible package manager designed to be a dramatically faster replacement for `npm`, `yarn`, and `pnpm`.\nIt's a standalone tool that works in existing Node.js projects; if your project has a `package.json`, you can use `bun install`.\n...\nTo install all dependencies...",
+          "source": "web",
+          "title": "bun install | Bun Docs",
+          "url": "https://bun.com/docs/pm/cli/install"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-09-03",
+          "place_metadata": null,
+          "snippet": "To add an npm package as a dependency, use `bun add`.\nterminal\n```\nbun add zod\n```\nThis adds the package to `dependencies` in `package.json`.\nBy default, Bun uses the `^` range specifier, which accepts future minor and patch versions.\n...\nTo pin your project to the exact version you installed, use `...",
+          "source": "web",
+          "title": "Add a dependency | Bun Guides",
+          "url": "https://bun.com/guides/install/add"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-20",
+          "place_metadata": null,
+          "snippet": "To add an npm package as a development dependency, use `bun add --development`.\nterminal\n```\nbun add zod --dev\nbun add zod -d # shorthand\n```\nThis adds the package to `devDependencies` in `package.json`.",
+          "source": "web",
+          "title": "Add a development dependency | Bun Guides",
+          "url": "https://bun.com/guides/install/add-dev"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-01",
+          "place_metadata": null,
+          "snippet": "To add an npm package as a dependency, use `bun add`.\n```sh terminal icon=\"terminal\" theme={\"theme\":{\"light\":\"github-light\",\"dark\":\"dracula\"}}\nbun add zod\n```\n***\nThis adds the package to `dependencies` in `package.json`.\nBy default, Bun uses the `^` range specifier, which accepts future minor and p...",
+          "source": "web",
+          "title": "Add a dependency",
+          "url": "https://bun.com/docs/guides/install/add"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-04-15",
+          "place_metadata": null,
+          "snippet": "bun add\nAdd and install new dependencies to the current project.\nNote: `a` can be used as an alias for `add`.\n...\n→bun install\nInstall JavaScript dependencies for a project from `package.json`.\n...\n```\nboolean\nDownload and install all the packages listed as dependencies in `package.json`\nExample:\n``...",
+          "source": "web",
+          "title": "bun command — examples & options",
+          "url": "https://www.commands.sh/bun"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-22",
+          "place_metadata": null,
+          "snippet": "terminal\n...\n# It only takes one command to migrate\nbun i\n# To add dependencies:\nbun i @types/bun\n# To add devDependencies:\nbun i -d @types/bun\n# To remove a dependency:\n...\n```\n...\nInstall packages globally with `bun i -g <package>`.\nBy default, they go into a `.bun/install/global/node_modules` fol...",
+          "source": "web",
+          "title": "Migrate from npm install to bun install | Bun Guides",
+          "url": "https://bun.com/guides/install/from-npm-install-to-bun-install"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-25",
+          "place_metadata": null,
+          "snippet": "```\nnpm install -g bun # the last `npm` command you'll ever need",
+          "source": "web",
+          "title": "Installation | Bun Docs",
+          "url": "https://bun.com/docs/installation"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-20",
+          "place_metadata": null,
+          "snippet": "# bun install The npm-compatible package manager that finishes first.\nIt reads your `package.json`, migrates your lockfile, and installs from a global cache.\n...\n`curl -fsSL https://bun.sh/install | bash`",
+          "source": "web",
+          "title": "bun install — a superfast npm-compatible package manager",
+          "url": "https://bun.com/package-manager"
+        },
+        {
+          "date": "2025-10-10",
+          "last_updated": "2026-09-05",
+          "place_metadata": null,
+          "snippet": "npm install -g bun\n```\n...\n, Bun installs workspace dependencies from the registry instead of linking locally—useful in CI where pre-built packages are faster than building from source.\n...\n** lets you choose which dependencies to update: bun update --interactive**\n```\n...\n# Update dependencies only...",
+          "source": "web",
+          "title": "Bun 1.3 | Bun Blog",
+          "url": "https://bun.com/blog/bun-v1.3"
+        },
+        {
+          "date": "2026-09-05",
+          "last_updated": "2026-09-07",
+          "place_metadata": null,
+          "snippet": "bun install <pkg> # install a package\nbunx cowsay 'Hello, world!'\n...\n```\n...\n- Install\n- Add a dependency\n- Add a Git dependency\n- Add a peer dependency\n- Add a trusted dependency\n- Add a development dependency\n- Add a tarball dependency\n- Add an optional dependency\n- Generate a yarn-compatible loc...",
+          "source": "web",
+          "title": "oven-sh/bun: Incredibly fast JavaScript runtime, bundler, test runner ...",
+          "url": "https://github.com/oven-sh/bun"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-09-04",
+          "place_metadata": null,
+          "snippet": "```\n`bun install` installs dependencies for all workspaces in the monorepo, de-duplicating packages if possible.\nTo install dependencies for specific workspaces only, use the `--filter` flag.\n```\n# Install dependencies for all workspaces starting with `pkg-` except for `pkg-c`\nbun install --filter \"...",
+          "source": "web",
+          "title": "Workspaces | Bun Docs",
+          "url": "https://bun.com/docs/pm/workspaces"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-09-07",
+          "place_metadata": null,
+          "snippet": "bun bd\n...\nUsing your system's package manager, install Bun's dependencies:\n```\n...\n```\ncurl -fsSL https://bun.com/install | bash\n```\n```\nnpm install -g bun\n```\n...\nAfter cloning the repository, run the following command to build.\nThis can take a while: it downloads and builds dependencies.\n```\nbun ...",
+          "source": "web",
+          "title": "Contributing | Bun Docs",
+          "url": "https://bun.sh/docs/project/contributing"
+        },
+        {
+          "date": "2026-05-23",
+          "last_updated": "2026-08-25",
+          "place_metadata": null,
+          "snippet": "Bun is an all-in-one JavaScript runtime, package manager, bundler, and test runner — `bun install` replaces `npm install`, `bun run server.ts` replaces `node` + `tsx`, `bun build` replaces webpack/esbuild, and `bun test` replaces Jest.\n...\n### Install packages\n```\nbun install # install everything in...",
+          "source": "web",
+          "title": "Bun Cheatsheet",
+          "url": "https://www.deployhq.com/cheatsheets/bun"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-30",
+          "place_metadata": null,
+          "snippet": "Once you add the package to `trustedDependencies`, run a fresh install.\nBun re-installs your dependencies and runs the package's lifecycle scripts.\n(`bun pm trust` runs them immediately, so you can skip the extra install.)\nterminal\n```\nrm -rf node_modules\nbun install\n```",
+          "source": "web",
+          "title": "Add a trusted dependency | Bun Guides",
+          "url": "https://bun.com/guides/install/trusted"
+        },
+        {
+          "date": "2021-04-14",
+          "last_updated": "2026-04-17",
+          "place_metadata": null,
+          "snippet": "Native: (macOS x64 & Silicon, Linux x64, Windows Subsystem for Linux)\n```\ncurl -fsSL https://bun.sh/install | bash\n```\n...\nOn Linux, `bun install` tends to install packages 20x - 100x faster than `npm install`.\nOn macOS, it’s more like 4x - 80x.\nTo install packages from package.json:\n```\nbun install...",
+          "source": "web",
+          "title": "bun/README.md at 7d1c9fa1a471d180c078a860c4885478f334bdf5 · oven-sh/bun",
+          "url": "https://github.com/oven-sh/bun/blob/7d1c9fa1a471d180c078a860c4885478f334bdf5/README.md"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-26",
+          "place_metadata": null,
+          "snippet": "Install packages up to 30x faster than npm with a global cache and workspaces\nGet started with\n```\nbun install\n```\n...\n- Package Manager: Fast installs, workspaces, overrides, and audits with\n```\nbun install\n```\n.\n...\nbun install <pkg> # install a package\nbun build ./index.tsx # bundle a project for...",
+          "source": "web",
+          "title": "Welcome to Bun | Bun Docs",
+          "url": "https://bun.com/docs"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-09-05",
+          "place_metadata": null,
+          "snippet": "### Add Bun to a Node.js app\n$ bun install # replaces npm install\n$ bun run dev # replaces npm run dev\nMigration guide",
+          "source": "web",
+          "title": "Install Bun — get started in seconds",
+          "url": "https://bun.com/get"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-09-05",
+          "place_metadata": null,
+          "snippet": "Use bun install or bun test in an existing Node.js project, or run the whole thing on Bun.\n...\n```\n$ bun install\n```\n...\n> $ bun installbun install v1.4.2 (0aa2b1cd)Output abridged from Bun v1.4.2.\n...\nInstall Bun, open the project you were already working on, and run\n```\nbun install\n```\n. Your code...",
+          "source": "web",
+          "title": "Bun — A fast all-in-one JavaScript runtime",
+          "url": "https://bun.com/"
+        },
+        {
+          "date": "2023-09-13",
+          "last_updated": "2026-08-24",
+          "place_metadata": null,
+          "snippet": "You can now use Bun to install packages (`bun install`), run scripts (`bun run`) and execute files directly (`bun index.ts`).",
+          "source": "web",
+          "title": "How to install Bun package manager",
+          "url": "https://ploi.io/documentation/server/how-to-install-bun-package-manager"
+        },
+        {
+          "date": null,
+          "last_updated": "2026-08-17",
+          "place_metadata": null,
+          "snippet": "`bun update` (alias `bun up`) updates every dependency, direct and transitive, to the newest version allowed by the ranges that request it.\nIt then rewrites `package.json` and `bun.lock`.\nTo ignore your declared ranges, use `--latest`.\n...\nbun update\n```\n...\n`bun update <package>` updates `<package>...",
+          "source": "web",
+          "title": "bun update | Bun Docs",
+          "url": "https://bun.com/docs/pm/cli/update"
+        }
+      ],
+      "usage": {
+        "completion_tokens": 16,
+        "cost": {
+          "input_tokens_cost": 0.00002,
+          "output_tokens_cost": 0.00002,
+          "request_cost": 0.005,
+          "total_cost": 0.00504
+        },
+        "prompt_tokens": 24,
+        "search_context_size": "low",
+        "total_tokens": 40
+      }
+    },
+    "status": 200
+  },
+  "version": 1
+}

@@ -37,6 +37,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "deepseek", label: "DeepSeek" },
   { id: "together", label: "Together AI" },
   { id: "mistral", label: "Mistral" },
+  { id: "perplexity", label: "Perplexity Sonar" },
   { id: "xai", label: "xAI Grok" },
   { id: "cerebras", label: "Cerebras" },
   { id: "cloudflare", label: "Cloudflare Worker AI" },
@@ -185,6 +186,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "gemini" ||
     normalized === "deepseek" ||
     normalized === "mistral" ||
+    normalized === "perplexity" ||
     normalized === "cerebras" ||
     normalized === "cloudflare" ||
     normalized === "fireworks" ||

@@ -156,7 +156,8 @@ export function modelExistsOnInstance(
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
     instance.type === "together" ||
-    instance.type === "mistral"
+    instance.type === "mistral" ||
+    instance.type === "perplexity"
   ) {
     if (instance.customModels?.length) {
       return findCustomModel(instance.customModels, trimmed) !== undefined;
@@ -356,7 +357,8 @@ export function applyProviderInstanceUpdate(
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
       instance.type === "together" ||
-      instance.type === "mistral"
+      instance.type === "mistral" ||
+      instance.type === "perplexity"
     ) {
       next.customModels = validateCustomModels(request.customModels);
     }
