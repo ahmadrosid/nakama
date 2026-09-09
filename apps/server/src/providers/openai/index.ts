@@ -152,6 +152,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Together AI";
   }
 
+  if (providerName === "vercel_ai_gateway") {
+    return "Vercel AI Gateway";
+  }
+
   if (providerName === "mistral") {
     return "Mistral";
   }
