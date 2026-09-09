@@ -125,8 +125,16 @@ MIT
 
 Thanks to everyone who helps make Nakama better.
 
-<p>
+<p align="center">
   <a href="https://github.com/ahmadrosid/nakama/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=ahmadrosid/nakama" alt="Nakama contributors" />
+    <img src="https://contrib.rocks/image?repo=ahmadrosid/nakama" alt="Nakama contributors" width="812" />
+  </a>
+</p>
+
+## Star History
+
+<p align="center">
+  <a href="https://star-history.dera.page/#ahmadrosid/nakama">
+    <img src="https://star-history.dera.page/svg?repos=ahmadrosid/nakama" alt="Star History Chart" width="800" />
   </a>
 </p>
