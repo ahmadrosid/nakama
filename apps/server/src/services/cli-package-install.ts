@@ -117,11 +117,11 @@ export async function probeCliVersion(command: string): Promise<{
       resolve({ installed: false, missing: false, version: null });
     }, timeoutMs);
 
-    child.stdout?.on("data", (chunk) => {
-      stdout += chunk.toString();
+    child.stdout?.setEncoding("utf8").on("data", (text: string) => {
+      stdout += text;
     });
-    child.stderr?.on("data", (chunk) => {
-      stderr += chunk.toString();
+    child.stderr?.setEncoding("utf8").on("data", (text: string) => {
+      stderr += text;
     });
     child.once("error", (error) => {
       clearTimeout(timeoutId);
