@@ -9,6 +9,12 @@ description: "Run a declared recipe on demand with step receipts so summaries on
 - **Workflows** run a declared recipe when you ask — each data step leaves a receipt; the summarize step may only use those receipts.
 - **Tasks** are a to-do list the agent works through manually.
 
+To run a workflow on a clock, press **Schedule** on it. That opens a super bot chat
+with the workflow id filled in, and the automation it creates calls `run_workflow`
+on its trigger like any other prompt.
+
+![The Schedule action on a saved workflow](/screenshots/workflow-schedule-button.png)
+
 ## Workflows
 
 A workflow is a name, a bound profile, ordered steps, and run history.
