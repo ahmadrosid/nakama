@@ -62,6 +62,45 @@ describe("OpenAI provider streaming", () => {
     expect(streamInit?.idleTimeout).toBe(0);
   });
 
+  test("appends Perplexity citations from the final stream chunk", async () => {
+    const fetchMock = mock(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        expect(body.stream_options).toBeUndefined();
+
+        return new Response(
+          streamFromChunks([
+            'data:{"choices":[{"delta":{"content":"Answer.[1]"}}]}\r\n\r\n',
+            'data:{"choices":[{"delta":{}}],"citations":["https://source.test/story"]}\r\n\r\n',
+            "data:[DONE]\r\n\r\n",
+          ]),
+          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+        );
+      }
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = createOpenAIProvider({
+      apiKey: "pplx-test",
+      baseUrl: "https://api.perplexity.ai",
+      model: "sonar",
+      providerName: "perplexity",
+    });
+    const chunks: string[] = [];
+
+    const result = await provider.streamChat(
+      {
+        messages: [{ content: "Search", role: "user" }],
+        system: "Answer with sources.",
+      },
+      { onChunk: (delta) => chunks.push(delta) }
+    );
+
+    expect(result.content).toContain("Answer.[1]");
+    expect(result.content).toContain("1. <https://source.test/story>");
+    expect(chunks.join("")).toBe(result.content);
+  });
+
   test("streams responses api text and thinking", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe("https://api.openai.com/v1/responses");

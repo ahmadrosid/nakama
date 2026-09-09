@@ -101,6 +101,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openrouter: "OpenRouter",
   qwen: "Qwen (DashScope)",
   qwen_cn: "Qwen (DashScope CN)",
+  perplexity: "Perplexity Sonar",
   together: "Together AI",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",

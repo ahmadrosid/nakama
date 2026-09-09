@@ -10,7 +10,7 @@ import {
 } from "../../services/skill-suggestion-service";
 import type { ServerOptions } from "../context";
 import { requireNotViewerFromContext } from "../org-guards";
-import { json } from "../shared";
+import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerSkillSuggestionRoutes(
@@ -94,7 +94,10 @@ export function registerSkillSuggestionRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const sessionId = c.req.query("sessionId");
-    const status = c.req.query("status") as "pending" | "applied" | undefined;
+    const status = parseOptionalQueryEnum(c.req.query("status"), [
+      "pending",
+      "applied",
+    ]);
     const profileId = c.req.query("profileId");
     const suggestions = await service.listSuggestions(orgId, {
       profileId: profileId || undefined,

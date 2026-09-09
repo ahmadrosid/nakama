@@ -22,6 +22,24 @@ function createApp() {
 const BASE = "http://localhost:4310";
 
 describe("org memory routes (v1)", () => {
+  test("rejects an unknown proposal status filter", async () => {
+    const { app, databaseAdapter } = createApp();
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "status-admin@org.com"
+    );
+    const orgId = adminSession.orgId!;
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/memory/proposals?status=unknown`, {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   test("admin can add a fact, get memory, search, pin, unpin, archive", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const adminSession = await setupFreshInstallSession(

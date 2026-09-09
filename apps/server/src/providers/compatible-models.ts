@@ -138,7 +138,8 @@ export function catalogCustomModelsToCatalog(
       provider === "together" ||
       provider === "mistral" ||
       provider === "qwen" ||
-      provider === "qwen_cn"
+      provider === "qwen_cn" ||
+      provider === "perplexity"
     ) {
       model.supportsThinking = false;
     }
@@ -333,6 +334,7 @@ export function getModelsForProviderInstance(
     instance.type === "mistral" ||
     instance.type === "qwen" ||
     instance.type === "qwen_cn" ||
+    instance.type === "perplexity" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];

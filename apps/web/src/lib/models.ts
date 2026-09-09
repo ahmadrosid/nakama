@@ -50,6 +50,7 @@ export function formatProviderLabel(
     provider === "gemini" ||
     provider === "deepseek" ||
     provider === "mistral" ||
+    provider === "perplexity" ||
     provider === "cerebras" ||
     provider === "cloudflare" ||
     provider === "fireworks" ||
@@ -88,6 +89,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "mistral", label: "Mistral" },
     { id: "qwen", label: "Qwen (DashScope)" },
     { id: "qwen_cn", label: "Qwen (DashScope CN)" },
+    { id: "perplexity", label: "Perplexity Sonar" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
     { id: "fireworks", label: "Fireworks" },
@@ -905,6 +907,7 @@ export function resolveModelThinkingSupport(
     model.provider === "mistral" ||
     model.provider === "qwen" ||
     model.provider === "qwen_cn" ||
+    model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama"
@@ -958,6 +961,7 @@ export function resolveModelVisionSupport(
     model.provider === "mistral" ||
     model.provider === "qwen" ||
     model.provider === "qwen_cn" ||
+    model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||

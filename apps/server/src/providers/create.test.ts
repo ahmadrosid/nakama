@@ -143,39 +143,119 @@ describe("createProviderForInstance routing", () => {
     }
   });
 
-  test("routes qwen instances to the DashScope compatible-mode path with auth", async () => {
+
+  test.each([
+    {
+      apiKey: "test-key",
+      id: "inst_qwen",
+      label: "Qwen (DashScope)",
+      type: "qwen" as const,
+    },
+    {
+      apiKey: "cn-key",
+      id: "inst_qwen_cn",
+      label: "Qwen (DashScope CN)",
+      type: "qwen_cn" as const,
+    },
+  ])(
+    "routes $type instances to the DashScope compatible-mode path with auth",
+    async ({ apiKey, id, label, type }) => {
+      let seenPath = "";
+      let seenAuth = "";
+      let seenModel = "";
+      let seenEnableThinking: unknown;
+
+      const mock = Bun.serve({
+        fetch: async (request) => {
+          const url = new URL(request.url);
+          seenPath = url.pathname;
+          seenAuth = request.headers.get("authorization") ?? "";
+          const body = (await request.json()) as {
+            enable_thinking?: unknown;
+            model?: string;
+          };
+          seenModel = body.model ?? "";
+          seenEnableThinking = body.enable_thinking;
+          return Response.json({
+            choices: [
+              {
+                finish_reason: "stop",
+                index: 0,
+                message: { content: "ok", role: "assistant" },
+              },
+            ],
+            created: 1,
+            id: "mock",
+            model: seenModel,
+            object: "chat.completion",
+            usage: {
+              completion_tokens: 1,
+              prompt_tokens: 1,
+              total_tokens: 2,
+            },
+          });
+        },
+        port: 0,
+      });
+
+      try {
+        const instance: ProviderInstance = {
+          apiKey,
+          baseUrl: `http://127.0.0.1:${mock.port}/compatible-mode/v1`,
+          createdAt: new Date().toISOString(),
+          id,
+          label,
+          type,
+        };
+
+        const client = createProviderForInstance(instance, "qwen3.7-plus");
+
+        expect(client).not.toBeNull();
+        expect(client?.name).toBe(type);
+
+        const result = await client!.generateChat({
+          messages: [{ content: "ping", role: "user" }],
+          providerOptions: { thinking: { effort: "medium", enabled: true } },
+        });
+
+        expect(result.content).toBe("ok");
+        expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
+        expect(seenAuth).toBe(`Bearer ${apiKey}`);
+        expect(seenModel).toBe("qwen3.7-plus");
+        expect(seenEnableThinking).toBe(true);
+      } finally {
+        mock.stop(true);
+      }
+    }
+  );
+
+  test("routes perplexity chat and keeps citations while omitting local tools", async () => {
     let seenPath = "";
     let seenAuth = "";
-    let seenModel = "";
-    let seenEnableThinking: unknown;
+    const seenBodies: Array<Record<string, unknown>> = [];
 
     const mock = Bun.serve({
       fetch: async (request) => {
-        const url = new URL(request.url);
-        seenPath = url.pathname;
+        seenPath = new URL(request.url).pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        const body = (await request.json()) as {
-          enable_thinking?: unknown;
-          model?: string;
-        };
-        seenModel = body.model ?? "";
-        seenEnableThinking = body.enable_thinking;
+        seenBodies.push((await request.json()) as Record<string, unknown>);
         return Response.json({
           choices: [
             {
               finish_reason: "stop",
               index: 0,
-              message: { content: "ok", role: "assistant" },
+              message: {
+                content: "Grounded answer.[1][2]",
+                role: "assistant",
+              },
             },
           ],
-          created: 1,
-          id: "mock",
-          model: seenModel,
-          object: "chat.completion",
+          citations: ["https://one.test/a", "https://two.test/b"],
+          model: "sonar",
           usage: {
-            completion_tokens: 1,
-            prompt_tokens: 1,
-            total_tokens: 2,
+            completion_tokens: 3,
+            prompt_tokens: 2,
+            total_tokens: 5,
           },
         });
       },
@@ -185,82 +265,40 @@ describe("createProviderForInstance routing", () => {
     try {
       const instance: ProviderInstance = {
         apiKey: "test-key",
-        baseUrl: `http://127.0.0.1:${mock.port}/compatible-mode/v1`,
+        baseUrl: `http://127.0.0.1:${mock.port}`,
         createdAt: new Date().toISOString(),
-        id: "inst_qwen",
-        label: "Qwen (DashScope)",
-        type: "qwen",
+        id: "inst_perplexity",
+        label: "Perplexity Sonar",
+        type: "perplexity",
       };
-
-      const client = createProviderForInstance(instance, "qwen3.7-plus");
-
-      expect(client).not.toBeNull();
-      expect(client?.name).toBe("qwen");
+      const client = createProviderForInstance(instance, "sonar");
 
       const result = await client!.generateChat({
-        messages: [{ content: "ping", role: "user" }],
-        providerOptions: { thinking: { effort: "medium", enabled: true } },
-      });
-
-      expect(result.content).toBe("ok");
-      expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
-      expect(seenAuth).toBe("Bearer test-key");
-      expect(seenModel).toBe("qwen3.7-plus");
-      expect(seenEnableThinking).toBe(true);
-    } finally {
-      mock.stop(true);
-    }
-  });
-
-  test("routes qwen_cn instances to the DashScope CN compatible-mode path", async () => {
-    let seenPath = "";
-
-    const mock = Bun.serve({
-      fetch: async (request) => {
-        const url = new URL(request.url);
-        seenPath = url.pathname;
-        return Response.json({
-          choices: [
-            {
-              finish_reason: "stop",
-              index: 0,
-              message: { content: "ok", role: "assistant" },
-            },
-          ],
-          created: 1,
-          id: "mock",
-          model: "qwen3.7-plus",
-          object: "chat.completion",
-          usage: {
-            completion_tokens: 1,
-            prompt_tokens: 1,
-            total_tokens: 2,
+        messages: [{ content: "What changed?", role: "user" }],
+        system: "Answer with sources.",
+        tools: [
+          {
+            description: "Look up a local record",
+            name: "lookup",
+            parameters: { type: "object" },
           },
-        });
-      },
-      port: 0,
-    });
-
-    try {
-      const instance: ProviderInstance = {
-        apiKey: "cn-key",
-        baseUrl: `http://127.0.0.1:${mock.port}/compatible-mode/v1`,
-        createdAt: new Date().toISOString(),
-        id: "inst_qwen_cn",
-        label: "Qwen (DashScope CN)",
-        type: "qwen_cn",
-      };
-
-      const client = createProviderForInstance(instance, "qwen3.7-plus");
-
-      expect(client).not.toBeNull();
-      expect(client?.name).toBe("qwen_cn");
-
-      await client!.generateChat({
-        messages: [{ content: "ping", role: "user" }],
+        ],
       });
 
-      expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
+      expect(client?.name).toBe("perplexity");
+      expect(seenPath).toBe("/chat/completions");
+      expect(seenAuth).toBe("Bearer test-key");
+      expect(seenBodies[0]?.model).toBe("sonar");
+      expect(seenBodies[0]?.tools).toBeUndefined();
+      expect(result.content).toContain("Grounded answer.[1][2]");
+      expect(result.content).toContain("1. <https://one.test/a>");
+      expect(result.content).toContain("2. <https://two.test/b>");
+
+      await client!.generateText({
+        prompt: "Return JSON",
+        system: "Return a result.",
+      });
+      expect(seenBodies[1]?.response_format).toBeUndefined();
     } finally {
       mock.stop(true);
     }

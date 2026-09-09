@@ -36,6 +36,24 @@ function createApp() {
 const BASE = "http://localhost:4310";
 
 describe("skill proposal routes (v1)", () => {
+  test("rejects an unknown status filter", async () => {
+    const { app, databaseAdapter } = createApp();
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "status-admin@org.com"
+    );
+    const orgId = adminSession.orgId!;
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/skill-proposals?status=unknown`, {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   test("admin can list, approve, and reject proposals; member needs sessionId to list", async () => {
     const { app, authService, databaseAdapter, skillProposalService } =
       createApp();

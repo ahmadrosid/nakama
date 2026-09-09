@@ -99,6 +99,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   qwen: new Set<string>(),
   qwen_cn: new Set<string>(),
+  perplexity: new Set<string>(),
   together: new Set<string>(),
   xai: new Set<string>(),
   xai_oauth: new Set<string>(),

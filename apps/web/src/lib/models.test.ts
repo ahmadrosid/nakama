@@ -27,6 +27,7 @@ function group(
     | "mistral"
     | "qwen"
     | "qwen_cn"
+    | "perplexity"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -175,6 +176,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("qw-cn-1", "model-1"),
         group("qw-cn-1", "qwen_cn", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats perplexity models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -407,6 +424,7 @@ describe("firstAvailableProviderOption", () => {
           "mistral",
           "qwen",
           "qwen_cn",
+          "perplexity",
           "cerebras",
           "cloudflare",
           "fireworks",

@@ -1,14 +1,22 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  createSqliteDatabase,
+} from "@nakama/db";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
-import { createHonoApp } from "./app";
+import {
+  createHonoApp,
+  DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES,
+  MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
+} from "./app";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   buildSetupAuthBody,
   createPlatformAdminUser,
@@ -92,6 +100,153 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("rejects oversized request bodies before public route handlers", async () => {
+    const app = createHonoApp(createServerOptions());
+
+    const defaultLimitResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(defaultLimitResponse.status).toBe(413);
+
+    const importWithinLimitResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(importWithinLimitResponse.status).toBe(400);
+
+    const importLimitResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(MAX_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(importLimitResponse.status).toBe(413);
+  });
+
+  test("liveness stays up while readiness tracks a closed and reopened database", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    const { app } = createMinimalHonoApp({
+      databaseAdapter: database.adapter,
+      webDistDir: resolve(import.meta.dir, "../../../web"),
+    });
+    try {
+      expect((await app.request("/healthz")).status).toBe(200);
+      expect((await app.request("/readyz")).status).toBe(200);
+      await database.close();
+      const unavailable = await app.request("/readyz");
+      expect(unavailable.status).toBe(503);
+      expect(await unavailable.json()).toEqual({ ok: false });
+      expect((await app.request("/healthz")).status).toBe(200);
+      await database.reopen();
+      expect((await app.request("/readyz")).status).toBe(200);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test("opt-in metrics and JSON logs correlate requests without logging URL secrets", async () => {
+    const previous = {
+      format: process.env.NAKAMA_LOG_FORMAT,
+      level: process.env.NAKAMA_LOG_LEVEL,
+      metrics: process.env.NAKAMA_METRICS,
+    };
+    const output = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      delete process.env.NAKAMA_METRICS;
+      expect(
+        (await createMinimalHonoApp().app.request("/metrics")).status
+      ).toBe(404);
+      process.env.NAKAMA_METRICS = "true";
+      process.env.NAKAMA_LOG_FORMAT = "json";
+      process.env.NAKAMA_LOG_LEVEL = "debug";
+      output.mockClear();
+      const { app, databaseAdapter } = createMinimalHonoApp({
+        webDistDir: resolve(import.meta.dir, "../../../web"),
+      });
+      const response = await app.request("/v1/private-secret?token=hidden", {
+        headers: { "X-Request-Id": "probe-123" },
+      });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("X-Request-Id")).toBe("probe-123");
+      const records = output.mock.calls.map(([line]) =>
+        JSON.parse(String(line))
+      );
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        message: "http.request",
+        method: "GET",
+        requestId: "probe-123",
+      });
+      expect(JSON.stringify(records)).not.toContain("private-secret");
+      expect(JSON.stringify(records)).not.toContain("hidden");
+      const generated = await app.request("/healthz", {
+        headers: { "X-Request-Id": "x".repeat(300) },
+      });
+      expect(generated.headers.get("X-Request-Id")).toHaveLength(36);
+      const metrics = await app.request("/metrics");
+      expect(metrics.status).toBe(200);
+      expect(metrics.headers.get("Content-Type")).toContain("text/plain");
+      expect(await metrics.text()).toContain("nakama_http_requests_total 2");
+
+      process.env.NAKAMA_LOG_LEVEL = "warn";
+      output.mockClear();
+      await app.request("/healthz");
+      expect(output).not.toHaveBeenCalled();
+      const failure = spyOn(
+        databaseAdapter,
+        "countHumanUsers"
+      ).mockRejectedValue(new Error("database unavailable"));
+      try {
+        const error = await app.request("/health", {
+          headers: { "X-Request-Id": "failed-probe" },
+        });
+        expect(error.status).toBe(500);
+        expect(error.headers.get("X-Request-Id")).toBe("failed-probe");
+        expect(output).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(String(output.mock.calls[0]?.[0]))).toMatchObject({
+          level: "error",
+          requestId: "failed-probe",
+          status: 500,
+        });
+        expect(await (await app.request("/metrics")).text()).toContain(
+          "nakama_http_server_errors_total 1"
+        );
+      } finally {
+        failure.mockRestore();
+      }
+    } finally {
+      output.mockRestore();
+      for (const [key, value] of [
+        ["NAKAMA_METRICS", previous.metrics],
+        ["NAKAMA_LOG_FORMAT", previous.format],
+        ["NAKAMA_LOG_LEVEL", previous.level],
+      ]) {
+        if (value === undefined) {
+          delete process.env[key!];
+        } else {
+          process.env[key!] = value;
+        }
+      }
+    }
+  });
+
   test("accepts opaque bearer auth for internal clients", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-bearer-auth-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

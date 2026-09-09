@@ -163,6 +163,18 @@ describe("resolveModel", () => {
     );
   });
 
+  test("resolves the current Perplexity Sonar catalog", () => {
+    expect(getDefaultModel("perplexity")).toBe("sonar");
+    expect(resolveModel("perplexity", "sonar-pro")).toBe("sonar-pro");
+    expect(getModelById("sonar")?.contextWindow).toBe(128_000);
+    expect(getModelById("sonar")?.inputPerMillionUsd).toBe(1);
+    expect(getModelById("sonar")?.outputPerMillionUsd).toBe(1);
+    expect(getModelById("sonar-pro")?.contextWindow).toBe(200_000);
+    expect(getModelById("sonar-pro")?.supportsVision).toBe(true);
+    expect(getModelById("sonar-reasoning-pro")?.supportsThinking).toBe(true);
+    expect(getModelById("sonar-deep-research")?.supportsVision).toBe(false);
+  });
+
   test("resolves catalog models for Cerebras", () => {
     expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
     expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
@@ -366,5 +378,13 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("qwen3-vl-plus", "qwen")).toBe(true);
     expect(modelSupportsVision("qwen3-vl-plus", "qwen_cn")).toBe(true);
     expect(modelSupportsVision("qwen-flash", "qwen_cn")).toBe(false);
+  });
+
+  test("reads Perplexity vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("sonar", "perplexity")).toBe(true);
+    expect(modelSupportsVision("sonar-pro", "perplexity")).toBe(true);
+    expect(modelSupportsVision("sonar-deep-research", "perplexity")).toBe(
+      false
+    );
   });
 });

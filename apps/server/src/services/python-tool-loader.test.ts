@@ -7,9 +7,10 @@ import {
   makeCustomToolRecord,
   setupCustomToolsDir,
 } from "./custom-tool-test-helpers";
-import { loadPythonTool } from "./python-tool-loader";
+import { loadPythonTool, resolvePythonBin } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+const originalPythonBin = process.env.NAKAMA_PYTHON_BIN;
 const setupToolsDir = setupCustomToolsDir;
 const makeRecord = (overrides = {}) =>
   makeCustomToolRecord({
@@ -17,6 +18,57 @@ const makeRecord = (overrides = {}) =>
     handlerType: "python",
     ...overrides,
   });
+
+describe("resolvePythonBin", () => {
+  afterEach(() => {
+    if (originalPythonBin === undefined) {
+      delete process.env.NAKAMA_PYTHON_BIN;
+    } else {
+      process.env.NAKAMA_PYTHON_BIN = originalPythonBin;
+    }
+  });
+
+  test("defaults to python3", () => {
+    delete process.env.NAKAMA_PYTHON_BIN;
+    expect(resolvePythonBin()).toBe("python3");
+  });
+
+  test("accepts bare python3 and python", () => {
+    expect(resolvePythonBin("python3")).toBe("python3");
+    expect(resolvePythonBin("python")).toBe("python");
+    expect(resolvePythonBin("python3.12")).toBe("python3.12");
+  });
+
+  test("rejects bare names that are not python", () => {
+    expect(() => resolvePythonBin("bash")).toThrow(/bare name/i);
+    expect(() => resolvePythonBin("node")).toThrow(/bare name/i);
+  });
+
+  test("rejects relative paths", () => {
+    expect(() => resolvePythonBin("./python3")).toThrow(/absolute path/i);
+  });
+
+  test("rejects absolute paths outside the allowlist", () => {
+    expect(() => resolvePythonBin("/tmp/python3")).toThrow(/allowlist/i);
+    expect(() => resolvePythonBin("/bin/bash")).toThrow(/basename/i);
+    expect(() =>
+      resolvePythonBin("/opt/homebrew/Cellar/pythonfoo/bin/python3")
+    ).toThrow(/allowlist/i);
+  });
+
+  test("accepts Homebrew Cellar python and python@ paths by prefix", () => {
+    expect(
+      resolvePythonBin("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3")
+    ).toBe("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3");
+    expect(
+      resolvePythonBin("/opt/homebrew/Cellar/python/3.12.0/bin/python3")
+    ).toBe("/opt/homebrew/Cellar/python/3.12.0/bin/python3");
+  });
+
+  test("accepts /usr/bin/python3 when present", () => {
+    expect(resolvePythonBin("/usr/bin/python3")).toBe("/usr/bin/python3");
+  });
+});
 
 describe("python tool loader", () => {
   let configDir = "";
@@ -26,6 +78,11 @@ describe("python tool loader", () => {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+    if (originalPythonBin === undefined) {
+      delete process.env.NAKAMA_PYTHON_BIN;
+    } else {
+      process.env.NAKAMA_PYTHON_BIN = originalPythonBin;
     }
 
     if (configDir) {
@@ -66,6 +123,26 @@ if __name__ == "__main__":
     // The loader must forward context.workspaceRoot to the child process as
     // NAKAMA_WORKSPACE_ROOT.
     expect(result.root).toBe("/tmp/nakama-ws");
+  });
+
+  test("rejects a disallowed NAKAMA_PYTHON_BIN before spawn", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "echo.py"),
+      `import json, sys
+def run(input, context):
+    return input
+if __name__ == "__main__":
+    sys.stdout.write(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
+`,
+      "utf8"
+    );
+
+    process.env.NAKAMA_PYTHON_BIN = "/tmp/not-an-allowlisted-python";
+    const tool = await loadPythonTool(makeRecord());
+    await expect(tool!.run({}, {})).rejects.toThrow(/allowlist/i);
   });
 
   test("returns an error tool when the module file is missing", async () => {

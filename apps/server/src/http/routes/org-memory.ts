@@ -16,7 +16,12 @@ import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
 } from "../org-guards";
-import { json, readJson, readOptionalJson } from "../shared";
+import {
+  json,
+  parseOptionalQueryEnum,
+  readJson,
+  readOptionalJson,
+} from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerOrgMemoryRoutes(
@@ -693,11 +698,11 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const status = c.req.query("status") as
-      | "pending"
-      | "approved"
-      | "rejected"
-      | undefined;
+    const status = parseOptionalQueryEnum(c.req.query("status"), [
+      "pending",
+      "approved",
+      "rejected",
+    ]);
     const proposals = await service.listProposals(orgId, status);
     const pendingCount = await service.countPendingProposals(orgId);
     return json({ pendingCount, proposals });

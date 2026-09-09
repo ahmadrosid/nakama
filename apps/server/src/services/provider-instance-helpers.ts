@@ -152,22 +152,18 @@ export function modelExistsOnInstance(
   }
 
   if (
-    instance.type === "openai" ||
-    instance.type === "anthropic" ||
-    instance.type === "gemini" ||
-    instance.type === "deepseek" ||
-    instance.type === "together" ||
-    instance.type === "mistral" ||
-    instance.type === "qwen" ||
-    instance.type === "qwen_cn"
+    (instance.type === "openai" ||
+      instance.type === "anthropic" ||
+      instance.type === "gemini" ||
+      instance.type === "deepseek" ||
+      instance.type === "together" ||
+      instance.type === "mistral" ||
+      instance.type === "qwen" ||
+      instance.type === "qwen_cn" ||
+      instance.type === "perplexity") &&
+    instance.customModels?.length
   ) {
-    if (instance.customModels?.length) {
-      return findCustomModel(instance.customModels, trimmed) !== undefined;
-    }
-    // Region variants (qwen / qwen_cn) share model ids — scope by provider.
-    return getModelsForProvider(instance.type).some(
-      (model) => model.id === trimmed
-    );
+    return findCustomModel(instance.customModels, trimmed) !== undefined;
   }
 
   return getModelsForProvider(instance.type).some(
@@ -366,7 +362,8 @@ export function applyProviderInstanceUpdate(
       instance.type === "together" ||
       instance.type === "mistral" ||
       instance.type === "qwen" ||
-      instance.type === "qwen_cn"
+      instance.type === "qwen_cn" ||
+      instance.type === "perplexity"
     ) {
       next.customModels = validateCustomModels(request.customModels);
     }

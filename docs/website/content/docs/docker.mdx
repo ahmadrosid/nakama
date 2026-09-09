@@ -32,6 +32,15 @@ The data root follows `NAKAMA_CONFIG_DIR` when set. By default it is `/nakama/da
 
 On first run, complete the setup wizard in the browser and add your LLM provider. See [Providers](/providers) and [First-time setup](/first-time-setup).
 
+### Logs and monitoring
+
+Use readiness checks to keep traffic away from an unavailable database, and request IDs to connect an HTTP response with its logs.
+
+- Set `NAKAMA_LOG_FORMAT=json` for JSON lines on standard output. `NAKAMA_LOG_LEVEL` accepts `debug`, `info` (default), `warn`, `error`, or `silent`. These settings cover HTTP request logging and the initial worker lifecycle events; other existing logs remain unchanged.
+- HTTP responses include `X-Request-Id`. Nakama honors incoming IDs up to 255 characters or generates one. Response logs include this ID, method, status, and duration; `debug` also logs request start. URLs, request bodies, and credentials are not included in these HTTP logs. Streaming durations measure response setup, not the whole stream.
+- Use `/healthz` for liveness and `/readyz` for readiness on port 4310. Readiness returns 200 when the active connection can read the migrated database, or 503 when unavailable. It does not track restore progress and can remain ready while the old connection is still usable. Neither probe needs login or checks external providers or worker connectivity. The existing `/health` behavior is unchanged.
+- Set `NAKAMA_METRICS=true` to enable `/metrics`; otherwise it returns 404. It serves Prometheus-format HTTP response and server-error counters, which reset on process restart. Nakama sends nothing to an external collector. The endpoint needs no login and uses the same listener as the dashboard: restrict access through your network or reverse proxy before enabling it.
+
 ### First-boot seed (optional)
 
 To skip the setup wizard on a fresh data volume, set all three admin seed variables before the first boot. Nakama creates the admin account, a `Personal` org (override with `NAKAMA_SEED_ORG_NAME`), and an OpenCode Zen provider. Self-hosted installs without these variables behave as today.
