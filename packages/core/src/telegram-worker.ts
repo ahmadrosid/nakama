@@ -34,9 +34,9 @@ export function resolveTelegramWorkerStatus(
 }
 
 export async function getTelegramWorkerStatus(
-  orgId: string | null
+  orgId: TelegramConfigScope
 ): Promise<TelegramWorkerStatus> {
-  const scope = orgId === null ? null : await resolveTelegramScopeForOrg(orgId);
+  const scope = await resolveTelegramScopeForOrg(orgId);
   const settings = await loadTelegramSettingsPublic(scope);
   const running = await createTelegramWorkerHeartbeat(scope).isRunning();
 

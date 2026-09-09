@@ -70,7 +70,7 @@ export async function listTelegramConfigOrgIds(): Promise<string[]> {
     }
   }
 
-  return configured.sort();
+  return configured;
 }
 
 export function parseAllowedUserIds(raw: string): number[] {
@@ -118,8 +118,12 @@ export async function loadTelegramConfigFile(
  * along.
  */
 export async function resolveTelegramScopeForOrg(
-  orgId: string
+  orgId: TelegramConfigScope
 ): Promise<TelegramConfigScope> {
+  if (orgId === null) {
+    return null;
+  }
+
   return (await pathExists(getTelegramConfigPath(orgId))) ? orgId : null;
 }
 
