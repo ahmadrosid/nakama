@@ -51,6 +51,26 @@ export function registerPluginRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  app.get("/v1/plugins/official", async (c) => {
+    requireNotViewerFromContext(c);
+    return json({
+      plugins: await requirePluginService(options).listOfficialPlugins(),
+    });
+  });
+  app.post("/v1/plugins/official/:pluginId/install", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    try {
+      const install = await requirePluginService(options).installOfficialPlugin(
+        orgId,
+        c.req.param("pluginId"),
+        { id: auth.user.id, role: "admin" }
+      );
+      return json({ install });
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");

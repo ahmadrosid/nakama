@@ -98,6 +98,12 @@ interface InspectedPackage {
 }
 
 const installLocks = new Map<string, Promise<unknown>>();
+const officialInstallLocks = new Map<string, Promise<unknown>>();
+// Shipped composition, rather than package author/id claims, grants official status.
+const OFFICIAL_PLUGINS = new Map<
+  string,
+  { requiresHost: boolean; setupAction?: string }
+>([["workflows", { requiresHost: true, setupAction: "import_legacy" }]]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
 const PLUGIN_RUNNER_PATH = fileURLToPath(
@@ -126,6 +132,12 @@ const SPOOFABLE_INPUT_KEYS = new Set([
 
 export interface PluginServiceOptions {
   drainTimeoutMs?: number;
+  officialPackagesDir?: string;
+  onHostRequest?: (
+    request: unknown,
+    context: PluginExecutionContext,
+    signal?: AbortSignal
+  ) => Promise<unknown>;
 }
 
 let pluginLifecycleTestHooks: {
@@ -301,6 +313,142 @@ export class PluginService {
     return toPreview(inspected);
   }
 
+  async listOfficialPlugins() {
+    if (!this.options.officialPackagesDir) {
+      return [];
+    }
+    return Promise.all(
+      [...OFFICIAL_PLUGINS.keys()].map(async (pluginId) => {
+        const inspected = await this.inspectOfficialPlugin(pluginId);
+        const { id, name, description, version } = inspected.manifest;
+        return { description, id, name, version };
+      })
+    );
+  }
+
+  async installOfficialPlugin(
+    orgId: string,
+    pluginId: string,
+    actor: PluginExecutionActor
+  ) {
+    if (actor.role !== "admin") {
+      throw new PluginHostError("forbidden");
+    }
+    const official = OFFICIAL_PLUGINS.get(pluginId);
+    if (!official) {
+      throw new PluginHostError("not_found");
+    }
+    if (official.requiresHost && !this.options.onHostRequest) {
+      throw new PluginHostError(
+        "package_unavailable",
+        false,
+        "This plugin requires agent host capabilities."
+      );
+    }
+    const inspected = await this.inspectOfficialPlugin(pluginId);
+    return withKeyedLock(
+      officialInstallLocks,
+      `${this.configDir}:${orgId}:${pluginId}`,
+      async () => {
+        await withPluginMutation(() =>
+          withKeyedLock(
+            installLocks,
+            `${pluginId}@${inspected.manifest.version}`,
+            () =>
+              withKeyedLock(stagingLocks, "staging", () =>
+                this.publishInspectedPackage(inspected)
+              )
+          )
+        );
+        let install = await this.db.getOrgPlugin(orgId, pluginId);
+        if (!install || install.lifecycleState === "retained") {
+          install = await this.addOrgPlugin(
+            orgId,
+            pluginId,
+            inspected.manifest.version
+          );
+        }
+        const enabledByInstall = install.lifecycleState === "disabled";
+        if (enabledByInstall) {
+          install = await this.enableOrgPlugin(
+            orgId,
+            pluginId,
+            install.revision
+          );
+        }
+        if (install.lifecycleState !== "enabled") {
+          throw new PluginHostError("invalid_state");
+        }
+        if (official.setupAction) {
+          try {
+            await this.invokePluginAction({
+              access: "ui",
+              actionKey: official.setupAction,
+              actor,
+              input: {},
+              orgId,
+              pluginId,
+            });
+          } catch (error) {
+            if (enabledByInstall) {
+              await this.disableOrgPlugin(orgId, pluginId, install.revision);
+            }
+            throw error;
+          }
+        }
+        return install;
+      }
+    );
+  }
+
+  private async inspectOfficialPlugin(
+    pluginId: string
+  ): Promise<InspectedPackage> {
+    // This allowlist is shipped with Nakama; package metadata cannot grant official status.
+    if (!(OFFICIAL_PLUGINS.has(pluginId) && this.options.officialPackagesDir)) {
+      throw new PluginHostError("not_found");
+    }
+    const directory = join(this.options.officialPackagesDir, pluginId);
+    const files = new Map<string, Uint8Array>();
+    for (const file of ["package.json", PLUGIN_MANIFEST_FILENAME]) {
+      files.set(file, await readFile(join(directory, file)));
+    }
+    for (const folder of ["actions", "migrations", "ui", "skills"]) {
+      for (const entry of await readdir(join(directory, folder), {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile()) {
+          continue;
+        }
+        const path = join(entry.parentPath, entry.name);
+        files.set(
+          relative(directory, path).split(sep).join("/"),
+          await readFile(path)
+        );
+      }
+    }
+    const validated = validatePluginManifest(
+      JSON.parse(Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME)!).toString())
+    );
+    if (!validated.ok || validated.manifest.id !== pluginId) {
+      throw new PluginHostError("invalid_manifest");
+    }
+    assertReferencedFilesExist(validated.manifest, files);
+    const hash = createHash("sha256");
+    for (const [name, data] of [...files].sort(([a], [b]) =>
+      a.localeCompare(b)
+    )) {
+      hash.update(JSON.stringify([name, data.byteLength])).update(data);
+    }
+    return {
+      digest: hash.digest("hex"),
+      files,
+      integrity: "bundled",
+      manifest: validated.manifest,
+    };
+  }
+
   async installPluginPackage(
     source: PluginPackageRequest,
     options: InstallPluginPackageOptions = {}
@@ -366,6 +514,7 @@ export class PluginService {
         profileId: input.access === "tool" ? input.profileId : undefined,
         sessionId: input.access === "tool" ? input.sessionId : undefined,
       });
+      context.actionKey = action.key;
       if (input.access === "tool" && !context.profileId) {
         throw new PluginHostError("invalid_input");
       }
@@ -1305,10 +1454,23 @@ export class PluginService {
       transport: {
         extraArgs: ["--no-install"],
         includeConfigDir: false,
+        onHostRequest: this.options.onHostRequest
+          ? (request, signal) =>
+              this.options.onHostRequest!(
+                request,
+                input.context,
+                mergeAbortSignals(input.signal, signal)
+              )
+          : undefined,
         stdin: {
           context: input.context,
           input: input.input,
         },
+        timeoutMs:
+          input.context.pluginId === "workflows" &&
+          input.context.actionKey === "run_workflow"
+            ? 300_000
+            : undefined,
       },
       workspaceRoot: input.context.workspaceRoot,
     });

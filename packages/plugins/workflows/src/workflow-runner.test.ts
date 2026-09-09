@@ -30,15 +30,11 @@ describe("WorkflowRunner", () => {
     let summarizeBag: Record<string, unknown> | null = null;
     const service = createWorkflowServiceStub(workflow);
     const agent = {
-      buildWorkflowToolContext: () => ({}),
-      resolveWorkflowExecutionTools: async () => [
-        {
-          name: "echo_tool",
-          async run(args: Record<string, unknown>) {
-            return { ok: args.query, source: "tool" };
-          },
-        },
-      ],
+      executeTool: async (
+        _profile: string,
+        _name: string,
+        args: Record<string, unknown>
+      ) => ({ ok: args.query, source: "tool" }),
       runWorkflowSummarize: async (
         _orgId: string,
         _profileId: string,
@@ -89,15 +85,7 @@ describe("WorkflowRunner", () => {
     let summarizeCalled = false;
     const service = createWorkflowServiceStub(workflow);
     const agent = {
-      buildWorkflowToolContext: () => ({}),
-      resolveWorkflowExecutionTools: async () => [
-        {
-          name: "echo_tool",
-          async run() {
-            return { value: 1 };
-          },
-        },
-      ],
+      executeTool: async () => ({ value: 1 }),
       runWorkflowSummarize: async () => {
         summarizeCalled = true;
         return "nope";
@@ -133,17 +121,9 @@ describe("WorkflowRunner", () => {
     let summarizeCalled = false;
     const service = createWorkflowServiceStub(workflow);
     const agent = {
-      buildWorkflowToolContext: () => ({}),
-      resolveWorkflowExecutionTools: async () => [
-        {
-          name: "web_search",
-          async run() {
-            throw new Error(
-              "web_search runs on the configured OpenAI or Anthropic provider and cannot be executed locally."
-            );
-          },
-        },
-      ],
+      executeTool: async () => ({
+        error: "web_search cannot be executed locally.",
+      }),
       runWorkflowSummarize: async () => {
         summarizeCalled = true;
         return "nope";

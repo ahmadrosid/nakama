@@ -1,0 +1,307 @@
+{
+  "apiVersion": 1,
+  "id": "workflows",
+  "name": "Workflows",
+  "version": "1.0.0",
+  "minNakamaVersion": "0.4.10",
+  "author": "Nakama",
+  "license": "MIT",
+  "description": "Run repeatable recipes with your agents, tools, and verified step results.",
+  "actions": [
+    {
+      "key": "create_workflow",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Create a workflow after confirming its recipe with the user. Steps use kind: tool, compare, assert, template, and a final summarize with prompt. Use {{input.key}} or {{steps.id.key}} for references.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "steps"]
+      }
+    },
+    {
+      "key": "update_workflow",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Update workflow",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["workflowId"]
+      }
+    },
+    {
+      "key": "list_workflows",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "List workflows",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "run_workflow",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Run a saved workflow with profile tools and summarize only its receipts.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["workflowId"]
+      }
+    },
+    {
+      "key": "delete_workflow",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Delete workflow",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["workflowId"]
+      }
+    },
+    {
+      "key": "get_workflow",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Get workflow",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["workflowId"]
+      }
+    },
+    {
+      "key": "runs",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Runs",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["workflowId"]
+      }
+    },
+    {
+      "key": "delete_run",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Delete run",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["workflowId", "runId"]
+      }
+    },
+    {
+      "key": "profiles",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Profiles",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "tools",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Tools",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "import_legacy",
+      "access": "admin",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Import legacy",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "access": "member",
+      "description": "database",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "key": "database",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "table": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "access": "member",
+      "description": "get run",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "key": "get_run",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": ["workflowId", "runId"]
+      }
+    }
+  ],
+  "skills": [
+    {
+      "key": "create-workflow",
+      "directory": "skills/create-workflow"
+    }
+  ],
+  "database": {
+    "migrations": [
+      {
+        "id": "001-workflows",
+        "path": "migrations/001-workflows.sql"
+      }
+    ]
+  },
+  "ui": {
+    "entryHtml": "ui/index.html",
+    "assetsDir": "ui",
+    "pageLabel": "Workflows"
+  }
+}

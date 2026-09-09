@@ -6,7 +6,7 @@ include-body-on-match: true
 
 When the user wants a workflow they can run on demand (for example "morning brief"), explain the step recipe clearly before saving.
 
-Use `create_workflow` with `kind` (never `type`). Last step must be `summarize` with `prompt` (never `instruction`).
+Use `plugin_workflows__create_workflow` with `kind` (never `type`). Last step must be `summarize` with `prompt` (never `instruction`).
 
 ```json
 [
@@ -19,10 +19,10 @@ Use `create_workflow` with `kind` (never `type`). Last step must be `summarize` 
 - `compare` / `assert` / `template` — deterministic on prior receipts, fail closed. `compare.op` is `eq` | `near` | `contains`. Do not use compare as free-text analysis
 - exactly one final `summarize` — turns the receipt bag into prose (no tools)
 
-When the user names a profile to run as, confirm that profile and pass its `profileId`. Omit `profileId` to use the current chat profile.
+When the user names a profile to run as, confirm that profile and pass its `agentId`. Omit `agentId` to use the current chat profile.
 
-When the user asks to run a saved workflow, use `list_workflows` to find it, then `run_workflow`. Pass `input` when the recipe uses `{{input.*}}` bindings.
+When the user asks to run a saved workflow, use `plugin_workflows__list_workflows` to find it, then `plugin_workflows__run_workflow`. Pass `input` when the recipe uses `{{input.*}}` bindings.
 
-When the user wants to change an existing workflow, use `update_workflow`.
+When the user wants to change an existing workflow, use `plugin_workflows__update_workflow`.
 
 Do not use workflows for clock-driven jobs — use `create_automation` for schedules.

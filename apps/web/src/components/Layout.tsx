@@ -41,7 +41,6 @@ import {
   visibleNavGroups,
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
-import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
 
 export function Layout() {
   const shell = useAppShell();
@@ -337,9 +336,7 @@ function AppShellHeader({
   const title = label ?? pluginId;
   return (
     <header className="app-shell-header gap-4 bg-card px-6">
-      {page === "automations" ? (
-        <AgentWorkTabs />
-      ) : hideTitle ? null : (
+      {hideTitle ? null : (
         <h1 className="type-brand min-w-0 truncate">{title}</h1>
       )}
       <div

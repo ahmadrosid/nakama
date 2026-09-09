@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import type { OrgRole } from "@nakama/core";
 import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
 import {
@@ -86,9 +87,15 @@ function pluginBundle(
   });
 }
 
-function createApp() {
+function createApp(
+  options: ConstructorParameters<typeof PluginService>[2] = {}
+) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const pluginService = new PluginService(databaseAdapter, getUserConfigDir());
+  const pluginService = new PluginService(
+    databaseAdapter,
+    getUserConfigDir(),
+    options
+  );
   return {
     ...createMinimalHonoApp({ databaseAdapter, pluginService }),
     pluginService,
@@ -763,6 +770,49 @@ describe("plugin HTTP API", () => {
       lastLifecycleError: null,
       removedActionKeys: ["list", "wipe"],
     });
+  });
+
+  test("org admin installs official workflows with one request; member and CSRF failures are blocked", async () => {
+    const { app, authService, databaseAdapter } = createApp({
+      officialPackagesDir: resolve("packages/plugins"),
+      onHostRequest: async () => [],
+    });
+    const admin = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = admin.orgId!;
+    const catalog = await jsonRequest(app, "/v1/plugins/official", admin);
+    expect(catalog.status).toBe(200);
+    expect((await catalog.json()).plugins[0].id).toBe("workflows");
+    const path = "/v1/plugins/official/workflows/install";
+    const denied = await jsonRequest(app, path, admin, {
+      method: "POST",
+      headers: { "X-CSRF-Token": "invalid" },
+    });
+    expect(denied.status).toBe(403);
+    await seedUser(databaseAdapter, authService, {
+      email: "official-member@example.com",
+      orgId,
+      role: "member",
+      userId: "official_member",
+    });
+    const member = await loginUserSession(
+      app,
+      "official-member@example.com",
+      PASSWORD,
+      orgId
+    );
+    expect(
+      (await jsonRequest(app, path, member, { method: "POST" })).status
+    ).toBe(403);
+    const installed = await jsonRequest(app, path, admin, { method: "POST" });
+    expect(installed.status).toBe(200);
+    expect((await installed.json()).install.lifecycleState).toBe("enabled");
+    const listed = await jsonRequest(app, "/v1/plugins", member);
+    expect(
+      (await listed.json()).plugins.some(
+        (plugin: { pluginId: string; enabled: boolean }) =>
+          plugin.pluginId === "workflows" && plugin.lifecycleState === "enabled"
+      )
+    ).toBe(true);
   });
 
   test("openapi documents plugin routes", async () => {

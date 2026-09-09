@@ -222,8 +222,6 @@ import type {
   WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
   WorkerLogsResponse,
-  WorkflowResponse,
-  WorkflowSqliteInspectResponse,
   XaiOAuthDeviceCompleteRequest,
   XaiOAuthDeviceCompleteResponse,
   XaiOAuthDeviceStartResponse,
@@ -1518,93 +1516,110 @@ export class NakamaClient {
     return response.readThroughAt;
   }
 
-  async listWorkflows(): Promise<ListWorkflowsResponse> {
-    return this.request<ListWorkflowsResponse>("/v1/workflows");
-  }
-
   async inspectWorkflowSqlite(
     table?: string
-  ): Promise<WorkflowSqliteInspectResponse> {
-    const query = table ? `?table=${encodeURIComponent(table)}` : "";
-    return this.request<WorkflowSqliteInspectResponse>(
-      `/v1/workflows/database${query}`
-    );
+  ): Promise<import("@nakama/core").WorkflowSqliteInspectResponse> {
+    return (
+      await this.invokePluginAction("workflows", "database", {
+        input: { table },
+      })
+    ).result as import("@nakama/core").WorkflowSqliteInspectResponse;
   }
-
+  async listWorkflows(): Promise<ListWorkflowsResponse> {
+    return {
+      workflows: (await this.invokePluginAction("workflows", "list_workflows"))
+        .result as StoredWorkflow[],
+    };
+  }
   async getWorkflow(workflowId: string): Promise<StoredWorkflow> {
-    const response = await this.request<WorkflowResponse>(
-      `/v1/workflows/${encodeURIComponent(workflowId)}`
-    );
-    return response.workflow;
+    return (
+      await this.invokePluginAction("workflows", "get_workflow", {
+        input: { workflowId },
+      })
+    ).result as StoredWorkflow;
   }
-
   async createWorkflow(
     request: CreateWorkflowRequest
   ): Promise<StoredWorkflow> {
-    const response = await this.request<WorkflowResponse>("/v1/workflows", {
-      body: JSON.stringify(request),
-      method: "POST",
-    });
-    return response.workflow;
+    const { profileId, ...input } = request;
+    return (
+      await this.invokePluginAction("workflows", "create_workflow", {
+        input: { ...input, agentId: profileId },
+      })
+    ).result as StoredWorkflow;
   }
-
   async updateWorkflow(
     workflowId: string,
     request: UpdateWorkflowRequest
   ): Promise<StoredWorkflow> {
-    const response = await this.request<WorkflowResponse>(
-      `/v1/workflows/${encodeURIComponent(workflowId)}`,
-      {
-        body: JSON.stringify(request),
-        method: "PUT",
-      }
-    );
-    return response.workflow;
+    const { profileId, ...input } = request;
+    return (
+      await this.invokePluginAction("workflows", "update_workflow", {
+        input: { ...input, agentId: profileId, workflowId },
+      })
+    ).result as StoredWorkflow;
   }
-
   async deleteWorkflow(workflowId: string): Promise<void> {
-    await this.request(`/v1/workflows/${encodeURIComponent(workflowId)}`, {
-      method: "DELETE",
+    await this.invokePluginAction("workflows", "delete_workflow", {
+      input: { workflowId },
     });
   }
-
   async runWorkflow(
     workflowId: string,
     request: RunWorkflowRequest = {}
   ): Promise<RunWorkflowResponse["run"]> {
-    const response = await this.request<RunWorkflowResponse>(
-      `/v1/workflows/${encodeURIComponent(workflowId)}/run`,
-      withDisabledFetchIdle({
-        body: JSON.stringify(request),
-        method: "POST",
+    const result = (
+      await this.invokePluginAction("workflows", "run_workflow", {
+        input: { workflowId, ...request },
       })
-    );
-    return response.run;
+    ).result as RunWorkflowResponse;
+    return result.run;
   }
-
   async listWorkflowRuns(
     workflowId: string
   ): Promise<ListWorkflowRunsResponse["runs"]> {
-    const response = await this.request<ListWorkflowRunsResponse>(
-      `/v1/workflows/${encodeURIComponent(workflowId)}/runs`
-    );
-    return response.runs;
+    return (
+      await this.invokePluginAction("workflows", "runs", {
+        input: { workflowId },
+      })
+    ).result as ListWorkflowRunsResponse["runs"];
   }
-
   async getWorkflowRun(
     workflowId: string,
     runId: string
   ): Promise<GetWorkflowRunResponse["run"]> {
-    const response = await this.request<GetWorkflowRunResponse>(
-      `/v1/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}`
-    );
-    return response.run;
+    const run = (
+      await this.invokePluginAction("workflows", "get_run", {
+        input: { runId, workflowId },
+      })
+    ).result as GetWorkflowRunResponse["run"] | null;
+    if (!run) {
+      throw new Error("Workflow run not found.");
+    }
+    return run;
   }
-
   async deleteWorkflowRun(workflowId: string, runId: string): Promise<void> {
-    await this.request(
-      `/v1/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}`,
-      { method: "DELETE" }
+    await this.invokePluginAction("workflows", "delete_run", {
+      input: { runId, workflowId },
+    });
+  }
+  async listOfficialPlugins(): Promise<{
+    plugins: Array<{
+      id: string;
+      name: string;
+      description: string;
+      version: string;
+    }>;
+  }> {
+    return this.request("/v1/plugins/official");
+  }
+  async installOfficialPlugin(
+    pluginId: string,
+    orgId?: string
+  ): Promise<unknown> {
+    return this.request(
+      `/v1/plugins/official/${encodeURIComponent(pluginId)}/install`,
+      { method: "POST", ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}) }
     );
   }
 
@@ -2203,6 +2218,7 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...withDisabledFetchIdle({}),
         ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
@@ -2220,6 +2236,7 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...withDisabledFetchIdle({}),
         ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
@@ -2268,6 +2285,7 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...withDisabledFetchIdle({}),
         ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
@@ -2310,6 +2328,7 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...withDisabledFetchIdle({}),
         ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );

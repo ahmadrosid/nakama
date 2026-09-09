@@ -1,0 +1,19 @@
+{
+  "name": "@nakama/plugin-workflows",
+  "version": "1.0.0",
+  "type": "module",
+  "files": [
+    "nakama.plugin.json",
+    "actions",
+    "migrations",
+    "ui",
+    "skills"
+  ],
+  "scripts": {
+    "build": "bun build ./src/actions.ts --outdir actions --target bun",
+    "test": "bun test src"
+  },
+  "devDependencies": {
+    "@nakama/core": "workspace:*"
+  }
+}

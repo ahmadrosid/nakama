@@ -1,33 +1,44 @@
-import { executeToolCall } from "@nakama/agent";
+import type { StoredWorkflow, WorkflowStep } from "@nakama/core/contract";
 import {
   buildReceiptBag,
   executeAssert,
   executeCompare,
-  formatAutomationRunError,
   resolveTemplateString,
   resolveWorkflowValue,
-  type StoredWorkflow,
-  type WorkflowStep,
-} from "@nakama/core";
-import type { AgentService } from "./agent-service";
+} from "./workflow-ops";
+export interface WorkflowHost {
+  executeTool(
+    profileId: string,
+    name: string,
+    input: Record<string, unknown>,
+    runId: string,
+    workflowId: string
+  ): Promise<unknown>;
+  runWorkflowSummarize(
+    orgId: string,
+    profileId: string,
+    prompt: string,
+    bag: Record<string, unknown>
+  ): Promise<string>;
+}
+
 import type { WorkflowService } from "./workflow-service";
 
 export class WorkflowRunner {
-  private readonly running = new Set<string>();
-
   constructor(
     private readonly workflowService: WorkflowService,
-    private readonly agentService: AgentService
+    private readonly agentService: WorkflowHost
   ) {}
 
   async run(
     workflowId: string,
     runtimeInput: Record<string, unknown> = {}
-  ): Promise<{ error?: string; output?: string; skipped?: boolean }> {
-    if (this.running.has(workflowId)) {
-      return { error: "Workflow is already running.", skipped: true };
-    }
-
+  ): Promise<{
+    error?: string;
+    output?: string;
+    skipped?: boolean;
+    runId?: string;
+  }> {
     const workflow = await this.workflowService.get(workflowId);
     if (!workflow) {
       throw new Error("Workflow not found.");
@@ -42,7 +53,6 @@ export class WorkflowRunner {
       throw new Error("Workflow organization is missing.");
     }
 
-    this.running.add(workflowId);
     const run = await this.workflowService.createRun(workflowId, runtimeInput);
 
     try {
@@ -57,15 +67,13 @@ export class WorkflowRunner {
         workflowId,
         { output }
       );
-      return { output: completedRun.output ?? output };
+      return { output: completedRun.output ?? output, runId: run.id };
     } catch (error) {
-      const message = formatAutomationRunError(error);
+      const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message,
       });
-      return { error: message };
-    } finally {
-      this.running.delete(workflowId);
+      return { error: message, runId: run.id };
     }
   }
 
@@ -75,10 +83,6 @@ export class WorkflowRunner {
     runId: string,
     runtimeInput: Record<string, unknown>
   ): Promise<string> {
-    const tools = await this.agentService.resolveWorkflowExecutionTools(
-      orgId,
-      workflow.profileId
-    );
     const stepOutputs: Record<string, unknown> = {};
     const bag = () => buildReceiptBag(runtimeInput, stepOutputs);
 
@@ -94,7 +98,7 @@ export class WorkflowRunner {
       );
 
       try {
-        const result = await this.executeDataStep(step, bag(), tools, orgId, {
+        const result = await this.executeDataStep(step, bag(), {
           profileId: workflow.profileId,
           runId,
           workflowId: workflow.id,
@@ -106,7 +110,7 @@ export class WorkflowRunner {
           status: "completed",
         });
       } catch (error) {
-        const message = formatAutomationRunError(error);
+        const message = error instanceof Error ? error.message : String(error);
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
           error: message,
           status: "failed",
@@ -142,7 +146,7 @@ export class WorkflowRunner {
       });
       return output;
     } catch (error) {
-      const message = formatAutomationRunError(error);
+      const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.updateRunStep(runId, summarizeRecord.id, {
         error: message,
         status: "failed",
@@ -154,8 +158,6 @@ export class WorkflowRunner {
   private async executeDataStep(
     step: WorkflowStep,
     bag: ReturnType<typeof buildReceiptBag>,
-    tools: Awaited<ReturnType<AgentService["resolveWorkflowExecutionTools"]>>,
-    orgId: string,
     context: {
       profileId: string;
       runId: string;
@@ -167,10 +169,12 @@ export class WorkflowRunner {
         string,
         unknown
       >;
-      const output = await executeToolCall(
-        tools,
-        { arguments: input, name: step.tool },
-        this.agentService.buildWorkflowToolContext(orgId, context)
+      const output = await this.agentService.executeTool(
+        context.profileId,
+        step.tool,
+        input,
+        context.runId,
+        context.workflowId
       );
       const toolError = readToolError(output);
       if (toolError) {

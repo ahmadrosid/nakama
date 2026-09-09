@@ -2,7 +2,7 @@ import type {
   WorkflowCompareOp,
   WorkflowReceiptBag,
   WorkflowStep,
-} from "./contract";
+} from "@nakama/core/contract";
 
 const TEMPLATE_PATTERN = /\{\{([^}]+)\}\}/g;
 
@@ -143,7 +143,7 @@ export function buildReceiptBag(
   };
 }
 
-export function collectTemplateRefs(value: unknown): string[] {
+function collectTemplateRefs(value: unknown): string[] {
   const refs: string[] = [];
 
   const visit = (current: unknown): void => {

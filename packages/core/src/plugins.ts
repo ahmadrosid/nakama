@@ -120,6 +120,7 @@ export interface PluginExecutionActor {
 }
 
 export interface PluginExecutionContext {
+  actionKey?: string;
   actor: PluginExecutionActor;
   apiVersion: typeof PLUGIN_MANIFEST_API_VERSION;
   databasePath?: string;

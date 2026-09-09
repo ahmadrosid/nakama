@@ -41,8 +41,10 @@ function buildAllowlistedSubprocessEnv(
 interface SpawnJsonToolTransport {
   extraArgs?: string[];
   includeConfigDir?: boolean;
+  onHostRequest?: (request: unknown, signal: AbortSignal) => Promise<unknown>;
   /** When set, written to stdin instead of `input`. Legacy callers omit this. */
   stdin?: unknown;
+  timeoutMs?: number;
 }
 
 export interface SpawnJsonToolOptions {
@@ -74,7 +76,7 @@ export async function spawnJsonTool(
     workspaceRoot,
     transport?.includeConfigDir ?? true
   );
-  const timeoutMs = resolveCustomToolTimeoutMs();
+  const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
   const childArgs = [...(transport?.extraArgs ?? []), ...args];
   const stdinPayload =
     transport && "stdin" in transport ? transport.stdin : input;
@@ -86,7 +88,54 @@ export async function spawnJsonTool(
       const child = spawn(bin, childArgs, {
         cwd,
         env,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: transport?.onHostRequest
+          ? ["pipe", "pipe", "pipe", "ipc"]
+          : ["pipe", "pipe", "pipe"],
+      });
+      const hostAbort = new AbortController();
+
+      let hostRequestPending = false;
+      child.on("message", async (message: unknown) => {
+        if (
+          !(transport?.onHostRequest && message) ||
+          typeof message !== "object"
+        ) {
+          return;
+        }
+        const request = message as Record<string, unknown>;
+        if (
+          request.type !== "nakama-host-request" ||
+          typeof request.id !== "string"
+        ) {
+          return;
+        }
+        const reply = (payload: object) => {
+          if (child.connected) {
+            child.send(
+              { id: request.id, type: "nakama-host-result", ...payload },
+              () => {}
+            );
+          }
+        };
+        if (hostRequestPending) {
+          reply({ error: "Host calls must be sequential." });
+          return;
+        }
+        hostRequestPending = true;
+        try {
+          reply({
+            result: await transport.onHostRequest(
+              request.request,
+              hostAbort.signal
+            ),
+          });
+        } catch (error) {
+          reply({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          hostRequestPending = false;
+        }
       });
 
       let stdout = "";
@@ -95,6 +144,7 @@ export async function spawnJsonTool(
       let aborted = false;
 
       const killChild = () => {
+        hostAbort.abort();
         try {
           child.kill("SIGTERM");
         } catch {
@@ -120,6 +170,7 @@ export async function spawnJsonTool(
       }
 
       const sigtermTimer = setTimeout(() => {
+        hostAbort.abort();
         try {
           child.kill("SIGTERM");
         } catch {
@@ -148,11 +199,13 @@ export async function spawnJsonTool(
       child.stdin?.on("error", () => {});
 
       child.once("error", (error) => {
+        hostAbort.abort();
         clearTimeout(sigtermTimer);
         reject(error);
       });
 
       child.once("close", (exitCode) => {
+        hostAbort.abort();
         context.signal?.removeEventListener("abort", onAbort);
         clearTimeout(sigtermTimer);
         const tail = stderr.trim() || "(no stderr)";

@@ -2,6 +2,18 @@
 
 Nakama plugins are trusted npm packages. A platform admin installs the bytes. An organization admin activates them. Plugin code runs as ordinary Bun and browser JavaScript — there is no sandbox.
 
+## Official plugins
+
+The **Official plugins** catalog is an allowlist shipped with Nakama. Organization admins can install these packages with one click; no npm lookup or separate platform approval is required. Third-party package installation still requires platform approval.
+
+Workflows lives in `packages/plugins/workflows`. Its manifest, bundled actions, UI, skills, and migrations are copied into the same immutable release store used for npm plugins. It uses the existing organization lifecycle, contribution ownership, private database generations, backup, and retained-data deletion. A package's `author` or id never makes it official.
+
+Official catalog entries declare required host support and an optional setup action. Installation checks requirements before publishing a release. If setup fails after this install enabled the plugin, it disables the plugin while retaining its data for retry; a plugin that was already enabled is left running.
+
+This follows the declared-dependency and reversible-effect ideas described in [DeepSeek Harness's Cordis primer](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md). Nakama uses its existing package and organization lifecycle for these guarantees.
+
+Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated bundled action in the change. Runtime images include the package under `packages/plugins`; source development and built server entrypoints use the same catalog.
+
 ## Package layout
 
 ```text
@@ -36,7 +48,7 @@ Installing the same id/version/digest is idempotent. Different bytes for an exis
 
 `run(input, context)` receives host-derived context only:
 
-- `apiVersion`, `pluginId`, `pluginVersion`, `orgId`
+- `apiVersion`, `pluginId`, `pluginVersion`, `orgId`, `actionKey`
 - `actor.id`, `actor.role`
 - `invocationId`
 - `dataDir` — organization plugin files
@@ -44,6 +56,16 @@ Installing the same id/version/digest is idempotent. Different bytes for an exis
 - `profileId`, `sessionId`, `workspaceRoot` — tool calls only
 
 Spoofed org, role, or path fields in input are stripped. Use `bun:sqlite` against `context.databasePath`. Write extra files under `context.dataDir`.
+
+## Host calls
+
+Actions can call `await context.host(request)` sequentially through the invocation's IPC channel. The host supplies organization and actor identity, checks profile access, and only executes tools assigned to the requested profile. Host work is cancelled when the action ends, times out, or is disabled. Calls to other plugin tools are excluded to prevent recursive subprocess chains.
+
+Supported operations: `profiles`; `tools` with `agentId`; `execute_tool` with `agentId`, `name`, and `input`; and `summarize` with `agentId`, `prompt`, and a `bag` of step results. A summary has no tools. Requests cannot choose the organization or actor. Viewers and cross-organization profiles are rejected; Super Bot requires an admin.
+
+The official Workflows plugin additionally uses host operations to read its legacy data for import and inspect the existing organization SQLite tool data. Legacy import is admin-only and read-only at the source. Its plugin database records completion so reinstalling does not resurrect deleted workflows.
+
+The official workflow run action has a five-minute execution budget; other actions retain the normal custom-tool timeout.
 
 ## Schema and migrations
 

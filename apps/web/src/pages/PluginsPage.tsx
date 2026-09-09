@@ -26,8 +26,10 @@ import {
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
+  useInstallOfficialPlugin,
   useInstallOrgPlugin,
   useInstallPluginPackage,
+  useOfficialPlugins,
   useOrgPlugins,
   usePluginReleases,
   usePreviewOrgPluginUpdate,
@@ -259,6 +261,13 @@ export function PluginsPage() {
         </p>
       ) : null}
 
+      <OfficialPluginsCatalog
+        busy={busy}
+        canManage={canManage}
+        onError={setActionError}
+        plugins={plugins}
+      />
+
       {plugins.length === 0 ? (
         <p className="py-10 text-center text-muted-foreground text-sm">
           {canInstallPackages
@@ -342,6 +351,73 @@ export function PluginsPage() {
         orgId={orgId}
       />
     </div>
+  );
+}
+
+function OfficialPluginsCatalog({
+  plugins,
+  busy,
+  canManage,
+  onError,
+}: {
+  plugins: OrgPluginDetail[];
+  busy: boolean;
+  canManage: boolean;
+  onError(error: string | null): void;
+}) {
+  const officialQuery = useOfficialPlugins();
+  const installOfficial = useInstallOfficialPlugin();
+  const official = officialQuery.data?.plugins ?? [];
+  const installing = busy || installOfficial.isPending;
+  function onInstall(id: string) {
+    onError(null);
+    void installOfficial
+      .mutateAsync(id)
+      .catch((error) => onError(formatError(error)));
+  }
+  if (officialQuery.error) {
+    return (
+      <p className="mb-4 text-destructive text-sm" role="alert">
+        {formatError(officialQuery.error)}
+      </p>
+    );
+  }
+  if (official.length === 0) {
+    return null;
+  }
+  return (
+    <section aria-label="Official plugins" className="mb-6">
+      <h2 className="type-section-title mb-3">Official plugins</h2>
+      {official.map((item) => {
+        const installed = plugins.find(
+          (plugin) => plugin.pluginId === item.id && plugin.installed
+        );
+        return (
+          <div
+            className="flex items-center justify-between gap-4 rounded-md border border-border p-4"
+            key={item.id}
+          >
+            <span className="font-medium">{item.name}</span>
+            {installed?.lifecycleState === "enabled" ? (
+              <Link
+                className="text-sm underline underline-offset-4"
+                to={pluginPagePath(item.id)}
+              >
+                Open
+              </Link>
+            ) : (
+              <Button
+                disabled={installing || !canManage}
+                onClick={() => onInstall(item.id)}
+                type="button"
+              >
+                {installing ? "Installing…" : installed ? "Enable" : "Install"}
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }
 

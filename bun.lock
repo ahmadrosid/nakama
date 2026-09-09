@@ -152,6 +152,13 @@
         "@nakama/core": "workspace:*",
       },
     },
+    "packages/plugins/workflows": {
+      "name": "@nakama/plugin-workflows",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@nakama/core": "workspace:*",
+      },
+    },
   },
   "overrides": {
     "libsignal": "6.0.0",
@@ -478,6 +485,8 @@
     "@nakama/db": ["@nakama/db@workspace:packages/db"],
 
     "@nakama/discord": ["@nakama/discord@workspace:apps/platform/discord"],
+
+    "@nakama/plugin-workflows": ["@nakama/plugin-workflows@workspace:packages/plugins/workflows"],
 
     "@nakama/server": ["@nakama/server@workspace:apps/server"],
 

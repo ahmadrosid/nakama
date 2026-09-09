@@ -30,6 +30,8 @@ const steps: WorkflowStep[] = [
 describe("chat-stream-workflow", () => {
   test("isRunWorkflowTool matches name", () => {
     expect(isRunWorkflowTool("run_workflow")).toBe(true);
+    expect(isRunWorkflowTool("plugin_workflows__run_workflow")).toBe(true);
+    expect(isListWorkflowsTool("plugin_workflows__list_workflows")).toBe(true);
     expect(isRunWorkflowTool("create_workflow")).toBe(false);
     expect(isListWorkflowsTool("list_workflows")).toBe(true);
   });

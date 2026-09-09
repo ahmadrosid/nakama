@@ -328,7 +328,6 @@ import {
   resolveProfileStoredTools,
   type ServerToolOverrides,
 } from "./tool-resolver";
-import type { WorkflowRunner } from "./workflow-runner";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -357,12 +356,10 @@ export class AgentService {
   private readonly superBotTools: ToolDefinition[];
   private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
-  private workflowTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
   private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
-  private workflowRunner: WorkflowRunner | null = null;
 
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
@@ -500,11 +497,6 @@ export class AgentService {
     this.sessions.clear();
   }
 
-  setWorkflowTools(tools: ToolDefinition[]): void {
-    this.workflowTools = tools;
-    this.sessions.clear();
-  }
-
   setServerTools(tools: ServerToolOverrides): void {
     this.serverTools = tools;
   }
@@ -515,10 +507,6 @@ export class AgentService {
 
   setAutomationRunner(runner: AutomationRunner): void {
     this.automationRunner = runner;
-  }
-
-  setWorkflowRunner(runner: WorkflowRunner): void {
-    this.workflowRunner = runner;
   }
 
   setMcpClientManager(manager: McpClientManager): void {
@@ -1402,7 +1390,7 @@ export class AgentService {
     return session.send(prompt);
   }
 
-  async resolveWorkflowExecutionTools(
+  async resolvePluginExecutionTools(
     orgId: string,
     profileId: string
   ): Promise<ToolDefinition[]> {
@@ -1411,20 +1399,11 @@ export class AgentService {
       includeAutomationTools: false,
       includeSkillManageTools: false,
       includeTodoTools: false,
-      includeWorkflowTools: false,
     });
     return partitionTools(tools).localTools;
   }
 
-  async resolveWorkflowToolNames(
-    orgId: string,
-    profileId: string
-  ): Promise<Set<string>> {
-    const tools = await this.resolveWorkflowExecutionTools(orgId, profileId);
-    return new Set(tools.map((tool) => tool.name));
-  }
-
-  buildWorkflowToolContext(
+  buildPluginToolContext(
     orgId: string,
     context: {
       profileId: string;
@@ -1443,11 +1422,12 @@ export class AgentService {
     });
   }
 
-  async runWorkflowSummarize(
+  async runPluginSummarize(
     orgId: string,
     profileId: string,
     prompt: string,
-    receiptBag: Record<string, unknown>
+    receiptBag: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
@@ -1489,7 +1469,7 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.send(userMessage);
+    return session.sendStream(userMessage, { onChunk() {} }, { signal });
   }
 
   async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
@@ -1629,14 +1609,6 @@ export class AgentService {
     }
 
     return this.automationRunner.run(automationId);
-  }
-
-  async runWorkflow(workflowId: string, input: Record<string, unknown> = {}) {
-    if (!this.workflowRunner) {
-      throw new Error("Workflow runner is not configured.");
-    }
-
-    return this.workflowRunner.run(workflowId, input);
   }
 
   get providerConfigured(): boolean {
@@ -3385,7 +3357,6 @@ export class AgentService {
     options: {
       actorRole?: "admin" | "member" | "viewer" | null;
       includeAutomationTools?: boolean;
-      includeWorkflowTools?: boolean;
       includeTodoTools?: boolean;
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
@@ -3401,7 +3372,6 @@ export class AgentService {
       userConfig: this.userConfig,
     });
     const includeAutomationTools = options.includeAutomationTools ?? true;
-    const includeWorkflowTools = options.includeWorkflowTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
     const includeSubAgentTool = options.includeSubAgentTool ?? true;
@@ -3457,10 +3427,6 @@ export class AgentService {
 
     if (includeAutomationTools && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
-    }
-
-    if (includeWorkflowTools && this.workflowTools.length > 0) {
-      resolved = [...resolved, ...this.workflowTools];
     }
 
     if (includeTodoTools && this.todoTools.length > 0) {

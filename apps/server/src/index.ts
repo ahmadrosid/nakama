@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import type { Server } from "bun";
 import { ensureProcessPath } from "./lib/ensure-process-path";
+import { createPluginAgentHost } from "./services/plugin-agent-host";
 
 ensureProcessPath();
 // Position is cosmetic: ESM evaluates every import above before this line runs, so a throw
@@ -72,8 +73,6 @@ import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import { SkillsService } from "./services/skills-service";
 import { SystemStatusService } from "./services/system-status-service";
 import { WorkerManagerService } from "./services/worker-manager-service";
-import { WorkflowRunner } from "./services/workflow-runner";
-import { WorkflowService } from "./services/workflow-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
 import {
@@ -83,7 +82,6 @@ import {
 import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
-import { createWorkflowTools } from "./tools/workflow-tools";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -182,17 +180,13 @@ agent.setAutomationRunHistoryTools(
 );
 agent.setAutomationRunner(automationRunner);
 
-const workflowService = new WorkflowService(database.adapter);
-const workflowRunner = new WorkflowRunner(workflowService, agent);
-agent.setWorkflowTools(
-  createWorkflowTools(workflowService, workflowRunner, agent)
-);
-agent.setWorkflowRunner(workflowRunner);
-
 const workerManager = new WorkerManagerService(projectRoot);
 
 const orgService = new OrgService(database.adapter, authService);
-const pluginService = new PluginService(database.adapter, getUserConfigDir());
+const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
+  officialPackagesDir: join(projectRoot, "packages/plugins"),
+  onHostRequest: createPluginAgentHost(database.adapter, agent),
+});
 try {
   await pluginService.recoverInterruptedPluginOperations();
 } catch (error) {
@@ -287,7 +281,6 @@ const app = createHonoApp({
   systemStatus,
   webDistDir,
   workerManager,
-  workflowService,
 });
 
 const server = startServer({

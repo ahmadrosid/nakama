@@ -9,11 +9,13 @@ import { formatSessionRelativeTime } from "@/lib/chat-history";
 import { countWords } from "@/lib/pasted-text";
 
 export function isRunWorkflowTool(tool: string | undefined): boolean {
-  return tool === "run_workflow";
+  return tool === "run_workflow" || tool === "plugin_workflows__run_workflow";
 }
 
 export function isListWorkflowsTool(tool: string | undefined): boolean {
-  return tool === "list_workflows";
+  return (
+    tool === "list_workflows" || tool === "plugin_workflows__list_workflows"
+  );
 }
 
 export interface ListedWorkflow {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowStep } from "./contract";
+import type { WorkflowStep } from "@nakama/core/contract";
 import {
   buildReceiptBag,
   executeAssert,

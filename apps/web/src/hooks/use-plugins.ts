@@ -66,6 +66,25 @@ export function useOrgPlugins() {
   });
 }
 
+export function useOfficialPlugins() {
+  return useQuery({
+    queryFn: () => client.listOfficialPlugins(),
+    queryKey: ["official-plugins"],
+  });
+}
+
+export function useInstallOfficialPlugin() {
+  return usePluginMutation(
+    (pluginId: string, orgId) => client.installOfficialPlugin(pluginId, orgId),
+    async ({ orgId, queryClient }) => {
+      await invalidateOrgPlugins(queryClient, orgId);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.plugins.releases,
+      });
+    }
+  );
+}
+
 export function useOrgPlugin(pluginId: string | undefined) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
