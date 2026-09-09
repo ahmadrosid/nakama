@@ -24,7 +24,6 @@ import {
   type PluginExecutionContext,
   type PluginManifest,
   type PluginReleaseSummary,
-  type PluginUiBootstrap,
   type PluginUiContribution,
   pathExists,
   resolvePluginReleaseEntry,
@@ -1122,7 +1121,7 @@ export class PluginService {
       ui: manifest?.ui
         ? {
             assetsDir: manifest.ui.assetsDir,
-            entryHtml: manifest.ui.entryHtml,
+            entryModule: manifest.ui.entryModule,
             pageLabel: manifest.ui.pageLabel,
           }
         : null,
@@ -1182,10 +1181,10 @@ export class PluginService {
       return null;
     }
 
-    const uiDirectory = dirname(ui.entryHtml);
+    const uiDirectory = dirname(ui.entryModule);
     const relativePath =
       assetPath === ""
-        ? ui.entryHtml
+        ? ui.entryModule
         : uiDirectory === "."
           ? assetPath
           : `${uiDirectory}/${assetPath}`;
@@ -1204,38 +1203,12 @@ export class PluginService {
         return null;
       }
       return {
-        isDocument:
-          relativePath === ui.entryHtml || relativePath.endsWith(".html"),
+        isDocument: relativePath.endsWith(".html"),
         path: resolved,
       };
     } catch {
       return null;
     }
-  }
-
-  async getEnabledUiBootstrap(
-    orgId: string,
-    pluginId: string,
-    theme: "dark" | "light"
-  ): Promise<PluginUiBootstrap | null> {
-    const install = await this.db.getOrgPlugin(orgId, pluginId);
-    if (
-      !(
-        install &&
-        install.lifecycleState === "enabled" &&
-        install.selectedVersion
-      )
-    ) {
-      return null;
-    }
-
-    return {
-      actionBaseUrl: `/v1/plugins/${pluginId}/actions`,
-      orgId,
-      pluginId,
-      pluginVersion: install.selectedVersion,
-      theme,
-    };
   }
 
   async recoverInterruptedPluginOperations(): Promise<void> {
@@ -1968,7 +1941,7 @@ function isUiReleasePath(
   ui: PluginUiContribution,
   relativePath: string
 ): boolean {
-  if (relativePath === ui.entryHtml) {
+  if (relativePath === ui.entryModule) {
     return true;
   }
   const assetsDir = ui.assetsDir.replace(/\/+$/, "");
@@ -2216,7 +2189,7 @@ function assertReferencedFilesExist(
   if (
     manifest.ui &&
     !(
-      files.has(manifest.ui.entryHtml) &&
+      files.has(manifest.ui.entryModule) &&
       hasPrefix(files, manifest.ui.assetsDir)
     )
   ) {

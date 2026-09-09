@@ -13,7 +13,6 @@ import {
   type PluginExecutionActor,
   type PluginPackagePreviewResponse,
   type PluginRevisionRequest,
-  type PluginUiBootstrap,
   type UpdateOrgPluginRequest,
 } from "@nakama/core";
 import type { Context } from "hono";
@@ -30,8 +29,6 @@ import {
 } from "../org-guards";
 import { type getRequestAuth, json, readJson } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
-
-const PLUGIN_UI_BOOTSTRAP_PATH = "__nakama/bootstrap.json";
 
 const UI_MIME_TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
@@ -599,6 +596,7 @@ export function registerPluginRoutes(
     try {
       const invoked = await plugins.invokePluginAction({
         access: "ui",
+        signal: c.req.raw.signal,
         actionKey: decodeURIComponent(c.req.param("actionKey")),
         actor: pluginActor(auth),
         input: body.input ?? {},
@@ -631,19 +629,6 @@ async function servePluginUi(c: Context<AppEnv>, options: ServerOptions) {
   const plugins = requirePluginService(options);
   const pluginId = decodeURIComponent(c.req.param("pluginId"));
   const assetPath = pluginUiAssetPath(c.req.path, orgId, pluginId);
-  if (assetPath === PLUGIN_UI_BOOTSTRAP_PATH) {
-    const theme = parseTheme(c.req.query("theme"));
-    const bootstrap = await plugins.getEnabledUiBootstrap(
-      orgId,
-      pluginId,
-      theme
-    );
-    if (!bootstrap) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    return json<PluginUiBootstrap>(bootstrap);
-  }
-
   const asset = await plugins.resolveEnabledUiAsset(orgId, pluginId, assetPath);
   if (!asset) {
     throw new NakamaApiError("Not found", 404);
@@ -697,10 +682,6 @@ function pluginUiAssetPath(
   } catch {
     return requestPath.slice(prefix.length + 1);
   }
-}
-
-function parseTheme(value: string | undefined): "dark" | "light" {
-  return value === "dark" ? "dark" : "light";
 }
 
 function contentTypeFor(filePath: string, isDocument: boolean): string {

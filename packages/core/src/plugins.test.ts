@@ -49,7 +49,7 @@ describe("validatePluginManifest", () => {
       ...identity,
       ui: {
         assetsDir: "ui/assets",
-        entryHtml: "ui/index.html",
+        entryModule: "ui/index.js",
         pageLabel: "Notes",
       },
     });
@@ -57,6 +57,23 @@ describe("validatePluginManifest", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.manifest.ui?.pageLabel).toBe("Notes");
+    }
+  });
+
+  test("UI entrypoints must be JavaScript modules", () => {
+    for (const [entryModule, accepted] of [
+      ["ui/app.mjs", true],
+      ["ui/index.html", false],
+      ["../app.js", false],
+    ] as const) {
+      expect(
+        validatePluginManifest({
+          ...identity,
+          apiVersion: PLUGIN_MANIFEST_API_VERSION,
+          minNakamaVersion: "0.1.0",
+          ui: { assetsDir: "ui", entryModule, pageLabel: "Notes" },
+        }).ok
+      ).toBe(accepted);
     }
   });
 

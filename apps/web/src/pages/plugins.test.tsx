@@ -10,14 +10,12 @@ import {
 } from "@/context/auth-context-shared";
 import {
   formatPluginTrustLines,
-  isNakamaPluginReadyMessage,
   isPluginOwned,
-  NAKAMA_PLUGIN_READY_TYPE,
   nextPluginVersions,
   orgPluginQueryOptions,
   orgPluginsQueryOptions,
   pluginRowActions,
-  pluginUiDocumentUrl,
+  pluginUiModuleUrl,
   resolvePluginPageView,
   useEnableOrgPlugin,
   useInstallPluginPackage,
@@ -60,7 +58,7 @@ function plugin(overrides: Partial<OrgPluginDetail> = {}): OrgPluginDetail {
     selectedVersion: "1.0.0",
     ui: {
       assetsDir: "ui",
-      entryHtml: "index.html",
+      entryModule: "index.js",
       pageLabel: "Notes",
     },
     updatedAt: "2026-09-07T00:00:00.000Z",
@@ -264,7 +262,7 @@ describe("plugin management authority and mutations", () => {
   });
 });
 
-describe("plugin page states and iframe contract", () => {
+describe("plugin page states and module contract", () => {
   test("query keys include orgId so org switches drop stale work", () => {
     expect(queryKeys.plugins.all("org-a")).toEqual(["plugins", "org-a"]);
     expect(queryKeys.plugins.detail("org-b", "notes")).toEqual([
@@ -281,33 +279,21 @@ describe("plugin page states and iframe contract", () => {
     );
   });
 
-  test("theme is on the iframe URL", () => {
-    expect(pluginUiDocumentUrl("org-a", "notes", "dark")).toBe(
-      "/v1/plugins/ui/org-a/notes/?theme=dark"
+  test("module URL separates orgs, revisions, and reinstalled versions", () => {
+    expect(pluginUiModuleUrl("org-a", "notes", 3, "1.0.0")).toBe(
+      "/v1/plugins/ui/org-a/notes/?revision=3&version=1.0.0"
     );
-  });
-
-  test("ready signal requires type and matching pluginId", () => {
-    expect(
-      isNakamaPluginReadyMessage(
-        { pluginId: "notes", type: NAKAMA_PLUGIN_READY_TYPE },
-        "notes"
-      )
-    ).toBe(true);
-    expect(
-      isNakamaPluginReadyMessage(
-        { pluginId: "other", type: NAKAMA_PLUGIN_READY_TYPE },
-        "notes"
-      )
-    ).toBe(false);
-    expect(isNakamaPluginReadyMessage({ type: "load" }, "notes")).toBe(false);
+    expect(pluginUiModuleUrl("org-a", "notes", 4, "1.0.0")).not.toBe(
+      pluginUiModuleUrl("org-b", "notes", 4, "1.0.0")
+    );
+    expect(pluginUiModuleUrl("org-a", "notes", 3, "1.0.0")).not.toBe(
+      pluginUiModuleUrl("org-a", "notes", 3, "2.0.0")
+    );
   });
 
   test("disabled, unavailable, failed, and unauthorized are named states", () => {
     expect(
       resolvePluginPageView({
-        iframeReady: false,
-        loadTimedOut: false,
         orgRole: "viewer",
         queryStatus: "pending",
       })
@@ -315,16 +301,12 @@ describe("plugin page states and iframe contract", () => {
     expect(
       resolvePluginPageView({
         errorStatus: 403,
-        iframeReady: false,
-        loadTimedOut: false,
         orgRole: "member",
         queryStatus: "error",
       })
     ).toBe("unauthorized");
     expect(
       resolvePluginPageView({
-        iframeReady: false,
-        loadTimedOut: false,
         orgRole: "member",
         plugin: plugin({ lifecycleState: "disabled" }),
         queryStatus: "success",
@@ -332,8 +314,6 @@ describe("plugin page states and iframe contract", () => {
     ).toBe("disabled");
     expect(
       resolvePluginPageView({
-        iframeReady: false,
-        loadTimedOut: false,
         orgRole: "member",
         plugin: plugin({
           lastLifecycleError: "package_unavailable",
@@ -344,8 +324,6 @@ describe("plugin page states and iframe contract", () => {
     ).toBe("unavailable");
     expect(
       resolvePluginPageView({
-        iframeReady: false,
-        loadTimedOut: false,
         orgRole: "member",
         plugin: plugin({ lifecycleState: "enabled", ui: null }),
         queryStatus: "success",
@@ -353,22 +331,11 @@ describe("plugin page states and iframe contract", () => {
     ).toBe("unavailable");
     expect(
       resolvePluginPageView({
-        iframeReady: false,
-        loadTimedOut: true,
         orgRole: "member",
         plugin: plugin({ lifecycleState: "enabled" }),
         queryStatus: "success",
       })
-    ).toBe("failed");
-    expect(
-      resolvePluginPageView({
-        iframeReady: false,
-        loadTimedOut: false,
-        orgRole: "member",
-        plugin: plugin({ lifecycleState: "enabled" }),
-        queryStatus: "success",
-      })
-    ).toBe("frame");
+    ).toBe("page");
   });
 
   test("state view is a heading plus a route, not an empty frame", () => {

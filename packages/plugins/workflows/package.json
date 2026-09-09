@@ -10,10 +10,11 @@
     "skills"
   ],
   "scripts": {
-    "build": "bun build ./src/actions.ts --outdir actions --target bun",
+    "build": "bun build ./src/actions.ts --outdir actions --target bun && bun build ./src/ui.tsx --outfile ui/app.js --target browser",
     "test": "bun test src"
   },
   "devDependencies": {
-    "@nakama/core": "workspace:*"
+    "@nakama/core": "workspace:*",
+    "@types/react": "^19.1.6"
   }
 }

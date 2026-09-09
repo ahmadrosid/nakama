@@ -18,16 +18,13 @@ import { client } from "@/lib/client";
 import { canAccessIntegrationsPage } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 
-export const NAKAMA_PLUGIN_READY_TYPE = "nakama-plugin-ready";
-export const PLUGIN_READY_TIMEOUT_MS = 12_000;
-
 export type PluginPageViewKind =
   | "loading"
   | "unauthorized"
   | "disabled"
   | "unavailable"
   | "failed"
-  | "frame";
+  | "page";
 
 export function isPluginOwned(resource: { pluginId?: string | null }): boolean {
   return Boolean(resource.pluginId);
@@ -276,36 +273,13 @@ export function useDeleteRetainedPluginData() {
   );
 }
 
-export function pluginUiDocumentUrl(
+export function pluginUiModuleUrl(
   orgId: string,
   pluginId: string,
-  theme: "dark" | "light"
+  revision: number,
+  version: string | null
 ): string {
-  const params = new URLSearchParams({ theme });
-  return `/v1/plugins/ui/${encodeURIComponent(orgId)}/${encodeURIComponent(pluginId)}/?${params}`;
-}
-
-/**
- * Plugin pages post this to window.parent after the app mounts.
- * Iframe `load` is not enough — the host waits PLUGIN_READY_TIMEOUT_MS.
- *
- *   parent.postMessage(
- *     { type: "nakama-plugin-ready", pluginId },
- *     window.location.origin
- *   )
- */
-export function isNakamaPluginReadyMessage(
-  data: unknown,
-  pluginId: string
-): boolean {
-  if (typeof data !== "object" || data === null) {
-    return false;
-  }
-
-  const record = data as { pluginId?: unknown; type?: unknown };
-  return (
-    record.type === NAKAMA_PLUGIN_READY_TYPE && record.pluginId === pluginId
-  );
+  return `/v1/plugins/ui/${encodeURIComponent(orgId)}/${encodeURIComponent(pluginId)}/?revision=${revision}&version=${encodeURIComponent(version ?? "")}`;
 }
 
 export function isPluginLifecycleBusy(plugin: OrgPluginDetail): boolean {
@@ -346,8 +320,6 @@ export function formatPluginTrustLines(
 
 export function resolvePluginPageView(input: {
   errorStatus?: number;
-  iframeReady: boolean;
-  loadTimedOut: boolean;
   orgRole: string | undefined;
   plugin?: OrgPluginDetail | null;
   queryStatus: "error" | "pending" | "success";
@@ -388,11 +360,7 @@ export function resolvePluginPageView(input: {
     return "unavailable";
   }
 
-  if (input.loadTimedOut && !input.iframeReady) {
-    return "failed";
-  }
-
-  return "frame";
+  return "page";
 }
 
 export function pluginPageStateMessage(kind: PluginPageViewKind): string {

@@ -48,7 +48,7 @@ function notesManifest(overrides: Record<string, unknown> = {}) {
     skills: [{ directory: "skills/notes", key: "notes" }],
     ui: {
       assetsDir: "ui/assets",
-      entryHtml: "ui/index.html",
+      entryModule: "ui/index.js",
       pageLabel: "Notes",
     },
     ...identity,
@@ -68,7 +68,7 @@ function validBundle(
       "side-effect.js": sideEffectJs,
       "skills/notes/SKILL.md": "# Notes\n",
       "ui/assets/app.js": "export {}",
-      "ui/index.html": "<html></html>",
+      "ui/index.js": "<html></html>",
     },
     options
   );
