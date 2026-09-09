@@ -145,7 +145,7 @@ describe("createProviderForInstance routing", () => {
       });
 
       expect(result.content).toBe("ok");
-      expect(result.thinking).toBe("because");
+      expect(result.assistantMessage.thinking).toBe("because");
       expect(seenPath).toBe("/v1/chat/completions");
       expect(seenAuth).toBe("Bearer test-key");
       expect(seenModel).toBe("openai/gpt-4o-mini");
