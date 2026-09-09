@@ -8,6 +8,11 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const serverUrl = process.env.NAKAMA_SERVER_URL ?? "http://127.0.0.1:4310";
 
 export default defineConfig({
+  // `scripts/build-sw.ts` reads the manifest to build the service worker's
+  // precache list, then deletes it from `dist`.
+  build: {
+    manifest: true,
+  },
   plugins: [react(), tailwindcss()],
   preview: {
     port: 3003,
