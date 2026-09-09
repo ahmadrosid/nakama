@@ -1812,6 +1812,10 @@ export interface AssignSkillRequest {
   skillId: string;
 }
 
+export interface MoveProfileRequest {
+  organizationId: string;
+}
+
 export interface CloneProfileRequest {
   /** Optional explicit id; otherwise a unique slug of the name. */
   id?: string;
@@ -2225,6 +2229,7 @@ export type ProviderName =
   | "deepseek"
   | "doubao"
   | "mistral"
+  | "perplexity"
   | "cerebras"
   | "fireworks"
   | "ollama"

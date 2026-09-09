@@ -285,6 +285,49 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsVision: true,
   },
   {
+    contextWindow: 128_000,
+    default: true,
+    id: "sonar",
+    inputPerMillionUsd: 1,
+    maxOutputTokens: 8192,
+    name: "Sonar",
+    outputPerMillionUsd: 1,
+    provider: "perplexity",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 200_000,
+    id: "sonar-pro",
+    inputPerMillionUsd: 3,
+    maxOutputTokens: 8192,
+    name: "Sonar Pro",
+    outputPerMillionUsd: 15,
+    provider: "perplexity",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    id: "sonar-reasoning-pro",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 8192,
+    name: "Sonar Reasoning Pro",
+    outputPerMillionUsd: 8,
+    provider: "perplexity",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    id: "sonar-deep-research",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 32_768,
+    name: "Sonar Deep Research",
+    outputPerMillionUsd: 8,
+    provider: "perplexity",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
     contextWindow: 131_072,
     default: true,
     id: "openai/gpt-oss-120b",
@@ -758,6 +801,7 @@ export function getDefaultModel(
       provider === "doubao" ||
       provider === "together" ||
       provider === "mistral" ||
+      provider === "perplexity" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -780,15 +824,17 @@ export function getDefaultModel(
                 ? "openai/gpt-oss-120b"
                 : provider === "mistral"
                   ? "mistral-small-2603"
-                  : provider === "cerebras"
-                    ? "gpt-oss-120b"
-                    : provider === "fireworks"
-                      ? "accounts/fireworks/models/kimi-k2p6"
-                      : provider === "opencode_go"
-                        ? "opencode-go/kimi-k2.7-code"
-                        : provider === "cloudflare"
-                          ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                          : "gpt-5.4";
+                  : provider === "perplexity"
+                    ? "sonar"
+                    : provider === "cerebras"
+                      ? "gpt-oss-120b"
+                      : provider === "fireworks"
+                        ? "accounts/fireworks/models/kimi-k2p6"
+                        : provider === "opencode_go"
+                          ? "opencode-go/kimi-k2.7-code"
+                          : provider === "cloudflare"
+                            ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                            : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -855,6 +901,7 @@ export function resolveModel(
       provider === "doubao" ||
       provider === "together" ||
       provider === "mistral" ||
+      provider === "perplexity" ||
       provider === "cerebras" ||
       provider === "fireworks" ||
       provider === "opencode_go") &&

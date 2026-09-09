@@ -1,5 +1,6 @@
+import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
 import { cp } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type {
   AssignMcpServerRequest,
   AssignSkillRequest,
@@ -15,6 +16,7 @@ import type {
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
   ListToolsResponse,
+  MoveProfileRequest,
   ProfileDetail,
   ProfileResponse,
   ProfileSummary,
@@ -73,7 +75,11 @@ import {
   soulFieldFromFileName,
   withAssignmentChange,
 } from "./profile-change-history";
-import { deleteProfileWithHistoryArchives } from "./session-persistence";
+import {
+  deleteProfileWithHistoryArchives,
+  sessionHistoryArchivePath,
+} from "./session-persistence";
+import { sessionTurnRegistry } from "./session-turn-registry";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
@@ -417,6 +423,67 @@ export class ProfileService {
     );
 
     return this.getProfile(orgId, profileId);
+  }
+
+  async moveProfile(
+    orgId: string,
+    profileId: string,
+    request: MoveProfileRequest
+  ): Promise<ProfileResponse> {
+    await this.requireProfile(orgId, profileId);
+    const destination = request?.organizationId;
+    if (typeof destination !== "string" || !destination.trim()) {
+      throw new NakamaApiError("Destination organization is required.", 400);
+    }
+    const target = await this.db.getOrganizationById(destination);
+    if (!target || target.archivedAt) {
+      throw new NakamaApiError("Destination organization is unavailable.", 404);
+    }
+    if (destination === orgId) {
+      throw new NakamaApiError("Choose another organization.", 400);
+    }
+    const sessions = (await this.db.listSessions()).filter(
+      (session) => session.profileId === profileId
+    );
+    if (sessions.some((session) => sessionTurnRegistry.isActive(session.id))) {
+      throw new NakamaApiError(
+        "Wait for active chats to finish before moving this profile.",
+        409
+      );
+    }
+    const from = getProfileSoulDir(orgId, profileId);
+    const to = getProfileSoulDir(destination, profileId);
+    const paths: [string, string][] = [
+      [from, to],
+      ...sessions.map((session): [string, string] => [
+        sessionHistoryArchivePath(orgId, session.id),
+        sessionHistoryArchivePath(destination, session.id),
+      ]),
+    ];
+    const moved: [string, string][] = [];
+    try {
+      for (const [source, targetPath] of paths) {
+        if (lstatSync(targetPath, { throwIfNoEntry: false })) {
+          throw new NakamaApiError(
+            "Destination already contains profile data.",
+            409
+          );
+        }
+        if (!existsSync(source)) {
+          continue;
+        }
+        mkdirSync(dirname(targetPath), { recursive: true });
+        renameSync(source, targetPath);
+        moved.push([source, targetPath]);
+      }
+      await this.db.moveProfile(profileId, orgId, destination, from, to);
+    } catch (error) {
+      for (const [source, targetPath] of moved.reverse()) {
+        renameSync(targetPath, source);
+      }
+      throw error;
+    }
+    return this.getProfile(destination, profileId);
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {

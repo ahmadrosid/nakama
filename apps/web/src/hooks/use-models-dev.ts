@@ -32,6 +32,7 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "doubao",
   "together",
   "mistral",
+  "perplexity",
 ]);
 
 const NPM_MAP: Record<string, SelectedProvider> = {
@@ -46,6 +47,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   mistral: "mistral",
   opencode: "openai_compatible",
   openrouter: "openrouter",
+  perplexity: "perplexity",
   together: "together",
   volcengine: "doubao",
 };

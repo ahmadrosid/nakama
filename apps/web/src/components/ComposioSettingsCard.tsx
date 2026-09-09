@@ -270,7 +270,7 @@ function ComposioApiKeySection({
           className="min-w-[4.5rem] shrink-0"
           disabled={!canSave || savePending}
           onClick={onSave}
-          size="sm"
+          size="lg"
           type="button"
         >
           {savePending ? <Spinner className="size-4" /> : "Save"}

@@ -51,6 +51,7 @@ export function formatProviderLabel(
     provider === "deepseek" ||
     provider === "doubao" ||
     provider === "mistral" ||
+    provider === "perplexity" ||
     provider === "cerebras" ||
     provider === "cloudflare" ||
     provider === "fireworks" ||
@@ -86,6 +87,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "doubao", label: "Doubao (Volcengine)" },
     { id: "together", label: "Together AI" },
     { id: "mistral", label: "Mistral" },
+    { id: "perplexity", label: "Perplexity Sonar" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
     { id: "fireworks", label: "Fireworks" },
@@ -902,6 +904,7 @@ export function resolveModelThinkingSupport(
     model.provider === "doubao" ||
     model.provider === "together" ||
     model.provider === "mistral" ||
+    model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama"
@@ -954,6 +957,7 @@ export function resolveModelVisionSupport(
     model.provider === "doubao" ||
     model.provider === "together" ||
     model.provider === "mistral" ||
+    model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||

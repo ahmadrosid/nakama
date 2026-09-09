@@ -220,6 +220,7 @@ export function resolveHistoryProfileId(input: {
   search: string;
   profiles: ReadonlyArray<{ id: string }>;
   liveChatProfileId?: string | null;
+  orgId?: string | null;
 }): string | null {
   const fromUrl = new URLSearchParams(input.search).get("profile");
   return (
@@ -227,7 +228,7 @@ export function resolveHistoryProfileId(input: {
       input.profiles,
       fromUrl,
       input.liveChatProfileId,
-      readStoredActiveChatProfileId()
+      readStoredActiveChatProfileId(input.orgId)
     ) ?? resolveDefaultProfileId(input.profiles)
   );
 }

@@ -39,7 +39,7 @@ import {
   ensureBundledSkillsAssigned,
   seedDatabase,
 } from "@nakama/db";
-import { createHonoApp } from "./http/app";
+import { createHonoApp, MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./http/app";
 import {
   disableBunIdleTimeoutForLongHeldRequest,
   disableBunIdleTimeoutForSse,
@@ -279,7 +279,8 @@ const app = createHonoApp({
 
 const server = startServer({
   canFallbackToNextPort,
-  fetch: app.fetch,
+  // The limiter needs the peer address, and Bun only exposes it on `server`.
+  fetch: (request: Request, server: Server) => app.fetch(request, { server }),
   host,
   preferredPort: requestedPort,
 });
@@ -370,7 +371,7 @@ function startServer(options: {
   host: string;
   preferredPort: number;
   canFallbackToNextPort: boolean;
-  fetch: (request: Request) => Response | Promise<Response>;
+  fetch: (request: Request, server: Server) => Response | Promise<Response>;
 }): ReturnType<typeof Bun.serve> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
@@ -382,12 +383,13 @@ function startServer(options: {
       return Bun.serve({
         async fetch(request, server: Server) {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
-          const response = await options.fetch(request);
+          const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);
           return response;
         },
         hostname: options.host,
         idleTimeout: 255,
+        maxRequestBodySize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
         port,
       });
     } catch (error) {

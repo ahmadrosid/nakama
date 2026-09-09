@@ -160,6 +160,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Mistral";
   }
 
+  if (providerName === "perplexity") {
+    return "Perplexity";
+  }
+
   return "OpenAI";
 }
 
@@ -346,13 +350,13 @@ async function buildChatCompletionRequestBody(options: {
   provider?: ProviderName;
   thinking?: ProviderChatOptions["thinking"];
 }) {
-  const hasTools = Boolean(options.tools?.length);
   const provider = options.provider ?? "openai";
+  const hasTools = provider !== "perplexity" && Boolean(options.tools?.length);
 
   return {
     model: options.model,
     ...(options.stream ? { stream: true } : {}),
-    ...(options.streamOptions
+    ...(options.streamOptions && provider !== "perplexity"
       ? {
           stream_options: { include_usage: options.streamOptions.includeUsage },
         }
@@ -367,6 +371,11 @@ async function buildChatCompletionRequestBody(options: {
       : provider === "doubao"
         ? buildDoubaoThinkingBody(options.thinking)
         : {}),
+    ...(provider === "perplexity" && options.thinking?.enabled
+      ? {
+          reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
+        }
+      : {}),
     ...(hasTools
       ? {
           tool_choice: "auto",
@@ -378,6 +387,42 @@ async function buildChatCompletionRequestBody(options: {
         }
       : {}),
   };
+}
+
+function formatPerplexityCitations(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  const citations: string[] = [];
+  const seen = new Set<string>();
+
+  for (const citation of value) {
+    if (typeof citation !== "string") {
+      continue;
+    }
+
+    try {
+      const url = new URL(citation);
+      if (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        !seen.has(url.href)
+      ) {
+        seen.add(url.href);
+        citations.push(url.href.replaceAll(">", "%3E"));
+      }
+    } catch {
+      // Ignore malformed citation metadata without dropping the answer.
+    }
+  }
+
+  if (citations.length === 0) {
+    return "";
+  }
+
+  return `\n\nSources:\n${citations
+    .map((citation, index) => `${index + 1}. <${citation}>`)
+    .join("\n")}`;
 }
 
 function buildDeepSeekThinkingBody(
@@ -472,6 +517,7 @@ async function requestChatCompletion(
   }
 
   const payload = (await response.json()) as {
+    citations?: unknown;
     usage?: Record<string, unknown>;
     choices?: Array<{
       message?: {
@@ -487,7 +533,11 @@ async function requestChatCompletion(
 
   const message = payload.choices?.[0]?.message;
   const toolCalls = parseOpenAIToolCalls(message?.tool_calls);
-  const content = message?.content ?? "";
+  const citationText =
+    client.providerName === "perplexity"
+      ? formatPerplexityCitations(payload.citations)
+      : "";
+  const content = `${message?.content ?? ""}${citationText}`;
   const thinking = readReasoningContent(message);
 
   if (!content.trim() && toolCalls.length === 0 && !thinking) {
@@ -544,7 +594,12 @@ async function streamChatCompletion(
     throw new Error(`${client.label} returned an empty stream.`);
   }
 
-  return readOpenAIStream(response.body, options.handlers, client.label);
+  return readOpenAIStream(
+    response.body,
+    options.handlers,
+    client.label,
+    client.providerName
+  );
 }
 
 async function requestCompletion(
@@ -559,7 +614,7 @@ async function requestCompletion(
     body: JSON.stringify({
       messages: options.messages,
       model: options.model,
-      ...(options.responseFormat
+      ...(options.responseFormat && client.providerName !== "perplexity"
         ? { response_format: options.responseFormat }
         : {}),
     }),
@@ -652,15 +707,18 @@ function finalizePendingToolCalls(
 async function readOpenAIStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamChatHandlers,
-  label = "OpenAI"
+  label = "OpenAI",
+  provider: ProviderName = "openai"
 ): Promise<ChatCompletionResult> {
   let content = "";
   let thinking = "";
   let usage: ChatCompletionResult["usage"];
+  let citations: unknown;
   const pending = new Map<number, PendingToolCall>();
 
   await readSseEvents(body, ({ data }) => {
     const payload = JSON.parse(data) as {
+      citations?: unknown;
       usage?: Record<string, unknown>;
       choices?: Array<{
         delta?: {
@@ -676,6 +734,7 @@ async function readOpenAIStream(
     };
 
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
+    citations = payload.citations ?? citations;
 
     const delta = payload.choices?.[0]?.delta;
 
@@ -711,6 +770,13 @@ async function readOpenAIStream(
 
   const toolCalls = finalizePendingToolCalls(pending);
   const thinkingText = thinking.trim() || undefined;
+  const citationText =
+    provider === "perplexity" ? formatPerplexityCitations(citations) : "";
+
+  if (citationText) {
+    content += citationText;
+    handlers.onChunk(citationText);
+  }
 
   if (!content.trim() && toolCalls.length === 0 && !thinkingText) {
     throw new Error(`${label} returned an empty response.`);

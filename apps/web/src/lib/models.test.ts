@@ -26,6 +26,7 @@ function group(
     | "doubao"
     | "together"
     | "mistral"
+    | "perplexity"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -171,6 +172,22 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats perplexity models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -244,6 +261,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(false);
   });
 
+  test("treats doubao models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -272,22 +305,6 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("tg-1", "model-1"),
         group("tg-1", "together", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats doubao models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("db-1", "model-1"),
-        group("db-1", "doubao")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("db-1", "model-1"),
-        group("db-1", "doubao", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -398,6 +415,7 @@ describe("firstAvailableProviderOption", () => {
           "doubao",
           "together",
           "mistral",
+          "perplexity",
           "cerebras",
           "cloudflare",
           "fireworks",

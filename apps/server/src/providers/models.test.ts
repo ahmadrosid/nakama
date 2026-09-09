@@ -145,24 +145,50 @@ describe("resolveModel", () => {
       "doubao-seed-1-8-251228"
     );
     expect(getDefaultModel("doubao")).toBe("doubao-seed-2-1-pro-260628");
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsThinking).toBe(true);
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsVision).toBe(true);
-    expect(getModelById("doubao-seed-2-1-turbo-260628")?.supportsVision).toBe(true);
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsThinking).toBe(
+      true
+    );
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsVision).toBe(
+      true
+    );
+    expect(getModelById("doubao-seed-2-1-turbo-260628")?.supportsVision).toBe(
+      true
+    );
     expect(getModelById("doubao-seed-1-8-251228")?.supportsVision).toBe(true);
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.contextWindow).toBe(256_000);
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.maxOutputTokens).toBe(256_000);
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.contextWindow).toBe(
+      256_000
+    );
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.maxOutputTokens).toBe(
+      256_000
+    );
   });
 
   test("uses doubao custom model shortlist when provided", () => {
     const customModels = [
-      { default: true, id: "doubao-seed-2-1-turbo-260628", name: "Doubao Seed 2.1 Turbo" },
+      {
+        default: true,
+        id: "doubao-seed-2-1-turbo-260628",
+        name: "Doubao Seed 2.1 Turbo",
+      },
     ];
-    expect(resolveModel("doubao", "doubao-seed-2-1-turbo-260628", customModels)).toBe(
-      "doubao-seed-2-1-turbo-260628"
-    );
+    expect(
+      resolveModel("doubao", "doubao-seed-2-1-turbo-260628", customModels)
+    ).toBe("doubao-seed-2-1-turbo-260628");
     expect(resolveModel("doubao", "unknown-model", customModels)).toBe(
       "doubao-seed-2-1-turbo-260628"
     );
+  });
+
+  test("resolves the current Perplexity Sonar catalog", () => {
+    expect(getDefaultModel("perplexity")).toBe("sonar");
+    expect(resolveModel("perplexity", "sonar-pro")).toBe("sonar-pro");
+    expect(getModelById("sonar")?.contextWindow).toBe(128_000);
+    expect(getModelById("sonar")?.inputPerMillionUsd).toBe(1);
+    expect(getModelById("sonar")?.outputPerMillionUsd).toBe(1);
+    expect(getModelById("sonar-pro")?.contextWindow).toBe(200_000);
+    expect(getModelById("sonar-pro")?.supportsVision).toBe(true);
+    expect(getModelById("sonar-reasoning-pro")?.supportsThinking).toBe(true);
+    expect(getModelById("sonar-deep-research")?.supportsVision).toBe(false);
   });
 
   test("resolves catalog models for Cerebras", () => {
@@ -363,8 +389,20 @@ describe("modelSupportsVision", () => {
   });
 
   test("reads Doubao vision flags from the curated catalog", () => {
-    expect(modelSupportsVision("doubao-seed-2-1-pro-260628", "doubao")).toBe(true);
-    expect(modelSupportsVision("doubao-seed-2-1-turbo-260628", "doubao")).toBe(true);
+    expect(modelSupportsVision("doubao-seed-2-1-pro-260628", "doubao")).toBe(
+      true
+    );
+    expect(modelSupportsVision("doubao-seed-2-1-turbo-260628", "doubao")).toBe(
+      true
+    );
     expect(modelSupportsVision("doubao-seed-1-8-251228", "doubao")).toBe(true);
+  });
+
+  test("reads Perplexity vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("sonar", "perplexity")).toBe(true);
+    expect(modelSupportsVision("sonar-pro", "perplexity")).toBe(true);
+    expect(modelSupportsVision("sonar-deep-research", "perplexity")).toBe(
+      false
+    );
   });
 });

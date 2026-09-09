@@ -36,6 +36,7 @@ const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
 const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
 const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
+const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
 export interface CreateProviderOptions {
@@ -109,6 +110,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_MISTRAL_BASE_URL,
         model,
         providerName: "mistral",
+      });
+    case "perplexity":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_PERPLEXITY_BASE_URL,
+        model,
+        providerName: "perplexity",
       });
     case "minimax":
     case "minimax_cn":

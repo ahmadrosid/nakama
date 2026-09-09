@@ -56,6 +56,7 @@ import type {
   ListSkillsResponse,
   ListToolsResponse,
   ModelsResponse,
+  MoveProfileRequest,
   PatchSkillRequest,
   ProfileResponse,
   ProviderChatOptions,
@@ -2704,6 +2705,24 @@ export class AgentService {
     return response;
   }
 
+  async moveProfile(
+    orgId: string,
+    profileId: string,
+    request: MoveProfileRequest
+  ): Promise<ProfileResponse> {
+    const result = await this.profileService.moveProfile(
+      orgId,
+      profileId,
+      request
+    );
+    for (const [sessionId, record] of this.sessions) {
+      if (record.profileId === profileId) {
+        this.sessions.delete(sessionId);
+      }
+    }
+    return result;
+  }
+
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
     await this.profileService.deleteProfile(orgId, profileId);
     for (const [sessionId, record] of this.sessions) {
@@ -3288,7 +3307,7 @@ export class AgentService {
     const profile = await this.db.getProfileForOrg(profileId, orgId);
 
     if (!profile) {
-      throw new Error("Profile not found.");
+      throw new NakamaApiError("Profile not found.", 404);
     }
 
     return profile;

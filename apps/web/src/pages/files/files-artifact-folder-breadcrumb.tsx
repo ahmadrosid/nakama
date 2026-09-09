@@ -26,7 +26,7 @@ export function ArtifactFolderBreadcrumb({
         type="button"
         variant="ghost"
       >
-        Artifacts
+        Home
       </Button>
       {segments.map((segment, index) => {
         const isCurrent = index === segments.length - 1;

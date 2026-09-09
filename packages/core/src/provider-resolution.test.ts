@@ -18,6 +18,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("doubao")).toBe("doubao");
     expect(parseProviderName("mistral")).toBe("mistral");
+    expect(parseProviderName("perplexity")).toBe("perplexity");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
     expect(parseProviderName("minimax")).toBe("minimax");
@@ -51,6 +52,10 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("doubao uses DOUBAO_API_KEY", () => {
     expect(apiKeyEnvVarForProvider("doubao")).toBe("DOUBAO_API_KEY");
+  });
+
+  test("perplexity uses PERPLEXITY_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("perplexity")).toBe("PERPLEXITY_API_KEY");
   });
 
   test("maps Moonshot regions to distinct env keys", () => {
@@ -152,6 +157,18 @@ describe("resolveProvider doubao", () => {
     });
 
     expect(provider).toBe("doubao");
+  });
+});
+
+describe("resolveProvider perplexity", () => {
+  test("auto-resolves Perplexity when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        PERPLEXITY_API_KEY: "pplx-test",
+      },
+    });
+
+    expect(provider).toBe("perplexity");
   });
 });
 

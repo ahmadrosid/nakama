@@ -98,6 +98,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     "text/csv",
     DOCX_MEDIA_TYPE,
   ]),
+  perplexity: new Set<string>(),
   together: new Set<string>(),
   xai: new Set<string>(),
   xai_oauth: new Set<string>(),

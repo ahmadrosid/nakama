@@ -10,6 +10,7 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "doubao",
   "together",
   "mistral",
+  "perplexity",
   "opencode_go",
 ] as const;
 

@@ -100,6 +100,7 @@ import type {
   MarkAutomationRunsReadResponse,
   McpServerResponse,
   ModelsResponse,
+  MoveProfileRequest,
   NotificationDestinationSummary,
   NotificationDestinationWithSecret,
   OrganizationResponse,
@@ -769,6 +770,19 @@ export class NakamaClient {
       {
         body: JSON.stringify(request),
         method: "PUT",
+      }
+    );
+  }
+
+  async moveProfile(
+    profileId: string,
+    request: MoveProfileRequest
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/move`,
+      {
+        body: JSON.stringify(request),
+        method: "POST",
       }
     );
   }

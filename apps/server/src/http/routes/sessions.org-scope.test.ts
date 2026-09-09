@@ -128,6 +128,26 @@ describe("session routes are scoped to the caller's active org", () => {
     });
   }
 
+  test("GET /v1/sessions -> 404 for a profile in another org", async () => {
+    const { app } = await createScenario();
+    const attacker = await loginUserSession(
+      app,
+      "attacker@example.com",
+      PASSWORD,
+      ATTACKER_ORG
+    );
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/sessions?profileId=profile_victim&channel=web",
+        { headers: attacker.headers() }
+      )
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Profile not found." });
+  });
+
   test("the owning org still reads its own session", async () => {
     const { app, victimSessionId } = await createScenario();
     const victim = await loginUserSession(

@@ -23,6 +23,7 @@ import type {
 } from "@nakama/db";
 import { ensureLocalClientAccess } from "@nakama/db";
 import type { Context } from "hono";
+import type { ZodType } from "zod";
 import type { AuthService } from "../services/auth-service";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import type { AppEnv } from "./types";
@@ -371,15 +372,40 @@ export function assertJsonRequest(request: Request): void {
   }
 }
 
-export async function readJson<T>(request: Request): Promise<T> {
+export async function readJson<T>(
+  request: Request,
+  schema?: ZodType<T>
+): Promise<T> {
   try {
-    return (await request.json()) as T;
+    const body = (await request.json()) as unknown;
+    if (!schema) {
+      return body as T;
+    }
+
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      throw new NakamaApiError("Invalid request body.", 400);
+    }
+    return parsed.data;
   } catch (err) {
     if (err instanceof SyntaxError) {
       throw new NakamaApiError("Invalid JSON in request body.", 400);
     }
     throw err;
   }
+}
+
+export function parseOptionalQueryEnum<const T extends string>(
+  value: string | undefined,
+  allowed: readonly T[]
+): T | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (allowed.includes(value as T)) {
+    return value as T;
+  }
+  throw new NakamaApiError("Invalid query parameter.", 400);
 }
 
 export async function readOptionalJson<T>(

@@ -20,7 +20,7 @@ const tokenPayload = {
 const devicePayload = {
   device_code: "secret-device-code",
   expires_in: 60,
-  interval: 1,
+  interval: 0.02,
   user_code: "CODE",
   verification_uri: "https://accounts.x.ai/oauth2/device",
   verification_uri_complete:
@@ -93,11 +93,13 @@ test("pending and slow_down wait before polling again", async () => {
   const start = await startXaiOAuthDeviceSession("pending");
   const result = await completeXaiOAuthDeviceSession(
     start.sessionId,
-    "pending"
+    "pending",
+    undefined,
+    { slowDownIncrementMs: 30 }
   );
   expect(result.refreshToken).toBe("refresh");
-  expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(5900);
-}, 12_000);
+  expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(25);
+}, 2000);
 
 for (const error of ["access_denied", "expired_token"]) {
   test(`stops polling after ${error}`, async () => {

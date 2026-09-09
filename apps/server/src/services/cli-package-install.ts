@@ -11,6 +11,11 @@ const CLI_INSTALL_TIMEOUT_MS = 120_000;
  */
 const CLI_SETTLE_TIMEOUT_MS = 5000;
 
+function readPositiveEnvMs(name: string): number | undefined {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 export interface GlobalPackageInstallPlan {
   args: string[];
   command: string;
@@ -81,7 +86,9 @@ export async function probeCliVersion(command: string): Promise<{
   missing: boolean;
 }> {
   const { spawn } = await import("node:child_process");
-  const timeoutMs = 5000;
+  const timeoutMs = readPositiveEnvMs("NAKAMA_CLI_PROBE_TIMEOUT_MS") ?? 5000;
+  const sigtermGraceMs =
+    readPositiveEnvMs("NAKAMA_CLI_SIGTERM_GRACE_MS") ?? CLI_SIGTERM_GRACE_MS;
 
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
@@ -106,10 +113,7 @@ export async function probeCliVersion(command: string): Promise<{
 
     const timeoutId = setTimeout(() => {
       child.kill("SIGTERM");
-      killTimeoutId = setTimeout(
-        () => child.kill("SIGKILL"),
-        CLI_SIGTERM_GRACE_MS
-      );
+      killTimeoutId = setTimeout(() => child.kill("SIGKILL"), sigtermGraceMs);
       resolve({ installed: false, missing: false, version: null });
     }, timeoutMs);
 
