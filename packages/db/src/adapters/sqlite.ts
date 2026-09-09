@@ -1862,6 +1862,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ? AND profile_id = ? AND id = ?
     LIMIT 1
   `);
+  const listArtifactSharesForProfileStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+    FROM artifact_shares
+    WHERE org_id = ? AND profile_id = ?
+  `);
   const revokeArtifactShareStmt = db.prepare(`
     UPDATE artifact_shares
     SET revoked_at = ?
@@ -2724,6 +2731,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.completedAt,
         record.position
       );
+    },
+
+    async listArtifactSharesForProfile(orgId, profileId) {
+      return listArtifactSharesForProfileStmt
+        .all(orgId, profileId)
+        .map((row) => toArtifactShareRecord(row as ArtifactShareRow));
     },
 
     async listAutomationRuns(automationId, limit = 20) {

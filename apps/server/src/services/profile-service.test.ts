@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getProfileSoulDir } from "@nakama/core";
+import { getProfileSoulDir, writeArtifactShareSnapshot } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -968,6 +968,36 @@ describe("profile service deleteProfile", () => {
     expect(
       (await readFile(path.join(keptDir, "SOUL.md"), "utf8")).length
     ).toBeGreaterThan(0);
+  });
+
+  test("removes artifact share snapshots before their rows cascade", async () => {
+    const { db, service } = await setup();
+    const removed = await service.createProfile(ORG_ID, { name: "Removed" });
+    const shareId = "share_delete_test";
+    const storagePath = await writeArtifactShareSnapshot({
+      bytes: Buffer.from("shared private data"),
+      filename: "report.md",
+      orgId: ORG_ID,
+      shareId,
+    });
+    await db.createArtifactShare({
+      createdAt: new Date().toISOString(),
+      createdByUserId: "user_test",
+      filename: "report.md",
+      id: shareId,
+      mimeType: "text/markdown",
+      orgId: ORG_ID,
+      profileId: removed.profile.id,
+      revokedAt: null,
+      sizeBytes: 19,
+      sourcePath: "artifacts/report.md",
+      storagePath,
+      tokenHash: "share_token_hash",
+    });
+
+    await service.deleteProfile(ORG_ID, removed.profile.id);
+
+    await expect(access(storagePath)).rejects.toThrow();
   });
 
   test("deletes the default when the org has 3 profiles and promotes a successor", async () => {

@@ -4,6 +4,7 @@ import type { AgentChatSession } from "@nakama/agent";
 import type { ChatMessage, ToolDefinition } from "@nakama/core";
 import {
   createId,
+  deleteArtifactShareSnapshot,
   getProfileSoulDir,
   getUserConfigDir,
   jsonSchemaFromZod,
@@ -90,6 +91,14 @@ export function deleteProfileWithHistoryArchives(
   return withArchiveLock(
     dirname(sessionHistoryArchivePath(orgId, "")),
     async () => {
+      const artifactShares = await db.listArtifactSharesForProfile(
+        orgId,
+        profileId
+      );
+      for (const share of artifactShares) {
+        await deleteArtifactShareSnapshot(orgId, share.storagePath);
+      }
+
       const sessions = await db.listSessions();
       for (const session of sessions) {
         if (session.profileId === profileId) {
