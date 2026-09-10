@@ -3,7 +3,6 @@ import type {
   McpServerSummary,
 } from "@nakama/core/contract";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { McpServerAuthorizeDialog } from "@/components/soul-tools/mcp-tab/McpServerAuthorizeDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
@@ -31,14 +30,23 @@ import {
   useUpdateMcpServerMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
-import { queryKeys } from "@/lib/query-keys";
 
 /** The callback connects the server on its own, so the list is re-read until it lands. */
 const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
-const AUTHORIZATION_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
-  const { data: servers = [], isLoading, error } = useMcpServersQuery();
+  const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
+    serverId: string;
+    url: string;
+  } | null>(null);
+  const {
+    data: servers = [],
+    isLoading,
+    error,
+  } = useMcpServersQuery(
+    pendingAuth ? { refetchInterval: AUTHORIZATION_POLL_INTERVAL_MS } : {}
+  );
   const createMutation = useCreateMcpServerMutation();
   const updateMutation = useUpdateMcpServerMutation();
   const deleteMutation = useDeleteMcpServerMutation();
@@ -51,12 +59,6 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
     null
   );
-  const [pendingAuth, setPendingAuth] = useState<{
-    name: string;
-    serverId: string;
-    url: string;
-  } | null>(null);
-  const queryClient = useQueryClient();
   const pendingAuthStatus = pendingAuth
     ? servers.find((server) => server.id === pendingAuth.serverId)?.status
     : undefined;
@@ -75,27 +77,10 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const errorMessage = actionError ?? (error ? formatError(error) : null);
 
   useEffect(() => {
-    if (!pendingAuth) {
-      return;
-    }
-
     if (pendingAuthStatus === "connected") {
       setPendingAuth(null);
-      return;
     }
-
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      if (Date.now() - startedAt > AUTHORIZATION_POLL_TIMEOUT_MS) {
-        setPendingAuth(null);
-        return;
-      }
-
-      void queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
-    }, AUTHORIZATION_POLL_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [pendingAuth, pendingAuthStatus, queryClient]);
+  }, [pendingAuthStatus]);
 
   function startAuthorization(response: McpServerResponse): boolean {
     if (!response.authorizationUrl) {
