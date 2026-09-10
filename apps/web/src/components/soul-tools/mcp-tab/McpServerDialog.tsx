@@ -232,7 +232,13 @@ function McpServerDialogCreateForm({
           Cancel
         </Button>
         <Button disabled={state.formDisabled || !state.canSubmit} type="submit">
-          {busy ? <Spinner className="size-4" /> : submitLabel}
+          {busy ? (
+            <Spinner className="size-4" />
+          ) : state.testResult?.requiresAuthorization && !state.isEdit ? (
+            "Add and sign in"
+          ) : (
+            submitLabel
+          )}
         </Button>
       </DialogFooter>
     </form>

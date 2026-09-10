@@ -26,6 +26,7 @@ type McpTestResult = {
   ok: boolean;
   toolCount: number;
   message: string;
+  requiresAuthorization: boolean;
   tools: CachedMcpToolSummary[];
 };
 
@@ -192,6 +193,7 @@ function mcpConnectionTestResult(result: {
   ok: boolean;
   toolCount: number;
   error?: string;
+  requiresAuthorization?: boolean;
   tools: CachedMcpToolSummary[];
 }): McpTestResult {
   if (result.ok) {
@@ -201,6 +203,7 @@ function mcpConnectionTestResult(result: {
           ? "Connected, but no tools were returned."
           : `Connected. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`,
       ok: true,
+      requiresAuthorization: false,
       toolCount: result.toolCount,
       tools: result.tools,
     };
@@ -209,6 +212,7 @@ function mcpConnectionTestResult(result: {
   return {
     message: result.error ?? "Connection test failed.",
     ok: false,
+    requiresAuthorization: result.requiresAuthorization === true,
     toolCount: 0,
     tools: [],
   };
@@ -275,12 +279,7 @@ export function useMcpServerDialogState({
   const [env, setEnv] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    ok: boolean;
-    toolCount: number;
-    message: string;
-    tools: CachedMcpToolSummary[];
-  } | null>(null);
+  const [testResult, setTestResult] = useState<McpTestResult | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -359,6 +358,7 @@ export function useMcpServerDialogState({
       setTestResult({
         message: formatError(error),
         ok: false,
+        requiresAuthorization: false,
         toolCount: 0,
         tools: [],
       });

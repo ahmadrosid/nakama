@@ -57,6 +57,7 @@ export function McpServerDialogForm({
     ok: boolean;
     toolCount: number;
     message: string;
+    requiresAuthorization: boolean;
     tools: CachedMcpToolSummary[];
   } | null;
   submitError: string | null;
@@ -222,9 +223,15 @@ export function McpServerDialogForm({
           <p
             className={cn(
               "rounded-md px-3 py-2.5 text-sm",
-              testResult.ok
-                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                : "bg-destructive/10 text-destructive"
+              testResult.ok &&
+                "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+              // A server that wants a browser sign-in is not misconfigured, so
+              // it does not get the red box that means "fix your input".
+              !testResult.ok &&
+                testResult.requiresAuthorization &&
+                "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              !(testResult.ok || testResult.requiresAuthorization) &&
+                "bg-destructive/10 text-destructive"
             )}
             role="status"
           >
