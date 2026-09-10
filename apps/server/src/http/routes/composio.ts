@@ -14,7 +14,13 @@ import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
 } from "../org-guards";
-import { errorResponse, json, readJson, readOptionalJson } from "../shared";
+import {
+  errorResponse,
+  escapeHtml,
+  json,
+  readJson,
+  readOptionalJson,
+} from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerComposioOAuthRoutes(
@@ -78,15 +84,6 @@ export function registerComposioOAuthRoutes(
       );
     }
   });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }
 
 export function registerComposioRoutes(

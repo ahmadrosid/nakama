@@ -441,6 +441,15 @@ export function errorResponse(
   );
 }
 
+export function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 const CHANNEL_LIST = `${AGENT_CHANNELS.slice(0, -1).join(", ")}, or ${
   AGENT_CHANNELS[AGENT_CHANNELS.length - 1]
 }`;
