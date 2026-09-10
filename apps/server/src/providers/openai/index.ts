@@ -369,8 +369,13 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
-    ...(provider === "vercel_ai_gateway"
-      ? buildVercelReasoningBody(options.thinking)
+    ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
+      ? {
+          reasoning: {
+            effort: normalizeThinkingEffort(options.thinking.effort),
+            enabled: true,
+          },
+        }
       : {}),
     ...(provider === "perplexity" && options.thinking?.enabled
       ? {
@@ -444,22 +449,6 @@ function buildDeepSeekThinkingBody(
   return {
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
-  };
-}
-
-/** AI Gateway Chat Completions extension: top-level `reasoning` object. */
-function buildVercelReasoningBody(
-  thinking: ProviderChatOptions["thinking"] | undefined
-) {
-  if (!thinking?.enabled) {
-    return {};
-  }
-
-  return {
-    reasoning: {
-      effort: normalizeThinkingEffort(thinking.effort),
-      enabled: true,
-    },
   };
 }
 

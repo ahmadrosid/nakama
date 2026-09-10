@@ -30,7 +30,6 @@ import {
 } from "./ollama-provider-config";
 import {
   apiKeyEnvVarForProvider,
-  isDiscoveryModelProvider,
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
@@ -641,9 +640,7 @@ function loadProvidersFromSections(
       : undefined;
     // Writer persists models_json for every type that has a shortlist/catalog
     // override; load any present JSON so restarts keep shortlists.
-    const customModels = values.models_json?.trim()
-      ? parseCustomModelsJson(values.models_json)
-      : undefined;
+    const customModels = parseCustomModelsJson(values.models_json);
     const hostMode =
       type === "ollama"
         ? (parseOllamaHostMode(values.host_mode) ?? undefined)
