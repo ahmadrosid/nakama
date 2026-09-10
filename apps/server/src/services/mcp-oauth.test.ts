@@ -137,7 +137,8 @@ describe("MCP browser authorization", () => {
     const authorizeParams = new URL(authorizationUrl).searchParams;
     const state = authorizeParams.get("state");
 
-    expect(created.server.status).toBe("disconnected");
+    expect(created.server.status).toBe("needs_auth");
+    expect(created.server.lastError).toBeNull();
     expect(created.server.toolCount).toBe(0);
     expect(authorizeParams.get("redirect_uri")).toBe(redirectUri);
     expect(authorizeParams.get("code_challenge")).toBeTruthy();
@@ -179,6 +180,24 @@ describe("MCP browser authorization", () => {
     expect(grant?.codeVerifier).toBeUndefined();
 
     await manager.disconnectAll();
+  });
+
+  test("reports a sign-in requirement from a test instead of a failure", async () => {
+    const service = new McpService(
+      createInMemoryDatabaseAdapter(),
+      new McpClientManager()
+    );
+
+    const needsSignIn = await service.testServer("http", { url: remote.url });
+    expect(needsSignIn.ok).toBe(false);
+    expect(needsSignIn.requiresAuthorization).toBe(true);
+
+    // A server that is simply unreachable must not be dressed up as a sign-in.
+    const broken = await service.testServer("http", {
+      url: "http://127.0.0.1:1/mcp",
+    });
+    expect(broken.ok).toBe(false);
+    expect(broken.requiresAuthorization).toBeUndefined();
   });
 
   test("keeps the grant while the endpoint is unchanged and drops it when it moves", async () => {
