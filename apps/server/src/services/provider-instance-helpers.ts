@@ -156,6 +156,7 @@ export function modelExistsOnInstance(
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
     instance.type === "together" ||
+    instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
     instance.type === "perplexity"
   ) {
@@ -357,6 +358,7 @@ export function applyProviderInstanceUpdate(
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
       instance.type === "together" ||
+      instance.type === "vercel_ai_gateway" ||
       instance.type === "mistral" ||
       instance.type === "perplexity"
     ) {

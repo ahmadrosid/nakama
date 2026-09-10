@@ -2254,7 +2254,8 @@ export type ProviderName =
   | "zhipu"
   | "zhipu_cn"
   | "xai"
-  | "together";
+  | "together"
+  | "vercel_ai_gateway";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

@@ -12,6 +12,7 @@ When the `skill_manage` tool is available, use it for all skill create/update/de
 
 | Action | When |
 |--------|------|
+| `install` | Import public GitHub SKILL.md — pass `url`; see `skill-installer` for discovery and limitations |
 | `create` | New reusable workflow — pass full SKILL.md (`content`) |
 | `patch` | Targeted fix — `name`, `old_string`, `new_string` (preferred over rewrite) |
 | `edit` | Full SKILL.md replacement — `name` + `content` (frontmatter name must match) |
