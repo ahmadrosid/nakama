@@ -3471,7 +3471,12 @@ export class AgentService {
         const assignedSkills = await this.skillsService.listSkillsForProfile(
           profile.id
         );
-        if (assignedSkills.some((skill) => skill.name === "manage-skills")) {
+        if (
+          assignedSkills.some(
+            (skill) =>
+              skill.name === "manage-skills" || skill.name === "skill-installer"
+          )
+        ) {
           resolved = [
             ...resolved,
             ...createSkillManageTools({
