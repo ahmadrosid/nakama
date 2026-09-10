@@ -5,6 +5,7 @@ import type {
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { McpServerAuthorizeDialog } from "@/components/soul-tools/mcp-tab/McpServerAuthorizeDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import {
   McpPageState,
@@ -51,6 +52,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     null
   );
   const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
     serverId: string;
     url: string;
   } | null>(null);
@@ -95,17 +97,13 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     return () => clearInterval(timer);
   }, [pendingAuth, pendingAuthStatus, queryClient]);
 
-  /**
-   * A popup blocker can swallow this window.open, because it runs after the
-   * request rather than inside the click. The banner keeps the link reachable.
-   */
   function startAuthorization(response: McpServerResponse): boolean {
     if (!response.authorizationUrl) {
       return false;
     }
 
-    window.open(response.authorizationUrl, "_blank", "noopener,noreferrer");
     setPendingAuth({
+      name: response.server.name,
       serverId: response.server.id,
       url: response.authorizationUrl,
     });
@@ -181,21 +179,16 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         </p>
       ) : null}
 
-      {pendingAuth ? (
-        <p className="rounded-md border border-border bg-muted px-4 py-3 text-sm">
-          Waiting for you to authorize this server in the new tab. Nothing
-          opened?{" "}
-          <a
-            className="underline"
-            href={pendingAuth.url}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Open the authorization page
-          </a>
-          .
-        </p>
-      ) : null}
+      <McpServerAuthorizeDialog
+        authorizationUrl={pendingAuth?.url ?? null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setPendingAuth(null);
+          }
+        }}
+        open={pendingAuth !== null}
+        serverName={pendingAuth?.name ?? ""}
+      />
 
       <McpServersSection
         busy={busy}
