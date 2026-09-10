@@ -52,6 +52,7 @@ import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
 import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
+import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { McpClientManager } from "./services/mcp-client-manager";
@@ -358,7 +359,9 @@ async function initializeOptionalServices(options: {
   database: Database;
 }): Promise<void> {
   try {
-    await options.mcpService.connectEnabledServers();
+    await options.mcpService.connectEnabledServers({
+      callbackBaseUrl: resolveComposioCallbackBaseUrl(),
+    });
   } catch (error) {
     console.warn("Could not connect MCP servers:", error);
   }
