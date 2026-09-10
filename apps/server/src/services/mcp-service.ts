@@ -576,6 +576,7 @@ function toMcpServerDetail(
     ...toMcpServerSummary(server, assignedProfileCount),
     cachedTools: toCachedMcpToolSummaries(server.cachedTools),
     config: redactMcpConfig(server.transport, server.config),
+    usesOAuth: Boolean(readMcpOAuthGrant(server.config)),
   };
 }
 

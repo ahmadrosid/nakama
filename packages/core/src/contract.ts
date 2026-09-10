@@ -1891,6 +1891,8 @@ export interface McpServerSummary {
 export interface McpServerDetail extends McpServerSummary {
   cachedTools: CachedMcpToolSummary[];
   config: McpServerConfig;
+  /** Authenticated by a browser sign-in rather than by headers. */
+  usesOAuth: boolean;
 }
 
 export interface ListMcpServersResponse {
