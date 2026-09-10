@@ -61,7 +61,9 @@ Platform admins manage servers at **Agent → System → MCP** and assign them o
 ### Add a server
 
 1. Open **Agent → System → MCP** → **Add server**
-2. Choose **HTTP** or **Command**, enter name and config
+2. Pick the server type: **HTTP** (a URL, with an API key header if it needs one),
+   **Sign-in** (a URL that authenticates through your browser) or **Command** (a local
+   process), then enter the name and config
 3. **Test connection**, then save — enabled servers connect immediately
 
 ### Assign to a profile
@@ -126,10 +128,11 @@ Hosted MCP servers such as Notion, Linear or Sentry do not take an API key heade
 use OAuth, the same as any other app you sign in to, so Nakama needs one trip through your
 browser before it can connect.
 
-1. Add the server with its URL and no headers. **Test connection** answers "This server
-   signs in with a browser" in amber rather than a red error, and the save button becomes
-   **Add and sign in**
-2. A dialog offers the provider's sign-in page. Click it, and the page opens in a new tab
+1. Pick the **Sign-in** type and enter the name and URL. There is no header field: the
+   provider issues the credential. **Test connection** is optional here and reports the
+   sign-in requirement as the expected answer, in green
+2. **Add and sign in** opens a dialog with the provider's sign-in page. Click it, and the
+   page opens in a new tab
 3. Approve the access the provider asks for
 4. The provider sends you back to Nakama, which finishes the connection and caches the
    tools. The dialog closes itself and the row flips to **connected**
