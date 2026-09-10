@@ -1,5 +1,4 @@
 import {
-  discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
   type OAuthClientProvider,
 } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -32,10 +31,6 @@ export interface McpOAuthGrant {
 
 export type StoredMcpHttpConfig = McpHttpConfig & { oauth?: McpOAuthGrant };
 
-function mcpOAuthCallbackPath(serverId: string): string {
-  return `/v1/mcp/oauth/callback/${encodeURIComponent(serverId)}`;
-}
-
 export function readMcpOAuthGrant(config: unknown): McpOAuthGrant | undefined {
   if (typeof config !== "object" || config === null) {
     return;
@@ -46,24 +41,27 @@ export function readMcpOAuthGrant(config: unknown): McpOAuthGrant | undefined {
   return typeof grant === "object" && grant !== null ? grant : undefined;
 }
 
+/** A stalled well-known endpoint must not hold a Test connection open (#326). */
+const OAUTH_PROBE_TIMEOUT_MS = 5000;
+
 /**
- * Whether a server that refused us speaks OAuth, asked the same way `auth()`
- * asks: RFC 9728 protected resource metadata first, then the authorization
- * server metadata at the origin. Reading it off the error text instead would
- * call every 401 an OAuth server, including a plain bad API key.
+ * Whether a server that refused us speaks OAuth, decided by the RFC 9728
+ * metadata the MCP authorization spec requires it to publish. Reading it off
+ * the error text instead would call every 401 an OAuth server, including a
+ * plain bad API key.
  */
 export async function serverAdvertisesOAuth(url: string): Promise<boolean> {
   try {
-    await discoverOAuthProtectedResourceMetadata(url);
+    await discoverOAuthProtectedResourceMetadata(
+      url,
+      undefined,
+      (input, init) =>
+        fetch(input, {
+          ...init,
+          signal: AbortSignal.timeout(OAUTH_PROBE_TIMEOUT_MS),
+        })
+    );
     return true;
-  } catch {
-    // No protected resource metadata: the server may still name its
-    // authorization server the older way, at the origin.
-  }
-
-  try {
-    const { origin } = new URL(url);
-    return Boolean(await discoverAuthorizationServerMetadata(origin));
   } catch {
     return false;
   }
@@ -74,7 +72,7 @@ export async function serverAdvertisesOAuth(url: string): Promise<boolean> {
  *
  * Nakama is not the user agent, so `redirectToAuthorization` records the URL
  * instead of following it: the operator opens it in their own browser and the
- * provider lands back on `mcpOAuthCallbackPath`.
+ * provider lands back on the callback route.
  */
 export class McpServerOAuthProvider implements OAuthClientProvider {
   /** Set when the flow needs consent instead of returning tokens. */
@@ -92,7 +90,7 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
   }
 
   get redirectUrl(): string {
-    return `${this.callbackBaseUrl.replace(/\/$/, "")}${mcpOAuthCallbackPath(this.serverId)}`;
+    return `${this.callbackBaseUrl.replace(/\/$/, "")}/v1/mcp/oauth/callback/${encodeURIComponent(this.serverId)}`;
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -161,15 +159,20 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
       return;
     }
 
+    const all = scope === "all";
+
     await this.update({
-      ...(scope === "all" || scope === "client"
-        ? { clientInformation: undefined }
-        : {}),
-      ...(scope === "all" || scope === "tokens" ? { tokens: undefined } : {}),
-      ...(scope === "all" || scope === "verifier"
+      ...(all || scope === "client" ? { clientInformation: undefined } : {}),
+      ...(all || scope === "tokens" ? { tokens: undefined } : {}),
+      ...(all || scope === "verifier"
         ? { codeVerifier: undefined, state: undefined }
         : {}),
     });
+  }
+
+  /** True once the provider has issued something worth refreshing. */
+  hasTokens(): boolean {
+    return Boolean(this.grant.tokens);
   }
 
   /** The stored `state` is single use: it is spent by the callback. */
