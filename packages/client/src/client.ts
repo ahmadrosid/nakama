@@ -105,6 +105,7 @@ import type {
   NotificationDestinationWithSecret,
   OrganizationResponse,
   OrgInviteCreatedResponse,
+  OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
   OrgMemoryHistoryRevisionResponse,
   OrgMemoryProposalResponse,
@@ -2128,6 +2129,15 @@ export class NakamaClient {
         body: JSON.stringify(request),
         method: "POST",
       }
+    );
+  }
+
+  async getOrganizationLlmQuotaStatus(
+    orgId: string
+  ): Promise<OrgLlmQuotaStatusResponse> {
+    return this.request<OrgLlmQuotaStatusResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/llm-quota`,
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 

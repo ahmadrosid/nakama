@@ -5,9 +5,11 @@ import type {
   InviteOrgMemberRequest,
   ListOrgMembersResponse,
   OrgInviteCreatedResponse,
+  OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
   UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
+import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
@@ -358,6 +360,19 @@ export function registerOrgMemberRoutes(
     return new Response(null, { status: 204 });
   });
 
+  app.get("/v1/orgs/:orgId/llm-quota", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    const quota = await new OrgUsageQuotaService(
+      options.databaseAdapter
+    ).getStatus(orgId);
+    return json<OrgLlmQuotaStatusResponse>(quota);
+  });
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "patch",
@@ -368,7 +383,17 @@ export function registerOrgMemberRoutes(
           content: {
             "application/json": {
               schema: z
-                .object({ name: z.string() })
+                .object({
+                  monthlyLlmTokenLimit: z.number().int().min(0).optional(),
+                  monthlyLlmTurnLimit: z.number().int().min(0).optional(),
+                  monthlyLlmWarningPercent: z
+                    .number()
+                    .int()
+                    .min(1)
+                    .max(99)
+                    .optional(),
+                  name: z.string().optional(),
+                })
                 .openapi("UpdateOrganizationRequest"),
             },
           },

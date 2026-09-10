@@ -289,6 +289,7 @@ import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { OrgMemoryService } from "./org-memory-service";
+import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import type { ProfileChangeMeta } from "./profile-change-history";
 import {
   recordProfileChangeEvent,
@@ -371,6 +372,7 @@ export class AgentService {
   private orgMemoryService: OrgMemoryService | null = null;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
+  private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
   private serverTools: ServerToolOverrides = {};
   private _providerConfigured: boolean;
@@ -387,6 +389,7 @@ export class AgentService {
     this.userConfig = userConfig;
     this.db = db;
     this.profileService = new ProfileService(db);
+    this.orgUsageQuotaService = new OrgUsageQuotaService(db);
     this.sessionTitleService = new SessionTitleService(
       db,
       () => this.userConfig
@@ -425,6 +428,19 @@ export class AgentService {
    * is not awaited and a rejection is swallowed.
    */
   /** Same fire-and-forget shape as the savings recorder, for provider tokens. */
+  private llmTurnQuotaCheckerFor(orgId: string | undefined) {
+    if (!orgId?.trim()) {
+      return;
+    }
+
+    const scopedOrgId = orgId.trim();
+    return (reservedTokens: number) =>
+      this.orgUsageQuotaService.assertCanStartLlmTurn(
+        scopedOrgId,
+        reservedTokens
+      );
+  }
+
   private turnUsageRecorderFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -1381,6 +1397,7 @@ export class AgentService {
       soul: soulActive,
       systemPrompt,
       toolContext: buildToolExecutionContext({
+        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         automationId,
         automationRunId,
         orgId,
@@ -1428,6 +1445,7 @@ export class AgentService {
     }
   ): ToolContext {
     return buildToolExecutionContext({
+      assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       orgId,
       orgRole: "member",
       profileId: context.profileId,
@@ -1473,6 +1491,7 @@ export class AgentService {
       soul: soulActive,
       systemPrompt,
       toolContext: buildToolExecutionContext({
+        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         orgId,
         orgRole: "member",
         profileId,
@@ -1537,6 +1556,7 @@ export class AgentService {
       systemPrompt: childSystemPrompt,
       toolContext: buildToolExecutionContext({
         agentDepth: input.agentDepth,
+        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
         orgRole: input.orgRole,
@@ -3692,6 +3712,7 @@ export class AgentService {
       soul: soulActive,
       systemPrompt: resolvedSystemPrompt,
       toolContext: buildToolExecutionContext({
+        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
         isPlatformAdmin: isPlatformAdmin || undefined,

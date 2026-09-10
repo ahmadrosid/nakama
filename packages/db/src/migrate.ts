@@ -34,6 +34,8 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillsWriteApprovalColumns);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateSkillsCuratorColumns);
+  atomic(migrateLlmUsageQuotaColumns);
+  atomic(migrateOrgLlmMonthlyQuotaTable);
   atomic(migrateSkillsCuratorConsolidateColumns);
   atomic(migrateOrganizationArchivedAt);
   atomic(migrateSkillUsageTables);
@@ -361,6 +363,8 @@ function migrateLlmTurnUsageTable(db: Database): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (org_id, bucket, arm)
     );
+    CREATE INDEX IF NOT EXISTS llm_turn_usage_org_bucket
+      ON llm_turn_usage (org_id, bucket);
   `);
 }
 
@@ -671,6 +675,42 @@ function migrateSkillsCuratorConsolidateColumns(db: Database): void {
       "ALTER TABLE profiles ADD COLUMN skills_curator_consolidate_enabled INTEGER;"
     );
   }
+}
+
+function migrateLlmUsageQuotaColumns(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(organizations)")
+    .all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("monthly_llm_turn_limit")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN monthly_llm_turn_limit INTEGER NOT NULL DEFAULT 0;"
+    );
+  }
+  if (!names.has("monthly_llm_token_limit")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN monthly_llm_token_limit INTEGER;"
+    );
+  }
+  if (!names.has("monthly_llm_warning_percent")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN monthly_llm_warning_percent INTEGER NOT NULL DEFAULT 80;"
+    );
+  }
+}
+
+function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS org_llm_monthly_quota (
+      org_id TEXT NOT NULL,
+      month TEXT NOT NULL,
+      reserved_turns INTEGER NOT NULL DEFAULT 0,
+      reserved_tokens INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, month),
+      FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+    );
+  `);
 }
 
 function migrateOrganizationArchivedAt(db: Database): void {

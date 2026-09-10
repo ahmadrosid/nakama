@@ -71,6 +71,44 @@ function providerWithUsage(): ProviderClient {
 }
 
 describe("per-call usage", () => {
+  test("checks an organization quota before calling the provider", async () => {
+    let calls = 0;
+    const provider: ProviderClient = {
+      generateChat: () => {
+        calls += 1;
+        return Promise.resolve({
+          assistantMessage: { content: "Unexpected", role: "assistant" },
+          content: "Unexpected",
+          toolCalls: [],
+        });
+      },
+      generateText: () => Promise.resolve({ content: "{}" }),
+      name: "openai",
+      streamChat: () => {
+        calls += 1;
+        return Promise.resolve({
+          assistantMessage: { content: "Unexpected", role: "assistant" },
+          content: "Unexpected",
+          toolCalls: [],
+        });
+      },
+    };
+    const session = createAgentChatSession(
+      { provider, tools: [] },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.reject(new Error("Monthly LLM turn limit reached.")),
+        },
+      }
+    );
+
+    await expect(session.send("hi")).rejects.toThrow(
+      "Monthly LLM turn limit reached."
+    );
+    expect(calls).toBe(0);
+  });
+
   test("emits onUsage per LLM call and stores usage on history messages", async () => {
     const session = createAgentChatSession(
       { provider: providerWithUsage(), tools: [pingTool] },
