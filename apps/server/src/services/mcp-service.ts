@@ -29,14 +29,11 @@ import {
   McpServerOAuthProvider,
   readMcpOAuthGrant,
   type StoredMcpHttpConfig,
+  serverAdvertisesOAuth,
 } from "./mcp-oauth";
 
-/**
- * Not an error the operator can fix by editing config: the server asked for an
- * OAuth grant and the flow is waiting on them to approve it in a browser.
- */
-const AUTHORIZATION_PENDING_MESSAGE =
-  "This server requires authorization. Open the authorization link to finish connecting.";
+const AUTHORIZATION_REQUIRED_MESSAGE =
+  "This server signs in with a browser. Add it, then approve the sign-in to connect.";
 
 export interface McpConnectOptions {
   /** Origin the OAuth callback is reachable at; omitted means no OAuth. */
@@ -151,11 +148,13 @@ export class McpService {
         }
 
         // Authorization is a step, not a failure: keep the row so the callback
-        // has something to complete.
+        // has something to complete, and say so in the status rather than
+        // reporting a connection error the operator cannot fix by editing.
         record = {
           ...record,
           config: withOAuthGrant(record.config, grant),
-          lastError: AUTHORIZATION_PENDING_MESSAGE,
+          lastError: null,
+          status: "needs_auth",
         };
         await this.db.upsertMcpServer(record);
 
@@ -297,8 +296,8 @@ export class McpService {
       const authorizationUrl = provider?.authorizationUrl;
       const updated: StoredMcpServerRecord = {
         ...server,
-        lastError: authorizationUrl ? AUTHORIZATION_PENDING_MESSAGE : message,
-        status: authorizationUrl ? "disconnected" : "error",
+        lastError: authorizationUrl ? null : message,
+        status: authorizationUrl ? "needs_auth" : "error",
         updatedAt: new Date().toISOString(),
       };
 
@@ -457,12 +456,14 @@ export class McpService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const requiresAuthorization =
+        normalizedTransport === "http" &&
+        (await serverAdvertisesOAuth((resolvedConfig as McpHttpConfig).url));
 
       return {
-        error: /\b401\b|unauthorized/i.test(message)
-          ? `${message}. If this server signs in with a browser, save it and use Connect to authorize.`
-          : message,
+        error: requiresAuthorization ? AUTHORIZATION_REQUIRED_MESSAGE : message,
         ok: false,
+        ...(requiresAuthorization ? { requiresAuthorization } : {}),
         toolCount: 0,
         tools: [],
       };
