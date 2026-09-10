@@ -7,10 +7,26 @@ import {
   McpHeadersEditor,
 } from "@/components/soul-tools/mcp-tab/McpFormEditors";
 import type { McpHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
+import {
+  type McpServerKind,
+  mcpServerKind,
+} from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+function kindHint(kind: McpServerKind): string {
+  if (kind === "signin") {
+    return "A hosted server that signs you in through your browser (OAuth). Nakama registers itself with the provider and stores the grant, so there is no key to paste.";
+  }
+
+  if (kind === "stdio") {
+    return "A command Nakama runs locally, one process per profile.";
+  }
+
+  return "A remote endpoint that takes an API key or another header, if it needs one at all.";
+}
 
 export function McpServerDialogForm({
   idPrefix,
@@ -26,10 +42,11 @@ export function McpServerDialogForm({
   formDisabled,
   loadingForm,
   canSubmit,
+  signIn,
   testing,
   testResult,
   submitError,
-  onTransportChange,
+  onKindChange,
   onOpenImport,
   onNameChange,
   onUrlChange,
@@ -52,6 +69,7 @@ export function McpServerDialogForm({
   formDisabled: boolean;
   loadingForm: boolean;
   canSubmit: boolean;
+  signIn: boolean;
   testing: boolean;
   testResult: {
     ok: boolean;
@@ -61,7 +79,7 @@ export function McpServerDialogForm({
     tools: CachedMcpToolSummary[];
   } | null;
   submitError: string | null;
-  onTransportChange: (transport: McpTransport) => void;
+  onKindChange: (kind: McpServerKind) => void;
   onOpenImport: () => void;
   onNameChange: (value: string) => void;
   onUrlChange: (value: string) => void;
@@ -71,6 +89,8 @@ export function McpServerDialogForm({
   onEnvChange: (rows: McpHeaderRow[]) => void;
   onTestConnection: () => void;
 }) {
+  const kind = mcpServerKind(transport, signIn);
+
   if (loadingForm) {
     return (
       <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm">
@@ -96,28 +116,29 @@ export function McpServerDialogForm({
             Import JSON
           </Button>
         }
-        label="Transport"
+        label="Server type"
       >
         <div
-          aria-label="MCP transport"
+          aria-label="MCP server type"
           className="segmented-control w-full"
           role="tablist"
         >
           {(
             [
               { id: "http" as const, label: "HTTP" },
+              { id: "signin" as const, label: "Sign-in" },
               { id: "stdio" as const, label: "Command" },
             ] as const
           ).map((item) => (
             <button
               aria-controls={`${idPrefix}-transport-panel-${item.id}`}
-              aria-selected={transport === item.id}
+              aria-selected={kind === item.id}
               className="segmented-control-item"
-              data-active={transport === item.id || undefined}
+              data-active={kind === item.id || undefined}
               disabled={formDisabled || isEdit}
               id={`${idPrefix}-transport-${item.id}`}
               key={item.id}
-              onClick={() => onTransportChange(item.id)}
+              onClick={() => onKindChange(item.id)}
               role="tab"
               type="button"
             >
@@ -125,6 +146,7 @@ export function McpServerDialogForm({
             </button>
           ))}
         </div>
+        <p className="mt-2 text-muted-foreground text-xs">{kindHint(kind)}</p>
       </McpFormField>
 
       <McpFormField htmlFor={`${idPrefix}-name`} label="Name">
@@ -139,12 +161,12 @@ export function McpServerDialogForm({
       </McpFormField>
 
       <div
-        aria-labelledby={`${idPrefix}-transport-${transport}`}
+        aria-labelledby={`${idPrefix}-transport-${kind}`}
         className="space-y-5"
-        id={`${idPrefix}-transport-panel-${transport}`}
+        id={`${idPrefix}-transport-panel-${kind}`}
         role="tabpanel"
       >
-        {transport === "http" ? (
+        {kind === "http" || kind === "signin" ? (
           <>
             <McpFormField htmlFor={`${idPrefix}-url`} label="URL">
               <Input
@@ -157,14 +179,16 @@ export function McpServerDialogForm({
               />
             </McpFormField>
 
-            <McpFormField hint="Optional" label="Headers">
-              <McpHeadersEditor
-                disabled={formDisabled}
-                headers={headers}
-                isEdit={isEdit}
-                onChange={onHeadersChange}
-              />
-            </McpFormField>
+            {kind === "http" ? (
+              <McpFormField hint="Optional" label="Headers">
+                <McpHeadersEditor
+                  disabled={formDisabled}
+                  headers={headers}
+                  isEdit={isEdit}
+                  onChange={onHeadersChange}
+                />
+              </McpFormField>
+            ) : null}
           </>
         ) : (
           <>
@@ -223,11 +247,11 @@ export function McpServerDialogForm({
           <p
             className={cn(
               "rounded-md px-3 py-2.5 text-sm",
-              testResult.ok &&
+              (testResult.ok || (signIn && testResult.requiresAuthorization)) &&
                 "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
               // A server that wants a browser sign-in is not misconfigured, so
               // it does not get the red box that means "fix your input".
-              !testResult.ok &&
+              !(testResult.ok || signIn) &&
                 testResult.requiresAuthorization &&
                 "bg-amber-500/10 text-amber-700 dark:text-amber-300",
               !(testResult.ok || testResult.requiresAuthorization) &&

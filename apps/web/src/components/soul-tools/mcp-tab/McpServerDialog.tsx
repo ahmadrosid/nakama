@@ -186,7 +186,7 @@ function McpServerDialogCreateForm({
         onCommandChange={(value) => {
           state.setCommand(value);
           if (value.trim()) {
-            state.setTransport("stdio");
+            state.selectKind("stdio");
           }
           state.clearTestResult();
         }}
@@ -198,23 +198,18 @@ function McpServerDialogCreateForm({
           state.setHeaders(nextHeaders);
           state.clearTestResult();
         }}
+        onKindChange={state.selectKind}
         onNameChange={(value) => {
           state.setName(value);
           state.clearTestResult();
         }}
         onOpenImport={state.openImportDialog}
         onTestConnection={() => void state.handleTestConnection()}
-        onTransportChange={(nextTransport) => {
-          state.setTransport(nextTransport);
-          state.clearTestResult();
-        }}
         onUrlChange={(value) => {
           state.setUrl(value);
-          if (value.trim()) {
-            state.setTransport("http");
-          }
           state.clearTestResult();
         }}
+        signIn={state.signIn}
         submitError={state.submitError}
         testing={state.testing}
         testResult={state.testResult}
@@ -234,7 +229,8 @@ function McpServerDialogCreateForm({
         <Button disabled={state.formDisabled || !state.canSubmit} type="submit">
           {busy ? (
             <Spinner className="size-4" />
-          ) : state.testResult?.requiresAuthorization && !state.isEdit ? (
+          ) : (state.signIn || state.testResult?.requiresAuthorization) &&
+            !state.isEdit ? (
             "Add and sign in"
           ) : (
             submitLabel
