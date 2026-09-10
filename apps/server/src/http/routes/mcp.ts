@@ -8,13 +8,101 @@ import type {
   TestMcpServerResponse,
   UpdateMcpServerRequest,
 } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
+import {
+  resolveCallbackBaseUrlFromRedirect,
+  resolveComposioCallbackBaseUrl,
+} from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { json, readJson } from "../shared";
+import { errorResponse, escapeHtml, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
+
+/**
+ * The OAuth provider redirects the operator's browser here, so this route is
+ * public (see `isPublicRouteRequest`) and guarded by the single-use state it
+ * carries. It has to be registered before the org-context middleware, which is
+ * why it is not part of `registerMcpRoutes`.
+ */
+export function registerMcpOAuthRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
+  const { mcpService } = options;
+
+  app.get("/v1/mcp/oauth/callback/:serverId", async (c) => {
+    const providerError =
+      c.req.query("error_description") || c.req.query("error");
+
+    if (providerError) {
+      return oauthResultPage("Authorization failed", providerError, 400);
+    }
+
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+
+    if (!(code && state)) {
+      return errorResponse("Missing OAuth code or state.", 400);
+    }
+
+    try {
+      const { server } = await mcpService.completeOAuth(
+        decodeURIComponent(c.req.param("serverId")),
+        {
+          callbackBaseUrl: resolveCallbackBaseUrlFromRedirect(c.req.raw),
+          code,
+          state,
+        }
+      );
+
+      return oauthResultPage(
+        `${server.name} connected`,
+        `${server.toolCount} tool${server.toolCount === 1 ? "" : "s"} cached. You can close this tab.`
+      );
+    } catch (error) {
+      return oauthResultPage(
+        "Authorization failed",
+        error instanceof Error ? error.message : String(error),
+        error instanceof NakamaApiError ? error.status : 400
+      );
+    }
+  });
+}
+
+function oauthResultPage(
+  title: string,
+  detail: string,
+  status = 200
+): Response {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)} - Nakama</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    a { color: #0b57d0; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <p>${escapeHtml(detail)}</p>
+  <p><a href="/system?tab=mcp">Open MCP servers</a></p>
+</body>
+</html>`,
+    {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      status,
+    }
+  );
+}
 
 export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent, mcpService } = options;
@@ -285,7 +373,12 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
   app.post("/v1/mcp/servers", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<CreateMcpServerRequest>(c.req.raw);
-    return json<McpServerResponse>(await mcpService.createServer(body), 201);
+    return json<McpServerResponse>(
+      await mcpService.createServer(body, {
+        callbackBaseUrl: resolveComposioCallbackBaseUrl({ request: c.req.raw }),
+      }),
+      201
+    );
   });
 
   app.post("/v1/mcp/servers/test", async (c) => {
@@ -300,7 +393,12 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
     requirePlatformAdminFromContext(c);
     return json<McpServerResponse>(
       await mcpService.connectServer(
-        decodeURIComponent(c.req.param("serverId"))
+        decodeURIComponent(c.req.param("serverId")),
+        {
+          callbackBaseUrl: resolveComposioCallbackBaseUrl({
+            request: c.req.raw,
+          }),
+        }
       )
     );
   });
@@ -308,7 +406,9 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
   app.post("/v1/mcp/servers/:serverId/sync", async (c) => {
     requirePlatformAdminFromContext(c);
     return json<McpServerResponse>(
-      await mcpService.syncServer(decodeURIComponent(c.req.param("serverId")))
+      await mcpService.syncServer(decodeURIComponent(c.req.param("serverId")), {
+        callbackBaseUrl: resolveComposioCallbackBaseUrl({ request: c.req.raw }),
+      })
     );
   });
 
