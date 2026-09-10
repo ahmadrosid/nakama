@@ -150,7 +150,9 @@ describe("MCP browser authorization", () => {
         code: "fake-auth-code",
         state: "not-the-state",
       })
-    ).rejects.toThrow("Invalid OAuth state.");
+    ).rejects.toThrow();
+    // A refused state exchanges nothing.
+    expect(remote.tokenRequests).toHaveLength(0);
 
     const completed = await service.completeOAuth(created.server.id, {
       callbackBaseUrl: CALLBACK_BASE_URL,
