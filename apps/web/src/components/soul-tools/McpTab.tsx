@@ -1,6 +1,10 @@
-import type { McpServerSummary } from "@nakama/core/contract";
+import type {
+  McpServerResponse,
+  McpServerSummary,
+} from "@nakama/core/contract";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import {
   McpPageState,
@@ -26,6 +30,11 @@ import {
   useUpdateMcpServerMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
+
+/** The callback connects the server on its own, so the list is re-read until it lands. */
+const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
+const AUTHORIZATION_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: servers = [], isLoading, error } = useMcpServersQuery();
@@ -41,6 +50,14 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
     null
   );
+  const [pendingAuth, setPendingAuth] = useState<{
+    serverId: string;
+    url: string;
+  } | null>(null);
+  const queryClient = useQueryClient();
+  const pendingAuthStatus = pendingAuth
+    ? servers.find((server) => server.id === pendingAuth.serverId)?.status
+    : undefined;
   const editServer =
     servers.find((server) => server.id === editServerId) ?? null;
   const detailServer =
@@ -54,6 +71,47 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     connectMutation.isPending ||
     syncMutation.isPending;
   const errorMessage = actionError ?? (error ? formatError(error) : null);
+
+  useEffect(() => {
+    if (!pendingAuth) {
+      return;
+    }
+
+    if (pendingAuthStatus === "connected") {
+      setPendingAuth(null);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - startedAt > AUTHORIZATION_POLL_TIMEOUT_MS) {
+        setPendingAuth(null);
+        return;
+      }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
+    }, AUTHORIZATION_POLL_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [pendingAuth, pendingAuthStatus, queryClient]);
+
+  /**
+   * A popup blocker can swallow this window.open, because it runs after the
+   * request rather than inside the click. The banner keeps the link reachable.
+   */
+  function startAuthorization(response: McpServerResponse): boolean {
+    if (!response.authorizationUrl) {
+      return false;
+    }
+
+    window.open(response.authorizationUrl, "_blank", "noopener,noreferrer");
+    setPendingAuth({
+      serverId: response.server.id,
+      url: response.authorizationUrl,
+    });
+
+    return true;
+  }
 
   function requestDelete(server: McpServerSummary) {
     if (
@@ -88,7 +146,12 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     setActionError(null);
 
     try {
-      await connectMutation.mutateAsync(serverId);
+      const response = await connectMutation.mutateAsync(serverId);
+
+      if (startAuthorization(response)) {
+        return;
+      }
+
       setDetailServerId(serverId);
     } catch (err) {
       setActionError(formatError(err));
@@ -115,6 +178,22 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
       {errorMessage ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {errorMessage}
+        </p>
+      ) : null}
+
+      {pendingAuth ? (
+        <p className="rounded-md border border-border bg-muted px-4 py-3 text-sm">
+          Waiting for you to authorize this server in the new tab. Nothing
+          opened?{" "}
+          <a
+            className="underline"
+            href={pendingAuth.url}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Open the authorization page
+          </a>
+          .
         </p>
       ) : null}
 
@@ -157,6 +236,11 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
               connect: true,
             });
             setCreateOpen(false);
+
+            if (startAuthorization(response)) {
+              return;
+            }
+
             setDetailServerId(response.server.id);
           } catch (err) {
             const message = formatError(err);
