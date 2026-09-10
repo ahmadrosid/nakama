@@ -50,7 +50,7 @@ function draftStep(step: WorkflowStep): StepDraft {
           typeof value === "string" &&
           !["left", "right", "expected", "tolerance"].includes(key)
             ? value
-            : JSON.stringify(value),
+            : JSON.stringify(value, null, 2),
         ])
     ),
     id: step.id,
@@ -79,7 +79,106 @@ function serializeSteps(steps: StepDraft[]) {
 
 export function apply(ctx: Context) {
   const React = ctx.React;
-  const { Button } = ctx.ui;
+  const {
+    Button,
+    Input,
+    Textarea,
+    Switch,
+    Select,
+    SelectTrigger,
+    SelectValue,
+    SelectContent,
+    SelectItem,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+  } = ctx.ui;
+
+  function Choice({
+    label,
+    value,
+    options,
+    onChange,
+    disabled = false,
+  }: {
+    label: string;
+    value: string;
+    options: Array<{ value: string; label: string }>;
+    onChange(value: string): void;
+    disabled?: boolean;
+  }) {
+    return (
+      <Select
+        disabled={disabled}
+        onValueChange={(next) => {
+          if (next !== null) {
+            onChange(String(next));
+          }
+        }}
+        value={value}
+      >
+        <SelectTrigger aria-label={label}>
+          <SelectValue>
+            {options.find((option) => option.value === value)?.label ?? label}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function Icon({
+    kind,
+  }: {
+    kind:
+      | "add"
+      | "play"
+      | "delete"
+      | "more"
+      | "expand"
+      | "close"
+      | "collapse"
+      | "workflow";
+  }) {
+    const paths = {
+      add: "M12 5v14M5 12h14",
+      close: "m6 6 12 12M6 18 18 6",
+      collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
+      delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
+      expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+      more: "M5 12h.01M12 12h.01M19 12h.01",
+      play: "m8 5 11 7-11 7V5Z",
+      workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
+    };
+    return (
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="16"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={kind === "more" ? 3 : 1.5}
+        viewBox="0 0 24 24"
+        width="16"
+      >
+        <path d={paths[kind]} />
+      </svg>
+    );
+  }
   ctx.styles(css);
   const action = async <T,>(name: string, input?: unknown): Promise<T> =>
     (await ctx.host.call(name, input)) as T;
@@ -125,31 +224,79 @@ export function apply(ctx: Context) {
       <main className="workflows-page">
         {error && <p role="alert">{error}</p>}
         {data ? (
-          <>
-            <div className="workflow-picker">
-              <select
-                aria-label="Select workflow"
-                onChange={(event) => setSelectedId(event.target.value || null)}
-                value={selectedId ?? ""}
-              >
-                <option value="">New workflow</option>
-                {data.workflows.map((workflow) => (
-                  <option key={workflow.id} value={workflow.id}>
-                    {workflow.name}
-                  </option>
-                ))}
-              </select>
-              <Button onClick={() => setSelectedId(null)} type="button">
-                New workflow
-              </Button>
-            </div>
-            <Editor
-              key={`${selected?.id ?? "new"}:${selected?.version ?? 0}`}
-              onSaved={saved}
-              profiles={data.profiles}
-              workflow={selected}
-            />
-          </>
+          <div
+            className="workflow-layout"
+            data-empty={data.workflows.length === 0}
+          >
+            {data.workflows.length > 0 && (
+              <aside aria-label="Workflows" className="workflow-sidebar">
+                <ul>
+                  {data.workflows.map((workflow) => (
+                    <li key={workflow.id}>
+                      <Button
+                        aria-current={
+                          selectedId === workflow.id ? "true" : undefined
+                        }
+                        className="workflow-list-item"
+                        onClick={() => setSelectedId(workflow.id)}
+                        type="button"
+                        variant="ghost"
+                      >
+                        <span className="workflow-list-name">
+                          {workflow.name}
+                        </span>
+                        <span className="workflow-list-meta">
+                          {workflow.steps.length} steps ·{" "}
+                          {data.profiles.find(
+                            (profile) => profile.id === workflow.profileId
+                          )?.name ?? workflow.profileId}
+                        </span>
+                        <span className="workflow-list-state">
+                          <span
+                            className="workflow-status-dot"
+                            data-enabled={workflow.enabled}
+                          />
+                          {workflow.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  className="workflow-create"
+                  onClick={() => setSelectedId("")}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon kind="add" />
+                  New workflow
+                </Button>
+              </aside>
+            )}
+            {selected || selectedId === "" ? (
+              <Editor
+                key={`${selected?.id ?? "new"}:${selected?.version ?? 0}`}
+                onSaved={saved}
+                profiles={data.profiles}
+                workflow={selected}
+              />
+            ) : (
+              <section className="workflow-welcome">
+                <div className="workflow-welcome-icon">
+                  <Icon kind="workflow" />
+                </div>
+                <h2>
+                  {data.workflows.length
+                    ? "Select a workflow"
+                    : "Create your first workflow"}
+                </h2>
+                <Button onClick={() => setSelectedId("")} type="button">
+                  <Icon kind="add" />
+                  Create workflow
+                </Button>
+              </section>
+            )}
+          </div>
         ) : (
           <p role="status">{error ? "Unavailable" : "Loading…"}</p>
         )}
@@ -193,9 +340,62 @@ export function apply(ctx: Context) {
     const [error, setError] = React.useState("");
     const [runs, setRuns] = React.useState<WorkflowRunRecord[]>([]);
     const [confirmDelete, setConfirmDelete] = React.useState(false);
-    const [tab, setTab] = React.useState<"canvas" | "runs" | "data">("canvas");
-    const [selection, setSelection] = React.useState("settings");
-    const [zoom, setZoom] = React.useState(100);
+    const [selection, setSelection] = React.useState("");
+    const [panelTab, setPanelTab] = React.useState("configure");
+    const [expanded, setExpanded] = React.useState(false);
+    const [tools, setTools] = React.useState<Array<{ name: string }>>([]);
+    const [toolsError, setToolsError] = React.useState("");
+    const panelRef = React.useRef<HTMLElement>(null);
+    React.useEffect(() => {
+      let active = true;
+      setTools([]);
+      setToolsError("");
+      action<Array<{ name: string }>>("tools", { agentId })
+        .then((result) => {
+          if (active) {
+            setTools(result);
+          }
+        })
+        .catch((error) => {
+          if (active) {
+            setToolsError(String(error.message ?? error));
+          }
+        });
+      return () => {
+        active = false;
+      };
+    }, [agentId]);
+    React.useEffect(() => {
+      setPanelTab("configure");
+      setExpanded(false);
+      if (!selection) {
+        return;
+      }
+      const previous = document.activeElement;
+      panelRef.current?.focus();
+      return () => {
+        if (previous instanceof HTMLElement && previous.isConnected) {
+          previous.focus();
+        }
+      };
+    }, [selection]);
+    React.useEffect(() => {
+      if (!selection) {
+        return;
+      }
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key !== "Escape" || event.defaultPrevented) {
+          return;
+        }
+        if (expanded) {
+          setExpanded(false);
+        } else {
+          setSelection("");
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [selection, expanded]);
     const selectedIndex = steps.findIndex((step) => step.key === selection);
     const selectedStep = steps[selectedIndex];
     const initialDraft = React.useRef(
@@ -249,8 +449,7 @@ export function apply(ctx: Context) {
       event.preventDefault();
       void perform(async () => {
         if (!(name.trim() && agentId && summary.trim())) {
-          setTab("canvas");
-          setSelection(summary.trim() ? "settings" : "summary");
+          setSelection(summary.trim() ? "" : "summary");
           throw new Error(
             "Enter a workflow name, choose an agent, and add summary instructions."
           );
@@ -294,9 +493,11 @@ export function apply(ctx: Context) {
         }
         return next;
       });
-    const addStep = () => {
+    const addStep = (database = false) => {
       const step: StepDraft = {
-        fields: { input: "{}", tool: "web_fetch" },
+        fields: database
+          ? { input: '{"sql":"","params":[]}', tool: "sqlite" }
+          : { input: '{"url":""}', tool: "web_fetch" },
         id: `step_${crypto.randomUUID().slice(0, 8)}`,
         key: crypto.randomUUID(),
         kind: "tool",
@@ -327,293 +528,338 @@ export function apply(ctx: Context) {
           throw new Error(result.error);
         }
       });
-    const lastRun = runs[0];
+    const title = (id: string) =>
+      id
+        .replace(/[_-]+/g, " ")
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
     return (
       <section className="workflow-editor">
         <form onSubmit={save}>
           <fieldset className="editor-fields" disabled={busy}>
             <header className="editor-toolbar">
-              <div className="workflow-title">
-                <input
-                  aria-label="Workflow name"
-                  maxLength={200}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Untitled workflow"
-                  required
-                  value={name}
-                />
-                <span className="workflow-state">
-                  {workflow
-                    ? dirty
-                      ? "Unsaved"
-                      : enabled
-                        ? "Enabled"
-                        : "Disabled"
-                    : "Draft"}
-                </span>
-              </div>
-              <div className="buttons">
-                <button type="submit">{busy ? "Working…" : "Save"}</button>
-                <button
-                  className="primary"
-                  onClick={() => setTab("runs")}
+              <p>{name || "New workflow"}</p>
+              <div className="workflow-actions">
+                {(dirty || !workflow) && (
+                  <Button disabled={busy} size="sm" type="submit">
+                    {busy ? "Saving…" : "Save"}
+                  </Button>
+                )}
+                <Button
+                  aria-label="Delete workflow"
+                  disabled={busy || !workflow}
+                  onClick={() => setConfirmDelete(true)}
+                  size="icon-sm"
                   type="button"
+                  variant="outline"
                 >
-                  Run
-                </button>
+                  <Icon kind="delete" />
+                </Button>
+                <Button
+                  disabled={busy || !workflow || dirty || !enabled}
+                  onClick={runWorkflow}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Icon kind="play" />
+                  {busy ? "Running…" : "Test run"}
+                </Button>
               </div>
             </header>
-            <nav aria-label="Workflow views" className="view-tabs">
-              {(["canvas", "runs", "data"] as const).map((view) => (
-                <button
-                  aria-current={tab === view ? "page" : undefined}
-                  key={view}
-                  onClick={() => setTab(view)}
-                  type="button"
-                >
-                  {view.charAt(0).toUpperCase() + view.slice(1)}
-                </button>
-              ))}
-              <button
-                aria-pressed={tab === "canvas" && selection === "settings"}
-                className="settings-button"
-                onClick={() => {
-                  setTab("canvas");
-                  setSelection("settings");
-                }}
-                type="button"
-              >
-                Settings
-              </button>
-            </nav>
-            {error && <p role="alert">{error}</p>}
-            {tab === "canvas" && (
-              <div className="canvas-layout">
-                <div className="canvas-area">
-                  <div aria-label="Canvas zoom" className="canvas-controls">
-                    <button
-                      aria-label="Zoom out"
-                      disabled={zoom <= 60}
-                      onClick={() =>
-                        setZoom((current) => Math.max(60, current - 20))
-                      }
-                      type="button"
-                    >
-                      Zoom out
-                    </button>
-                    <button
-                      aria-label="Reset zoom"
-                      onClick={() => setZoom(100)}
-                      type="button"
-                    >
-                      {zoom}%
-                    </button>
-                    <button
-                      aria-label="Zoom in"
-                      disabled={zoom >= 140}
-                      onClick={() =>
-                        setZoom((current) => Math.min(140, current + 20))
-                      }
-                      type="button"
-                    >
-                      Zoom in
-                    </button>
+            <div className="workflow-scroll">
+              <div className="workflow-content">
+                {error && (
+                  <p className="workflow-error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <div className="workflow-meta">
+                  <div className="workflow-meta-row">
+                    <Input
+                      aria-label="Workflow name"
+                      className="workflow-name"
+                      maxLength={200}
+                      onChange={(event) => setName(event.target.value)}
+                      placeholder="Untitled workflow"
+                      required
+                      value={name}
+                    />
+                    <label className="workflow-enabled">
+                      <Switch
+                        aria-label="Enabled"
+                        checked={enabled}
+                        disabled={busy}
+                        onCheckedChange={setEnabled}
+                      />
+                      Enabled
+                    </label>
+                    <Choice
+                      disabled={busy}
+                      label="Agent"
+                      onChange={setAgentId}
+                      options={profiles.map((profile) => ({
+                        label: profile.name,
+                        value: profile.id,
+                      }))}
+                      value={agentId}
+                    />
                   </div>
-                  <div
-                    aria-label="Workflow canvas"
-                    className="canvas-viewport"
-                    role="region"
-                  >
-                    <ol className="workflow-track" style={{ zoom: zoom / 100 }}>
-                      <li>
-                        <button
-                          aria-pressed={selection === "input"}
-                          className="workflow-node input-node"
-                          onClick={() => setSelection("input")}
-                          type="button"
-                        >
-                          <span className="node-kind">Start</span>
-                          <strong>Input</strong>
-                          <span className="node-description">Run input</span>
-                        </button>
-                      </li>
-                      {steps.map((step, index) => (
-                        <li key={step.key}>
-                          <button
-                            aria-pressed={selection === step.key}
-                            className="workflow-node"
-                            onClick={() => setSelection(step.key)}
-                            type="button"
-                          >
-                            <span className="node-kind">
-                              Step {index + 1} · {step.kind}
-                            </span>
-                            <strong>{step.id || "Untitled step"}</strong>
-                            <span className="node-description">
-                              {step.fields.tool ||
-                                step.fields.template ||
-                                step.fields.path ||
-                                "Compare values"}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                      <li className="add-node">
-                        <button onClick={addStep} type="button">
-                          Add step
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          aria-pressed={selection === "summary"}
-                          className="workflow-node summary-node"
-                          onClick={() => setSelection("summary")}
-                          type="button"
-                        >
-                          <span className="node-kind">Output</span>
-                          <strong>Summary</strong>
-                          <span className="node-description">
-                            {profiles.find((profile) => profile.id === agentId)
-                              ?.name || "Choose an agent"}
-                          </span>
-                        </button>
-                      </li>
-                    </ol>
-                  </div>
-                  <footer className="canvas-status">
-                    <span
-                      className="run-status"
-                      data-status={lastRun?.status}
-                      role="status"
-                    >
-                      {lastRun
-                        ? `Last run ${lastRun.status} · ${new Date(lastRun.startedAt).toLocaleString()}`
-                        : "No runs yet"}
-                    </span>
-                    <button onClick={() => setTab("runs")} type="button">
-                      View runs
-                    </button>
-                  </footer>
+                  <Input
+                    aria-label="Workflow description"
+                    className="workflow-description"
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="Description"
+                    value={description}
+                  />
                 </div>
-                <aside
-                  aria-label="Workflow inspector"
-                  className="workflow-inspector"
-                >
-                  <h2>
-                    {selectedStep
-                      ? "Step details"
-                      : selection === "input"
-                        ? "Input"
-                        : selection === "summary"
-                          ? "Summary"
-                          : "Workflow settings"}
-                  </h2>
-                  {selection === "settings" && (
-                    <>
-                      <label>
-                        Agent
-                        <select
-                          onChange={(event) => setAgentId(event.target.value)}
-                          value={agentId}
+                <ol className="workflow-steps">
+                  {[
+                    ...steps.map((step) => ({ id: step.id, key: step.key })),
+                    { id: summaryStep?.id ?? "summary", key: "summary" },
+                  ].map((step, index) => (
+                    <li key={step.key}>
+                      <div
+                        className="workflow-step-card"
+                        data-selected={selection === step.key}
+                      >
+                        <Button
+                          className="workflow-step-open"
+                          onClick={() => setSelection(step.key)}
+                          type="button"
+                          variant="ghost"
                         >
-                          {!profiles.length && (
-                            <option value="">No agents available</option>
-                          )}
-                          {profiles.map((profile) => (
-                            <option key={profile.id} value={profile.id}>
-                              {profile.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Description
-                        <textarea
-                          onChange={(event) =>
-                            setDescription(event.target.value)
-                          }
-                          rows={3}
-                          value={description}
-                        />
-                      </label>
-                      <label className="check">
-                        <input
-                          checked={enabled}
-                          onChange={(event) => setEnabled(event.target.checked)}
-                          type="checkbox"
-                        />
-                        Enabled
-                      </label>
-                      {workflow && (
-                        <div className="danger-zone">
-                          {confirmDelete ? (
-                            <div aria-label="Confirm deletion" role="group">
-                              <p>Delete workflow and its run history?</p>
-                              <div className="buttons">
-                                <button
-                                  onClick={() => setConfirmDelete(false)}
-                                  type="button"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  className="danger"
-                                  onClick={() =>
-                                    void perform(async () => {
-                                      await action("delete_workflow", {
-                                        workflowId: workflow.id,
-                                      });
-                                      if (mounted.current) {
-                                        await onSaved();
-                                      }
-                                    })
-                                  }
-                                  type="button"
-                                >
-                                  Confirm delete
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              className="danger"
-                              onClick={() => setConfirmDelete(true)}
-                              type="button"
+                          <span className="workflow-step-number">
+                            {index + 1}
+                          </span>
+                          <span>{title(step.id) || "Untitled step"}</span>
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            disabled={busy}
+                            render={
+                              <Button
+                                aria-label={`Options for ${title(step.id)}`}
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              />
+                            }
+                          >
+                            <Icon kind="more" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => setSelection(step.key)}
                             >
-                              Delete workflow
-                            </button>
-                          )}
-                        </div>
+                              Configure
+                            </DropdownMenuItem>
+                            {step.key !== "summary" && (
+                              <>
+                                <DropdownMenuItem
+                                  disabled={index === 0}
+                                  onClick={() => moveStep(step.key, -1)}
+                                >
+                                  Move earlier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={index === steps.length - 1}
+                                  onClick={() => moveStep(step.key, 1)}
+                                >
+                                  Move later
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setSteps((current) =>
+                                      current.filter(
+                                        (entry) => entry.key !== step.key
+                                      )
+                                    )
+                                  }
+                                  variant="destructive"
+                                >
+                                  Delete step
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      {index < steps.length && (
+                        <div
+                          aria-hidden="true"
+                          className="workflow-connector"
+                        />
                       )}
-                    </>
+                    </li>
+                  ))}
+                </ol>
+                <div className="workflow-add-actions">
+                  <Button
+                    onClick={() => addStep()}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Icon kind="add" />
+                    Add step
+                  </Button>
+                  <Button
+                    onClick={() => addStep(true)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Icon kind="add" />
+                    Add database
+                  </Button>
+                </div>
+                <section aria-label="Run history" className="workflow-runs">
+                  <div className="workflow-runs-header">
+                    <h2>Runs</h2>
+                    <Button
+                      onClick={() => setSelection("input")}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Run input
+                    </Button>
+                  </div>
+                  {!runs.length && (
+                    <p className="workflow-empty">No runs yet.</p>
                   )}
-                  {selection === "input" && (
-                    <label>
-                      Run input (JSON)
-                      <textarea
-                        className="code-input"
-                        onChange={(event) => setRunInput(event.target.value)}
-                        rows={8}
-                        spellCheck={false}
-                        value={runInput}
-                      />
-                    </label>
-                  )}
-                  {selection === "summary" && (
-                    <label>
-                      Summary instructions
-                      <textarea
-                        onChange={(event) => setSummary(event.target.value)}
-                        rows={8}
-                        value={summary}
-                      />
-                    </label>
-                  )}
+                  {runs.map((run) => (
+                    <details className="workflow-run-record" key={run.id}>
+                      <summary>
+                        <span data-status={run.status}>{run.status}</span>
+                        <time dateTime={run.startedAt}>
+                          {new Date(run.startedAt).toLocaleString()}
+                        </time>
+                      </summary>
+                      {(run.error || run.output) && (
+                        <pre>{run.error || run.output}</pre>
+                      )}
+                      {(run.steps ?? []).map((step) => (
+                        <div key={step.id}>
+                          <h3>
+                            {step.stepId} · {step.status}
+                          </h3>
+                          <pre>
+                            {JSON.stringify(
+                              {
+                                error: step.error,
+                                input: step.input,
+                                output: step.output,
+                              },
+                              null,
+                              2
+                            )}
+                          </pre>
+                        </div>
+                      ))}
+                    </details>
+                  ))}
+                </section>
+                <Button
+                  onClick={() => setSelection("data")}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Workflow data
+                </Button>
+              </div>
+            </div>
+          </fieldset>
+        </form>
+        {(selectedStep || selection === "summary" || selection === "data") && (
+          <aside
+            aria-label={
+              selection === "data" ? "Workflow data" : "Workflow step"
+            }
+            className="workflow-step-drawer"
+            data-expanded={expanded}
+            ref={panelRef}
+            tabIndex={-1}
+          >
+            <header className="workflow-drawer-header">
+              {selection !== "data" && (
+                <span className="workflow-step-number">
+                  {selectedStep ? selectedIndex + 1 : steps.length + 1}
+                </span>
+              )}
+              <div className="workflow-drawer-title">
+                <h2>
+                  {selection === "data"
+                    ? "Workflow data"
+                    : title(selectedStep?.id ?? summaryStep?.id ?? "summary")}
+                </h2>
+                {selection !== "data" && (
+                  <p>
+                    {selectedStep
+                      ? title(selectedStep.fields.tool ?? selectedStep.kind)
+                      : "Summarize"}
+                  </p>
+                )}
+              </div>
+              <Button
+                aria-label={
+                  selection === "data"
+                    ? expanded
+                      ? "Collapse data"
+                      : "Expand data"
+                    : expanded
+                      ? "Collapse step"
+                      : "Expand step"
+                }
+                onClick={() => setExpanded((value) => !value)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon kind={expanded ? "collapse" : "expand"} />
+              </Button>
+              <Button
+                aria-label={selection === "data" ? "Close data" : "Close step"}
+                onClick={() => setSelection("")}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon kind="close" />
+              </Button>
+            </header>
+            {selection !== "data" && (
+              <div aria-label="Step views" className="workflow-drawer-tabs">
+                {[
+                  "configure",
+                  ...(selectedStep?.fields.tool === "sqlite"
+                    ? ["database"]
+                    : []),
+                  "test",
+                ].map((tab) => (
+                  <Button
+                    aria-pressed={panelTab === tab}
+                    key={tab}
+                    onClick={() => setPanelTab(tab)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    {title(tab)}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <div className="workflow-drawer-body">
+              {selection !== "data" && panelTab === "configure" && (
+                <div className="workflow-step-fields">
+                  {toolsError && <p role="alert">{toolsError}</p>}
                   {selectedStep && (
                     <>
                       <label>
-                        Step ID
-                        <input
+                        Name
+                        <Input
+                          disabled={busy}
                           onChange={(event) =>
                             updateStep(selectedStep.key, {
                               id: event.target.value,
@@ -622,52 +868,58 @@ export function apply(ctx: Context) {
                           value={selectedStep.id}
                         />
                       </label>
-                      <label>
-                        Kind
-                        <select
-                          onChange={(event) =>
-                            updateStep(selectedStep.key, {
-                              fields:
-                                event.target.value === "compare"
-                                  ? { op: "eq" }
-                                  : {},
-                              kind: event.target.value,
-                            })
-                          }
-                          value={selectedStep.kind}
-                        >
-                          {Object.keys(stepFields).map((kind) => (
-                            <option key={kind} value={kind}>
-                              {kind}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {(stepFields[selectedStep.kind] ?? []).map((field) => (
-                        <label key={field}>
-                          {field === "input"
-                            ? "Tool arguments (JSON)"
-                            : field.charAt(0).toUpperCase() + field.slice(1)}
-                          {field === "op" ? (
-                            <select
-                              onChange={(event) =>
+                      {(stepFields[selectedStep.kind] ?? []).map((field) =>
+                        field === "tool" ? (
+                          <label key={field}>
+                            Tool
+                            <Choice
+                              disabled={busy}
+                              label="Tool"
+                              onChange={(value) =>
                                 updateStep(selectedStep.key, {
                                   fields: {
                                     ...selectedStep.fields,
-                                    [field]: event.target.value,
+                                    tool: value,
                                   },
                                 })
                               }
-                              value={selectedStep.fields[field] ?? "eq"}
-                            >
-                              {["eq", "near", "contains"].map((op) => (
-                                <option key={op} value={op}>
-                                  {op}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <textarea
+                              options={Array.from(
+                                new Set(
+                                  [
+                                    selectedStep.fields.tool,
+                                    ...tools.map((tool) => tool.name),
+                                  ].filter((name): name is string =>
+                                    Boolean(name)
+                                  )
+                                )
+                              ).map((name) => ({ label: name, value: name }))}
+                              value={selectedStep.fields.tool ?? ""}
+                            />
+                          </label>
+                        ) : field === "op" ? (
+                          <Choice
+                            disabled={busy}
+                            key={field}
+                            label="Operator"
+                            onChange={(value) =>
+                              updateStep(selectedStep.key, {
+                                fields: {
+                                  ...selectedStep.fields,
+                                  [field]: value,
+                                },
+                              })
+                            }
+                            options={["eq", "near", "contains"].map((op) => ({
+                              label: op,
+                              value: op,
+                            }))}
+                            value={selectedStep.fields[field] ?? "eq"}
+                          />
+                        ) : (
+                          <label key={field}>
+                            {field === "input" ? "Input" : title(field)}
+                            <Textarea
+                              disabled={busy}
                               onChange={(event) =>
                                 updateStep(selectedStep.key, {
                                   fields: {
@@ -678,191 +930,245 @@ export function apply(ctx: Context) {
                               }
                               rows={
                                 field === "input" || field === "template"
-                                  ? 5
+                                  ? 8
                                   : 2
                               }
                               value={selectedStep.fields[field] ?? ""}
                             />
-                          )}
-                        </label>
-                      ))}
-                      <div className="buttons step-actions">
-                        <button
-                          disabled={selectedIndex === 0}
-                          onClick={() => moveStep(selectedStep.key, -1)}
-                          type="button"
-                        >
-                          Move earlier
-                        </button>
-                        <button
-                          disabled={selectedIndex === steps.length - 1}
-                          onClick={() => moveStep(selectedStep.key, 1)}
-                          type="button"
-                        >
-                          Move later
-                        </button>
-                      </div>
-                      <button
-                        className="danger"
-                        onClick={() => {
-                          setSteps((current) =>
-                            current.filter(
-                              (step) => step.key !== selectedStep.key
-                            )
-                          );
-                          setSelection("settings");
-                        }}
-                        type="button"
-                      >
-                        Delete step
-                      </button>
+                          </label>
+                        )
+                      )}
                     </>
                   )}
-                </aside>
-              </div>
-            )}
-            {tab === "runs" && (
-              <section aria-label="Run history" className="workflow-panel">
-                <div className="run-form">
-                  <label>
-                    Run input (JSON)
-                    <textarea
-                      className="code-input"
-                      onChange={(event) => setRunInput(event.target.value)}
-                      rows={4}
-                      spellCheck={false}
-                      value={runInput}
-                    />
-                  </label>
-                  <div className="buttons">
-                    <button
-                      className="primary"
-                      disabled={!workflow || dirty || !enabled}
-                      onClick={runWorkflow}
-                      type="button"
-                    >
-                      {busy ? "Running…" : "Run workflow"}
-                    </button>
-                    {(!workflow || dirty) && (
-                      <span className="muted">
-                        Save changes to run this workflow.
-                      </span>
-                    )}
-                    {workflow && !dirty && !enabled && (
-                      <span className="muted">
-                        Enable and save this workflow to run it.
-                      </span>
-                    )}
-                  </div>
+                  {selection === "summary" && (
+                    <label>
+                      Summary instructions
+                      <Textarea
+                        disabled={busy}
+                        onChange={(event) => setSummary(event.target.value)}
+                        rows={8}
+                        value={summary}
+                      />
+                    </label>
+                  )}
                 </div>
-                <h2>Run history</h2>
-                {!runs.length && <p className="empty-state">No runs yet</p>}
-                {runs.map((run) => (
-                  <details className="run-record" key={run.id}>
-                    <summary>
-                      <span className="run-status" data-status={run.status}>
-                        {run.status}
-                      </span>
-                      <time dateTime={run.startedAt}>
-                        {new Date(run.startedAt).toLocaleString()}
-                      </time>
-                    </summary>
-                    {(run.error || run.output) && (
-                      <pre>{run.error || run.output}</pre>
-                    )}
-                    {(run.steps ?? []).map((step) => (
-                      <div key={step.id}>
-                        <h3>
-                          {step.stepId} · {step.status}
-                        </h3>
-                        <pre>
-                          {JSON.stringify(
-                            {
-                              error: step.error,
-                              input: step.input,
-                              output: step.output,
-                            },
-                            null,
-                            2
-                          )}
-                        </pre>
-                      </div>
-                    ))}
-                  </details>
-                ))}
-              </section>
-            )}
-            {tab === "data" && (
-              <div className="workflow-panel">
+              )}
+              {(selection === "data" || panelTab === "database") && (
                 <DatabasePanel />
-              </div>
-            )}
-          </fieldset>
-        </form>
+              )}
+              {selection !== "data" &&
+                panelTab === "test" &&
+                (() => {
+                  const receipt = runs[0]?.steps?.find(
+                    (step) =>
+                      step.stepId ===
+                      (selectedStep?.id ?? summaryStep?.id ?? "summary")
+                  );
+                  return receipt ? (
+                    <div className="workflow-step-fields">
+                      <p>{receipt.status}</p>
+                      {receipt.error && <p role="alert">{receipt.error}</p>}
+                      <label>
+                        Input<pre>{JSON.stringify(receipt.input, null, 2)}</pre>
+                      </label>
+                      <label>
+                        Output
+                        <pre>{JSON.stringify(receipt.output, null, 2)}</pre>
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="workflow-empty">
+                      No test results yet. Run the workflow to see this step’s
+                      input and output.
+                    </p>
+                  );
+                })()}
+            </div>
+          </aside>
+        )}
+        <Dialog
+          onOpenChange={(open) => {
+            if (!(open || busy)) {
+              setSelection("");
+            }
+          }}
+          open={selection === "input"}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Run input</DialogTitle>
+            </DialogHeader>
+            <div
+              className="workflow-step-fields"
+              style={{
+                display: "grid",
+                gap: 16,
+                maxHeight: "65dvh",
+                overflowY: "auto",
+              }}
+            >
+              {selection === "input" && (
+                <label>
+                  Run input (JSON)
+                  <Textarea
+                    disabled={busy}
+                    onChange={(event) => setRunInput(event.target.value)}
+                    rows={8}
+                    spellCheck={false}
+                    value={runInput}
+                  />
+                </label>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={busy}
+                onClick={() => setSelection("")}
+                type="button"
+              >
+                Done
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          onOpenChange={(open) => {
+            if (!busy) {
+              setConfirmDelete(open);
+            }
+          }}
+          open={confirmDelete}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete workflow?</DialogTitle>
+              <DialogDescription>
+                This removes the workflow and its run history permanently.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                disabled={busy}
+                onClick={() => setConfirmDelete(false)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void perform(async () => {
+                    await action("delete_workflow", {
+                      workflowId: workflow!.id,
+                    });
+                    if (mounted.current) {
+                      await onSaved();
+                    }
+                  })
+                }
+                type="button"
+                variant="destructive"
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </section>
     );
   }
 
   function DatabasePanel() {
+    const [table, setTable] = React.useState("");
     const [data, setData] = React.useState<{
       tables: Array<{ name: string }>;
       preview?: unknown;
     } | null>(null);
     const [error, setError] = React.useState("");
-    const revision = React.useRef(0);
-    React.useEffect(
-      () => () => {
-        revision.current++;
-      },
-      []
-    );
-    const load = async (table?: string) => {
-      const current = ++revision.current;
-      try {
-        const result = await action<{
-          tables: Array<{ name: string }>;
-          preview?: unknown;
-        }>("database", table ? { table } : {});
-        if (current === revision.current) {
-          setData(result);
-          setError("");
-        }
-      } catch (error) {
-        if (current === revision.current) {
-          setError(error instanceof Error ? error.message : String(error));
-        }
-      }
-    };
-    return (
-      <details
-        onToggle={(event) => {
-          if (event.currentTarget.open && !data) {
-            void load();
+    const [loading, setLoading] = React.useState(true);
+    const [retry, setRetry] = React.useState(0);
+    React.useEffect(() => {
+      let active = true;
+      setLoading(true);
+      setError("");
+      action<{ tables: Array<{ name: string }>; preview?: unknown }>(
+        "database",
+        table ? { table } : {}
+      )
+        .then((result) => {
+          if (active) {
+            setData(result);
           }
-        }}
-        open
-      >
-        <summary>Workflow data</summary>
-        {error && <p role="alert">{error}</p>}
-        <label>
-          Table
-          <select
-            defaultValue=""
-            onChange={(event) => void load(event.target.value)}
-          >
-            <option value="">Select a table</option>
-            {data?.tables.map((table) => (
-              <option key={table.name} value={table.name}>
-                {table.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {data?.preview != null && (
-          <pre>{JSON.stringify(data.preview, null, 2)}</pre>
+        })
+        .catch((error) => {
+          if (active) {
+            setError(error instanceof Error ? error.message : String(error));
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setLoading(false);
+          }
+        });
+      return () => {
+        active = false;
+      };
+    }, [table, retry]);
+    return (
+      <div aria-busy={loading} className="workflow-step-fields">
+        {error ? (
+          <div>
+            <p role="alert">{error}</p>
+            <Button
+              onClick={() => setRetry((value) => value + 1)}
+              type="button"
+              variant="outline"
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {Boolean(data?.tables.length) && (
+          <Choice
+            disabled={loading}
+            label="Table"
+            onChange={setTable}
+            options={(data?.tables ?? []).map((entry) => ({
+              label: entry.name,
+              value: entry.name,
+            }))}
+            value={table}
+          />
         )}
-      </details>
+        {loading ? (
+          <p className="workflow-empty" role="status">
+            Loading data…
+          </p>
+        ) : (
+          !error &&
+          (data?.tables.length ? (
+            table ? (
+              data.preview == null ? (
+                <p className="workflow-empty">No preview available.</p>
+              ) : (
+                <pre>{JSON.stringify(data.preview, null, 2)}</pre>
+              )
+            ) : (
+              <p className="workflow-empty">
+                Select a table to preview its data.
+              </p>
+            )
+          ) : (
+            <div className="workflow-empty">
+              <p>No tables yet.</p>
+              <p>Add a database step and run it to store data here.</p>
+            </div>
+          ))
+        )}
+      </div>
     );
   }
+
   ctx.slots.register("page", WorkflowsPage);
 }

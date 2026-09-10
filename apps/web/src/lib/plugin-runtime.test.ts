@@ -74,6 +74,107 @@ describe("native plugin activation", () => {
     expect(stylesheet).toContain('[data-plugin-id="workflows"]');
   });
 
+  test.each(["", "summary", "empty", "draft", "data"])(
+    "a loaded workflow renders shared controls with selection %s",
+    async (selection) => {
+      const module = await import(
+        new URL(
+          "../../../../packages/plugins/workflows/ui/app.js",
+          import.meta.url
+        ).href
+      );
+      const workflow = {
+        description: "Fetch and summarize the news",
+        enabled: true,
+        id: "brief",
+        name: "morning-brief",
+        profileId: "agent-a",
+        steps: [
+          { id: "fetch_hn", input: {}, kind: "tool", tool: "web_fetch" },
+          { id: "summarize_brief", kind: "summarize", prompt: "Summarize" },
+        ],
+        version: 1,
+      };
+      // Seed the two page states for server rendering; all component hooks still
+      // run through the real host React dispatcher. Effects do not run in SSR.
+      const initialStates = [
+        {
+          profiles: [{ id: "agent-a", name: "Default Bot" }],
+          workflows:
+            selection === "empty" || selection === "draft" ? [] : [workflow],
+        },
+        selection === "empty" ? null : selection === "draft" ? "" : workflow.id,
+      ];
+      let stateIndex = 0;
+      let Page!: React.ComponentType;
+      module.apply({
+        ...options(),
+        React: {
+          ...React,
+          useState: ((initial: unknown) => {
+            const index = stateIndex++;
+            const value =
+              index < initialStates.length
+                ? initialStates[index]
+                : index === 14
+                  ? selection === "summary" || selection === "data"
+                    ? selection
+                    : ""
+                  : initial;
+            return React.useState(value);
+          }) as typeof React.useState,
+        },
+        slots: {
+          register: (_slot: string, component: React.ComponentType) => {
+            Page = component;
+          },
+        },
+        styles: () => {},
+        ui,
+      });
+      const html = renderToString(createElement(Page));
+      if (selection === "empty") {
+        expect(html).toContain("Create your first workflow");
+        expect(html).toContain("Create workflow");
+        expect(html).not.toContain("<form");
+        expect(html).not.toContain("Test run");
+        return;
+      }
+      if (selection === "draft") {
+        expect(html).toContain("<form");
+        expect(html).toContain('aria-label="Workflow name"');
+        expect(html).toContain('type="submit"');
+        expect(html).not.toContain("Create your first workflow");
+        return;
+      }
+      expect(html).toContain('aria-label="Workflows"');
+      expect(html).toContain('aria-current="true"');
+      expect(html).toContain("Fetch Hn");
+      expect(html).toContain("Summarize Brief");
+      expect(html).toContain('role="switch"');
+      expect(html).toContain('data-slot="select-trigger"');
+      expect(html).toContain('data-slot="input"');
+      expect(html).toMatch(/<button[^>]*>.*?Test run<\/button>/s);
+      expect(html).not.toContain('type="submit"');
+      if (selection === "data") {
+        expect(html).toContain('aria-label="Workflow data"');
+        expect(html).toContain('aria-label="Expand data"');
+        expect(html).toContain('aria-label="Close data"');
+        expect(html).toContain('aria-busy="true"');
+        expect(html).not.toContain('role="dialog"');
+        expect(html).not.toContain('aria-label="Step views"');
+        return;
+      }
+      if (selection) {
+        expect(html).toContain('aria-label="Workflow step"');
+        expect(html).toContain('aria-label="Expand step"');
+        expect(html).toContain('aria-label="Close step"');
+        expect(html).toContain('aria-label="Step views"');
+        expect(html).toContain('data-slot="textarea"');
+      }
+    }
+  );
+
   test("an effect interrupted during setup still releases its resource", async () => {
     const controller = new AbortController();
     let active = 0;
