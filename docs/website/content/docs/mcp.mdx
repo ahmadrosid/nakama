@@ -119,6 +119,37 @@ That header is shared by every profile assigned to this server. After sync, keye
 }
 ```
 
+### Servers that sign in with a browser
+
+Hosted MCP servers such as Notion, Linear or Sentry do not take an API key header. They
+use OAuth, the same as any other app you sign in to, so Nakama needs one trip through your
+browser before it can connect.
+
+1. Add the server with its URL and no headers, then save. **Test connection** reports a
+   `401` for these, which is expected: the sign-in has not happened yet
+2. Nakama opens the provider's authorization page in a new tab. If a popup blocker eats it,
+   use the link in the banner on the MCP page
+3. Approve the access the provider asks for
+4. The provider sends you back to Nakama, which finishes the connection and caches the
+   tools. The MCP page flips to **connected** on its own
+
+The refresh token is stored with the server, so Nakama keeps the connection alive across
+restarts without asking again. **Connect** starts a fresh sign-in whenever the grant is
+revoked or expires.
+
+Two things this needs:
+
+- **A reachable public URL.** The provider redirects your browser back to
+  `{your Nakama URL}/v1/mcp/oauth/callback/{serverId}`, so set the public URL under
+  **Settings** (or `NAKAMA_WEB_PUBLIC_URL`) for anything other than a local install
+- **Dynamic client registration**, which Nakama uses to register itself with the provider.
+  Servers that instead hand you a `client_id` and `client_secret` to paste in are not
+  supported yet
+
+Like a header, the grant belongs to the server record, so every profile assigned to that
+server acts as the account that signed in. Editing the URL drops the grant, because it
+belongs to that one endpoint.
+
 ### Import from an existing config
 
 Use **Import JSON** or paste a Cursor-style `mcpServers` block onto the form. A bare server object (top-level `command` or `url`) also works — the first entry fills the form for review.
@@ -161,6 +192,7 @@ MCP management is platform-admin only (same as profiles, builtins, and skills).
 ## Troubleshooting
 
 - **`error` status** — check `lastError`: wrong URL, missing `command`, unreachable host, or expired credentials
+- **"This server requires authorization"** - the OAuth sign-in never finished. Click **Connect** to get a fresh link, and check the public URL matches the origin you open the dashboard on
 - **No tools discovered** — server connected but returned zero tools; fix server-side config, then **Sync tools**
 - **"not connected" on tool call** — connection dropped; reconnect. For stdio, confirm the command is on PATH
 - **Exa rate limit** — add an `x-api-key` header with your [Exa API key](https://dashboard.exa.ai/api-keys), then reconnect
