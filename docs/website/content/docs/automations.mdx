@@ -8,6 +8,8 @@ description: "Run a prompt on a cron schedule or at a set time, deliver the resu
 - **Automations** are a saved prompt plus a trigger. They run themselves, on a schedule or at a time you name, and can deliver the result to a channel.
 - **Workflows** are a declared step recipe you run on demand. Each data step stores a receipt; the final summarize step only sees those receipts.
 
+The two do connect. An automation turn holds the workflow tools, so a prompt like `Run my "Morning brief" workflow (id wf_123)` puts a saved recipe on a schedule without any extra wiring. Press **Schedule** on a workflow to start that conversation with the id already filled in.
+
 See [Workflows](/workflows) for the step kinds and receipt model.
 
 ## Automations

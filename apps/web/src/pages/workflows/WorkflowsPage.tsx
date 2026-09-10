@@ -33,6 +33,7 @@ import {
   useWorkflowsQuery,
 } from "@/hooks/use-workflows";
 import { formatError } from "@/lib/client";
+import { findSuperBotProfile } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 import { sectionClass } from "@/pages/automations/automations-page.shared";
 import { WorkflowBuilder } from "@/pages/workflows/workflow-builder";
@@ -45,6 +46,7 @@ export function WorkflowsPage() {
     error: workflowsError,
   } = useWorkflowsQuery();
   const { data: profiles = [] } = useProfilesQuery();
+  const superBotProfile = findSuperBotProfile(profiles);
   const profileById = useMemo(
     () => new Map(profiles.map((profile) => [profile.id, profile])),
     [profiles]
@@ -142,6 +144,20 @@ export function WorkflowsPage() {
     }
   }
 
+  // Automations are created by chatting with the super bot, the same path the
+  // Automations tab uses. The draft carries the id so the agent reuses it
+  // instead of guessing one.
+  function goToScheduleWorkflow(workflow: StoredWorkflow) {
+    if (!superBotProfile) {
+      setPageError("No super bot profile exists in this organization.");
+      return;
+    }
+
+    navigateToNewChat(superBotProfile.id, {
+      draft: `Create an automation that runs my "${workflow.name}" workflow (id ${workflow.id}) on a schedule.`,
+    });
+  }
+
   function goToCreateWorkflow() {
     navigateToNewChat(null, {
       draft:
@@ -186,6 +202,11 @@ export function WorkflowsPage() {
             return Promise.resolve();
           }
           return handleSave(selected, input);
+        }}
+        onSchedule={() => {
+          if (selected) {
+            goToScheduleWorkflow(selected);
+          }
         }}
         onSelect={setSelectedId}
         onToggleEnabled={(enabled) => {
@@ -252,6 +273,7 @@ function WorkflowsPageLayout({
   onProfileChange,
   onRun,
   onSave,
+  onSchedule,
   onSelect,
   onToggleEnabled,
   profileById,
@@ -272,6 +294,7 @@ function WorkflowsPageLayout({
     name: string;
     steps: StoredWorkflow["steps"];
   }) => Promise<void>;
+  onSchedule: () => void;
   onSelect: (workflowId: string) => void;
   onToggleEnabled: (enabled: boolean) => void;
   profileById: Map<string, ProfileSummary>;
@@ -369,6 +392,7 @@ function WorkflowsPageLayout({
               onProfileChange={onProfileChange}
               onRun={onRun}
               onSave={onSave}
+              onSchedule={onSchedule}
               onToggleEnabled={onToggleEnabled}
               profileById={profileById}
               profiles={profiles}

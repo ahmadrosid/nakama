@@ -17,6 +17,7 @@ import {
   ArrowExpand01Icon,
   ArrowShrink02Icon,
   Cancel01Icon,
+  Clock01Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PlayIcon,
@@ -103,6 +104,7 @@ export function WorkflowBuilder({
   onDelete,
   onProfileChange,
   onRun,
+  onSchedule,
   onSave,
   onToggleEnabled,
   profileById,
@@ -114,6 +116,7 @@ export function WorkflowBuilder({
   onDelete: () => void;
   onProfileChange: (profileId: string) => Promise<void>;
   onRun: () => void;
+  onSchedule: () => void;
   onSave: (input: {
     description: string;
     name: string;
@@ -239,6 +242,7 @@ export function WorkflowBuilder({
         name={name}
         onDelete={onDelete}
         onRun={onRun}
+        onSchedule={onSchedule}
       />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="h-full min-h-0 overflow-y-auto p-5">
@@ -474,12 +478,14 @@ function WorkflowBuilderHeader({
   name,
   onDelete,
   onRun,
+  onSchedule,
 }: {
   busy: boolean;
   enabled: boolean;
   name: string;
   onDelete: () => void;
   onRun: () => void;
+  onSchedule: () => void;
 }) {
   return (
     <header className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-4 py-3">
@@ -495,6 +501,16 @@ function WorkflowBuilderHeader({
           variant="outline"
         >
           <Delete02Icon className="size-4" strokeWidth={1.5} />
+        </Button>
+        <Button
+          disabled={busy}
+          onClick={onSchedule}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Clock01Icon aria-hidden className="size-4" strokeWidth={1.5} />
+          Schedule
         </Button>
         <Button
           disabled={busy || !enabled}
