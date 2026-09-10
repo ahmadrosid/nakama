@@ -22,6 +22,19 @@ import {
   parseMcpConfigJson,
 } from "@/lib/mcp-config-import";
 
+export type McpServerKind = "http" | "signin" | "stdio";
+
+export function mcpServerKind(
+  transport: McpTransport,
+  signIn: boolean
+): McpServerKind {
+  if (transport === "stdio") {
+    return "stdio";
+  }
+
+  return signIn ? "signin" : "http";
+}
+
 type McpTestResult = {
   ok: boolean;
   toolCount: number;
@@ -39,6 +52,7 @@ type McpFormSetters = {
   setArgs: (value: string[]) => void;
   setEnv: (value: McpHeaderRow[]) => void;
   setSubmitError: (value: string | null) => void;
+  setSignIn: (value: boolean) => void;
   setTestResult: (value: McpTestResult | null) => void;
   setTesting: (value: boolean) => void;
   setImportOpen: (value: boolean) => void;
@@ -101,6 +115,7 @@ function applyMcpFormReset({
   if (!server) {
     setters.setName("");
     setters.setTransport("http");
+    setters.setSignIn(false);
     setters.setUrl("");
     setters.setHeaders([emptyHeaderRow()]);
     setters.setCommand("");
@@ -118,6 +133,7 @@ function applyMcpFormReset({
 
   setters.setName(detail.name);
   setters.setTransport(detail.transport);
+  setters.setSignIn(detail.usesOAuth);
   setters.setSubmitError(null);
   setters.setTestResult(null);
   setters.setTesting(false);
@@ -149,6 +165,7 @@ function buildMcpServerRequest({
   headers,
   name,
   isEdit,
+  signIn,
   server,
 }: {
   transport: McpTransport;
@@ -159,6 +176,7 @@ function buildMcpServerRequest({
   headers: McpHeaderRow[];
   name: string;
   isEdit: boolean;
+  signIn: boolean;
   server?: McpServerSummary | null;
 }): CreateMcpServerRequest {
   const activeTransport = resolveFormTransport(transport, command, url);
@@ -179,7 +197,8 @@ function buildMcpServerRequest({
 
   return {
     config: {
-      headers: headersToRecord(headers, isEdit),
+      // The provider issues the credential, so there is no header to keep.
+      ...(signIn ? {} : { headers: headersToRecord(headers, isEdit) }),
       url: url.trim(),
     },
     connect: false,
@@ -275,6 +294,7 @@ export function useMcpServerDialogState({
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [command, setCommand] = useState("");
+  const [signIn, setSignIn] = useState(false);
   const [args, setArgs] = useState<string[]>([]);
   const [env, setEnv] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -312,6 +332,7 @@ export function useMcpServerDialogState({
     setImportError,
     setImportOpen,
     setName,
+    setSignIn,
     setSubmitError,
     setTesting,
     setTestResult,
@@ -333,6 +354,7 @@ export function useMcpServerDialogState({
       isEdit,
       name,
       server,
+      signIn,
       transport,
       url,
     });
@@ -340,6 +362,20 @@ export function useMcpServerDialogState({
 
   function clearTestResult() {
     setTestResult(null);
+  }
+
+  function selectKind(kind: McpServerKind) {
+    setTestResult(null);
+    setSignIn(kind === "signin");
+
+    if (kind === "stdio") {
+      setTransport("stdio");
+      setUrl("");
+      return;
+    }
+
+    setTransport("http");
+    setCommand("");
   }
 
   async function handleTestConnection() {
@@ -380,6 +416,7 @@ export function useMcpServerDialogState({
     }
 
     event.preventDefault();
+    setSignIn(false);
     tryImportMcpJson(text, isEdit, transport, formSetters);
   }
 
@@ -398,6 +435,7 @@ export function useMcpServerDialogState({
       return;
     }
 
+    setSignIn(false);
     setImportOpen(false);
     setImportDraft("");
     setImportError(null);
@@ -441,6 +479,7 @@ export function useMcpServerDialogState({
     loadingForm,
     name,
     openImportDialog,
+    selectKind,
     setArgs,
     setCommand,
     setEnv,
@@ -451,6 +490,7 @@ export function useMcpServerDialogState({
     setName,
     setTransport,
     setUrl,
+    signIn,
     submitError,
     testing,
     testResult,
