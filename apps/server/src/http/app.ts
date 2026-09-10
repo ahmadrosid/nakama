@@ -20,7 +20,7 @@ import {
 import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
-import { registerMcpRoutes } from "./routes/mcp";
+import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
 import { registerNotificationWebhookRoutes } from "./routes/notification-webhooks";
@@ -224,6 +224,7 @@ export function createHonoApp(options: ServerOptions) {
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
   registerComposioOAuthRoutes(app, options);
+  registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));
   registerSystemRoutes(app, options);
   registerAuthRoutes(app, options);
