@@ -18,7 +18,7 @@ import {
   requireActiveOrgIdFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { errorResponse, escapeHtml, json, readJson } from "../shared";
+import { errorResponse, json, oauthResultPage, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 /**
@@ -38,7 +38,7 @@ export function registerMcpOAuthRoutes(
       c.req.query("error_description") || c.req.query("error");
 
     if (providerError) {
-      return oauthResultPage("Authorization failed", providerError, 400);
+      return mcpOAuthPage("Authorization failed", providerError, 400);
     }
 
     const code = c.req.query("code");
@@ -58,12 +58,12 @@ export function registerMcpOAuthRoutes(
         }
       );
 
-      return oauthResultPage(
+      return mcpOAuthPage(
         `${server.name} connected`,
         `${server.toolCount} tool${server.toolCount === 1 ? "" : "s"} cached. You can close this tab.`
       );
     } catch (error) {
-      return oauthResultPage(
+      return mcpOAuthPage(
         "Authorization failed",
         error instanceof Error ? error.message : String(error),
         error instanceof NakamaApiError ? error.status : 400
@@ -72,35 +72,12 @@ export function registerMcpOAuthRoutes(
   });
 }
 
-function oauthResultPage(
-  title: string,
-  detail: string,
-  status = 200
-): Response {
-  return new Response(
-    `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)} - Nakama</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
-    h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
-    p { color: #444; }
-    a { color: #0b57d0; }
-  </style>
-</head>
-<body>
-  <h1>${escapeHtml(title)}</h1>
-  <p>${escapeHtml(detail)}</p>
-  <p><a href="/system?tab=mcp">Open MCP servers</a></p>
-</body>
-</html>`,
-    {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-      status,
-    }
+function mcpOAuthPage(title: string, detail: string, status = 200): Response {
+  return oauthResultPage(
+    title,
+    detail,
+    { href: "/system?tab=mcp", label: "Open MCP servers" },
+    status
   );
 }
 

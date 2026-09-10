@@ -16,8 +16,8 @@ import {
 } from "../org-guards";
 import {
   errorResponse,
-  escapeHtml,
   json,
+  oauthResultPage,
   readJson,
   readOptionalJson,
 } from "../shared";
@@ -46,27 +46,13 @@ export function registerComposioOAuthRoutes(
         accept.includes("text/html") || !accept.includes("application/json");
 
       if (wantsHtml) {
-        const toolkit = escapeHtml(result.toolkitSlug);
-        return c.html(
-          `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Connected — Nakama</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
-    h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
-    p { color: #444; }
-    a { color: #0b57d0; }
-  </style>
-</head>
-<body>
-  <h1>${toolkit} connected</h1>
-  <p>You can close this tab and return to Discord, Telegram, or chat.</p>
-  <p><a href="/integrations?section=composio&amp;connected=${encodeURIComponent(result.toolkitSlug)}">Open Integrations</a></p>
-</body>
-</html>`
+        return oauthResultPage(
+          `${result.toolkitSlug} connected`,
+          "You can close this tab and return to Discord, Telegram, or chat.",
+          {
+            href: `/integrations?section=composio&connected=${encodeURIComponent(result.toolkitSlug)}`,
+            label: "Open Integrations",
+          }
         );
       }
 
