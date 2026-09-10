@@ -1,3 +1,4 @@
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -14,6 +15,13 @@ import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
 interface ConnectedMcpClient {
   client: Client;
   transport: Transport;
+}
+
+interface ConnectOptions {
+  /** OAuth client for HTTP servers behind the MCP authorization spec. */
+  authProvider?: OAuthClientProvider;
+  orgId?: string;
+  profileId?: string;
 }
 
 export class McpClientManager {
@@ -48,7 +56,7 @@ export class McpClientManager {
 
   async connect(
     server: StoredMcpServerRecord,
-    options?: { orgId?: string; profileId?: string }
+    options?: ConnectOptions
   ): Promise<CachedMcpTool[]> {
     const key = connectionKey(
       server.id,
@@ -281,12 +289,13 @@ function connectionKey(
 function createTransport(
   transport: McpTransport,
   config: unknown,
-  options?: { orgId?: string; profileId?: string }
+  options?: ConnectOptions
 ): Transport {
   if (transport === "http") {
     const http = readHttpConfig(config);
 
     return new StreamableHTTPClientTransport(new URL(http.url), {
+      ...(options?.authProvider ? { authProvider: options.authProvider } : {}),
       requestInit: {
         headers: http.headers,
       },
