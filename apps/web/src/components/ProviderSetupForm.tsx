@@ -1,5 +1,22 @@
 import type { CreateProviderResponse } from "@nakama/core/contract";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
+import { Button } from "@nakama/ui/button";
+import { FormField } from "@nakama/ui/form-field";
+import { Input } from "@nakama/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { Spinner } from "@nakama/ui/spinner";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useState } from "react";
 import {
@@ -14,23 +31,6 @@ import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderMo
 import { ProviderSelect } from "@/components/ProviderSelect";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
-import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {

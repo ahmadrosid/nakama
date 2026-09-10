@@ -1,4 +1,5 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
+import { Card, CardContent } from "@nakama/ui/card";
 import { useReducer } from "react";
 import {
   type OrgMemberAddCredentials,
@@ -11,7 +12,6 @@ import {
   OrgMembersSecretBanner,
 } from "@/components/settings/org-members-card-header";
 import { OrgMembersTable } from "@/components/settings/org-members-table";
-import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/context/use-auth";
 import {
   useAddOrgMember,

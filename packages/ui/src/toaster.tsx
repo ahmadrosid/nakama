@@ -1,6 +1,6 @@
 import { CheckmarkCircle01Icon } from "hugeicons-react";
-import { useToasts } from "@/lib/toast";
-import { cn } from "@/lib/utils";
+import { useToasts } from "./toast";
+import { cn } from "./utils";
 
 export function Toaster() {
   const toasts = useToasts();

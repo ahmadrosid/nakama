@@ -4,15 +4,15 @@ import type {
   SkillUsageSummary,
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
+import { cn } from "@nakama/ui/utils";
 import { Link } from "react-router-dom";
 import { CodeBlock } from "@/components/ai-elements/code-block";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 import { isPluginOwned } from "@/hooks/use-plugins";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
 import { pluginsSystemPath } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 

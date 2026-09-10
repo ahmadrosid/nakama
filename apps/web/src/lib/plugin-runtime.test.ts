@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import * as ui from "@nakama/ui";
 import * as React from "react";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -19,6 +20,31 @@ function options(controller = new AbortController()) {
 }
 
 describe("native plugin activation", () => {
+  test("plugins render shared UI with the host React instance", async () => {
+    const runtime = await activatePlugin(
+      {
+        apply(ctx) {
+          const { Button, Input } = ctx.ui;
+          ctx.slots.register("page", () =>
+            ctx.React.createElement(
+              "form",
+              null,
+              ctx.React.createElement(Input, { defaultValue: "Workflow" }),
+              ctx.React.createElement(Button, { disabled: true }, "Save")
+            )
+          );
+        },
+        inject: ["slots", "ui"],
+      },
+      options()
+    );
+    const html = renderToString(createElement(runtime.Page));
+    expect(html).toContain('data-slot="button"');
+    expect(html).toContain('value="Workflow"');
+    expect(html).toContain("disabled");
+    runtime.dispose();
+  });
+
   test("the shipped Workflows module renders with the host React instance", async () => {
     const module = await import(
       new URL(
@@ -39,6 +65,7 @@ describe("native plugin activation", () => {
       styles: (css: string) => {
         stylesheet = css;
       },
+      ui,
     });
     const html = renderToString(createElement(Page));
     expect(html).not.toContain("<h1");
@@ -123,6 +150,17 @@ describe("native plugin activation", () => {
   });
 
   test("unknown and undeclared services are rejected", async () => {
+    await expect(
+      activatePlugin(
+        {
+          apply(ctx) {
+            void ctx.ui;
+          },
+          inject: ["slots"],
+        },
+        options()
+      )
+    ).rejects.toThrow();
     const unavailable = {
       apply() {},
       inject: ["database"],

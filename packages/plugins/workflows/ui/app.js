@@ -12,7 +12,7 @@ var style_default = `[data-plugin-id="workflows"] {
     line-height: 1.5;
     color: var(--foreground);
   }
-  button,
+  button:not([data-slot]),
   input,
   select,
   textarea {
@@ -24,17 +24,17 @@ var style_default = `[data-plugin-id="workflows"] {
     border: 1px solid var(--border);
     border-radius: 7px;
   }
-  button {
+  button:not([data-slot]) {
     min-height: 38px;
     cursor: pointer;
     transition:
       background-color 150ms,
       border-color 150ms;
   }
-  button:hover:not(:disabled) {
+  button:not([data-slot]):hover:not(:disabled) {
     background: var(--accent);
   }
-  button:disabled {
+  button:not([data-slot]):disabled {
     cursor: not-allowed;
     opacity: 0.45;
   }
@@ -466,7 +466,7 @@ var style_default = `[data-plugin-id="workflows"] {
     .workflow-panel {
       padding: 24px 16px;
     }
-    button {
+    button:not([data-slot]) {
       min-height: 44px;
     }
   }
@@ -474,7 +474,7 @@ var style_default = `[data-plugin-id="workflows"] {
 `;
 
 // src/ui.tsx
-var inject = ["slots", "host", "styles"];
+var inject = ["slots", "host", "styles", "ui"];
 var stepFields = {
   assert: ["path", "expected"],
   compare: ["left", "op", "right", "tolerance"],
@@ -511,6 +511,7 @@ function serializeSteps(steps) {
 }
 function apply(ctx) {
   const React = ctx.React;
+  const { Button } = ctx.ui;
   ctx.styles(style_default);
   const action = async (name, input) => await ctx.host.call(name, input);
   function WorkflowsPage() {
@@ -557,7 +558,7 @@ function apply(ctx) {
     }, "New workflow"), data.workflows.map((workflow) => /* @__PURE__ */ React.createElement("option", {
       key: workflow.id,
       value: workflow.id
-    }, workflow.name))), /* @__PURE__ */ React.createElement("button", {
+    }, workflow.name))), /* @__PURE__ */ React.createElement(Button, {
       onClick: () => setSelectedId(null),
       type: "button"
     }, "New workflow")), /* @__PURE__ */ React.createElement(Editor, {

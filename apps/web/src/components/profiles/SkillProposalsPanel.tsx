@@ -3,16 +3,17 @@ import type {
   ProfileSummary,
   SkillProposal,
 } from "@nakama/core/contract";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { toast } from "@nakama/ui/toast";
+import { useState } from "react";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import {
@@ -25,7 +26,6 @@ import {
   formatSessionTimestamp,
 } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
 
 function shortenId(value: string): string {
   return value.length > 16 ? `${value.slice(0, 12)}…` : value;

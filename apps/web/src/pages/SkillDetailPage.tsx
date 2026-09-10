@@ -1,3 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { toast } from "@nakama/ui/toast";
+import { cn } from "@nakama/ui/utils";
 import { ArrowLeft01Icon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
@@ -9,8 +13,6 @@ import {
 } from "react-router-dom";
 import { RemoveSkillFromProfileDialog } from "@/components/RemoveSkillFromProfileDialog";
 import { SkillDetailContent } from "@/components/SkillDetailContent";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { useProfileQuery, useSkillQuery } from "@/hooks/use-app-queries";
 import {
@@ -19,8 +21,6 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
-import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 

@@ -1,6 +1,4 @@
-import { CodeIcon, Delete02Icon } from "hugeicons-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,14 +6,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@/components/ui/input-group";
-import { Textarea } from "@/components/ui/textarea";
+} from "@nakama/ui/input-group";
+import { Textarea } from "@nakama/ui/textarea";
+import { CodeIcon, Delete02Icon } from "hugeicons-react";
+import { useState } from "react";
 import { useSaveTelegramSettings } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {

@@ -1,15 +1,15 @@
 import type { InstallSkillRequest } from "@nakama/core/contract";
-import { type SubmitEvent, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { type SubmitEvent, useState } from "react";
 import { formatError } from "@/lib/client";
 
 interface SkillInstallDialogProps {

@@ -4,14 +4,14 @@ import type {
   UpdateProfileRequest,
 } from "@nakama/core/contract";
 import { resolveProfileOrgBooleanOverride } from "@nakama/core/skills/profile-org-override";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
+import { toast } from "@nakama/ui/toast";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/use-auth";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
 
 type OverrideField = keyof Pick<
   UpdateProfileRequest,

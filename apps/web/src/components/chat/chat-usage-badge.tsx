@@ -4,14 +4,14 @@ import {
   PopoverContent,
   PopoverHeader,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@nakama/ui/popover";
+import { cn } from "@nakama/ui/utils";
 import {
   chatUsageTitle,
   formatChatUsageCost,
   formatCompactTokens,
   formatUsd,
 } from "@/lib/chat-usage";
-import { cn } from "@/lib/utils";
 
 /**
  * Two linked coins with a token at the centre. `evenodd` is what hollows the

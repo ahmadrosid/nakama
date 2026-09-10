@@ -1,3 +1,4 @@
+import * as ui from "@nakama/ui";
 import * as React from "react";
 
 export interface PluginClientContext {
@@ -10,11 +11,12 @@ export interface PluginClientContext {
   slots: { register(slot: "page", component: React.ComponentType): void };
   styles(css: string): void;
   theme: "dark" | "light";
+  ui: typeof ui;
 }
 
 export interface PluginClientModule {
   apply(context: PluginClientContext): void | Promise<void>;
-  inject: Array<"slots" | "host" | "styles">;
+  inject: Array<"slots" | "host" | "styles" | "ui">;
 }
 
 /** Each activation owns its registrations and effects, including failed startup. */
@@ -30,7 +32,7 @@ export async function activatePlugin(
     throw new Error("Plugin must export inject and apply.");
   }
   for (const dependency of module.inject) {
-    if (!["slots", "host", "styles"].includes(dependency)) {
+    if (!["slots", "host", "styles", "ui"].includes(dependency)) {
       throw new Error(`Unavailable plugin service: ${dependency}`);
     }
   }
@@ -99,6 +101,7 @@ export async function activatePlugin(
         return () => style.remove();
       });
     },
+    ui,
   };
   const context = {
     effect,
@@ -108,7 +111,7 @@ export async function activatePlugin(
     signal: options.signal,
     theme: options.theme,
   } as PluginClientContext;
-  for (const name of ["slots", "host", "styles"] as const) {
+  for (const name of ["slots", "host", "styles", "ui"] as const) {
     Object.defineProperty(context, name, {
       get() {
         assertActive();

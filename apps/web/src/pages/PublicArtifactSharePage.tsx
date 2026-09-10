@@ -1,3 +1,4 @@
+import { cn } from "@nakama/ui/utils";
 import { Download04Icon } from "hugeicons-react";
 import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
@@ -19,7 +20,6 @@ import {
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
 import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
-import { cn } from "@/lib/utils";
 
 function publicShareError(token: string, loadError: unknown): string | null {
   if (!token) {

@@ -1,5 +1,5 @@
+import { Button } from "@nakama/ui/button";
 import { Folder01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
 import {
   type ArtifactFolderEntry,
   artifactFolderFileLabel,

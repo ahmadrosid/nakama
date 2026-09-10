@@ -1,11 +1,11 @@
 import type { SkillSummary } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import {
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
   profileCanUseLearnCommand,
   type SkillTokenRange,
 } from "@/lib/chat-composer-skills";
-import { cn } from "@/lib/utils";
 
 interface ChatSkillTokenOverlayProps {
   className?: string;

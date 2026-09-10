@@ -7,6 +7,7 @@ import type {
   WorkflowRunRecord,
   WorkflowStep,
 } from "@nakama/core/contract";
+import type * as UI from "@nakama/ui";
 import type * as ReactType from "react";
 import css from "../ui/style.css" with { type: "text" };
 
@@ -19,12 +20,13 @@ type StepDraft = {
 };
 type Context = {
   React: typeof ReactType;
+  ui: typeof UI;
   signal: AbortSignal;
   slots: { register(slot: "page", component: ReactType.ComponentType): void };
   styles(css: string): void;
   host: { call(action: string, input?: unknown): Promise<unknown> };
 };
-export const inject = ["slots", "host", "styles"];
+export const inject = ["slots", "host", "styles", "ui"];
 const stepFields: Record<string, string[]> = {
   assert: ["path", "expected"],
   compare: ["left", "op", "right", "tolerance"],
@@ -77,6 +79,7 @@ function serializeSteps(steps: StepDraft[]) {
 
 export function apply(ctx: Context) {
   const React = ctx.React;
+  const { Button } = ctx.ui;
   ctx.styles(css);
   const action = async <T,>(name: string, input?: unknown): Promise<T> =>
     (await ctx.host.call(name, input)) as T;
@@ -136,9 +139,9 @@ export function apply(ctx: Context) {
                   </option>
                 ))}
               </select>
-              <button onClick={() => setSelectedId(null)} type="button">
+              <Button onClick={() => setSelectedId(null)} type="button">
                 New workflow
-              </button>
+              </Button>
             </div>
             <Editor
               key={`${selected?.id ?? "new"}:${selected?.version ?? 0}`}

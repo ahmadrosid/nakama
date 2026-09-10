@@ -1,7 +1,7 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
-import { cn } from "@/lib/utils";
 
 export function ChatPageColumn({
   children,

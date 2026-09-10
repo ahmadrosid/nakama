@@ -1,15 +1,15 @@
 import type { ProfileDetail, ToolSummary } from "@nakama/core/contract";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
+import { Button } from "@nakama/ui/button";
+import { cn } from "@nakama/ui/utils";
 import { Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/use-auth";
 import { isPluginOwned } from "@/hooks/use-plugins";
 import { canUseToolPlayground, toolPlaygroundPath } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
 export function ProfileToolsSection({

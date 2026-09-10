@@ -1,12 +1,12 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { Button } from "@nakama/ui/button";
+import { DialogOverlay, DialogTitle } from "@nakama/ui/dialog";
+import { cn } from "@nakama/ui/utils";
 import { Menu01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ProfileRail } from "@/components/ProfileRail";
-import { Button } from "@/components/ui/button";
-import { DialogOverlay, DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 
 /**
  * Phone-sized navigation. The rail and sidebar cost a fixed 296px, which is

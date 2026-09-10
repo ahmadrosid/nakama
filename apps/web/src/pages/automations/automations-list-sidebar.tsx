@@ -1,6 +1,6 @@
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
 import { RefreshIcon, Search01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   AutomationListItem,
   AutomationListSkeleton,

@@ -2,9 +2,10 @@
  * Adapted from AIcss Web Search (https://www.aicss.dev/components/web-search).
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
+
+import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 import styles from "./WebSearch.module.css";
 import type {
   WebSearchSiteState,

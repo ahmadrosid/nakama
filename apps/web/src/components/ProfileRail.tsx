@@ -1,14 +1,11 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { SidebarUserMenu } from "@/components/SidebarUserMenu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
@@ -21,7 +18,6 @@ import {
 } from "@/lib/chat-history";
 import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 
 export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: profiles = [] } = useProfilesQuery();

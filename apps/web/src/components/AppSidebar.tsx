@@ -1,3 +1,6 @@
+import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
@@ -8,12 +11,6 @@ import type { ElementType } from "react";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
@@ -33,7 +30,6 @@ import {
   pluginIdFromPath,
   visibleNavGroups,
 } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 
 export function AppSidebar({
   variant = "shell",

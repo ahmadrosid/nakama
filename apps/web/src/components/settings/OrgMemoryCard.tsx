@@ -1,11 +1,6 @@
 import { parseOrgMemoryContent } from "@nakama/core/soul/org-memory";
-import { PencilIcon, PinIcon } from "hugeicons-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { OrgMemoryHistoryPanel } from "@/components/settings/OrgMemoryHistoryPanel";
-import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@nakama/ui/button";
+import { Card } from "@nakama/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -13,20 +8,21 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
+import { toast } from "@nakama/ui/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
+import { PencilIcon, PinIcon } from "hugeicons-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { OrgMemoryHistoryPanel } from "@/components/settings/OrgMemoryHistoryPanel";
+import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
 import { useAuth } from "@/context/use-auth";
 import { useOrgMemory, useUpdateOrgMemory } from "@/hooks/use-org-memory";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 const MAX_BODY_BYTES = 256_000;
 

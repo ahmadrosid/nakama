@@ -1,6 +1,5 @@
 import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
-import { File01Icon, Folder01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +7,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
+import { File01Icon, Folder01Icon } from "hugeicons-react";
 
 function SoulFileEditorHeader({
   openFileMeta,

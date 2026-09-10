@@ -6,8 +6,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/command";
+import { cn } from "@nakama/ui/utils";
 
 export function McpServerAssignList({
   className,

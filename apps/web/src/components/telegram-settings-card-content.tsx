@@ -1,4 +1,20 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Copy01Icon,
   RefreshIcon,
@@ -12,23 +28,7 @@ import {
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { Button } from "@/components/ui/button";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
-import { cn } from "@/lib/utils";
 
 function pairingCodeDescription(
   pairingCode: string | null,

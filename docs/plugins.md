@@ -130,6 +130,7 @@ Services must be declared in `inject`; unavailable or undeclared services fail a
 
 - `slots.register("page", Component)` registers exactly one page for this plugin.
 - `host.call(actionKey, input)` invokes this plugin's backend action. Nakama supplies authentication, CSRF, and the activation's org; plugins do not build raw API requests.
+- `ui` exposes the shared `@nakama/ui` components (for example `const { Button, Input } = ctx.ui`). Declare `"ui"` in `inject`; use type-only `@nakama/ui` imports for TypeScript. The host supplies React and the component styles, so do not bundle React or the UI library into a plugin.
 - `styles(css)` adds a stylesheet and removes it on unload. Scope selectors under `[data-plugin-id="your-plugin-id"]` so they do not affect the dashboard.
 
 Every context also receives `React`, `orgId`, `pluginId`, `theme`, `signal`, and `effect(setup)`. An effect's setup must return a cleanup function. Cleanup runs on navigation, org/theme/revision changes, failed activation, or unmount. React render failures are contained by the page error boundary. Startup has a 12-second deadline.

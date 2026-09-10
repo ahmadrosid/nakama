@@ -2,7 +2,7 @@
  * Adapted from AIcss Image Generation (https://www.aicss.dev/components/image-generation).
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
-import { cn } from "@/lib/utils";
+import { cn } from "@nakama/ui/utils";
 import styles from "./ImageGeneration.module.css";
 
 export type ImageGenerationAspect = "square" | "portrait" | "landscape";

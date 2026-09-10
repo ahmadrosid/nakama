@@ -11,7 +11,7 @@
     line-height: 1.5;
     color: var(--foreground);
   }
-  button,
+  button:not([data-slot]),
   input,
   select,
   textarea {
@@ -23,17 +23,17 @@
     border: 1px solid var(--border);
     border-radius: 7px;
   }
-  button {
+  button:not([data-slot]) {
     min-height: 38px;
     cursor: pointer;
     transition:
       background-color 150ms,
       border-color 150ms;
   }
-  button:hover:not(:disabled) {
+  button:not([data-slot]):hover:not(:disabled) {
     background: var(--accent);
   }
-  button:disabled {
+  button:not([data-slot]):disabled {
     cursor: not-allowed;
     opacity: 0.45;
   }
@@ -465,7 +465,7 @@
     .workflow-panel {
       padding: 24px 16px;
     }
-    button {
+    button:not([data-slot]) {
       min-height: 44px;
     }
   }

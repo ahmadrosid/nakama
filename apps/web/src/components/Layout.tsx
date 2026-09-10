@@ -1,3 +1,5 @@
+import { TooltipProvider } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import { useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -5,7 +7,6 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppContext } from "@/context/use-app-context";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
@@ -16,7 +17,6 @@ import {
   pageIdFromPath,
   pluginIdFromPath,
 } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 
 export function Layout() {
   const shell = useAppShell();

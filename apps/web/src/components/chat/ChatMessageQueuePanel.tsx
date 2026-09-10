@@ -1,10 +1,10 @@
+import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon, Clock01Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
   type ComposerStackEdge,
   composerShelfPanelClass,
 } from "@/lib/chat-stream";
-import { cn } from "@/lib/utils";
 
 export interface QueuedComposerMessage {
   attachmentCount: number;

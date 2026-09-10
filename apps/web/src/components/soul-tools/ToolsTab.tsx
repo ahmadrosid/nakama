@@ -3,11 +3,7 @@ import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
-import { Add01Icon, Delete02Icon, Search01Icon } from "hugeicons-react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,9 +11,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { Add01Icon, Delete02Icon, Search01Icon } from "hugeicons-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useProfilesQuery, useToolsQuery } from "@/hooks/use-app-queries";
@@ -30,7 +31,6 @@ import {
   toolPlaygroundPath,
 } from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 const toolSearchThreshold = 4;

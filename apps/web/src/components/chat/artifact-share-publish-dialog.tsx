@@ -1,6 +1,4 @@
-import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
-import type { PublishIntent } from "@/components/chat/use-artifact-share-controls";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,10 +6,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
+import type { PublishIntent } from "@/components/chat/use-artifact-share-controls";
 
 type ArtifactSharePublishDialogProps = {
   open: boolean;

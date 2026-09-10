@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { type Frame, vu } from "@/components/ui/matrix-frames";
-import { cn } from "@/lib/utils";
+import { type Frame, vu } from "./matrix-frames";
+import { cn } from "./utils";
 
 type MatrixMode = "default" | "vu";
 

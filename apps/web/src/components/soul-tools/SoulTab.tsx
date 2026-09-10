@@ -1,4 +1,5 @@
 import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -17,7 +18,6 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { findDefaultProfile, resolveInitialProfileId } from "@/lib/profiles";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 

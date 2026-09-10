@@ -4,7 +4,7 @@ import {
   ArrowUp01Icon,
   CheckmarkCircle01Icon,
 } from "hugeicons-react";
-import { cn } from "@/lib/utils";
+import { cn } from "./utils";
 
 const Select = SelectPrimitive.Root;
 

@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@nakama/core": "workspace:*",
+    "@nakama/ui": "workspace:*",
     "@types/react": "^19.1.6"
   }
 }

@@ -1,8 +1,8 @@
+import { Button } from "@nakama/ui/button";
+import { Card } from "@nakama/ui/card";
+import { Input } from "@nakama/ui/input";
 import { useRef, useState } from "react";
 import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/use-auth";
 
 interface SetupStepOrganizationProps {

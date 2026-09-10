@@ -1,7 +1,7 @@
 import type { SkillSummary } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import { CheckmarkCircle01Icon, SparklesIcon } from "hugeicons-react";
 import type { ComposerSlashSuggestion } from "@/lib/chat-composer-skills";
-import { cn } from "@/lib/utils";
 
 interface ChatSkillPickerProps {
   activeIndex: number;

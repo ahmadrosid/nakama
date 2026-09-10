@@ -1,7 +1,7 @@
 import { Edit03Icon } from "hugeicons-react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "./button";
 import {
   Dialog,
   DialogContent,
@@ -9,10 +9,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+} from "./dialog";
+import { Spinner } from "./spinner";
+import { Textarea } from "./textarea";
+import { cn } from "./utils";
 
 type ExpandableTextareaProps = {
   label: string;

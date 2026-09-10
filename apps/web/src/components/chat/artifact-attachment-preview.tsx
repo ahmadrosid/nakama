@@ -1,3 +1,6 @@
+import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import {
   File01Icon,
   Image01Icon,
@@ -5,15 +8,8 @@ import {
   ViewIcon,
 } from "hugeicons-react";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
 import { formatBytes } from "@/lib/knowledge-base-files";
-import { cn } from "@/lib/utils";
 
 interface ArtifactAttachmentPreviewProps {
   artifact: ChatArtifactRef;

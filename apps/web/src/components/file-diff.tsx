@@ -2,7 +2,7 @@
  * Adapted from AIcss File Diff (https://www.aicss.dev/components/file-diff).
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
-import { cn } from "@/lib/utils";
+import { cn } from "@nakama/ui/utils";
 import styles from "./file-diff.module.css";
 import type { FileDiffRow } from "./file-diff.shared";
 

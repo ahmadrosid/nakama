@@ -1,12 +1,12 @@
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { McpTab } from "@/components/soul-tools/McpTab";
 import { ToolsTab } from "@/components/soul-tools/ToolsTab";
-import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 import { PluginsPage } from "@/pages/PluginsPage";
 import { LlmUsageTab } from "@/pages/StatusPage";
 import {

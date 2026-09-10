@@ -1,14 +1,14 @@
 import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type { AgentTodo } from "@nakama/core/contract";
+import { Matrix } from "@nakama/ui/matrix";
+import { type Frame, snake3x2 } from "@nakama/ui/matrix-frames";
+import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon, ListViewIcon } from "hugeicons-react";
 import { useState } from "react";
-import { Matrix } from "@/components/ui/matrix";
-import { type Frame, snake3x2 } from "@/components/ui/matrix-frames";
 import {
   type ComposerStackEdge,
   composerShelfPanelClass,
 } from "@/lib/chat-stream";
-import { cn } from "@/lib/utils";
 
 interface AgentTodoPanelProps {
   embedded?: boolean;
