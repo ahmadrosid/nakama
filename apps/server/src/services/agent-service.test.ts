@@ -737,6 +737,18 @@ describe("AgentService skill_manage injection", () => {
   test("injects skill_manage for web/cli only when manage-skills is assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
+    // Give the profile at least one own tool so the platform groups (incl.
+    // skill_manage) are eligible; the no-tools case is covered separately.
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_skill_manage",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile("profile_default", "tool_for_skill_manage");
     const skills = new SkillsService(db);
     await ensureBundledSkillFiles();
     await skills.syncDiscoveredSkills();
@@ -780,6 +792,64 @@ describe("AgentService skill_manage injection", () => {
     expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
       false
     );
+  });
+
+  test("skips platform tool groups for a profile with no tools", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+
+    type ResolveTools = {
+      resolveProfileTools(
+        profile: StoredProfileRecord,
+        options?: {
+          includeAutomationTools?: boolean;
+          includeSkillManageTools?: boolean;
+          includeWorkflowTools?: boolean;
+          includeTodoTools?: boolean;
+          includeQuestionTools?: boolean;
+        }
+      ): Promise<Array<{ name: string }>>;
+    };
+
+    const resolve = (
+      service as unknown as ResolveTools
+    ).resolveProfileTools.bind(service);
+    const profile = createDefaultProfile();
+
+    // Profile with zero own tools: no platform groups, no session helpers.
+    const tools = await resolve(profile, {
+      includeAutomationTools: true,
+      includeQuestionTools: true,
+      includeSkillManageTools: true,
+      includeTodoTools: true,
+      includeWorkflowTools: true,
+    });
+    expect(tools).toHaveLength(0);
+
+    // Give the profile one own tool; platform groups come back.
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_platform_groups",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile("profile_default", "tool_for_platform_groups");
+    const withTools = await resolve(profile, {
+      includeAutomationTools: true,
+      includeQuestionTools: true,
+      includeSkillManageTools: true,
+      includeTodoTools: true,
+      includeWorkflowTools: true,
+    });
+    expect(withTools.some((tool) => tool.name === "test_tool")).toBe(true);
+    expect(withTools.some((tool) => tool.name === "ask_user_question")).toBe(
+      true
+    );
+    expect(withTools.some((tool) => tool.name === "todo_write")).toBe(true);
   });
 
   test("keeps raw /learn in history on web when manage-skills is assigned", async () => {
