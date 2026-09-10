@@ -1893,6 +1893,11 @@ export interface ListMcpServersResponse {
 }
 
 export interface McpServerResponse {
+  /**
+   * Present when the server needs a browser sign-in before it can connect.
+   * Open it, approve, and the OAuth callback finishes the connection.
+   */
+  authorizationUrl?: string;
   server: McpServerDetail;
 }
 
