@@ -47,6 +47,7 @@ Nakama **caches** the tool list at connect time — it is not re-fetched on ever
 |-------|---------|
 | `connected` | Active connection and cached tools |
 | `disconnected` | No connection; tools stale or empty |
+| `needs_auth` | Waiting for a browser sign-in, shown as **Sign-in required** with a **Sign in** button |
 | `error` | Last connect/sync failed — see `lastError` |
 
 - **Connect** — opens the client, fetches and caches tools
@@ -125,13 +126,16 @@ Hosted MCP servers such as Notion, Linear or Sentry do not take an API key heade
 use OAuth, the same as any other app you sign in to, so Nakama needs one trip through your
 browser before it can connect.
 
-1. Add the server with its URL and no headers, then save. **Test connection** reports a
-   `401` for these, which is expected: the sign-in has not happened yet
-2. Nakama opens the provider's authorization page in a new tab. If a popup blocker eats it,
-   use the link in the banner on the MCP page
+1. Add the server with its URL and no headers. **Test connection** answers "This server
+   signs in with a browser" in amber rather than a red error, and the save button becomes
+   **Add and sign in**
+2. A dialog offers the provider's sign-in page. Click it, and the page opens in a new tab
 3. Approve the access the provider asks for
 4. The provider sends you back to Nakama, which finishes the connection and caches the
-   tools. The MCP page flips to **connected** on its own
+   tools. The dialog closes itself and the row flips to **connected**
+
+Close the dialog with **Finish later** and nothing is lost: the row stays as **Sign-in
+required** with a **Sign in** button that starts the same flow again.
 
 The refresh token is stored with the server, so Nakama keeps the connection alive across
 restarts without asking again. **Connect** starts a fresh sign-in whenever the grant is
@@ -192,7 +196,7 @@ MCP management is platform-admin only (same as profiles, builtins, and skills).
 ## Troubleshooting
 
 - **`error` status** — check `lastError`: wrong URL, missing `command`, unreachable host, or expired credentials
-- **"This server requires authorization"** - the OAuth sign-in never finished. Click **Connect** to get a fresh link, and check the public URL matches the origin you open the dashboard on
+- **`needs_auth` status / "Sign-in required"** - the OAuth sign-in never finished. Click **Sign in** on the row for a fresh link, and check the public URL matches the origin you open the dashboard on
 - **No tools discovered** — server connected but returned zero tools; fix server-side config, then **Sync tools**
 - **"not connected" on tool call** — connection dropped; reconnect. For stdio, confirm the command is on PATH
 - **Exa rate limit** — add an `x-api-key` header with your [Exa API key](https://dashboard.exa.ai/api-keys), then reconnect
