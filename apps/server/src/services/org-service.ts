@@ -921,8 +921,16 @@ export class OrgService {
     }
 
     const members = await this.databaseAdapter.listOrgMembers(orgId);
-    const adminCount = members.filter((entry) => entry.role === "admin").length;
-    if (adminCount > 1) {
+    const admins = members.filter((entry) => entry.role === "admin");
+    const adminUsers = await Promise.all(
+      admins.map((entry) => this.databaseAdapter.getUserById(entry.userId))
+    );
+    // disabled_at is install-wide and does not touch org_members rows, so a raw
+    // admin-row count still sees a disabled admin as usable coverage.
+    const usableAdminCount = adminUsers.filter(
+      (user) => user && !user.disabledAt
+    ).length;
+    if (usableAdminCount > 1) {
       return member;
     }
 
