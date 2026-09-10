@@ -361,6 +361,7 @@ async function initializeOptionalServices(options: {
   try {
     await options.mcpService.connectEnabledServers({
       callbackBaseUrl: resolveComposioCallbackBaseUrl(),
+      reauthorize: false,
     });
   } catch (error) {
     console.warn("Could not connect MCP servers:", error);

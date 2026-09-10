@@ -32,12 +32,22 @@ import {
   serverAdvertisesOAuth,
 } from "./mcp-oauth";
 
+const INVALID_OAUTH_CALLBACK_MESSAGE =
+  "This sign-in link is no longer valid. Start it again from the MCP page.";
+
 const AUTHORIZATION_REQUIRED_MESSAGE =
   "This server signs in with a browser. Add it, then approve the sign-in to connect.";
 
 export interface McpConnectOptions {
   /** Origin the OAuth callback is reachable at; omitted means no OAuth. */
   callbackBaseUrl?: string;
+  /**
+   * Whether this caller may start a fresh sign-in. False for startup and other
+   * unattended reconnects: they should refresh a grant they already have, not
+   * spend discovery on a link nobody will open, and not replace the state an
+   * operator is in the middle of using.
+   */
+  reauthorize?: boolean;
 }
 
 function buildOAuthProvider(
@@ -49,12 +59,18 @@ function buildOAuthProvider(
     return;
   }
 
-  return new McpServerOAuthProvider(
+  const provider = new McpServerOAuthProvider(
     server.id,
     options.callbackBaseUrl,
     readMcpOAuthGrant(server.config),
     persist
   );
+
+  if (options.reauthorize === false && !provider.hasTokens()) {
+    return;
+  }
+
+  return provider;
 }
 
 function withOAuthGrant(config: unknown, grant?: McpOAuthGrant): unknown {
@@ -294,29 +310,20 @@ export class McpService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const authorizationUrl = provider?.authorizationUrl;
+      // Re-read: the provider persisted the pending grant during the attempt,
+      // and the record this method started from predates it.
+      const stored = (await this.db.getMcpServer(serverId)) ?? server;
       const updated: StoredMcpServerRecord = {
-        ...server,
+        ...stored,
         lastError: authorizationUrl ? null : message,
         status: authorizationUrl ? "needs_auth" : "error",
         updatedAt: new Date().toISOString(),
       };
 
-      // The provider already persisted the pending grant, so re-read it rather
-      // than writing the pre-flow config back over it.
-      const current = await this.db.getMcpServer(serverId);
-      await this.db.upsertMcpServer({
-        ...updated,
-        config: current?.config ?? updated.config,
-      });
+      await this.db.upsertMcpServer(updated);
 
       if (authorizationUrl) {
-        return {
-          authorizationUrl,
-          server: toMcpServerDetail({
-            ...updated,
-            config: current?.config ?? updated.config,
-          }),
-        };
+        return { authorizationUrl, server: toMcpServerDetail(updated) };
       }
 
       throw new Error(message);
@@ -331,26 +338,25 @@ export class McpService {
     serverId: string,
     options: { code: string; state: string; callbackBaseUrl: string }
   ): Promise<McpServerResponse> {
-    const server = await this.requireServer(serverId);
+    // One message for a wrong id, a server that never started a flow and a
+    // wrong state: this endpoint is public, so it says nothing about which
+    // server ids exist.
+    const server = await this.db.getMcpServer(serverId);
 
-    if (server.transport !== "http") {
-      throw new NakamaApiError(
-        "Only HTTP MCP servers use browser authorization.",
-        400
-      );
+    if (!server || server.transport !== "http") {
+      throw new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400);
     }
 
     // The base the flow actually started from wins: the token exchange must
     // repeat that redirect_uri verbatim.
     const pending = readMcpOAuthGrant(server.config);
-    const provider = buildOAuthProvider(
-      server,
-      { callbackBaseUrl: pending?.callbackBaseUrl ?? options.callbackBaseUrl },
-      (grant) => this.saveOAuthGrant(serverId, grant)
+    const callbackBaseUrl = pending?.callbackBaseUrl ?? options.callbackBaseUrl;
+    const provider = buildOAuthProvider(server, { callbackBaseUrl }, (grant) =>
+      this.saveOAuthGrant(serverId, grant)
     );
 
     if (!provider?.matchesPendingState(options.state)) {
-      throw new NakamaApiError("Invalid OAuth state.", 400);
+      throw new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400);
     }
 
     const result = await auth(provider, {
@@ -362,9 +368,7 @@ export class McpService {
       throw new NakamaApiError("MCP authorization did not complete.", 400);
     }
 
-    return this.connectServer(serverId, {
-      callbackBaseUrl: options.callbackBaseUrl,
-    });
+    return this.connectServer(serverId, { callbackBaseUrl });
   }
 
   private async saveOAuthGrant(
