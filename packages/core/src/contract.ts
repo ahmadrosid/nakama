@@ -2480,6 +2480,8 @@ export interface ToolContext {
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
+  /** Assigned plugin tools in this group are discovered per user turn. */
+  discoveryGroup?: string;
   /**
    * When true, the LLM provider runs this tool itself and `run` is never
    * called. Only `web_search` uses it today: the built-in stub is hosted, a

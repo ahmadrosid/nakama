@@ -116,6 +116,9 @@ describe("AgentService plugin capabilities", () => {
       { pluginService: plugins }
     );
     expect(
+      before.find((entry) => entry.name === tool!.name)?.discoveryGroup
+    ).toBe("notes");
+    expect(
       before.some(
         (item) => item.name === derivePluginToolName("notes", "write")
       )

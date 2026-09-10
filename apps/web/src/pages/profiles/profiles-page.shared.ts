@@ -51,7 +51,7 @@ export function profileHasPendingEdits(snapshot: ProfileEditSnapshot): boolean {
 }
 
 export type RemoveAssignmentTarget =
-  | { kind: "tool"; id: string; name: string }
+  | { kind: "tool"; id: string; ids?: string[]; name: string }
   | { kind: "mcp"; id: string; name: string }
   | { kind: "skill"; id: string; name: string }
   | { kind: "composio"; id: string; name: string };

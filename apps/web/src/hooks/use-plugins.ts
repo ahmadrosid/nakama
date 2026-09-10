@@ -5,6 +5,7 @@ import type {
   OrgPluginDetail,
   PluginPackagePreviewResponse,
   PluginPackageRequest,
+  ToolSummary,
   UpdateOrgPluginRequest,
 } from "@nakama/core/contract";
 import {
@@ -28,6 +29,21 @@ export type PluginPageViewKind =
 
 export function isPluginOwned(resource: { pluginId?: string | null }): boolean {
   return Boolean(resource.pluginId);
+}
+
+/** Group plugin actions for one-click profile assignment, retaining their IDs. */
+export function groupPluginTools(tools: ToolSummary[]) {
+  const groups = new Map<string, { tool: ToolSummary; tools: ToolSummary[] }>();
+  for (const tool of tools) {
+    const key = tool.pluginId ? `plugin:${tool.pluginId}` : `tool:${tool.id}`;
+    const group = groups.get(key);
+    if (group) {
+      group.tools.push(tool);
+    } else {
+      groups.set(key, { tool, tools: [tool] });
+    }
+  }
+  return [...groups.values()];
 }
 
 export function orgPluginsQueryOptions(orgId: string) {

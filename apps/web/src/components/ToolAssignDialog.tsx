@@ -17,11 +17,12 @@ import {
 } from "@nakama/ui/dialog";
 import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
-import { isPluginOwned } from "@/hooks/use-plugins";
+import { groupPluginTools, isPluginOwned } from "@/hooks/use-plugins";
 
 interface ToolAssignDialogProps {
   disabled?: boolean;
   error?: string | null;
+  groupPlugins?: boolean;
   hideTrigger?: boolean;
   onAssign: (toolId: string) => void | Promise<void>;
   onOpenChange?: (open: boolean) => void;
@@ -31,6 +32,7 @@ interface ToolAssignDialogProps {
 
 export function ToolAssignDialog({
   tools,
+  groupPlugins = false,
   disabled = false,
   error = null,
   hideTrigger = false,
@@ -97,7 +99,10 @@ export function ToolAssignDialog({
                   : "No tools found."}
               </CommandEmpty>
               <CommandGroup>
-                {tools.map((tool) => (
+                {(groupPlugins
+                  ? groupPluginTools(tools)
+                  : tools.map((tool) => ({ tool, tools: [tool] }))
+                ).map(({ tool, tools: members }) => (
                   <CommandItem
                     disabled={disabled}
                     key={tool.id}
@@ -105,13 +110,19 @@ export function ToolAssignDialog({
                       void onAssign(tool.id);
                       setOpen(false);
                     }}
-                    value={`${tool.name} ${tool.description}`}
+                    value={`${tool.pluginId ?? ""} ${members.map((entry) => `${entry.name} ${entry.description}`).join(" ")}`}
                   >
                     <div className="min-w-0">
-                      <p>{tool.name}</p>
+                      <p>
+                        {groupPlugins && tool.pluginId
+                          ? tool.pluginId
+                          : tool.name}
+                      </p>
                       {isPluginOwned(tool) ? (
                         <p className="truncate text-muted-foreground text-xs">
-                          {tool.pluginId}
+                          {groupPlugins
+                            ? `${members.length} actions`
+                            : tool.pluginId}
                         </p>
                       ) : tool.description ? (
                         <p className="truncate text-muted-foreground text-xs">

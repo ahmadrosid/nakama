@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
-import type { OrgPluginDetail } from "@nakama/core/contract";
+import type { OrgPluginDetail, ToolSummary } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -10,6 +10,7 @@ import {
 } from "@/context/auth-context-shared";
 import {
   formatPluginTrustLines,
+  groupPluginTools,
   isPluginOwned,
   nextPluginVersions,
   orgPluginQueryOptions,
@@ -505,4 +506,17 @@ describe("plugin ownership and update helpers", () => {
     expect(lines.join(" ")).toContain("deadbeef");
     expect(lines.join(" ")).toContain("notes");
   });
+});
+
+test("plugin assignment groups keep every action ID and separate ordinary tools", () => {
+  const tools = [
+    { id: "read", name: "read_file" },
+    { id: "create", name: "plugin_workflows__create", pluginId: "workflows" },
+    { id: "notes", name: "plugin_notes__list", pluginId: "notes" },
+    { id: "run", name: "plugin_workflows__run", pluginId: "workflows" },
+  ] as ToolSummary[];
+  expect(
+    groupPluginTools(tools).map((group) => group.tools.map((tool) => tool.id))
+  ).toEqual([["read"], ["create", "run"], ["notes"]]);
+  expect(tools).toHaveLength(4);
 });

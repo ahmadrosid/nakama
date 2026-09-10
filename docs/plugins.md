@@ -135,6 +135,8 @@ Services must be declared in `inject`; unavailable or undeclared services fail a
 
 Every context also receives `React`, `orgId`, `pluginId`, `theme`, `signal`, and `effect(setup)`. An effect's setup must return a cleanup function. Cleanup runs on navigation, org/theme/revision changes, failed activation, or unmount. React render failures are contained by the page error boundary. Startup has a 12-second deadline.
 
+Plugins that need shadcn-style controls must use `ctx.ui` from `packages/ui` for buttons, inputs, selects, switches, menus, and dialogs. Keep plugin CSS focused on layout; do not replace the shared control styles with broad `button` or `input` selectors. Menus and dialogs render in host portals, so layout styles scoped to the plugin page do not reach their content.
+
 Bundle browser code as one self-contained ESM module without bundling React or React DOM. Use `ctx.React.createElement`, or compile JSX in classic mode against a local `React = ctx.React`. The official Workflows source is an example. Do not import Nakama's internal modules. Module URLs include the package version and org installation revision; keep top-level code free of side effects and register effects inside `apply`.
 
 This replaces the pre-release HTML/iframe UI contract. Convert `entryHtml` to `entryModule` and replace bootstrap/ready messages with `inject`/`apply`. Backend actions and stored plugin data keep their existing contract. These are trusted browser modules; declared services and effect cleanup are lifecycle controls, not a JavaScript security sandbox. The first supported UI slot is the plugin page; this does not introduce DeepSeek's dynamic code-authoring tools or its full runtime.
@@ -162,3 +164,12 @@ npm publish --access public
 ```
 
 Include built UI assets and bundled JavaScript in the published package. In **System → Plugins**, preview `@your-team/nakama-notes` at `1.0.0`, then approve installation.
+
+
+### Profile assignment and discovery
+
+The profile Tools list groups actions by plugin. Adding a plugin assigns its currently available actions in one interaction; removing the group removes the assigned actions. Existing partial assignments remain partial until an admin adds the remaining actions. New actions introduced by a plugin update are not automatically assigned.
+
+Chat keeps ordinary tools available immediately. Assigned plugin actions contribute only a compact name catalog to `find_tools` initially. The agent searches by plugin or action name, then receives up to five matching definitions on the next model call. Repeating a broad search loads the remaining matches. Loaded definitions stay available for the current user request and reset on the next request, in both streaming and non-streaming chat. Prior tool calls and results remain in conversation history.
+
+Discovery cannot add unassigned actions. Execution still checks the current organization, profile assignment, actor role, and plugin lifecycle state. Discovery does not execute an action, and a newly discovered action cannot execute until the next model call. This reduces initial schema size; a turn using every action still pays for those definitions after discovery.
