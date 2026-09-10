@@ -3426,19 +3426,30 @@ export class AgentService {
       ];
     }
 
-    if (includeAutomationTools && this.automationTools.length > 0) {
+    // A profile with no tools of its own (builtin, MCP, and Composio all
+    // empty) answers without tools.  Skip the platform groups below so an
+    // admin who stripped every tool from a profile actually gets an empty tool
+    // list on chat turns — injecting 16 helpers here makes small local models
+    // print a fake tool call as plain text instead of doing the work.
+    const hasOwnTools = resolved.length > 0;
+
+    if (
+      hasOwnTools &&
+      includeAutomationTools &&
+      this.automationTools.length > 0
+    ) {
       resolved = [...resolved, ...this.automationTools];
     }
 
-    if (includeWorkflowTools && this.workflowTools.length > 0) {
+    if (hasOwnTools && includeWorkflowTools && this.workflowTools.length > 0) {
       resolved = [...resolved, ...this.workflowTools];
     }
 
-    if (includeTodoTools && this.todoTools.length > 0) {
+    if (hasOwnTools && includeTodoTools && this.todoTools.length > 0) {
       resolved = [...resolved, ...this.todoTools];
     }
 
-    if (includeQuestionTools && this.questionTools.length > 0) {
+    if (hasOwnTools && includeQuestionTools && this.questionTools.length > 0) {
       resolved = [...resolved, ...this.questionTools];
     }
 
@@ -3456,7 +3467,7 @@ export class AgentService {
       resolved = [...resolved, ...skillTools];
 
       // Interactive web/cli only: messaging, automation, task, and subagent omit this.
-      if (includeSkillManageTools) {
+      if (hasOwnTools && includeSkillManageTools) {
         const assignedSkills = await this.skillsService.listSkillsForProfile(
           profile.id
         );
@@ -3476,7 +3487,9 @@ export class AgentService {
       resolved = [...resolved, ...this.superBotTools];
     }
 
-    resolved = [...resolved, ...this.orgMemoryTools];
+    if (hasOwnTools) {
+      resolved = [...resolved, ...this.orgMemoryTools];
+    }
 
     if (!includeSubAgentTool) {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
@@ -3502,7 +3515,7 @@ export class AgentService {
       includeSkillManageTools,
       userId,
     });
-    if (channel === "discord") {
+    if (channel === "discord" && tools.length > 0) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
     // Same table as the tools above on purpose: a channel that can manage
@@ -3534,7 +3547,12 @@ export class AgentService {
       : profile.model;
     const compaction = this.resolveCompactionConfig(profile, selectedModel);
     const harness = this.createHarnessForProfile(profile, selectedModel);
-    tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
+    // Part of the "no tools" contract: session-history and channel-artifact
+    // helpers are also platform groups, so a profile that resolved to zero
+    // tools must not receive them either.
+    if (tools.length > 0) {
+      tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
+    }
     const saveAttachment = createAttachmentSaver(this.db, {
       channel,
       orgId,
