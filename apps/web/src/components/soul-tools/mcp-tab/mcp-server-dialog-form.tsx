@@ -16,6 +16,28 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
+const TEST_RESULT_TONE = {
+  bad: "bg-destructive/10 text-destructive",
+  ok: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  pending: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+} as const;
+
+/**
+ * A server asking for a browser sign-in is not misconfigured, so it never gets
+ * the red box that means "fix your input", and in the Sign-in tab it is the
+ * answer the operator was after.
+ */
+function testResultTone(
+  result: { ok: boolean; requiresAuthorization: boolean },
+  signIn: boolean
+): keyof typeof TEST_RESULT_TONE {
+  if (result.ok || (signIn && result.requiresAuthorization)) {
+    return "ok";
+  }
+
+  return result.requiresAuthorization ? "pending" : "bad";
+}
+
 function kindHint(kind: McpServerKind): string {
   if (kind === "signin") {
     return "A hosted server that signs you in through your browser (OAuth). Nakama registers itself with the provider and stores the grant, so there is no key to paste.";
@@ -247,15 +269,7 @@ export function McpServerDialogForm({
           <p
             className={cn(
               "rounded-md px-3 py-2.5 text-sm",
-              (testResult.ok || (signIn && testResult.requiresAuthorization)) &&
-                "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-              // A server that wants a browser sign-in is not misconfigured, so
-              // it does not get the red box that means "fix your input".
-              !(testResult.ok || signIn) &&
-                testResult.requiresAuthorization &&
-                "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-              !(testResult.ok || testResult.requiresAuthorization) &&
-                "bg-destructive/10 text-destructive"
+              TEST_RESULT_TONE[testResultTone(testResult, signIn)]
             )}
             role="status"
           >

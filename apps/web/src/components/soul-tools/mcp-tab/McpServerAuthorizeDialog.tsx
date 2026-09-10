@@ -10,14 +10,6 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-function authorizationHost(authorizationUrl: string): string {
-  try {
-    return new URL(authorizationUrl).host;
-  } catch {
-    return "the provider";
-  }
-}
-
 /**
  * The link is a plain anchor the operator clicks: a window.open fired after the
  * request that produced this URL is a popup blocker's favourite target, and a
@@ -44,7 +36,7 @@ export function McpServerAuthorizeDialog({
         <DialogHeader className="gap-3">
           <DialogTitle>Sign in to {serverName}</DialogTitle>
           <DialogDescription>
-            {authorizationHost(authorizationUrl)} handles the sign-in. Approve
+            {new URL(authorizationUrl).host} handles the sign-in. Approve
             Nakama's access there and this server connects on its own. Nothing
             is stored until you approve.
           </DialogDescription>
