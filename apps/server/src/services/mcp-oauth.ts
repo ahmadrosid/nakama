@@ -1,4 +1,8 @@
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import {
+  discoverAuthorizationServerMetadata,
+  discoverOAuthProtectedResourceMetadata,
+  type OAuthClientProvider,
+} from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
   OAuthClientInformationFull,
   OAuthClientInformationMixed,
@@ -40,6 +44,29 @@ export function readMcpOAuthGrant(config: unknown): McpOAuthGrant | undefined {
   const grant = (config as StoredMcpHttpConfig).oauth;
 
   return typeof grant === "object" && grant !== null ? grant : undefined;
+}
+
+/**
+ * Whether a server that refused us speaks OAuth, asked the same way `auth()`
+ * asks: RFC 9728 protected resource metadata first, then the authorization
+ * server metadata at the origin. Reading it off the error text instead would
+ * call every 401 an OAuth server, including a plain bad API key.
+ */
+export async function serverAdvertisesOAuth(url: string): Promise<boolean> {
+  try {
+    await discoverOAuthProtectedResourceMetadata(url);
+    return true;
+  } catch {
+    // No protected resource metadata: the server may still name its
+    // authorization server the older way, at the origin.
+  }
+
+  try {
+    const { origin } = new URL(url);
+    return Boolean(await discoverAuthorizationServerMetadata(origin));
+  } catch {
+    return false;
+  }
 }
 
 /**
