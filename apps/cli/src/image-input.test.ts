@@ -73,9 +73,9 @@ describe("resolveAllowedImagePath", () => {
     );
     await writeFile(join(sibling, "shot.png"), tinyPng);
 
-    expect(() =>
-      resolveAllowedImagePath(join(sibling, "shot.png"))
-    ).toThrow(/outside allowed directories/i);
+    expect(() => resolveAllowedImagePath(join(sibling, "shot.png"))).toThrow(
+      /outside allowed directories/i
+    );
   });
 });
 

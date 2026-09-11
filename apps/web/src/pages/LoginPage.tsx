@@ -1,7 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
@@ -63,7 +63,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex h-svh items-center justify-center bg-background">
+    <div className="flex h-svh items-center justify-center bg-background px-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center text-center">
           <img

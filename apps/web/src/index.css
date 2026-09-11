@@ -3,6 +3,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 @import "streamdown/styles.css";
+@source "../../../packages/ui/src";
 /* Formerly shadcn/tailwind.css (package removed; variants still needed). */
 @theme inline {
   @keyframes accordion-down {
@@ -195,6 +196,26 @@
   input[type="reset"]:disabled,
   [role="button"][aria-disabled="true"] {
     cursor: not-allowed;
+  }
+
+  /* iOS Safari zooms the whole page in when a focused control's text is under
+     16px, and never zooms back out. Phone-sized viewports opt out of the
+     smaller type rather than fight the zoom. */
+  @media (max-width: 639.98px) {
+    input:not([type="button"]):not([type="checkbox"]):not([type="radio"]):not(
+        [type="submit"]
+      ):not([type="reset"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+  /* Touch targets big enough to hit, without changing the desktop rhythm. */
+  @media (hover: none) and (pointer: coarse) {
+    .sidebar-nav-link {
+      @apply py-2.5;
+    }
   }
 }
 

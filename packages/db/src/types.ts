@@ -1,7 +1,10 @@
 import type {
   AgentQuestionnaire,
   AgentTodo,
+  OrgPluginLifecycleState,
+  OrgPluginSummary,
   OrgRole,
+  PluginReleaseSummary,
   ThinkingEffort,
 } from "@nakama/core";
 
@@ -104,6 +107,8 @@ export interface StoredToolRecord {
   id: string;
   name: string;
   orgId?: string | null;
+  pluginId?: string | null;
+  pluginKey?: string | null;
   updatedAt: string;
 }
 
@@ -347,6 +352,8 @@ export interface StoredSkillRecord {
   id: string;
   name: string;
   orgId?: string | null;
+  pluginId?: string | null;
+  pluginKey?: string | null;
   sourcePath: string;
   updatedAt: string;
 }
@@ -383,6 +390,7 @@ export interface StoredMcpServerRecord {
 
 export interface StoredUserRecord {
   createdAt: string;
+  disabledAt?: string | null;
   email: string;
   id: string;
   isPlatformAdmin?: boolean;
@@ -390,6 +398,56 @@ export interface StoredUserRecord {
   passwordHash: string;
   phone?: string | null;
   updatedAt: string;
+}
+
+export type { OrgPluginLifecycleState } from "@nakama/core";
+
+export type StoredPluginReleaseRecord = PluginReleaseSummary;
+
+export interface StoredOrgPluginRecord extends OrgPluginSummary {
+  createdAt: string;
+  orgId: string;
+}
+
+export type UpsertPluginReleaseResult =
+  | { ok: true }
+  | { ok: false; reason: "digest_conflict" };
+
+export type PluginPublishFailureReason =
+  | "stale_revision"
+  | "tool_name_collision"
+  | "tool_name_invalid";
+
+export type PluginPublishResult =
+  | { ok: true; revision: number }
+  | { ok: false; reason: PluginPublishFailureReason };
+
+export interface CompareAndSetOrgPluginStateInput {
+  databaseGeneration: string | null;
+  expectedRevision: number;
+  lastLifecycleError?: string | null;
+  lifecycleState: OrgPluginLifecycleState;
+  now: string;
+  orgId: string;
+  pendingOperation?: string | null;
+  pluginId: string;
+  selectedVersion: string | null;
+}
+
+export interface PublishOrgPluginReleaseInput {
+  contributions: {
+    skills: StoredSkillRecord[];
+    tools: StoredToolRecord[];
+  };
+  databaseGeneration: string | null;
+  expectedRevision: number;
+  lastLifecycleError?: string | null;
+  lifecycleState: OrgPluginLifecycleState;
+  now: string;
+  orgId: string;
+  pendingOperation?: string | null;
+  pluginId: string;
+  selectedVersion: string;
 }
 
 export interface StoredOrganizationRecord {
@@ -584,6 +642,9 @@ export interface DatabaseAdapter {
   }): Promise<boolean>;
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
+  compareAndSetOrgPluginState(
+    input: CompareAndSetOrgPluginStateInput
+  ): Promise<PluginPublishResult>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(
@@ -625,12 +686,20 @@ export interface DatabaseAdapter {
   deleteMessagesForSession(sessionId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
+  deleteOrgPlugin(
+    orgId: string,
+    pluginId: string,
+    expectedRevision: number
+  ): Promise<boolean>;
+  deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
   deleteSkill(id: string): Promise<boolean>;
   deleteTool(id: string): Promise<boolean>;
   deleteWorkflow(id: string): Promise<boolean>;
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
+  disableUser(id: string, disabledAt: string): Promise<void>;
+  enableUser(id: string): Promise<void>;
   /**
    * Settles runs left `running` by a process that exited mid-run. Only a
    * `finally` in the owning process completes a run, so a kill leaves the row
@@ -699,6 +768,10 @@ export interface DatabaseAdapter {
     orgId: string,
     id: string
   ): Promise<StoredOrgMemoryProposal | null>;
+  getOrgPlugin(
+    orgId: string,
+    pluginId: string
+  ): Promise<StoredOrgPluginRecord | null>;
   getPendingOrgInvite(
     orgId: string,
     email: string
@@ -724,6 +797,10 @@ export interface DatabaseAdapter {
     profileId: string,
     skillName: string
   ): Promise<StoredSkillProposal | null>;
+  getPluginRelease(
+    pluginId: string,
+    version: string
+  ): Promise<StoredPluginReleaseRecord | null>;
   getProfile(id: string): Promise<StoredProfileRecord | null>;
   getProfileForOrg(
     id: string,
@@ -800,6 +877,15 @@ export interface DatabaseAdapter {
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
 
+  listArtifactSharesForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredArtifactShareRecord[]>;
+
+  listAttachmentsForSession(
+    sessionId: string
+  ): Promise<StoredAttachmentRecord[]>;
+
   listAutomationRuns(
     automationId: string,
     limit?: number
@@ -837,6 +923,11 @@ export interface DatabaseAdapter {
     orgId: string,
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
+  listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
+
+  listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
+
+  listPluginReleases(pluginId?: string): Promise<StoredPluginReleaseRecord[]>;
 
   listProfileChangeEvents(
     orgId: string,
@@ -847,7 +938,6 @@ export interface DatabaseAdapter {
   listProfileComposioToolkits(
     profileId: string
   ): Promise<StoredProfileComposioToolkitRecord[]>;
-
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForMcpServer(serverId: string): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
@@ -911,6 +1001,9 @@ export interface DatabaseAdapter {
     workspaceFrom: string,
     workspaceTo: string
   ): Promise<void>;
+  publishOrgPluginRelease(
+    input: PublishOrgPluginReleaseInput
+  ): Promise<PluginPublishResult>;
   replaceMessagesForSession(
     sessionId: string,
     messages: StoredSessionMessageRecord[]
@@ -1022,6 +1115,9 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   upsertOrganization(record: StoredOrganizationRecord): Promise<void>;
   upsertOrgMember(record: StoredOrgMemberRecord): Promise<void>;
+  upsertPluginRelease(
+    record: StoredPluginReleaseRecord
+  ): Promise<UpsertPluginReleaseResult>;
   upsertProfile(record: StoredProfileRecord): Promise<void>;
   upsertSession(record: StoredSessionRecord): Promise<void>;
   upsertSkill(record: StoredSkillRecord): Promise<void>;

@@ -1,5 +1,8 @@
 import {
   builtinTools,
+  type JsonSchema,
+  type PluginActorRole,
+  type PluginExecutionActor,
   type ToolContext,
   type ToolDefinition,
   type UserConfig,
@@ -15,11 +18,20 @@ import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
+import type { PluginService } from "./plugin-service";
+import { actorMayInvoke, PluginHostError } from "./plugin-service";
 
 export type ServerToolOverrides = {
   generateImage?: ToolDefinition | null;
   session?: ToolDefinition[];
   subAgent?: ToolDefinition | null;
+};
+
+export type ResolveStoredToolsOptions = {
+  actorRole?: PluginActorRole;
+  pluginService?: PluginService | null;
+  serverTools?: ServerToolOverrides;
+  userConfig?: UserConfig | null;
 };
 
 export function omitUnavailableBuiltinTools(
@@ -37,10 +49,7 @@ export async function resolveProfileStoredTools(
   records: StoredToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
-  options: {
-    serverTools?: ServerToolOverrides;
-    userConfig?: UserConfig | null;
-  } = {}
+  options: ResolveStoredToolsOptions = {}
 ): Promise<ToolDefinition[]> {
   // A configured search back-end replaces the provider-hosted web_search stub
   // for every caller; without one the stub stays and the provider searches.
@@ -63,10 +72,7 @@ export async function resolveToolsFromStorage(
   records: StoredToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
-  options: {
-    serverTools?: ServerToolOverrides;
-    userConfig?: UserConfig | null;
-  } = {}
+  options: ResolveStoredToolsOptions = {}
 ): Promise<ToolDefinition[]> {
   const builtinMap = new Map(
     [...builtinTools, ...builtinOverrides].map((tool) => [tool.name, tool])
@@ -79,7 +85,13 @@ export async function resolveToolsFromStorage(
   const resolved: ToolDefinition[] = [];
 
   for (const record of records) {
-    const tool = await resolveStoredTool(record, builtinMap, serverTools);
+    const tool = await resolveStoredTool(
+      record,
+      builtinMap,
+      serverTools,
+      options.pluginService,
+      options.actorRole
+    );
 
     if (tool) {
       resolved.push(tool);
@@ -92,7 +104,9 @@ export async function resolveToolsFromStorage(
 async function resolveStoredTool(
   record: StoredToolRecord,
   builtinMap: Map<string, ToolDefinition>,
-  serverTools: Map<string, ToolDefinition>
+  serverTools: Map<string, ToolDefinition>,
+  pluginService?: PluginService | null,
+  actorRole?: PluginActorRole
 ): Promise<ToolDefinition | null> {
   if (record.handlerType === "builtin") {
     return builtinMap.get(record.name) ?? null;
@@ -105,6 +119,10 @@ async function resolveStoredTool(
     record.handlerType === "session"
   ) {
     return serverTools.get(record.name) ?? null;
+  }
+
+  if (record.handlerType === "plugin") {
+    return loadPluginTool(record, pluginService, actorRole);
   }
 
   const customHandler = getCustomToolHandler(record.handlerType);
@@ -155,4 +173,86 @@ function createCodingAgentAwareBashTool(
       return runBash(enriched, context);
     },
   };
+}
+
+async function loadPluginTool(
+  record: StoredToolRecord,
+  pluginService?: PluginService | null,
+  actorRole?: PluginActorRole
+): Promise<ToolDefinition | null> {
+  const pluginId = record.pluginId;
+  const actionKey = record.pluginKey;
+  const orgId = record.orgId;
+  if (!(pluginService && pluginId && actionKey && orgId)) {
+    return null;
+  }
+
+  const action = await pluginService.getEnabledExposedAction(
+    orgId,
+    pluginId,
+    actionKey
+  );
+  if (!action) {
+    return null;
+  }
+  if (actorRole && !actorMayInvoke(action.access, actorRole)) {
+    return null;
+  }
+
+  return {
+    description: record.description,
+    discoveryGroup: pluginId,
+    name: record.name,
+    parameters: isJsonSchema(action.inputSchema)
+      ? action.inputSchema
+      : undefined,
+    async run(input, context) {
+      const trustedOrgId = context.orgId?.trim();
+      const trustedProfileId = context.profileId?.trim();
+      if (!(trustedOrgId && trustedProfileId)) {
+        throw new PluginHostError("invalid_input");
+      }
+
+      const invoked = await pluginService.invokePluginAction({
+        access: "tool",
+        actionKey,
+        actor: pluginActorFromContext(context),
+        input,
+        orgId: trustedOrgId,
+        pluginId,
+        profileId: trustedProfileId,
+        sessionId: context.sessionId,
+        signal: context.signal,
+      });
+      return invoked.result;
+    },
+  };
+}
+
+export function pluginActorFromContext(
+  context: ToolContext
+): PluginExecutionActor {
+  const messagingChannel =
+    context.channel === "telegram" ||
+    context.channel === "whatsapp" ||
+    context.channel === "discord";
+  return {
+    id: context.userId?.trim() ?? "",
+    role: messagingChannel
+      ? "member"
+      : pluginActorRoleFromOrgRole(context.orgRole),
+  };
+}
+
+function pluginActorRoleFromOrgRole(
+  role: ToolContext["orgRole"]
+): PluginActorRole {
+  if (role === "admin" || role === "member" || role === "viewer") {
+    return role;
+  }
+  return "viewer";
+}
+
+function isJsonSchema(value: unknown): value is JsonSchema {
+  return typeof value === "object" && value !== null;
 }

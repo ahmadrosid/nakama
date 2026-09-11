@@ -1,4 +1,14 @@
 import type { ToolSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
 import {
   type ChangeEvent,
   type FormEvent,
@@ -8,16 +18,6 @@ import {
   useRef,
 } from "react";
 import { ProfileCreateDialogForm } from "@/components/profile-create-dialog-form";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,

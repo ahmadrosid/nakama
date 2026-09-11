@@ -1,3 +1,4 @@
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
@@ -11,7 +12,6 @@ import {
   writeStoredArtifactShare,
 } from "@/lib/artifact-share-storage";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
 
 export type PublishIntent = "publish" | "refresh" | "view" | "recover";
 

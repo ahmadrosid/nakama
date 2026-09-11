@@ -1,3 +1,6 @@
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   useDeferredValue,
   useLayoutEffect,
@@ -9,15 +12,12 @@ import {
   type ModelCostFilter,
   ModelCostFilterSelect,
 } from "@/components/ModelBrowseShell";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { type ModelsDevRow, useModelsDev } from "@/hooks/use-models-dev";
 import { formatError } from "@/lib/client";
 import {
   isProviderTypeAlreadyConfigured,
   type SelectedProvider,
 } from "@/lib/models";
-import { cn } from "@/lib/utils";
 
 export type BrowseSelectHandler = (
   provider: SelectedProvider,

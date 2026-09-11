@@ -135,9 +135,13 @@ export function catalogCustomModelsToCatalog(
       model.supportsThinking = entry.supportsThinking;
     } else if (
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
       provider === "xiaomi" ||
+      provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
+      provider === "qwen" ||
+      provider === "qwen_cn" ||
       provider === "perplexity"
     ) {
       model.supportsThinking = false;
@@ -329,9 +333,13 @@ export function getModelsForProviderInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
+    instance.type === "doubao" ||
     instance.type === "together" ||
     instance.type === "xiaomi" ||
+    instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
+    instance.type === "qwen" ||
+    instance.type === "qwen_cn" ||
     instance.type === "perplexity" ||
     instance.type === "opencode_go"
   ) {

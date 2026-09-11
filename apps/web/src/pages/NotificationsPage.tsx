@@ -1,5 +1,5 @@
+import { Spinner } from "@nakama/ui/spinner";
 import { NotificationList } from "@/components/notifications/notification-list";
-import { Spinner } from "@/components/ui/spinner";
 import { useNotifications } from "@/hooks/use-notifications";
 
 export function NotificationsPage() {

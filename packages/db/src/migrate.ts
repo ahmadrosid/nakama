@@ -54,6 +54,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioTables);
   atomic(migrateComposioUserConnections);
   atomic(migrateProfileChangeEventsTable);
+  atomic(migratePluginTables);
 }
 
 function applyBootstrapSchema(db: Database): void {
@@ -279,6 +280,7 @@ function migrateUsersTable(db: Database): void {
       name TEXT,
       phone TEXT,
       is_platform_admin INTEGER DEFAULT 0 NOT NULL,
+      disabled_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -306,6 +308,10 @@ function migrateUsersTable(db: Database): void {
 
   if (!columnNames.has("user_context")) {
     db.exec("ALTER TABLE users ADD COLUMN user_context TEXT;");
+  }
+
+  if (!columnNames.has("disabled_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN disabled_at TEXT;");
   }
 }
 
@@ -1545,6 +1551,70 @@ function migrateProfileChangeEventsTable(db: Database): void {
     CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
       ON profile_change_events (profile_id, created_at DESC);
   `);
+}
+
+function migratePluginTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS plugin_releases (
+      plugin_id TEXT NOT NULL,
+      version TEXT NOT NULL,
+      manifest TEXT NOT NULL,
+      digest TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (plugin_id, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS org_plugins (
+      org_id TEXT NOT NULL,
+      plugin_id TEXT NOT NULL,
+      selected_version TEXT,
+      database_generation TEXT,
+      lifecycle_state TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      pending_operation TEXT,
+      last_lifecycle_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, plugin_id),
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+    );
+  `);
+
+  addNullableTextColumnIfMissing(db, "tools", "plugin_id");
+  addNullableTextColumnIfMissing(db, "tools", "plugin_key");
+  addNullableTextColumnIfMissing(db, "skills", "plugin_id");
+  addNullableTextColumnIfMissing(db, "skills", "plugin_key");
+
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS skills_org_plugin_key_unique
+      ON skills (org_id, plugin_id, plugin_key)
+      WHERE plugin_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS tools_org_plugin_key_unique
+      ON tools (org_id, plugin_id, plugin_key)
+      WHERE plugin_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS org_plugins_org_id
+      ON org_plugins (org_id);
+  `);
+}
+
+function addNullableTextColumnIfMissing(
+  db: Database,
+  tableName: string,
+  columnName: string
+): void {
+  const columns = db
+    .prepare(`PRAGMA table_info(${quoteSqliteIdentifier(tableName)})`)
+    .all() as Array<{ name: string }>;
+
+  if (columns.length === 0) {
+    return;
+  }
+
+  if (!columns.some((column) => column.name === columnName)) {
+    db.exec(
+      `ALTER TABLE ${quoteSqliteIdentifier(tableName)} ADD COLUMN ${quoteSqliteIdentifier(columnName)} TEXT;`
+    );
+  }
 }
 
 function migrateComposioTables(db: Database): void {

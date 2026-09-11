@@ -22,6 +22,9 @@ import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { sessionTurnRegistry } from "./session-turn-registry";
+
+const TEST_ORG_ID = "org_test";
+
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
@@ -731,20 +734,75 @@ describe("AgentService skill_manage injection", () => {
     }
   });
 
-  test("injects skill_manage for web/cli only when manage-skills is assigned", async () => {
+  test.each(["manage-skills", "skill-installer"])(
+    "injects skill_manage for interactive chat when %s is assigned",
+    async (skillName) => {
+      const db = createInMemoryDatabaseAdapter();
+      await db.upsertProfile(createDefaultProfile());
+      // Give the profile at least one own tool so the platform groups (incl.
+      // skill_manage) are eligible; the no-tools case is covered separately.
+      await db.upsertTool({
+        createdAt: new Date().toISOString(),
+        description: "Test tool",
+        handlerConfig: { modulePath: "test.js" },
+        handlerType: "javascript",
+        id: "tool_for_skill_manage",
+        name: "test_tool",
+        updatedAt: new Date().toISOString(),
+      });
+      await db.assignToolToProfile("profile_default", "tool_for_skill_manage");
+      const skills = new SkillsService(db);
+      await ensureBundledSkillFiles();
+      await skills.syncDiscoveredSkills();
+      const manage = (await skills.listSkills()).skills.find(
+        (skill) => skill.name === skillName
+      );
+      expect(manage).toBeDefined();
+      await db.assignSkillToProfile("profile_default", manage!.id);
+
+      const service = new AgentService(null, null, db);
+      service.setSkillsService(skills);
+
+      type ResolveTools = {
+        resolveProfileTools(
+          profile: StoredProfileRecord,
+          options?: {
+            includeAutomationTools?: boolean;
+            includeSkillManageTools?: boolean;
+          }
+        ): Promise<Array<{ name: string }>>;
+      };
+
+      const resolve = (
+        service as unknown as ResolveTools
+      ).resolveProfileTools.bind(service);
+      const profile = createDefaultProfile();
+
+      const webTools = await resolve(profile, {
+        includeSkillManageTools: true,
+      });
+      expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
+
+      const telegramTools = await resolve(profile, {
+        includeSkillManageTools: false,
+      });
+      expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(
+        false
+      );
+
+      const automationTools = await resolve(profile, {
+        includeAutomationTools: false,
+      });
+      expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
+        false
+      );
+    }
+  );
+
+  test("skips platform tool groups for a profile with no tools", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
-    const skills = new SkillsService(db);
-    await ensureBundledSkillFiles();
-    await skills.syncDiscoveredSkills();
-    const manage = (await skills.listSkills()).skills.find(
-      (skill) => skill.name === "manage-skills"
-    );
-    expect(manage).toBeDefined();
-    await db.assignSkillToProfile("profile_default", manage!.id);
-
     const service = new AgentService(null, null, db);
-    service.setSkillsService(skills);
 
     type ResolveTools = {
       resolveProfileTools(
@@ -752,6 +810,8 @@ describe("AgentService skill_manage injection", () => {
         options?: {
           includeAutomationTools?: boolean;
           includeSkillManageTools?: boolean;
+          includeTodoTools?: boolean;
+          includeQuestionTools?: boolean;
         }
       ): Promise<Array<{ name: string }>>;
     };
@@ -761,22 +821,37 @@ describe("AgentService skill_manage injection", () => {
     ).resolveProfileTools.bind(service);
     const profile = createDefaultProfile();
 
-    const webTools = await resolve(profile, { includeSkillManageTools: true });
-    expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
-
-    const telegramTools = await resolve(profile, {
-      includeSkillManageTools: false,
+    // Profile with zero own tools: no platform groups, no session helpers.
+    const tools = await resolve(profile, {
+      includeAutomationTools: true,
+      includeQuestionTools: true,
+      includeSkillManageTools: true,
+      includeTodoTools: true,
     });
-    expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(
-      false
-    );
+    expect(tools).toHaveLength(0);
 
-    const automationTools = await resolve(profile, {
-      includeAutomationTools: false,
+    // Give the profile one own tool; platform groups come back.
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_platform_groups",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
     });
-    expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
-      false
+    await db.assignToolToProfile("profile_default", "tool_for_platform_groups");
+    const withTools = await resolve(profile, {
+      includeAutomationTools: true,
+      includeQuestionTools: true,
+      includeSkillManageTools: true,
+      includeTodoTools: true,
+    });
+    expect(withTools.some((tool) => tool.name === "test_tool")).toBe(true);
+    expect(withTools.some((tool) => tool.name === "ask_user_question")).toBe(
+      true
     );
+    expect(withTools.some((tool) => tool.name === "todo_write")).toBe(true);
   });
 
   test("keeps raw /learn in history on web when manage-skills is assigned", async () => {
@@ -914,9 +989,10 @@ describe("AgentService bot token validation", () => {
     );
 
     const error = await captureError(() =>
-      service.setTelegramSettings({ botToken })
+      service.setTelegramSettings(TEST_ORG_ID, { botToken })
     );
-    const configured = (await service.getTelegramSettings()).configured;
+    const configured = (await service.getTelegramSettings(TEST_ORG_ID))
+      .configured;
 
     expect({ configured, rejected: error !== null, requestCount }).toEqual({
       configured: false,
@@ -924,7 +1000,7 @@ describe("AgentService bot token validation", () => {
       requestCount: 1,
     });
     expect(error?.message).not.toContain(botToken);
-    expect(await loadTelegramConfigFile()).toBeNull();
+    expect(await loadTelegramConfigFile(TEST_ORG_ID)).toBeNull();
   });
 
   test("persists a Telegram token accepted by Telegram", async () => {
@@ -942,13 +1018,15 @@ describe("AgentService bot token validation", () => {
       createInMemoryDatabaseAdapter()
     );
 
-    const saved = await service.setTelegramSettings({
+    const saved = await service.setTelegramSettings(TEST_ORG_ID, {
       botToken: "123456:valid-token",
     });
 
     expect(saved.configured).toBe(true);
     expect(new URL(requestUrl).pathname).toBe("/bot123456%3Avalid-token/getMe");
-    expect((await service.getTelegramSettings()).configured).toBe(true);
+    expect((await service.getTelegramSettings(TEST_ORG_ID)).configured).toBe(
+      true
+    );
   });
 
   test("rejects and does not persist a Discord token rejected by Discord", async () => {
@@ -1016,32 +1094,34 @@ describe("AgentService bot token validation", () => {
       null,
       createInMemoryDatabaseAdapter()
     );
-    await service.setTelegramSettings({
+    await service.setTelegramSettings(TEST_ORG_ID, {
       allowedUserIds: "42",
       botToken: "123456:original-token",
       profileId: "original",
     });
-    const beforeReplacement = await loadTelegramConfigFile();
+    const beforeReplacement = await loadTelegramConfigFile(TEST_ORG_ID);
 
     globalThis.fetch = (async () =>
       new Response(null, { status: 401 })) as typeof fetch;
     await expect(
-      service.setTelegramSettings({
+      service.setTelegramSettings(TEST_ORG_ID, {
         allowedUserIds: "43",
         botToken: "123456:rejected-token",
         profileId: "replacement",
       })
     ).rejects.toBeInstanceOf(Error);
-    expect(await loadTelegramConfigFile()).toEqual(beforeReplacement);
+    expect(await loadTelegramConfigFile(TEST_ORG_ID)).toEqual(
+      beforeReplacement
+    );
 
     globalThis.fetch = (async () => {
       throw new Error("Token-less Telegram edits must not call the provider.");
     }) as typeof fetch;
-    await service.setTelegramSettings({
+    await service.setTelegramSettings(TEST_ORG_ID, {
       allowedUserIds: "43",
       profileId: "edited",
     });
-    expect(await loadTelegramConfigFile()).toMatchObject({
+    expect(await loadTelegramConfigFile(TEST_ORG_ID)).toMatchObject({
       allowedUserIds: [43],
       botToken: "123456:original-token",
       profileId: "edited",
@@ -1117,7 +1197,7 @@ describe("AgentService bot token validation", () => {
       expect(body.error).not.toContain(botToken);
     }
 
-    expect(await loadTelegramConfigFile()).toBeNull();
+    expect(await loadTelegramConfigFile(TEST_ORG_ID)).toBeNull();
     expect(await loadDiscordConfigFile()).toBeNull();
   });
 });

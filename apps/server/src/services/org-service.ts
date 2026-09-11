@@ -584,6 +584,84 @@ export class OrgService {
     );
   }
 
+  async disableMember(orgId: string, userId: string): Promise<void> {
+    assertOrgMemberUserIdShape(userId);
+    await this.requireActiveOrganization(orgId);
+
+    const member = await this.databaseAdapter.getOrgMember(orgId, userId);
+    if (!member) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    // disabled_at is install-wide, not per-org, so this has to check every org
+    // the user administers, not just the org named in the URL: a user can be
+    // a plain member of orgId while being the sole admin of a different org,
+    // and disabling never touches org_members rows, so assertCanChangeAdminMembership
+    // (which only looks at one org) would miss that entirely.
+    const memberships =
+      await this.databaseAdapter.listUserOrganizations(userId);
+    const adminMemberships = memberships.filter(
+      (membership) => membership.role === "admin"
+    );
+    for (const membership of adminMemberships) {
+      const members = await this.databaseAdapter.listOrgMembers(
+        membership.organization.id
+      );
+      const otherAdmins = members.filter(
+        (entry) => entry.role === "admin" && entry.userId !== userId
+      );
+      const otherAdminUsers = await Promise.all(
+        otherAdmins.map((entry) =>
+          this.databaseAdapter.getUserById(entry.userId)
+        )
+      );
+      const hasUsableAdmin = otherAdminUsers.some(
+        (user) => user && !user.disabledAt
+      );
+      if (!hasUsableAdmin) {
+        throw new NakamaApiError(
+          "Cannot disable the last active admin of an organization.",
+          409
+        );
+      }
+    }
+
+    // Same shape as the org-admin check: is_platform_admin is also install-wide
+    // and unrelated to org membership, so a platform admin who is a plain
+    // member (or not a member) everywhere would otherwise slip past the loop
+    // above and could be the install's only platform admin.
+    const targetUser = await this.databaseAdapter.getUserById(userId);
+    if (targetUser?.isPlatformAdmin) {
+      const platformAdmins =
+        await this.databaseAdapter.listPlatformAdminUsers();
+      const hasUsablePlatformAdmin = platformAdmins.some(
+        (admin) => admin.id !== userId && !admin.disabledAt
+      );
+      if (!hasUsablePlatformAdmin) {
+        throw new NakamaApiError(
+          "Cannot disable the last active platform admin.",
+          409
+        );
+      }
+    }
+
+    const now = new Date().toISOString();
+    await this.databaseAdapter.disableUser(userId, now);
+    await this.databaseAdapter.revokeBrowserSessionsForUser(userId, now);
+  }
+
+  async enableMember(orgId: string, userId: string): Promise<void> {
+    assertOrgMemberUserIdShape(userId);
+    await this.requireActiveOrganization(orgId);
+
+    const member = await this.databaseAdapter.getOrgMember(orgId, userId);
+    if (!member) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    await this.databaseAdapter.enableUser(userId);
+  }
+
   async updateMember(
     orgId: string,
     userId: string,
@@ -843,8 +921,16 @@ export class OrgService {
     }
 
     const members = await this.databaseAdapter.listOrgMembers(orgId);
-    const adminCount = members.filter((entry) => entry.role === "admin").length;
-    if (adminCount > 1) {
+    const admins = members.filter((entry) => entry.role === "admin");
+    const adminUsers = await Promise.all(
+      admins.map((entry) => this.databaseAdapter.getUserById(entry.userId))
+    );
+    // disabled_at is install-wide and does not touch org_members rows, so a raw
+    // admin-row count still sees a disabled admin as usable coverage.
+    const usableAdminCount = adminUsers.filter(
+      (user) => user && !user.disabledAt
+    ).length;
+    if (usableAdminCount > 1) {
       return member;
     }
 

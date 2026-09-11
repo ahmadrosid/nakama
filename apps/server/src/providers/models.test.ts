@@ -18,6 +18,22 @@ describe("isOpenRouterModelSlug", () => {
 });
 
 describe("resolveModel", () => {
+  test("uses xiaomi custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "mimo-v2.5", name: "MiMo V2.5" },
+    ];
+    expect(resolveModel("xiaomi", "mimo-v2.5", customModels)).toBe("mimo-v2.5");
+    expect(resolveModel("xiaomi", "unknown-model", customModels)).toBe(
+      "mimo-v2.5"
+    );
+  });
+
+  test("resolves catalog models for Xiaomi MiMo", () => {
+    expect(resolveModel("xiaomi", "mimo-v2.5-pro")).toBe("mimo-v2.5-pro");
+    expect(resolveModel("xiaomi", "mimo-v2.5")).toBe("mimo-v2.5");
+    expect(getDefaultModel("xiaomi")).toBe("mimo-v2.5-pro");
+  });
+
   test("passes through custom OpenRouter slugs", () => {
     expect(resolveModel("openrouter", "google/gemini-2.5-pro-preview")).toBe(
       "google/gemini-2.5-pro-preview"
@@ -115,20 +131,30 @@ describe("resolveModel", () => {
     );
   });
 
-  test("resolves catalog models for Xiaomi MiMo", () => {
-    expect(resolveModel("xiaomi", "mimo-v2.5-pro")).toBe("mimo-v2.5-pro");
-    expect(resolveModel("xiaomi", "mimo-v2.5")).toBe("mimo-v2.5");
-    expect(getDefaultModel("xiaomi")).toBe("mimo-v2.5-pro");
+  test("resolves catalog models for Vercel AI Gateway", () => {
+    expect(resolveModel("vercel_ai_gateway", "openai/gpt-4o-mini")).toBe(
+      "openai/gpt-4o-mini"
+    );
+    expect(
+      resolveModel("vercel_ai_gateway", "anthropic/claude-sonnet-4.5")
+    ).toBe("anthropic/claude-sonnet-4.5");
+    expect(getDefaultModel("vercel_ai_gateway")).toBe("openai/gpt-4o-mini");
+    expect(getModelById("openai/gpt-4o-mini")?.supportsVision).toBe(true);
+    expect(getModelById("openai/gpt-5")?.supportsThinking).toBe(true);
+    expect(getModelById("meta/llama-3.3-70b")?.supportsVision).toBe(false);
+    expect(getModelById("deepseek/deepseek-v4-flash")?.supportsThinking).toBe(
+      true
+    );
   });
 
-  test("uses xiaomi custom model shortlist when provided", () => {
-    const customModels = [
-      { default: true, id: "mimo-v2.5", name: "MiMo V2.5" },
-    ];
-    expect(resolveModel("xiaomi", "mimo-v2.5", customModels)).toBe("mimo-v2.5");
-    expect(resolveModel("xiaomi", "unknown-model", customModels)).toBe(
-      "mimo-v2.5"
-    );
+  test("uses vercel_ai_gateway custom model shortlist when provided", () => {
+    const customModels = [{ default: true, id: "openai/gpt-5", name: "GPT-5" }];
+    expect(
+      resolveModel("vercel_ai_gateway", "openai/gpt-5", customModels)
+    ).toBe("openai/gpt-5");
+    expect(
+      resolveModel("vercel_ai_gateway", "unknown-model", customModels)
+    ).toBe("openai/gpt-5");
   });
 
   test("resolves catalog models for Mistral", () => {
@@ -150,6 +176,77 @@ describe("resolveModel", () => {
     );
     expect(resolveModel("mistral", "unknown-model", customModels)).toBe(
       "mistral-small-2603"
+    );
+  });
+
+  test("resolves catalog models for Qwen DashScope intl and CN", () => {
+    expect(resolveModel("qwen", "qwen3.7-plus")).toBe("qwen3.7-plus");
+    expect(resolveModel("qwen", "qwen3-vl-plus")).toBe("qwen3-vl-plus");
+    expect(resolveModel("qwen_cn", "qwen-flash")).toBe("qwen-flash");
+    expect(getDefaultModel("qwen")).toBe("qwen3.7-plus");
+    expect(getDefaultModel("qwen_cn")).toBe("qwen3.7-plus");
+    expect(getModelById("qwen3.7-plus")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen3.7-plus")?.contextWindow).toBe(1_000_000);
+    expect(getModelById("qwen3.7-plus")?.supportsVision).toBe(true);
+    expect(getModelById("qwen3-vl-plus")?.supportsVision).toBe(true);
+    expect(getModelById("qwen3-vl-plus")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen-flash")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen-flash")?.inputPerMillionUsd).toBe(0.05);
+  });
+
+  test("resolves catalog models for Doubao", () => {
+    expect(resolveModel("doubao", "doubao-seed-2-1-turbo-260628")).toBe(
+      "doubao-seed-2-1-turbo-260628"
+    );
+    expect(resolveModel("doubao", "doubao-seed-1-8-251228")).toBe(
+      "doubao-seed-1-8-251228"
+    );
+    expect(getDefaultModel("doubao")).toBe("doubao-seed-2-1-pro-260628");
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsThinking).toBe(
+      true
+    );
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsVision).toBe(
+      true
+    );
+    expect(getModelById("doubao-seed-2-1-turbo-260628")?.supportsVision).toBe(
+      true
+    );
+    expect(getModelById("doubao-seed-1-8-251228")?.supportsThinking).toBe(true);
+    expect(getModelById("doubao-seed-1-8-251228")?.supportsVision).toBe(true);
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.contextWindow).toBe(
+      256_000
+    );
+    expect(getModelById("doubao-seed-2-1-pro-260628")?.maxOutputTokens).toBe(
+      256_000
+    );
+  });
+
+  test("uses qwen custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "qwen-flash", name: "Qwen Flash" },
+    ];
+    expect(resolveModel("qwen", "qwen-flash", customModels)).toBe("qwen-flash");
+    expect(resolveModel("qwen", "unknown-model", customModels)).toBe(
+      "qwen-flash"
+    );
+    expect(resolveModel("qwen_cn", "qwen-flash", customModels)).toBe(
+      "qwen-flash"
+    );
+  });
+
+  test("uses doubao custom model shortlist when provided", () => {
+    const customModels = [
+      {
+        default: true,
+        id: "doubao-seed-2-1-turbo-260628",
+        name: "Doubao Seed 2.1 Turbo",
+      },
+    ];
+    expect(
+      resolveModel("doubao", "doubao-seed-2-1-turbo-260628", customModels)
+    ).toBe("doubao-seed-2-1-turbo-260628");
+    expect(resolveModel("doubao", "unknown-model", customModels)).toBe(
+      "doubao-seed-2-1-turbo-260628"
     );
   });
 
@@ -296,6 +393,11 @@ describe("resolveModel", () => {
 });
 
 describe("modelSupportsVision", () => {
+  test("reads Xiaomi MiMo vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("mimo-v2.5-pro", "xiaomi")).toBe(false);
+    expect(modelSupportsVision("mimo-v2.5", "xiaomi")).toBe(true);
+  });
+
   test("keeps MiniMax models opt-in only (discovered lists)", () => {
     expect(modelSupportsVision("MiniMax-M3", "minimax")).toBe(false);
 
@@ -356,15 +458,37 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("MiniMaxAI/MiniMax-M3", "together")).toBe(true);
   });
 
-  test("reads Xiaomi MiMo vision flags from the curated catalog", () => {
-    expect(modelSupportsVision("mimo-v2.5-pro", "xiaomi")).toBe(false);
-    expect(modelSupportsVision("mimo-v2.5", "xiaomi")).toBe(true);
+  test("reads Vercel AI Gateway vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("openai/gpt-4o-mini", "vercel_ai_gateway")).toBe(
+      true
+    );
+    expect(modelSupportsVision("meta/llama-3.3-70b", "vercel_ai_gateway")).toBe(
+      false
+    );
   });
 
   test("reads Mistral vision flags from the curated catalog", () => {
     expect(modelSupportsVision("mistral-small-2603", "mistral")).toBe(true);
     expect(modelSupportsVision("mistral-large-2512", "mistral")).toBe(true);
     expect(modelSupportsVision("ministral-14b-2512", "mistral")).toBe(true);
+  });
+
+  test("reads Qwen DashScope vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("qwen3.7-plus", "qwen")).toBe(true);
+    expect(modelSupportsVision("qwen-plus", "qwen")).toBe(false);
+    expect(modelSupportsVision("qwen3-vl-plus", "qwen")).toBe(true);
+    expect(modelSupportsVision("qwen3-vl-plus", "qwen_cn")).toBe(true);
+    expect(modelSupportsVision("qwen-flash", "qwen_cn")).toBe(false);
+  });
+
+  test("reads Doubao vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("doubao-seed-2-1-pro-260628", "doubao")).toBe(
+      true
+    );
+    expect(modelSupportsVision("doubao-seed-2-1-turbo-260628", "doubao")).toBe(
+      true
+    );
+    expect(modelSupportsVision("doubao-seed-1-8-251228", "doubao")).toBe(true);
   });
 
   test("reads Perplexity vision flags from the curated catalog", () => {

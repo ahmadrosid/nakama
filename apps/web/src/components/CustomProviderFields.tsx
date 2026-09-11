@@ -1,17 +1,17 @@
 import type { WireApi } from "@nakama/core/contract";
-import { BrowsableModelFields } from "@/components/BrowsableModelFields";
-import type { ModelListRow } from "@/components/ModelListEditor";
-import { ModelsBrowseList } from "@/components/ModelsBrowseList";
-import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
-import { FormField } from "@/components/ui/form-field";
-import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
+import { FormField } from "@nakama/ui/form-field";
+import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
+import { BrowsableModelFields } from "@/components/BrowsableModelFields";
+import type { ModelListRow } from "@/components/ModelListEditor";
+import { ModelsBrowseList } from "@/components/ModelsBrowseList";
+import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 
 interface CustomProviderFieldsProps {
   apiKey: string;

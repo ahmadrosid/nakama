@@ -1,7 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import {
   useSaveWebPublicUrl,
   useWebPublicUrlSettings,

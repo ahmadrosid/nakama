@@ -1,7 +1,13 @@
-import { Coins01Icon, LayoutGridIcon, Plug01Icon } from "hugeicons-react";
+import {
+  Coins01Icon,
+  CubeIcon,
+  LayoutGridIcon,
+  Plug01Icon,
+} from "hugeicons-react";
 
 export const SYSTEM_TABS = [
   { icon: LayoutGridIcon, id: "tools" as const, label: "Tools" },
+  { icon: CubeIcon, id: "plugins" as const, label: "Plugins" },
   { icon: Coins01Icon, id: "usage" as const, label: "Usage" },
   { icon: Plug01Icon, id: "mcp" as const, label: "MCP" },
 ] as const;
@@ -14,6 +20,10 @@ export function resolveSystemTab(
 ): SystemTabId {
   if (value === "usage") {
     return "usage";
+  }
+
+  if (value === "plugins") {
+    return "plugins";
   }
 
   if (!isPlatformAdmin) {

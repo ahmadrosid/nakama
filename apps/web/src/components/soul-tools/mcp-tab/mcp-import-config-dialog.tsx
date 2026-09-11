@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,8 +6,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+} from "@nakama/ui/dialog";
+import { Textarea } from "@nakama/ui/textarea";
 
 export function McpImportConfigDialog({
   open,

@@ -1,11 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { GridViewIcon, ListViewIcon, Refresh01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { FilesViewMode } from "@/lib/files-page.shared";
 
 function FilesViewModeToggle({

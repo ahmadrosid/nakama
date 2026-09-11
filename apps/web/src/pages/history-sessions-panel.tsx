@@ -1,19 +1,19 @@
 import type { ProfileSummary, SessionSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Cancel01Icon,
   Delete02Icon,
   RefreshIcon,
   Search01Icon,
 } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import {
   formatSessionChannelLabel,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
-import { cn } from "@/lib/utils";
 import {
   formatSessionTitle,
   groupSessionsByDate,

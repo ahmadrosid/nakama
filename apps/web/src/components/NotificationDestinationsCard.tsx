@@ -2,6 +2,10 @@ import type {
   NotificationDestinationSummary,
   NotificationDestinationWithSecret,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -11,9 +15,6 @@ import {
   ViewOffIcon,
 } from "hugeicons-react";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import {
   useCreateNotificationDestination,
   useDeleteNotificationDestination,
@@ -28,7 +29,6 @@ import {
   maskWebhookApiKey,
   parseTelegramTopicLink,
 } from "@/lib/notification-destinations";
-import { cn } from "@/lib/utils";
 
 function CopyButtonIcon({ copied }: { copied: boolean }) {
   const iconTransition =

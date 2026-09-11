@@ -7,20 +7,21 @@ import type {
   ProfileSummary,
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import { Input } from "@nakama/ui/input";
+import { cn } from "@nakama/ui/utils";
 import { useQueries } from "@tanstack/react-query";
 import { MoreHorizontalIcon, Search01Icon } from "hugeicons-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { ComposioProfileAssignPicker } from "@/components/ComposioProfileAssignPicker";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
@@ -35,7 +36,6 @@ import {
   useUpdateProfileComposioToolkitsMutation,
 } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 const CATALOG_PAGE_SIZE = 15;
 const EMPTY_PROFILES: ProfileSummary[] = [];

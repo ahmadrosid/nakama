@@ -6,6 +6,24 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test("official plugin reinstall sends revision and explicit organization", async () => {
+  let request!: Request;
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      request = new Request(input, init);
+      return Response.json({ install: { lifecycleState: "enabled" } });
+    },
+  });
+  await client.reinstallOfficialPlugin("workflows", 7, "org-a");
+  expect(new URL(request.url).pathname).toBe(
+    "/v1/plugins/official/workflows/reinstall"
+  );
+  expect(request.method).toBe("POST");
+  expect(request.headers.get("X-Org-Id")).toBe("org-a");
+  expect(await request.json()).toEqual({ expectedRevision: 7 });
+});
+
 test("chat stream request includes cookie CSRF protection", async () => {
   const originalDocument = (
     globalThis as typeof globalThis & { document?: { cookie: string } }

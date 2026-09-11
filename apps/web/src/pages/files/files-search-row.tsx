@@ -1,16 +1,16 @@
-import { Search01Icon } from "hugeicons-react";
-import {
-  ARTIFACT_TYPE_FILTER_LABELS,
-  type ArtifactTypeFilter,
-} from "@/components/soul-tools/artifacts-tab-filters";
-import { Input } from "@/components/ui/input";
+import { Input } from "@nakama/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
+import { Search01Icon } from "hugeicons-react";
+import {
+  ARTIFACT_TYPE_FILTER_LABELS,
+  type ArtifactTypeFilter,
+} from "@/components/soul-tools/artifacts-tab-filters";
 
 export function FilesSearchRow({
   searchQuery,

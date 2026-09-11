@@ -1,8 +1,8 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
 import { Delete02Icon, Edit03Icon } from "hugeicons-react";
 import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 
 export function OrgMembersTable({
   members,

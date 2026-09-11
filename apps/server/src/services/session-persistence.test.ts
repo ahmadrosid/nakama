@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
-import type { ChatMessage, ProviderClient } from "@nakama/core";
+import {
+  type ChatMessage,
+  type ProviderClient,
+  saveAttachmentBytes,
+} from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -264,6 +268,49 @@ describe("session persistence", () => {
       readFile(sessionHistoryArchivePath("org_1", branch!.sessionId))
     ).rejects.toThrow();
     expect(await loadSessionHistory(db, branch!.sessionId)).toEqual([]);
+  });
+
+  test("purge removes attachment bytes and metadata", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Test",
+      orgId: "org_1",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const service = new AgentService(null, null, db);
+    const sessionId = await service.createSession("org_1", "web", "profile");
+    const attachmentPath = await saveAttachmentBytes(
+      "org_1",
+      "profile",
+      "attachment",
+      Buffer.from("attachment")
+    );
+    await db.insertAttachment({
+      channel: "web",
+      createdAt: now,
+      filename: "attachment.txt",
+      id: "attachment",
+      kind: "document",
+      mediaType: "text/plain",
+      orgId: "org_1",
+      profileId: "profile",
+      sessionId,
+      sizeBytes: 10,
+      storagePath: attachmentPath,
+    });
+
+    expect(await service.purgeSession(sessionId, "other-org")).toBe(false);
+    expect(await readFile(attachmentPath, "utf8")).toBe("attachment");
+    expect(await service.purgeSession(sessionId, "org_1")).toBe(true);
+    await expect(readFile(attachmentPath)).rejects.toThrow();
+    expect(await db.getAttachment("attachment")).toBeNull();
   });
 
   test("clear during an archive write does not resurrect history or leave an archive", async () => {

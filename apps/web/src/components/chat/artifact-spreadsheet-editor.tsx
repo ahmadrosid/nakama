@@ -1,7 +1,8 @@
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { Add01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import {
   columnIndexToLetter,
   normalizeSpreadsheetShape,
@@ -9,7 +10,6 @@ import {
   type SpreadsheetRows,
   serializeSpreadsheetText,
 } from "@/lib/artifact-spreadsheet";
-import { cn } from "@/lib/utils";
 import { isSpreadsheetNumericCell } from "./spreadsheet-numeric";
 
 const GRID_LINE = "border-border";

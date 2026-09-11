@@ -1,15 +1,15 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { ArrowDown01Icon } from "hugeicons-react";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@nakama/ui/dropdown-menu";
+import { cn } from "@nakama/ui/utils";
+import { ArrowDown01Icon } from "hugeicons-react";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { composerIconButtonClass } from "@/lib/chat-stream";
-import { cn } from "@/lib/utils";
 
 function profileLabel(profile: ProfileSummary): string {
   return profile.isSuper ? `${profile.name} (super)` : profile.name;

@@ -96,7 +96,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         ? "Every workspace lives inside an organization. Name yours to finish setup."
         : currentStep === 3
           ? "Set up your AI provider to get started. You can add more later."
-          : "Help the agent understand your preferences — optional.";
+          : "Help the agent understand your preferences. Optional.";
 
   function renderStep(): ReactNode {
     switch (currentStep) {

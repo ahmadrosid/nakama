@@ -1,12 +1,12 @@
-import { ExpandableTextarea } from "@/components/ui/expandable-textarea";
-import { Input } from "@/components/ui/input";
+import { ExpandableTextarea } from "@nakama/ui/expandable-textarea";
+import { Input } from "@nakama/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
 import {
   encodeModelSelection,
   extractModelId,

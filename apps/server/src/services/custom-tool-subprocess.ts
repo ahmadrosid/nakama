@@ -18,7 +18,8 @@ function resolveCustomToolTimeoutMs(): number {
 }
 
 function buildAllowlistedSubprocessEnv(
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  includeConfigDir = true
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
 
@@ -26,7 +27,7 @@ function buildAllowlistedSubprocessEnv(
     env.PATH = process.env.PATH;
   }
 
-  if (process.env.NAKAMA_CONFIG_DIR) {
+  if (includeConfigDir && process.env.NAKAMA_CONFIG_DIR) {
     env.NAKAMA_CONFIG_DIR = process.env.NAKAMA_CONFIG_DIR;
   }
 
@@ -35,6 +36,12 @@ function buildAllowlistedSubprocessEnv(
   }
 
   return env;
+}
+
+interface SpawnJsonToolTransport {
+  includeConfigDir?: boolean;
+  onHostRequest?: (request: unknown, signal: AbortSignal) => Promise<unknown>;
+  timeoutMs?: number;
 }
 
 export interface SpawnJsonToolOptions {
@@ -47,6 +54,7 @@ export interface SpawnJsonToolOptions {
   input: unknown;
   /** Used in error messages, e.g. "Python tool", "JavaScript tool". */
   label: string;
+  transport?: SpawnJsonToolTransport;
   workspaceRoot?: string;
 }
 
@@ -59,9 +67,13 @@ export interface SpawnJsonToolOptions {
 export async function spawnJsonTool(
   options: SpawnJsonToolOptions
 ): Promise<unknown> {
-  const { args, bin, context, cwd, input, label, workspaceRoot } = options;
-  const env = buildAllowlistedSubprocessEnv(workspaceRoot);
-  const timeoutMs = resolveCustomToolTimeoutMs();
+  const { args, bin, context, cwd, input, label, transport, workspaceRoot } =
+    options;
+  const env = buildAllowlistedSubprocessEnv(
+    workspaceRoot,
+    transport?.includeConfigDir ?? true
+  );
+  const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
 
   const result = await new Promise<{ stderr: string; stdout: string }>(
     (resolve, reject) => {
@@ -70,21 +82,68 @@ export async function spawnJsonTool(
       const child = spawn(bin, args, {
         cwd,
         env,
-        signal: context.signal,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: transport?.onHostRequest
+          ? ["pipe", "pipe", "pipe", "ipc"]
+          : ["pipe", "pipe", "pipe"],
+      });
+      const hostAbort = new AbortController();
+
+      let hostRequestPending = false;
+      child.on("message", async (message: unknown) => {
+        if (
+          !(transport?.onHostRequest && message) ||
+          typeof message !== "object"
+        ) {
+          return;
+        }
+        const request = message as Record<string, unknown>;
+        if (
+          request.type !== "nakama-host-request" ||
+          typeof request.id !== "string"
+        ) {
+          return;
+        }
+        const reply = (payload: object) => {
+          if (child.connected) {
+            child.send(
+              { id: request.id, type: "nakama-host-result", ...payload },
+              () => {}
+            );
+          }
+        };
+        if (hostRequestPending) {
+          reply({ error: "Host calls must be sequential." });
+          return;
+        }
+        hostRequestPending = true;
+        try {
+          reply({
+            result: await transport.onHostRequest(
+              request.request,
+              hostAbort.signal
+            ),
+          });
+        } catch (error) {
+          reply({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          hostRequestPending = false;
+        }
       });
 
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      let aborted = false;
 
-      const sigtermTimer = setTimeout(() => {
+      const killChild = () => {
+        hostAbort.abort();
         try {
           child.kill("SIGTERM");
         } catch {
           // already exited
         }
-        timedOut = true;
         setTimeout(() => {
           try {
             child.kill("SIGKILL");
@@ -92,6 +151,21 @@ export async function spawnJsonTool(
             // already exited
           }
         }, SIGKILL_GRACE_MS).unref();
+      };
+
+      const onAbort = () => {
+        aborted = true;
+        killChild();
+      };
+      if (context.signal?.aborted) {
+        onAbort();
+      } else {
+        context.signal?.addEventListener("abort", onAbort, { once: true });
+      }
+
+      const sigtermTimer = setTimeout(() => {
+        killChild();
+        timedOut = true;
       }, timeoutMs);
 
       child.stdout?.on("data", (chunk: Buffer | string) => {
@@ -107,16 +181,24 @@ export async function spawnJsonTool(
       child.stdin?.on("error", () => {});
 
       child.once("error", (error) => {
+        hostAbort.abort();
         clearTimeout(sigtermTimer);
         reject(error);
       });
 
       child.once("close", (exitCode) => {
+        hostAbort.abort();
+        context.signal?.removeEventListener("abort", onAbort);
         clearTimeout(sigtermTimer);
         const tail = stderr.trim() || "(no stderr)";
 
         // A child that traps SIGTERM can still exit 0 after the deadline;
         // the budget is spent either way, so report the timeout.
+        if (aborted) {
+          reject(new Error(`${label} was cancelled`));
+          return;
+        }
+
         if (timedOut) {
           reject(
             new Error(
