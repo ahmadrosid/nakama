@@ -16,8 +16,8 @@ interface ArtifactAttachmentPreviewProps {
   className?: string;
   id: string;
   profileId: string;
-  /** `chip` is the chat attachment chip; `icon` is an icon-only view button. */
-  variant?: "chip" | "icon";
+  /** `overlay` makes the containing file card the preview target. */
+  variant?: "chip" | "icon" | "overlay";
 }
 
 export function ArtifactAttachmentPreview({
@@ -62,8 +62,22 @@ function ArtifactAttachmentPreviewTrigger({
   isImage: boolean;
   isVideo: boolean;
   onOpen: () => void;
-  variant: "chip" | "icon";
+  variant: "chip" | "icon" | "overlay";
 }) {
+  if (variant === "overlay") {
+    return (
+      <button
+        aria-label={`View ${artifact.filename}`}
+        className={cn(
+          "absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset",
+          className
+        )}
+        onClick={onOpen}
+        type="button"
+      />
+    );
+  }
+
   if (variant === "icon") {
     return (
       <Tooltip>
