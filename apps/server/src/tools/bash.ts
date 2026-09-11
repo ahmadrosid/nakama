@@ -91,7 +91,7 @@ export function resetBashSandboxManagerForTests(): void {
 }
 
 const BASH_TOOL_DESCRIPTION_BASE =
-  "Run a one-off shell command in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
+  "Run a one-off shell command starting in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
 
 function bashToolDescription(): string {
   try {
@@ -101,7 +101,7 @@ function bashToolDescription(): string {
   } catch {
     // Invalid backend config — keep the host description.
   }
-  return BASH_TOOL_DESCRIPTION_BASE;
+  return `${BASH_TOOL_DESCRIPTION_BASE} Host execution is unrestricted by Nakama and uses the server process's OS permissions. Commands can access files outside the profile workspace, including other profiles' files when OS permissions allow. Assign host bash only to trusted profiles.`;
 }
 
 export const bashTool: ToolDefinition<BashInput, BashOutput> = {

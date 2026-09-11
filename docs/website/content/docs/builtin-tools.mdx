@@ -310,7 +310,7 @@ The notice rides inside `text` rather than in a field of its own because the too
 
 ### `bash`
 
-Run a one-off shell command in the profile workspace and return stdout, stderr, and exit code.
+Run a one-off shell command starting in the profile workspace and return stdout, stderr, and exit code.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
@@ -326,7 +326,9 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 **Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, `pi`, or `agent`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
 
-**Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
+**Host access:** Host Bash is unrestricted by Nakama and runs with the server process's OS permissions. The profile workspace is only the starting directory; commands can access files outside it, including other profiles' files when OS permissions allow. Checking `cwd` does not isolate commands. Assign host Bash only to trusted profiles; use MicroSandbox when profile isolation is required.
+
+Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 
 **Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow and the opt-in [agent-browser](/agent-browser) skill. Interactive browser runs inherit host `AGENT_BROWSER_EXECUTABLE_PATH` / `AGENT_BROWSER_ARGS` when you opt into Cloak.
 
