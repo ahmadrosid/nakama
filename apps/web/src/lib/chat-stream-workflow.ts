@@ -369,9 +369,11 @@ function isWorkflowRunRecord(value: unknown): value is WorkflowRunRecord {
   );
 }
 
-function firstStringValue(input: Record<string, unknown>): string | null {
+function firstStringValue(
+  input: Record<string, unknown> | null | undefined
+): string | null {
   for (const key of ["url", "query", "path", "command"]) {
-    const value = input[key];
+    const value = input?.[key];
     if (typeof value === "string" && value.trim()) {
       return key === "url"
         ? formatHost(value.trim())

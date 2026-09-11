@@ -28,6 +28,36 @@ const steps: WorkflowStep[] = [
 ];
 
 describe("chat-stream-workflow", () => {
+  test.each([undefined, null])(
+    "workflow cards tolerate absent tool input: %p",
+    (input) => {
+      const card = buildWorkflowRunCard({
+        isRunning: false,
+        parsed: null,
+        runs: [],
+        workflow: {
+          enabled: true,
+          name: "Morning Brief",
+          steps: [
+            {
+              id: "fetch",
+              input,
+              kind: "tool",
+              tool: "web_fetch",
+            } as unknown as WorkflowStep,
+          ],
+        },
+      });
+
+      expect(card.views).toHaveLength(1);
+      expect(card.views[0]).toMatchObject({
+        id: "fetch",
+        tag: null,
+        tool: "web_fetch",
+      });
+    }
+  );
+
   test("isRunWorkflowTool matches name", () => {
     expect(isRunWorkflowTool("run_workflow")).toBe(true);
     expect(isRunWorkflowTool("plugin_workflows__run_workflow")).toBe(true);
