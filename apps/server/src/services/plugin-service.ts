@@ -101,7 +101,10 @@ const officialInstallLocks = new Map<string, Promise<unknown>>();
 const OFFICIAL_PLUGINS = new Map<
   string,
   { requiresHost: boolean; setupAction?: string }
->([["workflows", { requiresHost: true, setupAction: "import_legacy" }]]);
+>([
+  ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
+  ["supermemory", { requiresHost: true }],
+]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
 const PLUGIN_RUNNER_PATH = fileURLToPath(

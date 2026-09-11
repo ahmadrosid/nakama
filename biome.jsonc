@@ -7,10 +7,7 @@
     "ultracite/biome/vitest"
   ],
   "files": {
-    "includes": [
-      "!packages/plugins/*/actions",
-      "!packages/plugins/workflows/ui/app.js"
-    ]
+    "includes": ["!packages/plugins/*/actions", "!packages/plugins/*/ui/app.js"]
   },
   "css": {
     "parser": {

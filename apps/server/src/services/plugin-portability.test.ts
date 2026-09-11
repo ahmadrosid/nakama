@@ -1,11 +1,19 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdtemp,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   getCustomToolsDir,
   getOrgPluginDatabasePath,
+  getOrgPluginDataDir,
   pathExists,
 } from "@nakama/core";
 import {
@@ -181,6 +189,140 @@ describe("plugin portability", () => {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
     await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("Supermemory backup preserves namespace and restricts restored credentials", async () => {
+    const source = await createSqliteDatabase(
+      `file:${join(configDir, "nakama.db")}`
+    );
+    const restoreRoot = await mkdtemp(
+      join(tmpdir(), "nakama-supermemory-restore-")
+    );
+    let restored: Awaited<ReturnType<typeof createSqliteDatabase>> | undefined;
+    try {
+      const now = new Date().toISOString();
+      await source.adapter.upsertOrganization({
+        createdAt: now,
+        id: ORG,
+        name: "Source",
+        slug: "source",
+        updatedAt: now,
+      });
+      const options = {
+        officialPackagesDir: resolve(
+          import.meta.dir,
+          "../../../../packages/plugins"
+        ),
+        onHostRequest: async () => [{ id: "agent", name: "Agent" }],
+      };
+      const service = new PluginService(source.adapter, configDir, options);
+      await service.installOfficialPlugin(ORG, "supermemory", ACTOR);
+      const request = {
+        access: "ui" as const,
+        actor: ACTOR,
+        orgId: ORG,
+        pluginId: "supermemory",
+      };
+      await service.invokePluginAction({
+        ...request,
+        actionKey: "save_settings",
+        input: { token: "backup-secret", url: "http://localhost:6767" },
+      });
+      const installed = await source.adapter.getOrgPlugin(ORG, "supermemory");
+      const sourcePlugin = new Database(
+        getOrgPluginDatabasePath(
+          ORG,
+          "supermemory",
+          installed!.databaseGeneration!,
+          configDir
+        )
+      );
+      const identity = sourcePlugin
+        .query("SELECT namespace,org_id FROM dataset")
+        .get();
+      sourcePlugin.close();
+      const exported = await createNakamaDataExport({ rootDir: configDir });
+      await restoreNakamaDataImport(exported.data, {
+        confirm: true,
+        databasePath: join(restoreRoot, "nakama.db"),
+        rootDir: restoreRoot,
+      });
+      restored = await createSqliteDatabase(
+        `file:${join(restoreRoot, "nakama.db")}`
+      );
+      const restoredService = new PluginService(
+        restored.adapter,
+        restoreRoot,
+        options
+      );
+      const disabled = await restored.adapter.getOrgPlugin(ORG, "supermemory");
+      expect(disabled!.lifecycleState).toBe("disabled");
+      const enabled = await restoredService.enableOrgPlugin(
+        ORG,
+        "supermemory",
+        disabled!.revision
+      );
+      const restoredPath = getOrgPluginDatabasePath(
+        ORG,
+        "supermemory",
+        enabled.databaseGeneration!,
+        restoreRoot
+      );
+      const snapshot = new Database(restoredPath);
+      expect(
+        snapshot.query("SELECT namespace,org_id FROM dataset").get()
+      ).toEqual(identity);
+      snapshot.close();
+      const credentials = join(
+        getOrgPluginDataDir(ORG, "supermemory", restoreRoot),
+        "connection.json"
+      );
+      expect((await stat(credentials)).mode % 512).toBe(0o600);
+      await chmod(credentials, 0o644);
+      expect(
+        (
+          await restoredService.invokePluginAction({
+            ...request,
+            actionKey: "get_settings",
+            input: {},
+          })
+        ).result
+      ).toEqual({ configured: true, url: "http://localhost:6767" });
+      expect((await stat(credentials)).mode % 512).toBe(0o600);
+      await restored.adapter.upsertOrganization({
+        createdAt: now,
+        id: DEST,
+        name: "Destination",
+        slug: "destination",
+        updatedAt: now,
+      });
+      await restoredService.installOfficialPlugin(DEST, "supermemory", ACTOR);
+      const destination = await restored.adapter.getOrgPlugin(
+        DEST,
+        "supermemory"
+      );
+      await copyFile(
+        restoredPath,
+        getOrgPluginDatabasePath(
+          DEST,
+          "supermemory",
+          destination!.databaseGeneration!,
+          restoreRoot
+        )
+      );
+      await expect(
+        restoredService.invokePluginAction({
+          ...request,
+          actionKey: "get_settings",
+          input: {},
+          orgId: DEST,
+        })
+      ).rejects.toThrow();
+    } finally {
+      await restored?.close();
+      await source.close();
+      await rm(restoreRoot, { force: true, recursive: true });
+    }
   });
 
   test("export during a plugin write snapshots consistently and restore leaves plugins disabled", async () => {

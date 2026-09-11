@@ -16,6 +16,18 @@ Run `bun run --cwd packages/plugins/workflows build` after source edits and incl
 
 For local development, rebuild the plugin, then choose **System → Plugins → Official plugins → Reinstall**. Organization admins can reload the bundled files without manually bumping the package version. Reinstall preserves workflows, run history, and the enabled/disabled state. It creates an immutable development release for changed content and switches only the active organization; other organizations keep their selected code. Unchanged content reuses its development release. If an update or migration fails, the plugin remains disabled with its previous data available for recovery.
 
+### Supermemory
+
+`packages/plugins/supermemory` is the official explicit-memory and text-knowledge plugin. Rebuild with `bun run --cwd packages/plugins/supermemory build` and include both bundles. It requires the existing profile host capability and performs no network setup during installation.
+
+The API target for initial contract verification is **Supermemory server 0.0.8**, with `OPENAI_MODEL=gpt-5.1`, `SUPERMEMORY_EMBEDDING_PROVIDER=openai`, `SUPERMEMORY_EMBEDDING_MODEL=text-embedding-3-small`, and `SUPERMEMORY_EMBEDDING_DIMENSIONS=1536`. Set `OPENAI_API_KEY` on the external server. Live OpenAI-backed verification remains a release gate; the deterministic tests exercise documented HTTP responses and must not be described as a live-server compatibility proof.
+
+The plugin derives distinct memory/knowledge container tags from its persisted namespace, organization and validated profile. Tools use host profile context; the page passes `agentId`. It uses `/v4/memories` for explicit facts, memory-only `/v4/search`, and document-only `/v3/search` for knowledge. Search hits must match local receipts and the metadata written by this installation. Failed remote removal leaves a local tombstone, immediately excluding the item from plugin recall.
+
+Each save requires a stable `submissionKey`. Receipts reserve it under a SQLite uniqueness constraint before HTTP; changing content under the same key fails. Documents use a deterministic `customId`; unresolved memories reconcile with a scoped metadata-filtered list. No ambiguous write is automatically replayed. A process interrupted during submission becomes unknown after 30 seconds.
+
+Connection settings live in an atomic, owner-only `connection.json` under the plugin data directory. Redacted reads never return tokens. Settings updates and receipt reservations share the database write lock, without holding it during HTTP. The host restores files with owner-only permissions, which the plugin rechecks on use. Same-org backups preserve the namespace; a different-org dataset fails closed. Full backups contain credentials and need appropriate protection. External Supermemory data needs its own backup.
+
 ## Package layout
 
 ```text

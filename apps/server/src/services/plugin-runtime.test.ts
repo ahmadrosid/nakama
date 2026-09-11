@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -155,6 +156,100 @@ describe("plugin runtime", () => {
   afterEach(async () => {
     resetPluginAdmissionForTests();
     await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("official Supermemory retains its private dataset across reinstall and uninstall", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir, {
+      officialPackagesDir: fileURLToPath(
+        new URL("../../../../packages/plugins", import.meta.url)
+      ),
+      onHostRequest: async () => [{ id: "agent", name: "Agent" }],
+    });
+    const actor = { id: "admin", role: "admin" as const };
+    const invoke = (actionKey: string, input: Record<string, unknown> = {}) =>
+      service.invokePluginAction({
+        access: "ui",
+        actionKey,
+        actor,
+        input,
+        orgId: "org_a",
+        pluginId: "supermemory",
+      });
+    await service.installOfficialPlugin("org_a", "supermemory", actor);
+    expect((await invoke("get_settings")).result).toEqual({
+      configured: false,
+      url: "",
+    });
+    await invoke("save_settings", {
+      token: "private-token",
+      url: "http://localhost:6767",
+    });
+    const installed = await db.getOrgPlugin("org_a", "supermemory");
+    const path = getOrgPluginDatabasePath(
+      "org_a",
+      "supermemory",
+      installed!.databaseGeneration!,
+      configDir
+    );
+    const dataset = new Database(path);
+    const identity = dataset
+      .query("SELECT namespace, org_id FROM dataset")
+      .get();
+    dataset.close();
+    await service.installOfficialPlugin("org_a", "supermemory", actor, {
+      expectedRevision: installed!.revision,
+    });
+    expect((await invoke("get_settings")).result).toEqual({
+      configured: true,
+      url: "http://localhost:6767",
+    });
+    const reinstalled = await db.getOrgPlugin("org_a", "supermemory");
+    const restoredPath = getOrgPluginDatabasePath(
+      "org_a",
+      "supermemory",
+      reinstalled!.databaseGeneration!,
+      configDir
+    );
+    const retained = new Database(restoredPath);
+    expect(
+      retained.query("SELECT namespace, org_id FROM dataset").get()
+    ).toEqual(identity);
+    retained.close();
+    await expect(
+      service.invokePluginAction({
+        access: "tool",
+        actionKey: "search_memory",
+        actor,
+        input: { query: "secret" },
+        orgId: "org_a",
+        pluginId: "supermemory",
+        profileId: "unassigned",
+      })
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await service.disableOrgPlugin(
+      "org_a",
+      "supermemory",
+      reinstalled!.revision
+    );
+    await expect(invoke("get_settings")).rejects.toMatchObject({
+      code: "admission_closed",
+    });
+    const disabled = await db.getOrgPlugin("org_a", "supermemory");
+    await service.uninstallOrgPlugin(
+      "org_a",
+      "supermemory",
+      disabled!.revision
+    );
+    expect(existsSync(restoredPath)).toBe(true);
+    expect(
+      existsSync(
+        join(
+          getOrgPluginDataDir("org_a", "supermemory", configDir),
+          "connection.json"
+        )
+      )
+    ).toBe(true);
   });
 
   test("UI and tool adapters receive equivalent input and org context", async () => {

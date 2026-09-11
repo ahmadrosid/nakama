@@ -1,0 +1,24 @@
+{
+  "name": "@nakama/plugin-supermemory",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "nakama.plugin.json",
+    "actions",
+    "migrations",
+    "ui",
+    "skills"
+  ],
+  "scripts": {
+    "build": "bun build ./src/actions.ts --outdir actions --target bun && bun build ./src/ui.tsx --outfile ui/app.js --target browser",
+    "test": "bun test src"
+  },
+  "devDependencies": {
+    "@nakama/core": "workspace:*",
+    "@nakama/ui": "workspace:*",
+    "@types/react": "^19.1.6",
+    "@types/react-test-renderer": "^19.3.0",
+    "react": "^19.2.8",
+    "react-test-renderer": "19.2.8"
+  }
+}

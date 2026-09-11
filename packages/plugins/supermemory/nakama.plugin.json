@@ -1,0 +1,313 @@
+{
+  "apiVersion": 1,
+  "id": "supermemory",
+  "name": "Supermemory",
+  "version": "0.1.0",
+  "minNakamaVersion": "0.4.10",
+  "author": "Nakama",
+  "license": "MIT",
+  "description": "Explicit agent memories and searchable text knowledge with your Supermemory server.",
+  "actions": [
+    {
+      "key": "remember",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Save one fact the user explicitly asked to remember. Reuse submissionKey on retries.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "submissionKey": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["content", "submissionKey"]
+      }
+    },
+    {
+      "key": "search_memory",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Search intentionally saved facts for this agent.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "key": "list_memories",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "List saved facts and unresolved saves for this agent.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "forget_memory",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Forget one exact local memory ID. This excludes recall; upstream forgetting is not permanent erasure.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    {
+      "key": "add_document",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Add plain text knowledge, up to 256 KiB. Reuse submissionKey on retries. URLs are not fetched.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "submissionKey": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["content", "title", "submissionKey"]
+      }
+    },
+    {
+      "key": "search_knowledge",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Search this agent\u2019s documents. Cite the returned title, source and local ID.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "key": "list_documents",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "List tracked documents and processing states.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "get_document",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Refresh a document\u2019s processing state using its local ID.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    {
+      "key": "delete_document",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Delete a tracked document by local ID. Retry the same ID if remote deletion is pending.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    {
+      "key": "profiles",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "List agents available to the current user and connection availability.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "get_settings",
+      "access": "admin",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Read connection settings without credentials.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "save_settings",
+      "access": "admin",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Save the connection or rotate its token.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": ["url"]
+      }
+    },
+    {
+      "key": "check_connection",
+      "access": "admin",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Check the configured server with a scoped read.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "skills": [
+    {
+      "key": "supermemory",
+      "directory": "skills/supermemory"
+    }
+  ],
+  "database": {
+    "migrations": [
+      {
+        "id": "001-supermemory",
+        "path": "migrations/001-supermemory.sql"
+      }
+    ]
+  },
+  "ui": {
+    "entryModule": "ui/app.js",
+    "assetsDir": "ui",
+    "pageLabel": "Supermemory"
+  }
+}
