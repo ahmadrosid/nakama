@@ -115,7 +115,7 @@ export async function startXaiOAuthDeviceSession(
     throw new Error("Grok returned an invalid sign-in URL.");
   }
   const sessionId = randomUUID();
-  const interval = Math.max(1, data.interval);
+  const interval = Math.max(0.001, data.interval);
   sessions.set(sessionId, {
     deviceCode: data.device_code,
     expiresAt: Date.now() + Math.min(data.expires_in, 1800) * 1000,
@@ -154,7 +154,8 @@ function trustedXaiVerificationUri(value: unknown): string | null {
 export async function completeXaiOAuthDeviceSession(
   sessionId: string,
   owner: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { slowDownIncrementMs?: number }
 ): Promise<XaiOAuthCredentials> {
   const session = sessions.get(sessionId);
   if (!session || session.owner !== owner || session.expiresAt <= Date.now()) {
@@ -166,6 +167,7 @@ export async function completeXaiOAuthDeviceSession(
     Math.max(1, session.expiresAt - Date.now())
   );
   const pollingSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  const slowDownIncrementMs = options?.slowDownIncrementMs ?? 5000;
   let interval = session.interval * 1000;
   while (!pollingSignal.aborted) {
     await delay(interval, undefined, { signal: pollingSignal });
@@ -185,7 +187,7 @@ export async function completeXaiOAuthDeviceSession(
       continue;
     }
     if (payload.error === "slow_down") {
-      interval += 5000;
+      interval += slowDownIncrementMs;
       continue;
     }
     if (payload.error === "access_denied") {

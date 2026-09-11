@@ -12,7 +12,10 @@ export interface SkillTokenRange {
   start: number;
 }
 
+export type ComposerAddCommandAction = "add-mcp" | "add-tool";
+
 export interface ReservedSlashCommand {
+  action?: ComposerAddCommandAction;
   description: string;
   name: string;
 }
@@ -35,6 +38,20 @@ export const RESERVED_COMPOSER_SLASH_COMMANDS: ReservedSlashCommand[] = [
   {
     description: "Distill a reusable skill from sources",
     name: "learn",
+  },
+];
+
+/** Opens a dialog instead of inserting text. Shown when the user can assign tools. */
+export const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
+  {
+    action: "add-tool",
+    description: "Assign a tool to this agent",
+    name: "add-tool",
+  },
+  {
+    action: "add-mcp",
+    description: "Assign or add an MCP server",
+    name: "add-mcp",
   },
 ];
 
@@ -68,18 +85,29 @@ export function findActiveSkillSlashRange(
 }
 
 export function filterReservedSlashCommands(
-  query: string
+  query: string,
+  commands: ReservedSlashCommand[] = RESERVED_COMPOSER_SLASH_COMMANDS
 ): ReservedSlashCommand[] {
   const normalized = query.trim().toLowerCase();
 
   if (!normalized) {
-    return [...RESERVED_COMPOSER_SLASH_COMMANDS];
+    return [...commands];
   }
 
   // Name-prefix only — description matching made "/re" steal focus via "reusable".
-  return RESERVED_COMPOSER_SLASH_COMMANDS.filter((command) =>
+  return commands.filter((command) =>
     command.name.toLowerCase().startsWith(normalized)
   );
+}
+
+export function matchComposerAddCommand(
+  text: string
+): ComposerAddCommandAction | null {
+  const token = text.trim();
+  const command = COMPOSER_ADD_SLASH_COMMANDS.find(
+    (item) => `/${item.name}` === token
+  );
+  return command?.action ?? null;
 }
 
 export function profileCanUseLearnCommand(skills: SkillSummary[]): boolean {
@@ -108,9 +136,18 @@ export function filterSkillsForSlashQuery(
 
 export function filterComposerSlashSuggestions(
   skills: SkillSummary[],
-  query: string
+  query: string,
+  options: { enableAddCommands?: boolean } = {}
 ): ComposerSlashSuggestion[] {
-  const commands = profileCanUseLearnCommand(skills)
+  const addCommands = options.enableAddCommands
+    ? filterReservedSlashCommands(query, COMPOSER_ADD_SLASH_COMMANDS).map(
+        (command) => ({
+          command,
+          kind: "command" as const,
+        })
+      )
+    : [];
+  const learnCommands = profileCanUseLearnCommand(skills)
     ? filterReservedSlashCommands(query).map((command) => ({
         command,
         kind: "command" as const,
@@ -123,7 +160,7 @@ export function filterComposerSlashSuggestions(
     })
   );
 
-  return [...commands, ...skillSuggestions];
+  return [...addCommands, ...learnCommands, ...skillSuggestions];
 }
 
 export function replaceSlashRangeWithSkillInvocation(

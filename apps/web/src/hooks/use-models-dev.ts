@@ -29,11 +29,14 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "openrouter",
   "opencode",
   "deepseek",
+  "together",
   "mistral",
+  "perplexity",
 ]);
 
 const NPM_MAP: Record<string, SelectedProvider> = {
   "@ai-sdk/anthropic": "anthropic",
+  "@ai-sdk/gateway": "vercel_ai_gateway",
   "@ai-sdk/google": "gemini",
   "@ai-sdk/openai": "openai",
 };
@@ -43,12 +46,14 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   mistral: "mistral",
   opencode: "openai_compatible",
   openrouter: "openrouter",
+  perplexity: "perplexity",
+  together: "together",
+  vercel: "vercel_ai_gateway",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {
   "@ai-sdk/amazon-bedrock": "Requires AWS SigV4 auth",
   "@ai-sdk/azure": "Requires Azure deployment routing",
-  "@ai-sdk/gateway": "Requires Vercel AI Gateway",
   "@ai-sdk/google-vertex": "Requires Google Cloud OAuth",
   "@ai-sdk/google-vertex/anthropic": "Requires Google Cloud OAuth",
   "@jerome-benoit/sap-ai-provider-v2": "Requires SAP-specific auth",

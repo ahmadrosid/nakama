@@ -1,13 +1,11 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { SidebarUserMenu } from "@/components/SidebarUserMenu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
@@ -20,19 +18,25 @@ import {
 } from "@/lib/chat-history";
 import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 
-export function ProfileRail() {
+export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: profiles = [] } = useProfilesQuery();
-  const { user } = useAuth();
+  const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
   const {
     profileId: liveChatProfileId,
     setProfileId: setLiveChatProfileId,
-    switchChatProfile,
+    syncForOrg,
   } = useActiveChatProfile();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (profiles.length === 0) {
+      return;
+    }
+    syncForOrg({ orgId: activeOrg?.id ?? null, profiles });
+  }, [activeOrg?.id, profiles, syncForOrg]);
 
   const logoSrc = ditherLogoSrc(resolvedTheme);
   const orderedProfiles = profiles.toSorted(
@@ -50,6 +54,8 @@ export function ProfileRail() {
   });
 
   function handleSelectProfile(profileId: string) {
+    onNavigate?.();
+
     if (profileId === activeProfileId) {
       return;
     }
@@ -82,9 +88,9 @@ export function ProfileRail() {
       return;
     }
 
-    // Draft /chat: reset in place via the mounted ChatPage handler.
+    // Draft /chat: store update; ChatPage enters a new draft for this id.
     if (location.pathname === buildChatBasePath()) {
-      switchChatProfile(profileId);
+      setLiveChatProfileId(profileId);
       return;
     }
 
@@ -157,6 +163,8 @@ export function ProfileRail() {
           <ProfileAdminPlusButton
             label={onProfilesPage ? "New profile" : "Manage profiles"}
             onClick={() => {
+              onNavigate?.();
+
               if (!onProfilesPage) {
                 navigate(pathForPage("profiles"));
                 return;

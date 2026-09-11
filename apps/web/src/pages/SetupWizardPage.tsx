@@ -1,8 +1,8 @@
+import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { SetupLayout } from "@/components/SetupLayout";
 import { SetupWizard } from "@/components/setup-wizard/SetupWizard";
-import { Spinner } from "@/components/ui/spinner";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { pathForPage, SETUP_PATH } from "@/lib/navigation";

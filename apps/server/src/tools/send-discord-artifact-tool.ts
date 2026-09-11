@@ -163,33 +163,3 @@ export const sendDiscordArtifactTool: ToolDefinition<
 export function createSendDiscordArtifactTools(): ToolDefinition[] {
   return [sendDiscordArtifactTool];
 }
-
-export function parseSendDiscordArtifactToolResult(
-  result: unknown
-): SendDiscordArtifactSuccess | null {
-  if (typeof result !== "object" || result === null) {
-    return null;
-  }
-
-  const record = result as Record<string, unknown>;
-  if (record.ok !== true) {
-    return null;
-  }
-
-  if (
-    typeof record.path !== "string" ||
-    typeof record.filename !== "string" ||
-    typeof record.mimeType !== "string" ||
-    typeof record.sizeBytes !== "number"
-  ) {
-    return null;
-  }
-
-  return {
-    filename: record.filename,
-    mimeType: record.mimeType,
-    ok: true,
-    path: record.path,
-    sizeBytes: record.sizeBytes,
-  };
-}

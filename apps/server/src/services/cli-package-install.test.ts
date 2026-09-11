@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runTimedInstallCommand } from "./cli-package-install";
 
 const STALLING_PLAN = {
@@ -40,6 +43,35 @@ const PIPE_HOLDING_PLAN = {
 };
 
 describe("runTimedInstallCommand", () => {
+  test("preserves UTF-8 characters split across stdout and stderr chunks", async () => {
+    const progress: string[] = [];
+    const result = await runTimedInstallCommand(
+      {
+        args: [
+          "-e",
+          `
+          process.stdout.write(Buffer.from([0xf0, 0x9f]));
+          process.stderr.write(Buffer.from([0xe2]));
+          await Bun.sleep(100);
+          process.stdout.write(Buffer.from([0x9a, 0x80, 0x0a]));
+          process.stderr.write(Buffer.from([0x82, 0xac]));
+          `,
+        ],
+        command: process.execPath,
+        displayCommand: "split UTF-8 output",
+      },
+      (message) => progress.push(message)
+    );
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stderr: "\u20ac",
+      stdout: "\ud83d\ude80",
+      timedOut: false,
+    });
+    expect(progress).toEqual(["stdout: \ud83d\ude80", "stderr: \u20ac"]);
+  });
+
   test("gives up on an installer that outlives the timeout", async () => {
     const result = await runTimedInstallCommand(STALLING_PLAN, undefined, {
       timeoutMs: 50,
@@ -155,4 +187,53 @@ describe("runTimedInstallCommand", () => {
       timedOut: true,
     });
   });
+
+  /**
+   * The installer shells out and the grandchild outlives its parent. A kill
+   * aimed at the direct child leaves that grandchild running, which is what
+   * "the timeout does not cancel the install" meant in practice.
+   */
+  test("a timed-out install stops the processes it started, not just the one it spawned", async () => {
+    const marker = join(tmpdir(), `nakama-install-grandchild-${Date.now()}`);
+    rmSync(marker, { force: true });
+
+    const result = await runTimedInstallCommand(
+      {
+        args: [
+          "-c",
+          `sh -c 'sleep 1.2; echo alive > ${marker}' & echo started; wait`,
+        ],
+        command: "sh",
+        displayCommand: "sh -c 'grandchild'",
+      },
+      undefined,
+      { settleTimeoutMs: 1000, sigtermGraceMs: 100, timeoutMs: 200 }
+    );
+
+    expect(result.timedOut).toBe(true);
+
+    // Past the grandchild's own sleep: if the group was signalled it never
+    // wrote, and if only the direct child was signalled it has by now.
+    await Bun.sleep(1600);
+    const survived = existsSync(marker);
+    rmSync(marker, { force: true });
+    expect(survived).toBe(false);
+  }, 15_000);
+
+  test("an aborted signal ends the install without waiting for the deadline", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+
+    const startedAt = Date.now();
+    const result = await runTimedInstallCommand(STALLING_PLAN, undefined, {
+      settleTimeoutMs: 1000,
+      signal: controller.signal,
+      sigtermGraceMs: 100,
+      timeoutMs: 60_000,
+    });
+
+    // The 60s deadline never fired, so finishing at all is the abort working.
+    expect(result.timedOut).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(10_000);
+  }, 15_000);
 });

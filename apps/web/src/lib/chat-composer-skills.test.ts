@@ -6,6 +6,7 @@ import {
   findActiveSkillSlashRange,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
+  matchComposerAddCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
 } from "./chat-composer-skills";
@@ -157,6 +158,36 @@ describe("filterComposerSlashSuggestions", () => {
         "sk"
       ).filter((item) => item.kind === "command")
     ).toEqual([]);
+  });
+
+  test("lists /add-tool and /add-mcp only when add commands are enabled", () => {
+    expect(
+      filterComposerSlashSuggestions([weatherSkill], "add").filter(
+        (item) => item.kind === "command"
+      )
+    ).toEqual([]);
+    expect(
+      filterComposerSlashSuggestions([weatherSkill], "add", {
+        enableAddCommands: true,
+      }).map((item) =>
+        item.kind === "command" ? item.command.name : item.skill.name
+      )
+    ).toEqual(["add-tool", "add-mcp"]);
+    expect(
+      filterComposerSlashSuggestions([weatherSkill], "add-t", {
+        enableAddCommands: true,
+      }).map((item) =>
+        item.kind === "command" ? item.command.name : item.skill.name
+      )
+    ).toEqual(["add-tool"]);
+  });
+});
+
+describe("matchComposerAddCommand", () => {
+  test("matches a bare add command", () => {
+    expect(matchComposerAddCommand("  /add-tool  ")).toBe("add-tool");
+    expect(matchComposerAddCommand("/add-mcp")).toBe("add-mcp");
+    expect(matchComposerAddCommand("/add-tool please")).toBeNull();
   });
 });
 

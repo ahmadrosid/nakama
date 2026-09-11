@@ -63,6 +63,7 @@ import { getTimezoneCatalog } from "../../services/timezone-catalog-service";
 import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import type { ServerOptions } from "../context";
 import {
+  requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
@@ -1698,13 +1699,16 @@ export function registerModelRoutes(
     requireOrgAdminFromContext(c);
 
     return streamAgentBrowserInstall(
-      async (send) => {
-        const status = await installAgentBrowser((progress) => {
-          send({
-            message: progress.message,
-            type: "progress",
-          });
-        });
+      async (send, signal) => {
+        const status = await installAgentBrowser(
+          (progress) => {
+            send({
+              message: progress.message,
+              type: "progress",
+            });
+          },
+          { signal }
+        );
 
         send({
           status,
@@ -1718,18 +1722,20 @@ export function registerModelRoutes(
     );
   });
 
-  app.get("/v1/settings/telegram", async (c) => {
-    getRequestAuth(c);
-    return json<TelegramSettingsResponse>(await agent.getTelegramSettings());
-  });
+  app.get("/v1/settings/telegram", async (c) =>
+    json<TelegramSettingsResponse>(
+      await agent.getTelegramSettings(requireActiveOrgIdFromContext(c))
+    )
+  );
 
   app.put("/v1/settings/telegram", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<UpdateTelegramSettingsRequest>(c.req.raw);
 
     try {
       return json<TelegramSettingsResponse>(
-        await agent.setTelegramSettings(body)
+        await agent.setTelegramSettings(orgId, body)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
@@ -1742,9 +1748,10 @@ export function registerModelRoutes(
 
   app.post("/v1/settings/telegram/handshake", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     try {
       return json<TelegramSettingsResponse>(
-        await agent.regenerateTelegramHandshake()
+        await agent.regenerateTelegramHandshake(orgId)
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

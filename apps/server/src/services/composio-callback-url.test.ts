@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,43 @@ import {
 } from "./composio-callback-url";
 
 describe("composio-callback-url", () => {
+  const previous = {
+    configDir: process.env.NAKAMA_CONFIG_DIR,
+    publicUrl: process.env.NAKAMA_PUBLIC_URL,
+    webPublicUrl: process.env.NAKAMA_WEB_PUBLIC_URL,
+  };
+  let isolatedConfigDir = "";
+
+  beforeEach(() => {
+    isolatedConfigDir = join(
+      tmpdir(),
+      `nakama-callback-url-${crypto.randomUUID()}`
+    );
+    mkdirSync(isolatedConfigDir, { recursive: true });
+    process.env.NAKAMA_CONFIG_DIR = isolatedConfigDir;
+    delete process.env.NAKAMA_PUBLIC_URL;
+    delete process.env.NAKAMA_WEB_PUBLIC_URL;
+  });
+
+  afterEach(() => {
+    rmSync(isolatedConfigDir, { force: true, recursive: true });
+    if (previous.configDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previous.configDir;
+    }
+    if (previous.publicUrl === undefined) {
+      delete process.env.NAKAMA_PUBLIC_URL;
+    } else {
+      process.env.NAKAMA_PUBLIC_URL = previous.publicUrl;
+    }
+    if (previous.webPublicUrl === undefined) {
+      delete process.env.NAKAMA_WEB_PUBLIC_URL;
+    } else {
+      process.env.NAKAMA_WEB_PUBLIC_URL = previous.webPublicUrl;
+    }
+  });
+
   test("resolveRequestClientOrigin prefers explicit origin", () => {
     const request = new Request(
       "http://app.example.com/v1/composio/toolkits/gmail/connect",

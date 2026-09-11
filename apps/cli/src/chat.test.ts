@@ -98,7 +98,7 @@ describe("formatStatusLines", () => {
     ok: true,
     providerConfigured: true,
     userConfigured: true,
-    version: "0.4.9",
+    version: "0.4.10",
   };
   const models: ModelsResponse = {
     currentProviderId: "provider-a",

@@ -1,7 +1,7 @@
 export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "create-automation",
-  "create-workflow",
   "manage-skills",
+  "skill-installer",
   "update-profile-memory",
   "archive-profile-memory",
   "save-artifact",

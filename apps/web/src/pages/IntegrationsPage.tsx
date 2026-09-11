@@ -1,3 +1,5 @@
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Bug01Icon,
   CodeIcon,
@@ -19,10 +21,8 @@ import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
-import { Spinner } from "@/components/ui/spinner";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 

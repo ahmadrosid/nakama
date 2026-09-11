@@ -1,4 +1,13 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Camera01Icon,
@@ -8,15 +17,6 @@ import {
 } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import {
   type ProfileSaveStatus,
   profilesTagline,

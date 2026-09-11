@@ -1,3 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
 import { useCallback, useEffect, useState } from "react";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
@@ -9,10 +13,6 @@ import { WebSearchSettingsCard } from "@/components/settings/WebSearchSettingsCa
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { UserContextSettings } from "@/components/UserContextCard";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
@@ -69,16 +69,11 @@ export function SettingsPage() {
             className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             id="chat-usage-setting"
           >
-            <div className="min-w-0 space-y-0.5">
-              <p className="font-medium text-foreground text-sm">
-                Token usage in chat
-              </p>
-              <p className="text-muted-foreground text-xs">
-                Show tokens and estimated cost under each reply.
-              </p>
-            </div>
+            <p className="font-medium text-foreground text-sm">
+              Token usage in chat
+            </p>
             <Switch
-              aria-label="Show token usage in chat"
+              aria-label="Token usage in chat"
               checked={chatUsage.visible}
               onCheckedChange={chatUsage.toggle}
             />

@@ -538,6 +538,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     channelOrgKey: string,
     messageText: string | undefined
   ): Promise<boolean> {
+    // A bot owned by an org answers only for that org, so neither the picker
+    // nor a stored per-user selection may move the chat to another tenant.
+    if (config.orgId) {
+      client.setOrgId(config.orgId);
+      return true;
+    }
+
     const orgContext = await prepareChannelOrgContext({
       getSelectedOrgId: () => getOrgSelection(orgStore, channelOrgKey)?.orgId,
       listOrgs: () => client.listUserOrgs(),
@@ -574,6 +581,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     conversationKey: string,
     telegram: TelegramRichMessenger
   ): Promise<void> {
+    if (config.orgId) {
+      await telegram.send("This bot serves a single organization.");
+      return;
+    }
+
     const { orgs } = await client.listUserOrgs();
 
     if (orgs.length === 0) {

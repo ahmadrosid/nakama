@@ -9,6 +9,36 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-09-08
+
+### Added
+
+- Edit a sent chat message and regenerate its reply ([#887])
+- Per-reply token usage and cost, with context and usage popovers ([#886], [#913])
+- Direct Mistral, Together AI, and Moonshot Kimi providers ([#896], [#897], [#914])
+- Move profiles between organizations ([#920])
+- Open tool and MCP assignment dialogs from `/add-tool` and `/add-mcp` ([#917])
+- Opt-in server observability ([#908])
+
+### Changed
+
+- Pending skill reviews appear on the composer ([#906])
+- Message editing uses a compact composer ([#912])
+- PATH and timezone handling use platform APIs; unused helpers and dependencies removed ([#916], [#919], [#921])
+
+### Fixed
+
+- ChatGPT model discovery recovers from rejected tokens ([#905])
+- Compacted chat history is preserved in session archives ([#898])
+- Per-turn tool loop output is bounded ([#899])
+- WhatsApp linked sessions recover and report files are delivered ([#911])
+- Chat profile selection survives organization switches ([#918])
+- Replay snapshots preserve event order ([#909])
+- Install deadlines cancel the underlying install ([#900])
+- Rotated CLI auth tokens no longer print to stdout ([#895])
+- Python tool interpreter paths are restricted to an allowlist ([#926])
+- Artifact folder navigation is simpler
+
 ## [0.4.9] - 2026-09-08
 
 ### Added
@@ -720,7 +750,8 @@ First tagged release. The baseline it established:
 - Export and import for data portability
 - Docker image published from GitHub Actions, and a VitePress documentation site
 
-[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.9...main
+[Unreleased]: https://github.com/ahmadrosid/nakama/compare/v0.4.10...main
+[0.4.10]: https://github.com/ahmadrosid/nakama/compare/v0.4.9...v0.4.10
 [0.4.9]: https://github.com/ahmadrosid/nakama/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/ahmadrosid/nakama/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/ahmadrosid/nakama/compare/v0.4.6...v0.4.7
@@ -1012,3 +1043,26 @@ First tagged release. The baseline it established:
 [#860]: https://github.com/ahmadrosid/nakama/pull/860
 [#875]: https://github.com/ahmadrosid/nakama/pull/875
 [#881]: https://github.com/ahmadrosid/nakama/pull/881
+[#886]: https://github.com/ahmadrosid/nakama/pull/886
+[#887]: https://github.com/ahmadrosid/nakama/pull/887
+[#895]: https://github.com/ahmadrosid/nakama/pull/895
+[#896]: https://github.com/ahmadrosid/nakama/pull/896
+[#897]: https://github.com/ahmadrosid/nakama/pull/897
+[#898]: https://github.com/ahmadrosid/nakama/pull/898
+[#899]: https://github.com/ahmadrosid/nakama/pull/899
+[#900]: https://github.com/ahmadrosid/nakama/pull/900
+[#905]: https://github.com/ahmadrosid/nakama/pull/905
+[#906]: https://github.com/ahmadrosid/nakama/pull/906
+[#908]: https://github.com/ahmadrosid/nakama/pull/908
+[#909]: https://github.com/ahmadrosid/nakama/pull/909
+[#911]: https://github.com/ahmadrosid/nakama/pull/911
+[#912]: https://github.com/ahmadrosid/nakama/pull/912
+[#913]: https://github.com/ahmadrosid/nakama/pull/913
+[#914]: https://github.com/ahmadrosid/nakama/pull/914
+[#916]: https://github.com/ahmadrosid/nakama/pull/916
+[#917]: https://github.com/ahmadrosid/nakama/pull/917
+[#918]: https://github.com/ahmadrosid/nakama/pull/918
+[#919]: https://github.com/ahmadrosid/nakama/pull/919
+[#920]: https://github.com/ahmadrosid/nakama/pull/920
+[#921]: https://github.com/ahmadrosid/nakama/pull/921
+[#926]: https://github.com/ahmadrosid/nakama/pull/926

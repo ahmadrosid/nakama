@@ -1,8 +1,8 @@
+import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 export function IntegrationCardShell({
   embedded,

@@ -1,4 +1,13 @@
 import type { ChatUsage } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import { Textarea } from "@nakama/ui/textarea";
+import { cn } from "@nakama/ui/utils";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -30,14 +39,6 @@ import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.sha
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
   type ChatListItem,
@@ -59,7 +60,6 @@ import { awaitingModelLabel, isAwaitingModelResponse } from "@/lib/chat-stream";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
-import { cn } from "@/lib/utils";
 
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
 function VirtuosoEdgePad() {
@@ -291,9 +291,11 @@ function ChatMessageListSession({
       contentClassName,
       modelLabel,
       onBranchMessage,
+      onEditMessage,
       onRetryMessage,
       profileId,
       showThinking,
+      showUsage,
       streamActive,
       turnStartedAt,
       turns.length,
@@ -655,6 +657,7 @@ function AssistantMessageActions({
 
   return (
     <div className="flex items-center gap-1 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 group-active:opacity-100">
+      {usage ? <ChatUsageBadge usage={usage} /> : null}
       <button
         aria-label={copied ? "Copied" : "Copy response"}
         className={cn(
@@ -715,7 +718,6 @@ function AssistantMessageActions({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
-      {usage ? <ChatUsageBadge className="ml-1" usage={usage} /> : null}
     </div>
   );
 }

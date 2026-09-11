@@ -1,10 +1,10 @@
+import { cn } from "@nakama/ui/utils";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ThinkingState } from "@/components/chat/ThinkingState";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { formatElapsedSeconds } from "@/lib/elapsed-time";
 import { splitThinkingLines } from "@/lib/thinking-text";
-import { cn } from "@/lib/utils";
 import styles from "./ThinkingReasoning.module.css";
 
 const MAX_H = 100;

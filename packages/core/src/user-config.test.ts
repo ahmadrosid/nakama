@@ -275,6 +275,56 @@ describe("user config multi-provider", () => {
     );
   });
 
+  test("round-trips discovered models_json for discovery providers", async () => {
+    // The writer persists customModels for every provider type, so the reader
+    // must parse them back for discovery providers too — otherwise a fetched
+    // catalog is written to disk and dropped on the next load.
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const moonshotId = createProviderInstanceId();
+    const zhipuId = createProviderInstanceId();
+
+    await saveUserConfig({
+      defaultProviderId: moonshotId,
+      providers: [
+        {
+          apiKey: "sk-moonshot-test",
+          baseUrl: "https://api.moonshot.ai/v1",
+          createdAt: "2026-09-08T10:00:00.000Z",
+          customModels: [
+            {
+              default: true,
+              id: "kimi-k2.5",
+              inputPerMillionUsd: 0.6,
+              name: "Kimi K2.5",
+              outputPerMillionUsd: 2.5,
+              supportsVision: false,
+            },
+          ],
+          id: moonshotId,
+          label: "Moonshot Kimi",
+          type: "moonshot",
+        },
+        {
+          apiKey: "zp-test",
+          createdAt: "2026-09-08T10:00:00.000Z",
+          customModels: [{ default: true, id: "glm-5.2" }],
+          id: zhipuId,
+          label: "GLM (Z.ai)",
+          type: "zhipu",
+        },
+      ],
+    });
+
+    const loaded = await loadUserConfig();
+    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe("kimi-k2.5");
+    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(
+      0.6
+    );
+    expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("glm-5.2");
+  });
+
   test("repairs literal undefined label on load", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

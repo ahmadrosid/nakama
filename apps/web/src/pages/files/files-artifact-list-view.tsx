@@ -1,8 +1,8 @@
 import type { ArtifactFile } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import { ArrowRight01Icon, Folder01Icon } from "hugeicons-react";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import { formatBytes } from "@/lib/knowledge-base-files";
-import { cn } from "@/lib/utils";
 import {
   type ArtifactFolderEntry,
   artifactBasename,

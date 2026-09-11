@@ -1,3 +1,5 @@
+import { Button } from "@nakama/ui/button";
+import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon, Rotate02Icon, Wrench01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -13,7 +15,10 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
-import { Button } from "@/components/ui/button";
+import { PluginSurface } from "@/components/PluginSurface";
+import { useAuth } from "@/context/use-auth";
+import { useTheme } from "@/context/use-theme";
+import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
@@ -42,8 +47,8 @@ import {
 } from "@/lib/chat-stream-web-search";
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
-import { cn } from "@/lib/utils";
 export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
@@ -165,6 +170,38 @@ function AssistantTextContent({
   );
 }
 
+function PluginToolRow({ message }: { message: ChatListItem }) {
+  const plugins = useOrgPlugins().data ?? [];
+  const match = findPluginTool(plugins, message.tool);
+  const { activeOrg } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const plugin = match?.plugin;
+  const fallback = <ToolTimelineItem message={message} />;
+  if (
+    !(match && activeOrg) ||
+    activeOrg.role === "viewer" ||
+    !plugin?.ui ||
+    plugin.lifecycleState !== "enabled"
+  ) {
+    return fallback;
+  }
+  return (
+    <PluginSurface
+      fallback={fallback}
+      key={`${activeOrg.id}:${plugin.pluginId}:${plugin.selectedVersion}:${plugin.revision}:${resolvedTheme}`}
+      orgId={activeOrg.id}
+      plugin={plugin}
+      theme={resolvedTheme}
+      tool={{
+        action: match.action,
+        input: message.toolInput,
+        result: message.toolResult,
+        status: message.toolStatus ?? "done",
+      }}
+    />
+  );
+}
+
 function AssistantWorkGroup({
   thinking,
   tools,
@@ -177,14 +214,23 @@ function AssistantWorkGroup({
   profileId?: string | null;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
-  const workflowRunTools = visibleTools.filter((tool) =>
-    isRunWorkflowTool(tool.tool)
+  const pluginTools = visibleTools.filter((tool) =>
+    tool.tool?.startsWith("plugin_")
+  );
+  const workflowRunTools = visibleTools.filter(
+    (tool) => !tool.tool?.startsWith("plugin_") && isRunWorkflowTool(tool.tool)
   );
   const otherTools = visibleTools.filter(
-    (tool) => !isRunWorkflowTool(tool.tool)
+    (tool) =>
+      !(tool.tool?.startsWith("plugin_") || isRunWorkflowTool(tool.tool))
   );
 
-  if (workflowRunTools.length === 0 && otherTools.length === 0 && !thinking) {
+  if (
+    pluginTools.length === 0 &&
+    workflowRunTools.length === 0 &&
+    otherTools.length === 0 &&
+    !thinking
+  ) {
     return null;
   }
 
@@ -196,6 +242,9 @@ function AssistantWorkGroup({
         thinking={thinking}
         tools={otherTools}
       />
+      {pluginTools.map((tool) => (
+        <PluginToolRow key={tool.id} message={tool} />
+      ))}
       {workflowRunTools.map((tool) => (
         <WorkflowRunToolRow key={tool.id} message={tool} />
       ))}

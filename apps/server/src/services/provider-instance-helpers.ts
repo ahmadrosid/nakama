@@ -155,7 +155,10 @@ export function modelExistsOnInstance(
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
-    instance.type === "mistral"
+    instance.type === "together" ||
+    instance.type === "vercel_ai_gateway" ||
+    instance.type === "mistral" ||
+    instance.type === "perplexity"
   ) {
     if (instance.customModels?.length) {
       return findCustomModel(instance.customModels, trimmed) !== undefined;
@@ -354,7 +357,10 @@ export function applyProviderInstanceUpdate(
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
-      instance.type === "mistral"
+      instance.type === "together" ||
+      instance.type === "vercel_ai_gateway" ||
+      instance.type === "mistral" ||
+      instance.type === "perplexity"
     ) {
       next.customModels = validateCustomModels(request.customModels);
     }

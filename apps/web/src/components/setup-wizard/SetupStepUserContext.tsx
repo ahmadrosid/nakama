@@ -1,3 +1,6 @@
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { useEffect, useState } from "react";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import {
@@ -6,8 +9,6 @@ import {
   useUserContextEditor,
   writeUserContextDraft,
 } from "@/components/UserContextForm";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import {
   useUserContextQuery,
@@ -16,7 +17,6 @@ import {
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
 import { getBrowserTimezone } from "@/lib/timezones";
-import { cn } from "@/lib/utils";
 
 interface SetupStepUserContextProps {
   onBack: () => void;

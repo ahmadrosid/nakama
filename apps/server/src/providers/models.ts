@@ -253,6 +253,169 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsVision: true,
   },
   {
+    contextWindow: 128_000,
+    default: true,
+    id: "sonar",
+    inputPerMillionUsd: 1,
+    maxOutputTokens: 8192,
+    name: "Sonar",
+    outputPerMillionUsd: 1,
+    provider: "perplexity",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 200_000,
+    id: "sonar-pro",
+    inputPerMillionUsd: 3,
+    maxOutputTokens: 8192,
+    name: "Sonar Pro",
+    outputPerMillionUsd: 15,
+    provider: "perplexity",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    id: "sonar-reasoning-pro",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 8192,
+    name: "Sonar Reasoning Pro",
+    outputPerMillionUsd: 8,
+    provider: "perplexity",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    id: "sonar-deep-research",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 32_768,
+    name: "Sonar Deep Research",
+    outputPerMillionUsd: 8,
+    provider: "perplexity",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    contextWindow: 131_072,
+    default: true,
+    id: "openai/gpt-oss-120b",
+    inputPerMillionUsd: 0.15,
+    maxOutputTokens: 40_960,
+    name: "GPT-OSS 120B",
+    outputPerMillionUsd: 0.6,
+    provider: "together",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    contextWindow: 131_072,
+    id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    inputPerMillionUsd: 1.04,
+    maxOutputTokens: 40_960,
+    name: "Llama 3.3 70B Instruct Turbo",
+    outputPerMillionUsd: 1.04,
+    provider: "together",
+    supportsVision: false,
+  },
+  {
+    contextWindow: 262_144,
+    id: "Qwen/Qwen3.5-9B",
+    inputPerMillionUsd: 0.17,
+    maxOutputTokens: 65_536,
+    name: "Qwen3.5 9B",
+    outputPerMillionUsd: 0.25,
+    provider: "together",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "deepseek-ai/DeepSeek-V4-Flash-0731",
+    inputPerMillionUsd: 0.14,
+    maxOutputTokens: 384_000,
+    name: "DeepSeek V4 Flash",
+    outputPerMillionUsd: 0.28,
+    provider: "together",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "MiniMaxAI/MiniMax-M3",
+    inputPerMillionUsd: 0.3,
+    maxOutputTokens: 131_072,
+    name: "MiniMax M3",
+    outputPerMillionUsd: 1.2,
+    provider: "together",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    default: true,
+    id: "openai/gpt-4o-mini",
+    inputPerMillionUsd: 0.15,
+    maxOutputTokens: 16_384,
+    name: "GPT-4o mini",
+    outputPerMillionUsd: 0.6,
+    provider: "vercel_ai_gateway",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 400_000,
+    id: "openai/gpt-5",
+    inputPerMillionUsd: 1.25,
+    maxOutputTokens: 128_000,
+    name: "GPT-5",
+    outputPerMillionUsd: 10,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_000_000,
+    id: "anthropic/claude-sonnet-4.5",
+    inputPerMillionUsd: 3,
+    maxOutputTokens: 64_000,
+    name: "Claude Sonnet 4.5",
+    outputPerMillionUsd: 15,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_000_000,
+    id: "google/gemini-2.5-flash",
+    inputPerMillionUsd: 0.3,
+    maxOutputTokens: 65_536,
+    name: "Gemini 2.5 Flash",
+    outputPerMillionUsd: 2.5,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    id: "meta/llama-3.3-70b",
+    inputPerMillionUsd: 0.72,
+    maxOutputTokens: 8192,
+    name: "Llama 3.3 70B",
+    outputPerMillionUsd: 0.72,
+    provider: "vercel_ai_gateway",
+    supportsVision: false,
+  },
+  {
+    contextWindow: 1_000_000,
+    id: "deepseek/deepseek-v4-flash",
+    inputPerMillionUsd: 0.13,
+    maxOutputTokens: 384_000,
+    name: "DeepSeek V4 Flash",
+    outputPerMillionUsd: 0.26,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
     contextWindow: 131_072,
     default: true,
     id: "gpt-oss-120b",
@@ -627,10 +790,6 @@ export function validateOpenCodeGoCustomModels(
   return models;
 }
 
-export function getAvailableModels(): ProviderModelOption[] {
-  return AVAILABLE_MODELS;
-}
-
 export function getModelById(modelId: string): ProviderModelOption | undefined {
   return AVAILABLE_MODELS.find((model) => model.id === modelId);
 }
@@ -672,7 +831,10 @@ export function getDefaultModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "together" ||
+      provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
+      provider === "perplexity" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -689,17 +851,23 @@ export function getDefaultModel(
           ? "gemini-2.5-flash"
           : provider === "deepseek"
             ? "deepseek-v4-flash"
-            : provider === "mistral"
-              ? "mistral-small-2603"
-              : provider === "cerebras"
-                ? "gpt-oss-120b"
-                : provider === "fireworks"
-                  ? "accounts/fireworks/models/kimi-k2p6"
-                  : provider === "opencode_go"
-                    ? "opencode-go/kimi-k2.7-code"
-                    : provider === "cloudflare"
-                      ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                      : "gpt-5.4";
+            : provider === "together"
+              ? "openai/gpt-oss-120b"
+              : provider === "vercel_ai_gateway"
+                ? "openai/gpt-4o-mini"
+                : provider === "mistral"
+                  ? "mistral-small-2603"
+                  : provider === "perplexity"
+                    ? "sonar"
+                    : provider === "cerebras"
+                      ? "gpt-oss-120b"
+                      : provider === "fireworks"
+                        ? "accounts/fireworks/models/kimi-k2p6"
+                        : provider === "opencode_go"
+                          ? "opencode-go/kimi-k2.7-code"
+                          : provider === "cloudflare"
+                            ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                            : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -763,7 +931,10 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "together" ||
+      provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
+      provider === "perplexity" ||
       provider === "cerebras" ||
       provider === "fireworks" ||
       provider === "opencode_go") &&

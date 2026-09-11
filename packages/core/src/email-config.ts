@@ -52,10 +52,6 @@ export interface UpdateEmailSettingsInput {
   username?: string;
 }
 
-export function maskSecret(secret: string): string | null {
-  return maskTrailingSecret(secret);
-}
-
 export function parseIniBoolean(
   value: string | undefined,
   fallback: boolean
@@ -240,7 +236,7 @@ export function toEmailSettingsPublic(
     imapHost: file.imapHost || null,
     imapPort: file.imapPort,
     imapSecure: file.imapSecure,
-    passwordMasked: maskSecret(file.password),
+    passwordMasked: maskTrailingSecret(file.password),
     smtpHost: file.smtpHost || null,
     smtpPort: file.smtpPort,
     smtpSecure: file.smtpSecure,
@@ -347,5 +343,3 @@ export function toMailboxConfig(config: EmailConfigFile) {
     },
   };
 }
-
-export const emailConfigToMailboxConfig = toMailboxConfig;

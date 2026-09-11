@@ -10,6 +10,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "gemini",
   "deepseek",
   "mistral",
+  "perplexity",
   "cerebras",
   "fireworks",
   "ollama",
@@ -20,9 +21,13 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "xai_oauth",
   "minimax",
   "minimax_cn",
+  "moonshot",
+  "moonshot_cn",
   "zhipu",
   "zhipu_cn",
   "xai",
+  "together",
+  "vercel_ai_gateway",
 ] as const;
 
 export {
@@ -43,6 +48,7 @@ export function parseProviderName(
     normalized === "gemini" ||
     normalized === "deepseek" ||
     normalized === "mistral" ||
+    normalized === "perplexity" ||
     normalized === "cerebras" ||
     normalized === "fireworks" ||
     normalized === "ollama" ||
@@ -53,9 +59,13 @@ export function parseProviderName(
     normalized === "xai_oauth" ||
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
+    normalized === "moonshot" ||
+    normalized === "moonshot_cn" ||
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
-    normalized === "xai"
+    normalized === "xai" ||
+    normalized === "together" ||
+    normalized === "vercel_ai_gateway"
   ) {
     return normalized;
   }
@@ -77,6 +87,8 @@ export function apiKeyEnvVarForProvider(
       return null;
     case "mistral":
       return "MISTRAL_API_KEY";
+    case "perplexity":
+      return "PERPLEXITY_API_KEY";
     case "cerebras":
       return "CEREBRAS_API_KEY";
     case "fireworks":
@@ -98,12 +110,20 @@ export function apiKeyEnvVarForProvider(
       return "MINIMAX_API_KEY";
     case "minimax_cn":
       return "MINIMAX_CN_API_KEY";
+    case "moonshot":
+      return "MOONSHOT_API_KEY";
+    case "moonshot_cn":
+      return "MOONSHOT_CN_API_KEY";
     case "zhipu":
       return "ZHIPU_API_KEY";
     case "zhipu_cn":
       return "ZHIPU_CN_API_KEY";
     case "xai":
       return "XAI_API_KEY";
+    case "together":
+      return "TOGETHER_API_KEY";
+    case "vercel_ai_gateway":
+      return "VERCEL_AI_GATEWAY_API_KEY";
   }
 }
 

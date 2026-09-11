@@ -1,14 +1,15 @@
-import { Add01Icon, Alert02Icon } from "hugeicons-react";
-import { useState } from "react";
-import { ProviderSetupForm } from "@/components/ProviderSetupForm";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@nakama/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@nakama/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
+import { toast } from "@nakama/ui/toast";
+import { Add01Icon, Alert02Icon } from "hugeicons-react";
+import { useState } from "react";
+import { ProviderSetupForm } from "@/components/ProviderSetupForm";
 import {
   useDeleteProviderMutation,
   useModelsQuery,
@@ -16,7 +17,6 @@ import {
   useUpdateProviderMutation,
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
 import { ProviderInstanceCard } from "./provider-instance-card";
 
 interface ProviderSettingsCardProps {

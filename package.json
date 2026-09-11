@@ -1,12 +1,13 @@
 {
   "name": "nakama",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "private": true,
   "type": "module",
   "workspaces": [
     "apps/*",
     "apps/platform/*",
-    "packages/*"
+    "packages/*",
+    "packages/plugins/*"
   ],
   "scripts": {
     "agent:ui": "bash scripts/agent-ui-harness.sh start",
@@ -35,9 +36,6 @@
   },
   "overrides": {
     "libsignal": "6.0.0"
-  },
-  "dependencies": {
-    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

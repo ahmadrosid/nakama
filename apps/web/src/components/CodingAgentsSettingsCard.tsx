@@ -1,12 +1,12 @@
 import type { CodingHarnessSettingsResponse } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
+import { cn } from "@nakama/ui/utils";
 import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { CodingAgentLogo } from "@/components/coding-agent-logos";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { client, formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 function CopyCommandButton({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);

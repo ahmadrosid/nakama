@@ -1,5 +1,5 @@
+import { Button } from "@nakama/ui/button";
 import { ArrowRight01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
 import { artifactFolderSegments } from "@/pages/files/files-artifact-folders";
 
 export function ArtifactFolderBreadcrumb({
@@ -26,7 +26,7 @@ export function ArtifactFolderBreadcrumb({
         type="button"
         variant="ghost"
       >
-        Artifacts
+        Home
       </Button>
       {segments.map((segment, index) => {
         const isCurrent = index === segments.length - 1;

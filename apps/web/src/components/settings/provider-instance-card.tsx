@@ -3,6 +3,8 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import {
   Delete02Icon,
   Edit03Icon,
@@ -23,12 +25,6 @@ import {
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 function ProviderActionButton({
   label,

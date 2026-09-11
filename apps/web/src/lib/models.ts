@@ -50,6 +50,7 @@ export function formatProviderLabel(
     provider === "gemini" ||
     provider === "deepseek" ||
     provider === "mistral" ||
+    provider === "perplexity" ||
     provider === "cerebras" ||
     provider === "cloudflare" ||
     provider === "fireworks" ||
@@ -60,9 +61,13 @@ export function formatProviderLabel(
     provider === "xai_oauth" ||
     provider === "minimax" ||
     provider === "minimax_cn" ||
+    provider === "moonshot" ||
+    provider === "moonshot_cn" ||
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
-    provider === "xai"
+    provider === "xai" ||
+    provider === "together" ||
+    provider === "vercel_ai_gateway"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -79,7 +84,10 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "together", label: "Together AI" },
+    { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
     { id: "mistral", label: "Mistral" },
+    { id: "perplexity", label: "Perplexity Sonar" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
     { id: "fireworks", label: "Fireworks" },
@@ -88,6 +96,8 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "minimax", label: "MiniMax" },
     { id: "xai", label: "xAI Grok" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
+    { id: "moonshot", label: "Moonshot Kimi" },
+    { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
     { id: "zhipu", label: "GLM (Z.ai)" },
     { id: "zhipu_cn", label: "GLM (CN)" },
     { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
@@ -891,7 +901,10 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
+    model.provider === "together" ||
+    model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
+    model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama"
@@ -941,7 +954,10 @@ export function resolveModelVisionSupport(
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
+    model.provider === "together" ||
+    model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
+    model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||

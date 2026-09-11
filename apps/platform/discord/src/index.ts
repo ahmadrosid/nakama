@@ -1,6 +1,10 @@
 import { join } from "node:path";
 import { NakamaClient } from "@nakama/client";
-import { installErrorHandlers, installErrorTrackingSink } from "@nakama/core";
+import {
+  installErrorHandlers,
+  installErrorTrackingSink,
+  log,
+} from "@nakama/core";
 import { hasActiveStreams } from "@nakama/core/channel-active-stream";
 import {
   ChannelOrgStore,
@@ -114,7 +118,7 @@ try {
     threadStore,
   });
 
-  console.log("Nakama Discord bridge running.");
+  log("info", "worker.started", { worker: "discord" });
   console.log(`Server: ${serverUrl}`);
   console.log(`Profile: ${config.profileId}`);
   const authConfig = authStore.getConfig();

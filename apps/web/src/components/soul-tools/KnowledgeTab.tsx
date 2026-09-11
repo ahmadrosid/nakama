@@ -1,8 +1,6 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type { KnowledgeBaseDocument } from "@nakama/core/contract";
-import { useEffect, useRef, useState } from "react";
-import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +8,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { useEffect, useRef, useState } from "react";
+import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {

@@ -1,15 +1,11 @@
 import type { TokenOptimizationResponse } from "@nakama/core/contract";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import { GithubIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { client, formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 /**
  * Palette: categorical slots 1 and 2, validated for both surfaces (six checks;

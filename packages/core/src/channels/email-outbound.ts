@@ -1,7 +1,7 @@
 import {
-  emailConfigToMailboxConfig,
   isEmailConfigComplete,
   loadEmailConfig,
+  toMailboxConfig,
 } from "../email-config";
 import { createSmtpSender } from "../mail/smtp-sender";
 import type { ChannelSendResult, EmailOutboundAdapter } from "./types";
@@ -16,7 +16,7 @@ export function createEmailOutboundAdapter(): EmailOutboundAdapter {
           return { error: "Email is not configured.", ok: false };
         }
 
-        const sender = createSmtpSender(emailConfigToMailboxConfig(config));
+        const sender = createSmtpSender(toMailboxConfig(config));
         await sender.send({
           subject: input.subject,
           text: input.text,

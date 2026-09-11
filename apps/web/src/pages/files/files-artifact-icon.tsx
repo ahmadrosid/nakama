@@ -1,6 +1,6 @@
+import { cn } from "@nakama/ui/utils";
 import { File02Icon, Film02Icon, Image02Icon } from "hugeicons-react";
 import { classifyArtifactType } from "@/components/soul-tools/artifacts-tab-filters";
-import { cn } from "@/lib/utils";
 
 export function ArtifactIcon({
   mimeType,

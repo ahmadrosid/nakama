@@ -1,19 +1,19 @@
 import { NakamaApiError } from "@nakama/core/api-error";
-import { useState } from "react";
-import {
-  clearUserContextDraft,
-  UserContextForm,
-  useUserContextEditor,
-} from "@/components/UserContextForm";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { useState } from "react";
+import {
+  clearUserContextDraft,
+  UserContextForm,
+  useUserContextEditor,
+} from "@/components/UserContextForm";
 import { useAuth } from "@/context/use-auth";
 import {
   useUserContextQuery,

@@ -142,3 +142,21 @@ describe("disableBunIdleTimeoutForLongHeldRequest", () => {
     expect(called).toBe(false);
   });
 });
+
+test("plugin action and official install connections stay open until completion", () => {
+  for (const path of [
+    "/v1/plugins/workflows/actions/run_workflow",
+    "/v1/plugins/official/workflows/install",
+  ]) {
+    for (const method of ["POST", "GET"]) {
+      const request = new Request(`http://localhost${path}`, { method });
+      const calls: number[] = [];
+      disableBunIdleTimeoutForLongHeldRequest(request, {
+        timeout(_request, seconds) {
+          calls.push(seconds);
+        },
+      });
+      expect(calls).toEqual(method === "POST" ? [0] : []);
+    }
+  }
+});

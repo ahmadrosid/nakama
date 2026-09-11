@@ -2,6 +2,9 @@ import type {
   KnowledgeBaseDocument,
   KnowledgeBaseSource,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Delete02Icon,
   File01Icon,
@@ -11,10 +14,7 @@ import {
 } from "hugeicons-react";
 import type { RefObject } from "react";
 import { KnowledgeDocumentPreview } from "@/components/soul-tools/knowledge-document-preview";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { formatBytes, KNOWLEDGE_BASE_ACCEPT } from "@/lib/knowledge-base-files";
-import { cn } from "@/lib/utils";
 
 /** Extend icon-sm (28px) to a 40px hit target without overlapping neighbors at gap-3. */
 const iconActionHitArea =

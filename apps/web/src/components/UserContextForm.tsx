@@ -5,12 +5,13 @@ import {
   USER_CONTEXT_FIELDS,
   type UserContextAnswers,
 } from "@nakama/core/user-context";
+import { Button } from "@nakama/ui/button";
+import { FormField } from "@nakama/ui/form-field";
+import { Input } from "@nakama/ui/input";
+import { Textarea } from "@nakama/ui/textarea";
+import { cn } from "@nakama/ui/utils";
 import { MoreHorizontalIcon } from "hugeicons-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   browserLanguageLabel,
   isPresetRole,
@@ -24,7 +25,6 @@ import {
   splitReplies,
   workHintsForRole,
 } from "@/components/user-context-presets";
-import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /* Shared plumbing: the raw USER.md string is the only state.          */

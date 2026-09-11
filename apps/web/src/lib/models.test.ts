@@ -23,7 +23,10 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "together"
+    | "vercel_ai_gateway"
     | "mistral"
+    | "perplexity"
     | "cerebras"
     | "fireworks",
   flags?: {
@@ -121,6 +124,38 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats together models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats vercel_ai_gateway models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats mistral models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -133,6 +168,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("mi-1", "model-1"),
         group("mi-1", "mistral", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats perplexity models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("pplx-1", "model-1"),
+        group("pplx-1", "perplexity", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -222,6 +273,38 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("cb-1", "model-1"),
         group("cb-1", "cerebras", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats together models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("tg-1", "model-1"),
+        group("tg-1", "together", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats vercel_ai_gateway models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -329,7 +412,10 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "together",
+          "vercel_ai_gateway",
           "mistral",
+          "perplexity",
           "cerebras",
           "cloudflare",
           "fireworks",

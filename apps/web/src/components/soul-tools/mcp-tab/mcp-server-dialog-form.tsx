@@ -1,4 +1,8 @@
 import type { CachedMcpToolSummary, McpTransport } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { CodeIcon } from "hugeicons-react";
 import { McpToolList } from "@/components/soul-tools/McpToolList";
 import {
@@ -7,10 +11,6 @@ import {
   McpHeadersEditor,
 } from "@/components/soul-tools/mcp-tab/McpFormEditors";
 import type { McpHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 export function McpServerDialogForm({
   idPrefix,

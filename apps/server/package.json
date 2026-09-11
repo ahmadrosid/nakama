@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "build": "bun build ./src/index.ts --outdir dist --target bun && cp src/services/javascript-tool-runner.js src/services/plugin-runner.js dist/",
     "dev": "bun run src/dev.ts",
     "start": "NODE_ENV=production bun run dist/index.js",
     "test": "bun test"
@@ -11,23 +11,24 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
     "@composio/core": "^0.17.0",
-    "@countrystatecity/timezones": "^1.0.5",
     "@google/genai": "^2.7.0",
     "@hono/zod-openapi": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@nakama/agent": "workspace:*",
     "@nakama/core": "workspace:*",
     "@nakama/db": "workspace:*",
-    "@openrouter/sdk": "^1.2.61",
+    "@openrouter/sdk": "^1.2.108",
     "fflate": "^0.8.3",
-    "fix-path": "^5.0.0",
     "hono": "^4.13.5",
-    "microsandbox": "0.6.15",
+    "microsandbox": "0.6.17",
     "openai": "^7.5.0",
+    "pacote": "^22.0.0",
     "pm2": "^7.0.4",
+    "tar": "^7.5.22",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@types/pacote": "^11.1.8",
     "msw": "^2.15.0"
   }
 }
