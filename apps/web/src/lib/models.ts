@@ -606,97 +606,34 @@ export function buildCreateProviderRequest(options: {
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
-  const request = buildConfigureProviderRequest(options);
+  const customModels =
+    options.provider === "openai_compatible" ||
+    ([
+      "openrouter",
+      "xai_oauth",
+      "cerebras",
+      "fireworks",
+      "ollama",
+      "opencode_go",
+    ].includes(options.provider) &&
+      options.customModels?.length)
+      ? options.customModels
+      : undefined;
 
   return {
-    apiKey: request.apiKey,
-    type: request.provider,
+    apiKey: options.apiKey,
+    type: options.provider,
     ...(options.xaiOAuth ? { xaiOAuth: options.xaiOAuth } : {}),
     ...(options.chatgptOAuth ? { chatgptOAuth: options.chatgptOAuth } : {}),
-    ...(request.model ? { model: request.model } : {}),
+    ...(options.model ? { model: options.model } : {}),
     ...(options.displayName?.trim()
       ? { label: options.displayName.trim() }
       : {}),
     ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
     ...(options.hostMode ? { hostMode: options.hostMode } : {}),
-    ...(request.customModels ? { customModels: request.customModels } : {}),
+    ...(customModels ? { customModels } : {}),
     ...(options.wireApi === "responses" ? { wireApi: options.wireApi } : {}),
   };
-}
-
-export function buildConfigureProviderRequest(options: {
-  apiKey: string;
-  provider: SelectedProvider;
-  model?: string;
-  displayName?: string;
-  baseUrl?: string;
-  hostMode?: OllamaHostMode;
-  customModels?: ConfigureProviderRequest["customModels"];
-}): ConfigureProviderRequest {
-  const request: ConfigureProviderRequest = {
-    apiKey: options.apiKey,
-    provider: options.provider,
-    ...(options.model ? { model: options.model } : {}),
-  };
-
-  if (options.provider === "openai_compatible") {
-    return {
-      ...request,
-      baseUrl: options.baseUrl?.trim(),
-      customModels: options.customModels,
-      displayName: options.displayName?.trim(),
-    };
-  }
-
-  if (
-    (options.provider === "openrouter" || options.provider === "xai_oauth") &&
-    options.customModels?.length
-  ) {
-    return {
-      ...request,
-      customModels: options.customModels,
-    };
-  }
-
-  if (options.provider === "cerebras" && options.customModels?.length) {
-    return {
-      ...request,
-      customModels: options.customModels,
-    };
-  }
-
-  if (options.provider === "fireworks" && options.customModels?.length) {
-    return {
-      ...request,
-      customModels: options.customModels,
-    };
-  }
-
-  if (options.provider === "ollama" && options.customModels?.length) {
-    return {
-      ...request,
-      baseUrl: options.baseUrl?.trim(),
-      customModels: options.customModels,
-    };
-  }
-
-  if (options.provider === "opencode_go" && options.customModels?.length) {
-    return {
-      ...request,
-      customModels: options.customModels,
-    };
-  }
-
-  if (options.provider === "opencode_go") {
-    return request;
-  }
-
-  const baseUrl = options.baseUrl?.trim();
-  if (baseUrl) {
-    return { ...request, baseUrl };
-  }
-
-  return request;
 }
 
 export function encodeModelSelection(

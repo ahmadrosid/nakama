@@ -5,7 +5,6 @@ import type {
   InstallSkillRequest,
   ListSkillsResponse,
   PatchSkillRequest,
-  SkillDetail,
   SkillResponse,
   SkillSummary,
   SkillUsageSummary,
@@ -1168,14 +1167,4 @@ export function toSkillSummaries(
     ...toSkillSummary(record, usageBySkillId.get(record.id) ?? null),
     usage: toSkillUsageSummary(usageBySkillId.get(record.id)),
   }));
-}
-
-export function toSkillDetail(
-  record: StoredSkillRecord,
-  body = ""
-): SkillDetail {
-  return {
-    ...toSkillSummary(record),
-    body,
-  };
 }

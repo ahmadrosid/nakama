@@ -467,16 +467,9 @@ export function deriveChatStatus(
 export function latestAssistantTurnMessages(
   messages: ChatListItem[]
 ): ChatListItem[] {
-  let start = 0;
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "user") {
-      start = index + 1;
-      break;
-    }
-  }
-
-  return messages.slice(start);
+  return messages.slice(
+    messages.findLastIndex((message) => message?.role === "user") + 1
+  );
 }
 
 /**

@@ -144,20 +144,6 @@ export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
   ),
 };
 
-const navItemsWithIcons = [
-  ...NAV_ITEMS,
-  ...Object.values(STANDALONE_PAGES).filter(
-    (item): item is NavItem => item !== undefined
-  ),
-];
-
-/** Compatibility lookup for consumers that only need an icon by page id. */
-export const NAV_ITEM_ICONS: Record<PageId, NavIcon> = {
-  ...(Object.fromEntries(
-    navItemsWithIcons.map((item) => [item.id, item.icon])
-  ) as Record<PageId, NavIcon>),
-};
-
 export const SETUP_PATH = "/setup";
 
 export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
