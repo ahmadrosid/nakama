@@ -139,7 +139,28 @@ Plugins that need shadcn-style controls must use `ctx.ui` from `packages/ui` for
 
 Bundle browser code as one self-contained ESM module without bundling React or React DOM. Use `ctx.React.createElement`, or compile JSX in classic mode against a local `React = ctx.React`. The official Workflows source is an example. Do not import Nakama's internal modules. Module URLs include the package version and org installation revision; keep top-level code free of side effects and register effects inside `apply`.
 
-This replaces the pre-release HTML/iframe UI contract. Convert `entryHtml` to `entryModule` and replace bootstrap/ready messages with `inject`/`apply`. Backend actions and stored plugin data keep their existing contract. These are trusted browser modules; declared services and effect cleanup are lifecycle controls, not a JavaScript security sandbox. The first supported UI slot is the plugin page; this does not introduce DeepSeek's dynamic code-authoring tools or its full runtime.
+This replaces the pre-release HTML/iframe UI contract. Convert `entryHtml` to `entryModule` and replace bootstrap/ready messages with `inject`/`apply`. Backend actions and stored plugin data keep their existing contract. These are trusted browser modules; declared services and effect cleanup are lifecycle controls, not a JavaScript security sandbox. Supported UI slots include the plugin page and plugin-owned tool renderers; this does not introduce DeepSeek's dynamic code-authoring tools or its full runtime.
+
+## Chat tool renderers
+
+A plugin can register React renderers for its own actions in the same browser module as its page:
+
+```js
+ctx.slots.register("tool:run_workflow", function WorkflowCard({ action, input, result, status }) {
+  return ctx.React.createElement("pre", null,
+    status === "running" ? "Running…" : JSON.stringify(result, null, 2));
+});
+```
+
+Use the original action key after `tool:`, not the full `plugin_<id>__<key>` tool name. Registration requires `"slots"` in `inject`. Each action accepts one renderer; duplicate or malformed registrations fail activation. The page registration remains required.
+
+Renderers receive `action`, `input` (the tool arguments, when available), `result` (the returned tool result, when available), and `status` (`running` or `done`). These props update as the chat tool call progresses. `done` means the call ended; inspect the result for application errors. Do not execute mutations during render or mount. Use explicit controls for mutations and `ctx.host.call` for backend actions. The host enforces existing action permissions.
+
+Chat matches tool names against the active organization's installed plugin actions, including normalized hyphens. Plugins cannot register renderers for native tools or other plugins. Only enabled plugins with a UI module are loaded; missing, disabled, failed, or unregistered renderers use the standard tool display. Startup and render failures are contained to the card.
+
+Nakama mounts each card with the host React instance, shared `ctx.ui`, and a `data-plugin-id` wrapper. Scope styles as for plugin pages. Each mounted surface owns an activation: use component effect cleanup for polling and `ctx.effect` for activation resources. Unmounts, organization changes, theme changes, and installation revisions dispose the old activation. Historical tool results use the currently enabled release's renderer, so tolerate older result shapes.
+
+The Workflows plugin registers `tool:run_workflow`; its card reads recorded receipts and polls its own read actions while running. Native legacy `run_workflow` messages retain the native card.
 
 ## Build and publish
 

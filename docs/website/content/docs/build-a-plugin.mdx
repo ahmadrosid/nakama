@@ -1,0 +1,269 @@
+---
+title: "Build your first plugin"
+description: "Create a plugin with an agent tool, a dashboard page, and a custom chat result card."
+---
+
+A plugin lets you ship a feature that people can use from both the dashboard and their agents. This guide builds **Greeting**: a small plugin with one tool, a page for trying it, and its own chat result card.
+
+You need Bun 1.3+, a running Nakama installation, and platform-admin access to install your package. Publishing requires an npm account and a package name you own. Use a Nakama build that includes React tool-renderer slots; older builds with page-only plugin support cannot load this example's custom renderer.
+
+## 1. Create the package
+
+Create this directory structure:
+
+```text
+nakama-greeting/
+  package.json
+  nakama.plugin.json
+  src/
+    greet.js
+    ui.js
+```
+
+Add `package.json`. Replace `@your-team` with your npm scope:
+
+```json
+{
+  "name": "@your-team/nakama-greeting",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["nakama.plugin.json", "actions", "ui"],
+  "scripts": {
+    "build": "bun build ./src/greet.js --outfile actions/greet.js --target bun && bun build ./src/ui.js --outfile ui/app.js --target browser"
+  }
+}
+```
+
+Nakama loads built JavaScript. It does not install your dependencies or run package build scripts. If your plugin needs libraries, put them in `devDependencies` and bundle them. Packages with nonempty `dependencies`, `optionalDependencies`, or `peerDependencies` are rejected.
+
+## 2. Declare the plugin
+
+Add `nakama.plugin.json`:
+
+```json
+{
+  "apiVersion": 1,
+  "id": "greeting",
+  "name": "Greeting",
+  "description": "Greet someone from the dashboard or chat.",
+  "version": "1.0.0",
+  "minNakamaVersion": "0.4.10",
+  "author": "Your team",
+  "license": "MIT",
+  "actions": [
+    {
+      "key": "greet",
+      "description": "Create a greeting for a person by name.",
+      "entry": "actions/greet.js",
+      "access": "member",
+      "effect": "read",
+      "exposeAsTool": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "ui": {
+    "entryModule": "ui/app.js",
+    "assetsDir": "ui",
+    "pageLabel": "Greeting"
+  }
+}
+```
+
+The two package versions must match. Keep `id` stable across updates. Set `minNakamaVersion` to the oldest release you actually support; the value above is the current development baseline, not a guarantee that every build of that version supports tool renderers.
+
+`access` controls who can invoke the action: `member` allows members and admins; `admin` requires an org admin. Viewers cannot invoke plugin actions. Use `effect: "write"` for actions that change data. Setting `exposeAsTool` creates the agent tool `plugin_greeting__greet`; assignment to a profile is still required.
+
+## 3. Implement the action
+
+Add `src/greet.js`:
+
+```js
+export async function run(input, context) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Enter a name.");
+  return { greeting: `Hello, ${name}!` };
+}
+```
+
+Nakama validates the declared input schema before invoking the action. Check business rules inside `run`, such as rejecting a name containing only spaces.
+
+The host supplies `context.orgId`, `context.actor`, and `context.actionKey`. For files, use `context.dataDir`. Actions invoked as agent tools also receive profile and session context. Do not take organization identity, roles, or storage paths from user input.
+
+## 4. Add a page and chat card
+
+Add `src/ui.js`:
+
+```js
+export const inject = ["slots", "host", "ui", "styles"];
+
+export function apply(ctx) {
+  const React = ctx.React;
+  const h = React.createElement;
+  const { Button, Input } = ctx.ui;
+
+  ctx.styles(`
+    [data-plugin-id="greeting"] .greeting-form {
+      display: grid;
+      gap: 12px;
+      max-width: 360px;
+    }
+    [data-plugin-id="greeting"] .greeting-result {
+      margin: 0;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+  `);
+
+  function GreetingCard({ result, status }) {
+    const text = status === "running"
+      ? "Preparing greeting…"
+      : typeof result?.greeting === "string"
+        ? result.greeting
+        : "No greeting returned.";
+    return h("p", { className: "greeting-result", role: "status" }, text);
+  }
+
+  function GreetingPage() {
+    const [name, setName] = React.useState("");
+    const [result, setResult] = React.useState(null);
+    const [busy, setBusy] = React.useState(false);
+    const [error, setError] = React.useState("");
+
+    async function submit(event) {
+      event.preventDefault();
+      if (busy) return;
+      setBusy(true);
+      setError("");
+      setResult(null);
+      try {
+        const value = await ctx.host.call("greet", { name });
+        if (!ctx.signal.aborted) setResult(value);
+      } catch (error) {
+        if (!ctx.signal.aborted) setError(String(error.message ?? error));
+      } finally {
+        if (!ctx.signal.aborted) setBusy(false);
+      }
+    }
+
+    return h("form", { className: "greeting-form", onSubmit: submit },
+      h("h2", null, "Greeting"),
+      h(Input, {
+        "aria-label": "Name",
+        placeholder: "Name",
+        value: name,
+        maxLength: 100,
+        required: true,
+        disabled: busy,
+        onChange: event => setName(event.target.value),
+      }),
+      h(Button, { type: "submit", disabled: busy || !name.trim() },
+        busy ? "Preparing…" : "Greet"),
+      error ? h("p", { role: "alert" }, error) : null,
+      result ? h(GreetingCard, { result, status: "done" }) : null,
+    );
+  }
+
+  ctx.slots.register("tool:greet", GreetingCard);
+  ctx.slots.register("page", GreetingPage);
+}
+```
+
+Use Nakama's React instance and shared UI controls; do not bundle React, React DOM, or `@nakama/ui`. This example uses `createElement` so no JSX configuration is needed. Declare each service you use in `inject`.
+
+The `page` slot makes your page available in the sidebar. The `tool:greet` slot customizes the result of your own `greet` action in chat. Use the original action key after `tool:`, not the full agent tool name. Exactly one page is required; tool renderers are optional.
+
+Tool renderers receive four props:
+
+| Prop | Meaning |
+|---|---|
+| `action` | Original action key, such as `greet` |
+| `input` | Tool arguments, when available |
+| `result` | Returned tool result, when available |
+| `status` | `running` or `done`; `done` does not guarantee success |
+
+Nakama falls back to its standard tool display when a renderer is missing, disabled, or fails. Your renderer cannot replace native tools or another plugin's tools. Historical messages use the currently enabled release, so handle missing fields and older result shapes.
+
+Keep rendering free of mutations. Use explicit buttons for writes. For polling, return cleanup from your React effect. Use `ctx.effect(() => cleanup)` for activation resources. Each page or chat card has its own activation; organization, theme, and installation changes dispose the old one. Keep module-level code free of side effects and scope CSS under your plugin's `data-plugin-id` wrapper.
+
+## 5. Build and check locally
+
+From your package directory:
+
+```bash
+bun run build
+bun -e 'const { run } = await import("./actions/greet.js"); const result = await run({ name: "Ada" }, {}); if (result.greeting !== "Hello, Ada!") throw new Error("Unexpected greeting"); console.log(result);'
+npm pack --dry-run
+```
+
+The action check should print a greeting for Ada. The package listing should include `nakama.plugin.json`, `actions/greet.js`, and `ui/app.js`.
+
+Before releasing changes, test invalid inputs, action errors, and any data writes. For the UI, check loading, success, failure, navigation away during a request, and switching organizations. A successful action build does not verify its page or chat renderer.
+
+## 6. Publish and try it in Nakama
+
+When you are ready to make the package public:
+
+```bash
+npm login
+npm publish --access public
+```
+
+1. As a platform admin, open **System → Plugins**. Enter your package name and exact version, choose **Preview package**, then install it.
+2. As an org admin, add and enable Greeting in the active organization.
+3. Open **Greeting** from the sidebar. Enter a name and click **Greet**.
+4. As a platform admin, open **System → Profiles** and assign the Greeting tool to a profile.
+5. Chat with that profile: “Use the Greeting plugin to greet Ada.” The result should use your `GreetingCard`.
+
+Assigned plugin tools are discovered through the agent's `find_tools` capability. Installing a package alone does not assign its tools to every profile.
+
+Custom packages currently install from the public npm registry using exact versions. Local paths, Git URLs, private registries, and uploaded archives are not supported. For your own plugin, test the action and bundle locally, then publish a new version to test installation. The **Official plugins → Reinstall** shortcut applies only to plugins bundled with Nakama, such as Workflows.
+
+## Add persistent data
+
+When your feature needs a database, include SQL migrations in the package and declare them in the manifest:
+
+```json
+"database": {
+  "migrations": [
+    { "id": "001-notes", "path": "migrations/001-notes.sql" }
+  ]
+}
+```
+
+Add `"migrations"` to `package.json`'s `files` list. An initial migration could contain:
+
+```sql
+CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+```
+
+Inside an action, open `context.databasePath` with Bun's `Database` from `bun:sqlite`, use parameterized queries, and close the database in `finally`. Nakama selects the organization's database generation. Do not construct storage paths from `process.cwd()` or accept them from callers.
+
+Add new migrations with new IDs. Do not edit previously released migrations: Nakama records their checksums. Updates run while the plugin is disabled; a failed update keeps the previous selected code and database generation available for recovery.
+
+## Add agent instructions
+
+To teach agents when and how to use your actions, include `skills/use-greeting/SKILL.md` and declare it:
+
+```json
+"skills": [
+  { "key": "use-greeting", "directory": "skills/use-greeting" }
+]
+```
+
+Add `"skills"` to the package's `files` list. Write the skill with a `name`, `description`, and instructions using your actual action names and input fields. Assign it to the profile alongside the tool. Skills guide the agent; action schemas and backend validation enforce correctness.
+
+## Update and maintain
+
+Bump both manifest and package versions, rebuild, inspect the package, and publish. A platform admin installs the new release; an org admin disables the plugin, updates it, then enables it. Never change published bytes under an existing version. New actions need profile assignment after an update.
+
+Uninstall retains organization data. Deleting that data is a separate admin action. Installed plugins are trusted server and browser code, not sandboxed extensions; only approve code you trust.
+
+For complete context fields, supported input-schema keywords, and host operations, see the [plugin authoring reference](https://github.com/ahmadrosid/nakama/blob/main/docs/plugins.md). For the working official example, see [Workflows](https://github.com/ahmadrosid/nakama/tree/main/packages/plugins/workflows). For installation roles and backup behavior, see [Using plugins](/plugins).
