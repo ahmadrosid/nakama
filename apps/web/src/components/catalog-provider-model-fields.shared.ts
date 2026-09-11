@@ -9,6 +9,7 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "deepseek",
   "doubao",
   "together",
+  "xiaomi",
   "vercel_ai_gateway",
   "mistral",
   "qwen",

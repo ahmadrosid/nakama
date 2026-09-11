@@ -156,6 +156,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Together AI";
   }
 
+  if (providerName === "xiaomi") {
+    return "Xiaomi MiMo";
+  }
+
   if (providerName === "vercel_ai_gateway") {
     return "Vercel AI Gateway";
   }
@@ -381,6 +385,7 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
+    ...(provider === "xiaomi" ? buildXiaomiThinkingBody(options.thinking) : {}),
     ...(provider === "qwen" || provider === "qwen_cn"
       ? { enable_thinking: Boolean(options.thinking?.enabled) }
       : {}),
@@ -466,6 +471,17 @@ function buildDeepSeekThinkingBody(
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
   };
+}
+
+/** MiMo: `thinking.type` only. API defaults to enabled — opt out unless UI asks. */
+function buildXiaomiThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
+  }
+
+  return { thinking: { type: "disabled" as const } };
 }
 
 /** Ark Seed: `thinking.type` only. Default is on for many Seed models — opt out unless UI enables. */

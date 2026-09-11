@@ -18,6 +18,22 @@ describe("isOpenRouterModelSlug", () => {
 });
 
 describe("resolveModel", () => {
+  test("uses xiaomi custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "mimo-v2.5", name: "MiMo V2.5" },
+    ];
+    expect(resolveModel("xiaomi", "mimo-v2.5", customModels)).toBe("mimo-v2.5");
+    expect(resolveModel("xiaomi", "unknown-model", customModels)).toBe(
+      "mimo-v2.5"
+    );
+  });
+
+  test("resolves catalog models for Xiaomi MiMo", () => {
+    expect(resolveModel("xiaomi", "mimo-v2.5-pro")).toBe("mimo-v2.5-pro");
+    expect(resolveModel("xiaomi", "mimo-v2.5")).toBe("mimo-v2.5");
+    expect(getDefaultModel("xiaomi")).toBe("mimo-v2.5-pro");
+  });
+
   test("passes through custom OpenRouter slugs", () => {
     expect(resolveModel("openrouter", "google/gemini-2.5-pro-preview")).toBe(
       "google/gemini-2.5-pro-preview"
@@ -377,6 +393,11 @@ describe("resolveModel", () => {
 });
 
 describe("modelSupportsVision", () => {
+  test("reads Xiaomi MiMo vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("mimo-v2.5-pro", "xiaomi")).toBe(false);
+    expect(modelSupportsVision("mimo-v2.5", "xiaomi")).toBe(true);
+  });
+
   test("keeps MiniMax models opt-in only (discovered lists)", () => {
     expect(modelSupportsVision("MiniMax-M3", "minimax")).toBe(false);
 

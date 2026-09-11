@@ -56,6 +56,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   together: "together",
   vercel: "vercel_ai_gateway",
   volcengine: "doubao",
+  xiaomi: "xiaomi",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {

@@ -28,6 +28,7 @@ const BUILTIN_LABELS: Record<
   vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
+  xiaomi: "Xiaomi MiMo",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };

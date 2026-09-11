@@ -28,6 +28,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "zhipu_cn",
   "xai",
   "together",
+  "xiaomi",
   "qwen",
   "qwen_cn",
   "vercel_ai_gateway",
@@ -69,6 +70,7 @@ export function parseProviderName(
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
     normalized === "together" ||
+    normalized === "xiaomi" ||
     normalized === "qwen" ||
     normalized === "qwen_cn" ||
     normalized === "vercel_ai_gateway"
@@ -130,6 +132,8 @@ export function apiKeyEnvVarForProvider(
       return "XAI_API_KEY";
     case "together":
       return "TOGETHER_API_KEY";
+    case "xiaomi":
+      return "XIAOMI_API_KEY";
     case "qwen":
       return "QWEN_API_KEY";
     case "qwen_cn":

@@ -32,6 +32,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("qwen")).toBe("qwen");
     expect(parseProviderName("qwen_cn")).toBe("qwen_cn");
     expect(parseProviderName("vercel_ai_gateway")).toBe("vercel_ai_gateway");
+    expect(parseProviderName("xiaomi")).toBe("xiaomi");
   });
 
   test("rejects unknown values", () => {
@@ -41,6 +42,10 @@ describe("parseProviderName", () => {
 });
 
 describe("apiKeyEnvVarForProvider", () => {
+  test("maps Xiaomi MiMo to its env key", () => {
+    expect(apiKeyEnvVarForProvider("xiaomi")).toBe("XIAOMI_API_KEY");
+  });
+
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
   });
@@ -266,6 +271,7 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("qwen_cn")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
+    expect(isDiscoveryModelProvider("xiaomi")).toBe(false);
   });
 });
 
@@ -294,5 +300,17 @@ describe("defaultDiscoveryBaseUrl", () => {
   test("returns null when the family has no fixed default", () => {
     expect(defaultDiscoveryBaseUrl("openai_compatible")).toBeNull();
     expect(defaultDiscoveryBaseUrl("deepseek")).toBeNull();
+  });
+});
+
+describe("resolveProvider xiaomi", () => {
+  test("auto-resolves Xiaomi MiMo when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        XIAOMI_API_KEY: "xm-test",
+      },
+    });
+
+    expect(provider).toBe("xiaomi");
   });
 });

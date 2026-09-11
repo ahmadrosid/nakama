@@ -2256,6 +2256,7 @@ export type ProviderName =
   | "zhipu_cn"
   | "xai"
   | "together"
+  | "xiaomi"
   | "qwen"
   | "qwen_cn"
   | "vercel_ai_gateway";

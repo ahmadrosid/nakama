@@ -68,6 +68,7 @@ export function formatProviderLabel(
     provider === "zhipu_cn" ||
     provider === "xai" ||
     provider === "together" ||
+    provider === "xiaomi" ||
     provider === "qwen" ||
     provider === "qwen_cn" ||
     provider === "vercel_ai_gateway"
@@ -89,6 +90,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "deepseek", label: "DeepSeek" },
     { id: "doubao", label: "Doubao (Volcengine)" },
     { id: "together", label: "Together AI" },
+    { id: "xiaomi", label: "Xiaomi MiMo" },
     { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
     { id: "mistral", label: "Mistral" },
     { id: "qwen", label: "Qwen (DashScope)" },
@@ -909,6 +911,7 @@ export function resolveModelThinkingSupport(
     model.provider === "deepseek" ||
     model.provider === "doubao" ||
     model.provider === "together" ||
+    model.provider === "xiaomi" ||
     model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
     model.provider === "qwen" ||
@@ -965,6 +968,7 @@ export function resolveModelVisionSupport(
     model.provider === "deepseek" ||
     model.provider === "doubao" ||
     model.provider === "together" ||
+    model.provider === "xiaomi" ||
     model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
     model.provider === "qwen" ||

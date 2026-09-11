@@ -137,6 +137,7 @@ export function catalogCustomModelsToCatalog(
       provider === "deepseek" ||
       provider === "doubao" ||
       provider === "together" ||
+      provider === "xiaomi" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||
@@ -334,6 +335,7 @@ export function getModelsForProviderInstance(
     instance.type === "deepseek" ||
     instance.type === "doubao" ||
     instance.type === "together" ||
+    instance.type === "xiaomi" ||
     instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
     instance.type === "qwen" ||

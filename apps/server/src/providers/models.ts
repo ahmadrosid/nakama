@@ -497,6 +497,29 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsVision: false,
   },
   {
+    contextWindow: 1_048_576,
+    default: true,
+    id: "mimo-v2.5-pro",
+    inputPerMillionUsd: 0.435,
+    maxOutputTokens: 131_072,
+    name: "MiMo V2.5 Pro",
+    outputPerMillionUsd: 0.87,
+    provider: "xiaomi",
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "mimo-v2.5",
+    inputPerMillionUsd: 0.14,
+    maxOutputTokens: 131_072,
+    name: "MiMo V2.5",
+    outputPerMillionUsd: 0.28,
+    provider: "xiaomi",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
     contextWindow: 131_072,
     default: true,
     id: "gpt-oss-120b",
@@ -914,6 +937,7 @@ export function getDefaultModel(
       provider === "deepseek" ||
       provider === "doubao" ||
       provider === "together" ||
+      provider === "xiaomi" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||
@@ -937,23 +961,25 @@ export function getDefaultModel(
             ? "deepseek-v4-flash"
             : provider === "together"
               ? "openai/gpt-oss-120b"
-              : provider === "vercel_ai_gateway"
-                ? "openai/gpt-4o-mini"
-                : provider === "mistral"
-                  ? "mistral-small-2603"
-                  : provider === "qwen" || provider === "qwen_cn"
-                    ? "qwen3.7-plus"
-                    : provider === "perplexity"
-                      ? "sonar"
-                      : provider === "cerebras"
-                        ? "gpt-oss-120b"
-                        : provider === "fireworks"
-                          ? "accounts/fireworks/models/kimi-k2p6"
-                          : provider === "opencode_go"
-                            ? "opencode-go/kimi-k2.7-code"
-                            : provider === "cloudflare"
-                              ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                              : "gpt-5.4";
+              : provider === "xiaomi"
+                ? "mimo-v2.5-pro"
+                : provider === "vercel_ai_gateway"
+                  ? "openai/gpt-4o-mini"
+                  : provider === "mistral"
+                    ? "mistral-small-2603"
+                    : provider === "qwen" || provider === "qwen_cn"
+                      ? "qwen3.7-plus"
+                      : provider === "perplexity"
+                        ? "sonar"
+                        : provider === "cerebras"
+                          ? "gpt-oss-120b"
+                          : provider === "fireworks"
+                            ? "accounts/fireworks/models/kimi-k2p6"
+                            : provider === "opencode_go"
+                              ? "opencode-go/kimi-k2.7-code"
+                              : provider === "cloudflare"
+                                ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                                : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -1019,6 +1045,7 @@ export function resolveModel(
       provider === "deepseek" ||
       provider === "doubao" ||
       provider === "together" ||
+      provider === "xiaomi" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||

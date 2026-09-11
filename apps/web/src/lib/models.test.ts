@@ -24,6 +24,7 @@ function group(
     | "openrouter"
     | "deepseek"
     | "doubao"
+    | "xiaomi"
     | "together"
     | "vercel_ai_gateway"
     | "mistral"
@@ -63,6 +64,22 @@ function group(
 }
 
 describe("resolveModelThinkingSupport", () => {
+  test("treats xiaomi models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats openai-compatible models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -264,6 +281,22 @@ describe("resolveModelThinkingSupport", () => {
 });
 
 describe("resolveModelVisionSupport", () => {
+  test("treats xiaomi models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats openai-compatible and opencode_go models as opt-in only", () => {
     expect(
       resolveModelVisionSupport(
@@ -488,6 +521,7 @@ describe("firstAvailableProviderOption", () => {
           "deepseek",
           "doubao",
           "together",
+          "xiaomi",
           "vercel_ai_gateway",
           "mistral",
           "qwen",
