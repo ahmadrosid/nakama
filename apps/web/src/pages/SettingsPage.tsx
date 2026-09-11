@@ -12,6 +12,7 @@ import { WebPublicUrlSettingsRow } from "@/components/settings/WebPublicUrlSetti
 import { WebSearchSettingsCard } from "@/components/settings/WebSearchSettingsCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { UserContextSettings } from "@/components/UserContextCard";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
@@ -61,6 +62,8 @@ export function SettingsPage() {
             <p className="font-medium text-foreground text-sm">Appearance</p>
             <ThemeToggle />
           </div>
+
+          <UserContextSettings />
 
           <div
             className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"

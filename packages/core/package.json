@@ -21,6 +21,7 @@
     "./fs": "./src/fs.ts",
     "./profiles": "./src/profiles.ts",
     "./thinking-content": "./src/thinking-content.ts",
+    "./user-context": "./src/user-context.ts",
     "./message-content": "./src/message-content.ts",
     "./attachments/store": "./src/attachments/store.ts",
     "./attachments/content": "./src/attachments/content.ts",

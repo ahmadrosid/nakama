@@ -768,17 +768,6 @@ export function useUserContextQuery(
   });
 }
 
-export function useInitUserContextMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () => client.initUserContext(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.userContext });
-    },
-  });
-}
-
 export function useWriteUserContextMutation() {
   const queryClient = useQueryClient();
 
