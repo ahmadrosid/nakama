@@ -447,6 +447,7 @@ describe("OrgService", () => {
 
     const userId = created.adminMember!.member.userId;
     const updated = await orgService.updateOwnProfile(userId, {
+      currentPassword: created.adminMember!.temporaryPassword!,
       email: "updated@acme.com",
       name: "Updated Admin",
       phone: "",
@@ -456,6 +457,34 @@ describe("OrgService", () => {
     expect(updated.name).toBe("Updated Admin");
     expect(updated.email).toBe("updated@acme.com");
     expect(updated.phone).toBeNull();
+
+    const profileOnly = await orgService.updateOwnProfile(userId, {
+      name: "Renamed Admin",
+    });
+    expect(profileOnly.name).toBe("Renamed Admin");
+  });
+
+  test("requires the current password before changing email", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      admin: { email: "admin@acme.com", name: "Acme Admin" },
+      name: "Acme",
+      slug: "acme-email-reauth",
+    });
+    const userId = created.adminMember!.member.userId;
+
+    await expect(
+      orgService.updateOwnProfile(userId, { email: "attacker@example.com" })
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      orgService.updateOwnProfile(userId, {
+        currentPassword: "wrong-password",
+        email: "attacker@example.com",
+      })
+    ).rejects.toMatchObject({ status: 401 });
+    expect((await databaseAdapter.getUserById(userId))?.email).toBe(
+      "admin@acme.com"
+    );
   });
 
   test("rejects duplicate slugs", async () => {

@@ -246,9 +246,13 @@ function UserProfileDialog({
       return;
     }
 
-    const wantsPasswordChange = Boolean(
-      currentPassword || newPassword || confirmPassword
-    );
+    const emailChanged = trimmedEmail.toLowerCase() !== email.toLowerCase();
+    if (emailChanged && !currentPassword) {
+      setError("Enter your current password to change email.");
+      return;
+    }
+
+    const wantsPasswordChange = Boolean(newPassword || confirmPassword);
     if (wantsPasswordChange) {
       if (!(currentPassword && newPassword)) {
         setError("Enter your current password and a new password.");
@@ -263,6 +267,7 @@ function UserProfileDialog({
     setPending(true);
     try {
       await client.updateAuthProfile({
+        ...(emailChanged ? { currentPassword } : {}),
         email: trimmedEmail,
         name: formName,
         phone: formPhone,
@@ -351,7 +356,7 @@ function UserProfileDialog({
             <div>
               <p className="font-medium text-sm">Password</p>
               <p className="text-muted-foreground text-xs">
-                Leave blank to keep your current one.
+                Enter your current password to change email or password.
               </p>
             </div>
             <div>

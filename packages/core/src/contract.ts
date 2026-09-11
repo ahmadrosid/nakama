@@ -475,6 +475,7 @@ export interface AuthUserResponse {
 }
 
 export interface UpdateAuthProfileRequest {
+  currentPassword?: string;
   email?: string;
   name?: string | null;
   phone?: string | null;
