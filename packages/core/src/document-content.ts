@@ -98,6 +98,8 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     "text/csv",
     DOCX_MEDIA_TYPE,
   ]),
+  qwen: new Set<string>(),
+  qwen_cn: new Set<string>(),
   perplexity: new Set<string>(),
   together: new Set<string>(),
   vercel_ai_gateway: new Set<string>(),

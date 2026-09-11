@@ -39,6 +39,8 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "together", label: "Together AI" },
   { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
   { id: "mistral", label: "Mistral" },
+  { id: "qwen", label: "Qwen (DashScope)" },
+  { id: "qwen_cn", label: "Qwen (DashScope CN)" },
   { id: "perplexity", label: "Perplexity Sonar" },
   { id: "xai", label: "xAI Grok" },
   { id: "cerebras", label: "Cerebras" },
@@ -204,6 +206,8 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
     normalized === "together" ||
+    normalized === "qwen" ||
+    normalized === "qwen_cn" ||
     normalized === "vercel_ai_gateway"
   ) {
     return normalized;

@@ -32,6 +32,8 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "doubao",
   "together",
   "mistral",
+  "alibaba",
+  "qwen",
   "perplexity",
 ]);
 
@@ -43,12 +45,14 @@ const NPM_MAP: Record<string, SelectedProvider> = {
 };
 
 const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
+  alibaba: "qwen",
   bytedance: "doubao",
   deepseek: "deepseek",
   mistral: "mistral",
   opencode: "openai_compatible",
   openrouter: "openrouter",
   perplexity: "perplexity",
+  qwen: "qwen",
   together: "together",
   vercel: "vercel_ai_gateway",
   volcengine: "doubao",

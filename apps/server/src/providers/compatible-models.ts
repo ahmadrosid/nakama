@@ -139,6 +139,8 @@ export function catalogCustomModelsToCatalog(
       provider === "together" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
+      provider === "qwen" ||
+      provider === "qwen_cn" ||
       provider === "perplexity"
     ) {
       model.supportsThinking = false;
@@ -334,6 +336,8 @@ export function getModelsForProviderInstance(
     instance.type === "together" ||
     instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
+    instance.type === "qwen" ||
+    instance.type === "qwen_cn" ||
     instance.type === "perplexity" ||
     instance.type === "opencode_go"
   ) {

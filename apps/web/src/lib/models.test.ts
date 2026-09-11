@@ -27,6 +27,8 @@ function group(
     | "together"
     | "vercel_ai_gateway"
     | "mistral"
+    | "qwen"
+    | "qwen_cn"
     | "perplexity"
     | "cerebras"
     | "fireworks",
@@ -169,6 +171,29 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("mi-1", "model-1"),
         group("mi-1", "mistral", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats qwen models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen", { supportsThinking: true })
+      )
+    ).toBe(true);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-cn-1", "model-1"),
+        group("qw-cn-1", "qwen_cn", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -326,6 +351,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(true);
   });
 
+  test("treats qwen models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats vercel_ai_gateway models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -449,6 +490,8 @@ describe("firstAvailableProviderOption", () => {
           "together",
           "vercel_ai_gateway",
           "mistral",
+          "qwen",
+          "qwen_cn",
           "perplexity",
           "cerebras",
           "cloudflare",

@@ -217,6 +217,96 @@ describe("createProviderForInstance routing", () => {
     }
   });
 
+  test.each([
+    {
+      apiKey: "test-key",
+      id: "inst_qwen",
+      label: "Qwen (DashScope)",
+      type: "qwen" as const,
+    },
+    {
+      apiKey: "cn-key",
+      id: "inst_qwen_cn",
+      label: "Qwen (DashScope CN)",
+      type: "qwen_cn" as const,
+    },
+  ])(
+    "routes $type instances to the DashScope compatible-mode path with auth",
+    async ({ apiKey, id, label, type }) => {
+      let seenPath = "";
+      let seenAuth = "";
+      let seenModel = "";
+      let seenEnableThinking: unknown;
+
+      const mock = Bun.serve({
+        fetch: async (request) => {
+          const url = new URL(request.url);
+          seenPath = url.pathname;
+          seenAuth = request.headers.get("authorization") ?? "";
+          const body = (await request.json()) as {
+            enable_thinking?: unknown;
+            model?: string;
+          };
+          seenModel = body.model ?? "";
+          seenEnableThinking = body.enable_thinking;
+          return Response.json({
+            choices: [
+              {
+                finish_reason: "stop",
+                index: 0,
+                message: { content: "ok", role: "assistant" },
+              },
+            ],
+            created: 1,
+            id: "mock",
+            model: seenModel,
+            object: "chat.completion",
+            usage: {
+              completion_tokens: 1,
+              prompt_tokens: 1,
+              total_tokens: 2,
+            },
+          });
+        },
+        port: 0,
+      });
+
+      try {
+        const instance: ProviderInstance = {
+          apiKey,
+          baseUrl: `http://127.0.0.1:${mock.port}/compatible-mode/v1`,
+          createdAt: new Date().toISOString(),
+          id,
+          label,
+          type,
+        };
+
+        const client = createProviderForInstance(instance, "qwen3.7-plus");
+
+        expect(client).not.toBeNull();
+        expect(client?.name).toBe(type);
+
+        const result = await client!.generateChat({
+          messages: [{ content: "ping", role: "user" }],
+          providerOptions: { thinking: { effort: "medium", enabled: true } },
+        });
+
+        expect(result.content).toBe("ok");
+        expect(seenPath).toBe("/compatible-mode/v1/chat/completions");
+        expect(seenAuth).toBe(`Bearer ${apiKey}`);
+        expect(seenModel).toBe("qwen3.7-plus");
+        expect(seenEnableThinking).toBe(true);
+
+        await client!.generateChat({
+          messages: [{ content: "ping", role: "user" }],
+        });
+        expect(seenEnableThinking).toBe(false);
+      } finally {
+        mock.stop(true);
+      }
+    }
+  );
+
   test("routes doubao instances to the Ark /api/v3 chat completions path", async () => {
     let seenPath = "";
     let seenAuth = "";

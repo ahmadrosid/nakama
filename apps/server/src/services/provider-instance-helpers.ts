@@ -35,6 +35,7 @@ import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,
   getModelById,
+  getModelsForProvider,
   getModelsForProviderInstance,
   isCompatibleModelId,
   isOpenRouterModelSlug,
@@ -151,23 +152,25 @@ export function modelExistsOnInstance(
   }
 
   if (
-    instance.type === "openai" ||
-    instance.type === "anthropic" ||
-    instance.type === "gemini" ||
-    instance.type === "deepseek" ||
-    instance.type === "doubao" ||
-    instance.type === "together" ||
-    instance.type === "vercel_ai_gateway" ||
-    instance.type === "mistral" ||
-    instance.type === "perplexity"
+    (instance.type === "openai" ||
+      instance.type === "anthropic" ||
+      instance.type === "gemini" ||
+      instance.type === "deepseek" ||
+      instance.type === "doubao" ||
+      instance.type === "vercel_ai_gateway" ||
+      instance.type === "together" ||
+      instance.type === "mistral" ||
+      instance.type === "qwen" ||
+      instance.type === "qwen_cn" ||
+      instance.type === "perplexity") &&
+    instance.customModels?.length
   ) {
-    if (instance.customModels?.length) {
-      return findCustomModel(instance.customModels, trimmed) !== undefined;
-    }
-    return Boolean(getModelById(trimmed)?.provider === instance.type);
+    return findCustomModel(instance.customModels, trimmed) !== undefined;
   }
 
-  return Boolean(getModelById(trimmed)?.provider === instance.type);
+  return getModelsForProvider(instance.type).some(
+    (model) => model.id === trimmed
+  );
 }
 
 export function resolveDefaultModelForInstance(
@@ -362,6 +365,8 @@ export function applyProviderInstanceUpdate(
       instance.type === "together" ||
       instance.type === "vercel_ai_gateway" ||
       instance.type === "mistral" ||
+      instance.type === "qwen" ||
+      instance.type === "qwen_cn" ||
       instance.type === "perplexity"
     ) {
       next.customModels = validateCustomModels(request.customModels);

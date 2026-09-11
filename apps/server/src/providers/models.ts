@@ -384,6 +384,53 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
     supportsVision: true,
   },
+  ...(["qwen", "qwen_cn"] as const).flatMap((provider) => [
+    {
+      contextWindow: 1_000_000,
+      default: true,
+      id: "qwen3.7-plus",
+      inputPerMillionUsd: 0.4,
+      maxOutputTokens: 65_536,
+      name: "Qwen3.7 Plus",
+      outputPerMillionUsd: 1.6,
+      provider,
+      supportsThinking: true,
+      supportsVision: true,
+    },
+    {
+      contextWindow: 131_072,
+      id: "qwen-plus",
+      inputPerMillionUsd: 0.4,
+      maxOutputTokens: 8192,
+      name: "Qwen Plus",
+      outputPerMillionUsd: 1.2,
+      provider,
+      supportsThinking: true,
+      supportsVision: false,
+    },
+    {
+      contextWindow: 262_144,
+      id: "qwen3-vl-plus",
+      inputPerMillionUsd: 0.2,
+      maxOutputTokens: 32_768,
+      name: "Qwen3 VL Plus",
+      outputPerMillionUsd: 1.6,
+      provider,
+      supportsThinking: true,
+      supportsVision: true,
+    },
+    {
+      contextWindow: 1_000_000,
+      id: "qwen-flash",
+      inputPerMillionUsd: 0.05,
+      maxOutputTokens: 32_768,
+      name: "Qwen Flash",
+      outputPerMillionUsd: 0.4,
+      provider,
+      supportsThinking: true,
+      supportsVision: false,
+    },
+  ]),
   {
     contextWindow: 128_000,
     default: true,
@@ -869,6 +916,8 @@ export function getDefaultModel(
       provider === "together" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
+      provider === "qwen" ||
+      provider === "qwen_cn" ||
       provider === "perplexity" ||
       provider === "opencode_go") &&
     customModels?.length
@@ -892,17 +941,19 @@ export function getDefaultModel(
                 ? "openai/gpt-4o-mini"
                 : provider === "mistral"
                   ? "mistral-small-2603"
-                  : provider === "perplexity"
-                    ? "sonar"
-                    : provider === "cerebras"
-                      ? "gpt-oss-120b"
-                      : provider === "fireworks"
-                        ? "accounts/fireworks/models/kimi-k2p6"
-                        : provider === "opencode_go"
-                          ? "opencode-go/kimi-k2.7-code"
-                          : provider === "cloudflare"
-                            ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                            : "gpt-5.4";
+                  : provider === "qwen" || provider === "qwen_cn"
+                    ? "qwen3.7-plus"
+                    : provider === "perplexity"
+                      ? "sonar"
+                      : provider === "cerebras"
+                        ? "gpt-oss-120b"
+                        : provider === "fireworks"
+                          ? "accounts/fireworks/models/kimi-k2p6"
+                          : provider === "opencode_go"
+                            ? "opencode-go/kimi-k2.7-code"
+                            : provider === "cloudflare"
+                              ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                              : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -970,6 +1021,8 @@ export function resolveModel(
       provider === "together" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
+      provider === "qwen" ||
+      provider === "qwen_cn" ||
       provider === "perplexity" ||
       provider === "cerebras" ||
       provider === "fireworks" ||

@@ -21,6 +21,8 @@ const BUILTIN_LABELS: Record<
   openai: "OpenAI",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  qwen: "Qwen (DashScope)",
+  qwen_cn: "Qwen (DashScope CN)",
   perplexity: "Perplexity Sonar",
   together: "Together AI",
   vercel_ai_gateway: "Vercel AI Gateway",

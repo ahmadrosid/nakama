@@ -164,6 +164,14 @@ function providerLabel(providerName: ProviderName): string {
     return "Mistral";
   }
 
+  if (providerName === "qwen") {
+    return "Qwen (DashScope)";
+  }
+
+  if (providerName === "qwen_cn") {
+    return "Qwen (DashScope CN)";
+  }
+
   if (providerName === "perplexity") {
     return "Perplexity";
   }
@@ -372,6 +380,9 @@ async function buildChatCompletionRequestBody(options: {
     ),
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
+      : {}),
+    ...(provider === "qwen" || provider === "qwen_cn"
+      ? { enable_thinking: Boolean(options.thinking?.enabled) }
       : {}),
     ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
     ...(provider === "vercel_ai_gateway" && options.thinking?.enabled

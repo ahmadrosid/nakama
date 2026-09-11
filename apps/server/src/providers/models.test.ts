@@ -163,6 +163,21 @@ describe("resolveModel", () => {
     );
   });
 
+  test("resolves catalog models for Qwen DashScope intl and CN", () => {
+    expect(resolveModel("qwen", "qwen3.7-plus")).toBe("qwen3.7-plus");
+    expect(resolveModel("qwen", "qwen3-vl-plus")).toBe("qwen3-vl-plus");
+    expect(resolveModel("qwen_cn", "qwen-flash")).toBe("qwen-flash");
+    expect(getDefaultModel("qwen")).toBe("qwen3.7-plus");
+    expect(getDefaultModel("qwen_cn")).toBe("qwen3.7-plus");
+    expect(getModelById("qwen3.7-plus")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen3.7-plus")?.contextWindow).toBe(1_000_000);
+    expect(getModelById("qwen3.7-plus")?.supportsVision).toBe(true);
+    expect(getModelById("qwen3-vl-plus")?.supportsVision).toBe(true);
+    expect(getModelById("qwen3-vl-plus")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen-flash")?.supportsThinking).toBe(true);
+    expect(getModelById("qwen-flash")?.inputPerMillionUsd).toBe(0.05);
+  });
+
   test("resolves catalog models for Doubao", () => {
     expect(resolveModel("doubao", "doubao-seed-2-1-turbo-260628")).toBe(
       "doubao-seed-2-1-turbo-260628"
@@ -187,6 +202,19 @@ describe("resolveModel", () => {
     );
     expect(getModelById("doubao-seed-2-1-pro-260628")?.maxOutputTokens).toBe(
       256_000
+    );
+  });
+
+  test("uses qwen custom model shortlist when provided", () => {
+    const customModels = [
+      { default: true, id: "qwen-flash", name: "Qwen Flash" },
+    ];
+    expect(resolveModel("qwen", "qwen-flash", customModels)).toBe("qwen-flash");
+    expect(resolveModel("qwen", "unknown-model", customModels)).toBe(
+      "qwen-flash"
+    );
+    expect(resolveModel("qwen_cn", "qwen-flash", customModels)).toBe(
+      "qwen-flash"
     );
   });
 
@@ -422,6 +450,14 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("mistral-small-2603", "mistral")).toBe(true);
     expect(modelSupportsVision("mistral-large-2512", "mistral")).toBe(true);
     expect(modelSupportsVision("ministral-14b-2512", "mistral")).toBe(true);
+  });
+
+  test("reads Qwen DashScope vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("qwen3.7-plus", "qwen")).toBe(true);
+    expect(modelSupportsVision("qwen-plus", "qwen")).toBe(false);
+    expect(modelSupportsVision("qwen3-vl-plus", "qwen")).toBe(true);
+    expect(modelSupportsVision("qwen3-vl-plus", "qwen_cn")).toBe(true);
+    expect(modelSupportsVision("qwen-flash", "qwen_cn")).toBe(false);
   });
 
   test("reads Doubao vision flags from the curated catalog", () => {

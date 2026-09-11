@@ -11,6 +11,8 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "together",
   "vercel_ai_gateway",
   "mistral",
+  "qwen",
+  "qwen_cn",
   "perplexity",
   "opencode_go",
 ] as const;
