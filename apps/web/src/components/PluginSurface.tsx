@@ -137,6 +137,8 @@ export function PluginSurface({
                       <div
                         className="flex items-center gap-2"
                         data-plugin-id={pluginId}
+                        // Page container queries must not collapse header actions.
+                        style={{ containerType: "normal" }}
                       >
                         {children}
                       </div>,
