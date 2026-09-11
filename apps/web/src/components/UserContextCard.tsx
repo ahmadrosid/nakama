@@ -31,7 +31,6 @@ function formatUserContextError(error: unknown): string {
 
 interface UserContextEditorDialogProps {
   onOpenChange: (open: boolean) => void;
-  onSaveSuccess?: () => void;
   open: boolean;
 }
 
@@ -39,7 +38,6 @@ interface UserContextEditorDialogProps {
 export function UserContextEditorDialog({
   open,
   onOpenChange,
-  onSaveSuccess,
 }: UserContextEditorDialogProps) {
   const { activeOrg, user } = useAuth();
   const orgId = activeOrg?.id ?? null;
@@ -87,7 +85,6 @@ export function UserContextEditorDialog({
       setHint("Saved. Start a new chat to apply.");
       onOpenChange(false);
       await refetch();
-      onSaveSuccess?.();
     } catch (error) {
       setFormError(formatUserContextError(error));
     }
@@ -164,10 +161,6 @@ export function UserContextEditorDialog({
   );
 }
 
-interface UserContextSettingsProps {
-  onSaveSuccess?: () => void;
-}
-
 function UserContextStatusCopy({
   isActive,
   loadError,
@@ -193,9 +186,7 @@ function UserContextStatusCopy({
 }
 
 /** USER.md row for settings and the setup wizard. Render inside a parent card. */
-export function UserContextSettings({
-  onSaveSuccess,
-}: UserContextSettingsProps = {}) {
+export function UserContextSettings() {
   const { activeOrg } = useAuth();
   const {
     data: status,
@@ -230,11 +221,7 @@ export function UserContextSettings({
         )}
       </div>
 
-      <UserContextEditorDialog
-        onOpenChange={setEditorOpen}
-        onSaveSuccess={onSaveSuccess}
-        open={editorOpen}
-      />
+      <UserContextEditorDialog onOpenChange={setEditorOpen} open={editorOpen} />
     </>
   );
 }
