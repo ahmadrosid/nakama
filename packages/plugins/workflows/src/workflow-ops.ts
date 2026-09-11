@@ -26,12 +26,22 @@ export function getPathValue(bag: WorkflowReceiptBag, path: string): unknown {
   return current;
 }
 
+function requireTemplateValue(bag: WorkflowReceiptBag, path: string): unknown {
+  const value = getPathValue(bag, path);
+  if (value === undefined) {
+    throw new Error(
+      `Missing workflow data at ${path}. Check the referenced step output or run input.`
+    );
+  }
+  return value;
+}
+
 export function resolveTemplateString(
   template: string,
   bag: WorkflowReceiptBag
 ): string {
   return template.replace(TEMPLATE_PATTERN, (_match, rawPath: string) => {
-    const value = getPathValue(bag, rawPath.trim());
+    const value = requireTemplateValue(bag, rawPath.trim());
     if (value === undefined || value === null) {
       return "";
     }
@@ -55,7 +65,7 @@ export function resolveWorkflowValue(
 
     if (value.match(/^\{\{[^}]+\}\}$/)) {
       const inner = value.slice(2, -2).trim();
-      return getPathValue(bag, inner);
+      return requireTemplateValue(bag, inner);
     }
 
     return resolveTemplateString(value, bag);
@@ -231,6 +241,11 @@ export function validateWorkflowSteps(
     seenStepIds.add(id);
 
     if (kind === "summarize") {
+      if (index !== steps.length - 1) {
+        throw new Error(
+          "Summarize step must be the last step. Use a tool for intermediate extraction or analysis."
+        );
+      }
       summarizeCount += 1;
       readRequiredStepString(record, "prompt", `Summarize step ${id}`, {
         alias: "instruction",
@@ -290,14 +305,6 @@ export function validateWorkflowSteps(
     }
 
     priorStepIds.add(id);
-  }
-
-  if (summarizeCount > 1) {
-    throw new Error("Workflow may include at most one summarize step.");
-  }
-
-  if (summarizeCount === 1 && steps.at(-1)?.kind !== "summarize") {
-    throw new Error("Summarize step must be the last step.");
   }
 
   if (summarizeCount === 0) {

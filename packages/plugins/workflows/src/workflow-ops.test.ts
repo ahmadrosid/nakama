@@ -198,3 +198,47 @@ describe("workflow-ops", () => {
     ).toThrow(/use prompt instead/i);
   });
 });
+
+test("missing template references fail while explicit null and falsy values resolve", () => {
+  const bag = buildReceiptBag(
+    { empty: "", flag: false, nullable: null, zero: 0 },
+    { extract: "instructions" }
+  );
+  for (const reference of ["input.missing", "steps.extract.stories"]) {
+    expect(() => resolveWorkflowValue(`{{${reference}}}`, bag)).toThrow();
+    expect(() =>
+      resolveTemplateString(`Result: {{${reference}}}`, bag)
+    ).toThrow();
+  }
+  expect(
+    resolveWorkflowValue(
+      {
+        params: [
+          "{{input.nullable}}",
+          "{{input.zero}}",
+          "{{input.flag}}",
+          "{{input.empty}}",
+        ],
+      },
+      bag
+    )
+  ).toEqual({ params: [null, 0, false, ""] });
+});
+
+test("intermediate summaries are rejected before validating dependent references", () => {
+  expect(() =>
+    validateWorkflowSteps(
+      [
+        { id: "extract", kind: "summarize", prompt: "Extract stories" },
+        {
+          id: "store",
+          input: { params: ["{{steps.extract.output}}"] },
+          kind: "tool",
+          tool: "sqlite",
+        },
+        { id: "summary", kind: "summarize", prompt: "Summarize" },
+      ],
+      new Set(["sqlite"])
+    )
+  ).toThrow(/summarize step must be the last/i);
+});

@@ -27,7 +27,7 @@ Installation enables the plugin for your active organization and imports its exi
 | Template | Builds text from earlier results |
 | Summarize | Writes a final summary from the recorded results, without calling tools |
 
-Use `{{input.range}}` to reference run input and `{{steps.fetch.value}}` to reference an earlier step. A failed check stops the recipe before the summary.
+Use `{{input.range}}` to reference run input and `{{steps.fetch.value}}` to reference an earlier step. Missing referenced data or a failed check stops the recipe before later steps run. Explicit null values remain allowed. Templates only substitute text; extraction or analysis before a database write needs a tool that performs that work. The summary must be the final step.
 
 Open the **Runs** tab and expand a run to see its output and step receipts. The **Data** tab at the top of the editor browses tables used by the agent's SQLite tool; these stay separate from recipe and run storage.
 

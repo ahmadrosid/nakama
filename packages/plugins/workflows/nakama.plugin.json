@@ -14,7 +14,7 @@
       "effect": "write",
       "entry": "actions/actions.js",
       "exposeAsTool": true,
-      "description": "Create a workflow after confirming its recipe with the user. Steps use kind: tool, compare, assert, template, and a final summarize with prompt. Use {{input.key}} or {{steps.id.key}} for references.",
+      "description": "Create a workflow after confirming its recipe with the user. Steps use kind: tool, compare, assert, template, and a final summarize with prompt. Use {{input.key}} or {{steps.id.key}} for references. Tool steps require input objects (not args). Templates only substitute text; they do not perform AI extraction. Use a real assigned tool for intermediate extraction or analysis. Exactly one summarize step is allowed, at the end; later steps cannot reference it. References must match actual output fields. Add checks for required data and expected write results.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -50,7 +50,7 @@
       "effect": "write",
       "entry": "actions/actions.js",
       "exposeAsTool": true,
-      "description": "Update workflow",
+      "description": "Update workflow Tool steps require input objects (not args). Templates only substitute text; they do not perform AI extraction. Use a real assigned tool for intermediate extraction or analysis. Exactly one summarize step is allowed, at the end; later steps cannot reference it. References must match actual output fields. Add checks for required data and expected write results.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

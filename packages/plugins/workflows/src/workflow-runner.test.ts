@@ -208,3 +208,38 @@ function createWorkflowServiceStub(workflow: StoredWorkflow) {
     async updateRunStep() {},
   };
 }
+
+test("missing extraction data stops before the database write and summary", async () => {
+  const workflow = {
+    ...createBaseWorkflow(),
+    steps: [
+      { id: "extract", kind: "template", template: "Extract five stories" },
+      {
+        id: "store",
+        input: { params: ["{{steps.extract.stories}}"] },
+        kind: "tool",
+        tool: "sqlite",
+      },
+      { id: "summary", kind: "summarize", prompt: "Summarize" },
+    ],
+  } as StoredWorkflow;
+  let writes = 0;
+  let summaries = 0;
+  const runner = new WorkflowRunner(
+    createWorkflowServiceStub(workflow) as never,
+    {
+      executeTool: async () => {
+        writes++;
+        return { changes: 0 };
+      },
+      runWorkflowSummarize: async () => {
+        summaries++;
+        return "done";
+      },
+    }
+  );
+  const result = await runner.run(workflow.id);
+  expect(result.error).toBeDefined();
+  expect(writes).toBe(0);
+  expect(summaries).toBe(0);
+});
