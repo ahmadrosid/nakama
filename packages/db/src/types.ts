@@ -874,6 +874,11 @@ export interface DatabaseAdapter {
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
 
+  listArtifactSharesForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredArtifactShareRecord[]>;
+
   listAutomationRuns(
     automationId: string,
     limit?: number
