@@ -1,4 +1,7 @@
 import type { ToolDetail } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { ArrowLeft01Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
@@ -8,8 +11,6 @@ import {
   ToolPlaygroundRunForm,
 } from "@/components/tools/ToolPlaygroundPanel";
 import { useToolPlaygroundRun } from "@/components/tools/use-tool-playground-run";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery, useToolQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
@@ -19,7 +20,6 @@ import {
   toolPlaygroundBackTarget,
 } from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 

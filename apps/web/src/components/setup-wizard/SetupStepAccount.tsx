@@ -1,11 +1,11 @@
+import { Button } from "@nakama/ui/button";
+import { Card } from "@nakama/ui/card";
+import { Input } from "@nakama/ui/input";
 import { Upload04Icon } from "hugeicons-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SetupStepBackupImport } from "@/components/setup-wizard/SetupStepBackupImport";
 import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
 interface SetupStepAccountProps {
   onNext: (account: SetupAccountDraft) => void;

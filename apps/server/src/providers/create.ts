@@ -33,8 +33,15 @@ import { createOpenRouterProvider } from "./openrouter";
 import { createXaiProvider } from "./xai-oauth";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
 const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
+const DEFAULT_XIAOMI_BASE_URL = "https://api.xiaomimimo.com/v1";
+const DEFAULT_VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
 const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
+const DEFAULT_QWEN_BASE_URL =
+  "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+const DEFAULT_QWEN_CN_BASE_URL =
+  "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
@@ -89,6 +96,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         model,
         providerName: "deepseek",
       });
+    case "doubao":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_DOUBAO_BASE_URL,
+        model,
+        providerName: "doubao",
+      });
     case "together":
       return createOpenAIProvider({
         apiKey: options.apiKey,
@@ -96,12 +110,40 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         model,
         providerName: "together",
       });
+    case "xiaomi":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_XIAOMI_BASE_URL,
+        model,
+        providerName: "xiaomi",
+      });
+    case "vercel_ai_gateway":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_VERCEL_AI_GATEWAY_BASE_URL,
+        model,
+        providerName: "vercel_ai_gateway",
+      });
     case "mistral":
       return createOpenAIProvider({
         apiKey: options.apiKey,
         baseUrl: baseUrlOverride ?? DEFAULT_MISTRAL_BASE_URL,
         model,
         providerName: "mistral",
+      });
+    case "qwen":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_QWEN_BASE_URL,
+        model,
+        providerName: "qwen",
+      });
+    case "qwen_cn":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_QWEN_CN_BASE_URL,
+        model,
+        providerName: "qwen_cn",
       });
     case "perplexity":
       return createOpenAIProvider({

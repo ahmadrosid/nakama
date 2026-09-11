@@ -1,10 +1,10 @@
 import type { AgentQuestionnaire } from "@nakama/core/contract";
+import { Input } from "@nakama/ui/input";
+import { cn } from "@nakama/ui/utils";
 import {
   type DraftAnswerState,
   isCustomChoice,
 } from "@/components/chat/agent-questionnaire.shared";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 export function AgentQuestionnaireQuestion({
   questionIndex,

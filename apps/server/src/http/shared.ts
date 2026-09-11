@@ -166,7 +166,7 @@ export async function authenticateRequest(
       await ensureLocalClientAccess(databaseAdapter);
       user = await databaseAdapter.getUserByEmail(payload.email);
     }
-    if (!user) {
+    if (!user || user.disabledAt) {
       return null;
     }
 
@@ -192,7 +192,7 @@ export async function authenticateRequest(
           user = await databaseAdapter.getUserByEmail(payload.email);
         }
 
-        if (user) {
+        if (user && !user.disabledAt) {
           return {
             isPlatformAdmin: Boolean(user.isPlatformAdmin),
             mode: "local-token",
@@ -217,7 +217,7 @@ export async function authenticateRequest(
   }
 
   const user = await databaseAdapter.getUserById(session.userId);
-  if (!user) {
+  if (!user || user.disabledAt) {
     return null;
   }
 

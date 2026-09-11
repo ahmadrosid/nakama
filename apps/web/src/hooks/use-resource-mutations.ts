@@ -191,14 +191,24 @@ export function useAssignToolMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       profileId,
       toolId,
     }: {
       profileId: string;
-      toolId: string;
-    }) => client.assignTool(profileId, { toolId }),
-    onSuccess: async (_data, variables) => {
+      toolId: string | string[];
+    }) => {
+      const results = await Promise.allSettled(
+        (Array.isArray(toolId) ? toolId : [toolId]).map((id) =>
+          client.assignTool(profileId, { toolId: id })
+        )
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
+    },
+    onSettled: async (_data, _error, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
         queryClient.invalidateQueries({
@@ -213,14 +223,24 @@ export function useUnassignToolMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       profileId,
       toolId,
     }: {
       profileId: string;
-      toolId: string;
-    }) => client.unassignTool(profileId, toolId),
-    onSuccess: async (_data, variables) => {
+      toolId: string | string[];
+    }) => {
+      const results = await Promise.allSettled(
+        (Array.isArray(toolId) ? toolId : [toolId]).map((id) =>
+          client.unassignTool(profileId, id)
+        )
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
+    },
+    onSettled: async (_data, _error, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
         queryClient.invalidateQueries({
@@ -745,17 +765,6 @@ export function useUserContextQuery(
       options.orgId ?? "no-org",
       options.includeContent ? "content" : "status",
     ] as const,
-  });
-}
-
-export function useInitUserContextMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () => client.initUserContext(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.userContext });
-    },
   });
 }
 

@@ -54,7 +54,11 @@ import {
   buildAutomationSystemPrompt,
   buildAutomationUserPrompt,
 } from "./prompt";
-import { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
+import {
+  canRunToolCallsInParallel,
+  createTurnTools,
+  executeToolCall,
+} from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
@@ -164,7 +168,8 @@ export function createAgentChatSession(
   const channel = options.channel ?? "cli";
   const tools = options.tools ?? dependencies.tools ?? [];
   const enableToolLoop = options.enableToolLoop ?? tools.length > 0;
-  const systemPrompt = buildChatSystemPrompt(tools, {
+  let activeTools = createTurnTools(tools);
+  const systemPrompt = buildChatSystemPrompt(activeTools, {
     basePrompt: options.systemPrompt,
     channel,
     enableToolLoop,
@@ -209,7 +214,7 @@ export function createAgentChatSession(
   }
 
   function llmToolsForEstimate() {
-    const { localTools } = partitionTools(tools);
+    const { localTools } = partitionTools(activeTools);
     return enableToolLoop && localTools.length > 0
       ? toLlmToolDefinitions(localTools)
       : undefined;
@@ -280,7 +285,7 @@ export function createAgentChatSession(
       };
     }
 
-    const { localTools } = partitionTools(tools);
+    const { localTools } = partitionTools(activeTools);
     const llmTools =
       options.enableToolLoop !== false && localTools.length > 0
         ? toLlmToolDefinitions(localTools)
@@ -335,6 +340,7 @@ export function createAgentChatSession(
   return {
     clear() {
       history.length = 0;
+      activeTools = createTurnTools(tools);
       lastContextUsage = null;
       bumpHistoryRevision();
     },
@@ -358,9 +364,10 @@ export function createAgentChatSession(
       return historyRevision;
     },
     async send(input) {
+      activeTools = createTurnTools(tools);
       return sendMessage(
         dependencies,
-        tools,
+        activeTools,
         systemPrompt,
         history,
         resolveSendInput(input),
@@ -377,9 +384,10 @@ export function createAgentChatSession(
       );
     },
     async sendStream(input, handlers, streamOptions) {
+      activeTools = createTurnTools(tools);
       return sendMessage(
         dependencies,
-        tools,
+        activeTools,
         systemPrompt,
         history,
         resolveSendInput(input),
@@ -467,10 +475,6 @@ async function sendMessage(
   const { localTools, hasWebSearch } = partitionTools(tools);
   const enableTools =
     options.enableToolLoop && (localTools.length > 0 || hasWebSearch);
-  const llmTools =
-    enableTools && localTools.length > 0
-      ? toLlmToolDefinitions(localTools)
-      : undefined;
   // Hosted search is dropped wherever the provider cannot serve it: OpenRouter
   // has no hosted-search path, Gemini rejects googleSearch grounding beside
   // function declarations, and no provider accepts it beside attachments. The
@@ -522,12 +526,11 @@ async function sendMessage(
   try {
     const reply = await runConversation(
       dependencies.provider,
-      localTools,
+      tools,
       effectiveSystemPrompt,
       history,
       mode,
       enableTools,
-      llmTools,
       providerOptions,
       options.handlers,
       effectiveToolContext,
@@ -572,7 +575,6 @@ async function runConversation(
   history: ChatMessage[],
   mode: "send" | "stream",
   enableToolLoop: boolean,
-  llmTools: ReturnType<typeof toLlmToolDefinitions> | undefined,
   providerOptions: ProviderChatOptions | undefined,
   handlers?: StreamHandlers,
   toolContext?: ToolContext,
@@ -592,6 +594,11 @@ async function runConversation(
     if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
       break;
     }
+    const { localTools: iterationTools } = partitionTools(tools);
+    const llmTools =
+      enableToolLoop && iterationTools.length
+        ? toLlmToolDefinitions(iterationTools)
+        : undefined;
     const reservedTokens =
       estimateHistoryTokens(
         history,
@@ -676,7 +683,7 @@ async function runConversation(
 
     const toolHistoryStart = history.length;
     await executeToolCalls(
-      tools,
+      iterationTools,
       result.toolCalls,
       history,
       handlers,

@@ -1,6 +1,6 @@
+import { Button } from "@nakama/ui/button";
+import { cn } from "@nakama/ui/utils";
 import { CodeSquareIcon, ViewIcon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export type ArtifactPreviewMode = "preview" | "source";
 

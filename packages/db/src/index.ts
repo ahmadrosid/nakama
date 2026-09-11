@@ -12,7 +12,10 @@ export {
 } from "./adapters/sqlite";
 export * from "./automation-store";
 export * from "./constants";
-export type { ResolveDatabasePathOptions } from "./database-url";
+export {
+  type ResolveDatabasePathOptions,
+  resolveDatabasePath,
+} from "./database-url";
 export * from "./local-client";
 export * from "./org-profiles";
 export * from "./seed";

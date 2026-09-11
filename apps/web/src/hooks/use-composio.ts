@@ -2,6 +2,7 @@ import type {
   UpdateComposioSettingsRequest,
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
+import { toast } from "@nakama/ui/toast";
 import {
   queryOptions,
   useMutation,
@@ -10,7 +11,6 @@ import {
 } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { toast } from "@/lib/toast";
 
 /**
  * Composio OAuth connect links are hosted on composio.dev (and subdomains such

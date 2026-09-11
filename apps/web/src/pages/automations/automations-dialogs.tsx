@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,8 +6,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
 import { formatSessionTimestamp } from "@/lib/chat-history";
 import { AutomationEditorForm } from "@/pages/automations/automations-components";
 import type { AutomationsPageState } from "@/pages/automations/use-automations-page";

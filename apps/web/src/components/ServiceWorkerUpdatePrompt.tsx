@@ -1,5 +1,5 @@
+import { Button } from "@nakama/ui/button";
 import { RefreshIcon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
 import { useServiceWorkerUpdate } from "@/hooks/use-service-worker-update";
 
 export function ServiceWorkerUpdatePrompt() {

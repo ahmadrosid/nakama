@@ -20,7 +20,11 @@ import {
 import { artifactShareStorageKey } from "@/lib/artifact-share-storage";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { useRevokeArtifactShareMutation } from "./use-resource-mutations";
+import {
+  useAssignToolMutation,
+  useRevokeArtifactShareMutation,
+  useUnassignToolMutation,
+} from "./use-resource-mutations";
 
 const revoke = spyOn(client, "revokeProfileArtifactShare");
 const publish = spyOn(client, "publishProfileArtifactShare");
@@ -240,3 +244,59 @@ describe("artifact share controls with a stale share ID", () => {
     expect(store.has(storageKey)).toBe(true);
   });
 });
+
+test.each(["assign", "unassign"])(
+  "plugin %s waits for the whole batch and refreshes partial failures",
+  async (mode) => {
+    const spy =
+      mode === "assign"
+        ? spyOn(client, "assignTool")
+        : spyOn(client, "unassignTool");
+    let release!: (value: never) => void;
+    let started!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const error = new Error("One action was rejected");
+    spy.mockRejectedValueOnce(error);
+    spy.mockImplementationOnce(() => {
+      started();
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    });
+    const key = queryKeys.profiles.detail("profile");
+    queryClient.setQueryData(key, { id: "profile" });
+    let mutation!: ReturnType<typeof useAssignToolMutation>;
+    function Probe() {
+      const assign = useAssignToolMutation();
+      const unassign = useUnassignToolMutation();
+      mutation = mode === "assign" ? assign : unassign;
+      return null;
+    }
+    renderToString(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(Probe)
+      )
+    );
+    try {
+      let settled = false;
+      const result = mutation
+        .mutateAsync({ profileId: "profile", toolId: ["first", "second"] })
+        .catch((failure) => {
+          settled = true;
+          return failure;
+        });
+      await waiting;
+      expect(settled).toBe(false);
+      release({} as never);
+      expect(await result).toBe(error);
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+);

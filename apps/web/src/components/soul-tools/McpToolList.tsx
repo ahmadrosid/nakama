@@ -1,11 +1,11 @@
 import type { CachedMcpToolSummary } from "@nakama/core/contract";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { ArrowRight01Icon, Search01Icon } from "hugeicons-react";
 import { useMemo, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
 import { parseMcpToolParameters } from "@/lib/mcp-tool-schema";
-import { cn } from "@/lib/utils";
 
 const maxVisibleToolLabels = 12;
 const searchThreshold = 4;

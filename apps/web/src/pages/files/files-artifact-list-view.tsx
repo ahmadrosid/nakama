@@ -1,8 +1,8 @@
 import type { ArtifactFile } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import { ArrowRight01Icon, Folder01Icon } from "hugeicons-react";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import { formatBytes } from "@/lib/knowledge-base-files";
-import { cn } from "@/lib/utils";
 import {
   type ArtifactFolderEntry,
   artifactBasename,
@@ -10,11 +10,7 @@ import {
 } from "@/pages/files/files-artifact-folders";
 import { ArtifactIcon } from "@/pages/files/files-artifact-icon";
 import { ArtifactRowMenu } from "@/pages/files/files-artifact-row-menu";
-import {
-  formatTimestamp,
-  iconActionHitArea,
-  toChatArtifactRef,
-} from "@/pages/files/files-shared";
+import { formatTimestamp, toChatArtifactRef } from "@/pages/files/files-shared";
 
 function ArtifactFolderRow({
   folder,
@@ -88,7 +84,7 @@ export function ArtifactListView({
       ))}
       {artifacts.map((artifact) => (
         <li
-          className="flex items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
+          className="relative flex items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
           key={artifact.filename}
         >
           <div className="flex min-w-0 items-start gap-3">
@@ -113,14 +109,13 @@ export function ArtifactListView({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <ArtifactAttachmentPreview
-              artifact={toChatArtifactRef(artifact)}
-              className={iconActionHitArea}
-              id={`files-page:${artifact.path || artifact.filename}`}
-              profileId={profileId}
-              variant="icon"
-            />
+          <ArtifactAttachmentPreview
+            artifact={toChatArtifactRef(artifact)}
+            id={`files-page:${artifact.path || artifact.filename}`}
+            profileId={profileId}
+            variant="overlay"
+          />
+          <div className="relative z-10 shrink-0">
             <ArtifactRowMenu
               artifact={artifact}
               deletePending={deletePending}

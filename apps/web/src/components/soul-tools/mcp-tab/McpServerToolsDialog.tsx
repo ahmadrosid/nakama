@@ -1,7 +1,5 @@
 import type { McpServerSummary } from "@nakama/core/contract";
-import { CubeIcon } from "hugeicons-react";
-import { McpToolList } from "@/components/soul-tools/McpToolList";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,11 +7,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { CubeIcon } from "hugeicons-react";
+import { McpToolList } from "@/components/soul-tools/McpToolList";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 function McpServerEndpointMeta({
   detail,

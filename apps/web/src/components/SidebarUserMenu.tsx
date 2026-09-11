@@ -1,8 +1,4 @@
-import { Logout03Icon, SparklesIcon, UserIcon } from "hugeicons-react";
-import { useState } from "react";
-import { THEME_OPTIONS } from "@/components/theme-options";
-import { UserContextEditorDialog } from "@/components/UserContextCard";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,24 +6,24 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@nakama/ui/dropdown-menu";
+import { Input } from "@nakama/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
+import { Logout03Icon, SparklesIcon, UserIcon } from "hugeicons-react";
+import { useState } from "react";
+import { THEME_OPTIONS } from "@/components/theme-options";
+import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 export function SidebarUserMenu() {
   const { user, logout, refreshSession } = useAuth();
@@ -196,7 +192,6 @@ export function SidebarUserMenu() {
       />
 
       <UserContextEditorDialog
-        ensureExistsOnOpen
         onOpenChange={setPersonalisationOpen}
         open={personalisationOpen}
       />

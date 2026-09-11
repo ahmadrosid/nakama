@@ -1,10 +1,10 @@
+import { InputGroup } from "@nakama/ui/input-group";
+import { cn } from "@nakama/ui/utils";
 import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
 import {
   ComposerRimGlow,
   useComposerRimHost,
 } from "@/components/chat/composer-rim-glow";
-import { InputGroup } from "@/components/ui/input-group";
-import { cn } from "@/lib/utils";
 
 export type PromptInputFormProps = Omit<
   HTMLAttributes<HTMLFormElement>,

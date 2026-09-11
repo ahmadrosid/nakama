@@ -30,7 +30,6 @@ import {
 } from "./ollama-provider-config";
 import {
   apiKeyEnvVarForProvider,
-  isDiscoveryModelProvider,
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
@@ -87,6 +86,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   chatgpt: "ChatGPT (Plus/Pro)",
   cloudflare: "Cloudflare Worker AI",
   deepseek: "DeepSeek",
+  doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",
   gemini: "Gemini",
   minimax: "MiniMax",
@@ -100,9 +100,13 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
   perplexity: "Perplexity Sonar",
+  qwen: "Qwen (DashScope)",
+  qwen_cn: "Qwen (DashScope CN)",
   together: "Together AI",
+  vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
+  xiaomi: "Xiaomi MiMo",
   zhipu: "GLM (Z.ai)",
   zhipu_cn: "GLM (CN)",
 };
@@ -650,15 +654,9 @@ function loadProvidersFromSections(
     const baseUrl = values.base_url?.trim()
       ? normalizeBaseUrl(values.base_url)
       : undefined;
-    const customModels =
-      isDiscoveryModelProvider(type) ||
-      type === "openrouter" ||
-      type === "cerebras" ||
-      type === "fireworks" ||
-      type === "ollama" ||
-      type === "opencode_go"
-        ? parseCustomModelsJson(values.models_json)
-        : undefined;
+    // Writer persists models_json for every type that has a shortlist/catalog
+    // override; load any present JSON so restarts keep shortlists.
+    const customModels = parseCustomModelsJson(values.models_json);
     const hostMode =
       type === "ollama"
         ? (parseOllamaHostMode(values.host_mode) ?? undefined)

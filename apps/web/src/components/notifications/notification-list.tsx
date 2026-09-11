@@ -1,8 +1,8 @@
+import { cn } from "@nakama/ui/utils";
 import { BrainIcon, WorkflowSquare01Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import type { NotificationItem } from "@/hooks/use-notifications";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
-import { cn } from "@/lib/utils";
 
 function NotificationIcon({
   kind,

@@ -148,12 +148,32 @@ function providerLabel(providerName: ProviderName): string {
     return "DeepSeek";
   }
 
+  if (providerName === "doubao") {
+    return "Doubao (Volcengine)";
+  }
+
   if (providerName === "together") {
     return "Together AI";
   }
 
+  if (providerName === "xiaomi") {
+    return "Xiaomi MiMo";
+  }
+
+  if (providerName === "vercel_ai_gateway") {
+    return "Vercel AI Gateway";
+  }
+
   if (providerName === "mistral") {
     return "Mistral";
+  }
+
+  if (providerName === "qwen") {
+    return "Qwen (DashScope)";
+  }
+
+  if (providerName === "qwen_cn") {
+    return "Qwen (DashScope CN)";
   }
 
   if (providerName === "perplexity") {
@@ -365,6 +385,19 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
+    ...(provider === "xiaomi" ? buildXiaomiThinkingBody(options.thinking) : {}),
+    ...(provider === "qwen" || provider === "qwen_cn"
+      ? { enable_thinking: Boolean(options.thinking?.enabled) }
+      : {}),
+    ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
+    ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
+      ? {
+          reasoning: {
+            effort: normalizeThinkingEffort(options.thinking.effort),
+            enabled: true,
+          },
+        }
+      : {}),
     ...(provider === "perplexity" && options.thinking?.enabled
       ? {
           reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
@@ -440,6 +473,28 @@ function buildDeepSeekThinkingBody(
   };
 }
 
+/** MiMo: `thinking.type` only. API defaults to enabled — opt out unless UI asks. */
+function buildXiaomiThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
+  }
+
+  return { thinking: { type: "disabled" as const } };
+}
+
+/** Ark Seed: `thinking.type` only. Default is on for many Seed models — opt out unless UI enables. */
+function buildDoubaoThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
+  }
+
+  return { thinking: { type: "disabled" as const } };
+}
+
 function readReasoningContent(
   value: unknown,
   options?: { preserveWhitespace?: boolean }
@@ -452,7 +507,9 @@ function readReasoningContent(
   const direct =
     typeof record.reasoning_content === "string"
       ? record.reasoning_content
-      : undefined;
+      : typeof record.reasoning === "string"
+        ? record.reasoning
+        : undefined;
 
   if (direct === undefined) {
     return;

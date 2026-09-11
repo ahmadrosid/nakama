@@ -28,14 +28,6 @@ test("buildChatSystemPrompt includes automation skill pointer when create_automa
   expect(text).not.toContain("runAt");
 });
 
-test("buildChatSystemPrompt includes workflow tool pointer when list_workflows is available", () => {
-  const text = prompt(["list_workflows"]);
-
-  expect(text).toContain("list_workflows");
-  expect(text).toContain("create-workflow skill");
-  expect(text).toContain("Never invent or edit a workflow id");
-});
-
 test("buildChatSystemPrompt omits gated guidance for write_file-only sessions", () => {
   const text = prompt(["write_file"]);
 

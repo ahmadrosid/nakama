@@ -4,10 +4,10 @@ import type {
   CustomModelEntry,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { FormField } from "@nakama/ui/form-field";
+import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/ui/form-field";
-import { Spinner } from "@/components/ui/spinner";
 import { client, formatError } from "@/lib/client";
 
 type SubscriptionSignInFlow = "idle" | "waiting" | "error";

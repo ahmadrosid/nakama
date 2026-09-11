@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
 import {
+  derivePluginToolName,
   getUserMessageText,
   NakamaApiError,
   PRIVATE_FILE_MODE,
@@ -11,8 +12,11 @@ import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
 import { migrateDatabase } from "../migrate";
 import type {
+  CompareAndSetOrgPluginStateInput,
   DatabaseAdapter,
   OrgMemoryProposalStatus,
+  PluginPublishResult,
+  PublishOrgPluginReleaseInput,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
   StoredAutomationRecord,
@@ -28,6 +32,8 @@ import type {
   StoredOrgInviteRecord,
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
+  StoredOrgPluginRecord,
+  StoredPluginReleaseRecord,
   StoredProfileChangeEvent,
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
@@ -45,6 +51,7 @@ import type {
   StoredWorkflowRunRecord,
   StoredWorkflowRunStepRecord,
   StoredWorkspaceSettingsRecord,
+  UpsertPluginReleaseResult,
 } from "../types";
 
 export interface SqliteDatabase {
@@ -141,6 +148,9 @@ interface ToolRow {
   handler_type: string;
   id: string;
   name: string;
+  org_id?: string | null;
+  plugin_id?: string | null;
+  plugin_key?: string | null;
   updated_at: string;
 }
 
@@ -279,6 +289,8 @@ interface SkillRow {
   id: string;
   name: string;
   org_id: string | null;
+  plugin_id?: string | null;
+  plugin_key?: string | null;
   source_path: string;
   updated_at: string;
 }
@@ -312,6 +324,7 @@ interface McpServerRow {
 
 interface UserRow {
   created_at: string;
+  disabled_at?: string | null;
   email: string;
   id: string;
   is_platform_admin?: number | null;
@@ -883,13 +896,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getToolStmt = db.prepare("SELECT * FROM tools WHERE id = ?");
   const getToolByNameStmt = db.prepare("SELECT * FROM tools WHERE name = ?");
   const upsertToolStmt = db.prepare(`
-    INSERT INTO tools (id, name, description, handler_type, handler_config, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tools (
+      id, name, description, handler_type, handler_config, org_id, plugin_id, plugin_key, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       description = excluded.description,
       handler_type = excluded.handler_type,
       handler_config = excluded.handler_config,
+      org_id = excluded.org_id,
+      plugin_id = excluded.plugin_id,
+      plugin_key = excluded.plugin_key,
       updated_at = excluded.updated_at
   `);
   const deleteToolStmt = db.prepare("DELETE FROM tools WHERE id = ?");
@@ -1002,6 +1020,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getAttachmentStmt = db.prepare(
     "SELECT * FROM attachments WHERE id = ?"
   );
+  const listAttachmentsForSessionStmt = db.prepare(
+    "SELECT * FROM attachments WHERE session_id = ?"
+  );
   const deleteAttachmentStmt = db.prepare(
     "DELETE FROM attachments WHERE id = ?"
   );
@@ -1108,9 +1129,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
   const upsertSkillStmt = db.prepare(`
     INSERT INTO skills (
-      id, name, description, source_path, has_tool, disable_model_invocation, enabled, created_by, org_id, created_at, updated_at
+      id, name, description, source_path, has_tool, disable_model_invocation, enabled, created_by, org_id, plugin_id, plugin_key, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       description = excluded.description,
@@ -1120,9 +1141,85 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       enabled = excluded.enabled,
       created_by = excluded.created_by,
       org_id = excluded.org_id,
+      plugin_id = excluded.plugin_id,
+      plugin_key = excluded.plugin_key,
       updated_at = excluded.updated_at
   `);
   const deleteSkillStmt = db.prepare("DELETE FROM skills WHERE id = ?");
+  const getPluginReleaseStmt = db.prepare(
+    "SELECT * FROM plugin_releases WHERE plugin_id = ? AND version = ?"
+  );
+  const insertPluginReleaseStmt = db.prepare(`
+    INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const fillEmptyPluginReleaseDigestStmt = db.prepare(`
+    UPDATE plugin_releases
+    SET digest = ?, manifest = ?
+    WHERE plugin_id = ? AND version = ? AND (digest IS NULL OR digest = '')
+  `);
+  const getOrgPluginStmt = db.prepare(
+    "SELECT * FROM org_plugins WHERE org_id = ? AND plugin_id = ?"
+  );
+  const listOrgPluginsStmt = db.prepare(
+    "SELECT * FROM org_plugins ORDER BY org_id, plugin_id"
+  );
+  const listOrgPluginsForOrgStmt = db.prepare(
+    "SELECT * FROM org_plugins WHERE org_id = ? ORDER BY plugin_id"
+  );
+  const listPluginReleasesStmt = db.prepare(
+    "SELECT * FROM plugin_releases WHERE plugin_id = ? ORDER BY created_at ASC"
+  );
+  const listAllPluginReleasesStmt = db.prepare(
+    "SELECT * FROM plugin_releases ORDER BY plugin_id, created_at ASC"
+  );
+  const deleteOrgPluginStmt = db.prepare(
+    "DELETE FROM org_plugins WHERE org_id = ? AND plugin_id = ? AND revision = ?"
+  );
+  const deletePluginReleaseStmt = db.prepare(
+    "DELETE FROM plugin_releases WHERE plugin_id = ? AND version = ?"
+  );
+  const insertOrgPluginStmt = db.prepare(`
+    INSERT INTO org_plugins (
+      org_id, plugin_id, selected_version, database_generation, lifecycle_state,
+      revision, pending_operation, last_lifecycle_error, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+  `);
+  const updateOrgPluginCasStmt = db.prepare(`
+    UPDATE org_plugins
+    SET
+      selected_version = ?,
+      database_generation = ?,
+      lifecycle_state = ?,
+      revision = revision + 1,
+      pending_operation = ?,
+      last_lifecycle_error = ?,
+      updated_at = ?
+    WHERE org_id = ? AND plugin_id = ? AND revision = ?
+  `);
+  const getOwnedSkillIdStmt = db.prepare(`
+    SELECT id FROM skills
+    WHERE org_id = ? AND plugin_id = ? AND plugin_key = ?
+  `);
+  const listOwnedSkillIdsStmt = db.prepare(`
+    SELECT id, plugin_key FROM skills
+    WHERE org_id = ? AND plugin_id = ?
+  `);
+  const getOwnedToolIdStmt = db.prepare(`
+    SELECT id FROM tools
+    WHERE org_id = ? AND plugin_id = ? AND plugin_key = ?
+  `);
+  const listOwnedToolIdsStmt = db.prepare(`
+    SELECT id, plugin_key FROM tools
+    WHERE org_id = ? AND plugin_id = ?
+  `);
+  const findToolNameCollisionStmt = db.prepare(`
+    SELECT id FROM tools
+    WHERE name = ? AND org_id = ?
+      AND NOT (plugin_id IS ? AND plugin_key IS ?)
+    LIMIT 1
+  `);
   const listSkillsForProfileStmt = db.prepare(`
     SELECT skills.*
     FROM skills
@@ -1137,6 +1234,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const unassignSkillStmt = db.prepare(`
     DELETE FROM profile_skills
     WHERE profile_id = ? AND skill_id = ?
+  `);
+  const unassignSkillFromAllProfilesStmt = db.prepare(`
+    DELETE FROM profile_skills WHERE skill_id = ?
   `);
   const listSkillUsageForProfileStmt = db.prepare(`
     SELECT * FROM profile_skill_usage WHERE profile_id = ?
@@ -1506,6 +1606,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET password_hash = ?, updated_at = ?
     WHERE id = ?
   `);
+  const disableUserStmt = db.prepare(`
+    UPDATE users
+    SET disabled_at = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  const enableUserStmt = db.prepare(`
+    UPDATE users
+    SET disabled_at = NULL, updated_at = ?
+    WHERE id = ?
+  `);
   // Per-org context lives on org_members only. users.user_context is a legacy
   // column left in place for existing installs; migrateLegacyUserContextToOrgMembers
   // copies any remaining values once, and this read path must not use it (#550).
@@ -1522,6 +1632,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const countUsersStmt = db.prepare("SELECT COUNT(*) as count FROM users");
   const countHumanUsersStmt = db.prepare(
     "SELECT COUNT(*) as count FROM users WHERE id != ?"
+  );
+  const listPlatformAdminUsersStmt = db.prepare(
+    "SELECT * FROM users WHERE is_platform_admin = 1"
   );
 
   const createBrowserSessionStmt = db.prepare(`
@@ -1888,6 +2001,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ? AND profile_id = ? AND id = ?
     LIMIT 1
   `);
+  const listArtifactSharesForProfileStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+    FROM artifact_shares
+    WHERE org_id = ? AND profile_id = ?
+  `);
   const revokeArtifactShareStmt = db.prepare(`
     UPDATE artifact_shares
     SET revoked_at = ?
@@ -2009,6 +2129,262 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
             WHERE org_id = ? AND role = 'admin') > 1)
   `);
 
+  const upsertPluginReleaseTx = db.transaction(
+    (record: StoredPluginReleaseRecord): UpsertPluginReleaseResult => {
+      const existing = getPluginReleaseStmt.get(
+        record.pluginId,
+        record.version
+      ) as PluginReleaseRow | null;
+      if (existing) {
+        const existingDigest = existing.digest ?? "";
+        if (existingDigest && existingDigest !== record.digest) {
+          return { ok: false, reason: "digest_conflict" };
+        }
+        if (!existingDigest) {
+          fillEmptyPluginReleaseDigestStmt.run(
+            record.digest,
+            JSON.stringify(record.manifest),
+            record.pluginId,
+            record.version
+          );
+        }
+        return { ok: true };
+      }
+
+      insertPluginReleaseStmt.run(
+        record.pluginId,
+        record.version,
+        JSON.stringify(record.manifest),
+        record.digest,
+        record.createdAt
+      );
+      return { ok: true };
+    }
+  );
+
+  const publishOrgPluginReleaseTx = db.transaction(
+    (input: PublishOrgPluginReleaseInput): PluginPublishResult => {
+      const seenToolNames = new Set<string>();
+      for (const tool of input.contributions.tools) {
+        const pluginKey = tool.pluginKey ?? "";
+        const derived = derivePluginToolName(input.pluginId, pluginKey);
+        if (!derived || derived !== tool.name) {
+          return { ok: false, reason: "tool_name_invalid" };
+        }
+        if (seenToolNames.has(tool.name)) {
+          return { ok: false, reason: "tool_name_collision" };
+        }
+        seenToolNames.add(tool.name);
+        const collision = findToolNameCollisionStmt.get(
+          tool.name,
+          input.orgId,
+          input.pluginId,
+          pluginKey
+        );
+        if (collision) {
+          return { ok: false, reason: "tool_name_collision" };
+        }
+      }
+
+      const existing = getOrgPluginStmt.get(
+        input.orgId,
+        input.pluginId
+      ) as OrgPluginRow | null;
+
+      if (existing) {
+        if (existing.revision !== input.expectedRevision) {
+          return { ok: false, reason: "stale_revision" };
+        }
+        const updated = updateOrgPluginCasStmt.run(
+          input.selectedVersion,
+          input.databaseGeneration,
+          input.lifecycleState,
+          input.pendingOperation ?? null,
+          input.lastLifecycleError ?? null,
+          input.now,
+          input.orgId,
+          input.pluginId,
+          input.expectedRevision
+        );
+        if (updated.changes === 0) {
+          return { ok: false, reason: "stale_revision" };
+        }
+      } else {
+        if (input.expectedRevision !== 0) {
+          return { ok: false, reason: "stale_revision" };
+        }
+        insertOrgPluginStmt.run(
+          input.orgId,
+          input.pluginId,
+          input.selectedVersion,
+          input.databaseGeneration,
+          input.lifecycleState,
+          input.pendingOperation ?? null,
+          input.lastLifecycleError ?? null,
+          input.now,
+          input.now
+        );
+      }
+
+      const incomingSkillKeys = new Set(
+        input.contributions.skills.map((skill) => skill.pluginKey)
+      );
+      for (const row of listOwnedSkillIdsStmt.all(
+        input.orgId,
+        input.pluginId
+      ) as Array<{ id: string; plugin_key: string }>) {
+        if (!incomingSkillKeys.has(row.plugin_key)) {
+          unassignSkillFromAllProfilesStmt.run(row.id);
+          deleteSkillStmt.run(row.id);
+        }
+      }
+
+      for (const skill of input.contributions.skills) {
+        const owned = getOwnedSkillIdStmt.get(
+          input.orgId,
+          input.pluginId,
+          skill.pluginKey
+        ) as { id: string } | null;
+        const id = owned?.id ?? skill.id;
+        upsertSkillStmt.run(
+          id,
+          skill.name,
+          skill.description,
+          skill.sourcePath,
+          skill.hasTool ? 1 : 0,
+          skill.disableModelInvocation ? 1 : 0,
+          skill.enabled ? 1 : 0,
+          skill.createdBy,
+          input.orgId,
+          input.pluginId,
+          skill.pluginKey ?? null,
+          skill.createdAt,
+          skill.updatedAt
+        );
+      }
+
+      const incomingToolKeys = new Set(
+        input.contributions.tools.map((tool) => tool.pluginKey)
+      );
+      for (const row of listOwnedToolIdsStmt.all(
+        input.orgId,
+        input.pluginId
+      ) as Array<{ id: string; plugin_key: string }>) {
+        if (!incomingToolKeys.has(row.plugin_key)) {
+          unassignToolFromAllProfilesStmt.run(row.id);
+          deleteToolStmt.run(row.id);
+        }
+      }
+
+      for (const tool of input.contributions.tools) {
+        const owned = getOwnedToolIdStmt.get(
+          input.orgId,
+          input.pluginId,
+          tool.pluginKey
+        ) as { id: string } | null;
+        const id = owned?.id ?? tool.id;
+        upsertToolStmt.run(
+          id,
+          tool.name,
+          tool.description,
+          tool.handlerType,
+          JSON.stringify(tool.handlerConfig ?? {}),
+          input.orgId,
+          input.pluginId,
+          tool.pluginKey ?? null,
+          tool.createdAt,
+          tool.updatedAt
+        );
+      }
+
+      const published = getOrgPluginStmt.get(
+        input.orgId,
+        input.pluginId
+      ) as OrgPluginRow;
+      return { ok: true, revision: published.revision };
+    }
+  );
+
+  const compareAndSetOrgPluginStateTx = db.transaction(
+    (input: CompareAndSetOrgPluginStateInput): PluginPublishResult => {
+      const existing = getOrgPluginStmt.get(
+        input.orgId,
+        input.pluginId
+      ) as OrgPluginRow | null;
+
+      if (existing) {
+        if (existing.revision !== input.expectedRevision) {
+          return { ok: false, reason: "stale_revision" };
+        }
+        const updated = updateOrgPluginCasStmt.run(
+          input.selectedVersion,
+          input.databaseGeneration,
+          input.lifecycleState,
+          input.pendingOperation ?? null,
+          input.lastLifecycleError ?? null,
+          input.now,
+          input.orgId,
+          input.pluginId,
+          input.expectedRevision
+        );
+        if (updated.changes === 0) {
+          return { ok: false, reason: "stale_revision" };
+        }
+      } else {
+        if (input.expectedRevision !== 0) {
+          return { ok: false, reason: "stale_revision" };
+        }
+        insertOrgPluginStmt.run(
+          input.orgId,
+          input.pluginId,
+          input.selectedVersion,
+          input.databaseGeneration,
+          input.lifecycleState,
+          input.pendingOperation ?? null,
+          input.lastLifecycleError ?? null,
+          input.now,
+          input.now
+        );
+      }
+
+      const saved = getOrgPluginStmt.get(
+        input.orgId,
+        input.pluginId
+      ) as OrgPluginRow;
+      return { ok: true, revision: saved.revision };
+    }
+  );
+
+  const deleteOrgPluginTx = db.transaction(
+    (orgId: string, pluginId: string, expectedRevision: number): boolean => {
+      const existing = getOrgPluginStmt.get(
+        orgId,
+        pluginId
+      ) as OrgPluginRow | null;
+      if (!existing || existing.revision !== expectedRevision) {
+        return false;
+      }
+      for (const row of listOwnedSkillIdsStmt.all(orgId, pluginId) as Array<{
+        id: string;
+      }>) {
+        unassignSkillFromAllProfilesStmt.run(row.id);
+        deleteSkillStmt.run(row.id);
+      }
+      for (const row of listOwnedToolIdsStmt.all(orgId, pluginId) as Array<{
+        id: string;
+      }>) {
+        unassignToolFromAllProfilesStmt.run(row.id);
+        deleteToolStmt.run(row.id);
+      }
+      const deleted = deleteOrgPluginStmt.run(
+        orgId,
+        pluginId,
+        expectedRevision
+      );
+      return deleted.changes > 0;
+    }
+  );
+
   return {
     async appendMessagesForSession(sessionId, messages) {
       appendMessagesTransaction(sessionId, messages);
@@ -2034,6 +2410,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       // Prepare afresh: cached statements can outlive SQLite's closed handle.
       using statement = db.prepare("SELECT 1 FROM users LIMIT 1");
       statement.get();
+    },
+
+    async compareAndSetOrgPluginState(input) {
+      return compareAndSetOrgPluginStateTx(input);
     },
 
     async countHumanUsers() {
@@ -2245,6 +2625,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
+      return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
+    },
+
+    async deletePluginRelease(pluginId, version) {
+      const result = deletePluginReleaseStmt.run(pluginId, version);
+      return result.changes > 0;
+    },
+
     async deleteProfile(id) {
       const result = deleteProfileStmt.run(id);
       return result.changes > 0;
@@ -2275,6 +2664,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteWorkflowRun(workflowId, runId) {
       const result = deleteWorkflowRunStmt.run(workflowId, runId);
       return result.changes > 0;
+    },
+
+    async disableUser(id, disabledAt) {
+      disableUserStmt.run(disabledAt, disabledAt, id);
+    },
+
+    async enableUser(id) {
+      enableUserStmt.run(new Date().toISOString(), id);
     },
 
     async failInterruptedRuns() {
@@ -2458,6 +2855,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toOrgMemoryProposalRecord(row) : null;
     },
 
+    async getOrgPlugin(orgId, pluginId) {
+      const row = getOrgPluginStmt.get(orgId, pluginId) as OrgPluginRow | null;
+      return row ? toOrgPluginRecord(row) : null;
+    },
+
     async getPendingOrgInvite(orgId, email) {
       const row = getPendingOrgInviteStmt.get(
         orgId,
@@ -2507,6 +2909,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         skillName
       ) as SkillProposalRow | null;
       return row ? toSkillProposalRecord(row) : null;
+    },
+
+    async getPluginRelease(pluginId, version) {
+      const row = getPluginReleaseStmt.get(
+        pluginId,
+        version
+      ) as PluginReleaseRow | null;
+      return row ? toPluginReleaseRecord(row) : null;
     },
 
     async getProfile(id) {
@@ -2755,6 +3165,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async listArtifactSharesForProfile(orgId, profileId) {
+      return listArtifactSharesForProfileStmt
+        .all(orgId, profileId)
+        .map((row) => toArtifactShareRecord(row as ArtifactShareRow));
+    },
+
+    async listAttachmentsForSession(sessionId) {
+      return listAttachmentsForSessionStmt
+        .all(sessionId)
+        .map((row) => toAttachmentRecord(row as AttachmentRow));
+    },
+
     async listAutomationRuns(automationId, limit = 20) {
       return listAutomationRunsStmt
         .all(automationId, limit)
@@ -2887,6 +3309,26 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : listAllOrgMemoryProposalsStmt.all(orgId)
       ) as OrgMemoryProposalRow[];
       return rows.map(toOrgMemoryProposalRecord);
+    },
+
+    async listOrgPlugins(orgId) {
+      const rows =
+        orgId === undefined
+          ? listOrgPluginsStmt.all()
+          : listOrgPluginsForOrgStmt.all(orgId);
+      return rows.map((row) => toOrgPluginRecord(row as OrgPluginRow));
+    },
+
+    async listPlatformAdminUsers() {
+      const rows = listPlatformAdminUsersStmt.all() as UserRow[];
+      return rows.map(toUserRecord);
+    },
+
+    async listPluginReleases(pluginId) {
+      const rows = pluginId
+        ? listPluginReleasesStmt.all(pluginId)
+        : listAllPluginReleasesStmt.all();
+      return rows.map((row) => toPluginReleaseRecord(row as PluginReleaseRow));
     },
 
     async listProfileChangeEvents(orgId, profileId, options = {}) {
@@ -3093,6 +3535,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         workspaceFrom,
         workspaceTo
       );
+    },
+
+    async publishOrgPluginRelease(input) {
+      return publishOrgPluginReleaseTx(input);
     },
 
     async replaceMessagesForSession(sessionId, messages) {
@@ -3385,6 +3831,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runUpsertOrgMemberStmt(record);
     },
 
+    async upsertPluginRelease(record) {
+      return upsertPluginReleaseTx(record);
+    },
+
     async upsertProfile(record) {
       if (record.isDefault && record.orgId) {
         upsertDefaultProfileTransaction.immediate(record);
@@ -3416,6 +3866,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.enabled ? 1 : 0,
         record.createdBy,
         record.orgId ?? null,
+        record.pluginId ?? null,
+        record.pluginKey ?? null,
         record.createdAt,
         record.updatedAt
       );
@@ -3428,6 +3880,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.description,
         record.handlerType,
         JSON.stringify(record.handlerConfig ?? {}),
+        record.orgId ?? null,
+        record.pluginId ?? null,
+        record.pluginKey ?? null,
         record.createdAt,
         record.updatedAt
       );
@@ -3585,6 +4040,8 @@ function toSkillRecord(row: SkillRow): StoredSkillRecord {
     id: row.id,
     name: row.name,
     orgId: row.org_id ?? null,
+    pluginId: row.plugin_id ?? null,
+    pluginKey: row.plugin_key ?? null,
     sourcePath: row.source_path,
     updatedAt: row.updated_at,
   };
@@ -3641,6 +4098,58 @@ function toToolRecord(row: ToolRow): StoredToolRecord {
     handlerType: row.handler_type,
     id: row.id,
     name: row.name,
+    orgId: row.org_id ?? null,
+    pluginId: row.plugin_id ?? null,
+    pluginKey: row.plugin_key ?? null,
+    updatedAt: row.updated_at,
+  };
+}
+
+interface PluginReleaseRow {
+  created_at: string;
+  digest: string | null;
+  manifest: string;
+  plugin_id: string;
+  version: string;
+}
+
+interface OrgPluginRow {
+  created_at: string;
+  database_generation: string | null;
+  last_lifecycle_error: string | null;
+  lifecycle_state: string;
+  org_id: string;
+  pending_operation: string | null;
+  plugin_id: string;
+  revision: number;
+  selected_version: string | null;
+  updated_at: string;
+}
+
+function toPluginReleaseRecord(
+  row: PluginReleaseRow
+): StoredPluginReleaseRecord {
+  return {
+    createdAt: row.created_at,
+    digest: row.digest ?? "",
+    manifest: parseJson(row.manifest) as StoredPluginReleaseRecord["manifest"],
+    pluginId: row.plugin_id,
+    version: row.version,
+  };
+}
+
+function toOrgPluginRecord(row: OrgPluginRow): StoredOrgPluginRecord {
+  return {
+    createdAt: row.created_at,
+    databaseGeneration: row.database_generation,
+    lastLifecycleError: row.last_lifecycle_error,
+    lifecycleState:
+      row.lifecycle_state as StoredOrgPluginRecord["lifecycleState"],
+    orgId: row.org_id,
+    pendingOperation: row.pending_operation,
+    pluginId: row.plugin_id,
+    revision: row.revision,
+    selectedVersion: row.selected_version,
     updatedAt: row.updated_at,
   };
 }
@@ -4043,6 +4552,7 @@ function toProfileComposioToolkitRecord(
 function toUserRecord(row: UserRow): StoredUserRecord {
   return {
     createdAt: row.created_at,
+    disabledAt: row.disabled_at ?? null,
     email: row.email,
     id: row.id,
     isPlatformAdmin: Boolean(row.is_platform_admin),

@@ -1,3 +1,4 @@
+import { DropdownMenuItem } from "@nakama/ui/dropdown-menu";
 import { PencilEdit01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
@@ -24,7 +25,6 @@ import {
   type ArtifactShareControlsState,
   useArtifactShareControls,
 } from "@/components/chat/use-artifact-share-controls";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/context/use-auth";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useWriteArtifactMutation } from "@/hooks/use-resource-mutations";

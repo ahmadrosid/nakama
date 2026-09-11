@@ -334,4 +334,99 @@ export function registerPlatformOrgRoutes(
 
     return json<OrgInviteCreatedResponse>(invite, 201);
   });
+
+  const platformOrgMemberParams = z.object({
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+    userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "disablePlatformOrgMember",
+      path: "/v1/platform/orgs/{orgId}/members/{userId}/disable",
+      request: { params: platformOrgMemberParams },
+      responses: {
+        204: { description: "Member disabled" },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Disable a user's account",
+      tags: ["Platform"],
+    })
+  );
+
+  app.post("/v1/platform/orgs/:orgId/members/:userId/disable", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const userId = decodeURIComponent(c.req.param("userId"));
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    await orgService.disableMember(orgId, userId);
+    return new Response(null, { status: 204 });
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "enablePlatformOrgMember",
+      path: "/v1/platform/orgs/{orgId}/members/{userId}/enable",
+      request: { params: platformOrgMemberParams },
+      responses: {
+        204: { description: "Member enabled" },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Re-enable a disabled user's account",
+      tags: ["Platform"],
+    })
+  );
+
+  app.post("/v1/platform/orgs/:orgId/members/:userId/enable", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const userId = decodeURIComponent(c.req.param("userId"));
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    await orgService.enableMember(orgId, userId);
+    return new Response(null, { status: 204 });
+  });
 }

@@ -9,6 +9,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openrouter",
   "gemini",
   "deepseek",
+  "doubao",
   "mistral",
   "perplexity",
   "cerebras",
@@ -27,6 +28,10 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "zhipu_cn",
   "xai",
   "together",
+  "xiaomi",
+  "qwen",
+  "qwen_cn",
+  "vercel_ai_gateway",
 ] as const;
 
 export {
@@ -46,6 +51,7 @@ export function parseProviderName(
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "doubao" ||
     normalized === "mistral" ||
     normalized === "perplexity" ||
     normalized === "cerebras" ||
@@ -63,7 +69,11 @@ export function parseProviderName(
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
-    normalized === "together"
+    normalized === "together" ||
+    normalized === "xiaomi" ||
+    normalized === "qwen" ||
+    normalized === "qwen_cn" ||
+    normalized === "vercel_ai_gateway"
   ) {
     return normalized;
   }
@@ -83,6 +93,8 @@ export function apiKeyEnvVarForProvider(
       return "GEMINI_API_KEY";
     case "deepseek":
       return null;
+    case "doubao":
+      return "DOUBAO_API_KEY";
     case "mistral":
       return "MISTRAL_API_KEY";
     case "perplexity":
@@ -120,6 +132,14 @@ export function apiKeyEnvVarForProvider(
       return "XAI_API_KEY";
     case "together":
       return "TOGETHER_API_KEY";
+    case "xiaomi":
+      return "XIAOMI_API_KEY";
+    case "qwen":
+      return "QWEN_API_KEY";
+    case "qwen_cn":
+      return "QWEN_CN_API_KEY";
+    case "vercel_ai_gateway":
+      return "VERCEL_AI_GATEWAY_API_KEY";
   }
 }
 

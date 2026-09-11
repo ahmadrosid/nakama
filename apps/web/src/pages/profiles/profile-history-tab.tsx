@@ -1,15 +1,15 @@
 import type { ProfileChangeEvent } from "@nakama/core";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
 import {
   formatSessionRelativeTime,
   formatSessionTimestamp,

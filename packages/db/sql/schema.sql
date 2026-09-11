@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS tools (
   description TEXT NOT NULL,
   handler_type TEXT NOT NULL,
   handler_config TEXT DEFAULT '{}' NOT NULL,
+  plugin_id TEXT,
+  plugin_key TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -219,6 +221,8 @@ CREATE TABLE IF NOT EXISTS skills (
   disable_model_invocation INTEGER DEFAULT 0 NOT NULL,
   enabled INTEGER DEFAULT 1 NOT NULL,
   created_by TEXT NOT NULL DEFAULT 'bundled',
+  plugin_id TEXT,
+  plugin_key TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -262,6 +266,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_platform_admin INTEGER DEFAULT 0 NOT NULL,
   -- Legacy: pre-org USER.md; migrateLegacyUserContextToOrgMembers copies into org_members (#550).
   user_context TEXT,
+  disabled_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -529,3 +534,27 @@ CREATE TABLE IF NOT EXISTS profile_change_events (
 
 CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
   ON profile_change_events (profile_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS plugin_releases (
+  plugin_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  manifest TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (plugin_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS org_plugins (
+  org_id TEXT NOT NULL,
+  plugin_id TEXT NOT NULL,
+  selected_version TEXT,
+  database_generation TEXT,
+  lifecycle_state TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  pending_operation TEXT,
+  last_lifecycle_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, plugin_id),
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);

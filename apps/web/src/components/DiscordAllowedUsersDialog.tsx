@@ -1,6 +1,4 @@
-import { Delete02Icon } from "hugeicons-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +6,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
+} from "@nakama/ui/dialog";
+import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
+import { Delete02Icon } from "hugeicons-react";
+import { useState } from "react";
 import { useSaveDiscordSettings } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 

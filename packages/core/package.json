@@ -21,6 +21,7 @@
     "./fs": "./src/fs.ts",
     "./profiles": "./src/profiles.ts",
     "./thinking-content": "./src/thinking-content.ts",
+    "./user-context": "./src/user-context.ts",
     "./message-content": "./src/message-content.ts",
     "./attachments/store": "./src/attachments/store.ts",
     "./attachments/content": "./src/attachments/content.ts",
@@ -54,7 +55,6 @@
     "./skills/write": "./src/skills/write.ts",
     "./soul/org-memory": "./src/soul/org-memory.ts",
     "./tools/protected": "./src/tools/protected.ts",
-    "./workflow-ops": "./src/workflow-ops.ts",
     "./tools/email": "./src/tools/email.ts",
     "./tools/custom-web-search": "./src/tools/custom-web-search.ts",
     "./mcp/preinstalled": "./src/mcp/preinstalled.ts"

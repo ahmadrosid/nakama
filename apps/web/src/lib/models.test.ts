@@ -23,8 +23,13 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "doubao"
+    | "xiaomi"
     | "together"
+    | "vercel_ai_gateway"
     | "mistral"
+    | "qwen"
+    | "qwen_cn"
     | "perplexity"
     | "cerebras"
     | "fireworks",
@@ -59,6 +64,22 @@ function group(
 }
 
 describe("resolveModelThinkingSupport", () => {
+  test("treats xiaomi models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats openai-compatible models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -139,6 +160,22 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats vercel_ai_gateway models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats mistral models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -151,6 +188,45 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("mi-1", "model-1"),
         group("mi-1", "mistral", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats qwen models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen", { supportsThinking: true })
+      )
+    ).toBe(true);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("qw-cn-1", "model-1"),
+        group("qw-cn-1", "qwen_cn", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats doubao models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -205,6 +281,22 @@ describe("resolveModelThinkingSupport", () => {
 });
 
 describe("resolveModelVisionSupport", () => {
+  test("treats xiaomi models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("xm-1", "model-1"),
+        group("xm-1", "xiaomi", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats openai-compatible and opencode_go models as opt-in only", () => {
     expect(
       resolveModelVisionSupport(
@@ -244,6 +336,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(false);
   });
 
+  test("treats doubao models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -272,6 +380,38 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("tg-1", "model-1"),
         group("tg-1", "together", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats qwen models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("qw-1", "model-1"),
+        group("qw-1", "qwen", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats vercel_ai_gateway models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -379,8 +519,13 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "doubao",
           "together",
+          "xiaomi",
+          "vercel_ai_gateway",
           "mistral",
+          "qwen",
+          "qwen_cn",
           "perplexity",
           "cerebras",
           "cloudflare",

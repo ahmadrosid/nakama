@@ -811,7 +811,13 @@ export function useProfilesPage() {
     setError(null);
 
     try {
-      await assignMutation.mutateAsync({ profileId: selectedId, toolId });
+      const pluginId = allTools.find((tool) => tool.id === toolId)?.pluginId;
+      const ids = pluginId
+        ? availableTools.flatMap((tool) =>
+            tool.pluginId === pluginId ? [tool.id] : []
+          )
+        : [toolId];
+      await assignMutation.mutateAsync({ profileId: selectedId, toolId: ids });
     } catch (err) {
       setError(formatError(err));
     }
@@ -963,7 +969,7 @@ export function useProfilesPage() {
       if (removeConfirm.kind === "tool") {
         await unassignMutation.mutateAsync({
           profileId: selectedId,
-          toolId: removeConfirm.id,
+          toolId: removeConfirm.ids ?? [removeConfirm.id],
         });
       } else if (removeConfirm.kind === "mcp") {
         await unassignMcpMutation.mutateAsync({

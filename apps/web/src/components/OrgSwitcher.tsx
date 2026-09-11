@@ -1,23 +1,23 @@
 import type { UserOrgSummary } from "@nakama/core/contract";
-import { Add01Icon, ArrowDown01Icon, Edit03Icon } from "hugeicons-react";
-import { type ComponentProps, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+} from "@nakama/ui/dropdown-menu";
+import { Input } from "@nakama/ui/input";
+import { cn } from "@nakama/ui/utils";
+import { Add01Icon, ArrowDown01Icon, Edit03Icon } from "hugeicons-react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/use-auth";
-import { cn } from "@/lib/utils";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 

@@ -1,7 +1,5 @@
 import type { ProfilePackPreviewResponse } from "@nakama/core/contract";
-import { Alert02Icon, Archive01Icon, CloudUploadIcon } from "hugeicons-react";
-import { type RefObject, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,15 +7,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { toast } from "@nakama/ui/toast";
+import { cn } from "@nakama/ui/utils";
+import { Alert02Icon, Archive01Icon, CloudUploadIcon } from "hugeicons-react";
+import { type RefObject, useRef, useState } from "react";
 import {
   useImportProfilePackMutation,
   usePreviewProfilePackImportMutation,
 } from "@/hooks/use-profile-pack";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 interface ProfileImportDialogProps {
   onImported: (profileId: string) => void;

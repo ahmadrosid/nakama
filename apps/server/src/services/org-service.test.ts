@@ -631,6 +631,42 @@ describe("OrgService", () => {
     });
   });
 
+  test("protects the last org admin from removal or demotion when the other admin is disabled", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        phone: "+628123456789",
+      },
+      name: "Acme",
+      slug: "acme",
+    });
+
+    const adminUserId = created.adminMember!.member.userId;
+    const localClientUserId = LOCAL_CLIENT_USER_ID;
+
+    expect(localClientUserId).toBeTruthy();
+
+    await orgService.disableMember(created.organization.id, localClientUserId!);
+
+    await expect(
+      orgService.removeMember(created.organization.id, adminUserId)
+    ).rejects.toMatchObject({
+      message: "Cannot remove the last org admin.",
+      status: 409,
+    });
+
+    await expect(
+      orgService.updateMember(created.organization.id, adminUserId, {
+        role: "member",
+      })
+    ).rejects.toMatchObject({
+      message: "Cannot change role of the last org admin.",
+      status: 409,
+    });
+  });
+
   test("removeMember rejects bad userId shape before membership lookup", async () => {
     const { orgService } = createOrgService();
     const created = await orgService.createOrganization({

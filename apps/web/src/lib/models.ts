@@ -49,6 +49,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "doubao" ||
     provider === "mistral" ||
     provider === "perplexity" ||
     provider === "cerebras" ||
@@ -66,7 +67,11 @@ export function formatProviderLabel(
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
     provider === "xai" ||
-    provider === "together"
+    provider === "together" ||
+    provider === "xiaomi" ||
+    provider === "qwen" ||
+    provider === "qwen_cn" ||
+    provider === "vercel_ai_gateway"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -83,8 +88,13 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "doubao", label: "Doubao (Volcengine)" },
     { id: "together", label: "Together AI" },
+    { id: "xiaomi", label: "Xiaomi MiMo" },
+    { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
     { id: "mistral", label: "Mistral" },
+    { id: "qwen", label: "Qwen (DashScope)" },
+    { id: "qwen_cn", label: "Qwen (DashScope CN)" },
     { id: "perplexity", label: "Perplexity Sonar" },
     { id: "cerebras", label: "Cerebras" },
     { id: "cloudflare", label: "Cloudflare Worker AI" },
@@ -899,8 +909,13 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
+    model.provider === "doubao" ||
     model.provider === "together" ||
+    model.provider === "xiaomi" ||
+    model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
+    model.provider === "qwen" ||
+    model.provider === "qwen_cn" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
@@ -951,8 +966,13 @@ export function resolveModelVisionSupport(
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
+    model.provider === "doubao" ||
     model.provider === "together" ||
+    model.provider === "xiaomi" ||
+    model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
+    model.provider === "qwen" ||
+    model.provider === "qwen_cn" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||

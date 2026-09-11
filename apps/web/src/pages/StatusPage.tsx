@@ -2,6 +2,8 @@ import type {
   LlmUsageStatus,
   SystemStatusResponse,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { cn } from "@nakama/ui/utils";
 import {
   Alert02Icon,
   ArrowDownLeft01Icon,
@@ -15,7 +17,6 @@ import {
 } from "hugeicons-react";
 import { type ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import {
   WorkerActionBar,
   WorkerViewLogsButton,
@@ -29,7 +30,6 @@ import { formatUsd } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatProviderLabel } from "@/lib/models";
 import { PAGE_PATHS } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 import {
   buildServiceColumns,
   deriveSummary,

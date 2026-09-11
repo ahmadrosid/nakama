@@ -50,6 +50,7 @@ import type {
   StoredSkillRecord,
   StoredSkillUsageRecord,
 } from "@nakama/db";
+import type { PluginService } from "./plugin-service";
 import {
   type ProfileChangeMeta,
   recordProfileChangeEvent,
@@ -63,8 +64,18 @@ export interface SkillUsageRecordingContext {
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
+function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
+  return Boolean(record.pluginId && record.pluginKey);
+}
+
 export class SkillsService {
+  private pluginService: PluginService | null = null;
+
   constructor(private readonly db: DatabaseAdapter) {}
+
+  setPluginService(service: PluginService | null): void {
+    this.pluginService = service;
+  }
 
   async syncDiscoveredSkills(): Promise<SyncSkillsResponse> {
     const discovered = await discoverSkills();
@@ -172,6 +183,10 @@ export class SkillsService {
     }
 
     const record = await this.requireSkill(skillId);
+
+    if (isPluginOwnedSkill(record)) {
+      throw new Error("Plugin-owned skills cannot be edited.");
+    }
 
     if (bundledSkillNames.has(record.name)) {
       throw new Error("Bundled system skills cannot be edited.");
@@ -310,7 +325,7 @@ export class SkillsService {
     const createdBy = options?.createdBy ?? "agent";
     const changeMeta = options?.changeMeta;
 
-    const existingByName = await this.db.getSkillByName(name, orgId);
+    const existingByName = await this.getMutableSkillByName(name, orgId);
     if (
       existingByName &&
       !isPathWithinProfileSkillsDir(orgId, profileId, existingByName.sourcePath)
@@ -539,9 +554,13 @@ export class SkillsService {
     const skillName = assertValidSkillName(name);
     assertNotBundledSkillName(skillName);
 
-    const record = await this.db.getSkillByName(skillName, orgId);
+    const record = await this.getMutableSkillByName(skillName, orgId);
     if (!record) {
       throw new Error(`Skill "${skillName}" not found.`);
+    }
+
+    if (isPluginOwnedSkill(record)) {
+      throw new Error("Plugin-owned skills cannot be deleted.");
     }
 
     if (isGlobalSkillSourcePath(record.sourcePath)) {
@@ -578,6 +597,10 @@ export class SkillsService {
   ): Promise<void> {
     const record = await this.requireSkill(skillId);
 
+    if (isPluginOwnedSkill(record)) {
+      throw new Error("Plugin-owned skills cannot be archived.");
+    }
+
     if (isGlobalSkillSourcePath(record.sourcePath)) {
       throw new Error("Global skills cannot be archived by the curator.");
     }
@@ -605,6 +628,10 @@ export class SkillsService {
   async deleteSkill(skillId: string): Promise<void> {
     const record = await this.requireSkill(skillId);
 
+    if (isPluginOwnedSkill(record)) {
+      throw new Error("Plugin-owned skills cannot be deleted.");
+    }
+
     if (bundledSkillNames.has(record.name)) {
       throw new Error("Bundled system skills cannot be deleted.");
     }
@@ -622,8 +649,12 @@ export class SkillsService {
 
   async getSkill(skillId: string): Promise<SkillResponse> {
     const record = await this.requireSkill(skillId);
-    const discovered = await discoverSkillDirectory(record.sourcePath);
-    const body = discovered?.body ?? (await readSkillBody(record));
+    const directory = await this.resolveSkillDirectory(record);
+    const discovered = directory
+      ? await discoverSkillDirectory(directory)
+      : null;
+    const body =
+      discovered?.body ?? (await readSkillBody(directory ?? record.sourcePath));
 
     return {
       skill: {
@@ -639,17 +670,13 @@ export class SkillsService {
     usageContext?: SkillUsageRecordingContext
   ): Promise<string> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    const assignedRecords = await this.db.listSkillsForProfile(profileId);
     const skillIds = assigned
-      .map(
-        (skill) =>
-          assignedRecords.find((record) => record.name === skill.name)?.id
-      )
+      .map((item) => item.record.id)
       .filter((skillId): skillId is string => Boolean(skillId));
 
     void this.recordCatalogViews(orgId, profileId, skillIds, usageContext);
 
-    return composeSkillsCatalog(assigned);
+    return composeSkillsCatalog(assigned.map((item) => item.discovered));
   }
 
   async composeAgentBrowserCapabilityForProfile(
@@ -657,7 +684,9 @@ export class SkillsService {
     profileId: string
   ): Promise<string> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    return composeAgentBrowserCapabilityPrompt(assigned);
+    return composeAgentBrowserCapabilityPrompt(
+      assigned.map((item) => item.discovered)
+    );
   }
 
   async formatMatchedSkillsForPrompt(
@@ -670,15 +699,17 @@ export class SkillsService {
     } = {}
   ): Promise<string> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    const assignedRecords = await this.db.listSkillsForProfile(profileId);
-    const matched = matchSkillsForMessage(assigned, userMessage);
+    const discovered = assigned.map((item) => item.discovered);
+    const matched = matchSkillsForMessage(discovered, userMessage);
     const explicitSkillName = extractExplicitSkillName(userMessage);
 
     if (matched.length > 0) {
       const matchedSkillIds = matched
         .map(
           (skill) =>
-            assignedRecords.find((record) => record.name === skill.name)?.id
+            assigned.find(
+              (entry) => entry.discovered.directory === skill.directory
+            )?.record.id
         )
         .filter((skillId): skillId is string => Boolean(skillId));
 
@@ -708,7 +739,13 @@ export class SkillsService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    return loadSkillTools(assigned.filter((skill) => skill.hasTool));
+    return loadSkillTools(
+      assigned
+        .filter(
+          (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
+        )
+        .map((item) => item.discovered)
+    );
   }
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {
@@ -815,20 +852,80 @@ export class SkillsService {
   private async getAssignedDiscoveredSkills(
     orgId: string,
     profileId: string
-  ): Promise<DiscoveredSkill[]> {
+  ): Promise<
+    Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
+  > {
     const assigned = await this.db.listSkillsForProfile(profileId);
     const discovered = await discoverSkills({ orgId, profileId });
     const bySourcePath = new Map(
       discovered.map((skill) => [skill.directory, skill])
     );
-    const byName = new Map(discovered.map((skill) => [skill.name, skill]));
+    const standaloneByName = new Map(
+      discovered.map((skill) => [skill.name, skill])
+    );
+    const resolved: Array<{
+      discovered: DiscoveredSkill;
+      record: StoredSkillRecord;
+    }> = [];
 
-    return assigned
-      .map(
-        (record) =>
-          bySourcePath.get(record.sourcePath) ?? byName.get(record.name) ?? null
-      )
-      .filter((skill): skill is DiscoveredSkill => skill !== null);
+    for (const record of assigned) {
+      if (isPluginOwnedSkill(record)) {
+        const directory = await this.resolveSkillDirectory(record);
+        if (!directory) {
+          continue;
+        }
+        const pluginSkill = await discoverSkillDirectory(directory);
+        if (!pluginSkill) {
+          continue;
+        }
+        resolved.push({
+          discovered: { ...pluginSkill, hasTool: false, toolPath: null },
+          record,
+        });
+        continue;
+      }
+
+      const match =
+        bySourcePath.get(record.sourcePath) ??
+        standaloneByName.get(record.name) ??
+        null;
+      if (match) {
+        resolved.push({ discovered: match, record });
+      }
+    }
+
+    return resolved;
+  }
+
+  private async resolveSkillDirectory(
+    record: StoredSkillRecord
+  ): Promise<string | null> {
+    if (isPluginOwnedSkill(record) && record.pluginId && record.pluginKey) {
+      if (!(this.pluginService && record.orgId)) {
+        return null;
+      }
+      return this.pluginService.resolveEnabledSkillDirectory(
+        record.orgId,
+        record.pluginId,
+        record.pluginKey
+      );
+    }
+    return record.sourcePath;
+  }
+
+  private async getMutableSkillByName(
+    name: string,
+    orgId: string
+  ): Promise<StoredSkillRecord | null> {
+    const skills = await this.db.listSkills();
+    return (
+      skills.find(
+        (skill) =>
+          skill.name === name &&
+          !isPluginOwnedSkill(skill) &&
+          (skill.orgId === orgId || skill.orgId == null)
+      ) ?? null
+    );
   }
 
   private async syncSkillRecordFromDirectory(
@@ -846,7 +943,10 @@ export class SkillsService {
 
     const record =
       (await this.db.getSkillBySourcePath(directory)) ??
-      (await this.db.getSkillByName(name, orgIdFromSkillSourcePath(directory)));
+      (await this.getMutableSkillByName(
+        name,
+        orgIdFromSkillSourcePath(directory) ?? ""
+      ));
 
     if (!record) {
       throw new Error(`Skill was ${verb} but could not be synced.`);
@@ -867,13 +967,17 @@ export class SkillsService {
     createdByOverride?: SkillCreatedBy
   ): Promise<{ created: boolean }> {
     const existingByPath = await this.db.getSkillBySourcePath(skill.directory);
+    const existingByName = existingByPath
+      ? null
+      : await this.db.getSkillByName(
+          skill.name,
+          orgIdFromSkillSourcePath(skill.directory)
+        );
     const existing =
       existingByPath ??
-      (await this.db.getSkillByName(
-        skill.name,
-        orgIdFromSkillSourcePath(skill.directory)
-      )) ??
-      null;
+      (existingByName && !isPluginOwnedSkill(existingByName)
+        ? existingByName
+        : null);
     const now = new Date().toISOString();
     const defaultCreatedBy: SkillCreatedBy = isGlobalSkillSourcePath(
       skill.directory
@@ -920,9 +1024,13 @@ export class SkillsService {
   ): Promise<StoredSkillRecord> {
     assertNotBundledSkillName(name);
 
-    const record = await this.db.getSkillByName(name, orgId);
+    const record = await this.getMutableSkillByName(name, orgId);
     if (!record) {
       throw new Error(`Skill "${name}" not found.`);
+    }
+
+    if (isPluginOwnedSkill(record)) {
+      throw new Error("Plugin-owned skills cannot be edited.");
     }
 
     if (isGlobalSkillSourcePath(record.sourcePath)) {
@@ -948,6 +1056,9 @@ export class SkillsService {
     const grouped = new Map<string, StoredSkillRecord[]>();
 
     for (const skill of skills) {
+      if (isPluginOwnedSkill(skill)) {
+        continue;
+      }
       const group = grouped.get(skill.name) ?? [];
       group.push(skill);
       grouped.set(skill.name, group);
@@ -1002,6 +1113,8 @@ function toSkillSummary(
     hasTool: record.hasTool,
     id: record.id,
     name: record.name,
+    pluginId: record.pluginId ?? null,
+    pluginKey: record.pluginKey ?? null,
     sourcePath: record.sourcePath,
     updatedAt: record.updatedAt,
     usage: usage ? toSkillUsageSummary(usage) : undefined,
@@ -1032,9 +1145,9 @@ function toSkillUsageSummary(
   };
 }
 
-async function readSkillBody(record: StoredSkillRecord): Promise<string> {
+async function readSkillBody(sourcePath: string): Promise<string> {
   try {
-    const content = await readFile(`${record.sourcePath}/SKILL.md`, "utf8");
+    const content = await readFile(`${sourcePath}/SKILL.md`, "utf8");
     const bodyMatch = content.match(
       /^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/
     );
