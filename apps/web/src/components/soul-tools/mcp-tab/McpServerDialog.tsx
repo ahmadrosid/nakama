@@ -176,6 +176,7 @@ function McpServerDialogCreateForm({
         headers={state.headers}
         idPrefix={state.idPrefix}
         isEdit={state.isEdit}
+        kind={state.kind}
         loadingForm={state.loadingForm}
         name={state.name}
         nameAutoFocus={nameAutoFocus}
@@ -209,11 +210,9 @@ function McpServerDialogCreateForm({
           state.setUrl(value);
           state.clearTestResult();
         }}
-        signIn={state.signIn}
         submitError={state.submitError}
         testing={state.testing}
         testResult={state.testResult}
-        transport={state.transport}
         url={state.url}
       />
 
@@ -229,7 +228,8 @@ function McpServerDialogCreateForm({
         <Button disabled={state.formDisabled || !state.canSubmit} type="submit">
           {busy ? (
             <Spinner className="size-4" />
-          ) : (state.signIn || state.testResult?.requiresAuthorization) &&
+          ) : (state.kind === "signin" ||
+              state.testResult?.requiresAuthorization) &&
             !state.isEdit ? (
             "Add and sign in"
           ) : (

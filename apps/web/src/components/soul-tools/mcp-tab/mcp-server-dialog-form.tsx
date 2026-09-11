@@ -1,4 +1,4 @@
-import type { CachedMcpToolSummary, McpTransport } from "@nakama/core/contract";
+import type { CachedMcpToolSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
@@ -11,10 +11,7 @@ import {
   McpHeadersEditor,
 } from "@/components/soul-tools/mcp-tab/McpFormEditors";
 import type { McpHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
-import {
-  type McpServerKind,
-  mcpServerKind,
-} from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
+import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 
 const TEST_RESULT_TONE = {
   bad: "bg-destructive/10 text-destructive",
@@ -54,7 +51,7 @@ export function McpServerDialogForm({
   idPrefix,
   isEdit,
   nameAutoFocus = true,
-  transport,
+  kind,
   name,
   url,
   headers,
@@ -64,7 +61,6 @@ export function McpServerDialogForm({
   formDisabled,
   loadingForm,
   canSubmit,
-  signIn,
   testing,
   testResult,
   submitError,
@@ -81,7 +77,7 @@ export function McpServerDialogForm({
   idPrefix: string;
   isEdit: boolean;
   nameAutoFocus?: boolean;
-  transport: McpTransport;
+  kind: McpServerKind;
   name: string;
   url: string;
   headers: McpHeaderRow[];
@@ -91,7 +87,6 @@ export function McpServerDialogForm({
   formDisabled: boolean;
   loadingForm: boolean;
   canSubmit: boolean;
-  signIn: boolean;
   testing: boolean;
   testResult: {
     ok: boolean;
@@ -111,8 +106,6 @@ export function McpServerDialogForm({
   onEnvChange: (rows: McpHeaderRow[]) => void;
   onTestConnection: () => void;
 }) {
-  const kind = mcpServerKind(transport, signIn);
-
   if (loadingForm) {
     return (
       <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm">
@@ -269,7 +262,7 @@ export function McpServerDialogForm({
           <p
             className={cn(
               "rounded-md px-3 py-2.5 text-sm",
-              TEST_RESULT_TONE[testResultTone(testResult, signIn)]
+              TEST_RESULT_TONE[testResultTone(testResult, kind === "signin")]
             )}
             role="status"
           >

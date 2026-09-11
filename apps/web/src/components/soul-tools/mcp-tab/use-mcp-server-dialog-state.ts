@@ -45,14 +45,13 @@ type McpTestResult = {
 
 type McpFormSetters = {
   setName: (value: string) => void;
-  setTransport: (value: McpTransport) => void;
+  setKind: (value: McpServerKind) => void;
   setUrl: (value: string) => void;
   setHeaders: (value: McpHeaderRow[]) => void;
   setCommand: (value: string) => void;
   setArgs: (value: string[]) => void;
   setEnv: (value: McpHeaderRow[]) => void;
   setSubmitError: (value: string | null) => void;
-  setSignIn: (value: boolean) => void;
   setTestResult: (value: McpTestResult | null) => void;
   setTesting: (value: boolean) => void;
   setImportOpen: (value: boolean) => void;
@@ -65,7 +64,7 @@ function applyImportedServer(
   setters: Pick<
     McpFormSetters,
     | "setName"
-    | "setTransport"
+    | "setKind"
     | "setCommand"
     | "setArgs"
     | "setEnv"
@@ -74,7 +73,8 @@ function applyImportedServer(
   >
 ) {
   setters.setName(imported.name);
-  setters.setTransport(imported.transport);
+  // A pasted config carries a URL or a command, never an OAuth grant.
+  setters.setKind(mcpServerKind(imported.transport, false));
 
   if (imported.transport === "stdio") {
     const stdioConfig = imported.config as McpStdioConfig;
@@ -114,8 +114,7 @@ function applyMcpFormReset({
 
   if (!server) {
     setters.setName("");
-    setters.setTransport("http");
-    setters.setSignIn(false);
+    setters.setKind("http");
     setters.setUrl("");
     setters.setHeaders([emptyHeaderRow()]);
     setters.setCommand("");
@@ -132,8 +131,7 @@ function applyMcpFormReset({
   }
 
   setters.setName(detail.name);
-  setters.setTransport(detail.transport);
-  setters.setSignIn(detail.usesOAuth);
+  setters.setKind(mcpServerKind(detail.transport, detail.usesOAuth));
   setters.setSubmitError(null);
   setters.setTestResult(null);
   setters.setTesting(false);
@@ -244,7 +242,7 @@ function tryImportMcpJson(
   setters: Pick<
     McpFormSetters,
     | "setName"
-    | "setTransport"
+    | "setKind"
     | "setCommand"
     | "setArgs"
     | "setEnv"
@@ -290,11 +288,10 @@ export function useMcpServerDialogState({
     open && server ? server.id : null
   );
   const [name, setName] = useState("");
-  const [transport, setTransport] = useState<McpTransport>("http");
+  const [kind, setKind] = useState<McpServerKind>("http");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [command, setCommand] = useState("");
-  const [signIn, setSignIn] = useState(false);
   const [args, setArgs] = useState<string[]>([]);
   const [env, setEnv] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -304,6 +301,8 @@ export function useMcpServerDialogState({
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
 
+  const transport: McpTransport = kind === "stdio" ? "stdio" : "http";
+  const signIn = kind === "signin";
   const idPrefix = server ? `mcp-edit-${server.id}` : "mcp-create";
   const loadingForm = isEdit && loadingDetail && !detail;
   const formDisabled = busy || testing || loadingForm;
@@ -331,12 +330,11 @@ export function useMcpServerDialogState({
     setImportDraft,
     setImportError,
     setImportOpen,
+    setKind,
     setName,
-    setSignIn,
     setSubmitError,
     setTesting,
     setTestResult,
-    setTransport,
     setUrl,
   };
 
@@ -364,17 +362,15 @@ export function useMcpServerDialogState({
     setTestResult(null);
   }
 
-  function selectKind(kind: McpServerKind) {
+  function selectKind(next: McpServerKind) {
     setTestResult(null);
-    setSignIn(kind === "signin");
+    setKind(next);
 
-    if (kind === "stdio") {
-      setTransport("stdio");
+    if (next === "stdio") {
       setUrl("");
       return;
     }
 
-    setTransport("http");
     setCommand("");
   }
 
@@ -416,7 +412,6 @@ export function useMcpServerDialogState({
     }
 
     event.preventDefault();
-    setSignIn(false);
     tryImportMcpJson(text, isEdit, transport, formSetters);
   }
 
@@ -435,7 +430,6 @@ export function useMcpServerDialogState({
       return;
     }
 
-    setSignIn(false);
     setImportOpen(false);
     setImportDraft("");
     setImportError(null);
@@ -476,6 +470,7 @@ export function useMcpServerDialogState({
     importError,
     importOpen,
     isEdit,
+    kind,
     loadingForm,
     name,
     openImportDialog,
@@ -488,9 +483,7 @@ export function useMcpServerDialogState({
     setImportError,
     setImportOpen,
     setName,
-    setTransport,
     setUrl,
-    signIn,
     submitError,
     testing,
     testResult,
