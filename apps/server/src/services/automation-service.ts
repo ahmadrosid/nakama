@@ -114,6 +114,7 @@ export class AutomationService {
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
+      orgId,
     });
 
     const now = new Date().toISOString();
@@ -182,6 +183,7 @@ export class AutomationService {
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
+      orgId,
     });
 
     const updated: StoredAutomation = {

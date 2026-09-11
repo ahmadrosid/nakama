@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@nakama/ui/utils";
 import {
   type ComponentProps,
   type MouseEvent,
@@ -11,7 +12,6 @@ import {
 import { type LinkSafetyModalProps, StreamdownContext } from "streamdown";
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
 import { YoutubeEmbed } from "@/components/ai-elements/youtube-embed";
-import { cn } from "@/lib/utils";
 import { parseYoutubeVideoId } from "@/lib/youtube-url";
 
 type MarkdownAProps = ComponentProps<"a"> & {

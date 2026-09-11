@@ -1,0 +1,44 @@
+{
+  "name": "@nakama/ui",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./button-variants": "./src/button-variants.ts",
+    "./button": "./src/button.tsx",
+    "./card": "./src/card.tsx",
+    "./command": "./src/command.tsx",
+    "./dialog": "./src/dialog.tsx",
+    "./dropdown-menu": "./src/dropdown-menu.tsx",
+    "./expandable-textarea": "./src/expandable-textarea.tsx",
+    "./form-field": "./src/form-field.tsx",
+    "./input-group": "./src/input-group.tsx",
+    "./input": "./src/input.tsx",
+    "./matrix-frames": "./src/matrix-frames.ts",
+    "./matrix": "./src/matrix.tsx",
+    "./popover": "./src/popover.tsx",
+    "./select": "./src/select.tsx",
+    "./spinner": "./src/spinner.tsx",
+    "./switch": "./src/switch.tsx",
+    "./textarea": "./src/textarea.tsx",
+    "./toast": "./src/toast.ts",
+    "./toaster": "./src/toaster.tsx",
+    "./tooltip": "./src/tooltip.tsx",
+    "./utils": "./src/utils.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.5.0",
+    "class-variance-authority": "^0.7.1",
+    "cmdk": "^1.1.1",
+    "hugeicons-react": "^0.4.0",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}

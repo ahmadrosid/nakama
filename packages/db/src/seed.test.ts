@@ -15,6 +15,32 @@ import {
 } from "./seed";
 
 describe("seed cleanup", () => {
+  test("keeps a tool an operator unassigned from a profile", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_stripped",
+      isSuper: false,
+      model: null,
+      name: "Stripped",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await ensureBuiltinToolDefinitions(db);
+    await db.assignToolToProfile("profile_stripped", BUILTIN_TOOL_IDS.sqlite);
+    await db.unassignToolFromProfile(
+      "profile_stripped",
+      BUILTIN_TOOL_IDS.sqlite
+    );
+
+    await seedDatabase(db);
+
+    const tools = await db.listToolsForProfile("profile_stripped");
+    expect(tools.map((tool) => tool.id)).not.toContain(BUILTIN_TOOL_IDS.sqlite);
+  });
+
   test("deleteTool unassigns every profile before deleting", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();

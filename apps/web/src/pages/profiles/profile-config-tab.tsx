@@ -1,4 +1,26 @@
 import type { ProfileSummary } from "@nakama/core";
+import { Button } from "@nakama/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building06Icon,
@@ -10,31 +32,9 @@ import {
 import { useState } from "react";
 import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { toast } from "@/lib/toast";
 import { ProfileConfigAssignmentsSection } from "@/pages/profiles/profile-config-assignments-section";
 import { ProfileConfigIdentitySection } from "@/pages/profiles/profile-config-identity-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";

@@ -24,10 +24,9 @@ It was built for teams from day one: one server, many orgs, invites and roles, a
 
 Coming from [OpenClaw](https://github.com/openclaw/openclaw) or [Hermes Agent](https://github.com/nousresearch/hermes-agent)? Same class of capability, without the setup maze, and not limited to one operator on one machine.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/nakama_demo_dark.png" />
-  <img alt="Nakama dashboard demo" src="assets/nakama_demo_light.png" />
-</picture>
+<img alt="Picking an agent, asking it a question, then the automation that runs the same job every Monday" src="assets/nakama-demo.gif" />
+
+Thirty seconds, unedited: pick the agent, ask it something, see the soul that shapes how it answers, then the schedule that runs the job on Monday without you. Running on a local model through Ollama, no API key, nothing to pay.
 
 Open [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design.
 Open the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.

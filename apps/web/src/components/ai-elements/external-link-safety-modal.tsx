@@ -1,16 +1,15 @@
 "use client";
 
-import { Cancel01Icon } from "hugeicons-react";
-import { useState } from "react";
-import type { LinkSafetyModalProps } from "streamdown";
-
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
+import { Cancel01Icon } from "hugeicons-react";
+import { useState } from "react";
+import type { LinkSafetyModalProps } from "streamdown";
 import { splitExternalUrl } from "@/lib/external-link-url";
 
 const LEARN_MORE_HREF =

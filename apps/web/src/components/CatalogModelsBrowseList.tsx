@@ -1,3 +1,5 @@
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import {
   BrowseModelRowButton,
@@ -6,8 +8,6 @@ import {
   VirtualModelBrowseList,
 } from "@/components/ModelBrowseShell";
 import { filterRowsBySearch } from "@/components/model-browse-utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 export interface CatalogModelsBrowseQuery {
   canFetch?: boolean;

@@ -1,5 +1,5 @@
 import type { ArtifactFile } from "@nakama/core/contract";
-import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
+import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
   classifyArtifactType,
@@ -8,11 +8,7 @@ import { formatBytes } from "@/lib/knowledge-base-files";
 import { artifactBasename } from "@/pages/files/files-artifact-folders";
 import { ArtifactIcon } from "@/pages/files/files-artifact-icon";
 import { ArtifactRowMenu } from "@/pages/files/files-artifact-row-menu";
-import {
-  formatTimestamp,
-  iconActionHitArea,
-  toChatArtifactRef,
-} from "@/pages/files/files-shared";
+import { formatTimestamp, toChatArtifactRef } from "@/pages/files/files-shared";
 
 export function ArtifactGridCard({
   profileId,
@@ -29,17 +25,20 @@ export function ArtifactGridCard({
 }) {
   const kind = classifyArtifactType(artifact);
   const typeLabel = ARTIFACT_TYPE_FILTER_LABELS[kind];
-  const isImage = kind === "image";
+  const { imagePreviewUrl, openPanel } = useArtifactAttachmentPreviewPanel({
+    artifact: toChatArtifactRef(artifact),
+    id: `files-page-grid:${artifact.path || artifact.filename}`,
+    profileId,
+  });
 
   return (
-    <li className="flex min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background">
+    <li className="relative flex min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background transition-colors hover:bg-muted/40">
       <div className="relative aspect-[4/3] overflow-hidden border-border border-b bg-muted/20">
-        {isImage ? (
-          <ArtifactAttachmentPreview
-            artifact={toChatArtifactRef(artifact)}
-            className="absolute inset-0 h-full w-full max-w-none gap-0 rounded-none border-0 bg-transparent p-0 hover:bg-transparent [&>div:first-child]:aspect-auto [&>div:first-child]:h-full [&>div:first-child]:rounded-none [&>div:first-child]:border-0 [&>div:last-child]:hidden [&_img]:aspect-auto [&_img]:h-full [&_img]:rounded-none [&_img]:border-0 [&_img]:outline-none"
-            id={`files-page-grid:${artifact.path || artifact.filename}`}
-            profileId={profileId}
+        {kind === "image" && imagePreviewUrl ? (
+          <img
+            alt=""
+            className="h-full w-full object-cover"
+            src={imagePreviewUrl}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
@@ -69,16 +68,13 @@ export function ArtifactGridCard({
             {formatTimestamp(artifact.updatedAt)}
           </p>
         </div>
-        <div className="mt-auto flex items-center justify-end gap-2">
-          {isImage ? null : (
-            <ArtifactAttachmentPreview
-              artifact={toChatArtifactRef(artifact)}
-              className={iconActionHitArea}
-              id={`files-page-grid-view:${artifact.path || artifact.filename}`}
-              profileId={profileId}
-              variant="icon"
-            />
-          )}
+        <button
+          aria-label={`View ${artifact.filename}`}
+          className="absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+          onClick={openPanel}
+          type="button"
+        />
+        <div className="relative z-10 mt-auto flex self-end">
           <ArtifactRowMenu
             artifact={artifact}
             deletePending={deletePending}

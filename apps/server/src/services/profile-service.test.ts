@@ -1,8 +1,16 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { getProfileSoulDir, writeArtifactShareSnapshot } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -943,6 +951,55 @@ describe("profile service deleteProfile", () => {
     expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
   });
 
+  test("removes the deleted profile workspace without touching another profile", async () => {
+    const { db, service } = await setup();
+    const removed = await service.createProfile(ORG_ID, { name: "Removed" });
+    const kept = await service.createProfile(ORG_ID, { name: "Kept" });
+    const removedDir = getProfileSoulDir(ORG_ID, removed.profile.id);
+    const keptDir = getProfileSoulDir(ORG_ID, kept.profile.id);
+    const artifactDir = path.join(removedDir, "artifacts");
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(path.join(artifactDir, "report.md"), "private data");
+
+    await service.deleteProfile(ORG_ID, removed.profile.id);
+
+    expect(await db.getProfile(removed.profile.id)).toBeNull();
+    await expect(access(removedDir)).rejects.toThrow();
+    expect(
+      (await readFile(path.join(keptDir, "SOUL.md"), "utf8")).length
+    ).toBeGreaterThan(0);
+  });
+
+  test("removes artifact share snapshots before their rows cascade", async () => {
+    const { db, service } = await setup();
+    const removed = await service.createProfile(ORG_ID, { name: "Removed" });
+    const shareId = "share_delete_test";
+    const storagePath = await writeArtifactShareSnapshot({
+      bytes: Buffer.from("shared private data"),
+      filename: "report.md",
+      orgId: ORG_ID,
+      shareId,
+    });
+    await db.createArtifactShare({
+      createdAt: new Date().toISOString(),
+      createdByUserId: "user_test",
+      filename: "report.md",
+      id: shareId,
+      mimeType: "text/markdown",
+      orgId: ORG_ID,
+      profileId: removed.profile.id,
+      revokedAt: null,
+      sizeBytes: 19,
+      sourcePath: "artifacts/report.md",
+      storagePath,
+      tokenHash: "share_token_hash",
+    });
+
+    await service.deleteProfile(ORG_ID, removed.profile.id);
+
+    await expect(access(storagePath)).rejects.toThrow();
+  });
+
   test("deletes the default when the org has 3 profiles and promotes a successor", async () => {
     const { db, service } = await setup();
     const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
@@ -973,6 +1030,84 @@ describe("profile service deleteProfile", () => {
     expect((await db.getDefaultProfileForOrg(ORG_ID))?.id).toBe(
       third.profile.id
     );
+  });
+});
+
+describe("profile service plugin tool org scope", () => {
+  let tempConfigDir = "";
+
+  afterEach(async () => {
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { force: true, recursive: true });
+      tempConfigDir = "";
+    }
+  });
+
+  test("listTools omits another org's plugin-owned tools", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "Other org write",
+      handlerConfig: { actionKey: "write" },
+      handlerType: "plugin",
+      id: "tool_other",
+      name: "notes_write_other",
+      orgId: "org_other",
+      pluginId: "notes",
+      pluginKey: "write",
+      updatedAt: now,
+    });
+    await db.upsertTool({
+      createdAt: now,
+      description: "This org write",
+      handlerConfig: { actionKey: "write" },
+      handlerType: "plugin",
+      id: "tool_mine",
+      name: "notes_write_mine",
+      orgId: ORG_ID,
+      pluginId: "notes",
+      pluginKey: "write",
+      updatedAt: now,
+    });
+
+    const listed = await service.listTools(ORG_ID);
+    expect(listed.tools.some((tool) => tool.id === "tool_other")).toBe(false);
+    expect(listed.tools.some((tool) => tool.id === "tool_mine")).toBe(true);
+  });
+
+  test("assignTool rejects a plugin tool owned by another org", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-plugin-org-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const profile = await service.createProfile(ORG_ID, { name: "Scoped" });
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "Other org write",
+      handlerConfig: { actionKey: "write" },
+      handlerType: "plugin",
+      id: "tool_other",
+      name: "notes_write_other",
+      orgId: "org_other",
+      pluginId: "notes",
+      pluginKey: "write",
+      updatedAt: now,
+    });
+
+    await expect(
+      service.assignTool(ORG_ID, profile.profile.id, { toolId: "tool_other" })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await db.listToolsForProfile(profile.profile.id)).some(
+        (tool) => tool.id === "tool_other"
+      )
+    ).toBe(false);
   });
 });
 

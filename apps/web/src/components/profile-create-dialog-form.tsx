@@ -1,16 +1,16 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { Cancel01Icon } from "hugeicons-react";
-import type { ChangeEvent, ReactNode, RefObject } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/select";
+import { cn } from "@nakama/ui/utils";
+import { Cancel01Icon } from "hugeicons-react";
+import type { ChangeEvent, ReactNode, RefObject } from "react";
 
 export function ProfileCreateDialogForm({
   busy,

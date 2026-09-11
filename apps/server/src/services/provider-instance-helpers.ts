@@ -156,6 +156,8 @@ export function modelExistsOnInstance(
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
+      instance.type === "doubao" ||
+      instance.type === "vercel_ai_gateway" ||
       instance.type === "together" ||
       instance.type === "mistral" ||
       instance.type === "qwen" ||
@@ -359,7 +361,9 @@ export function applyProviderInstanceUpdate(
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
+      instance.type === "doubao" ||
       instance.type === "together" ||
+      instance.type === "vercel_ai_gateway" ||
       instance.type === "mistral" ||
       instance.type === "qwen" ||
       instance.type === "qwen_cn" ||

@@ -1,5 +1,3 @@
-import { ArrowDown01Icon } from "hugeicons-react";
-import { useMemo, useState } from "react";
 import {
   Command,
   CommandEmpty,
@@ -7,20 +5,18 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { ArrowDown01Icon } from "hugeicons-react";
+import { useMemo, useState } from "react";
 import { useTimezoneCatalog } from "@/hooks/use-timezones";
 import {
   getBrowserTimezone,
   getFilteredTimezoneGroups,
   getTimezoneDisplay,
 } from "@/lib/timezones";
-import { cn } from "@/lib/utils";
 
 interface TimezoneSelectProps {
   allowAccountDefault?: boolean;

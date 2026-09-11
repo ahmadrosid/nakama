@@ -1,14 +1,14 @@
 import type { ToolDetail } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
 import { PlayIcon } from "hugeicons-react";
 import { ToolSourceCodeBlock } from "@/components/tools/ToolSourceCodeBlock";
 import {
   formatToolPlaygroundResult,
   type ToolPlaygroundRunControls,
 } from "@/components/tools/use-tool-playground-run";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 
 export function ToolPlaygroundRunForm({
   tool,

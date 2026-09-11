@@ -260,8 +260,12 @@ export function createSuperBotTools(
       description: "List all registered tools.",
       name: "list_tools",
       parameters: emptyObjectSchema(),
-      async run() {
-        return profileService.listTools();
+      async run(_input, context) {
+        const orgId = context.orgId?.trim();
+        if (!orgId) {
+          return { tools: [] };
+        }
+        return profileService.listTools(orgId);
       },
     },
     {

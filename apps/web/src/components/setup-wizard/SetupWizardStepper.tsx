@@ -1,8 +1,8 @@
+import { cn } from "@nakama/ui/utils";
 import {
   SETUP_STEPS,
   type SetupStepId,
 } from "@/components/setup-wizard/setup-wizard.shared";
-import { cn } from "@/lib/utils";
 
 interface SetupWizardStepperProps {
   currentStep: SetupStepId;

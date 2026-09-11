@@ -1,10 +1,10 @@
-import { THEME_OPTIONS } from "@/components/theme-options";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
+import { THEME_OPTIONS } from "@/components/theme-options";
 import { useTheme } from "@/context/use-theme";
 import { isTheme } from "@/lib/theme";
 

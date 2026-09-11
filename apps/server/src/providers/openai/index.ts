@@ -148,8 +148,16 @@ function providerLabel(providerName: ProviderName): string {
     return "DeepSeek";
   }
 
+  if (providerName === "doubao") {
+    return "Doubao (Volcengine)";
+  }
+
   if (providerName === "together") {
     return "Together AI";
+  }
+
+  if (providerName === "vercel_ai_gateway") {
+    return "Vercel AI Gateway";
   }
 
   if (providerName === "mistral") {
@@ -375,6 +383,15 @@ async function buildChatCompletionRequestBody(options: {
       : provider === "qwen" || provider === "qwen_cn"
         ? buildQwenThinkingBody(options.thinking)
         : {}),
+    ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
+    ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
+      ? {
+          reasoning: {
+            effort: normalizeThinkingEffort(options.thinking.effort),
+            enabled: true,
+          },
+        }
+      : {}),
     ...(provider === "perplexity" && options.thinking?.enabled
       ? {
           reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
@@ -461,6 +478,17 @@ function buildQwenThinkingBody(
   return { enable_thinking: false };
 }
 
+/** Ark Seed: `thinking.type` only. Default is on for many Seed models — opt out unless UI enables. */
+function buildDoubaoThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
+  }
+
+  return { thinking: { type: "disabled" as const } };
+}
+
 function readReasoningContent(
   value: unknown,
   options?: { preserveWhitespace?: boolean }
@@ -473,7 +501,9 @@ function readReasoningContent(
   const direct =
     typeof record.reasoning_content === "string"
       ? record.reasoning_content
-      : undefined;
+      : typeof record.reasoning === "string"
+        ? record.reasoning
+        : undefined;
 
   if (direct === undefined) {
     return;

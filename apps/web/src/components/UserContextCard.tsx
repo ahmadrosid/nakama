@@ -1,6 +1,5 @@
 import { NakamaApiError } from "@nakama/core/api-error";
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +7,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
+import { cn } from "@nakama/ui/utils";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
   useInitUserContextMutation,
@@ -18,7 +19,6 @@ import {
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 function formatUserContextError(error: unknown): string {
   if (error instanceof NakamaApiError && error.status === 404) {

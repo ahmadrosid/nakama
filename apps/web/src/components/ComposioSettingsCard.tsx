@@ -1,20 +1,20 @@
-import { Link01Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { useEffect, useState } from "react";
-import { IntegrationCardShell } from "@/components/integration-settings.shared";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@/components/ui/input-group";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/input-group";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { Link01Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
+import { useEffect, useState } from "react";
+import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import {
   useComposioSettings,
   useSaveComposioSettings,
 } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 function ComposioStatusBadge({
   configured,

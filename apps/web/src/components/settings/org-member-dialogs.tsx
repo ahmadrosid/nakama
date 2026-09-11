@@ -1,9 +1,5 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
-import { useQuery } from "@tanstack/react-query";
-import { Copy01Icon, Mail01Icon } from "hugeicons-react";
-import { Link } from "react-router-dom";
-import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,19 +7,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { Spinner } from "@nakama/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { useQuery } from "@tanstack/react-query";
+import { Copy01Icon, Mail01Icon } from "hugeicons-react";
+import { Link } from "react-router-dom";
+import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
 import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
 
 export type OrgMemberAddCredentials = {

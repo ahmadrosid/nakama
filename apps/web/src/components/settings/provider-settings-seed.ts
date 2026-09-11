@@ -8,55 +8,14 @@ export function seedManageModelRows(
   customModels: CustomModelEntry[] | undefined,
   configuredModels: ProviderModelOption[]
 ): ModelListRow[] {
-  if (customModels?.length) {
-    return customModels.map((model) => ({
-      default: model.default,
-      id: model.id,
-      inputPerMillionUsd: model.inputPerMillionUsd,
-      name: model.name ?? model.id,
-      outputPerMillionUsd: model.outputPerMillionUsd,
-      supportsThinking: model.supportsThinking,
-    }));
-  }
-
-  return configuredModels.map((model) => ({
+  const models = customModels?.length ? customModels : configuredModels;
+  return models.map((model) => ({
     default: model.default,
     id: model.id,
     inputPerMillionUsd: model.inputPerMillionUsd,
     name: model.name ?? model.id,
     outputPerMillionUsd: model.outputPerMillionUsd,
     supportsThinking: model.supportsThinking,
+    supportsVision: model.supportsVision,
   }));
-}
-
-/** Seeds OpenRouter / Cerebras (and similar) manage dialogs. */
-export function seedShortlistManageModelRows(
-  customModels: CustomModelEntry[] | undefined,
-  currentModel?: string | null,
-  currentModelName?: string | null
-): ModelListRow[] {
-  if (customModels?.length) {
-    return customModels.map((model) => ({
-      default: model.default,
-      id: model.id,
-      inputPerMillionUsd: model.inputPerMillionUsd,
-      name: model.name ?? model.id,
-      outputPerMillionUsd: model.outputPerMillionUsd,
-      supportsThinking: model.supportsThinking,
-      supportsVision: model.supportsVision,
-    }));
-  }
-
-  const trimmed = currentModel?.trim();
-  if (trimmed) {
-    return [
-      {
-        default: true,
-        id: trimmed,
-        name: currentModelName?.trim() || trimmed,
-      },
-    ];
-  }
-
-  return [];
 }

@@ -40,6 +40,46 @@ function createApp(agentOverrides: Record<string, unknown> = {}) {
 }
 
 describe("tool playground routes", () => {
+  test("GET source is allowed for plugin-owned tools", async () => {
+    const { app, authService, databaseAdapter } = createApp({
+      getTool: async (toolId: string) => ({
+        tool: {
+          createdAt: new Date().toISOString(),
+          description: "Plugin write",
+          handlerConfig: { actionKey: "write" },
+          handlerType: "plugin",
+          id: toolId,
+          name: "notes_write",
+          pluginId: "notes",
+          pluginKey: "write",
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+      getToolSource: async () => ({
+        content: "",
+        language: "javascript" as const,
+        path: "plugins/notes/write",
+      }),
+    });
+    const { orgId, adminSession } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "acme-plugin-source",
+      "admin-plugin-source@acme.com"
+    );
+
+    const source = await app.fetch(
+      new Request("http://localhost:4310/v1/tools/tool_plugin/source", {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+    expect(source.status).toBe(200);
+    await expect(source.json()).resolves.toMatchObject({
+      path: "plugins/notes/write",
+    });
+  });
+
   test("org admin can read tool detail", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const { orgId, adminSession } = await createOrgAdminSession(

@@ -74,6 +74,7 @@ describe("seedOrgDefaultProfile", () => {
   test("assigns default bundled skills but not super bot skills", async () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
+    await upsertSkill(db, "skill-installer");
     await upsertSkill(db, "update-profile-memory");
     await upsertSkill(db, "archive-profile-memory");
     await upsertSkill(db, "save-artifact");
@@ -85,6 +86,7 @@ describe("seedOrgDefaultProfile", () => {
     );
 
     expect(skillNames).toContain("create-automation");
+    expect(skillNames).toContain("skill-installer");
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
     expect(skillNames).toContain("save-artifact");

@@ -16,6 +16,7 @@ export interface EmailOutboundAdapter {
 export interface TelegramOutboundAdapter {
   send(input: {
     text: string;
+    orgId?: string | null;
     chatIds?: number[];
     topicId?: number;
     parseMode?: "HTML";

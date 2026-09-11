@@ -191,6 +191,40 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
   },
   {
+    contextWindow: 256_000,
+    default: true,
+    id: "doubao-seed-2-1-pro-260628",
+    inputPerMillionUsd: 0.83,
+    maxOutputTokens: 256_000,
+    name: "Doubao Seed 2.1 Pro",
+    outputPerMillionUsd: 4.14,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 256_000,
+    id: "doubao-seed-2-1-turbo-260628",
+    inputPerMillionUsd: 0.41,
+    maxOutputTokens: 256_000,
+    name: "Doubao Seed 2.1 Turbo",
+    outputPerMillionUsd: 2.07,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 256_000,
+    id: "doubao-seed-1-8-251228",
+    inputPerMillionUsd: 0.26,
+    maxOutputTokens: 256_000,
+    name: "Doubao Seed 1.8",
+    outputPerMillionUsd: 0.67,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
     contextWindow: 262_144,
     default: true,
     id: "mistral-small-2603",
@@ -397,6 +431,71 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
       supportsVision: false,
     },
   ]),
+  {
+    contextWindow: 128_000,
+    default: true,
+    id: "openai/gpt-4o-mini",
+    inputPerMillionUsd: 0.15,
+    maxOutputTokens: 16_384,
+    name: "GPT-4o mini",
+    outputPerMillionUsd: 0.6,
+    provider: "vercel_ai_gateway",
+    supportsVision: true,
+  },
+  {
+    contextWindow: 400_000,
+    id: "openai/gpt-5",
+    inputPerMillionUsd: 1.25,
+    maxOutputTokens: 128_000,
+    name: "GPT-5",
+    outputPerMillionUsd: 10,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_000_000,
+    id: "anthropic/claude-sonnet-4.5",
+    inputPerMillionUsd: 3,
+    maxOutputTokens: 64_000,
+    name: "Claude Sonnet 4.5",
+    outputPerMillionUsd: 15,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_000_000,
+    id: "google/gemini-2.5-flash",
+    inputPerMillionUsd: 0.3,
+    maxOutputTokens: 65_536,
+    name: "Gemini 2.5 Flash",
+    outputPerMillionUsd: 2.5,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 128_000,
+    id: "meta/llama-3.3-70b",
+    inputPerMillionUsd: 0.72,
+    maxOutputTokens: 8192,
+    name: "Llama 3.3 70B",
+    outputPerMillionUsd: 0.72,
+    provider: "vercel_ai_gateway",
+    supportsVision: false,
+  },
+  {
+    contextWindow: 1_000_000,
+    id: "deepseek/deepseek-v4-flash",
+    inputPerMillionUsd: 0.13,
+    maxOutputTokens: 384_000,
+    name: "DeepSeek V4 Flash",
+    outputPerMillionUsd: 0.26,
+    provider: "vercel_ai_gateway",
+    supportsThinking: true,
+    supportsVision: false,
+  },
   {
     contextWindow: 131_072,
     default: true,
@@ -813,7 +912,9 @@ export function getDefaultModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
+      provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||
       provider === "qwen_cn" ||
@@ -836,21 +937,23 @@ export function getDefaultModel(
             ? "deepseek-v4-flash"
             : provider === "together"
               ? "openai/gpt-oss-120b"
-              : provider === "mistral"
-                ? "mistral-small-2603"
-                : provider === "qwen" || provider === "qwen_cn"
-                  ? "qwen3.7-plus"
-                  : provider === "perplexity"
-                    ? "sonar"
-                    : provider === "cerebras"
-                      ? "gpt-oss-120b"
-                      : provider === "fireworks"
-                        ? "accounts/fireworks/models/kimi-k2p6"
-                        : provider === "opencode_go"
-                          ? "opencode-go/kimi-k2.7-code"
-                          : provider === "cloudflare"
-                            ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                            : "gpt-5.4";
+              : provider === "vercel_ai_gateway"
+                ? "openai/gpt-4o-mini"
+                : provider === "mistral"
+                  ? "mistral-small-2603"
+                  : provider === "qwen" || provider === "qwen_cn"
+                    ? "qwen3.7-plus"
+                    : provider === "perplexity"
+                      ? "sonar"
+                      : provider === "cerebras"
+                        ? "gpt-oss-120b"
+                        : provider === "fireworks"
+                          ? "accounts/fireworks/models/kimi-k2p6"
+                          : provider === "opencode_go"
+                            ? "opencode-go/kimi-k2.7-code"
+                            : provider === "cloudflare"
+                              ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                              : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -914,7 +1017,9 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
+      provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||
       provider === "qwen_cn" ||

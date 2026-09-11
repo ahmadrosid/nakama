@@ -28,6 +28,7 @@ import { registerOrgCuratorRoutes } from "./routes/org-curator";
 import { registerOrgMemberRoutes } from "./routes/org-members";
 import { registerOrgMemoryRoutes } from "./routes/org-memory";
 import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
+import { registerPluginRoutes } from "./routes/plugins";
 import { registerProfilePortabilityRoutes } from "./routes/profile-portability";
 import { registerProfileRoutes } from "./routes/profiles";
 import { registerSessionRoutes } from "./routes/sessions";
@@ -40,7 +41,6 @@ import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
-import { registerWorkflowRoutes } from "./routes/workflows";
 import { errorResponse, isSecureRequest } from "./shared";
 import type { HonoApp } from "./types";
 
@@ -238,8 +238,8 @@ export function createHonoApp(options: ServerOptions) {
   registerMcpRoutes(app, options);
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
+  registerPluginRoutes(app, options);
   registerAutomationRoutes(app, options);
-  registerWorkflowRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
   registerTokenOptimizationRoutes(app, options);
   registerAutomationWorkerSettingsRoutes(app, options);

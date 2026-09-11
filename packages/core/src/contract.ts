@@ -1,4 +1,10 @@
 import type { LoadAttachmentBytes } from "./attachments/content";
+import type {
+  OrgPluginLifecycleState,
+  PluginActionAccess,
+  PluginActionEffect,
+  PluginManifest,
+} from "./plugins";
 
 export type AutomationTrigger =
   | { type: "manual" }
@@ -1791,6 +1797,8 @@ export interface SkillSummary {
   hasTool: boolean;
   id: string;
   name: string;
+  pluginId?: string | null;
+  pluginKey?: string | null;
   sourcePath: string;
   updatedAt: string;
   usage?: SkillUsageSummary;
@@ -1929,6 +1937,8 @@ export interface ToolSummary {
   handlerType: string;
   id: string;
   name: string;
+  pluginId?: string | null;
+  pluginKey?: string | null;
 }
 
 export interface ToolDetail extends ToolSummary {
@@ -2227,6 +2237,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "doubao"
   | "mistral"
   | "perplexity"
   | "cerebras"
@@ -2246,7 +2257,8 @@ export type ProviderName =
   | "xai"
   | "together"
   | "qwen"
-  | "qwen_cn";
+  | "qwen_cn"
+  | "vercel_ai_gateway";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;
@@ -2471,6 +2483,8 @@ export interface ToolContext {
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
+  /** Assigned plugin tools in this group are discovered per user turn. */
+  discoveryGroup?: string;
   /**
    * When true, the LLM provider runs this tool itself and `run` is never
    * called. Only `web_search` uses it today: the built-in stub is hosted, a
@@ -2578,6 +2592,123 @@ export interface ComposioToolErrorResult {
   code: ComposioToolErrorCode;
   error: string;
   toolkitSlug?: string;
+}
+
+export interface PluginReleaseSummary {
+  createdAt: string;
+  digest: string;
+  manifest: PluginManifest;
+  pluginId: string;
+  version: string;
+}
+
+export interface OrgPluginSummary {
+  databaseGeneration: string | null;
+  lastLifecycleError: string | null;
+  lifecycleState: OrgPluginLifecycleState;
+  pendingOperation: string | null;
+  pluginId: string;
+  revision: number;
+  selectedVersion: string | null;
+  updatedAt: string;
+}
+
+export interface PluginActionDescription {
+  access: PluginActionAccess;
+  description: string;
+  effect: PluginActionEffect;
+  key: string;
+}
+
+export interface PluginUiSummary {
+  assetsDir: string;
+  entryModule: string;
+  pageLabel: string;
+}
+
+export interface OrgPluginDetail extends OrgPluginSummary {
+  actions: PluginActionDescription[];
+  availableVersions: string[];
+  description: string;
+  installed: boolean;
+  name: string;
+  ui: PluginUiSummary | null;
+}
+
+export interface ListOrgPluginsResponse {
+  plugins: OrgPluginDetail[];
+}
+
+export interface ListPluginReleasesResponse {
+  releases: PluginReleaseSummary[];
+}
+
+export interface PluginPackageRequest {
+  packageName: string;
+  version: string;
+}
+
+export interface PluginPackagePreviewResponse {
+  contributions: {
+    actionKeys: string[];
+    hasDatabase: boolean;
+    hasUi: boolean;
+    skillKeys: string[];
+  };
+  digest: string;
+  integrity: string;
+  manifest: PluginManifest;
+}
+
+export interface InstallPluginPackageRequest extends PluginPackageRequest {
+  expectedDigest: string;
+  expectedIntegrity: string;
+}
+
+export interface InstallPluginPackageResponse {
+  createdAt: string;
+  digest: string;
+  manifest: PluginManifest;
+  pluginId: string;
+  reused: boolean;
+  version: string;
+}
+
+export interface InstallOrgPluginRequest {
+  version?: string;
+}
+
+export interface PluginRevisionRequest {
+  expectedRevision: number;
+}
+
+export interface UpdateOrgPluginRequest {
+  expectedRevision: number;
+  targetVersion: string;
+}
+
+export interface PluginContributionChangePreview {
+  lastLifecycleError: string | null;
+  removedActionKeys: string[];
+  removedSkillKeys: string[];
+  retainedSkillIds: string[];
+  retainedToolIds: string[];
+}
+
+export interface DeleteRetainedPluginDataRequest {
+  confirm: true;
+  expectedRevision: number;
+  orgId: string;
+  pluginId: string;
+}
+
+export interface InvokePluginActionRequest {
+  input?: unknown;
+}
+
+export interface InvokePluginActionResponse {
+  invocationId: string;
+  result: unknown;
 }
 
 export interface XaiOAuthCredentials {

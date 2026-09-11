@@ -3,6 +3,7 @@ import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,7 +12,6 @@ import {
 } from "@/components/chat/agent-questionnaire.shared";
 import { AgentQuestionnaireNav } from "@/components/chat/agent-questionnaire-nav";
 import { AgentQuestionnaireQuestion } from "@/components/chat/agent-questionnaire-question";
-import { Button } from "@/components/ui/button";
 import {
   type ComposerStackEdge,
   composerShelfPanelClass,

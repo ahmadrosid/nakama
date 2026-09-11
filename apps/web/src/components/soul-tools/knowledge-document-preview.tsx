@@ -1,4 +1,6 @@
 import type { KnowledgeBaseDocument } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { ViewIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
@@ -15,12 +17,6 @@ import {
   ArtifactPreviewModeToggle,
 } from "@/components/chat/artifact-preview-mode-toggle";
 import { useKnowledgeDocumentPreviewContent } from "@/components/soul-tools/use-knowledge-document-preview-content";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,

@@ -23,7 +23,9 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "doubao"
     | "together"
+    | "vercel_ai_gateway"
     | "mistral"
     | "qwen"
     | "qwen_cn"
@@ -141,6 +143,22 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats vercel_ai_gateway models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats mistral models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -176,6 +194,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("qw-cn-1", "model-1"),
         group("qw-cn-1", "qwen_cn", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats doubao models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -269,6 +303,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(false);
   });
 
+  test("treats doubao models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats cerebras models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -313,6 +363,22 @@ describe("resolveModelVisionSupport", () => {
       resolveModelVisionSupport(
         encodeModelSelection("qw-1", "model-1"),
         group("qw-1", "qwen", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats vercel_ai_gateway models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -420,7 +486,9 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "doubao",
           "together",
+          "vercel_ai_gateway",
           "mistral",
           "qwen",
           "qwen_cn",
