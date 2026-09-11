@@ -183,9 +183,7 @@ function SidebarNavGroup({
   toggleSystemNav: () => void;
   unreadTotal: number;
 }) {
-  const containsActive =
-    group.collapsible === true && group.items.some((item) => item.id === page);
-  const groupExpanded = !systemNavCollapsed || containsActive;
+  const groupExpanded = !systemNavCollapsed;
   // Icon rail always shows every destination; tree collapse only
   // applies when labels are visible.
   const itemsVisible = !group.collapsible || collapsed || groupExpanded;
@@ -202,12 +200,7 @@ function SidebarNavGroup({
         <button
           aria-expanded={groupExpanded}
           className="sidebar-nav-group-label"
-          onClick={() => {
-            if (groupExpanded && containsActive) {
-              return;
-            }
-            toggleSystemNav();
-          }}
+          onClick={toggleSystemNav}
           type="button"
         >
           <ArrowDown01Icon
