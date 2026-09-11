@@ -14,7 +14,11 @@ import type {
   SessionStatusResponse,
   UpdateSessionRequest,
 } from "@nakama/core";
-import { AGENT_CHANNELS, formatServerError } from "@nakama/core";
+import {
+  AGENT_CHANNELS,
+  formatServerError,
+  NakamaApiError,
+} from "@nakama/core";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
@@ -623,7 +627,10 @@ export function registerSessionRoutes(
     } catch (error) {
       const message = formatServerError(error);
       sessionTurnRegistry.endTurn(sessionId, { error: message, type: "error" });
-      return errorResponse(message, 500);
+      return errorResponse(
+        message,
+        error instanceof NakamaApiError ? error.status : 500
+      );
     }
   });
 }

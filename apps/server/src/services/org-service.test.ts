@@ -107,6 +107,28 @@ describe("OrgService", () => {
     expect(switched.slug).toBe("beta-switch");
   });
 
+  test("updates organization monthly LLM turn limit", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme Corp",
+      slug: "acme-usage-limit",
+    });
+
+    const updated = await orgService.updateOrganization(
+      created.organization.id,
+      {
+        monthlyLlmTurnLimit: 250,
+      }
+    );
+
+    expect(updated.monthlyLlmTurnLimit).toBe(250);
+    await expect(
+      orgService.updateOrganization(created.organization.id, {
+        monthlyLlmTurnLimit: -1,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   test("updates organization consolidate flag", async () => {
     const { orgService } = createOrgService();
 

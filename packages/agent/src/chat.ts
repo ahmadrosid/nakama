@@ -594,12 +594,20 @@ async function runConversation(
     if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
       break;
     }
-
     const { localTools: iterationTools } = partitionTools(tools);
     const llmTools =
       enableToolLoop && iterationTools.length
         ? toLlmToolDefinitions(iterationTools)
         : undefined;
+    const reservedTokens =
+      estimateHistoryTokens(
+        history,
+        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+        llmTools,
+        providerReplaysThinking(provider.name)
+      ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
+    await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
+
     const result = await generateReply(
       provider,
       systemPrompt,

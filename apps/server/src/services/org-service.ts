@@ -130,6 +130,30 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
+    const monthlyLlmTokenLimit =
+      request.monthlyLlmTokenLimit === undefined
+        ? (org.monthlyLlmTokenLimit ?? 0)
+        : request.monthlyLlmTokenLimit;
+    const monthlyLlmTurnLimit =
+      request.monthlyLlmTurnLimit === undefined
+        ? (org.monthlyLlmTurnLimit ?? 0)
+        : request.monthlyLlmTurnLimit;
+    const monthlyLlmWarningPercent =
+      request.monthlyLlmWarningPercent === undefined
+        ? (org.monthlyLlmWarningPercent ?? 80)
+        : request.monthlyLlmWarningPercent;
+    assertMonthlyLlmTurnLimit(monthlyLlmTokenLimit);
+    assertMonthlyLlmTurnLimit(monthlyLlmTurnLimit);
+    if (
+      !Number.isInteger(monthlyLlmWarningPercent) ||
+      monthlyLlmWarningPercent < 1 ||
+      monthlyLlmWarningPercent > 99
+    ) {
+      throw new NakamaApiError(
+        "Monthly LLM warning percent must be an integer from 1 to 99.",
+        400
+      );
+    }
     const skillsCuratorStaleAfterDays =
       request.skillsCuratorStaleAfterDays === undefined
         ? (org.skillsCuratorStaleAfterDays ?? 30)
@@ -144,6 +168,9 @@ export class OrgService {
     );
     const updated: StoredOrganizationRecord = {
       ...org,
+      monthlyLlmTokenLimit,
+      monthlyLlmTurnLimit,
+      monthlyLlmWarningPercent,
       name,
       skillsCuratorArchiveAfterDays,
       skillsCuratorConsolidateEnabled:
@@ -1089,6 +1116,15 @@ function assertSkillCuratorFreshnessClocks(
   }
 }
 
+function assertMonthlyLlmTurnLimit(limit: number): void {
+  if (!(Number.isInteger(limit) && limit >= 0 && limit <= 1_000_000)) {
+    throw new NakamaApiError(
+      "Monthly LLM turn limit must be an integer from 0 to 1000000.",
+      400
+    );
+  }
+}
+
 function assertNewPassword(password: string): void {
   if (password.length < 8) {
     throw new NakamaApiError("Password must be at least 8 characters.", 400);
@@ -1102,6 +1138,7 @@ function toOrganizationSummary(
     archivedAt: record.archivedAt ?? null,
     createdAt: record.createdAt,
     id: record.id,
+    monthlyLlmTurnLimit: record.monthlyLlmTurnLimit ?? 0,
     name: record.name,
     skillsCuratorArchiveAfterDays: record.skillsCuratorArchiveAfterDays ?? 90,
     skillsCuratorConsolidateEnabled:

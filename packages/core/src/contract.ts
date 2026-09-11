@@ -487,6 +487,9 @@ export interface OrganizationSummary {
   archivedAt?: string | null;
   createdAt: string;
   id: string;
+  monthlyLlmTokenLimit?: number;
+  monthlyLlmTurnLimit?: number;
+  monthlyLlmWarningPercent?: number;
   name: string;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
@@ -510,6 +513,9 @@ export interface CreateOrganizationRequest {
 }
 
 export interface UpdateOrganizationRequest {
+  monthlyLlmTokenLimit?: number;
+  monthlyLlmTurnLimit?: number;
+  monthlyLlmWarningPercent?: number;
   name?: string;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
@@ -578,6 +584,16 @@ export interface RunSkillCuratorInternalRequest {
 
 export interface ListOrganizationsResponse {
   organizations: OrganizationSummary[];
+}
+
+export interface OrgLlmQuotaStatusResponse {
+  month: string;
+  status: "blocked" | "ok" | "warning";
+  tokenLimit: number;
+  tokens: number;
+  turnLimit: number;
+  turns: number;
+  warningPercent: number;
 }
 
 export interface OrganizationResponse {
@@ -2421,6 +2437,8 @@ export interface ProviderClient {
 export interface ToolContext {
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
+  /** Atomically reserves quota before a new LLM invocation. */
+  assertCanStartLlmTurn?: (reservedTokens: number) => Promise<void>;
   automationId?: string;
   automationRunId?: string;
   /** Session channel when known (used for interactive-only tool gates). */

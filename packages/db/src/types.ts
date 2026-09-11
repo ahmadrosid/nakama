@@ -454,6 +454,9 @@ export interface StoredOrganizationRecord {
   archivedAt?: string | null;
   createdAt: string;
   id: string;
+  monthlyLlmTokenLimit?: number;
+  monthlyLlmTurnLimit?: number;
+  monthlyLlmWarningPercent?: number;
   name: string;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
@@ -1032,6 +1035,14 @@ export interface DatabaseAdapter {
     orgId: string,
     archivedAt: string
   ): Promise<boolean>;
+  tryReserveMonthlyLlmQuota(input: {
+    existingTokens: number;
+    existingTurns: number;
+    month: string;
+    orgId: string;
+    reservedTokens: number;
+    updatedAt: string;
+  }): Promise<boolean>;
   unassignMcpServerFromProfile(
     profileId: string,
     serverId: string

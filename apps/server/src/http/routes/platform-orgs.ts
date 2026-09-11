@@ -137,7 +137,17 @@ export function registerPlatformOrgRoutes(
           content: {
             "application/json": {
               schema: z
-                .object({ name: z.string() })
+                .object({
+                  monthlyLlmTokenLimit: z.number().int().min(0).optional(),
+                  monthlyLlmTurnLimit: z.number().int().min(0).optional(),
+                  monthlyLlmWarningPercent: z
+                    .number()
+                    .int()
+                    .min(1)
+                    .max(99)
+                    .optional(),
+                  name: z.string().optional(),
+                })
                 .openapi("UpdateOrganizationRequest"),
             },
           },
