@@ -457,7 +457,7 @@ export function oauthResultPage(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)} - Nakama</title>
+  <title>${Bun.escapeHTML(title)} - Nakama</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
     h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
@@ -466,9 +466,9 @@ export function oauthResultPage(
   </style>
 </head>
 <body>
-  <h1>${escapeHtml(title)}</h1>
-  <p>${escapeHtml(detail)}</p>
-  <p><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></p>
+  <h1>${Bun.escapeHTML(title)}</h1>
+  <p>${Bun.escapeHTML(detail)}</p>
+  <p><a href="${Bun.escapeHTML(link.href)}">${Bun.escapeHTML(link.label)}</a></p>
 </body>
 </html>`,
     {
@@ -476,15 +476,6 @@ export function oauthResultPage(
       status,
     }
   );
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }
 
 const CHANNEL_LIST = `${AGENT_CHANNELS.slice(0, -1).join(", ")}, or ${
