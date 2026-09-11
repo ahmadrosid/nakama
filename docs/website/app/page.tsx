@@ -11,6 +11,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { HeroPaperBackground } from "@/components/hero-paper-background";
+import { UseCaseRows } from "@/components/use-case-rows";
+import { withBasePath } from "@/lib/base-path";
 import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site-meta";
 
 export const metadata: Metadata = {
@@ -39,32 +41,38 @@ const features: Array<{
   icon: typeof BotIcon;
 }> = [
   {
-    details: "Identity, instructions, tools, and knowledge per profile.",
+    details:
+      "Give each agent its own workspace, memory, instructions, and tools.",
     icon: BotIcon,
     title: "Every agent has a role",
   },
   {
-    details: "One server — shared orgs, channels, and ops.",
+    details:
+      "Add the capabilities your team needs with custom plugins, skills, and tools.",
     icon: PackageIcon,
-    title: "Your nakama, one deployment",
+    title: "Build on your own terms",
   },
   {
-    details: "Orgs, members, profiles, and tools — isolated by tenant.",
+    details:
+      "Run multiple organizations on one instance, each with its own members, agents, and separate data.",
     icon: Building01Icon,
-    title: "Multi-tenant by design",
+    title: "Built for multiple teams",
   },
   {
-    details: "Soul files, skills, knowledge bases, and MCP per agent.",
+    details:
+      "Schedule recurring work and let agents turn successful workflows into reusable skills.",
     icon: SparklesIcon,
-    title: "Flexible agent behavior",
+    title: "Automate and keep learning",
   },
   {
-    details: "Web, CLI, Telegram, WhatsApp, and Discord.",
+    details:
+      "Work with your agents on the web, in the terminal, or through Telegram, WhatsApp, and Discord.",
     icon: MessageMultiple01Icon,
-    title: "Works across channels",
+    title: "Meet your team where they work",
   },
   {
-    details: "Docker, self-host, or getnakama.cloud — open source.",
+    details:
+      "Run Nakama on your own infrastructure or let us handle hosting for you.",
     icon: CloudIcon,
     title: "Self-hosted or managed",
   },
@@ -110,18 +118,23 @@ export default function HomePage() {
       </header>
 
       <main className="flex-1">
-        <section className="hero-section px-4 pt-4 md:px-6 md:pt-6">
-          <div className="hero-frame relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-stone-300/70 dark:border-zinc-500/30">
+        <section className="hero-section pt-4 md:pt-8">
+          <div className="hero-frame relative isolate w-full overflow-hidden">
             <HeroPaperBackground />
 
-            <div className="relative z-20 flex min-h-[28rem] flex-col px-6 pt-12 pb-36 md:min-h-[32rem] md:px-10 md:pt-14 md:pb-40 lg:min-h-[36rem] lg:px-12 lg:pt-16 lg:pb-44">
-              <div className="max-w-xl text-center md:text-left">
-                <h1 className="font-semibold text-4xl text-stone-900 leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl dark:text-white">
-                  AI agents that work with{" "}
-                  <span className="landing-accent">your team.</span>
+            <div className="relative z-10 mx-auto flex min-h-[24rem] max-w-5xl flex-col items-center justify-center px-5 py-16 sm:min-h-[30rem] sm:py-20">
+              <div className="w-full text-center">
+                <h1 className="hero-heading text-balance text-4xl text-stone-900 leading-[1.1] tracking-tight sm:text-5xl lg:text-7xl dark:text-white">
+                  <span className="block">AI agents that work</span>
+                  <span className="block">with your team.</span>
                 </h1>
 
-                <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
+                <p className="mx-auto mt-5 max-w-xl text-balance text-base text-stone-600 sm:text-lg dark:text-white/70">
+                  An open-source platform to build, run, and manage AI agents
+                  together.
+                </p>
+
+                <div className="hero-actions mt-8 flex flex-wrap items-center justify-center gap-3">
                   <Link
                     className="hero-cta-primary inline-flex items-center gap-2"
                     href="/quickstart"
@@ -148,43 +161,45 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            <div className="hero-preview pointer-events-none absolute right-0 bottom-0 left-[12%] z-10 translate-y-[48%] sm:left-[18%] sm:translate-y-[50%] md:left-[22%] md:translate-y-[52%] lg:left-[26%]">
-              <div className="overflow-hidden rounded-t-xl border border-stone-200 border-b-0 bg-stone-50 shadow-[0_-20px_60px_-20px_rgba(28,25,23,0.18)] dark:border-white/12 dark:bg-[#0d0d0f] dark:shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.75)]">
-                <div className="flex items-center gap-1.5 border-stone-200 border-b px-3 py-2.5 dark:border-white/8">
-                  <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
-                  <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
-                  <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
-                  <span className="ml-2 text-[11px] text-stone-500 dark:text-white/35">
-                    nakama · dashboard
-                  </span>
-                </div>
-                <Image
-                  alt="Nakama chat preview"
-                  className="block h-auto w-full dark:hidden"
-                  height={640}
-                  src="/screenshots/chat-light.png"
-                  width={960}
-                />
-                <Image
-                  alt=""
-                  aria-hidden
-                  className="hidden h-auto w-full dark:block"
-                  height={640}
-                  src="/screenshots/chat-dark.png"
-                  width={960}
-                />
-              </div>
+        <section
+          aria-label="Dashboard preview"
+          className="hero-preview mx-auto mt-4 w-[calc(100%_-_3rem)] max-w-6xl sm:mt-6"
+        >
+          <div className="overflow-hidden rounded-xl border border-black/10 bg-stone-50 shadow-2xl shadow-black/10 dark:border-white/10 dark:bg-[#0d0d0f]">
+            <div className="flex items-center gap-1.5 border-stone-200 border-b px-3 py-2.5 dark:border-white/8">
+              <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
+              <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
+              <span className="size-2.5 rounded-full bg-stone-300 dark:bg-white/15" />
+              <span className="ml-2 text-[11px] text-stone-500 dark:text-white/35">
+                nakama · dashboard
+              </span>
             </div>
+            <Image
+              alt="Nakama chat preview"
+              className="block h-auto w-full dark:hidden"
+              height={800}
+              src={withBasePath("/screenshots/chat-light.png")}
+              width={1280}
+            />
+            <Image
+              alt=""
+              aria-hidden
+              className="hidden h-auto w-full dark:block"
+              height={800}
+              src={withBasePath("/screenshots/chat-dark.png")}
+              width={1280}
+            />
           </div>
         </section>
 
         <section className="px-6 py-24 md:py-32">
           <p className="landing-lede mx-auto max-w-4xl text-center font-light text-2xl text-stone-600 leading-snug tracking-tight md:text-4xl md:leading-snug dark:text-white/70">
-            <span className="landing-accent font-medium">Nakama</span> gives
-            each agent a role, tools, and memory — then runs your whole{" "}
-            <span className="landing-accent font-medium">team</span> from one
-            deployment.
+            Build a team of agents around the way you work. Give each one a
+            role, memory, and tools, then bring them together for bigger
+            projects.
           </p>
         </section>
 
@@ -192,11 +207,11 @@ export default function HomePage() {
           <div className="mx-auto max-w-6xl">
             <div className="mb-10 max-w-2xl">
               <h2 className="landing-section-title font-medium text-3xl tracking-tight md:text-4xl">
-                Your whole nakama.
+                Give your agents a place on the team.
               </h2>
               <p className="mt-3 text-stone-600 dark:text-white/50">
-                Profiles, orgs, channels, and tools — focused agents, shared
-                ops.
+                Inspired by Hermes Agent and OpenClaw, Nakama brings memory,
+                skills, tools, and automation into a platform built for teams.
               </p>
             </div>
 
@@ -227,15 +242,30 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section className="px-6 pb-16 md:pb-24">
+          <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[0.8fr_1.2fr] md:gap-12 lg:gap-20">
+            <div className="md:pt-7">
+              <h2 className="landing-section-title max-w-sm text-balance font-medium text-3xl tracking-tight md:text-4xl">
+                What people are building with Nakama
+              </h2>
+              <p className="mt-4 max-w-sm text-stone-600 leading-relaxed dark:text-white/50">
+                These are workflows our users already run. We’re still exploring
+                what else Nakama can help teams do.
+              </p>
+            </div>
+            <UseCaseRows />
+          </div>
+        </section>
+
         <section className="border-stone-200 border-t px-6 py-16 md:py-20 dark:border-white/5">
           <div className="mx-auto flex max-w-6xl flex-col items-stretch justify-between gap-8 rounded-2xl border border-stone-200 bg-white p-8 sm:items-start lg:flex-row lg:items-center lg:p-10 dark:border-white/8 dark:bg-[#111113]">
             <div className="max-w-xl">
               <h2 className="landing-section-title font-medium text-2xl tracking-tight md:text-3xl">
-                Open source forever.
+                What will you build with Nakama?
               </h2>
               <p className="mt-3 text-stone-600 dark:text-white/50">
-                Deploy once — or use managed hosting — create orgs and profiles,
-                and route each task to the right agent.
+                Create your first agent, automate a workflow, or build something
+                for your customers. Start with the docs and make it your own.
               </p>
             </div>
             <div className="flex w-full shrink-0 flex-col gap-3 sm:w-auto sm:flex-row">
@@ -243,16 +273,16 @@ export default function HomePage() {
                 className="hero-cta-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto"
                 href="/quickstart"
               >
-                Read the docs
+                Create your first agent
                 <ArrowRight01Icon aria-hidden className="size-4" />
               </Link>
               <a
                 className="hero-cta-secondary w-full justify-center sm:w-auto"
-                href="https://github.com/ahmadrosid/nakama"
+                href="https://getnakama.cloud/"
                 rel="noreferrer"
                 target="_blank"
               >
-                Open GitHub
+                Explore managed hosting
               </a>
             </div>
           </div>
