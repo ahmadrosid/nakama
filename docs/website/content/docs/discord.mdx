@@ -167,7 +167,7 @@ Discord has a 2000-character limit per message. Nakama automatically chunks long
 
 ## Saved artifacts and share links
 
-When your agent saves a file for you with the `save-artifact` skill (content file plus `.nakama-meta.json` sidecar in the same turn), Nakama posts a **Publish-style share link** after the reply in Discord.
+When your agent saves a file for you with the `save-artifact` skill, Nakama posts a **Publish-style share link** after the reply in Discord.
 
 - The link uses the same unguessable `/s/{token}` URLs as dashboard Publish — no Nakama login required to open it.
 - Anyone who can read the Discord message can open the link until the share is revoked from the web app.
@@ -175,7 +175,7 @@ When your agent saves a file for you with the `save-artifact` skill (content fil
 
 To receive the file itself in Discord, ask in plain language — for example, “send the file” or “attach the PDF”. The agent uses the Discord-only `send_discord_artifact` tool to upload a native attachment when the file is within Discord’s size limit. You can also type `/attach` as a shortcut for the most recent saved artifact. If the file is too large, use the share link instead.
 
-Unpaired saves (content without a sidecar in the same turn) do not produce share links or attachments.
+Only successful artifact saves produce share links or attachments.
 
 ## Configuration notes
 

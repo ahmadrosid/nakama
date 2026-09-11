@@ -15,37 +15,10 @@ Use this skill to save **durable deliverables** the user may revisit later.
 - Reports, summaries, generated code snippets, logs, or structured notes the user asked to keep
 - Outputs they may download or review later in the profile **Artifacts** tab
 
-## Metadata sidecar
-
-After writing the artifact file, write a JSON sidecar at `artifacts/{filename}.nakama-meta.json` so the dashboard shows the correct MIME type and timestamp.
-
-Example for `artifacts/report.md`:
-
-```json
-{
-  "mimeType": "text/markdown",
-  "savedAt": "2026-07-12T05:13:00.000Z",
-  "sizeBytes": 1234
-}
-```
-
-- `mimeType`: choose an accurate type (`text/markdown`, `text/plain`, `application/json`, `text/html`, etc.)
-- `savedAt`: current time in ISO 8601 UTC
-- `sizeBytes`: UTF-8 byte length of the artifact file content (not the sidecar)
-
 ## Workflow
 
-1. Choose a short, descriptive filename under `artifacts/` (use subdirectories when grouping related files, e.g. `artifacts/weekly/report.md`).
+1. Choose a short, descriptive filename with the correct extension under `artifacts/` (use subdirectories when grouping related files, e.g. `artifacts/weekly/report.md`).
 2. `write_file` the artifact content to `artifacts/{filename}`. If that name already exists, a date suffix is added automatically (e.g. `report-2026-07-14.md`).
-3. `write_file` the metadata sidecar to `artifacts/{filename}.nakama-meta.json` using the same base filename from step 2.
-4. Confirm both paths in your reply so the user knows where to find the file. On web chat, saved artifacts also appear as attachment chips on the assistant message (with preview) in addition to the profile **Artifacts** tab.
+3. Confirm the saved path returned by the tool. On web chat, saved artifacts also appear as attachment chips on the assistant message (with preview) in addition to the profile **Artifacts** tab.
 
-## MIME type guidance
-
-| Content | mimeType |
-|---------|----------|
-| Markdown | `text/markdown` |
-| Plain text / logs | `text/plain` |
-| JSON | `application/json` |
-| HTML | `text/html` |
-| Source code | `text/plain` or a specific `text/x-*` when obvious |
+Save only the deliverable; Nakama derives the file type, size, and timestamp automatically.

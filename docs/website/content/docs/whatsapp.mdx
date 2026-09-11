@@ -116,7 +116,7 @@ Useful WhatsApp commands:
 
 ## Saved artifacts and share links
 
-When your agent saves a file for you with the `save-artifact` skill (content file plus `.nakama-meta.json` sidecar in the same turn), Nakama posts a **Publish-style share link** after the reply in WhatsApp.
+When your agent saves a file for you with the `save-artifact` skill, Nakama posts a **Publish-style share link** after the reply in WhatsApp.
 
 Opening that link does not require a Nakama login. Anyone who can read the WhatsApp message can open the file until the share is revoked from the dashboard.
 
@@ -124,7 +124,7 @@ To receive the file itself in WhatsApp, ask in plain language — for example, �
 
 In a WhatsApp **group**, both the share link and a requested document go to the whole group (same visibility as the bot’s other replies).
 
-Unpaired saves (content without a sidecar in the same turn) do not produce share links or attachments.
+Only successful artifact saves produce share links or attachments.
 
 ## Troubleshooting
 

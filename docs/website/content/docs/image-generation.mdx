@@ -36,7 +36,7 @@ Each generated image is written under the profile workspace:
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
 ```
 
-alongside a `.nakama-meta.json` sidecar, so it appears in **Files** with the right type and timestamp. When the call happens inside a chat session, the image is also saved as a session attachment, which is what makes it render inline in the conversation rather than only in the Files list. Web chat and the channel bridges both recognize `generate_image` output, so a Telegram or Discord turn gets the picture too.
+The image appears in **Files** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which is what makes it render inline in the conversation rather than only in the Files list. Web chat and the channel bridges both recognize `generate_image` output, so a Telegram or Discord turn gets the picture too.
 
 Attachments are capped at 5 MB.
 

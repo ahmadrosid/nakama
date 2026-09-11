@@ -90,11 +90,11 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 
 Artifacts are files your agent creates and saves for you — reports, summaries, generated text, Word documents, and other outputs you can preview or download later from the dashboard [Files page](/artifacts) or from web chat.
 
-They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the Files page shows MIME types and timestamps.
+They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. Nakama derives the file type, size, and timestamp automatically.
 
 On web chat, `write_file` and `write_docx` saves under `artifacts/` appear as attachment chips on the assistant message. Click a chip to open a resizable preview panel with copy, download, and fullscreen:
 
-On **Telegram**, **Discord**, and **WhatsApp**, the same paired saves post a Publish share link after the agent reply; ask to “send the file” when you want a native attachment. See [Telegram](/telegram/chat#saved-artifacts-and-share-links), [Discord](/discord#saved-artifacts-and-share-links), and [WhatsApp](/whatsapp#saved-artifacts-and-share-links).
+On **Telegram**, **Discord**, and **WhatsApp**, the same saves post a Publish share link after the agent reply; ask to “send the file” when you want a native attachment. See [Telegram](/telegram/chat#saved-artifacts-and-share-links), [Discord](/discord#saved-artifacts-and-share-links), and [WhatsApp](/whatsapp#saved-artifacts-and-share-links).
 
 | Content type | Preview behavior |
 |--------------|------------------|

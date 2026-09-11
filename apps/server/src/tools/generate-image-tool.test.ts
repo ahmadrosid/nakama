@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { UserConfig } from "@nakama/core";
+import { inferArtifactMimeType, type UserConfig } from "@nakama/core";
 import { GENERATE_IMAGE_TOOL_ID } from "@nakama/core/tools/protected";
 import {
   createInMemoryDatabaseAdapter,
@@ -206,7 +206,7 @@ describe("generate_image tool persistence (U4)", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
   }
 
-  test("prompt produces PNG path + sidecar + attachmentId", async () => {
+  test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
     const usage: Array<{ model: string; input: number; output: number }> = [];
@@ -253,16 +253,7 @@ describe("generate_image tool persistence (U4)", () => {
 
     const absolute = path.join(workspaceRoot, result.path);
     expect(await readFile(absolute)).toEqual(Buffer.from(PNG_BYTES));
-    const meta = JSON.parse(
-      await readFile(`${absolute}.nakama-meta.json`, "utf8")
-    ) as {
-      mimeType: string;
-      sizeBytes: number;
-      savedAt: string;
-    };
-    expect(meta.mimeType).toBe("image/png");
-    expect(meta.sizeBytes).toBe(PNG_BYTES.byteLength);
-    expect(meta.savedAt.length).toBeGreaterThan(0);
+    expect(await readdir(path.dirname(absolute))).toEqual(["cat.png"]);
 
     const attachment = await db.getAttachment(result.attachmentId);
     expect(attachment).toMatchObject({
@@ -277,7 +268,7 @@ describe("generate_image tool persistence (U4)", () => {
     expect(usage).toEqual([{ input: 8, model: "gpt-image-2", output: 200 }]);
   });
 
-  test("filename collision gets unique suffix and remapped sidecar pairs on disk", async () => {
+  test("filename collision saves a unique image without overwriting the original", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
     const artifactsDir = path.join(workspaceRoot, "artifacts");
@@ -317,12 +308,43 @@ describe("generate_image tool persistence (U4)", () => {
 
     const absolute = path.join(workspaceRoot, result.path);
     expect(await readFile(absolute)).toEqual(Buffer.from(PNG_BYTES));
-    const meta = JSON.parse(
-      await readFile(`${absolute}.nakama-meta.json`, "utf8")
-    ) as {
-      mimeType: string;
-    };
-    expect(meta.mimeType).toBe("image/png");
+    expect(await readFile(path.join(artifactsDir, "cat.png"), "utf8")).toBe(
+      "existing"
+    );
+    expect((await readdir(artifactsDir)).sort()).toEqual(
+      ["cat.png", path.basename(absolute)].sort()
+    );
+  });
+
+  test.each([
+    ["cat.jpg", "image/png"],
+    [undefined, "image/jpeg"],
+    ["cat.png", "image/webp"],
+  ])("filename %s matches generated type %s", async (filename, mediaType) => {
+    await setupWorkspace();
+    const result = await runGenerateImageTool(
+      { filename, prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async () => ({
+          data: PNG_BYTES,
+          mediaType,
+          model: "gpt-image-2",
+          size: "1024x1024",
+        }),
+        getUserConfig: () =>
+          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+      }
+    );
+    if (!("path" in result)) {
+      throw new Error("expected success");
+    }
+    expect(inferArtifactMimeType(result.path)).toBe(mediaType);
+    expect(await readFile(path.join(workspaceRoot, result.path))).toEqual(
+      Buffer.from(PNG_BYTES)
+    );
   });
 
   test("unset model returns error and writes no files (AE2)", async () => {

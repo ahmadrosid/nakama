@@ -2,6 +2,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   getProfileSoulDir,
+  inferArtifactMimeType,
   MAX_IMAGE_BYTES,
   NakamaApiError,
   pathExists,
@@ -21,7 +22,6 @@ import {
 
 export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 
-const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 const DEFAULT_FILENAME = "generated-image.png";
 
 export interface GenerateImageToolInput {
@@ -177,29 +177,14 @@ export async function runGenerateImageTool(
   const relativePath = normalizeRelativePath(
     path.relative(workspaceRoot, targetPath)
   );
-  const metaPath = `${targetPath}${ARTIFACT_META_SUFFIX}`;
-  const savedAt = new Date().toISOString();
   const sizeBytes = result.data.byteLength;
 
   await mkdir(artifactsDir, { recursive: true });
 
   try {
     await writeFile(targetPath, result.data);
-    await writeFile(
-      metaPath,
-      JSON.stringify(
-        {
-          mimeType: result.mediaType,
-          savedAt,
-          sizeBytes,
-        },
-        null,
-        2
-      ),
-      "utf8"
-    );
   } catch (error) {
-    await cleanupArtifactPair(targetPath, metaPath);
+    await unlink(targetPath).catch(() => undefined);
     return { error: errorMessage(error) };
   }
 
@@ -223,7 +208,7 @@ export async function runGenerateImageTool(
       });
       attachmentId = saved.attachmentId;
     } catch (error) {
-      await cleanupArtifactPair(targetPath, metaPath);
+      await unlink(targetPath).catch(() => undefined);
       return { error: errorMessage(error) };
     }
   }
@@ -283,8 +268,8 @@ function resolveOutputFilename(
     base = DEFAULT_FILENAME;
   }
 
-  if (!path.extname(base)) {
-    base = `${base}${extension}`;
+  if (inferArtifactMimeType(base) !== mediaType) {
+    base = `${path.basename(base, path.extname(base))}${extension}`;
   }
 
   return base;
@@ -292,14 +277,6 @@ function resolveOutputFilename(
 
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.replace(/\\/g, "/");
-}
-
-async function cleanupArtifactPair(
-  filePath: string,
-  metaPath: string
-): Promise<void> {
-  await unlink(filePath).catch(() => undefined);
-  await unlink(metaPath).catch(() => undefined);
 }
 
 function hasOwnKey(input: unknown, key: string): boolean {
