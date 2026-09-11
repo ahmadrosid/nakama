@@ -201,10 +201,9 @@ export class WorkflowRunner {
     }
 
     if (step.kind === "assert") {
-      const expected = resolveWorkflowValue(step.expected, bag);
       const result = executeAssert({
         bag,
-        expected,
+        expected: step.expected,
         path: step.path,
       });
       if (!result.ok) {
@@ -213,7 +212,7 @@ export class WorkflowRunner {
         );
       }
       return {
-        input: { expected, path: step.path },
+        input: { expected: result.expected, path: step.path },
         output: result,
       };
     }
