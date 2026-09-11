@@ -269,65 +269,18 @@ export function TelegramAllowedUsersDialog({
         </DialogContent>
       </Dialog>
 
-      <Dialog onOpenChange={setImportOpen} open={importOpen}>
-        <DialogContent className="gap-5 p-6 sm:max-w-lg">
-          <DialogHeader className="gap-2">
-            <DialogTitle>Import Telegram user</DialogTitle>
-            <DialogDescription>
-              Paste raw Telegram update JSON. The sender ID and username will be
-              added.
-            </DialogDescription>
-          </DialogHeader>
-
-          <Textarea
-            autoFocus
-            className="max-h-48 font-mono text-sm"
-            disabled={saveMutation.isPending}
-            onChange={(event) => {
-              setImportDraft(event.target.value);
-              if (importError) {
-                setImportError(null);
-              }
-            }}
-            placeholder={`{
-  "message": {
-    "from": {
-      "id": 213193924,
-      "username": "ahmadrosid"
-    }
-  }
-}`}
-            rows={10}
-            value={importDraft}
-          />
-
-          {importError ? (
-            <p
-              className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
-              role="alert"
-            >
-              {importError}
-            </p>
-          ) : null}
-
-          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
-            <Button
-              onClick={() => setImportOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={saveMutation.isPending || !importDraft.trim()}
-              onClick={handleImportApply}
-              type="button"
-            >
-              Add user
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TelegramUserImportDialog
+        draft={importDraft}
+        error={importError}
+        onApply={handleImportApply}
+        onDraftChange={(value) => {
+          setImportDraft(value);
+          setImportError(null);
+        }}
+        onOpenChange={setImportOpen}
+        open={importOpen}
+        pending={saveMutation.isPending}
+      />
 
       <Dialog
         onOpenChange={(next) => !next && setRemoveTarget(null)}
@@ -364,5 +317,82 @@ export function TelegramAllowedUsersDialog({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function TelegramUserImportDialog({
+  draft,
+  error,
+  onApply,
+  onDraftChange,
+  onOpenChange,
+  open,
+  pending,
+}: {
+  draft: string;
+  error: string | null;
+  onApply: () => void;
+  onDraftChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  pending: boolean;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="gap-5 p-6 sm:max-w-lg">
+        <DialogHeader className="gap-2">
+          <DialogTitle>Import Telegram user</DialogTitle>
+          <DialogDescription>
+            Paste raw Telegram update JSON. The sender ID and username will be
+            added.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Textarea
+          autoFocus
+          className="max-h-48 font-mono text-sm"
+          disabled={pending}
+          onChange={(event) => {
+            onDraftChange(event.target.value);
+          }}
+          placeholder={`{
+  "message": {
+    "from": {
+      "id": 213193924,
+      "username": "ahmadrosid"
+    }
+  }
+}`}
+          rows={10}
+          value={draft}
+        />
+
+        {error ? (
+          <p
+            className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
+          <Button
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={pending || !draft.trim()}
+            onClick={onApply}
+            type="button"
+          >
+            Add user
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

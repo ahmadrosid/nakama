@@ -45,7 +45,7 @@ export function PluginSurface({
       const module = (await import(
         /* @vite-ignore */ url
       )) as PluginClientModule;
-      const runtime = await activatePlugin(module, {
+      const loadedRuntime = await activatePlugin(module, {
         host: {
           async call(action, input) {
             const response = await client.invokePluginAction(
@@ -63,16 +63,16 @@ export function PluginSurface({
         signal: controller.signal,
         theme,
       });
-      dispose = runtime.dispose;
+      dispose = loadedRuntime.dispose;
       if (controller.signal.aborted) {
         dispose();
         return;
       }
       setRuntime({
-        ...runtime,
+        ...loadedRuntime,
         dispose() {
           controller.abort();
-          runtime.dispose();
+          loadedRuntime.dispose();
         },
       });
     };

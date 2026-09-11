@@ -222,13 +222,13 @@ export function CatalogProviderModelFields({
           onChange={onCustomModelsChange}
           showPricing
           showVision
-          visionDefaultOn={
-            provider === "openai" ||
-            provider === "anthropic" ||
-            provider === "gemini" ||
-            provider === "chatgpt" ||
-            provider === "xai_oauth"
-          }
+          visionDefaultOn={[
+            "openai",
+            "anthropic",
+            "gemini",
+            "chatgpt",
+            "xai_oauth",
+          ].includes(provider)}
         />
       )}
     </FormField>

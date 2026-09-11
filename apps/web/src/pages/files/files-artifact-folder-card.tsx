@@ -18,6 +18,7 @@ export function ArtifactFolderCard({
   return (
     <li className="flex min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background">
       <button
+        aria-label={`Open folder ${folder.name}`}
         className="relative flex aspect-[4/3] w-full cursor-pointer items-center justify-center overflow-hidden border-border border-b bg-muted/20 transition-colors duration-100 ease-out hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
         onClick={openFolder}
         type="button"
