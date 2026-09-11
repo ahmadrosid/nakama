@@ -1,6 +1,6 @@
+import { cn } from "@nakama/ui/utils";
 import { Plug01Icon } from "hugeicons-react";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 
 interface ComposioToolkitLogoProps {
   className?: string;

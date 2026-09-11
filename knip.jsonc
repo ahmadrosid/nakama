@@ -2,6 +2,14 @@
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
+    "packages/plugins/workflows": {
+      "entry": [
+        "src/actions.ts",
+        "src/ui.tsx",
+        "actions/actions.js",
+        "ui/app.js"
+      ]
+    },
     "apps/server": {
       "entry": ["src/index.ts", "scripts/*.ts"]
     },
@@ -92,11 +100,11 @@
     "apps/web/src/hooks/use-timezones.ts": ["exports"],
     "apps/web/src/hooks/use-resource-mutations.ts": ["exports"],
     "apps/web/src/lib/demo-login.ts": ["exports"],
-    "apps/web/src/components/ui/card.tsx": ["exports"],
-    "apps/web/src/components/ui/input-group.tsx": ["exports"],
+    "packages/ui/src/card.tsx": ["exports"],
+    "packages/ui/src/input-group.tsx": ["exports"],
     "apps/server/src/services/timezone-city-aliases.ts": ["exports"],
-    "apps/web/src/components/ui/command.tsx": ["exports"],
-    "apps/web/src/components/ui/dialog.tsx": ["exports"],
+    "packages/ui/src/command.tsx": ["exports"],
+    "packages/ui/src/dialog.tsx": ["exports"],
     "apps/web/src/pages/automations/automations-page.shared.ts": ["exports"],
     "apps/web/src/hooks/use-composio.ts": ["exports"],
     "apps/web/src/hooks/use-system-status.ts": ["exports"],

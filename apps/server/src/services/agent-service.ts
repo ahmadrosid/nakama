@@ -289,6 +289,7 @@ import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { OrgMemoryService } from "./org-memory-service";
+import type { PluginService } from "./plugin-service";
 import type { ProfileChangeMeta } from "./profile-change-history";
 import {
   recordProfileChangeEvent,
@@ -327,10 +328,10 @@ import {
   resolveProfileStoredTools,
   type ServerToolOverrides,
 } from "./tool-resolver";
-import type { WorkflowRunner } from "./workflow-runner";
 
 interface StoredSession {
   channel: AgentChannel;
+  pluginRevision: string;
   profileId: string;
   session: AgentChatSession;
 }
@@ -355,16 +356,15 @@ export class AgentService {
   private readonly superBotTools: ToolDefinition[];
   private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
-  private workflowTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
   private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
-  private workflowRunner: WorkflowRunner | null = null;
 
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
   private composioService: ComposioService | null = null;
+  private pluginService: PluginService | null = null;
   private skillsService: SkillsService | null = null;
   private skillProposalService: SkillProposalService | null = null;
   private skillSuggestionService: SkillSuggestionService | null = null;
@@ -497,11 +497,6 @@ export class AgentService {
     this.sessions.clear();
   }
 
-  setWorkflowTools(tools: ToolDefinition[]): void {
-    this.workflowTools = tools;
-    this.sessions.clear();
-  }
-
   setServerTools(tools: ServerToolOverrides): void {
     this.serverTools = tools;
   }
@@ -512,10 +507,6 @@ export class AgentService {
 
   setAutomationRunner(runner: AutomationRunner): void {
     this.automationRunner = runner;
-  }
-
-  setWorkflowRunner(runner: WorkflowRunner): void {
-    this.workflowRunner = runner;
   }
 
   setMcpClientManager(manager: McpClientManager): void {
@@ -529,6 +520,11 @@ export class AgentService {
 
   setComposioService(service: ComposioService): void {
     this.composioService = service;
+  }
+
+  setPluginService(service: PluginService | null): void {
+    this.pluginService = service;
+    this.sessions.clear();
   }
 
   setSkillsService(service: SkillsService): void {
@@ -1397,7 +1393,7 @@ export class AgentService {
     return session.send(prompt);
   }
 
-  async resolveWorkflowExecutionTools(
+  async resolvePluginExecutionTools(
     orgId: string,
     profileId: string
   ): Promise<ToolDefinition[]> {
@@ -1406,20 +1402,11 @@ export class AgentService {
       includeAutomationTools: false,
       includeSkillManageTools: false,
       includeTodoTools: false,
-      includeWorkflowTools: false,
     });
     return partitionTools(tools).localTools;
   }
 
-  async resolveWorkflowToolNames(
-    orgId: string,
-    profileId: string
-  ): Promise<Set<string>> {
-    const tools = await this.resolveWorkflowExecutionTools(orgId, profileId);
-    return new Set(tools.map((tool) => tool.name));
-  }
-
-  buildWorkflowToolContext(
+  buildPluginToolContext(
     orgId: string,
     context: {
       profileId: string;
@@ -1438,11 +1425,12 @@ export class AgentService {
     });
   }
 
-  async runWorkflowSummarize(
+  async runPluginSummarize(
     orgId: string,
     profileId: string,
     prompt: string,
-    receiptBag: Record<string, unknown>
+    receiptBag: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
@@ -1484,7 +1472,7 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.send(userMessage);
+    return session.sendStream(userMessage, { onChunk() {} }, { signal });
   }
 
   async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
@@ -1626,14 +1614,6 @@ export class AgentService {
     return this.automationRunner.run(automationId);
   }
 
-  async runWorkflow(workflowId: string, input: Record<string, unknown> = {}) {
-    if (!this.workflowRunner) {
-      throw new Error("Workflow runner is not configured.");
-    }
-
-    return this.workflowRunner.run(workflowId, input);
-  }
-
   get providerConfigured(): boolean {
     return this._providerConfigured;
   }
@@ -1693,6 +1673,7 @@ export class AgentService {
 
     this.sessions.set(sessionId, {
       channel,
+      pluginRevision: await this.pluginCapabilityRevision(orgId),
       profileId: resolvedProfileId,
       session,
     });
@@ -1871,6 +1852,7 @@ export class AgentService {
     );
     this.sessions.set(nextSessionId, {
       channel,
+      pluginRevision: await this.pluginCapabilityRevision(profileOrgId),
       profileId: record.profileId,
       session,
     });
@@ -1941,9 +1923,14 @@ export class AgentService {
     }
 
     const stored = this.sessions.get(sessionId);
+    const pluginRevision = await this.pluginCapabilityRevision(orgId);
+
+    if (stored && stored.pluginRevision === pluginRevision) {
+      return stored.session;
+    }
 
     if (stored) {
-      return stored.session;
+      this.sessions.delete(sessionId);
     }
 
     const channel = parseAgentChannel(record.channel);
@@ -1971,6 +1958,7 @@ export class AgentService {
 
     this.sessions.set(sessionId, {
       channel,
+      pluginRevision,
       profileId: record.profileId,
       session,
     });
@@ -2025,6 +2013,12 @@ export class AgentService {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
     if (!record) {
       return null;
+    }
+
+    const cached = this.sessions.get(sessionId);
+    const pluginRevision = await this.pluginCapabilityRevision(orgId);
+    if (cached && cached.pluginRevision !== pluginRevision) {
+      this.sessions.delete(sessionId);
     }
 
     return sessionTurnRegistry.beginTurn(sessionId).started;
@@ -2736,8 +2730,8 @@ export class AgentService {
     }
   }
 
-  async listTools(): Promise<ListToolsResponse> {
-    return this.profileService.listTools();
+  async listTools(orgId: string): Promise<ListToolsResponse> {
+    return this.profileService.listTools(orgId);
   }
 
   async getTool(toolId: string): Promise<ToolResponse> {
@@ -3283,6 +3277,13 @@ export class AgentService {
     };
   }
 
+  private async pluginCapabilityRevision(orgId: string): Promise<string> {
+    if (!this.pluginService) {
+      return "";
+    }
+    return this.pluginService.capabilityRevisionForOrg(orgId);
+  }
+
   /**
    * Sessions carry no org column; the org is only reachable through their
    * profile. Every by-id session operation resolves scope here so a caller in
@@ -3357,8 +3358,8 @@ export class AgentService {
   private async resolveProfileTools(
     profile: StoredProfileRecord,
     options: {
+      actorRole?: "admin" | "member" | "viewer" | null;
       includeAutomationTools?: boolean;
-      includeWorkflowTools?: boolean;
       includeTodoTools?: boolean;
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
@@ -3368,11 +3369,12 @@ export class AgentService {
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      actorRole: options.actorRole ?? undefined,
+      pluginService: this.pluginService,
       serverTools: this.serverTools,
       userConfig: this.userConfig,
     });
     const includeAutomationTools = options.includeAutomationTools ?? true;
-    const includeWorkflowTools = options.includeWorkflowTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
     const includeSubAgentTool = options.includeSubAgentTool ?? true;
@@ -3439,10 +3441,6 @@ export class AgentService {
       this.automationTools.length > 0
     ) {
       resolved = [...resolved, ...this.automationTools];
-    }
-
-    if (hasOwnTools && includeWorkflowTools && this.workflowTools.length > 0) {
-      resolved = [...resolved, ...this.workflowTools];
     }
 
     if (hasOwnTools && includeTodoTools && this.todoTools.length > 0) {
@@ -3516,7 +3514,17 @@ export class AgentService {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
     const includeSkillManageTools = SKILL_MANAGE_CHANNELS[channel];
+    const pluginOrgRole =
+      channel === "telegram" || channel === "whatsapp" || channel === "discord"
+        ? "member"
+        : orgRole;
     let tools = await this.resolveProfileTools(profile, {
+      actorRole:
+        pluginOrgRole === "admin" ||
+        pluginOrgRole === "member" ||
+        pluginOrgRole === "viewer"
+          ? pluginOrgRole
+          : undefined,
       includeSkillManageTools,
       userId,
     });
@@ -3690,7 +3698,9 @@ export class AgentService {
                     profile.isSuper &&
                     matched.some((skill) => skill.name === "create-profile")
                   ) {
-                    parts.push(await this.formatProfileAuthoringToolContext());
+                    parts.push(
+                      await this.formatProfileAuthoringToolContext(orgId)
+                    );
                   }
 
                   if (matched.some((skill) => skill.name === "coding-agent")) {
@@ -3745,13 +3755,20 @@ export class AgentService {
     return persistedSession;
   }
 
-  private async formatProfileAuthoringToolContext(): Promise<string> {
-    const { tools } = await this.profileService.listTools();
+  private async formatProfileAuthoringToolContext(
+    orgId: string
+  ): Promise<string> {
+    const { tools } = await this.profileService.listTools(orgId);
     const lines = tools
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((tool) => {
-        const source = tool.handlerType === "builtin" ? "builtin" : "custom";
+        const source =
+          tool.handlerType === "builtin"
+            ? "builtin"
+            : tool.handlerType === "plugin"
+              ? "plugin"
+              : "custom";
         return `- ${tool.name} (${source}, id: ${tool.id}) - ${tool.description}`;
       });
 

@@ -282,6 +282,9 @@ export class SkillCuratorService {
       const candidates: ConsolidateCandidateSkill[] = [];
 
       for (const skill of assigned) {
+        if (isExemptFromCurator(skill)) {
+          continue;
+        }
         const body =
           (await readTextIfExists(join(skill.sourcePath, "SKILL.md"))) ?? "";
         const usage = usageBySkillId.get(skill.id);
@@ -517,6 +520,7 @@ export class SkillCuratorService {
 
 function isExemptFromCurator(skill: StoredSkillRecord): boolean {
   return (
+    Boolean(skill.pluginId) ||
     skill.createdBy === "bundled" ||
     bundledSkillNames.has(skill.name) ||
     isGlobalSkillSourcePath(skill.sourcePath)

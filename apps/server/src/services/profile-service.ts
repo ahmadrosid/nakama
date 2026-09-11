@@ -519,9 +519,11 @@ export class ProfileService {
     }
   }
 
-  async listTools(): Promise<ListToolsResponse> {
+  async listTools(orgId: string): Promise<ListToolsResponse> {
     await ensureBuiltinToolDefinitions(this.db);
-    const tools = await this.db.listTools();
+    const tools = (await this.db.listTools()).filter(
+      (tool) => !tool.orgId || tool.orgId === orgId
+    );
     return { tools: tools.map(toToolDetail) };
   }
 
@@ -553,6 +555,10 @@ export class ProfileService {
 
     if (isProtectedToolId(tool.id)) {
       throw new Error(`Built-in tool "${tool.name}" cannot be deleted.`);
+    }
+
+    if (tool.pluginId) {
+      throw new Error("Plugin-owned tools cannot be deleted.");
     }
 
     const deleted = await this.db.deleteTool(toolId);
@@ -618,6 +624,10 @@ export class ProfileService {
 
     if (!tool) {
       throw new Error("Tool not found.");
+    }
+
+    if (tool.orgId && tool.orgId !== orgId) {
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     await withAssignmentChange(
@@ -992,6 +1002,8 @@ function toToolSummary(record: StoredToolRecord): ToolSummary {
     handlerType: record.handlerType,
     id: record.id,
     name: record.name,
+    pluginId: record.pluginId ?? null,
+    pluginKey: record.pluginKey ?? null,
   };
 }
 

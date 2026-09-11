@@ -810,7 +810,6 @@ describe("AgentService skill_manage injection", () => {
         options?: {
           includeAutomationTools?: boolean;
           includeSkillManageTools?: boolean;
-          includeWorkflowTools?: boolean;
           includeTodoTools?: boolean;
           includeQuestionTools?: boolean;
         }
@@ -828,7 +827,6 @@ describe("AgentService skill_manage injection", () => {
       includeQuestionTools: true,
       includeSkillManageTools: true,
       includeTodoTools: true,
-      includeWorkflowTools: true,
     });
     expect(tools).toHaveLength(0);
 
@@ -848,7 +846,6 @@ describe("AgentService skill_manage injection", () => {
       includeQuestionTools: true,
       includeSkillManageTools: true,
       includeTodoTools: true,
-      includeWorkflowTools: true,
     });
     expect(withTools.some((tool) => tool.name === "test_tool")).toBe(true);
     expect(withTools.some((tool) => tool.name === "ask_user_question")).toBe(

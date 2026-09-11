@@ -1,4 +1,8 @@
 import type { DataImportPreviewResponse } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Card } from "@nakama/ui/card";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Alert02Icon,
   CheckmarkCircle01Icon,
@@ -9,9 +13,6 @@ import {
   DataImportPreview,
   PendingIcon,
 } from "@/components/data-portability/DataImportPreview";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import {
   canRestoreDataImport,
   shouldClearInitialPreviewDedupe,
@@ -20,7 +21,6 @@ import {
   useRestoreSetupDataImport,
 } from "@/hooks/use-data-portability";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 const REDIRECT_DELAY_MS = 3000;
 

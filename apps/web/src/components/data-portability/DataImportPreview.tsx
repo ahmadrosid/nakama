@@ -1,10 +1,10 @@
 import type { DataImportPreviewResponse } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { Alert02Icon, Archive01Icon, Rotate02Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { formatDataPortabilityBytes } from "@/hooks/use-data-portability";
-import { cn } from "@/lib/utils";
 
 interface DataImportPreviewProps {
   fileName: string;

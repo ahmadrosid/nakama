@@ -25,7 +25,8 @@ export type PageId =
   | "organization"
   | "settings"
   | "notifications"
-  | "workers";
+  | "workers"
+  | "plugins";
 
 export interface NavItem {
   description: string;
@@ -177,6 +178,10 @@ export function canAccessIntegrationsPage(
   return orgRole === "admin" || orgRole === "member";
 }
 
+export function canManagePluginReleases(isPlatformAdmin: boolean): boolean {
+  return isPlatformAdmin;
+}
+
 export const canUseToolPlayground = canAccessSystemPage;
 
 /**
@@ -221,6 +226,72 @@ const queryPath = (path: string, params: Record<string, string>): string =>
 
 export const toolsTabPath = (): string =>
   queryPath(PAGE_PATHS.soul, { tab: "tools" });
+
+export const pluginsSystemPath = (): string =>
+  queryPath(PAGE_PATHS.soul, { tab: "plugins" });
+
+export const PLUGIN_PAGE_PREFIX = "/plugins";
+
+export function pluginPagePath(pluginId: string): string {
+  return `${PLUGIN_PAGE_PREFIX}/${encodeURIComponent(pluginId)}`;
+}
+
+export function pluginIdFromPath(pathname: string): string | null {
+  if (
+    pathname === PLUGIN_PAGE_PREFIX ||
+    pathname === `${PLUGIN_PAGE_PREFIX}/`
+  ) {
+    return null;
+  }
+
+  if (!pathname.startsWith(`${PLUGIN_PAGE_PREFIX}/`)) {
+    return null;
+  }
+
+  const rest = pathname.slice(PLUGIN_PAGE_PREFIX.length + 1);
+  if (!rest || rest.includes("/")) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(rest);
+  } catch {
+    return rest;
+  }
+}
+
+export interface PluginNavEntry {
+  href: string;
+  label: string;
+  pluginId: string;
+}
+
+export function enabledPluginNavEntries(
+  plugins: ReadonlyArray<{
+    lifecycleState: string;
+    pluginId: string;
+    ui: { pageLabel: string } | null;
+  }>
+): PluginNavEntry[] {
+  return plugins
+    .filter(
+      (plugin) => plugin.lifecycleState === "enabled" && plugin.ui !== null
+    )
+    .toSorted((left, right) => {
+      const leftLabel = left.ui?.pageLabel ?? left.pluginId;
+      const rightLabel = right.ui?.pageLabel ?? right.pluginId;
+      const byLabel = leftLabel.localeCompare(rightLabel);
+      if (byLabel !== 0) {
+        return byLabel;
+      }
+      return left.pluginId.localeCompare(right.pluginId);
+    })
+    .map((plugin) => ({
+      href: pluginPagePath(plugin.pluginId),
+      label: plugin.ui?.pageLabel ?? plugin.pluginId,
+      pluginId: plugin.pluginId,
+    }));
+}
 
 export const profilePath = (profileId: string): string =>
   queryPath(PAGE_PATHS.profiles, { profile: profileId });
@@ -295,6 +366,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   integrations: "/integrations",
   notifications: "/notifications",
   organization: "/organization",
+  plugins: PLUGIN_PAGE_PREFIX,
   profiles: "/profiles",
   settings: "/settings",
   soul: "/system",
@@ -306,19 +378,8 @@ const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
   [PAGE_PATHS.soul, "soul"],
   [PAGE_PATHS.profiles, "profiles"],
   [PAGE_PATHS.files, "files"],
+  [PAGE_PATHS.plugins, "plugins"],
 ];
-
-export type AgentWorkTab = "automations" | "workflows";
-
-export function agentWorkTabFromSearchParams(
-  searchParams: URLSearchParams
-): AgentWorkTab {
-  return searchParams.get("tab") === "workflows" ? "workflows" : "automations";
-}
-
-export function agentWorkTabPath(tab: AgentWorkTab): string {
-  return `${PAGE_PATHS.automations}?tab=${tab}`;
-}
 
 export function pathForPage(pageId: PageId): string {
   return PAGE_PATHS[pageId];

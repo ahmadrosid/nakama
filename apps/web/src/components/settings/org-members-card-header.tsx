@@ -1,4 +1,6 @@
 import type { OrgRole } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -6,12 +8,6 @@ import {
 } from "hugeicons-react";
 import { useState } from "react";
 import { OrgMemberInvitePopover } from "@/components/settings/org-member-dialogs";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export function OrgMembersCardHeader({
   orgId,

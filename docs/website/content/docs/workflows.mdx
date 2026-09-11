@@ -1,52 +1,44 @@
 ---
 title: "Workflows"
-description: "Run a declared recipe on demand with step receipts so summaries only use data that actually ran."
+description: "Install the official Workflows plugin to run repeatable recipes with verified step results."
 ---
 
-**Agent work** holds three related things:
+Workflows run a saved recipe when you ask. Each step records its result, and the final summary uses those results. Use automations for scheduled prompts.
 
-- **Automations** run a prompt on a schedule or at a set time.
-- **Workflows** run a declared recipe when you ask — each data step leaves a receipt; the summarize step may only use those receipts.
-- **Tasks** are a to-do list the agent works through manually.
+## Install
 
-To run a workflow on a clock, press **Schedule** on it. That opens a super bot chat with the workflow id filled in, and the automation it creates calls `run_workflow` on its trigger like any other prompt.
+1. Open **System → Plugins** as an organization admin.
+2. Under **Official plugins**, click **Install** on **Workflows**.
+3. Open **Workflows** from the sidebar's **Plugins** group.
 
-![The Schedule action on a saved workflow](/screenshots/workflow-schedule-button.png)
+Installation enables the plugin for your active organization and imports its existing workflows and run history once. The original data stays intact. You do not need to enter a package name or version.
 
-## Workflows
+## Create and run
 
-A workflow is a name, a bound profile, ordered steps, and run history.
+1. Click **New workflow**, enter a name, and choose an agent.
+2. Add and order the steps, then enter the final summary instructions.
+3. Click **Save**, then **Run**.
 
-| Step kind | What it does |
+| Step | What it does |
 | --- | --- |
-| `tool` | Calls an assigned builtin or MCP tool with fixed arguments (supports `{{input.*}}` and `{{steps.*}}` templates) |
-| `compare` | Checks two receipt values (`eq`, `near`, `contains`); fails the run when they do not match |
-| `assert` | Fails the run when a path in the receipt bag does not equal the expected value |
-| `template` | Renders text from receipts without the LLM |
-| `summarize` | One final LLM step with **no tools** — context is the receipt bag JSON plus your summarize prompt |
+| Tool | Calls a tool assigned to the selected agent |
+| Compare | Checks two values for equality, closeness, or containment |
+| Assert | Checks a value at a result path |
+| Template | Builds text from earlier results |
+| Summarize | Writes a final summary from the recorded results, without calling tools |
 
-Every workflow must end with exactly one `summarize` step.
+Use `{{input.range}}` to reference run input and `{{steps.fetch.value}}` to reference an earlier step. Missing referenced data or a failed check stops the recipe before later steps run. Explicit null values remain allowed. Templates only substitute text; extraction or analysis before a database write needs a tool that performs that work. The summary must be the final step.
 
-### Store data in SQLite
+Open the **Runs** tab and expand a run to see its output and step receipts. The **Data** tab at the top of the editor browses tables used by the agent's SQLite tool; these stay separate from recipe and run storage.
 
-On **Agent work → Workflows**, press **Add database**. That inserts a `sqlite` tool step. Put one SQL statement in **SQL**. The file is this organization's workflow database, not the product database. Open the step and press **Database** to browse tables and rows. The step opens as a drawer over the workflow. Expand it to fill the Workflows tab. **Query** writes a `SELECT` into the step. Use table names to keep recipes apart. Use `{{steps.*}}` to pass results into later steps.
+## Use from chat
 
-### Run a workflow
+Assign the plugin's tools and **create-workflow** skill to a profile in **System → Profiles**. Then ask that agent to create, update, list, or run a workflow. The plugin page works immediately after installation.
 
-1. Open **Agent work → Workflows**
-2. Select a workflow
-3. Press **Run now**
+To schedule a workflow, ask Super Bot to create an automation that runs it, including the workflow name and ID. Choose an agent with the plugin’s workflow tools assigned for the automation.
 
-Or ask in chat: "Run morning brief workflow". The agent uses `list_workflows` and `run_workflow`.
+## Manage access
 
-Optional runtime `input` binds values like `{{input.range}}` when you run.
+Organization admins install, enable, disable, and uninstall the plugin. Members can use enabled workflows. Viewers cannot open plugin pages or invoke their actions. Members cannot run workflows as Super Bot.
 
-### Trust the receipts
-
-Open a completed run and press **Show receipts**. Tool outputs, compare results, and assert outcomes are stored per step. If compare or assert fails, summarize is skipped and the run is `failed`.
-
-Create or edit workflows in chat (`create_workflow`, `update_workflow`) or inspect steps on the workflow detail panel.
-
-## Permissions
-
-Creating, editing, or running a workflow requires a non-viewer role. Members cannot bind Super Bot. See [Multi-tenancy](/multi-tenancy).
+Disable stops new calls and drains active runs. Uninstall keeps the plugin's data until an admin explicitly deletes retained data.

@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Command,
   CommandDialog,
@@ -8,9 +6,13 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@nakama/ui/command";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
+import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
+  enabledPluginNavEntries,
   navHrefForPage,
   STANDALONE_PAGES,
   visibleNavGroups,
@@ -25,6 +27,11 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { user, activeOrg } = useAuth();
+  const { data: orgPlugins = [] } = useOrgPlugins();
+  const pluginNav = useMemo(
+    () => enabledPluginNavEntries(orgPlugins),
+    [orgPlugins]
+  );
 
   const groups = useMemo(
     () =>
@@ -94,6 +101,22 @@ export function CommandPalette() {
               ))}
             </CommandGroup>
           ))}
+          {pluginNav.length > 0 ? (
+            <CommandGroup heading="Plugins">
+              {pluginNav.map((entry) => (
+                <CommandItem
+                  key={entry.pluginId}
+                  onSelect={() => go(entry.href)}
+                  value={`${entry.label} ${entry.pluginId}`}
+                >
+                  <span>{entry.label}</span>
+                  <span className="ml-auto truncate text-muted-foreground text-xs">
+                    {entry.pluginId}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ) : null}
           {standalone.length > 0 ? (
             <CommandGroup heading="More">
               {standalone.map((item) => (

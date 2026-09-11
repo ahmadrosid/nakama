@@ -9,11 +9,13 @@ import { formatSessionRelativeTime } from "@/lib/chat-history";
 import { countWords } from "@/lib/pasted-text";
 
 export function isRunWorkflowTool(tool: string | undefined): boolean {
-  return tool === "run_workflow";
+  return tool === "run_workflow" || tool === "plugin_workflows__run_workflow";
 }
 
 export function isListWorkflowsTool(tool: string | undefined): boolean {
-  return tool === "list_workflows";
+  return (
+    tool === "list_workflows" || tool === "plugin_workflows__list_workflows"
+  );
 }
 
 export interface ListedWorkflow {
@@ -367,9 +369,11 @@ function isWorkflowRunRecord(value: unknown): value is WorkflowRunRecord {
   );
 }
 
-function firstStringValue(input: Record<string, unknown>): string | null {
+function firstStringValue(
+  input: Record<string, unknown> | null | undefined
+): string | null {
   for (const key of ["url", "query", "path", "command"]) {
-    const value = input[key];
+    const value = input?.[key];
     if (typeof value === "string" && value.trim()) {
       return key === "url"
         ? formatHost(value.trim())

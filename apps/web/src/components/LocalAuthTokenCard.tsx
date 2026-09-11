@@ -1,8 +1,8 @@
+import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
+import { Spinner } from "@nakama/ui/spinner";
 import { Copy01Icon, RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import { useRotateLocalAuthToken } from "@/hooks/use-local-auth-token";
 import { formatError } from "@/lib/client";
 

@@ -1,22 +1,22 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import {
-  IntegrationSettingsFooter,
-  IntegrationStatusHeader,
-  SettingsRow,
-} from "@/components/integration-settings.shared";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+} from "@nakama/ui/select";
+import { Switch } from "@nakama/ui/switch";
+import { cn } from "@nakama/ui/utils";
+import {
+  IntegrationSettingsFooter,
+  IntegrationStatusHeader,
+  SettingsRow,
+} from "@/components/integration-settings.shared";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-linking-section";
-import { cn } from "@/lib/utils";
 
 export function WhatsAppSettingsCardContent({
   embedded,

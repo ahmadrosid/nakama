@@ -3,15 +3,15 @@ import {
   OLLAMA_CLOUD_DEFAULT_BASE_URL,
   OLLAMA_LOCAL_DEFAULT_BASE_URL,
 } from "@nakama/core/ollama-provider-config";
-import { FormField } from "@/components/ui/form-field";
-import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
+import { FormField } from "@nakama/ui/form-field";
+import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
 
 interface OllamaProviderSetupFieldsProps {
   baseUrl: string;

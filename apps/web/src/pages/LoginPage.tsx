@@ -1,7 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";

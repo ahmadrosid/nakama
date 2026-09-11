@@ -1,5 +1,5 @@
+import { Button } from "@nakama/ui/button";
 import { ArrowDown01Icon, ArrowUp01Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
 
 export function AgentQuestionnaireNav({
   currentQuestionIndex,

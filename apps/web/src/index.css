@@ -3,6 +3,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 @import "streamdown/styles.css";
+@source "../../../packages/ui/src";
 /* Formerly shadcn/tailwind.css (package removed; variants still needed). */
 @theme inline {
   @keyframes accordion-down {

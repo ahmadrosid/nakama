@@ -1,10 +1,10 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
+import { Switch } from "@nakama/ui/switch";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
 import { useRef } from "react";
 import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
-import { Button } from "@/components/ui/button";
-import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
-import { Switch } from "@/components/ui/switch";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}

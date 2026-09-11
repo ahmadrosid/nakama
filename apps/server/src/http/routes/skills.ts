@@ -1,13 +1,14 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type {
-  AssignSkillRequest,
-  CreateSkillRequest,
-  InstallSkillRequest,
-  ListSkillsResponse,
-  PatchSkillRequest,
-  ProfileResponse,
-  SkillResponse,
-  SyncSkillsResponse,
+import {
+  type AssignSkillRequest,
+  type CreateSkillRequest,
+  type InstallSkillRequest,
+  type ListSkillsResponse,
+  NakamaApiError,
+  type PatchSkillRequest,
+  type ProfileResponse,
+  type SkillResponse,
+  type SyncSkillsResponse,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
@@ -295,12 +296,17 @@ export function registerSkillRoutes(
   app.patch("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+    const skillId = decodeURIComponent(c.req.param("skillId"));
+    const existing = await agent.getSkill(skillId);
+    if (existing.skill.pluginId) {
+      throw new NakamaApiError("Plugin-owned skills cannot be edited.", 409);
+    }
     const body = await readJson<PatchSkillRequest>(c.req.raw);
     const profileId = c.req.query("profileId")?.trim() || undefined;
     return json<SkillResponse>(
       await agent.patchSkill(
         orgId,
-        decodeURIComponent(c.req.param("skillId")),
+        skillId,
         body,
         profileId ? { profileId } : undefined
       )
@@ -309,7 +315,12 @@ export function registerSkillRoutes(
 
   app.delete("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
-    await agent.deleteSkill(decodeURIComponent(c.req.param("skillId")));
+    const skillId = decodeURIComponent(c.req.param("skillId"));
+    const existing = await agent.getSkill(skillId);
+    if (existing.skill.pluginId) {
+      throw new NakamaApiError("Plugin-owned skills cannot be deleted.", 409);
+    }
+    await agent.deleteSkill(skillId);
     return new Response(null, { status: 204 });
   });
 

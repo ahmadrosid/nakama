@@ -1,7 +1,7 @@
+import { Button } from "@nakama/ui/button";
 import { useEffect, useState } from "react";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { UserContextSettings } from "@/components/UserContextCard";
-import { Button } from "@/components/ui/button";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { getBrowserTimezone } from "@/lib/timezones";
 

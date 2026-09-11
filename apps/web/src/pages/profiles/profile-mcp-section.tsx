@@ -1,6 +1,6 @@
 import type { McpServerSummary, ProfileDetail } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
 export function ProfileMcpSection({

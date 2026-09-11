@@ -1,20 +1,20 @@
 import { parseAllowedWhatsAppPhones } from "@nakama/core/whatsapp-phones";
-import { Delete02Icon } from "hugeicons-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@nakama/ui/dialog";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@/components/ui/input-group";
+} from "@nakama/ui/input-group";
+import { Delete02Icon } from "hugeicons-react";
+import { useState } from "react";
 import { useSaveWhatsAppSettings } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 

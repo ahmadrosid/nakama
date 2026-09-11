@@ -3,6 +3,16 @@ import type {
   SoulFileStatus,
   SoulStackFiles,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   ArrowRight01Icon,
   CheckmarkCircle01Icon,
@@ -14,16 +24,6 @@ import {
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 

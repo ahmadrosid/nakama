@@ -43,7 +43,12 @@ export function disableBunIdleTimeoutForLongHeldRequest(
   request: Request,
   server: { timeout(request: Request, seconds: number): void }
 ): void {
-  if (isLongHeldAutomationRunRequest(request)) {
+  const pluginRequest =
+    request.method === "POST" &&
+    /^\/v1\/plugins\/(?:[^/]+\/actions\/[^/]+|official\/[^/]+\/install)\/?$/.test(
+      new URL(request.url).pathname
+    );
+  if (isLongHeldAutomationRunRequest(request) || pluginRequest) {
     server.timeout(request, 0);
   }
 }

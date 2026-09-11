@@ -1,13 +1,13 @@
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import { cn } from "@nakama/ui/utils";
 import { Add01Icon, Cancel01Icon, Delete02Icon } from "hugeicons-react";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import {
   emptyHeaderRow,
   type McpHeaderRow,
 } from "@/components/soul-tools/mcp-tab/shared";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
-import { cn } from "@/lib/utils";
 
 export function McpFormField({
   label,

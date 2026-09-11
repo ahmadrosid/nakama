@@ -1,11 +1,11 @@
+import { buttonVariants } from "@nakama/ui/button-variants";
+import { cn } from "@nakama/ui/utils";
 import type { ReactNode } from "react";
 import { PairingStepTile } from "@/components/integration-settings.shared";
-import { buttonVariants } from "@/components/ui/button-variants";
 import {
   DISCORD_DEVELOPER_PORTAL_URL,
   DISCORD_SETUP_GUIDE_URL,
 } from "@/lib/integration-docs";
-import { cn } from "@/lib/utils";
 
 export function DiscordPairingGuide({
   inviteUrl,
