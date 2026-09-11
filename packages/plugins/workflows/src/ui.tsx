@@ -18,11 +18,23 @@ type StepDraft = {
   kind: string;
   fields: Record<string, string>;
 };
+type ToolRenderProps = {
+  action: string;
+  input?: Record<string, unknown>;
+  result?: unknown;
+  status: "running" | "done";
+};
 type Context = {
   React: typeof ReactType;
   ui: typeof UI;
   signal: AbortSignal;
-  slots: { register(slot: "page", component: ReactType.ComponentType): void };
+  slots: {
+    register(slot: "page", component: ReactType.ComponentType): void;
+    register(
+      slot: `tool:${string}`,
+      component: ReactType.ComponentType<ToolRenderProps>
+    ): void;
+  };
   styles(css: string): void;
   host: { call(action: string, input?: unknown): Promise<unknown> };
 };
@@ -183,6 +195,135 @@ export function apply(ctx: Context) {
   const action = async <T,>(name: string, input?: unknown): Promise<T> =>
     (await ctx.host.call(name, input)) as T;
 
+  function WorkflowRunCard({ input, result, status }: ToolRenderProps) {
+    const workflowId =
+      typeof input?.workflowId === "string" ? input.workflowId : null;
+    const [workflow, setWorkflow] = React.useState<StoredWorkflow | null>(null);
+    const [liveRun, setLiveRun] = React.useState<WorkflowRunRecord | null>(
+      null
+    );
+    const record =
+      result && typeof result === "object"
+        ? (result as { name?: string; run?: WorkflowRunRecord; error?: string })
+        : null;
+    React.useEffect(() => {
+      if (!workflowId) {
+        return;
+      }
+      let active = true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const load = async () => {
+        try {
+          const definition = await action<StoredWorkflow>("get_workflow", {
+            workflowId,
+          });
+          if (active) {
+            setWorkflow(definition);
+          }
+          if (status === "running") {
+            const runs = await action<WorkflowRunRecord[]>("runs", {
+              workflowId,
+            });
+            if (active) {
+              setLiveRun(runs.find((run) => run.status === "running") ?? null);
+            }
+          }
+        } catch {
+          // The recorded result remains readable if the workflow was removed.
+        }
+        if (active && status === "running") {
+          timer = setTimeout(load, 1500);
+        }
+      };
+      void load();
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    }, [workflowId, status]);
+    const run = record?.run ?? (status === "running" ? liveRun : null);
+    const receipts = run?.steps ?? [];
+    const steps =
+      workflow?.steps ??
+      receipts.map((receipt) => ({ id: receipt.stepId, kind: receipt.kind }));
+    const complete = receipts.filter(
+      (receipt) => receipt.status === "completed"
+    ).length;
+    const label =
+      run?.status === "failed" || record?.error
+        ? "Failed"
+        : status === "running"
+          ? "Running"
+          : run?.status === "completed"
+            ? "Done"
+            : "Finished";
+    return (
+      <section aria-label="Workflow run" className="workflow-chat-card">
+        <header>
+          <h3>{workflow?.name ?? record?.name ?? "Workflow"}</h3>
+          <span>
+            {label}
+            {steps.length ? ` · ${complete} of ${steps.length}` : ""}
+          </span>
+        </header>
+        {run?.error || record?.error ? (
+          <p role="alert">{run?.error ?? record?.error}</p>
+        ) : null}
+        <ol>
+          {steps.map((step) => {
+            const receipt = receipts.find((item) => item.stepId === step.id);
+            const stepStatus = receipt?.status ?? "pending";
+            const definition = workflow?.steps.find(
+              (item) => item.id === step.id
+            );
+            const detail =
+              definition?.kind === "tool"
+                ? definition.tool
+                : definition?.kind === "summarize"
+                  ? definition.prompt
+                  : definition?.kind === "template"
+                    ? definition.template
+                    : step.kind;
+            const output = receipt?.output;
+            const content =
+              output && typeof output === "object" && "content" in output
+                ? output.content
+                : null;
+            const meta =
+              receipt?.error ??
+              (typeof content === "string"
+                ? `${content.trim().split(/\s+/).filter(Boolean).length} words`
+                : stepStatus === "completed"
+                  ? step.kind === "summarize"
+                    ? "Written"
+                    : "Done"
+                  : stepStatus);
+            return (
+              <li data-status={stepStatus} key={step.id}>
+                <span aria-label={stepStatus} className="workflow-chat-mark">
+                  {stepStatus === "completed"
+                    ? "✓"
+                    : stepStatus === "failed"
+                      ? "×"
+                      : "○"}
+                </span>
+                <div>
+                  <p>
+                    {step.id
+                      .replaceAll(/[_-]+/g, " ")
+                      .replaceAll(/\b\w/g, (letter) => letter.toUpperCase())}
+                  </p>
+                  <p className="workflow-chat-detail">{detail}</p>
+                </div>
+                <span className="workflow-chat-result">{meta}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    );
+  }
+
   function WorkflowsPage() {
     const [data, setData] = React.useState<{
       workflows: StoredWorkflow[];
@@ -340,6 +481,7 @@ export function apply(ctx: Context) {
     const [error, setError] = React.useState("");
     const [runs, setRuns] = React.useState<WorkflowRunRecord[]>([]);
     const [confirmDelete, setConfirmDelete] = React.useState(false);
+    const [view, setView] = React.useState("workflow");
     const [selection, setSelection] = React.useState("");
     const [panelTab, setPanelTab] = React.useState("configure");
     const [expanded, setExpanded] = React.useState(false);
@@ -555,6 +697,14 @@ export function apply(ctx: Context) {
                   <Icon kind="delete" />
                 </Button>
                 <Button
+                  onClick={() => setSelection("input")}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Run input
+                </Button>
+                <Button
                   disabled={busy || !workflow || dirty || !enabled}
                   onClick={runWorkflow}
                   size="sm"
@@ -566,13 +716,83 @@ export function apply(ctx: Context) {
                 </Button>
               </div>
             </header>
-            <div className="workflow-scroll">
+            <nav aria-label="Workflow views" className="workflow-view-nav">
+              {["workflow", "runs", "data"].map((tab) => (
+                <Button
+                  aria-pressed={view === tab}
+                  key={tab}
+                  onClick={() => {
+                    setSelection("");
+                    setView(tab);
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  {title(tab)}
+                </Button>
+              ))}
+            </nav>
+            {error && (
+              <p className="workflow-error" role="alert">
+                {error}
+              </p>
+            )}
+            {view === "runs" && (
+              <section
+                aria-label="Run history"
+                className="workflow-scroll workflow-runs"
+              >
+                {!runs.length && <p className="workflow-empty">No runs yet.</p>}
+                {runs.map((run) => (
+                  <details className="workflow-run-record" key={run.id}>
+                    <summary>
+                      <span data-status={run.status}>{run.status}</span>
+                      <time dateTime={run.startedAt}>
+                        {new Date(run.startedAt).toLocaleString()}
+                      </time>
+                      <span
+                        aria-label="Duration"
+                        className="workflow-run-duration"
+                      >
+                        {run.completedAt
+                          ? `${Math.max(0, (Date.parse(run.completedAt) - Date.parse(run.startedAt)) / 1000).toFixed(1)}s`
+                          : run.status === "running"
+                            ? "In progress"
+                            : "—"}
+                      </span>
+                    </summary>
+                    {(run.error || run.output) && (
+                      <pre>{run.error || run.output}</pre>
+                    )}
+                    {(run.steps ?? []).map((step) => (
+                      <div key={step.id}>
+                        <h3>
+                          {step.stepId} · {step.status}
+                        </h3>
+                        <pre>
+                          {JSON.stringify(
+                            {
+                              error: step.error,
+                              input: step.input,
+                              output: step.output,
+                            },
+                            null,
+                            2
+                          )}
+                        </pre>
+                      </div>
+                    ))}
+                  </details>
+                ))}
+              </section>
+            )}
+            {view === "data" && (
+              <section aria-label="Workflow data" className="workflow-scroll">
+                <DatabasePanel />
+              </section>
+            )}
+            <div className="workflow-scroll" hidden={view !== "workflow"}>
               <div className="workflow-content">
-                {error && (
-                  <p className="workflow-error" role="alert">
-                    {error}
-                  </p>
-                )}
                 <div className="workflow-meta">
                   <div className="workflow-meta-row">
                     <Input
@@ -713,105 +933,34 @@ export function apply(ctx: Context) {
                     Add database
                   </Button>
                 </div>
-                <section aria-label="Run history" className="workflow-runs">
-                  <div className="workflow-runs-header">
-                    <h2>Runs</h2>
-                    <Button
-                      onClick={() => setSelection("input")}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      Run input
-                    </Button>
-                  </div>
-                  {!runs.length && (
-                    <p className="workflow-empty">No runs yet.</p>
-                  )}
-                  {runs.map((run) => (
-                    <details className="workflow-run-record" key={run.id}>
-                      <summary>
-                        <span data-status={run.status}>{run.status}</span>
-                        <time dateTime={run.startedAt}>
-                          {new Date(run.startedAt).toLocaleString()}
-                        </time>
-                      </summary>
-                      {(run.error || run.output) && (
-                        <pre>{run.error || run.output}</pre>
-                      )}
-                      {(run.steps ?? []).map((step) => (
-                        <div key={step.id}>
-                          <h3>
-                            {step.stepId} · {step.status}
-                          </h3>
-                          <pre>
-                            {JSON.stringify(
-                              {
-                                error: step.error,
-                                input: step.input,
-                                output: step.output,
-                              },
-                              null,
-                              2
-                            )}
-                          </pre>
-                        </div>
-                      ))}
-                    </details>
-                  ))}
-                </section>
-                <Button
-                  onClick={() => setSelection("data")}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Workflow data
-                </Button>
               </div>
             </div>
           </fieldset>
         </form>
-        {(selectedStep || selection === "summary" || selection === "data") && (
+        {(selectedStep || selection === "summary") && (
           <aside
-            aria-label={
-              selection === "data" ? "Workflow data" : "Workflow step"
-            }
+            aria-label="Workflow step"
             className="workflow-step-drawer"
             data-expanded={expanded}
             ref={panelRef}
             tabIndex={-1}
           >
             <header className="workflow-drawer-header">
-              {selection !== "data" && (
-                <span className="workflow-step-number">
-                  {selectedStep ? selectedIndex + 1 : steps.length + 1}
-                </span>
-              )}
+              <span className="workflow-step-number">
+                {selectedStep ? selectedIndex + 1 : steps.length + 1}
+              </span>
               <div className="workflow-drawer-title">
                 <h2>
-                  {selection === "data"
-                    ? "Workflow data"
-                    : title(selectedStep?.id ?? summaryStep?.id ?? "summary")}
+                  {title(selectedStep?.id ?? summaryStep?.id ?? "summary")}
                 </h2>
-                {selection !== "data" && (
-                  <p>
-                    {selectedStep
-                      ? title(selectedStep.fields.tool ?? selectedStep.kind)
-                      : "Summarize"}
-                  </p>
-                )}
+                <p>
+                  {selectedStep
+                    ? title(selectedStep.fields.tool ?? selectedStep.kind)
+                    : "Summarize"}
+                </p>
               </div>
               <Button
-                aria-label={
-                  selection === "data"
-                    ? expanded
-                      ? "Collapse data"
-                      : "Expand data"
-                    : expanded
-                      ? "Collapse step"
-                      : "Expand step"
-                }
+                aria-label={expanded ? "Collapse step" : "Expand step"}
                 onClick={() => setExpanded((value) => !value)}
                 size="icon-sm"
                 type="button"
@@ -820,7 +969,7 @@ export function apply(ctx: Context) {
                 <Icon kind={expanded ? "collapse" : "expand"} />
               </Button>
               <Button
-                aria-label={selection === "data" ? "Close data" : "Close step"}
+                aria-label="Close step"
                 onClick={() => setSelection("")}
                 size="icon-sm"
                 type="button"
@@ -829,29 +978,25 @@ export function apply(ctx: Context) {
                 <Icon kind="close" />
               </Button>
             </header>
-            {selection !== "data" && (
-              <div aria-label="Step views" className="workflow-drawer-tabs">
-                {[
-                  "configure",
-                  ...(selectedStep?.fields.tool === "sqlite"
-                    ? ["database"]
-                    : []),
-                  "test",
-                ].map((tab) => (
-                  <Button
-                    aria-pressed={panelTab === tab}
-                    key={tab}
-                    onClick={() => setPanelTab(tab)}
-                    type="button"
-                    variant="ghost"
-                  >
-                    {title(tab)}
-                  </Button>
-                ))}
-              </div>
-            )}
+            <div aria-label="Step views" className="workflow-drawer-tabs">
+              {[
+                "configure",
+                ...(selectedStep?.fields.tool === "sqlite" ? ["database"] : []),
+                "test",
+              ].map((tab) => (
+                <Button
+                  aria-pressed={panelTab === tab}
+                  key={tab}
+                  onClick={() => setPanelTab(tab)}
+                  type="button"
+                  variant="ghost"
+                >
+                  {title(tab)}
+                </Button>
+              ))}
+            </div>
             <div className="workflow-drawer-body">
-              {selection !== "data" && panelTab === "configure" && (
+              {panelTab === "configure" && (
                 <div className="workflow-step-fields">
                   {toolsError && <p role="alert">{toolsError}</p>}
                   {selectedStep && (
@@ -953,11 +1098,8 @@ export function apply(ctx: Context) {
                   )}
                 </div>
               )}
-              {(selection === "data" || panelTab === "database") && (
-                <DatabasePanel />
-              )}
-              {selection !== "data" &&
-                panelTab === "test" &&
+              {panelTab === "database" && <DatabasePanel />}
+              {panelTab === "test" &&
                 (() => {
                   const receipt = runs[0]?.steps?.find(
                     (step) =>
@@ -1170,5 +1312,6 @@ export function apply(ctx: Context) {
     );
   }
 
+  ctx.slots.register("tool:run_workflow", WorkflowRunCard);
   ctx.slots.register("page", WorkflowsPage);
 }

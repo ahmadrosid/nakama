@@ -160,6 +160,9 @@ function validateWorkflowSteps(steps, allowedTools) {
       if (!allowedTools.has(tool)) {
         throw new Error(`Tool step ${id} references unknown tool: ${tool}`);
       }
+      if (!record.input || typeof record.input !== "object" || Array.isArray(record.input)) {
+        throw new Error(`Tool step ${id} requires an input object. Use input, not args; use {} for tools without arguments.`);
+      }
     }
     if (kind === "compare") {
       const op = record.op;

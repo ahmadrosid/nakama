@@ -1,5 +1,30 @@
+import type { OrgPluginDetail } from "@nakama/core/contract";
 import * as ui from "@nakama/ui";
 import * as React from "react";
+
+export interface PluginToolProps {
+  action: string;
+  input?: Record<string, unknown>;
+  result?: unknown;
+  status: "running" | "done";
+}
+
+export function findPluginTool(
+  plugins: OrgPluginDetail[],
+  name: string | undefined
+) {
+  for (const plugin of plugins) {
+    const action = plugin.actions.find(
+      ({ key }) =>
+        `plugin_${plugin.pluginId.replaceAll("-", "_")}__${key.replaceAll("-", "_")}` ===
+        name
+    );
+    if (action) {
+      return { action: action.key, plugin };
+    }
+  }
+  return null;
+}
 
 export interface PluginClientContext {
   effect(setup: () => () => void): void;
@@ -8,7 +33,13 @@ export interface PluginClientContext {
   pluginId: string;
   React: typeof React;
   signal: AbortSignal;
-  slots: { register(slot: "page", component: React.ComponentType): void };
+  slots: {
+    register(slot: "page", component: React.ComponentType): void;
+    register(
+      slot: `tool:${string}`,
+      component: React.ComponentType<PluginToolProps>
+    ): void;
+  };
   styles(css: string): void;
   theme: "dark" | "light";
   ui: typeof ui;
@@ -26,7 +57,11 @@ export async function activatePlugin(
     PluginClientContext,
     "orgId" | "pluginId" | "theme" | "signal" | "host"
   >
-): Promise<{ Page: React.ComponentType; dispose(): void }> {
+): Promise<{
+  Page: React.ComponentType;
+  tools: ReadonlyMap<string, React.ComponentType<PluginToolProps>>;
+  dispose(): void;
+}> {
   options.signal.throwIfAborted();
   if (!Array.isArray(module.inject) || typeof module.apply !== "function") {
     throw new Error("Plugin must export inject and apply.");
@@ -39,6 +74,7 @@ export async function activatePlugin(
   const cleanups: Array<() => void> = [];
   let disposed = false;
   let Page: React.ComponentType | undefined;
+  const tools = new Map<string, React.ComponentType<PluginToolProps>>();
   const assertActive = () => {
     options.signal.throwIfAborted();
     if (disposed) {
@@ -50,6 +86,7 @@ export async function activatePlugin(
       return;
     }
     disposed = true;
+    tools.clear();
     for (const cleanup of cleanups.reverse()) {
       try {
         cleanup();
@@ -81,12 +118,27 @@ export async function activatePlugin(
       },
     },
     slots: {
-      register(slot: "page", component: React.ComponentType) {
+      register(
+        slot: "page" | `tool:${string}`,
+        component: React.ComponentType | React.ComponentType<PluginToolProps>
+      ) {
         assertActive();
+        if (slot.startsWith("tool:")) {
+          const action = slot.slice(5);
+          if (
+            !/^[a-z][a-z0-9_-]*$/.test(action) ||
+            tools.has(action) ||
+            typeof component !== "function"
+          ) {
+            throw new Error("Invalid or duplicate plugin tool renderer.");
+          }
+          tools.set(action, component as React.ComponentType<PluginToolProps>);
+          return;
+        }
         if (slot !== "page" || Page || typeof component !== "function") {
           throw new Error("Plugin must register exactly one page component.");
         }
-        Page = component;
+        Page = component as React.ComponentType;
         cleanups.push(() => {
           Page = undefined;
         });
@@ -140,7 +192,7 @@ export async function activatePlugin(
     if (!Page) {
       throw new Error("Plugin did not register a page.");
     }
-    return { dispose, Page };
+    return { dispose, Page, tools };
   } catch (error) {
     dispose();
     throw error;

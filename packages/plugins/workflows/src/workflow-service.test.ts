@@ -56,3 +56,77 @@ test("database prevents overlapping subprocess runs and imports transactionally"
     await rm(dir, { force: true, recursive: true });
   }
 });
+
+test("create and update reject malformed tool inputs without persisting changes", async () => {
+  const service = new WorkflowService(":memory:", "org_a");
+  service.db.exec(
+    await readFile(
+      new URL("../migrations/001-workflows.sql", import.meta.url),
+      "utf8"
+    )
+  );
+  const allowedTools = new Set(["web_fetch"]);
+  const summary = {
+    id: "summary",
+    kind: "summarize",
+    prompt: "Summarize",
+  } as const;
+  const validSteps = [
+    {
+      id: "fetch",
+      input: { url: "{{input.url}}" },
+      kind: "tool",
+      tool: "web_fetch",
+    } as const,
+    summary,
+  ];
+  try {
+    for (const fields of [
+      { args: { url: "https://example.com" } },
+      {},
+      { input: null },
+      { input: [] },
+      { input: "{}" },
+      { input: 42 },
+      { input: false },
+    ]) {
+      const steps = [
+        { id: "fetch", kind: "tool", tool: "web_fetch", ...fields },
+        summary,
+      ] as never;
+      await expect(
+        service.create({ name: "Invalid", steps }, "profile", allowedTools)
+      ).rejects.toThrow();
+      expect(await service.listForOrg()).toEqual([]);
+      const workflow = await service.create(
+        { name: "Valid", steps: validSteps },
+        "profile",
+        allowedTools
+      );
+      await expect(
+        service.update(workflow.id, { steps }, allowedTools)
+      ).rejects.toThrow();
+      expect((await service.get(workflow.id))?.steps).toEqual(validSteps);
+      await service.delete(workflow.id);
+    }
+    const workflow = await service.create(
+      {
+        name: "No arguments",
+        steps: [
+          { id: "fetch", input: {}, kind: "tool", tool: "web_fetch" },
+          summary,
+        ],
+      },
+      "profile",
+      allowedTools
+    );
+    expect((await service.get(workflow.id))?.steps[0]).toEqual({
+      id: "fetch",
+      input: {},
+      kind: "tool",
+      tool: "web_fetch",
+    });
+  } finally {
+    service.close();
+  }
+});

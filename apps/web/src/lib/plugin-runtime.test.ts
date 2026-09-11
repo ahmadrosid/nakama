@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import {
   activatePlugin,
+  findPluginTool,
   type PluginClientContext,
   type PluginClientModule,
 } from "./plugin-runtime";
@@ -116,11 +117,11 @@ describe("native plugin activation", () => {
             const value =
               index < initialStates.length
                 ? initialStates[index]
-                : index === 14
-                  ? selection === "summary" || selection === "data"
-                    ? selection
-                    : ""
-                  : initial;
+                : index === 14 && selection === "data"
+                  ? "data"
+                  : index === 15 && selection === "summary"
+                    ? "summary"
+                    : initial;
             return React.useState(value);
           }) as typeof React.useState,
         },
@@ -158,8 +159,7 @@ describe("native plugin activation", () => {
       expect(html).not.toContain('type="submit"');
       if (selection === "data") {
         expect(html).toContain('aria-label="Workflow data"');
-        expect(html).toContain('aria-label="Expand data"');
-        expect(html).toContain('aria-label="Close data"');
+        expect(html).toContain('aria-label="Workflow views"');
         expect(html).toContain('aria-busy="true"');
         expect(html).not.toContain('role="dialog"');
         expect(html).not.toContain('aria-label="Step views"');
@@ -353,4 +353,114 @@ describe("native plugin activation", () => {
     await expect(response).rejects.toThrow();
     runtime.dispose();
   });
+});
+
+test("tool renderers receive tool props and are removed on unload", async () => {
+  let context!: PluginClientContext;
+  const runtime = await activatePlugin(
+    {
+      apply(ctx) {
+        context = ctx;
+        ctx.slots.register("page", () => null);
+        ctx.slots.register("tool:list", ({ input, result, status }) =>
+          createElement("p", null, JSON.stringify({ input, result, status }))
+        );
+      },
+      inject: ["slots"],
+    },
+    options()
+  );
+  const Renderer = runtime.tools.get("list")!;
+  expect(
+    renderToString(
+      createElement(Renderer, {
+        action: "list",
+        input: { limit: 3 },
+        result: [1, 2],
+        status: "done",
+      })
+    )
+  ).toContain("limit");
+  expect(runtime.tools.has("other")).toBe(false);
+  runtime.dispose();
+  expect(runtime.tools.size).toBe(0);
+  expect(() => context.slots.register("tool:list", () => null)).toThrow();
+});
+
+test("duplicate and invalid tool slots fail activation", async () => {
+  for (const slot of ["tool:list", "tool:other:list", "tool:"] as const) {
+    await expect(
+      activatePlugin(
+        {
+          apply(ctx) {
+            ctx.slots.register("page", () => null);
+            ctx.slots.register("tool:list", () => null);
+            ctx.slots.register(slot, () => null);
+          },
+          inject: ["slots"],
+        },
+        options()
+      )
+    ).rejects.toThrow();
+  }
+});
+
+test("tool matching resolves normalized names only against the owning plugin's actions", () => {
+  const plugin = {
+    actions: [{ key: "list-items" }],
+    pluginId: "my-notes",
+  } as Parameters<typeof findPluginTool>[0][number];
+  expect(findPluginTool([plugin], "plugin_my_notes__list_items")).toEqual({
+    action: "list-items",
+    plugin,
+  });
+  expect(findPluginTool([plugin], "plugin_other__list_items")).toBeNull();
+  expect(findPluginTool([plugin], "plugin_my_notes__delete")).toBeNull();
+  expect(findPluginTool([plugin], "web_fetch")).toBeNull();
+});
+
+test("the Workflows plugin owns the run result renderer", async () => {
+  const module = await import(
+    new URL("../../../../packages/plugins/workflows/ui/app.js", import.meta.url)
+      .href
+  );
+  const renderers = new Map<string, React.ComponentType>();
+  module.apply({
+    ...options(),
+    React,
+    slots: {
+      register(slot: string, component: React.ComponentType) {
+        renderers.set(slot, component);
+      },
+    },
+    styles() {},
+    ui,
+  });
+  const Renderer = renderers.get("tool:run_workflow") as React.ComponentType<
+    import("./plugin-runtime").PluginToolProps
+  >;
+  expect(Renderer).toBeDefined();
+  const html = renderToString(
+    createElement(Renderer, {
+      action: "run_workflow",
+      result: {
+        name: "News digest",
+        run: {
+          status: "completed",
+          steps: [
+            {
+              kind: "tool",
+              output: { content: "Hello world" },
+              status: "completed",
+              stepId: "fetch_news",
+            },
+          ],
+        },
+      },
+      status: "done",
+    })
+  );
+  expect(html).toContain("News digest");
+  expect(html).toContain("2 words");
+  expect(html).toContain("Fetch News");
 });
