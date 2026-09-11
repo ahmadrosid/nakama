@@ -1,6 +1,9 @@
 // ui/style.css
 var style_default = `[data-plugin-id="workflows"] {
-  container-type: inline-size;
+  &:has(> .workflows-page) {
+    padding: 0;
+    container-type: inline-size;
+  }
 
   .workflows-page {
     min-width: 0;
@@ -13,9 +16,6 @@ var style_default = `[data-plugin-id="workflows"] {
     grid-template-columns: 240px minmax(0, 1fr);
     min-height: min(760px, 85dvh);
     overflow: hidden;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
   }
   .workflow-sidebar {
     display: flex;
@@ -72,9 +72,6 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-status-dot[data-enabled="true"] {
     background: #10b981;
-  }
-  .workflow-create {
-    margin: auto 12px 12px;
   }
   .workflow-editor,
   .workflow-editor form,
@@ -244,10 +241,6 @@ var style_default = `[data-plugin-id="workflows"] {
       border-right: 0;
       border-bottom: 1px solid var(--border);
     }
-    .workflow-create {
-      flex-shrink: 0;
-      margin: 8px 12px;
-    }
     .workflow-meta-row {
       flex-wrap: wrap;
     }
@@ -398,13 +391,14 @@ var style_default = `[data-plugin-id="workflows"] {
 
 [data-plugin-id="workflows"] {
   .workflow-chat-card {
+    min-width: 0;
+    max-width: 100%;
     padding: 12px 16px;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
   }
-  .workflow-chat-card header,
-  .workflow-chat-card li {
+  .workflow-chat-card header {
     display: flex;
     gap: 12px;
     align-items: baseline;
@@ -419,17 +413,36 @@ var style_default = `[data-plugin-id="workflows"] {
     font-size: 14px;
   }
   .workflow-chat-card h3 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-weight: 500;
+    white-space: nowrap;
+  }
+  .workflow-chat-card header > span {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .workflow-chat-card > [role="alert"] {
+    margin-bottom: 16px;
+    overflow-wrap: anywhere;
   }
   .workflow-chat-card ol {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     padding: 0;
     margin: 0;
     list-style: none;
   }
+  .workflow-chat-card li {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) minmax(0, 28%);
+    gap: 10px;
+    align-items: baseline;
+    min-width: 0;
+  }
   .workflow-chat-card li > div {
-    flex: 1;
     min-width: 0;
   }
   .workflow-chat-card li p,
@@ -445,10 +458,11 @@ var style_default = `[data-plugin-id="workflows"] {
     color: var(--muted-foreground);
   }
   .workflow-chat-result {
-    max-width: 40%;
+    min-width: 0;
+    text-align: right;
   }
   .workflow-chat-card [data-status="completed"] .workflow-chat-mark {
-    color: var(--primary);
+    color: #10b981;
   }
   .workflow-chat-card [data-status="failed"],
   .workflow-chat-card [role="alert"] {
@@ -636,7 +650,9 @@ function apply(ctx) {
       }, meta));
     })));
   }
-  function WorkflowsPage() {
+  function WorkflowsPage({
+    renderHeaderActions = (children) => children
+  }) {
     const [data, setData] = React.useState(null);
     const [selectedId, setSelectedId] = React.useState(null);
     const [error, setError] = React.useState("");
@@ -667,7 +683,13 @@ function apply(ctx) {
     const selected = data?.workflows.find((workflow) => workflow.id === selectedId) ?? null;
     return /* @__PURE__ */ React.createElement("main", {
       className: "workflows-page"
-    }, error && /* @__PURE__ */ React.createElement("p", {
+    }, data && renderHeaderActions(/* @__PURE__ */ React.createElement(Button, {
+      onClick: () => setSelectedId(""),
+      type: "button",
+      variant: "outline"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "add"
+    }), "New workflow")), error && /* @__PURE__ */ React.createElement("p", {
       role: "alert"
     }, error), data ? /* @__PURE__ */ React.createElement("div", {
       className: "workflow-layout",
@@ -692,14 +714,7 @@ function apply(ctx) {
     }, /* @__PURE__ */ React.createElement("span", {
       className: "workflow-status-dot",
       "data-enabled": workflow.enabled
-    }), workflow.enabled ? "Enabled" : "Disabled"))))), /* @__PURE__ */ React.createElement(Button, {
-      className: "workflow-create",
-      onClick: () => setSelectedId(""),
-      type: "button",
-      variant: "ghost"
-    }, /* @__PURE__ */ React.createElement(Icon, {
-      kind: "add"
-    }), "New workflow")), selected || selectedId === "" ? /* @__PURE__ */ React.createElement(Editor, {
+    }), workflow.enabled ? "Enabled" : "Disabled")))))), selected || selectedId === "" ? /* @__PURE__ */ React.createElement(Editor, {
       key: `${selected?.id ?? "new"}:${selected?.version ?? 0}`,
       onSaved: saved,
       profiles: data.profiles,

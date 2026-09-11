@@ -9,6 +9,10 @@ export interface PluginToolProps {
   status: "running" | "done";
 }
 
+export interface PluginPageProps {
+  renderHeaderActions?: (children: React.ReactNode) => React.ReactNode;
+}
+
 export function findPluginTool(
   plugins: OrgPluginDetail[],
   name: string | undefined
@@ -34,7 +38,10 @@ export interface PluginClientContext {
   React: typeof React;
   signal: AbortSignal;
   slots: {
-    register(slot: "page", component: React.ComponentType): void;
+    register(
+      slot: "page",
+      component: React.ComponentType<PluginPageProps>
+    ): void;
     register(
       slot: `tool:${string}`,
       component: React.ComponentType<PluginToolProps>
@@ -58,7 +65,7 @@ export async function activatePlugin(
     "orgId" | "pluginId" | "theme" | "signal" | "host"
   >
 ): Promise<{
-  Page: React.ComponentType;
+  Page: React.ComponentType<PluginPageProps>;
   tools: ReadonlyMap<string, React.ComponentType<PluginToolProps>>;
   dispose(): void;
 }> {
@@ -73,7 +80,7 @@ export async function activatePlugin(
   }
   const cleanups: Array<() => void> = [];
   let disposed = false;
-  let Page: React.ComponentType | undefined;
+  let Page: React.ComponentType<PluginPageProps> | undefined;
   const tools = new Map<string, React.ComponentType<PluginToolProps>>();
   const assertActive = () => {
     options.signal.throwIfAborted();
@@ -120,7 +127,9 @@ export async function activatePlugin(
     slots: {
       register(
         slot: "page" | `tool:${string}`,
-        component: React.ComponentType | React.ComponentType<PluginToolProps>
+        component:
+          | React.ComponentType<PluginPageProps>
+          | React.ComponentType<PluginToolProps>
       ) {
         assertActive();
         if (slot.startsWith("tool:")) {
@@ -138,7 +147,7 @@ export async function activatePlugin(
         if (slot !== "page" || Page || typeof component !== "function") {
           throw new Error("Plugin must register exactly one page component.");
         }
-        Page = component as React.ComponentType;
+        Page = component as React.ComponentType<PluginPageProps>;
         cleanups.push(() => {
           Page = undefined;
         });

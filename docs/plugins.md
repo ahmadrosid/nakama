@@ -129,6 +129,7 @@ export function apply(ctx) {
 Services must be declared in `inject`; unavailable or undeclared services fail activation:
 
 - `slots.register("page", Component)` registers exactly one page for this plugin.
+- Page components receive an optional `renderHeaderActions(children)` prop. Render its return value inside the page to place controls in the host's top navigation bar; the host owns placement and cleanup.
 - `host.call(actionKey, input)` invokes this plugin's backend action. Nakama supplies authentication, CSRF, and the activation's org; plugins do not build raw API requests.
 - `ui` exposes the shared `@nakama/ui` components (for example `const { Button, Input } = ctx.ui`). Declare `"ui"` in `inject`; use type-only `@nakama/ui` imports for TypeScript. The host supplies React and the component styles, so do not bundle React or the UI library into a plugin.
 - `styles(css)` adds a stylesheet and removes it on unload. Scope selectors under `[data-plugin-id="your-plugin-id"]` so they do not affect the dashboard.

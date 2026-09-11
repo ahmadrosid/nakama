@@ -324,7 +324,13 @@ export function apply(ctx: Context) {
     );
   }
 
-  function WorkflowsPage() {
+  function WorkflowsPage({
+    renderHeaderActions = (children) => children,
+  }: {
+    renderHeaderActions?: (
+      children: ReactType.ReactNode
+    ) => ReactType.ReactNode;
+  }) {
     const [data, setData] = React.useState<{
       workflows: StoredWorkflow[];
       profiles: Profile[];
@@ -363,6 +369,17 @@ export function apply(ctx: Context) {
       data?.workflows.find((workflow) => workflow.id === selectedId) ?? null;
     return (
       <main className="workflows-page">
+        {data &&
+          renderHeaderActions(
+            <Button
+              onClick={() => setSelectedId("")}
+              type="button"
+              variant="outline"
+            >
+              <Icon kind="add" />
+              New workflow
+            </Button>
+          )}
         {error && <p role="alert">{error}</p>}
         {data ? (
           <div
@@ -403,15 +420,6 @@ export function apply(ctx: Context) {
                     </li>
                   ))}
                 </ul>
-                <Button
-                  className="workflow-create"
-                  onClick={() => setSelectedId("")}
-                  type="button"
-                  variant="ghost"
-                >
-                  <Icon kind="add" />
-                  New workflow
-                </Button>
               </aside>
             )}
             {selected || selectedId === "" ? (

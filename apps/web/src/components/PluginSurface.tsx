@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { pluginPageStateMessage, pluginUiModuleUrl } from "@/hooks/use-plugins";
 import { client } from "@/lib/client";
 import {
@@ -123,7 +124,28 @@ export function PluginSurface({
         data-plugin-id={pluginId}
       >
         <Suspense fallback={fallback}>
-          {tool && Renderer ? <Renderer {...tool} /> : <Page />}
+          {tool && Renderer ? (
+            <Renderer {...tool} />
+          ) : (
+            <Page
+              renderHeaderActions={(children) => {
+                const target = document.querySelector(
+                  "[data-page-header-actions]"
+                );
+                return target
+                  ? createPortal(
+                      <div
+                        className="flex items-center gap-2"
+                        data-plugin-id={pluginId}
+                      >
+                        {children}
+                      </div>,
+                      target
+                    )
+                  : children;
+              }}
+            />
+          )}
         </Suspense>
       </div>
     </PluginRenderBoundary>

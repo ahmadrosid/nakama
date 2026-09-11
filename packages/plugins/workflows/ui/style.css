@@ -1,5 +1,8 @@
 [data-plugin-id="workflows"] {
-  container-type: inline-size;
+  &:has(> .workflows-page) {
+    padding: 0;
+    container-type: inline-size;
+  }
 
   .workflows-page {
     min-width: 0;
@@ -12,9 +15,6 @@
     grid-template-columns: 240px minmax(0, 1fr);
     min-height: min(760px, 85dvh);
     overflow: hidden;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
   }
   .workflow-sidebar {
     display: flex;
@@ -71,9 +71,6 @@
   }
   .workflow-status-dot[data-enabled="true"] {
     background: #10b981;
-  }
-  .workflow-create {
-    margin: auto 12px 12px;
   }
   .workflow-editor,
   .workflow-editor form,
@@ -243,10 +240,6 @@
       border-right: 0;
       border-bottom: 1px solid var(--border);
     }
-    .workflow-create {
-      flex-shrink: 0;
-      margin: 8px 12px;
-    }
     .workflow-meta-row {
       flex-wrap: wrap;
     }
@@ -397,13 +390,14 @@
 
 [data-plugin-id="workflows"] {
   .workflow-chat-card {
+    min-width: 0;
+    max-width: 100%;
     padding: 12px 16px;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
   }
-  .workflow-chat-card header,
-  .workflow-chat-card li {
+  .workflow-chat-card header {
     display: flex;
     gap: 12px;
     align-items: baseline;
@@ -418,17 +412,36 @@
     font-size: 14px;
   }
   .workflow-chat-card h3 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-weight: 500;
+    white-space: nowrap;
+  }
+  .workflow-chat-card header > span {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .workflow-chat-card > [role="alert"] {
+    margin-bottom: 16px;
+    overflow-wrap: anywhere;
   }
   .workflow-chat-card ol {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     padding: 0;
     margin: 0;
     list-style: none;
   }
+  .workflow-chat-card li {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) minmax(0, 28%);
+    gap: 10px;
+    align-items: baseline;
+    min-width: 0;
+  }
   .workflow-chat-card li > div {
-    flex: 1;
     min-width: 0;
   }
   .workflow-chat-card li p,
@@ -444,10 +457,11 @@
     color: var(--muted-foreground);
   }
   .workflow-chat-result {
-    max-width: 40%;
+    min-width: 0;
+    text-align: right;
   }
   .workflow-chat-card [data-status="completed"] .workflow-chat-mark {
-    color: var(--primary);
+    color: #10b981;
   }
   .workflow-chat-card [data-status="failed"],
   .workflow-chat-card [role="alert"] {
