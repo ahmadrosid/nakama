@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
 describe("ensureBundledSkillFiles", () => {
@@ -78,5 +79,19 @@ describe("ensureBundledSkillFiles", () => {
     expect(created).toContain("manage-skills");
     expect(content).toContain("skill_manage");
     expect(content).not.toContain("description: stale");
+  });
+
+  test("refreshes an installed save-artifact skill on startup", async () => {
+    const directory = join(configDir, "agent", "skills", "save-artifact");
+    const skillPath = join(directory, "SKILL.md");
+    await mkdir(directory, { recursive: true });
+    await Bun.write(skillPath, "outdated bundled skill");
+
+    const refreshed = await ensureBundledSkillFiles();
+
+    expect(refreshed).toContain("save-artifact");
+    expect(await readFile(skillPath, "utf8")).toBe(
+      await readBundledSkillMarkdown("save-artifact")
+    );
   });
 });

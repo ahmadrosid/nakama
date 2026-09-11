@@ -23,7 +23,7 @@ The artifact list gives you:
 
 ![The Files page grouping nested coding-agent-runs logs into a folder](/screenshots/files-artifacts-after-folders.png)
 
-Each row shows the resolved MIME type, size, and last modified time. Those come from the `{filename}.nakama-meta.json` sidecar the agent writes next to the file. Without a sidecar, Nakama infers the type from the extension, and sniffs the bytes for valid UTF-8 when the extension is unknown, so a `Dockerfile` or a `notes.abc` still previews as text instead of being written off as binary.
+Each row shows the file type, size, and last modified time. Nakama infers the type from the extension and reads the size and modification time from the file. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or a `notes.abc` still previews as text instead of being written off as binary. Existing metadata files remain supported.
 
 ## Previews by content type
 
@@ -75,7 +75,7 @@ Three things to know:
 
 - **Markdown only.** The write path refuses anything whose resolved type is not `text/markdown` with a 400, so a `.docx` cannot be replaced by the markdown its own preview was converted into.
 - **A failed save keeps your buffer** and shows the error, rather than dropping what you typed.
-- **The sidecar is refreshed**, so the Files list does not show a stale size and timestamp.
+- **The size and timestamp update** in the Files list after saving.
 
 A failed save looks like this. The error is shown, the buffer is still there, and Save is still available:
 
