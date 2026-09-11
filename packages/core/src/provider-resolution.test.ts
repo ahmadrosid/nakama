@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   apiKeyEnvVarForProvider,
   defaultDiscoveryBaseUrl,
@@ -113,6 +116,41 @@ describe("resolveProvider", () => {
     });
 
     expect(provider).toBe("gemini");
+  });
+
+  test("uses an API key mounted through a companion file variable", () => {
+    const directory = mkdtempSync(join(tmpdir(), "nakama-provider-key-"));
+    const keyPath = join(directory, "gemini");
+    writeFileSync(keyPath, "mounted-secret\n");
+
+    try {
+      expect(
+        resolveProvider({
+          env: { GEMINI_API_KEY_FILE: keyPath },
+        })
+      ).toBe("gemini");
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  test("prefers a direct API key over its companion file", () => {
+    expect(
+      resolveProvider({
+        env: {
+          GEMINI_API_KEY: "direct-secret",
+          GEMINI_API_KEY_FILE: "/missing/secret",
+        },
+      })
+    ).toBe("gemini");
+  });
+
+  test("fails when a configured API key file cannot be read", () => {
+    expect(() =>
+      resolveProvider({
+        env: { GEMINI_API_KEY_FILE: "/missing/secret" },
+      })
+    ).toThrow();
   });
 
   test("returns null when multiple env API keys are set", () => {

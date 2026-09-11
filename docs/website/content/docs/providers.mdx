@@ -19,6 +19,24 @@ During [First-time setup](/first-time-setup), the wizard uses the same provider 
 
 ![Configure your LLM provider in the setup wizard](/screenshots/setup-step-provider.png)
 
+## Mount provider API keys
+
+Keep provider secrets outside Nakama's data directory by setting the provider's
+API-key variable with a `_FILE` suffix. Its value is the path to a readable
+secret file:
+
+```sh
+OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
+```
+
+This works for built-in providers that expose an API-key environment variable,
+including `ANTHROPIC_API_KEY_FILE` and `GEMINI_API_KEY_FILE`. On first boot,
+set `NAKAMA_PROVIDER` as well when more than one provider secret is mounted.
+
+Nakama trims the file contents and leaves the API key empty in its saved
+settings. A directly set API-key variable takes priority over its `_FILE`
+partner. Startup fails when a configured secret file cannot be read.
+
 ## Supported providers
 
 Nakama supports these built-in provider types:
