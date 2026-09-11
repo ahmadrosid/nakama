@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_platform_admin INTEGER DEFAULT 0 NOT NULL,
   -- Legacy: pre-org USER.md; migrateLegacyUserContextToOrgMembers copies into org_members (#550).
   user_context TEXT,
+  disabled_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
