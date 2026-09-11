@@ -21,11 +21,13 @@ test("official workflow install imports once, executes through IPC, isolates org
   const dir = await mkdtemp(join(tmpdir(), "official-workflows-"));
   directories.push(dir);
   const officialPackagesDir = join(dir, "official");
-  await cp(
-    resolve(import.meta.dir, "../../../../packages/plugins/workflows"),
-    join(officialPackagesDir, "workflows"),
-    { recursive: true }
-  );
+  for (const pluginId of ["workflows", "supermemory"]) {
+    await cp(
+      resolve(import.meta.dir, "../../../../packages/plugins", pluginId),
+      join(officialPackagesDir, pluginId),
+      { recursive: true }
+    );
+  }
   const db = createInMemoryDatabaseAdapter();
   const legacy: StoredWorkflow = {
     description: "",
@@ -64,7 +66,9 @@ test("official workflow install imports once, executes through IPC, isolates org
     },
   });
   const actor = { id: "admin", role: "admin" as const };
-  expect((await service.listOfficialPlugins())[0]?.id).toBe("workflows");
+  expect(
+    (await service.listOfficialPlugins()).map((plugin) => plugin.id)
+  ).toEqual(expect.arrayContaining(["workflows", "supermemory"]));
   await service.installOfficialPlugin("org_a", "workflows", actor);
   const invoke = async (key: string, input = {}, orgId = "org_a") =>
     (
