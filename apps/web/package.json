@@ -10,7 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@base-ui/react": "^1.5.0",
+    "@base-ui/react": "^1.8.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@nakama/client": "workspace:*",
