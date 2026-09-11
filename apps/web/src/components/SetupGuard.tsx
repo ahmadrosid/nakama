@@ -1,5 +1,5 @@
+import { Spinner } from "@nakama/ui/spinner";
 import { Navigate, Outlet } from "react-router-dom";
-import { Spinner } from "@/components/ui/spinner";
 import { useAppContext } from "@/context/use-app-context";
 import { SETUP_PATH } from "@/lib/navigation";
 

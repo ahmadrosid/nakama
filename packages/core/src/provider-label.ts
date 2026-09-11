@@ -23,6 +23,7 @@ const BUILTIN_LABELS: Record<
   openrouter: "OpenRouter",
   perplexity: "Perplexity Sonar",
   together: "Together AI",
+  vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",

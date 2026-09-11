@@ -1,5 +1,5 @@
 import type { ArtifactFile } from "@nakama/core/contract";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import { formatError } from "@/lib/client";
 import type { FilesViewMode } from "@/lib/files-page.shared";
 import { ArtifactFolderCard } from "@/pages/files/files-artifact-folder-card";

@@ -1,11 +1,11 @@
+import { Button } from "@nakama/ui/button";
+import { FormField } from "@nakama/ui/form-field";
 import { Add01Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import {
   ModelListEditor,
   type ModelListRow,
 } from "@/components/ModelListEditor";
-import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/ui/form-field";
 
 interface BrowsableModelFieldsProps<T> {
   browseLabel: string;

@@ -1,9 +1,4 @@
-import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
-import { ProfileImportDialog } from "@/components/profiles/ProfileImportDialog";
-import { SkillCreateDialog } from "@/components/SkillCreateDialog";
-import { SkillInstallDialog } from "@/components/SkillInstallDialog";
-import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +6,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
+import { ProfileImportDialog } from "@/components/profiles/ProfileImportDialog";
+import { SkillCreateDialog } from "@/components/SkillCreateDialog";
+import { SkillInstallDialog } from "@/components/SkillInstallDialog";
+import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";

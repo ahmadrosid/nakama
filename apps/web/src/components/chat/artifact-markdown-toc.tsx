@@ -1,3 +1,4 @@
+import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon } from "hugeicons-react";
 import type { RefObject } from "react";
 import {
@@ -5,7 +6,6 @@ import {
   MARKDOWN_TOC_MIN_HEADINGS,
   type MarkdownHeading,
 } from "@/lib/markdown-toc";
-import { cn } from "@/lib/utils";
 
 const LEVEL_INDENT: Record<number, string> = {
   1: "pl-0",

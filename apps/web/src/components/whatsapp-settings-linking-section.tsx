@@ -1,3 +1,6 @@
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -6,9 +9,6 @@ import {
 } from "hugeicons-react";
 import { QRCodeSVG } from "qrcode.react";
 import { SettingsRow } from "@/components/integration-settings.shared";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 function pairingCodeDescription(
   pairingCode: string | null,

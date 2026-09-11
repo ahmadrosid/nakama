@@ -1,0 +1,35 @@
+---
+name: create-workflow
+description: Create and run user-triggered workflows with declared steps. Use when the user asks about a workflow or wants a verifiable recipe (fetch, compare, summarize) they can run on demand from chat or the dashboard.
+include-body-on-match: true
+---
+
+When the user wants a workflow they can run on demand (for example "morning brief"), explain the step recipe clearly before saving.
+
+Use `plugin_workflows__create_workflow` with `kind` (never `type`). Last step must be `summarize` with `prompt` (never `instruction`).
+
+```json
+[
+  { "id": "news", "kind": "tool", "tool": "web_fetch", "input": { "url": "https://news.ycombinator.com" } },
+  { "id": "summary", "kind": "summarize", "prompt": "Write a brief from the receipts only." }
+]
+```
+
+- `tool` — assigned profile or MCP tool that can run locally; `input` must match that tool's schema. Use `web_fetch` for URLs. Do not use `web_search` — it only runs inside a provider chat turn.
+- `template` — substitutes values into text only. Writing “extract stories” in a template returns those instructions; it does not call AI, parse content, or produce structured JSON.
+- `compare` / `assert` — deterministic checks on prior receipts. `compare.op` is `eq` | `near` | `contains`. Do not use compare as free-text analysis
+- exactly one final `summarize` — turns the receipt bag into prose (no tools). It cannot be an intermediate extraction step or feed a later database step.
+
+For extraction or analysis before a write, use an available tool that actually performs that work. Verify its input and output schema; do not invent a tool or output field. If no suitable tool is assigned, explain the missing capability instead of saving a recipe that cannot fulfill the request.
+
+References use the tool's actual output shape: `{{steps.fetch.content}}`, not an assumed `.output` wrapper. Missing references stop the run. Explicit null values are allowed, so check required data with assert/compare steps before writes when applicable.
+
+For a requested quantity such as five saved stories, check the extraction count and the database result with an assert/compare step. Inspect receipts before claiming success: a completed SQL call with `changes: 0` does not prove stories were saved. Do not blindly rerun writes after a failure; inspect which writes already completed.
+
+When the user names a profile to run as, confirm that profile and pass its `agentId`. Omit `agentId` to use the current chat profile.
+
+When the user asks to run a saved workflow, use `plugin_workflows__list_workflows` to find it, then `plugin_workflows__run_workflow`. Pass `input` when the recipe uses `{{input.*}}` bindings.
+
+When the user wants to change an existing workflow, use `plugin_workflows__update_workflow`.
+
+Do not use workflows for clock-driven jobs — use `create_automation` for schedules.

@@ -3,11 +3,7 @@ import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
-import { Add01Icon, Delete02Icon, Search01Icon } from "hugeicons-react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,22 +11,35 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { Add01Icon, Delete02Icon, Search01Icon } from "hugeicons-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useProfilesQuery, useToolsQuery } from "@/hooks/use-app-queries";
+import { isPluginOwned } from "@/hooks/use-plugins";
 import { useDeleteToolMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
-import { canUseToolPlayground, toolPlaygroundPath } from "@/lib/navigation";
+import {
+  canUseToolPlayground,
+  pluginsSystemPath,
+  toolPlaygroundPath,
+} from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
-import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 const toolSearchThreshold = 4;
 
 function isDeletableTool(tool: ToolDetail): boolean {
+  return !(isProtectedToolId(tool.id) || isPluginOwned(tool));
+}
+
+function isListedCustomTool(tool: ToolDetail): boolean {
   return !isProtectedToolId(tool.id);
 }
 
@@ -56,8 +65,8 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   const loading = isLoading && tools.length === 0;
   const busy = deleteToolMutation.isPending;
   const errorMessage = actionError ?? (error ? formatError(error) : null);
-  const customTools = tools.filter(isDeletableTool);
-  const builtinTools = tools.filter((tool) => !isDeletableTool(tool));
+  const customTools = tools.filter(isListedCustomTool);
+  const builtinTools = tools.filter((tool) => !isListedCustomTool(tool));
 
   function goToCreateTool() {
     if (!superBotProfile) {
@@ -381,11 +390,24 @@ function ToolListItem({
       )}
 
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-        {deletable ? (
+        {isPluginOwned(tool) ? (
+          <span className="scope-badge scope-badge-custom">
+            {tool.pluginId}
+          </span>
+        ) : deletable ? (
           <span className="scope-badge scope-badge-custom">custom</span>
         ) : (
           <span className="scope-badge scope-badge-active">built-in</span>
         )}
+        {tool.pluginId ? (
+          <Button
+            render={<Link to={pluginsSystemPath()} />}
+            size="sm"
+            variant="outline"
+          >
+            Plugin
+          </Button>
+        ) : null}
 
         {onConfigure ? (
           <Button

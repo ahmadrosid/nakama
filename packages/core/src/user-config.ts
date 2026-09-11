@@ -30,7 +30,6 @@ import {
 } from "./ollama-provider-config";
 import {
   apiKeyEnvVarForProvider,
-  isDiscoveryModelProvider,
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
@@ -102,6 +101,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openrouter: "OpenRouter",
   perplexity: "Perplexity Sonar",
   together: "Together AI",
+  vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",
   xai_oauth: "Grok (SuperGrok / Premium+)",
   zhipu: "GLM (Z.ai)",
@@ -236,6 +236,18 @@ export function validateTimezone(
   }
 
   return value;
+}
+
+// Org id reaches this as a path segment, so anything that could climb out of
+// the config dir is rejected here rather than at each caller.
+const ORG_ID_SEGMENT = /^[A-Za-z0-9][\w.-]{0,63}$/;
+
+export function getOrgConfigDir(orgId: string): string {
+  if (!ORG_ID_SEGMENT.test(orgId)) {
+    throw new Error(`Invalid organization id: ${orgId}`);
+  }
+
+  return join(getUserConfigDir(), "orgs", orgId);
 }
 
 export function getUserConfigDir(): string {
@@ -641,9 +653,7 @@ function loadProvidersFromSections(
       : undefined;
     // Writer persists models_json for every type that has a shortlist/catalog
     // override; load any present JSON so restarts keep shortlists.
-    const customModels = values.models_json?.trim()
-      ? parseCustomModelsJson(values.models_json)
-      : undefined;
+    const customModels = parseCustomModelsJson(values.models_json);
     const hostMode =
       type === "ollama"
         ? (parseOllamaHostMode(values.host_mode) ?? undefined)

@@ -1,4 +1,13 @@
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import {
   type CSSProperties,
   Fragment,
   type ReactNode,
@@ -6,16 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 export type ModelCostFilter = "all" | "free";
 

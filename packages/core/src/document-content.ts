@@ -100,6 +100,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   perplexity: new Set<string>(),
   together: new Set<string>(),
+  vercel_ai_gateway: new Set<string>(),
   xai: new Set<string>(),
   xai_oauth: new Set<string>(),
   zhipu: new Set<string>(),

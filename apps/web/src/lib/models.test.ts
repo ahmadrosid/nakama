@@ -25,6 +25,7 @@ function group(
     | "deepseek"
     | "doubao"
     | "together"
+    | "vercel_ai_gateway"
     | "mistral"
     | "perplexity"
     | "cerebras"
@@ -136,6 +137,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("tg-1", "model-1"),
         group("tg-1", "together", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
+  test("treats vercel_ai_gateway models as opt-in only for thinking", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -309,6 +326,22 @@ describe("resolveModelVisionSupport", () => {
     ).toBe(true);
   });
 
+  test("treats vercel_ai_gateway models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("vag-1", "model-1"),
+        group("vag-1", "vercel_ai_gateway", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats fireworks models as opt-in only for vision", () => {
     expect(
       resolveModelVisionSupport(
@@ -414,6 +447,7 @@ describe("firstAvailableProviderOption", () => {
           "deepseek",
           "doubao",
           "together",
+          "vercel_ai_gateway",
           "mistral",
           "perplexity",
           "cerebras",

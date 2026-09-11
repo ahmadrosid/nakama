@@ -1,12 +1,12 @@
+import { Card } from "@nakama/ui/card";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
+import { toast } from "@nakama/ui/toast";
 import { useState } from "react";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
-import { Card } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
 
 export function SkillsPostTurnReviewOrgCard() {
   const { activeOrg, updateOrg } = useAuth();

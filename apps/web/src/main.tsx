@@ -1,8 +1,9 @@
+import { Toaster } from "@nakama/ui/toaster";
+import { TooltipProvider } from "@nakama/ui/tooltip";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { ServiceWorkerUpdatePrompt } from "@/components/ServiceWorkerUpdatePrompt";
 import { ThemeProvider } from "@/context/theme-context";
 import { App } from "./App";
 import "./index.css";
@@ -14,6 +15,7 @@ createRoot(document.getElementById("root")!).render(
         <TooltipProvider>
           <App />
           <Toaster />
+          <ServiceWorkerUpdatePrompt />
         </TooltipProvider>
       </ThemeProvider>
     </BrowserRouter>

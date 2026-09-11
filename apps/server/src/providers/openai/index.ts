@@ -156,6 +156,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Together AI";
   }
 
+  if (providerName === "vercel_ai_gateway") {
+    return "Vercel AI Gateway";
+  }
+
   if (providerName === "mistral") {
     return "Mistral";
   }
@@ -369,8 +373,14 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
-    ...(provider === "doubao"
-      ? buildDoubaoThinkingBody(options.thinking)
+    ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
+    ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
+      ? {
+          reasoning: {
+            effort: normalizeThinkingEffort(options.thinking.effort),
+            enabled: true,
+          },
+        }
       : {}),
     ...(provider === "perplexity" && options.thinking?.enabled
       ? {
@@ -470,7 +480,9 @@ function readReasoningContent(
   const direct =
     typeof record.reasoning_content === "string"
       ? record.reasoning_content
-      : undefined;
+      : typeof record.reasoning === "string"
+        ? record.reasoning
+        : undefined;
 
   if (direct === undefined) {
     return;

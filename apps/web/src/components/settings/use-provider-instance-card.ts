@@ -14,10 +14,7 @@ import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
-import {
-  seedManageModelRows,
-  seedShortlistManageModelRows,
-} from "@/components/settings/provider-settings-seed";
+import { seedManageModelRows } from "@/components/settings/provider-settings-seed";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { formatError } from "@/lib/client";
 import {
@@ -90,26 +87,7 @@ export function useProviderInstanceCard({
   const openManage = () => {
     setDialogError(null);
 
-    if (isCompatibleLike) {
-      setManageModels(
-        seedManageModelRows(instance.customModels, instanceModels)
-      );
-    } else if (isOpenRouter || isShortlistBrowse) {
-      setManageModels(
-        seedShortlistManageModelRows(
-          instance.customModels,
-          null,
-          instanceModels[0]?.name
-        )
-      );
-    } else if (isCatalogShortlist) {
-      setManageModels(
-        seedManageModelRows(
-          instance.customModels,
-          instance.customModels?.length ? instanceModels : []
-        )
-      );
-    }
+    setManageModels(seedManageModelRows(instance.customModels, instanceModels));
 
     setManageOpen(true);
   };

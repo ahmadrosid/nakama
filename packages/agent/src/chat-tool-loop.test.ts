@@ -439,3 +439,100 @@ describe("agent chat tool loop", () => {
     expect(systems[0]).toContain("[pending] Ship");
   });
 });
+
+describe("plugin tool discovery", () => {
+  test.each(["send", "stream"])(
+    "loads only requested definitions and resets next turn (%s)",
+    async (mode) => {
+      const snapshots: string[][] = [];
+      let runs = 0;
+      const plugin: ToolDefinition = {
+        ...sampleTool,
+        discoveryGroup: "workflows",
+        name: "plugin_workflows__run_workflow",
+        async run() {
+          runs++;
+          return { ok: true };
+        },
+      };
+      const other = { ...plugin, name: "plugin_workflows__create_workflow" };
+      const replies = [
+        toolTurn([
+          {
+            arguments: { query: "run workflows" },
+            id: "discover",
+            name: "find_tools",
+          },
+        ]),
+        toolTurn([{ arguments: {}, id: "run", name: plugin.name }]),
+        textReply("Done"),
+        textReply("Hello"),
+      ];
+      const generate = (input: GenerateChatInput) => {
+        snapshots.push(input.tools?.map((tool) => tool.name) ?? []);
+        return Promise.resolve(replies.shift()!);
+      };
+      const provider: ProviderClient = {
+        generateChat: generate,
+        generateText: async () => ({ content: "" }),
+        name: "openai",
+        streamChat: async (input, handlers) => {
+          const result = await generate(input);
+          handlers.onChunk(result.content);
+          return result;
+        },
+      };
+      const session = createAgentChatSession({
+        provider,
+        tools: [sampleTool, plugin, other],
+      });
+      if (mode === "send") {
+        await session.send("Run my workflow");
+      } else {
+        await session.sendStream("Run my workflow", { onChunk() {} });
+      }
+      await session.send("Hello");
+      expect(snapshots[0]).toEqual(["sample", "find_tools"]);
+      expect(snapshots[1]).toEqual(["sample", "find_tools", plugin.name]);
+      expect(snapshots[2]).toEqual(snapshots[1]);
+      expect(snapshots[3]).toEqual(snapshots[0]);
+      expect(runs).toBe(1);
+    }
+  );
+
+  test("undiscovered calls, including the discovery batch, cannot execute", async () => {
+    let runs = 0;
+    const plugin: ToolDefinition = {
+      ...sampleTool,
+      discoveryGroup: "workflows",
+      name: "plugin_workflows__run",
+      async run() {
+        runs++;
+        return {};
+      },
+    };
+    const session = createAgentChatSession({
+      provider: createMockProvider([
+        toolTurn([{ arguments: {}, id: "guess", name: plugin.name }]),
+        toolTurn([
+          {
+            arguments: { query: "workflows" },
+            id: "discover",
+            name: "find_tools",
+          },
+          { arguments: {}, id: "early", name: plugin.name },
+        ]),
+        toolTurn([{ arguments: {}, id: "ready", name: plugin.name }]),
+        textReply("Done"),
+      ]),
+      tools: [plugin],
+    });
+    await session.send("Run");
+    expect(runs).toBe(1);
+    const results = session
+      .getHistory()
+      .filter((message) => message.role === "tool");
+    expect(results[0]?.content).toContain("Unknown tool");
+    expect(results[2]?.content).toContain("Unknown tool");
+  });
+});

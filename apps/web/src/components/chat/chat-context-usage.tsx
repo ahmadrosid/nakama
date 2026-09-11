@@ -4,7 +4,8 @@ import {
   PopoverContent,
   PopoverHeader,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@nakama/ui/popover";
+import { cn } from "@nakama/ui/utils";
 import {
   type ChatContextUsage,
   contextUsageRatio,
@@ -14,7 +15,6 @@ import {
   formatTokenCountDetailed,
 } from "@/lib/chat-context-usage";
 import { formatChatUsageCost } from "@/lib/chat-usage";
-import { cn } from "@/lib/utils";
 
 /** Match BrainIcon / select chevron visual weight in the composer toolbar. */
 const RING_SIZE = 12;

@@ -157,6 +157,7 @@ export function modelExistsOnInstance(
     instance.type === "deepseek" ||
     instance.type === "doubao" ||
     instance.type === "together" ||
+    instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
     instance.type === "perplexity"
   ) {
@@ -359,6 +360,7 @@ export function applyProviderInstanceUpdate(
       instance.type === "deepseek" ||
       instance.type === "doubao" ||
       instance.type === "together" ||
+      instance.type === "vercel_ai_gateway" ||
       instance.type === "mistral" ||
       instance.type === "perplexity"
     ) {

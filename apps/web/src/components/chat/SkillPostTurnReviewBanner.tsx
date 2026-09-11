@@ -1,12 +1,12 @@
 import type { SkillProposal, SkillSuggestion } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { Cancel01Icon, QuillWrite02Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import { ChatComposerNotice } from "@/components/chat/chat-tips";
 import { skillSuggestionPreview } from "@/components/chat/skill-post-turn-review.shared";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { orgSkillProposalsPath } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 
 export type SuggestionApplyState =
   | "idle"

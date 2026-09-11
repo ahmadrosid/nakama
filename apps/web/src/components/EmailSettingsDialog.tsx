@@ -2,18 +2,18 @@ import type {
   EmailSettingsResponse,
   UpdateEmailSettingsRequest,
 } from "@nakama/core/contract";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useReducer } from "react";
-import { EmailSettingsFooter } from "@/components/email-settings-footer";
-import { EmailSettingsFormFields } from "@/components/email-settings-form-fields";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useReducer } from "react";
+import { EmailSettingsFooter } from "@/components/email-settings-footer";
+import { EmailSettingsFormFields } from "@/components/email-settings-form-fields";
 import { useAuth } from "@/context/use-auth";
 import {
   emailSettingsQueryOptions,

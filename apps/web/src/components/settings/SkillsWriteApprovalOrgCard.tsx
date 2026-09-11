@@ -1,16 +1,16 @@
+import { Card } from "@nakama/ui/card";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
+import { toast } from "@nakama/ui/toast";
+import { cn } from "@nakama/ui/utils";
 import { type ReactNode, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
-import { Card } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 type SkillApprovalTab = "gate" | "proposals";
 
