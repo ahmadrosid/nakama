@@ -380,9 +380,10 @@ async function buildChatCompletionRequestBody(options: {
     ),
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
-      : provider === "qwen" || provider === "qwen_cn"
-        ? buildQwenThinkingBody(options.thinking)
-        : {}),
+      : {}),
+    ...(provider === "qwen" || provider === "qwen_cn"
+      ? { enable_thinking: Boolean(options.thinking?.enabled) }
+      : {}),
     ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
     ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
       ? {
@@ -465,17 +466,6 @@ function buildDeepSeekThinkingBody(
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
   };
-}
-
-/** DashScope hybrid models default thinking on — opt out unless UI enables. */
-function buildQwenThinkingBody(
-  thinking: ProviderChatOptions["thinking"] | undefined
-) {
-  if (thinking?.enabled) {
-    return { enable_thinking: true };
-  }
-
-  return { enable_thinking: false };
 }
 
 /** Ark Seed: `thinking.type` only. Default is on for many Seed models — opt out unless UI enables. */
