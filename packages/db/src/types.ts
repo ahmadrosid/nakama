@@ -882,6 +882,10 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<StoredArtifactShareRecord[]>;
 
+  listAttachmentsForSession(
+    sessionId: string
+  ): Promise<StoredAttachmentRecord[]>;
+
   listAutomationRuns(
     automationId: string,
     limit?: number

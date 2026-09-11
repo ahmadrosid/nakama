@@ -124,6 +124,7 @@ import {
   DEFAULT_THINKING_ENABLED,
   defaultOllamaBaseUrl,
   deleteArtifactFile,
+  deleteAttachmentBytes,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
@@ -1908,6 +1909,11 @@ export class AgentService {
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
     await deleteSessionHistoryArchive(orgId, sessionId);
+    const attachments = await this.db.listAttachmentsForSession(sessionId);
+    for (const attachment of attachments) {
+      await deleteAttachmentBytes(orgId, attachment.profileId, attachment.id);
+      await this.db.deleteAttachment(attachment.id);
+    }
     await this.db.deleteSession(sessionId);
     return true;
   }

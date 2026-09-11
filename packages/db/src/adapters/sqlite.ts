@@ -1017,6 +1017,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getAttachmentStmt = db.prepare(
     "SELECT * FROM attachments WHERE id = ?"
   );
+  const listAttachmentsForSessionStmt = db.prepare(
+    "SELECT * FROM attachments WHERE session_id = ?"
+  );
   const deleteAttachmentStmt = db.prepare(
     "DELETE FROM attachments WHERE id = ?"
   );
@@ -3137,6 +3140,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listArtifactSharesForProfileStmt
         .all(orgId, profileId)
         .map((row) => toArtifactShareRecord(row as ArtifactShareRow));
+    },
+
+    async listAttachmentsForSession(sessionId) {
+      return listAttachmentsForSessionStmt
+        .all(sessionId)
+        .map((row) => toAttachmentRecord(row as AttachmentRow));
     },
 
     async listAutomationRuns(automationId, limit = 20) {
