@@ -6,7 +6,8 @@
   "workspaces": [
     "apps/*",
     "apps/platform/*",
-    "packages/*"
+    "packages/*",
+    "packages/plugins/*"
   ],
   "scripts": {
     "agent:ui": "bash scripts/agent-ui-harness.sh start",

@@ -98,6 +98,16 @@ export async function readToolSource(
     return readFixedToolSource(SESSION_SOURCE, "typescript");
   }
 
+  if (record.handlerType === "plugin") {
+    const pluginId = record.pluginId ?? "plugin";
+    const actionKey = record.pluginKey ?? record.name;
+    return {
+      content: "",
+      language: "javascript",
+      path: `plugins/${pluginId}/${actionKey}`,
+    };
+  }
+
   if (record.handlerType === "builtin") {
     const source = BUILTIN_SOURCE_BY_NAME[record.name];
 

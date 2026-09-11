@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@nakama/ui/button";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
 
 export function ArtifactMarkdownEditor({
   busy,

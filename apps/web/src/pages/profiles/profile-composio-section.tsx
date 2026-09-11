@@ -1,6 +1,6 @@
+import { Button } from "@nakama/ui/button";
 import { Delete02Icon } from "hugeicons-react";
 import { ComposioToolkitAssignPicker } from "@/components/ComposioToolkitAssignPicker";
-import { Button } from "@/components/ui/button";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 

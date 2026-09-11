@@ -1,4 +1,14 @@
 import type { McpServerSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import { Spinner } from "@nakama/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Delete02Icon,
@@ -11,20 +21,6 @@ import {
 import { McpToolLabels } from "@/components/soul-tools/McpToolList";
 import { mcpServerDeleteBlockReason } from "@/components/soul-tools/mcp-tab/mcp-server-delete-block-reason";
 import { sectionClass } from "@/components/soul-tools/mcp-tab/shared";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 
 export function McpPageState({
   message,

@@ -1,4 +1,6 @@
 import type { ThinkingEffort } from "@nakama/core/contract";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import { BrainIcon } from "hugeicons-react";
 import {
   PromptInputSelect,
@@ -7,17 +9,11 @@ import {
   PromptInputSelectTrigger,
   PromptInputSelectValue,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { composerSelectTriggerClass } from "@/lib/chat-stream";
 import {
   THINKING_EFFORT_OPTIONS,
   thinkingEffortLabel,
 } from "@/lib/thinking-settings";
-import { cn } from "@/lib/utils";
 
 const THINKING_TOOLTIP = "Reasoning depth for the next replies.";
 

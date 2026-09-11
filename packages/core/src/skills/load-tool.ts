@@ -1,5 +1,7 @@
+import { resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { JsonSchema, ToolContext, ToolDefinition } from "../contract";
+import { getPluginsRootDir } from "../plugins";
 import { permissiveObjectSchema } from "../tools/schema";
 import type { DiscoveredSkill } from "./types";
 
@@ -17,6 +19,22 @@ export async function loadSkillTool(
 ): Promise<ToolDefinition | null> {
   if (!skill.toolPath) {
     return null;
+  }
+
+  if (
+    isPluginSkillToolPath(skill.toolPath) ||
+    isPluginSkillToolPath(skill.directory)
+  ) {
+    return {
+      description: skill.description,
+      name: skill.name,
+      parameters: permissiveObjectSchema(),
+      async run() {
+        return {
+          error: "Plugin skill entrypoints cannot be loaded in-process.",
+        };
+      },
+    };
   }
 
   try {
@@ -111,4 +129,14 @@ function isJsonSchema(value: unknown): value is JsonSchema {
 
 export function clearSkillToolModuleCache(): void {
   moduleCache.clear();
+}
+
+function isPluginSkillToolPath(filePath: string): boolean {
+  try {
+    const root = resolve(getPluginsRootDir());
+    const resolved = resolve(filePath);
+    return resolved === root || resolved.startsWith(`${root}${sep}`);
+  } catch {
+    return false;
+  }
 }

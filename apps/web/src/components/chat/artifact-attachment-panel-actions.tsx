@@ -1,16 +1,16 @@
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import {
   ArrowDown01Icon,
   ArrowExpand01Icon,
   ArrowShrink02Icon,
   CheckmarkCircle01Icon,
 } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 export function ArtifactAttachmentPanelActions({
   copied,

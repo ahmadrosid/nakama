@@ -188,6 +188,28 @@ describe("setup import routes", () => {
     ).resolves.toBe("keep");
   });
 
+  test("wrong-typed setup import body is rejected before decoding", async () => {
+    const { app } = createApp();
+
+    const previewResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: JSON.stringify({ data: 42 }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(previewResponse.status).toBe(400);
+
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/restore", {
+        body: JSON.stringify({ confirm: "yes", data: "archive" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(restoreResponse.status).toBe(400);
+  });
+
   test("setup import preview does not leak an unexpected error's message", async () => {
     const { app } = createApp();
     await writeFile(join(getUserConfigDir(), "config.ini"), "keep");

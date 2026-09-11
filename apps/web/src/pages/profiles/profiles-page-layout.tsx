@@ -1,3 +1,4 @@
+import { cn } from "@nakama/ui/utils";
 import { createPortal } from "react-dom";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
@@ -6,7 +7,6 @@ import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
-import { cn } from "@/lib/utils";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
 import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
 import { sectionClass } from "@/pages/profiles/profiles-page.shared";

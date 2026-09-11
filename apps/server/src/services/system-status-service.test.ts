@@ -79,7 +79,7 @@ describe("SystemStatusService", () => {
       uptimeSeconds: 30,
     });
 
-    const status = await service.getStatus();
+    const status = await service.getStatus(null);
 
     expect(status.automationWorker).toEqual({
       activeRuns: 2,
@@ -114,7 +114,7 @@ describe("SystemStatusService", () => {
       uptimeSeconds: 30,
     });
 
-    const status = await service.getStatus();
+    const status = await service.getStatus(null);
 
     expect(status.automationWorker.ok).toBe(false);
     expect(status.automationWorker.running).toBe(false);
@@ -132,7 +132,7 @@ describe("SystemStatusService", () => {
       uptimeSeconds: null,
     });
 
-    const status = await service.getStatus();
+    const status = await service.getStatus(null);
 
     expect(status.automationWorker.ok).toBe(false);
     expect(status.automationWorker.process?.managed).toBe(false);
@@ -152,7 +152,7 @@ describe("SystemStatusService", () => {
       },
     });
 
-    const status = await service.getStatus();
+    const status = await service.getStatus(null);
 
     expect(reachabilityCalls).toBe(1);
     expect(status.server).toMatchObject({

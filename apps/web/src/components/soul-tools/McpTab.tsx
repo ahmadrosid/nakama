@@ -1,13 +1,6 @@
 import type { McpServerSummary } from "@nakama/core/contract";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
-import { useState } from "react";
-import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
-import {
-  McpPageState,
-  McpServersSection,
-} from "@/components/soul-tools/mcp-tab/McpServersSection";
-import { McpServerToolsDialog } from "@/components/soul-tools/mcp-tab/McpServerToolsDialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +8,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { useState } from "react";
+import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
+import {
+  McpPageState,
+  McpServersSection,
+} from "@/components/soul-tools/mcp-tab/McpServersSection";
+import { McpServerToolsDialog } from "@/components/soul-tools/mcp-tab/McpServerToolsDialog";
 import { useMcpServersQuery } from "@/hooks/use-app-queries";
 import {
   useConnectMcpServerMutation,

@@ -1,20 +1,18 @@
 import type { OrgMemoryChangeLogEntry } from "@nakama/core/contract";
-import { EyeIcon, RotateLeft01Icon, TimelineIcon } from "hugeicons-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { toast } from "@nakama/ui/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
+import { EyeIcon, RotateLeft01Icon, TimelineIcon } from "hugeicons-react";
+import { useState } from "react";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { useOrgMemory } from "@/hooks/use-org-memory";
 import {
@@ -28,8 +26,6 @@ import {
   formatSessionTimestamp,
 } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
-import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 function shortenId(value: string): string {
   return value.length > 16 ? `${value.slice(0, 12)}…` : value;

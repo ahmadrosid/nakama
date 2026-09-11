@@ -1,4 +1,11 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
+import { cn } from "@nakama/ui/utils";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { SettingsRow } from "@/components/discord-settings-card.shared";
 import {
@@ -10,16 +17,9 @@ import {
   IntegrationStatusHeader,
 } from "@/components/integration-settings.shared";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import {
   DISCORD_DEVELOPER_PORTAL_URL,
   DISCORD_SETUP_GUIDE_URL,
 } from "@/lib/integration-docs";
-import { cn } from "@/lib/utils";
 
 export type DiscordSettingsCardView = {
   embedded: boolean;

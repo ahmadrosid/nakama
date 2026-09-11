@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@nakama/ui/button";
+import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon } from "hugeicons-react";
 import {
   type ComponentProps,
@@ -9,8 +11,6 @@ import {
   useCallback,
   useContext,
 } from "react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export interface ConversationStickinessValue {
   isAtBottom: boolean;

@@ -5,10 +5,10 @@ import type {
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
+import { Button } from "@nakama/ui/button";
 import { Delete02Icon } from "hugeicons-react";
 import { useMemo } from "react";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/use-auth";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
@@ -123,6 +123,11 @@ function ProfileSkillRow({
           <p className="truncate font-medium text-foreground text-sm leading-tight">
             {skill.name}
           </p>
+          {skill.pluginId ? (
+            <span className="shrink-0 text-muted-foreground text-xs">
+              {skill.pluginId}
+            </span>
+          ) : null}
           <SkillStatusBadge skill={skill} staleAfterDays={staleAfterDays} />
         </div>
         {usageHint ? (

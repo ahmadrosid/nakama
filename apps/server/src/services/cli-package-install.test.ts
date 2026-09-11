@@ -43,6 +43,35 @@ const PIPE_HOLDING_PLAN = {
 };
 
 describe("runTimedInstallCommand", () => {
+  test("preserves UTF-8 characters split across stdout and stderr chunks", async () => {
+    const progress: string[] = [];
+    const result = await runTimedInstallCommand(
+      {
+        args: [
+          "-e",
+          `
+          process.stdout.write(Buffer.from([0xf0, 0x9f]));
+          process.stderr.write(Buffer.from([0xe2]));
+          await Bun.sleep(100);
+          process.stdout.write(Buffer.from([0x9a, 0x80, 0x0a]));
+          process.stderr.write(Buffer.from([0x82, 0xac]));
+          `,
+        ],
+        command: process.execPath,
+        displayCommand: "split UTF-8 output",
+      },
+      (message) => progress.push(message)
+    );
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stderr: "\u20ac",
+      stdout: "\ud83d\ude80",
+      timedOut: false,
+    });
+    expect(progress).toEqual(["stdout: \ud83d\ude80", "stderr: \u20ac"]);
+  });
+
   test("gives up on an installer that outlives the timeout", async () => {
     const result = await runTimedInstallCommand(STALLING_PLAN, undefined, {
       timeoutMs: 50,

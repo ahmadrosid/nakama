@@ -1,17 +1,17 @@
+import { Button } from "@nakama/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
+import { Spinner } from "@nakama/ui/spinner";
 import { Link01Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useState } from "react";
 import {
   IntegrationCardShell,
   IntegrationStatusHeader,
 } from "@/components/integration-settings.shared";
-import { Button } from "@/components/ui/button";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import { Spinner } from "@/components/ui/spinner";
 import {
   useErrorTrackingSettings,
   useSaveErrorTrackingSettings,

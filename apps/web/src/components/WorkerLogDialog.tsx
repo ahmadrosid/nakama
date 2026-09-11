@@ -1,3 +1,11 @@
+import { Button } from "@nakama/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import { cn } from "@nakama/ui/utils";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -5,16 +13,8 @@ import {
   File01Icon,
 } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useClearWorkerLogs, useWorkerLogs } from "@/hooks/use-worker-logs";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 interface WorkerLogDialogProps {
   onOpenChange: (open: boolean) => void;

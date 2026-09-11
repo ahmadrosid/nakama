@@ -1,18 +1,10 @@
+import { Button } from "@nakama/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { Notification01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { NotificationList } from "@/components/notifications/notification-list";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useNotifications } from "@/hooks/use-notifications";
 import { PAGE_PATHS } from "@/lib/navigation";
 

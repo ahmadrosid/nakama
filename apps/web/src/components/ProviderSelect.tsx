@@ -1,5 +1,3 @@
-import { ArrowDown01Icon } from "hugeicons-react";
-import { useMemo, useState } from "react";
 import {
   Command,
   CommandEmpty,
@@ -8,18 +6,16 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@nakama/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { cn } from "@nakama/ui/utils";
+import { ArrowDown01Icon } from "hugeicons-react";
+import { useMemo, useState } from "react";
 import {
   isProviderTypeAlreadyConfigured,
   PROVIDER_OPTIONS,
   type SelectedProvider,
 } from "@/lib/models";
-import { cn } from "@/lib/utils";
 
 export type ProviderSelectValue = SelectedProvider | "__browse__";
 

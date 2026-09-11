@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
+import { useEffect, useMemo, useState } from "react";
+import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useModelsQuery,
   useSaveTranscriptionSettings,

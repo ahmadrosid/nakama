@@ -35,8 +35,13 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "doubao", label: "Doubao (Volcengine)" },
   { id: "together", label: "Together AI" },
+  { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
   { id: "mistral", label: "Mistral" },
+  { id: "qwen", label: "Qwen (DashScope)" },
+  { id: "qwen_cn", label: "Qwen (DashScope CN)" },
+  { id: "perplexity", label: "Perplexity Sonar" },
   { id: "xai", label: "xAI Grok" },
   { id: "cerebras", label: "Cerebras" },
   { id: "cloudflare", label: "Cloudflare Worker AI" },
@@ -184,7 +189,9 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "doubao" ||
     normalized === "mistral" ||
+    normalized === "perplexity" ||
     normalized === "cerebras" ||
     normalized === "cloudflare" ||
     normalized === "fireworks" ||
@@ -198,7 +205,10 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
-    normalized === "together"
+    normalized === "together" ||
+    normalized === "qwen" ||
+    normalized === "qwen_cn" ||
+    normalized === "vercel_ai_gateway"
   ) {
     return normalized;
   }

@@ -1,10 +1,11 @@
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { useMemo, useRef } from "react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { ArtifactMarkdownToc } from "@/components/chat/artifact-markdown-toc";
 import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
 import { SpreadsheetGrid } from "@/components/chat/artifact-spreadsheet-editor";
-import { Spinner } from "@/components/ui/spinner";
 import {
   ARTIFACT_HTML_IFRAME_SANDBOX,
   htmlForArtifactPreview,
@@ -12,7 +13,6 @@ import {
 import { parseSpreadsheetText } from "@/lib/artifact-spreadsheet";
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
 import { extractMarkdownHeadings } from "@/lib/markdown-toc";
-import { cn } from "@/lib/utils";
 
 type ArtifactPanelSharedProps = {
   loading: boolean;

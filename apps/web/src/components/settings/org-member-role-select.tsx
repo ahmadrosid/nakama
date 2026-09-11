@@ -5,7 +5,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@nakama/ui/select";
 
 const ROLE_LABELS: Record<OrgRole, string> = {
   admin: "Admin",

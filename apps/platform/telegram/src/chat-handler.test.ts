@@ -33,6 +33,12 @@ import {
   writeTelegramConfigIni,
 } from "./test-helpers";
 
+const TEST_CONFIG = {
+  botToken: "1234567890:TEST",
+  orgId: null,
+  profileId: "default",
+};
+
 // These handler tests run in ~0.2s locally but occasionally exceed the 5000ms
 // default under CI's concurrent all-workspace load. Give them more headroom.
 setDefaultTimeout(10_000);
@@ -78,7 +84,7 @@ describe("createChatHandler group chats", () => {
           pairedUserIds: [42],
         });
 
-        const authStore = new TelegramAuthStore();
+        const authStore = new TelegramAuthStore(null);
         await authStore.reload();
         const { client, calls } = createMockClient();
         const sessionStore = new SessionStore(
@@ -89,7 +95,7 @@ describe("createChatHandler group chats", () => {
         const handleMessage = createChatHandler({
           authStore,
           client,
-          config: { botToken: "1234567890:TEST", profileId: "default" },
+          config: TEST_CONFIG,
           getBotInfo: () => TEST_BOT_INFO,
           orgStore,
           sessionStore,
@@ -135,7 +141,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -146,7 +152,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -177,7 +183,7 @@ describe("createChatHandler group chats", () => {
         profileId: "research",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, getLastCreateSessionProfileId } = createMockClient(
         {
@@ -195,7 +201,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "research" },
+        config: { ...TEST_CONFIG, profileId: "research" },
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -236,7 +242,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getLastCreateSessionProfileId } = createMockClient({
         profiles: [
@@ -252,7 +258,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -294,7 +300,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         profiles: [
@@ -310,7 +316,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -345,7 +351,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         profiles: [
@@ -367,7 +373,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -404,7 +410,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getLastCreateSessionProfileId } = createMockClient({
         profiles: [
@@ -420,7 +426,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -447,7 +453,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient({
         orgs: createMultiTestOrgs(),
@@ -466,7 +472,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -497,7 +503,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getStreamControls } = createMockClient({
         autoComplete: false,
@@ -511,7 +517,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -575,7 +581,7 @@ describe("createChatHandler group chats", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -586,7 +592,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -617,7 +623,7 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({ orgs: createMultiTestOrgs() });
       const sessionStore = new SessionStore(
@@ -628,7 +634,7 @@ describe("createChatHandler group chats", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         getBotInfo: () => TEST_BOT_INFO,
         orgStore,
         sessionStore,
@@ -656,7 +662,7 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -667,7 +673,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -689,7 +695,7 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -700,7 +706,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -726,7 +732,7 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -737,7 +743,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -764,7 +770,7 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -775,7 +781,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -814,7 +820,7 @@ describe("createChatHandler security", () => {
         profileId: "missing_profile",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, getLastCreateSessionProfileId } = createMockClient(
         {
@@ -829,7 +835,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "missing_profile" },
+        config: { ...TEST_CONFIG, profileId: "missing_profile" },
         orgStore,
         sessionStore,
       });
@@ -859,7 +865,7 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient();
       const sessionStore = new SessionStore(
@@ -870,7 +876,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -900,7 +906,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -911,7 +917,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -936,7 +942,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -947,7 +953,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -972,7 +978,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, getStreamControl } = createMockClient({
         autoComplete: false,
@@ -986,7 +992,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1028,7 +1034,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1039,7 +1045,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1062,7 +1068,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         steps: [
@@ -1093,7 +1099,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1131,7 +1137,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         steps: [
@@ -1149,7 +1155,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1173,7 +1179,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getStreamControl } = createMockClient({
         autoComplete: false,
@@ -1196,7 +1202,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1246,7 +1252,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         steps: [
@@ -1269,7 +1275,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1302,7 +1308,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         steps: [
@@ -1332,7 +1338,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1365,7 +1371,7 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1376,7 +1382,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1401,7 +1407,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1412,7 +1418,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1436,7 +1442,7 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1447,7 +1453,7 @@ describe("createChatHandler security", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1473,7 +1479,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, orgIds } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1484,7 +1490,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1508,7 +1514,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1519,7 +1525,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1544,7 +1550,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient({
         orgs: createMultiTestOrgs(),
@@ -1557,7 +1563,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1581,7 +1587,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, orgIds } = createMockClient({
         orgs: createMultiTestOrgs(),
@@ -1594,7 +1600,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1620,7 +1626,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         profiles: [
@@ -1636,7 +1642,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1660,7 +1666,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client } = createMockClient({
         profiles: [
@@ -1676,7 +1682,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1700,7 +1706,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, getLastCreateSessionProfileId } = createMockClient(
         {
@@ -1718,7 +1724,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1749,7 +1755,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getLastCreateSessionProfileId } = createMockClient({
         orgs: createMultiTestOrgs(),
@@ -1768,7 +1774,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1794,7 +1800,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, listProfilesOrgIds } = createMockClient({
         orgs: createMultiTestOrgs(),
@@ -1813,7 +1819,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1840,7 +1846,7 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getLastCreateSessionProfileId } = createMockClient({
         orgs: createMultiTestOrgs(),
@@ -1865,7 +1871,7 @@ describe("bridge API integration", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1929,7 +1935,7 @@ describe("createChatHandler document attachments", () => {
         })
       );
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, getLastStreamInput } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1940,7 +1946,7 @@ describe("createChatHandler document attachments", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -1977,7 +1983,7 @@ describe("createChatHandler document attachments", () => {
 
       fetchSpy = spyOn(globalThis, "fetch");
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -1988,7 +1994,7 @@ describe("createChatHandler document attachments", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2015,7 +2021,7 @@ describe("createChatHandler document attachments", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(Buffer.from("voice-bytes"), {
@@ -2032,7 +2038,7 @@ describe("createChatHandler document attachments", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2066,7 +2072,7 @@ describe("createChatHandler document attachments", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -2077,7 +2083,7 @@ describe("createChatHandler document attachments", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2151,7 +2157,7 @@ describe("createChatHandler artifact delivery", () => {
         pairedUserIds: [4242],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient({
         messages: artifactMessages,
@@ -2171,7 +2177,7 @@ describe("createChatHandler artifact delivery", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2198,7 +2204,7 @@ describe("createChatHandler artifact delivery", () => {
         pairedUserIds: [4242],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient({
         messages: [
@@ -2240,7 +2246,7 @@ describe("createChatHandler artifact delivery", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2263,7 +2269,7 @@ describe("createChatHandler artifact delivery", () => {
         pairedUserIds: [4242],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -2292,7 +2298,7 @@ describe("createChatHandler artifact delivery", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2324,7 +2330,7 @@ describe("stream cleanup", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, getStreamControl } = createMockClient({
         autoComplete: false,
@@ -2338,7 +2344,7 @@ describe("stream cleanup", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });
@@ -2403,7 +2409,7 @@ describe("createChatHandler session hot cache", () => {
         pairedUserIds: [4242],
       });
 
-      const authStore = new TelegramAuthStore();
+      const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
@@ -2421,7 +2427,7 @@ describe("createChatHandler session hot cache", () => {
       const handleMessage = createChatHandler({
         authStore,
         client,
-        config: { botToken: "1234567890:TEST", profileId: "default" },
+        config: TEST_CONFIG,
         orgStore,
         sessionStore,
       });

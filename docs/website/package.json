@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@paper-design/shaders-react": "0.0.77",
-    "fumadocs-core": "^16.15.4",
+    "fumadocs-core": "^16.15.8",
     "fumadocs-mdx": "^15.4.0",
-    "fumadocs-ui": "^16.15.4",
+    "fumadocs-ui": "^16.15.8",
     "hugeicons-react": "^0.4.0",
     "next": "^16.3.4",
     "react": "^19.0.0",
@@ -24,9 +24,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react-dom": "^19.2.7",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.0.0"
   }

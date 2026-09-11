@@ -14,8 +14,8 @@
   "rtl": false,
   "aliases": {
     "components": "@/components",
-    "utils": "@/lib/utils",
-    "ui": "@/components/ui",
+    "utils": "@nakama/ui/utils",
+    "ui": "@nakama/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
   },

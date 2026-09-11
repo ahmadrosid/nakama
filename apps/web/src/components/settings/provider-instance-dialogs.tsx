@@ -4,6 +4,22 @@ import type {
   WireApi,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
+import { Spinner } from "@nakama/ui/spinner";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import {
@@ -12,22 +28,6 @@ import {
 } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import { Spinner } from "@/components/ui/spinner";
 import { apiKeyPlaceholder, type SelectedProvider } from "@/lib/models";
 
 export function ProviderReplaceKeyDialog({

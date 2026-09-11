@@ -1,7 +1,5 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { CheckmarkCircle02Icon, UserGroupIcon } from "hugeicons-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -9,15 +7,17 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@nakama/ui/command";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/dialog";
+import { cn } from "@nakama/ui/utils";
+import { CheckmarkCircle02Icon, UserGroupIcon } from "hugeicons-react";
+import { useState } from "react";
 
 interface ComposioProfileAssignPickerProps {
   assignedProfileIds: string[];

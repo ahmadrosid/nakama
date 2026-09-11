@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import type { Server } from "bun";
 import { ensureProcessPath } from "./lib/ensure-process-path";
+import { createPluginAgentHost } from "./services/plugin-agent-host";
 
 ensureProcessPath();
 // Position is cosmetic: ESM evaluates every import above before this line runs, so a throw
@@ -33,13 +34,14 @@ import {
   NAKAMA_API_VERSION,
   writeRuntimeServerUrl,
 } from "@nakama/core";
+import { claimLegacyTelegramConfig } from "@nakama/core/telegram-config";
 import {
   createDatabase,
   type Database,
   ensureBundledSkillsAssigned,
   seedDatabase,
 } from "@nakama/db";
-import { createHonoApp } from "./http/app";
+import { createHonoApp, MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./http/app";
 import {
   disableBunIdleTimeoutForLongHeldRequest,
   disableBunIdleTimeoutForSse,
@@ -61,6 +63,10 @@ import {
 import { McpService } from "./services/mcp-service";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
+import {
+  PluginService,
+  shutdownPluginRuntime,
+} from "./services/plugin-service";
 import { resolveProfileProviderSelection } from "./services/provider-instance-helpers";
 import { SkillCuratorService } from "./services/skill-curator-service";
 import { SkillProposalService } from "./services/skill-proposal-service";
@@ -68,8 +74,6 @@ import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import { SkillsService } from "./services/skills-service";
 import { SystemStatusService } from "./services/system-status-service";
 import { WorkerManagerService } from "./services/worker-manager-service";
-import { WorkflowRunner } from "./services/workflow-runner";
-import { WorkflowService } from "./services/workflow-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
 import {
@@ -79,7 +83,6 @@ import {
 import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
-import { createWorkflowTools } from "./tools/workflow-tools";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -114,6 +117,21 @@ await seedDatabase(database.adapter);
 const interruptedRuns = await database.adapter.failInterruptedRuns();
 if (interruptedRuns > 0) {
   console.log(`Settled ${interruptedRuns} run(s) interrupted by a restart`);
+}
+
+// Channel credentials used to be install-wide. On a single-org install that
+// config can only belong to that org, so claim it once before any scope-exact
+// read reports the org as unconfigured.
+const [soleOrganization, ...otherOrganizations] =
+  await database.adapter.listOrganizations();
+if (soleOrganization && otherOrganizations.length === 0) {
+  const claimed = await claimLegacyTelegramConfig(soleOrganization.id);
+
+  if (claimed) {
+    console.log(
+      `Moved the Telegram config into organization ${soleOrganization.id}; restart the Telegram worker.`
+    );
+  }
 }
 
 const authService = new AuthService();
@@ -178,16 +196,20 @@ agent.setAutomationRunHistoryTools(
 );
 agent.setAutomationRunner(automationRunner);
 
-const workflowService = new WorkflowService(database.adapter);
-const workflowRunner = new WorkflowRunner(workflowService, agent);
-agent.setWorkflowTools(
-  createWorkflowTools(workflowService, workflowRunner, agent)
-);
-agent.setWorkflowRunner(workflowRunner);
-
 const workerManager = new WorkerManagerService(projectRoot);
 
 const orgService = new OrgService(database.adapter, authService);
+const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
+  officialPackagesDir: join(projectRoot, "packages/plugins"),
+  onHostRequest: createPluginAgentHost(database.adapter, agent),
+});
+try {
+  await pluginService.recoverInterruptedPluginOperations();
+} catch (error) {
+  console.warn("Could not recover plugin operations:", error);
+}
+skillsService.setPluginService(pluginService);
+agent.setPluginService(pluginService);
 const orgMemoryService = new OrgMemoryService(database.adapter);
 const skillProposalService = new SkillProposalService(
   database.adapter,
@@ -268,18 +290,19 @@ const app = createHonoApp({
   },
   orgMemoryService,
   orgService,
+  pluginService,
   skillCuratorService,
   skillProposalService,
   skillSuggestionService,
   systemStatus,
   webDistDir,
   workerManager,
-  workflowService,
 });
 
 const server = startServer({
   canFallbackToNextPort,
-  fetch: app.fetch,
+  // The limiter needs the peer address, and Bun only exposes it on `server`.
+  fetch: (request: Request, server: Server) => app.fetch(request, { server }),
   host,
   preferredPort: requestedPort,
 });
@@ -370,7 +393,7 @@ function startServer(options: {
   host: string;
   preferredPort: number;
   canFallbackToNextPort: boolean;
-  fetch: (request: Request) => Response | Promise<Response>;
+  fetch: (request: Request, server: Server) => Response | Promise<Response>;
 }): ReturnType<typeof Bun.serve> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
@@ -382,12 +405,13 @@ function startServer(options: {
       return Bun.serve({
         async fetch(request, server: Server) {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
-          const response = await options.fetch(request);
+          const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);
           return response;
         },
         hostname: options.host,
         idleTimeout: 255,
+        maxRequestBodySize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
         port,
       });
     } catch (error) {
@@ -427,6 +451,7 @@ function registerRuntimeCleanup(
     }
 
     cleanedUp = true;
+    void shutdownPluginRuntime(1500);
     void mcpClientManager.disconnectAll();
     clearRuntimeServerUrl(serverUrl);
     database.close();

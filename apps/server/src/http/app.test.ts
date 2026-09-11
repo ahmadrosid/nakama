@@ -11,7 +11,11 @@ import {
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
-import { createHonoApp } from "./app";
+import {
+  createHonoApp,
+  DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES,
+  MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
+} from "./app";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   buildSetupAuthBody,
@@ -96,6 +100,46 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("rejects oversized request bodies before public route handlers", async () => {
+    const app = createHonoApp(createServerOptions());
+
+    const defaultLimitResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(defaultLimitResponse.status).toBe(413);
+
+    const importWithinLimitResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(importWithinLimitResponse.status).toBe(400);
+
+    const importLimitResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(MAX_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(importLimitResponse.status).toBe(413);
+  });
+
   test("liveness stays up while readiness tracks a closed and reopened database", async () => {
     const database = await createSqliteDatabase(":memory:");
     const { app } = createMinimalHonoApp({
@@ -339,6 +383,8 @@ describe("createHonoApp", () => {
     const csp = response.headers.get("Content-Security-Policy") ?? "";
     expect(csp).toContain("img-src 'self' data: blob:");
     expect(csp).toContain("media-src 'self' blob:");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(csp).not.toContain("frame-ancestors");
   });
 
   test("allows the theme bootstrap by hash instead of every inline script", async () => {
@@ -1118,6 +1164,60 @@ describe("createHonoApp", () => {
 
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+    });
+  });
+
+  describe("auth request bodies", () => {
+    test("rejects wrong-typed setup fields before invoking auth services", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify({
+            admin: {
+              email: "admin@example.com",
+              name: true,
+              password: "password123",
+            },
+            organization: { name: "Acme", slug: "acme" },
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    test("rejects missing required setup fields", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify({
+            admin: {
+              email: "admin@example.com",
+              name: "Admin",
+            },
+            organization: { name: "Acme", slug: "acme" },
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    test("keeps malformed auth JSON as a bad request", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: "{",
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
     });
   });
 

@@ -13,7 +13,7 @@ import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
 } from "../org-guards";
-import { json } from "../shared";
+import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerSkillProposalRoutes(
@@ -96,11 +96,11 @@ export function registerSkillProposalRoutes(
     const auth = requireNotViewerFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const status = c.req.query("status") as
-      | "pending"
-      | "approved"
-      | "rejected"
-      | undefined;
+    const status = parseOptionalQueryEnum(c.req.query("status"), [
+      "pending",
+      "approved",
+      "rejected",
+    ]);
     const profileId = c.req.query("profileId");
     const sessionId = c.req.query("sessionId");
     const isOrgAdmin = auth.orgRole === "admin" || auth.isPlatformAdmin;
