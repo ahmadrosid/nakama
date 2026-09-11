@@ -115,6 +115,32 @@ describe("resolveModel", () => {
     );
   });
 
+  test("resolves catalog models for Vercel AI Gateway", () => {
+    expect(resolveModel("vercel_ai_gateway", "openai/gpt-4o-mini")).toBe(
+      "openai/gpt-4o-mini"
+    );
+    expect(
+      resolveModel("vercel_ai_gateway", "anthropic/claude-sonnet-4.5")
+    ).toBe("anthropic/claude-sonnet-4.5");
+    expect(getDefaultModel("vercel_ai_gateway")).toBe("openai/gpt-4o-mini");
+    expect(getModelById("openai/gpt-4o-mini")?.supportsVision).toBe(true);
+    expect(getModelById("openai/gpt-5")?.supportsThinking).toBe(true);
+    expect(getModelById("meta/llama-3.3-70b")?.supportsVision).toBe(false);
+    expect(getModelById("deepseek/deepseek-v4-flash")?.supportsThinking).toBe(
+      true
+    );
+  });
+
+  test("uses vercel_ai_gateway custom model shortlist when provided", () => {
+    const customModels = [{ default: true, id: "openai/gpt-5", name: "GPT-5" }];
+    expect(
+      resolveModel("vercel_ai_gateway", "openai/gpt-5", customModels)
+    ).toBe("openai/gpt-5");
+    expect(
+      resolveModel("vercel_ai_gateway", "unknown-model", customModels)
+    ).toBe("openai/gpt-5");
+  });
+
   test("resolves catalog models for Mistral", () => {
     expect(resolveModel("mistral", "mistral-large-2512")).toBe(
       "mistral-large-2512"
@@ -338,6 +364,15 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("openai/gpt-oss-120b", "together")).toBe(false);
     expect(modelSupportsVision("Qwen/Qwen3.5-9B", "together")).toBe(true);
     expect(modelSupportsVision("MiniMaxAI/MiniMax-M3", "together")).toBe(true);
+  });
+
+  test("reads Vercel AI Gateway vision flags from the curated catalog", () => {
+    expect(modelSupportsVision("openai/gpt-4o-mini", "vercel_ai_gateway")).toBe(
+      true
+    );
+    expect(modelSupportsVision("meta/llama-3.3-70b", "vercel_ai_gateway")).toBe(
+      false
+    );
   });
 
   test("reads Mistral vision flags from the curated catalog", () => {

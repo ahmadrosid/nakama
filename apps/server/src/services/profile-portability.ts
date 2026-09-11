@@ -508,6 +508,9 @@ async function buildProfilePackMeta(
   const profileSkillNames: string[] = [];
 
   for (const skill of skills) {
+    if (skill.pluginId) {
+      continue;
+    }
     if (isGlobalSkillSourcePath(skill.sourcePath)) {
       bundledSkillNames.push(skill.name);
     } else {
@@ -539,7 +542,10 @@ async function buildProfilePackMeta(
     systemPrompt: profile.systemPrompt,
     thinkingEffort: profile.thinkingEffort ?? null,
     thinkingEnabled: profile.thinkingEnabled ?? null,
-    toolNames: tools.map((tool) => tool.name).sort(),
+    toolNames: tools
+      .filter((tool) => !tool.pluginId)
+      .map((tool) => tool.name)
+      .sort(),
   };
 }
 
@@ -557,6 +563,9 @@ async function collectPackedCustomTools(
   const tools = await db.listToolsForProfile(profileId);
 
   for (const tool of tools) {
+    if (tool.pluginId) {
+      continue;
+    }
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {

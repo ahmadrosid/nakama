@@ -136,6 +136,7 @@ export function catalogCustomModelsToCatalog(
     } else if (
       provider === "deepseek" ||
       provider === "together" ||
+      provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "perplexity"
     ) {
@@ -329,6 +330,7 @@ export function getModelsForProviderInstance(
     instance.type === "gemini" ||
     instance.type === "deepseek" ||
     instance.type === "together" ||
+    instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
     instance.type === "perplexity" ||
     instance.type === "opencode_go"

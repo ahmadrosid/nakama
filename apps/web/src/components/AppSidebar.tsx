@@ -1,35 +1,35 @@
+import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  CubeIcon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
+import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
   useSidebarCollapsed,
   useSystemNavCollapsed,
 } from "@/hooks/use-sidebar-collapsed";
 import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
+  enabledPluginNavEntries,
   type NavGroup,
   type NavItem,
   navHrefForPage,
   type PageId,
   pageIdFromPath,
+  pluginIdFromPath,
   visibleNavGroups,
 } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 
 export function AppSidebar({
   variant = "shell",
@@ -41,6 +41,12 @@ export function AppSidebar({
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const { user, activeOrg } = useAuth();
+  const { data: orgPlugins = [] } = useOrgPlugins();
+  const pluginNav = useMemo(
+    () => enabledPluginNavEntries(orgPlugins),
+    [orgPlugins]
+  );
+  const activePluginId = pluginIdFromPath(location.pathname);
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed: shellCollapsed, toggle } = useSidebarCollapsed();
@@ -84,8 +90,50 @@ export function AppSidebar({
             unreadTotal={automationUnreadTotal}
           />
         ))}
+        <PluginsNavGroup
+          activePluginId={activePluginId}
+          collapsed={collapsed}
+          entries={pluginNav}
+        />
       </nav>
     </aside>
+  );
+}
+
+function PluginsNavGroup({
+  entries,
+  collapsed,
+  activePluginId,
+}: {
+  entries: { href: string; label: string; pluginId: string }[];
+  collapsed: boolean;
+  activePluginId: string | null;
+}) {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return (
+    <div aria-label="Plugins" className="sidebar-nav-group" role="group">
+      {collapsed ? null : <p className="sidebar-nav-group-label">Plugins</p>}
+      <div className="sidebar-nav-group-items">
+        {entries.map((entry) => (
+          <SidebarNavButton
+            active={entry.pluginId === activePluginId}
+            collapsed={collapsed}
+            icon={CubeIcon}
+            item={{
+              description: entry.pluginId,
+              icon: CubeIcon,
+              id: "plugins",
+              label: entry.label,
+            }}
+            key={entry.pluginId}
+            to={entry.href}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -135,9 +183,7 @@ function SidebarNavGroup({
   toggleSystemNav: () => void;
   unreadTotal: number;
 }) {
-  const containsActive =
-    group.collapsible === true && group.items.some((item) => item.id === page);
-  const groupExpanded = !systemNavCollapsed || containsActive;
+  const groupExpanded = !systemNavCollapsed;
   // Icon rail always shows every destination; tree collapse only
   // applies when labels are visible.
   const itemsVisible = !group.collapsible || collapsed || groupExpanded;
@@ -154,12 +200,7 @@ function SidebarNavGroup({
         <button
           aria-expanded={groupExpanded}
           className="sidebar-nav-group-label"
-          onClick={() => {
-            if (groupExpanded && containsActive) {
-              return;
-            }
-            toggleSystemNav();
-          }}
+          onClick={toggleSystemNav}
           type="button"
         >
           <ArrowDown01Icon

@@ -5,6 +5,7 @@ import type {
   AgentTodo,
   ChatContextUsage,
 } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import type { Dispatch, SetStateAction } from "react";
 import type { ChatStatus } from "@/lib/ai-ui-types";
 import type { ChatListItem } from "@/lib/chat-history";
@@ -15,7 +16,6 @@ import {
 } from "@/lib/chat-stream-workflow";
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
-import { cn } from "@/lib/utils";
 
 export function formatBashToolResult(result: unknown): string | null {
   if (typeof result !== "object" || result === null) {

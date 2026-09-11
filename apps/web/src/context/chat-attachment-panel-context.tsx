@@ -1,3 +1,4 @@
+import { cn } from "@nakama/ui/utils";
 import {
   type ReactNode,
   useCallback,
@@ -14,7 +15,6 @@ import {
   type ChatAttachmentPanelConfig,
   ChatAttachmentPanelContext,
 } from "@/context/chat-attachment-panel-context-shared";
-import { cn } from "@/lib/utils";
 
 const DEFAULT_PANEL_WIDTH = 448;
 const ENTER_SLIDE_MS = 200;

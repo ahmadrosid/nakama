@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -92,6 +92,109 @@ describe("skill_manage tool", () => {
     const service = new SkillsService(db);
     return { db, service, tool: skillManageTool(service) };
   }
+
+  test.each([false, true])(
+    "install respects write approval = %s",
+    async (approval) => {
+      const { db, service } = await setup();
+      const profile = await seedOrgProfile(db, {
+        orgSkillsWriteApproval: approval,
+      });
+      const tool = skillManageTool(
+        service,
+        new SkillProposalService(db, service)
+      );
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(researchSkillMarkdown)
+      );
+      let invalidations = 0;
+      try {
+        const result = await tool.run(
+          {
+            action: "install",
+            url: "https://github.com/example/skills/tree/main/research-paper",
+          },
+          memberContext({
+            onSkillCatalogChange: () => {
+              invalidations += 1;
+            },
+            profileId: profile.id,
+          })
+        );
+        expect(result).toMatchObject(
+          approval
+            ? { name: "research-paper", staged: true }
+            : { assigned: true, created: true, name: "research-paper" }
+        );
+        expect(await db.listSkillsForProfile(profile.id)).toHaveLength(
+          approval ? 0 : 1
+        );
+        expect(invalidations).toBe(approval ? 0 : 1);
+        const skillPath = join(
+          configDir,
+          "orgs",
+          ORG_ID,
+          "profiles",
+          profile.id,
+          "skills",
+          "research-paper",
+          "SKILL.md"
+        );
+        expect(await pathExists(skillPath)).toBe(!approval);
+        if (!approval) {
+          expect(await readFile(skillPath, "utf8")).toBe(researchSkillMarkdown);
+        }
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    }
+  );
+
+  test("install rejects unauthorized requests before fetching", async () => {
+    const { tool } = await setup();
+    const fetchSpy = spyOn(globalThis, "fetch");
+    try {
+      for (const context of [
+        memberContext({ orgRole: "viewer" }),
+        memberContext({ channel: "telegram" }),
+      ]) {
+        await expect(
+          tool.run(
+            {
+              action: "install",
+              url: "https://github.com/example/skills/tree/main/research-paper",
+            },
+            context
+          )
+        ).rejects.toThrow();
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("failed downloads do not install a skill", async () => {
+    const { db, tool } = await setup();
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 404 })
+    );
+    try {
+      await expect(
+        tool.run(
+          {
+            action: "install",
+            url: "https://github.com/example/skills/tree/main/missing",
+          },
+          memberContext()
+        )
+      ).rejects.toThrow();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(await db.listSkillsForProfile(PROFILE_ID)).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 
   test("create assigns skill and makes it matchable", async () => {
     const { db, service, tool } = await setup();

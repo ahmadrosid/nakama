@@ -1,6 +1,6 @@
+import { cn } from "@nakama/ui/utils";
 import { Cancel01Icon } from "hugeicons-react";
 import { wordCountFromPastedFilename } from "@/lib/pasted-text";
-import { cn } from "@/lib/utils";
 
 interface TextAttachmentPreviewProps {
   className?: string;

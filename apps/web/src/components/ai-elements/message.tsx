@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@nakama/ui/utils";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
@@ -14,7 +15,6 @@ import { createLazyMermaidPlugin } from "@/components/ai-elements/lazy-mermaid-p
 import { MarkdownA } from "@/components/ai-elements/markdown-a";
 import { useTheme } from "@/context/use-theme";
 import type { UIMessage } from "@/lib/ai-ui-types";
-import { cn } from "@/lib/utils";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];

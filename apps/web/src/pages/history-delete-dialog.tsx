@@ -1,5 +1,5 @@
 import type { SessionSummary } from "@nakama/core/contract";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,8 +7,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
 import { formatSessionTitle } from "@/pages/history-page.shared";
 
 export function HistoryDeleteDialog({

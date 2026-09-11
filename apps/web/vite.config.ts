@@ -13,6 +13,17 @@ export default defineConfig({
   build: {
     manifest: true,
   },
+  optimizeDeps: {
+    // Chat is lazy-loaded. Without this, first /chat visit discovers streamdown
+    // mid-session, Vite rewrites dep chunks, and the browser 404s the old ones.
+    include: [
+      "@streamdown/cjk",
+      "@streamdown/code",
+      "@streamdown/math",
+      "@streamdown/mermaid",
+      "streamdown",
+    ],
+  },
   plugins: [react(), tailwindcss()],
   preview: {
     port: 3003,

@@ -66,7 +66,8 @@ export function formatProviderLabel(
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
     provider === "xai" ||
-    provider === "together"
+    provider === "together" ||
+    provider === "vercel_ai_gateway"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -84,6 +85,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
     { id: "together", label: "Together AI" },
+    { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
     { id: "mistral", label: "Mistral" },
     { id: "perplexity", label: "Perplexity Sonar" },
     { id: "cerebras", label: "Cerebras" },
@@ -900,6 +902,7 @@ export function resolveModelThinkingSupport(
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
     model.provider === "together" ||
+    model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||
@@ -952,6 +955,7 @@ export function resolveModelVisionSupport(
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||
     model.provider === "together" ||
+    model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||

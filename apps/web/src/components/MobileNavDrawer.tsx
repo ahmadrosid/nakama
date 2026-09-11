@@ -1,12 +1,12 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { Button } from "@nakama/ui/button";
+import { DialogOverlay, DialogTitle } from "@nakama/ui/dialog";
+import { cn } from "@nakama/ui/utils";
 import { Menu01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ProfileRail } from "@/components/ProfileRail";
-import { Button } from "@/components/ui/button";
-import { DialogOverlay, DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 
 /**
  * Phone-sized navigation. The rail and sidebar cost a fixed 296px, which is
@@ -59,7 +59,7 @@ export function MobileNavDrawer({ className }: { className?: string }) {
       <DialogPrimitive.Portal>
         <DialogOverlay className="bg-black/40" />
         <DialogPrimitive.Popup
-          className="data-open:slide-in-from-left data-closed:slide-out-to-left fixed inset-y-0 left-0 z-50 flex w-[18.5rem] max-w-[85vw] bg-background pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] outline-none duration-150 data-closed:animate-out data-open:animate-in"
+          className="data-open:slide-in-from-left data-closed:slide-out-to-left fixed inset-y-0 left-0 z-50 flex w-[18.5rem] max-w-[85vw] bg-background pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] outline-none transition-transform duration-150 data-closed:animate-out data-open:animate-in"
           data-slot="mobile-nav-drawer"
         >
           <DialogTitle className="sr-only">Navigation</DialogTitle>

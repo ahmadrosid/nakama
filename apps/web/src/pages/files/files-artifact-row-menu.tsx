@@ -1,4 +1,11 @@
 import type { ArtifactFile } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import {
   Delete02Icon,
   FileDownloadIcon,
@@ -9,13 +16,6 @@ import {
   ArtifactSharePublishDialogFromState,
 } from "@/components/chat/artifact-share-controls";
 import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   getArtifactDownloadUrl,
   iconActionHitArea,

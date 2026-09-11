@@ -1,19 +1,22 @@
+import { TooltipProvider } from "@nakama/ui/tooltip";
+import { cn } from "@nakama/ui/utils";
+import { useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppContext } from "@/context/use-app-context";
+import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
+  enabledPluginNavEntries,
   findNavItem,
   PAGE_PATHS,
   type PageId,
   pageIdFromPath,
+  pluginIdFromPath,
 } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
-import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
 
 export function Layout() {
   const shell = useAppShell();
@@ -31,7 +34,7 @@ export function Layout() {
           className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
           data-app-shell-content=""
         >
-          <AppShellHeader label={shell.activeNav?.label} page={shell.page} />
+          <AppShellHeader label={shell.headerLabel} page={shell.page} />
           <AppShellError error={shell.error} />
           <main className={appShellMainClassName(shell.page, shell.pathname)}>
             <RouteBoundary resetKey={shell.pathname}>
@@ -50,9 +53,23 @@ function useAppShell() {
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const { error } = useAppContext();
 
+  const { data: orgPlugins = [] } = useOrgPlugins();
+  const pluginNav = useMemo(
+    () => enabledPluginNavEntries(orgPlugins),
+    [orgPlugins]
+  );
+  const activePluginId = pluginIdFromPath(location.pathname);
+  const activePlugin = pluginNav.find(
+    (entry) => entry.pluginId === activePluginId
+  );
+
   return {
-    activeNav: findNavItem(page),
     error,
+    headerLabel:
+      activePlugin?.label ??
+      findNavItem(page)?.label ??
+      activePluginId ??
+      undefined,
     page,
     pathname: location.pathname,
   };
@@ -63,6 +80,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
     page === "chat" ||
     page === "automations" ||
     page === "files" ||
+    page === "plugins" ||
     pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
   );
 }
@@ -101,9 +119,7 @@ function AppShellHeader({
       )}
     >
       <MobileNavDrawer className="sm:hidden" />
-      {page === "automations" ? (
-        <AgentWorkTabs />
-      ) : hideTitle ? null : (
+      {hideTitle ? null : (
         <h1 className="type-brand min-w-0 truncate">{label}</h1>
       )}
       <div

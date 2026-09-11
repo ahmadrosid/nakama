@@ -6,6 +6,12 @@
     "ultracite/biome/tanstack",
     "ultracite/biome/vitest"
   ],
+  "files": {
+    "includes": [
+      "!packages/plugins/*/actions",
+      "!packages/plugins/workflows/ui/app.js"
+    ]
+  },
   "css": {
     "parser": {
       "cssModules": true

@@ -1,3 +1,5 @@
+import { Button } from "@nakama/ui/button";
+import { cn } from "@nakama/ui/utils";
 import { Cancel01Icon } from "hugeicons-react";
 import {
   type PointerEvent,
@@ -7,8 +9,6 @@ import {
   useRef,
 } from "react";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 interface AttachmentDetailPanelProps {
   bodyClassName?: string;

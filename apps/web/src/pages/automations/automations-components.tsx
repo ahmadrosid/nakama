@@ -6,6 +6,18 @@ import type {
   ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { Input } from "@nakama/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { Spinner } from "@nakama/ui/spinner";
+import { Textarea } from "@nakama/ui/textarea";
+import { cn } from "@nakama/ui/utils";
 import {
   ArrowRight01Icon,
   BotIcon,
@@ -23,23 +35,11 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 import {
   formatFutureRelativeTime,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
-import { cn } from "@/lib/utils";
 import {
   formatRunDuration,
   groupRunsByDay,

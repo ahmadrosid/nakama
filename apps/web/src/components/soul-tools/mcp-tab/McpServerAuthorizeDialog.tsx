@@ -1,4 +1,4 @@
-import { buttonVariants } from "@/components/ui/button-variants";
+import { buttonVariants } from "@nakama/ui/button-variants";
 import {
   Dialog,
   DialogContent,
@@ -6,9 +6,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 
 /**
  * The link is a plain anchor the operator clicks: a window.open fired after the

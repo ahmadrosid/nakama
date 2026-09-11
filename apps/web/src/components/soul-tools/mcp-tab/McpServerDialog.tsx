@@ -2,12 +2,7 @@ import type {
   CreateMcpServerRequest,
   McpServerSummary,
 } from "@nakama/core/contract";
-import { type ComponentProps, useState } from "react";
-import { McpServerAssignList } from "@/components/McpServerAssignList";
-import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
-import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
-import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,9 +10,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { type ComponentProps, useState } from "react";
+import { McpServerAssignList } from "@/components/McpServerAssignList";
+import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
+import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
+import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 
 type AddMcpMode = "existing" | "new";
 type McpServerDialogState = ReturnType<typeof useMcpServerDialogState>;

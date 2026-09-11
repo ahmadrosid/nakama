@@ -28,6 +28,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
     expect(parseProviderName("together")).toBe("together");
+    expect(parseProviderName("vercel_ai_gateway")).toBe("vercel_ai_gateway");
   });
 
   test("rejects unknown values", () => {
@@ -43,6 +44,12 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("maps Together AI to its env key", () => {
     expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
+  });
+
+  test("maps Vercel AI Gateway to its env key", () => {
+    expect(apiKeyEnvVarForProvider("vercel_ai_gateway")).toBe(
+      "VERCEL_AI_GATEWAY_API_KEY"
+    );
   });
 
   test("mistral uses MISTRAL_API_KEY", () => {
@@ -131,6 +138,18 @@ describe("resolveProvider together", () => {
   });
 });
 
+describe("resolveProvider vercel_ai_gateway", () => {
+  test("auto-resolves Vercel AI Gateway when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        VERCEL_AI_GATEWAY_API_KEY: "vgw-test",
+      },
+    });
+
+    expect(provider).toBe("vercel_ai_gateway");
+  });
+});
+
 describe("resolveProvider mistral", () => {
   test("auto-resolves Mistral when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -194,6 +213,7 @@ describe("isDiscoveryModelProvider", () => {
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
     expect(isDiscoveryModelProvider("together")).toBe(false);
+    expect(isDiscoveryModelProvider("vercel_ai_gateway")).toBe(false);
     expect(isDiscoveryModelProvider("mistral")).toBe(false);
     expect(isDiscoveryModelProvider("openai")).toBe(false);
     expect(isDiscoveryModelProvider("opencode_go")).toBe(false);

@@ -734,65 +734,70 @@ describe("AgentService skill_manage injection", () => {
     }
   });
 
-  test("injects skill_manage for web/cli only when manage-skills is assigned", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertProfile(createDefaultProfile());
-    // Give the profile at least one own tool so the platform groups (incl.
-    // skill_manage) are eligible; the no-tools case is covered separately.
-    await db.upsertTool({
-      createdAt: new Date().toISOString(),
-      description: "Test tool",
-      handlerConfig: { modulePath: "test.js" },
-      handlerType: "javascript",
-      id: "tool_for_skill_manage",
-      name: "test_tool",
-      updatedAt: new Date().toISOString(),
-    });
-    await db.assignToolToProfile("profile_default", "tool_for_skill_manage");
-    const skills = new SkillsService(db);
-    await ensureBundledSkillFiles();
-    await skills.syncDiscoveredSkills();
-    const manage = (await skills.listSkills()).skills.find(
-      (skill) => skill.name === "manage-skills"
-    );
-    expect(manage).toBeDefined();
-    await db.assignSkillToProfile("profile_default", manage!.id);
+  test.each(["manage-skills", "skill-installer"])(
+    "injects skill_manage for interactive chat when %s is assigned",
+    async (skillName) => {
+      const db = createInMemoryDatabaseAdapter();
+      await db.upsertProfile(createDefaultProfile());
+      // Give the profile at least one own tool so the platform groups (incl.
+      // skill_manage) are eligible; the no-tools case is covered separately.
+      await db.upsertTool({
+        createdAt: new Date().toISOString(),
+        description: "Test tool",
+        handlerConfig: { modulePath: "test.js" },
+        handlerType: "javascript",
+        id: "tool_for_skill_manage",
+        name: "test_tool",
+        updatedAt: new Date().toISOString(),
+      });
+      await db.assignToolToProfile("profile_default", "tool_for_skill_manage");
+      const skills = new SkillsService(db);
+      await ensureBundledSkillFiles();
+      await skills.syncDiscoveredSkills();
+      const manage = (await skills.listSkills()).skills.find(
+        (skill) => skill.name === skillName
+      );
+      expect(manage).toBeDefined();
+      await db.assignSkillToProfile("profile_default", manage!.id);
 
-    const service = new AgentService(null, null, db);
-    service.setSkillsService(skills);
+      const service = new AgentService(null, null, db);
+      service.setSkillsService(skills);
 
-    type ResolveTools = {
-      resolveProfileTools(
-        profile: StoredProfileRecord,
-        options?: {
-          includeAutomationTools?: boolean;
-          includeSkillManageTools?: boolean;
-        }
-      ): Promise<Array<{ name: string }>>;
-    };
+      type ResolveTools = {
+        resolveProfileTools(
+          profile: StoredProfileRecord,
+          options?: {
+            includeAutomationTools?: boolean;
+            includeSkillManageTools?: boolean;
+          }
+        ): Promise<Array<{ name: string }>>;
+      };
 
-    const resolve = (
-      service as unknown as ResolveTools
-    ).resolveProfileTools.bind(service);
-    const profile = createDefaultProfile();
+      const resolve = (
+        service as unknown as ResolveTools
+      ).resolveProfileTools.bind(service);
+      const profile = createDefaultProfile();
 
-    const webTools = await resolve(profile, { includeSkillManageTools: true });
-    expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
+      const webTools = await resolve(profile, {
+        includeSkillManageTools: true,
+      });
+      expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
 
-    const telegramTools = await resolve(profile, {
-      includeSkillManageTools: false,
-    });
-    expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(
-      false
-    );
+      const telegramTools = await resolve(profile, {
+        includeSkillManageTools: false,
+      });
+      expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(
+        false
+      );
 
-    const automationTools = await resolve(profile, {
-      includeAutomationTools: false,
-    });
-    expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
-      false
-    );
-  });
+      const automationTools = await resolve(profile, {
+        includeAutomationTools: false,
+      });
+      expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
+        false
+      );
+    }
+  );
 
   test("skips platform tool groups for a profile with no tools", async () => {
     const db = createInMemoryDatabaseAdapter();
@@ -805,7 +810,6 @@ describe("AgentService skill_manage injection", () => {
         options?: {
           includeAutomationTools?: boolean;
           includeSkillManageTools?: boolean;
-          includeWorkflowTools?: boolean;
           includeTodoTools?: boolean;
           includeQuestionTools?: boolean;
         }
@@ -823,7 +827,6 @@ describe("AgentService skill_manage injection", () => {
       includeQuestionTools: true,
       includeSkillManageTools: true,
       includeTodoTools: true,
-      includeWorkflowTools: true,
     });
     expect(tools).toHaveLength(0);
 
@@ -843,7 +846,6 @@ describe("AgentService skill_manage injection", () => {
       includeQuestionTools: true,
       includeSkillManageTools: true,
       includeTodoTools: true,
-      includeWorkflowTools: true,
     });
     expect(withTools.some((tool) => tool.name === "test_tool")).toBe(true);
     expect(withTools.some((tool) => tool.name === "ask_user_question")).toBe(

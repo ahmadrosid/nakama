@@ -1,14 +1,14 @@
-import { Message01Icon, RefreshIcon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@nakama/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+} from "@nakama/ui/select";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { Message01Icon, RefreshIcon } from "hugeicons-react";
 import { AutomationDetailPanel } from "@/pages/automations/automation-detail-panel";
 import {
   AutomationDetailSkeleton,
