@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
+  buildCreateProviderRequest,
   encodeModelSelection,
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
@@ -14,6 +15,59 @@ import {
   resolveModelVisionSupport,
   validateCustomModelsInput,
 } from "./models";
+
+describe("buildCreateProviderRequest", () => {
+  test.each([
+    ["openai_compatible", true, true],
+    ["openrouter", true, false],
+    ["xai_oauth", true, false],
+    ["cerebras", true, false],
+    ["fireworks", true, false],
+    ["ollama", true, false],
+    ["opencode_go", true, false],
+    ["openai", false, false],
+  ] as const)(
+    "preserves custom-model handling for %s",
+    (provider, populated, empty) => {
+      for (const customModels of [undefined, [], [{ id: "custom-model" }]]) {
+        const request = buildCreateProviderRequest({
+          apiKey: "key",
+          customModels,
+          provider,
+        });
+        const include =
+          customModels && (customModels.length ? populated : empty);
+        expect(request).toEqual({
+          apiKey: "key",
+          type: provider,
+          ...(include ? { customModels } : {}),
+        });
+      }
+    }
+  );
+
+  test("keeps normalized connection fields and model selection", () => {
+    expect(
+      buildCreateProviderRequest({
+        apiKey: "key",
+        baseUrl: " http://localhost:11434 ",
+        displayName: " Local ",
+        hostMode: "local",
+        model: "model-1",
+        provider: "ollama",
+        wireApi: "responses",
+      })
+    ).toEqual({
+      apiKey: "key",
+      baseUrl: "http://localhost:11434",
+      hostMode: "local",
+      label: "Local",
+      model: "model-1",
+      type: "ollama",
+      wireApi: "responses",
+    });
+  });
+});
 
 function group(
   providerId: string,
