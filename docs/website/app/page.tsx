@@ -195,15 +195,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="px-6 py-24 md:py-32">
-          <p className="landing-lede mx-auto max-w-4xl text-center font-light text-2xl text-stone-600 leading-snug tracking-tight md:text-4xl md:leading-snug dark:text-white/70">
-            Build a team of agents around the way you work. Give each one a
-            role, memory, and tools, then bring them together for bigger
-            projects.
-          </p>
-        </section>
-
-        <section className="px-6 pb-16 md:pb-24">
+        <section className="px-6 py-16 md:py-24">
           <div className="mx-auto max-w-6xl">
             <div className="mb-10 max-w-2xl">
               <h2 className="landing-section-title font-medium text-3xl tracking-tight md:text-4xl">

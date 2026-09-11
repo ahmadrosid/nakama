@@ -52,10 +52,6 @@
   color: var(--landing-brand);
 }
 
-.landing-lede .landing-accent {
-  color: var(--landing-brand);
-}
-
 .prose img {
   max-width: 100%;
   margin: 1rem 0;
@@ -75,7 +71,8 @@
   background: transparent;
 }
 
-.hero-heading {
+.hero-heading,
+.landing-section-title {
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 400;
 }
