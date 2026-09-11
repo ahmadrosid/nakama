@@ -418,17 +418,16 @@ class WorkflowRunner {
       return { input: { left, op: step.op, right }, output: result };
     }
     if (step.kind === "assert") {
-      const expected = resolveWorkflowValue(step.expected, bag);
       const result = executeAssert({
         bag,
-        expected,
+        expected: step.expected,
         path: step.path
       });
       if (!result.ok) {
         throw new Error(`Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`);
       }
       return {
-        input: { expected, path: step.path },
+        input: { expected: result.expected, path: step.path },
         output: result
       };
     }

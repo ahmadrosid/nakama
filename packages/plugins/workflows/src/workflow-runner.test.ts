@@ -136,6 +136,33 @@ describe("WorkflowRunner", () => {
     expect(result.error).toMatch(/cannot be executed locally/i);
     expect(summarizeCalled).toBe(false);
   });
+
+  test("compares template-shaped input strings without resolving them twice", async () => {
+    const workflow = {
+      ...createBaseWorkflow(),
+      steps: [
+        {
+          expected: "{{input.expected}}",
+          id: "check",
+          kind: "assert",
+          path: "input.actual",
+        },
+        { id: "summary", kind: "summarize", prompt: "Summarize" },
+      ] as WorkflowStep[],
+    };
+    const service = createWorkflowServiceStub(workflow);
+    const runner = new WorkflowRunner(service as never, {
+      executeTool: async () => ({}),
+      runWorkflowSummarize: async () => "done",
+    });
+
+    const result = await runner.run(workflow.id, {
+      actual: "{{literal}}",
+      expected: "{{literal}}",
+    });
+
+    expect(result).toMatchObject({ output: "done" });
+  });
 });
 
 function createBaseWorkflow(): StoredWorkflow {
