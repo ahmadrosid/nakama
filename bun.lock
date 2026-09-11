@@ -62,7 +62,7 @@
         "@nakama/agent": "workspace:*",
         "@nakama/core": "workspace:*",
         "@nakama/db": "workspace:*",
-        "@openrouter/sdk": "^1.2.61",
+        "@openrouter/sdk": "^1.2.108",
         "fflate": "^0.8.3",
         "hono": "^4.13.5",
         "microsandbox": "0.6.17",
@@ -550,7 +550,7 @@
 
     "@open-draft/until": ["@open-draft/until@2.1.0", "", {}, "sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg=="],
 
-    "@openrouter/sdk": ["@openrouter/sdk@1.2.61", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-CcpiQnqNb5he3tK6Ohlyg4kYzSBdOX2FITPoV98p1d0wIGsii8zfbKdjlsd8grA/H7morb8m0awm4DmgbxdlBw=="],
+    "@openrouter/sdk": ["@openrouter/sdk@1.2.108", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-xYWEM+RX9KWHO6KoD39BsBqr57Mu+lElQTooP44PRBH5GYShqqVLfC9Y7tROpfAT7LuaII9C3yWzzMsiokCx2A=="],
 
     "@oxc-parser/binding-android-arm-eabi": ["@oxc-parser/binding-android-arm-eabi@0.143.0", "", { "os": "android", "cpu": "arm" }, "sha512-n9uozULWflPqBtdmI8lAabLqGKNgLVNN0ZH8HfgCwpKGNtzRzauB76jTiW/3YLkcA7N1zskpi9GdVnZuu1SAvg=="],
 
@@ -2395,8 +2395,6 @@
     "@npmcli/git/which": ["which@7.0.0", "", { "dependencies": { "isexe": "^4.0.0" }, "bin": { "node-which": "bin/which.js" } }, "sha512-RancgH2dmbLdHl6LRhEqvklWMgl/Hdnun0Y90KhBOLkMefg8Qa7/Zel8Sm+8HEcP6DEjzsWzpkuBQEZok58isA=="],
 
     "@npmcli/promise-spawn/which": ["which@7.0.0", "", { "dependencies": { "isexe": "^4.0.0" }, "bin": { "node-which": "bin/which.js" } }, "sha512-RancgH2dmbLdHl6LRhEqvklWMgl/Hdnun0Y90KhBOLkMefg8Qa7/Zel8Sm+8HEcP6DEjzsWzpkuBQEZok58isA=="],
-
-    "@openrouter/sdk/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@pm2/js-api/async": ["async@2.6.4", "", { "dependencies": { "lodash": "^4.17.14" } }, "sha512-mzo5dfJYwAn29PeiJ0zvwTo04zj8HDJj0Mn8TD7sno7q12prdbnasKJHhkm2c1LgrhlJ0teaea8860oxi51mGA=="],
 
