@@ -64,6 +64,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     .openapi("AuthUserResponse");
   const updateAuthProfileSchema = z
     .object({
+      currentPassword: z.string().optional(),
       email: z.string().optional(),
       name: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),

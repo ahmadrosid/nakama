@@ -369,6 +369,7 @@ export class OrgService {
   async updateOwnProfile(
     userId: string,
     input: {
+      currentPassword?: string;
       name?: string | null;
       email?: string;
       phone?: string | null;
@@ -397,6 +398,14 @@ export class OrgService {
       }
 
       if (email !== user.email) {
+        const validPassword = await this.authService.verifyPassword(
+          input.currentPassword?.trim() ?? "",
+          user.passwordHash
+        );
+        if (!validPassword) {
+          throw new NakamaApiError("Current password is incorrect.", 401);
+        }
+
         const existing = await this.databaseAdapter.getUserByEmail(email);
         if (existing && existing.id !== user.id) {
           throw new NakamaApiError(
