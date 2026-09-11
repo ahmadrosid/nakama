@@ -1,6 +1,6 @@
 import type { OrgLlmQuotaStatusResponse } from "@nakama/core/contract";
+import { Card, CardContent, CardHeader, CardTitle } from "@nakama/ui/card";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 

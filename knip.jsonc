@@ -19,8 +19,6 @@
     // Not in package.json#workspaces; Knip would skip it otherwise.
     "docs/website": {}
   },
-  // Leftover unused deps: Biome via Ultracite.
-  "ignoreDependencies": ["@biomejs/biome"],
   // Type-only import Knip cannot resolve.
   "ignoreUnresolved": ["../../services/auth-service"],
   // Leftover unused exports/types/duplicates on the current tree. New files still fail.
