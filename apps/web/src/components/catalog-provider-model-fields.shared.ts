@@ -7,6 +7,7 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "anthropic",
   "gemini",
   "deepseek",
+  "doubao",
   "together",
   "vercel_ai_gateway",
   "mistral",

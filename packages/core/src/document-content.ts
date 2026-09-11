@@ -70,6 +70,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   cloudflare: new Set<string>(),
   deepseek: new Set<string>(),
+  doubao: new Set<string>(),
   fireworks: new Set<string>(),
   gemini: new Set([
     "application/pdf",

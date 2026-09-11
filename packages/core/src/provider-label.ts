@@ -9,6 +9,7 @@ const BUILTIN_LABELS: Record<
   chatgpt: "ChatGPT (Plus/Pro)",
   cloudflare: "Cloudflare Worker AI",
   deepseek: "DeepSeek",
+  doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",
   gemini: "Gemini",
   minimax: "MiniMax",

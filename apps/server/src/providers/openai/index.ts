@@ -148,6 +148,10 @@ function providerLabel(providerName: ProviderName): string {
     return "DeepSeek";
   }
 
+  if (providerName === "doubao") {
+    return "Doubao (Volcengine)";
+  }
+
   if (providerName === "together") {
     return "Together AI";
   }
@@ -369,6 +373,7 @@ async function buildChatCompletionRequestBody(options: {
     ...(provider === "deepseek"
       ? buildDeepSeekThinkingBody(options.thinking)
       : {}),
+    ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
     ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
       ? {
           reasoning: {
@@ -450,6 +455,17 @@ function buildDeepSeekThinkingBody(
     reasoning_effort: reasoningEffort,
     thinking: { type: "enabled" as const },
   };
+}
+
+/** Ark Seed: `thinking.type` only. Default is on for many Seed models — opt out unless UI enables. */
+function buildDoubaoThinkingBody(
+  thinking: ProviderChatOptions["thinking"] | undefined
+) {
+  if (thinking?.enabled) {
+    return { thinking: { type: "enabled" as const } };
+  }
+
+  return { thinking: { type: "disabled" as const } };
 }
 
 function readReasoningContent(

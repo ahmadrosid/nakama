@@ -23,6 +23,7 @@ function group(
     | "opencode_go"
     | "openrouter"
     | "deepseek"
+    | "doubao"
     | "together"
     | "vercel_ai_gateway"
     | "mistral"
@@ -172,6 +173,22 @@ describe("resolveModelThinkingSupport", () => {
     ).toBe(true);
   });
 
+  test("treats doubao models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsThinking: true })
+      )
+    ).toBe(true);
+  });
+
   test("treats perplexity models as opt-in only", () => {
     expect(
       resolveModelThinkingSupport(
@@ -259,6 +276,22 @@ describe("resolveModelVisionSupport", () => {
         group("openai-1", "openai", { supportsVision: false })
       )
     ).toBe(false);
+  });
+
+  test("treats doubao models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("db-1", "model-1"),
+        group("db-1", "doubao", { supportsVision: true })
+      )
+    ).toBe(true);
   });
 
   test("treats cerebras models as opt-in only for vision", () => {
@@ -412,6 +445,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "doubao",
           "together",
           "vercel_ai_gateway",
           "mistral",

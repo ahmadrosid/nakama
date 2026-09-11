@@ -29,6 +29,7 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "openrouter",
   "opencode",
   "deepseek",
+  "doubao",
   "together",
   "mistral",
   "perplexity",
@@ -42,6 +43,7 @@ const NPM_MAP: Record<string, SelectedProvider> = {
 };
 
 const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
+  bytedance: "doubao",
   deepseek: "deepseek",
   mistral: "mistral",
   opencode: "openai_compatible",
@@ -49,6 +51,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   perplexity: "perplexity",
   together: "together",
   vercel: "vercel_ai_gateway",
+  volcengine: "doubao",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {

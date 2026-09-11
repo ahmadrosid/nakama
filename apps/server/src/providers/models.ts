@@ -191,6 +191,40 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
   },
   {
+    contextWindow: 256_000,
+    default: true,
+    id: "doubao-seed-2-1-pro-260628",
+    inputPerMillionUsd: 0.83,
+    maxOutputTokens: 256_000,
+    name: "Doubao Seed 2.1 Pro",
+    outputPerMillionUsd: 4.14,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 256_000,
+    id: "doubao-seed-2-1-turbo-260628",
+    inputPerMillionUsd: 0.41,
+    maxOutputTokens: 256_000,
+    name: "Doubao Seed 2.1 Turbo",
+    outputPerMillionUsd: 2.07,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 256_000,
+    id: "doubao-seed-1-8-251228",
+    inputPerMillionUsd: 0.26,
+    maxOutputTokens: 256_000,
+    name: "Doubao Seed 1.8",
+    outputPerMillionUsd: 0.67,
+    provider: "doubao",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
     contextWindow: 262_144,
     default: true,
     id: "mistral-small-2603",
@@ -831,6 +865,7 @@ export function getDefaultModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
@@ -931,6 +966,7 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "doubao" ||
       provider === "together" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||

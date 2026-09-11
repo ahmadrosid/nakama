@@ -16,6 +16,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("doubao")).toBe("doubao");
     expect(parseProviderName("mistral")).toBe("mistral");
     expect(parseProviderName("perplexity")).toBe("perplexity");
     expect(parseProviderName("cerebras")).toBe("cerebras");
@@ -54,6 +55,10 @@ describe("apiKeyEnvVarForProvider", () => {
 
   test("mistral uses MISTRAL_API_KEY", () => {
     expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
+  });
+
+  test("doubao uses DOUBAO_API_KEY", () => {
+    expect(apiKeyEnvVarForProvider("doubao")).toBe("DOUBAO_API_KEY");
   });
 
   test("perplexity uses PERPLEXITY_API_KEY", () => {
@@ -162,6 +167,18 @@ describe("resolveProvider mistral", () => {
   });
 });
 
+describe("resolveProvider doubao", () => {
+  test("auto-resolves Doubao when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        DOUBAO_API_KEY: "db-test",
+      },
+    });
+
+    expect(provider).toBe("doubao");
+  });
+});
+
 describe("resolveProvider perplexity", () => {
   test("auto-resolves Perplexity when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -212,6 +229,7 @@ describe("isDiscoveryModelProvider", () => {
 
   test("excludes catalog providers", () => {
     expect(isDiscoveryModelProvider("deepseek")).toBe(false);
+    expect(isDiscoveryModelProvider("doubao")).toBe(false);
     expect(isDiscoveryModelProvider("together")).toBe(false);
     expect(isDiscoveryModelProvider("vercel_ai_gateway")).toBe(false);
     expect(isDiscoveryModelProvider("mistral")).toBe(false);
