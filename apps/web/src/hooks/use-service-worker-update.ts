@@ -18,32 +18,44 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
   const reloadingRef = useRef(false);
 
+  const [registration, setRegistration] =
+    useState<ServiceWorkerRegistration | null>(null);
+  const [installing, setInstalling] = useState<ServiceWorker | null>(null);
+
   useEffect(() => {
     if (!(import.meta.env.PROD && "serviceWorker" in navigator)) {
       return;
     }
-
     const container = navigator.serviceWorker;
     let disposed = false;
-    let registration: ServiceWorkerRegistration | null = null;
-    let lastCheck = Date.now();
-
     const handleControllerChange = () => {
       if (reloadingRef.current) {
         window.location.reload();
       }
     };
-
-    const trackInstalling = (worker: ServiceWorker) => {
-      worker.addEventListener("statechange", () => {
-        // No existing controller means this is the very first install, which
-        // is not an update the user needs to be told about.
-        if (worker.state === "installed" && container.controller) {
-          setWaiting(worker);
+    container.addEventListener("controllerchange", handleControllerChange);
+    container
+      .register(SERVICE_WORKER_URL, { scope: "/" })
+      .then((current) => {
+        if (!disposed) {
+          setRegistration(current);
         }
+      })
+      .catch((error: unknown) => {
+        console.warn("Service worker registration failed:", error);
       });
+    return () => {
+      disposed = true;
+      container.removeEventListener("controllerchange", handleControllerChange);
     };
+  }, []);
 
+  useEffect(() => {
+    if (!registration) {
+      return;
+    }
+    let lastCheck = Date.now();
+    const handleUpdateFound = () => setInstalling(registration.installing);
     const handleVisibilityChange = () => {
       if (
         document.visibilityState !== "visible" ||
@@ -52,41 +64,38 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
         return;
       }
       lastCheck = Date.now();
-      void registration?.update().catch(() => undefined);
+      void registration.update().catch(() => undefined);
     };
-
-    container.addEventListener("controllerchange", handleControllerChange);
+    registration.addEventListener("updatefound", handleUpdateFound);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    container
-      .register(SERVICE_WORKER_URL, { scope: "/" })
-      .then((current) => {
-        if (disposed) {
-          return;
-        }
-        registration = current;
-
-        if (current.waiting && container.controller) {
-          setWaiting(current.waiting);
-        }
-
-        current.addEventListener("updatefound", () => {
-          const installing = current.installing;
-          if (installing) {
-            trackInstalling(installing);
-          }
-        });
-      })
-      .catch((error: unknown) => {
-        console.warn("Service worker registration failed:", error);
-      });
-
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      setWaiting(registration.waiting);
+    }
+    handleUpdateFound();
     return () => {
-      disposed = true;
-      container.removeEventListener("controllerchange", handleControllerChange);
+      registration.removeEventListener("updatefound", handleUpdateFound);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [registration]);
+
+  useEffect(() => {
+    if (!installing) {
+      return;
+    }
+    const handleStateChange = () => {
+      // First installation has no existing controller and needs no reload prompt.
+      if (
+        installing.state === "installed" &&
+        navigator.serviceWorker.controller
+      ) {
+        setWaiting(installing);
+      }
+    };
+    installing.addEventListener("statechange", handleStateChange);
+    handleStateChange();
+    return () =>
+      installing.removeEventListener("statechange", handleStateChange);
+  }, [installing]);
 
   const applyUpdate = useCallback(() => {
     if (!waiting) {

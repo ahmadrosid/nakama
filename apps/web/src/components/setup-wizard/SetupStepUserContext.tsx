@@ -3,18 +3,19 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { useEffect, useState } from "react";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
-import {
-  clearUserContextDraft,
-  USER_CONTEXT_SECTIONS,
-  useUserContextEditor,
-  writeUserContextDraft,
-} from "@/components/UserContextForm";
+import { UserContextSection } from "@/components/UserContextForm";
+import { USER_CONTEXT_SECTIONS } from "@/components/user-context-presets";
 import { useAuth } from "@/context/use-auth";
 import {
   useUserContextQuery,
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
+import {
+  clearUserContextDraft,
+  useUserContextEditor,
+  writeUserContextDraft,
+} from "@/hooks/use-user-context-editor";
 import { formatError } from "@/lib/client";
 import { getBrowserTimezone } from "@/lib/timezones";
 
@@ -24,7 +25,12 @@ interface SetupStepUserContextProps {
   onSkip: () => void;
 }
 
-export function SetupStepUserContext({
+export function SetupStepUserContext(props: SetupStepUserContextProps) {
+  const { activeOrg } = useAuth();
+  return <SetupUserContextSession key={activeOrg?.id} {...props} />;
+}
+
+function SetupUserContextSession({
   onNext,
   onSkip,
   onBack,
@@ -141,7 +147,7 @@ export function SetupStepUserContext({
             <Spinner />
           </div>
         ) : (
-          <section.Component
+          <UserContextSection
             disabled={busy}
             idPrefix="setup-user-context"
             onChange={(next) => {
@@ -150,6 +156,7 @@ export function SetupStepUserContext({
                 setFormError(null);
               }
             }}
+            sectionId={section.id}
             value={content}
           />
         )}

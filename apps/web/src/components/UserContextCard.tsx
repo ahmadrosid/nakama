@@ -9,16 +9,16 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useState } from "react";
-import {
-  clearUserContextDraft,
-  UserContextForm,
-  useUserContextEditor,
-} from "@/components/UserContextForm";
+import { UserContextForm } from "@/components/UserContextForm";
 import { useAuth } from "@/context/use-auth";
 import {
   useUserContextQuery,
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
+import {
+  clearUserContextDraft,
+  useUserContextEditor,
+} from "@/hooks/use-user-context-editor";
 import { formatError } from "@/lib/client";
 
 function formatUserContextError(error: unknown): string {
@@ -39,6 +39,20 @@ export function UserContextEditorDialog({
   open,
   onOpenChange,
 }: UserContextEditorDialogProps) {
+  const { activeOrg } = useAuth();
+  return open ? (
+    <UserContextDialogSession
+      key={activeOrg?.id}
+      onOpenChange={onOpenChange}
+      open
+    />
+  ) : null;
+}
+
+function UserContextDialogSession({
+  open,
+  onOpenChange,
+}: UserContextEditorDialogProps) {
   const { activeOrg, user } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const {
@@ -55,7 +69,6 @@ export function UserContextEditorDialog({
     useUserContextEditor({
       defaultName: user?.name,
       orgId,
-      resetKey: open,
       status,
     });
 

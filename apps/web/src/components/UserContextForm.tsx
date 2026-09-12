@@ -1,4 +1,3 @@
-import type { UserContextStatusResponse } from "@nakama/core";
 import {
   parseUserContext,
   renderUserContext,
@@ -11,7 +10,7 @@ import { Input } from "@nakama/ui/input";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
 import { MoreHorizontalIcon } from "hugeicons-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   browserLanguageLabel,
   isPresetRole,
@@ -23,6 +22,7 @@ import {
   ROLE_PRESETS,
   splitAlways,
   splitReplies,
+  USER_CONTEXT_SECTIONS,
   workHintsForRole,
 } from "@/components/user-context-presets";
 
@@ -515,98 +515,24 @@ function ReviewSection({ value, onChange, disabled }: SectionProps) {
 /* Drafts and defaults, shared by the wizard step and the dialog        */
 /* ------------------------------------------------------------------ */
 
-const DRAFT_PREFIX = "nakama:user-context-draft:";
-
-function readDraft(orgId: string | null | undefined): string | null {
-  if (!orgId) {
-    return null;
-  }
-  try {
-    return localStorage.getItem(DRAFT_PREFIX + orgId);
-  } catch {
-    return null;
-  }
-}
-
-export function writeUserContextDraft(
-  orgId: string | null | undefined,
-  content: string
-): void {
-  if (!orgId) {
-    return;
-  }
-  try {
-    localStorage.setItem(DRAFT_PREFIX + orgId, content);
-  } catch {}
-}
-
-export function clearUserContextDraft(orgId: string | null | undefined): void {
-  if (!orgId) {
-    return;
-  }
-  try {
-    localStorage.removeItem(DRAFT_PREFIX + orgId);
-  } catch {}
-}
-
-/**
- * Local editor state for USER.md. Starts from the saved file; when that is
- * empty it falls back to a draft left by "Set up later", then to just the
- * account name so the first question is already answered.
- */
-export function useUserContextEditor(input: {
-  defaultName: string | null | undefined;
-  orgId: string | null | undefined;
-  /** Re-initialise when this flips, e.g. a dialog opening. */
-  resetKey?: boolean;
-  status: UserContextStatusResponse | undefined;
-}) {
-  const { status, orgId, defaultName, resetKey } = input;
-  const [content, setContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
-
-  useEffect(() => {
-    if (!status) {
-      return;
-    }
-    const saved = status.content ?? "";
-    const draft = saved === "" ? readDraft(orgId) : null;
-    const name = defaultName?.trim() ?? "";
-    const fallback =
-      saved === "" && name !== "" ? renderUserContext({ name }) : saved;
-    setContent(draft ?? fallback);
-    setSavedContent(saved);
-  }, [status, orgId, defaultName, resetKey]);
-
-  return { content, savedContent, setContent, setSavedContent };
-}
-
 /* ------------------------------------------------------------------ */
 /* Public surface                                                      */
 /* ------------------------------------------------------------------ */
 
-export const USER_CONTEXT_SECTIONS = [
-  {
-    Component: AboutSection,
-    id: "about",
-    title: "What do you do?",
-  },
-  {
-    Component: WorkSection,
-    id: "work",
-    title: "What are you working on?",
-  },
-  {
-    Component: StyleSection,
-    id: "style",
-    title: "How should replies sound?",
-  },
-  {
-    Component: ReviewSection,
-    id: "review",
-    title: "What Nakama will remember",
-  },
-] as const;
+const SECTION_COMPONENTS = {
+  about: AboutSection,
+  review: ReviewSection,
+  style: StyleSection,
+  work: WorkSection,
+};
+
+export function UserContextSection({
+  sectionId,
+  ...props
+}: SectionProps & { sectionId: keyof typeof SECTION_COMPONENTS }) {
+  const Component = SECTION_COMPONENTS[sectionId];
+  return <Component {...props} />;
+}
 
 interface UserContextFormProps {
   disabled?: boolean;
@@ -628,13 +554,8 @@ export function UserContextForm({
   idPrefix = "user-context",
 }: UserContextFormProps) {
   const hasExtra = parseUserContext(value).extra !== "";
-  const [reviewOpen, setReviewOpen] = useState(false);
-
-  useEffect(() => {
-    if (hasExtra) {
-      setReviewOpen(true);
-    }
-  }, [hasExtra]);
+  const [reviewExpanded, setReviewExpanded] = useState<boolean | null>(null);
+  const reviewOpen = reviewExpanded ?? hasExtra;
 
   const questionSections = USER_CONTEXT_SECTIONS.filter(
     (section) => section.id !== "review"
@@ -647,10 +568,11 @@ export function UserContextForm({
           <h3 className="font-medium text-foreground text-sm">
             {section.title}
           </h3>
-          <section.Component
+          <UserContextSection
             disabled={disabled}
             idPrefix={idPrefix}
             onChange={onChange}
+            sectionId={section.id}
             value={value}
           />
         </section>
@@ -659,7 +581,7 @@ export function UserContextForm({
       <div className="space-y-2">
         <Button
           disabled={disabled}
-          onClick={() => setReviewOpen((open) => !open)}
+          onClick={() => setReviewExpanded(!reviewOpen)}
           size="sm"
           type="button"
           variant="ghost"

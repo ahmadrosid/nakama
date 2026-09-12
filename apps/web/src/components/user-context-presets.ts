@@ -320,3 +320,10 @@ export function joinAlways(language: string, rest: string): string {
     ? `Reply in ${language}.`
     : `Reply in ${language}. ${rest}`;
 }
+
+export const USER_CONTEXT_SECTIONS = [
+  { id: "about", title: "What do you do?" },
+  { id: "work", title: "What are you working on?" },
+  { id: "style", title: "How should replies sound?" },
+  { id: "review", title: "What Nakama will remember" },
+] as const;
