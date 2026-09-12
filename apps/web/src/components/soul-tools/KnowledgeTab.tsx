@@ -183,7 +183,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
 
   return (
     <ChatAttachmentPanelProvider presentation="overlay">
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
         {error ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
             {error}

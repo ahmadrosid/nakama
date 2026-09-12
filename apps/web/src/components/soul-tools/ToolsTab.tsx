@@ -27,6 +27,7 @@ import { useDeleteToolMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import {
   canUseToolPlayground,
+  pluginIcon,
   pluginsSystemPath,
   toolPlaygroundPath,
 } from "@/lib/navigation";
@@ -264,6 +265,18 @@ function ToolListSection({
     });
   }, [tools, trimmedQuery]);
 
+  const pluginGroups = new Map<string, ToolDetail[]>();
+  const standaloneTools: ToolDetail[] = [];
+  for (const tool of filteredTools) {
+    if (tool.pluginId) {
+      const group = pluginGroups.get(tool.pluginId) ?? [];
+      group.push(tool);
+      pluginGroups.set(tool.pluginId, group);
+    } else {
+      standaloneTools.push(tool);
+    }
+  }
+
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
@@ -322,7 +335,7 @@ function ToolListSection({
             </p>
           ) : (
             <ul className="divide-y divide-border rounded-md border border-border">
-              {filteredTools.map((tool) => (
+              {standaloneTools.map((tool) => (
                 <ToolListItem
                   busy={busy}
                   key={tool.id}
@@ -340,11 +353,55 @@ function ToolListSection({
                   tool={tool}
                 />
               ))}
+              {[...pluginGroups].map(([pluginId, group]) => (
+                <PluginToolGroup
+                  busy={busy}
+                  key={`${pluginId}:${Boolean(trimmedQuery)}`}
+                  pluginId={pluginId}
+                  searching={Boolean(trimmedQuery)}
+                  tools={group}
+                />
+              ))}
             </ul>
           )}
         </div>
       )}
     </section>
+  );
+}
+
+function PluginToolGroup({
+  pluginId,
+  tools,
+  busy,
+  searching,
+}: {
+  pluginId: string;
+  tools: ToolDetail[];
+  busy: boolean;
+  searching: boolean;
+}) {
+  const Icon = pluginIcon(pluginId);
+  const label = pluginId === "supermemory" ? "Supermemory" : pluginId;
+  return (
+    <li>
+      <details open={searching}>
+        <summary className="cursor-pointer rounded-md px-4 py-3 text-sm marker:text-muted-foreground hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
+          <span className="ml-2 inline-flex items-center gap-2 align-middle">
+            <Icon aria-hidden className="size-4" />
+            <span className="font-medium">{label}</span>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {tools.length} {tools.length === 1 ? "tool" : "tools"}
+            </span>
+          </span>
+        </summary>
+        <ul className="divide-y divide-border border-border border-t">
+          {tools.map((tool) => (
+            <ToolListItem busy={busy} key={tool.id} tool={tool} />
+          ))}
+        </ul>
+      </details>
+    </li>
   );
 }
 
@@ -358,7 +415,7 @@ function ToolListItem({
   tool: ToolDetail;
   busy: boolean;
   playgroundHref?: string;
-  onDelete: () => void;
+  onDelete?: () => void;
   onConfigure?: () => void;
 }) {
   const deletable = isDeletableTool(tool);
@@ -430,7 +487,7 @@ function ToolListItem({
             disabled={busy}
             onClick={(event) => {
               event.stopPropagation();
-              onDelete();
+              onDelete?.();
             }}
             size="sm"
             type="button"

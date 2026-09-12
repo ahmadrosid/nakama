@@ -72,7 +72,13 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
                 aria-label="Selected automation"
                 className="min-w-0 flex-1"
               >
-                <SelectValue placeholder="Select automation" />
+                <SelectValue placeholder="Select automation">
+                  {
+                    automations.find(
+                      (automation) => automation.id === selectedId
+                    )?.name
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {filteredAutomations.map((automation) => (

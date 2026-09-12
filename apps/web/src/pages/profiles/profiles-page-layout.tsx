@@ -1,4 +1,3 @@
-import { cn } from "@nakama/ui/utils";
 import { createPortal } from "react-dom";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
@@ -9,7 +8,6 @@ import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
 import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
-import { sectionClass } from "@/pages/profiles/profiles-page.shared";
 import {
   PageState,
   ProfileDetailTabButton,
@@ -159,7 +157,7 @@ function ProfilesProposalsTab({
   return (
     <div
       aria-labelledby="profile-detail-tab-proposals"
-      className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+      className="no-scrollbar min-h-0 flex-1 overflow-y-auto"
       id="profile-detail-panel-proposals"
       role="tabpanel"
     >
@@ -178,7 +176,7 @@ function ProfilesPromptTab({
   return (
     <div
       aria-labelledby="profile-detail-tab-prompt"
-      className="no-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-5"
+      className="no-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto"
       id="profile-detail-panel-prompt"
       role="tabpanel"
     >
@@ -218,7 +216,7 @@ function ProfilesDetailPanel({
 
   if (detailTab === "profile") {
     return (
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
         <ProfileConfigTab state={state} />
       </div>
     );
@@ -358,12 +356,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
         selectedId={selectedId}
       />
 
-      <section
-        className={cn(
-          sectionClass,
-          "flex min-h-[calc(100svh-7rem)] flex-col overflow-hidden"
-        )}
-      >
+      <section className="flex min-h-[calc(100svh-7rem)] flex-col overflow-hidden">
         <ProfilesMainSection
           canCreateProfile={canCreateProfile}
           canPack={canPack}
