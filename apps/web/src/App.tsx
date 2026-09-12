@@ -32,6 +32,10 @@ const IntegrationsPage = lazyPage(
   "IntegrationsPage"
 );
 const LoginPage = lazyPage(() => import("@/pages/LoginPage"), "LoginPage");
+const AcceptInvitePage = lazyPage(
+  () => import("@/pages/AcceptInvitePage"),
+  "AcceptInvitePage"
+);
 const NotificationsPage = lazyPage(
   () => import("@/pages/NotificationsPage"),
   "NotificationsPage"
@@ -87,6 +91,14 @@ function AppShell() {
         <AppQueryPrefetch />
         <AppProvider>
           <Routes>
+            <Route
+              element={
+                <RouteBoundary fullScreen>
+                  <AcceptInvitePage />
+                </RouteBoundary>
+              }
+              path="/accept-invite"
+            />
             <Route
               element={
                 <RouteBoundary fullScreen>

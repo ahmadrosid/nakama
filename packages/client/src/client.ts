@@ -4,6 +4,8 @@ import {
   readApiErrorMessage,
 } from "@nakama/core/api-error";
 import type {
+  AcceptOrgInviteRequest,
+  AcceptOrgInviteResponse,
   AddOrgMemberRequest,
   AddOrgMemberResponse,
   AddOrgMemoryFactRequest,
@@ -2117,6 +2119,21 @@ export class NakamaClient {
     });
 
     this.applyAuthUserResponse(response);
+    return response;
+  }
+
+  async acceptOrgInvite(
+    request: AcceptOrgInviteRequest
+  ): Promise<AcceptOrgInviteResponse> {
+    const response = await this.request<AcceptOrgInviteResponse>(
+      "/v1/auth/accept-invite",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+
+    this.setOrgId(response.orgId);
     return response;
   }
 
