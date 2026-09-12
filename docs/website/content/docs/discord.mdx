@@ -195,6 +195,9 @@ Environment-based setup is also supported. The main env var is:
 DISCORD_BOT_TOKEN
 ```
 
+For mounted secrets, set `DISCORD_BOT_TOKEN_FILE` to the path of a readable
+file containing the token. A directly set `DISCORD_BOT_TOKEN` takes priority.
+
 Nakama also supports:
 
 ```text
