@@ -3,12 +3,14 @@ import { formatServerError, log, NakamaApiError } from "@nakama/core";
 import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { tryServeStaticWeb } from "../static-web";
+import { createAuditLogMiddleware } from "./audit-log";
 import { createAuthMiddleware } from "./auth-middleware";
 import type { ServerOptions } from "./context";
 import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
 import { createRateLimitMiddleware } from "./rate-limit-middleware";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
+import { registerAuditEventRoutes } from "./routes/audit-events";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerAutomationWorkerSettingsRoutes } from "./routes/automation-worker-settings";
 import { registerAutomationRoutes } from "./routes/automations";
@@ -237,7 +239,11 @@ export function createHonoApp(options: ServerOptions) {
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));
+  if (options.databaseAdapter) {
+    app.use("*", createAuditLogMiddleware(options.databaseAdapter));
+  }
   registerSystemRoutes(app, options);
+  registerAuditEventRoutes(app, options);
   registerAuthRoutes(app, options);
   registerSetupImportRoutes(app, options);
   registerWorkerRoutes(app, options);

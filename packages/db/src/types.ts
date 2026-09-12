@@ -626,6 +626,18 @@ export interface StoredBrowserSessionRecord {
   userId: string;
 }
 
+export interface StoredAuditEvent {
+  action: string;
+  actorUserId: string | null;
+  createdAt: string;
+  id: string;
+  metadata: Record<string, boolean | null | number | string>;
+  orgId: string | null;
+  requestId: string | null;
+  resourceId: string | null;
+  resourceType: string;
+}
+
 export interface DatabaseAdapter {
   appendMessagesForSession(
     sessionId: string,
@@ -667,6 +679,8 @@ export interface DatabaseAdapter {
   countUsers(): Promise<number>;
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
+  /** Append-only insert. Adapters must not expose update/delete for this table. */
+  createAuditEvent(record: StoredAuditEvent): Promise<void>;
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;
 
@@ -889,6 +903,13 @@ export interface DatabaseAdapter {
   listAttachmentsForSession(
     sessionId: string
   ): Promise<StoredAttachmentRecord[]>;
+
+  listAuditEvents(options?: {
+    action?: string;
+    limit?: number;
+    offset?: number;
+    orgId?: string;
+  }): Promise<StoredAuditEvent[]>;
 
   listAutomationRuns(
     automationId: string,
