@@ -744,9 +744,13 @@ export class NakamaClient {
     );
   }
 
-  async getProfile(profileId: string): Promise<ProfileResponse> {
+  async getProfile(
+    profileId: string,
+    orgId?: string
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}`
+      `/v1/profiles/${encodeURIComponent(profileId)}`,
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
     );
   }
 
@@ -825,8 +829,11 @@ export class NakamaClient {
     });
   }
 
-  async listTools(): Promise<ListToolsResponse> {
-    return this.request<ListToolsResponse>("/v1/tools");
+  async listTools(orgId?: string): Promise<ListToolsResponse> {
+    return this.request<ListToolsResponse>(
+      "/v1/tools",
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
   }
 
   async getTool(toolId: string): Promise<ToolResponse> {
@@ -885,24 +892,28 @@ export class NakamaClient {
 
   async assignTool(
     profileId: string,
-    request: AssignToolRequest
+    request: AssignToolRequest,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/tools`,
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
   }
 
   async unassignTool(
     profileId: string,
-    toolId: string
+    toolId: string,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/tools/${encodeURIComponent(toolId)}`,
       {
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
         method: "DELETE",
       }
     );
@@ -992,8 +1003,11 @@ export class NakamaClient {
     );
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
-    return this.request<ListSkillsResponse>("/v1/skills");
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
+    return this.request<ListSkillsResponse>(
+      "/v1/skills",
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
   }
 
   async cloneProfile(
@@ -1059,24 +1073,27 @@ export class NakamaClient {
 
   async assignSkill(
     profileId: string,
-    request: AssignSkillRequest
+    request: AssignSkillRequest,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/skills`,
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
   }
 
   async unassignSkill(
     profileId: string,
-    skillId: string
+    skillId: string,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/skills/${encodeURIComponent(skillId)}`,
-      { method: "DELETE" }
+      { ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}), method: "DELETE" }
     );
   }
 
@@ -1606,6 +1623,7 @@ export class NakamaClient {
   }
   async listOfficialPlugins(): Promise<{
     plugins: Array<{
+      icon?: string;
       id: string;
       name: string;
       description: string;

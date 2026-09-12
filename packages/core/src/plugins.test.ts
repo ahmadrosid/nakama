@@ -25,6 +25,37 @@ const identity = {
 };
 
 describe("validatePluginManifest", () => {
+  test("preserves an optional HTTPS icon", () => {
+    const icon = "https://example.com/plugin.svg";
+    const result = validatePluginManifest({
+      ...identity,
+      apiVersion: 1,
+      icon,
+      minNakamaVersion: "0.1.0",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.manifest).toHaveProperty("icon", icon);
+    }
+  });
+
+  test.each([
+    "",
+    123,
+    "javascript:alert(1)",
+    "file:///tmp/icon.png",
+    "http://example.com/icon.png",
+    "/icon.png",
+  ])("rejects invalid icon %s", (icon) => {
+    expect(
+      validatePluginManifest({
+        ...identity,
+        apiVersion: 1,
+        icon,
+        minNakamaVersion: "0.1.0",
+      }).ok
+    ).toBe(false);
+  });
   test("accepts a skills-only manifest", () => {
     const result = validatePluginManifest({
       apiVersion: PLUGIN_MANIFEST_API_VERSION,

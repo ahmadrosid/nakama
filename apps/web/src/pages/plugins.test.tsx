@@ -1,5 +1,11 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
-import type { OrgPluginDetail, ToolSummary } from "@nakama/core/contract";
+import type {
+  OrgPluginDetail,
+  ProfileDetail,
+  SkillSummary,
+  ToolDetail,
+  ToolSummary,
+} from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -15,12 +21,16 @@ import {
   nextPluginVersions,
   orgPluginQueryOptions,
   orgPluginsQueryOptions,
+  pluginAgentAccessState,
   pluginRowActions,
   pluginUiModuleUrl,
   resolvePluginPageView,
+  savePluginAgentAccess,
   useEnableOrgPlugin,
   useInstallPluginPackage,
+  usePluginAgentAccess,
   useReinstallOfficialPlugin,
+  useSavePluginAgentAccess,
 } from "@/hooks/use-plugins";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -30,11 +40,25 @@ import { PluginsPage } from "@/pages/PluginsPage";
 const enable = spyOn(client, "enableOrgPlugin");
 const installPackage = spyOn(client, "installPluginPackage");
 const reinstallOfficial = spyOn(client, "reinstallOfficialPlugin");
+const accessApi = {
+  assignSkill: spyOn(client, "assignSkill"),
+  assignTool: spyOn(client, "assignTool"),
+  plugin: spyOn(client, "getOrgPlugin"),
+  profile: spyOn(client, "getProfile"),
+  profiles: spyOn(client, "listProfiles"),
+  skills: spyOn(client, "listSkills"),
+  tools: spyOn(client, "listTools"),
+  unassignSkill: spyOn(client, "unassignSkill"),
+  unassignTool: spyOn(client, "unassignTool"),
+};
 const queryClient = new QueryClient({
   defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
 });
 
 afterEach(() => {
+  for (const method of Object.values(accessApi)) {
+    method.mockReset();
+  }
   enable.mockReset();
   installPackage.mockReset();
   reinstallOfficial.mockReset();
@@ -42,6 +66,9 @@ afterEach(() => {
 });
 
 afterAll(() => {
+  for (const method of Object.values(accessApi)) {
+    method.mockRestore();
+  }
   enable.mockRestore();
   installPackage.mockRestore();
   reinstallOfficial.mockRestore();
@@ -108,8 +135,36 @@ function renderEnable() {
 }
 
 describe("plugin management authority and mutations", () => {
+  test.each([false, true])(
+    "external install entry is platform-admin-only: %s",
+    (isPlatformAdmin) => {
+      queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
+        plugins: [plugin({ icon: "https://example.com/notes.svg" })],
+      });
+      const html = renderToString(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider
+            value={{
+              ...authValue,
+              user: { ...authValue.user!, isPlatformAdmin },
+            }}
+          >
+            <MemoryRouter>
+              <PluginsPage />
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      expect(html.includes(">Install external plugin</button>")).toBe(
+        isPlatformAdmin
+      );
+      expect(html).not.toContain('aria-label="npm package name"');
+      expect(html).not.toContain('aria-label="Exact package version"');
+      expect(html).toContain('src="https://example.com/notes.svg"');
+    }
+  );
   test.each(["admin", "member"] as const)(
-    "official reinstall is limited to admins: %s",
+    "official plugins render once with admin-only management: %s",
     (role) => {
       queryClient.setQueryData(["official-plugins"], {
         plugins: [
@@ -118,6 +173,12 @@ describe("plugin management authority and mutations", () => {
             id: "workflows",
             name: "Workflows",
             version: "1.0.1",
+          },
+          {
+            description: "",
+            id: "supermemory",
+            name: "Supermemory",
+            version: "1.0.0",
           },
         ],
       });
@@ -145,7 +206,15 @@ describe("plugin management authority and mutations", () => {
           </AuthContext.Provider>
         </QueryClientProvider>
       );
-      expect(html.includes(">Reinstall</button>")).toBe(role === "admin");
+      expect(html.match(/href="\/plugins\/workflows"/g)).toHaveLength(1);
+      expect(html.match(/>Supermemory</g)).toHaveLength(1);
+      expect(html.includes('href="/plugins/supermemory"')).toBe(false);
+      expect(html).not.toContain("No plugins installed.");
+      expect(html).toContain("<details");
+      expect(html).not.toMatch(/<details[^>]*\bopen/);
+      expect(html.includes('aria-label="Actions for Workflows"')).toBe(
+        role === "admin"
+      );
     }
   );
   test.each([false, true])(
@@ -237,7 +306,12 @@ describe("plugin management authority and mutations", () => {
       const buttons = [...html.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map(
         (match) => match[1].replace(/<[^>]*>/g, "")
       );
-      expect(buttons).toEqual([...actions]);
+      expect(buttons.filter(Boolean)).toEqual(
+        actions.some((action) => action === "Enable") ? ["Enable"] : []
+      );
+      expect(html.includes('aria-label="Actions for Notes"')).toBe(
+        role === "admin"
+      );
       expect(html.includes('href="/plugins/notes"')).toBe(state === "enabled");
     }
   );
@@ -350,6 +424,140 @@ describe("plugin management authority and mutations", () => {
       uninstall: false,
       update: false,
     });
+  });
+});
+
+describe("plugin agent access", () => {
+  const tool = { id: "notes-tool", pluginId: "notes" } as ToolDetail;
+  const otherTool = { id: "other-tool", pluginId: "other" } as ToolDetail;
+  const skill = { id: "notes-skill", pluginId: "notes" } as SkillSummary;
+  const otherSkill = { id: "other-skill", pluginId: "other" } as SkillSummary;
+  const resources = { skills: [skill, otherSkill], tools: [tool, otherTool] };
+  function agent(tools: ToolSummary[] = [], skills: SkillSummary[] = []) {
+    return { id: "agent-a", name: "Agent A", skills, tools } as ProfileDetail;
+  }
+  function setup(profile: ProfileDetail) {
+    accessApi.plugin.mockResolvedValue(plugin({ lifecycleState: "enabled" }));
+    accessApi.profile.mockResolvedValue({ profile });
+    accessApi.tools.mockResolvedValue({ tools: resources.tools });
+    accessApi.skills.mockResolvedValue({ skills: resources.skills });
+    accessApi.assignTool.mockResolvedValue({ profile });
+    accessApi.unassignTool.mockResolvedValue({ profile });
+    accessApi.assignSkill.mockResolvedValue({ profile });
+    accessApi.unassignSkill.mockResolvedValue({ profile });
+  }
+
+  test("distinguishes full, partial, and no access", () => {
+    expect(
+      pluginAgentAccessState(agent([tool], [skill]), "notes", resources)
+    ).toEqual({ assigned: 2, full: true, total: 2 });
+    expect(pluginAgentAccessState(agent([tool]), "notes", resources)).toEqual({
+      assigned: 1,
+      full: false,
+      total: 2,
+    });
+    expect(
+      pluginAgentAccessState(
+        agent([otherTool], [otherSkill]),
+        "notes",
+        resources
+      )
+    ).toEqual({ assigned: 0, full: false, total: 2 });
+    expect(pluginAgentAccessState(agent(), "ui-only", resources)).toEqual({
+      assigned: 0,
+      full: false,
+      total: 0,
+    });
+  });
+
+  test("grants missing capabilities without changing unrelated assignments", async () => {
+    setup(agent([tool, otherTool], [otherSkill]));
+    await savePluginAgentAccess("org-a", "notes", { "agent-a": true });
+    expect(accessApi.assignTool).not.toHaveBeenCalled();
+    expect(accessApi.assignSkill).toHaveBeenCalledTimes(1);
+    expect(accessApi.assignSkill).toHaveBeenCalledWith(
+      "agent-a",
+      { skillId: "notes-skill" },
+      "org-a"
+    );
+    expect(accessApi.unassignTool).not.toHaveBeenCalled();
+    expect(accessApi.unassignSkill).not.toHaveBeenCalled();
+    expect(accessApi.profile).toHaveBeenCalledWith("agent-a", "org-a");
+    expect(accessApi.tools).toHaveBeenCalledWith("org-a");
+    expect(accessApi.skills).toHaveBeenCalledWith("org-a");
+  });
+
+  test("revokes only this plugin's tools and skills", async () => {
+    setup(agent([tool, otherTool], [skill, otherSkill]));
+    await savePluginAgentAccess("org-a", "notes", { "agent-a": false });
+    expect(accessApi.unassignTool).toHaveBeenCalledTimes(1);
+    expect(accessApi.unassignTool).toHaveBeenCalledWith(
+      "agent-a",
+      "notes-tool",
+      "org-a"
+    );
+    expect(accessApi.unassignSkill).toHaveBeenCalledTimes(1);
+    expect(accessApi.unassignSkill).toHaveBeenCalledWith(
+      "agent-a",
+      "notes-skill",
+      "org-a"
+    );
+    expect(accessApi.assignTool).not.toHaveBeenCalled();
+    expect(accessApi.assignSkill).not.toHaveBeenCalled();
+  });
+
+  test("retry after partial failure skips assignments already saved", async () => {
+    setup(agent());
+    accessApi.assignSkill.mockRejectedValueOnce(new Error("Unavailable"));
+    await expect(
+      savePluginAgentAccess("org-a", "notes", { "agent-a": true })
+    ).rejects.toThrow();
+    accessApi.profile.mockResolvedValue({ profile: agent([tool]) });
+    await savePluginAgentAccess("org-a", "notes", { "agent-a": true });
+    expect(accessApi.assignTool).toHaveBeenCalledTimes(1);
+    expect(accessApi.assignSkill).toHaveBeenCalledTimes(2);
+  });
+
+  test("refuses assignments when the plugin was disabled", async () => {
+    setup(agent());
+    accessApi.plugin.mockResolvedValue(plugin());
+    await expect(
+      savePluginAgentAccess("org-a", "notes", { "agent-a": true })
+    ).rejects.toThrow();
+    expect(accessApi.profile).not.toHaveBeenCalled();
+    expect(accessApi.assignTool).not.toHaveBeenCalled();
+    expect(accessApi.assignSkill).not.toHaveBeenCalled();
+  });
+
+  test("loads org-scoped access counts and refreshes them after saving", async () => {
+    const profile = agent([tool]);
+    setup(profile);
+    accessApi.profiles.mockResolvedValue({ profiles: [profile] });
+    let access!: ReturnType<typeof usePluginAgentAccess>;
+    let save!: ReturnType<typeof useSavePluginAgentAccess>;
+    function Probe() {
+      access = usePluginAgentAccess();
+      save = useSavePluginAgentAccess();
+      return null;
+    }
+    renderToString(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={authValue}>
+          <Probe />
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    const result = await access.refetch();
+    expect(result.data?.counts).toEqual({ notes: 1, other: 0 });
+    expect(accessApi.profiles).toHaveBeenCalledWith("org-a");
+    await save.mutateAsync({ changes: { "agent-a": true }, pluginId: "notes" });
+    expect(
+      queryClient.getQueryState([
+        ...queryKeys.profiles.all,
+        "plugin-access",
+        "org-a",
+      ])?.isInvalidated
+    ).toBe(true);
   });
 });
 

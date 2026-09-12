@@ -91,6 +91,8 @@ export interface PluginManifest {
   author: string;
   database?: { migrations: PluginMigrationContribution[] };
   description: string;
+  /** HTTPS URL of the plugin's display icon. */
+  icon?: string;
   id: string;
   license: string;
   minNakamaVersion: string;
@@ -167,6 +169,16 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
     return fail("invalid_version");
   }
 
+  if (
+    value.icon !== undefined &&
+    (typeof value.icon !== "string" ||
+      value.icon.length > 2048 ||
+      !URL.canParse(value.icon) ||
+      new URL(value.icon).protocol !== "https:")
+  ) {
+    return fail("invalid_identity");
+  }
+
   const skillsResult = parseSkills(value.skills);
   if (!skillsResult.ok) {
     return skillsResult;
@@ -198,6 +210,7 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
       author: value.author,
       ...(databaseResult.database ? { database: databaseResult.database } : {}),
       description: value.description,
+      ...(typeof value.icon === "string" ? { icon: value.icon } : {}),
       id: value.id,
       license: value.license,
       minNakamaVersion: value.minNakamaVersion,

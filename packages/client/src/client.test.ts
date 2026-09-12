@@ -6,6 +6,38 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test("plugin access requests retain their explicit organization", async () => {
+  const requests: Request[] = [];
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({});
+    },
+    orgId: "org-other",
+  });
+  await client.getProfile("agent-a", "org-a");
+  await client.listTools("org-a");
+  await client.listSkills("org-a");
+  await client.assignTool("agent-a", { toolId: "tool" }, "org-a");
+  await client.unassignTool("agent-a", "tool", "org-a");
+  await client.assignSkill("agent-a", { skillId: "skill" }, "org-a");
+  await client.unassignSkill("agent-a", "skill", "org-a");
+  expect(requests).toHaveLength(7);
+  expect(requests.map((request) => request.headers.get("X-Org-Id"))).toEqual(
+    Array(7).fill("org-a")
+  );
+  expect(requests.map((request) => request.method)).toEqual([
+    "GET",
+    "GET",
+    "GET",
+    "POST",
+    "DELETE",
+    "POST",
+    "DELETE",
+  ]);
+});
+
 test("official plugin reinstall sends revision and explicit organization", async () => {
   let request!: Request;
   const client = new NakamaClient({

@@ -16,6 +16,7 @@ import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
+  useLocalStorageFlag,
   useSidebarCollapsed,
   useSystemNavCollapsed,
 } from "@/hooks/use-sidebar-collapsed";
@@ -30,6 +31,10 @@ import {
   pluginIdFromPath,
   visibleNavGroups,
 } from "@/lib/navigation";
+import {
+  getInitialPluginsNavCollapsed,
+  SIDEBAR_PLUGINS_NAV_COLLAPSED_KEY,
+} from "@/lib/sidebar";
 
 export function AppSidebar({
   variant = "shell",
@@ -109,14 +114,46 @@ function PluginsNavGroup({
   collapsed: boolean;
   activePluginId: string | null;
 }) {
+  const { collapsed: pluginsCollapsed, toggle } = useLocalStorageFlag(
+    SIDEBAR_PLUGINS_NAV_COLLAPSED_KEY,
+    getInitialPluginsNavCollapsed
+  );
+  const itemsVisible = collapsed || !pluginsCollapsed;
   if (entries.length === 0) {
     return null;
   }
 
   return (
-    <div aria-label="Plugins" className="sidebar-nav-group" role="group">
-      {collapsed ? null : <p className="sidebar-nav-group-label">Plugins</p>}
-      <div className="sidebar-nav-group-items">
+    <div
+      aria-label="Plugins"
+      className="sidebar-nav-group"
+      data-items-hidden={itemsVisible ? undefined : true}
+      data-tree
+      role="group"
+    >
+      {collapsed ? null : (
+        <button
+          aria-expanded={!pluginsCollapsed}
+          className="sidebar-nav-group-label"
+          onClick={toggle}
+          type="button"
+        >
+          <ArrowDown01Icon
+            aria-hidden="true"
+            className={cn(
+              "sidebar-nav-group-chevron",
+              pluginsCollapsed && "-rotate-90"
+            )}
+            strokeWidth={1.75}
+          />
+          <span className="truncate">Plugins</span>
+        </button>
+      )}
+      <div
+        aria-hidden={!itemsVisible}
+        className="sidebar-nav-group-items"
+        inert={itemsVisible ? undefined : true}
+      >
         {entries.map((entry) => (
           <SidebarNavButton
             active={entry.pluginId === activePluginId}

@@ -50,6 +50,8 @@ Actions must be prebuilt, self-contained JavaScript. Declare build tools and lib
 
 `apiVersion` is `1`. `id` is a stable slug (`notes`). `version` and `minNakamaVersion` are SemVer. Unknown API versions fail preview.
 
+Set optional `icon` to an HTTPS image URL, for example `"icon": "https://example.com/icon.svg"`. The plugin list displays it in a 40px square and uses a fallback if the image fails to load. Workflows and Supermemory have distinct built-in fallback icons.
+
 Supported JSON Schema keywords on action input: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `minItems`, `maxItems`. Remote `$ref` and other keywords are rejected.
 
 Action `key` values become agent tool names as `plugin_<id>__<key>` when `exposeAsTool` is true. Example: `plugin_notes__list`.

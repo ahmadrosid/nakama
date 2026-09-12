@@ -99,7 +99,13 @@ export function SystemPage() {
             pageHeaderActions
           )
         : null}
-      <section className="overflow-hidden rounded-md border border-border bg-card">
+      <section
+        className={
+          tab === "plugins"
+            ? "min-w-0"
+            : "overflow-hidden rounded-md border border-border bg-card"
+        }
+      >
         <div
           aria-labelledby={`system-tab-${tab}`}
           id={`system-panel-${tab}`}

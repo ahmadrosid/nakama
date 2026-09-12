@@ -321,8 +321,8 @@ export class PluginService {
     return Promise.all(
       [...OFFICIAL_PLUGINS.keys()].map(async (pluginId) => {
         const inspected = await this.inspectOfficialPlugin(pluginId);
-        const { id, name, description, version } = inspected.manifest;
-        return { description, id, name, version };
+        const { id, name, description, version, icon } = inspected.manifest;
+        return { description, id, name, version, ...(icon ? { icon } : {}) };
       })
     );
   }
@@ -1167,6 +1167,7 @@ export class PluginService {
       availableVersions: releases.map((release) => release.version),
       databaseGeneration: install?.databaseGeneration ?? null,
       description: manifest?.description ?? "",
+      ...(manifest?.icon ? { icon: manifest.icon } : {}),
       installed: Boolean(install),
       lastLifecycleError: install?.lastLifecycleError ?? null,
       lifecycleState: install?.lifecycleState ?? "disabled",

@@ -2649,6 +2649,7 @@ export interface OrgPluginDetail extends OrgPluginSummary {
   actions: PluginActionDescription[];
   availableVersions: string[];
   description: string;
+  icon?: string;
   installed: boolean;
   name: string;
   ui: PluginUiSummary | null;

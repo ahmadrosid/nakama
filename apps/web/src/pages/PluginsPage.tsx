@@ -14,8 +14,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
+import {
+  BrainIcon,
+  MoreHorizontalIcon,
+  PackageIcon,
+  WorkflowSquare01Icon,
+} from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
@@ -23,6 +35,7 @@ import {
   formatPluginTrustLines,
   isPluginLifecycleBusy,
   nextPluginVersions,
+  pluginAgentAccessState,
   pluginRowActions,
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
@@ -32,11 +45,13 @@ import {
   useInstallPluginPackage,
   useOfficialPlugins,
   useOrgPlugins,
+  usePluginAgentAccess,
   usePluginReleases,
   usePreviewOrgPluginUpdate,
   usePreviewPluginPackage,
   useReinstallOfficialPlugin,
   useRemovePluginRelease,
+  useSavePluginAgentAccess,
   useUninstallOrgPlugin,
   useUpdateOrgPlugin,
 } from "@/hooks/use-plugins";
@@ -44,11 +59,11 @@ import { formatError } from "@/lib/client";
 import {
   canAccessSystemPage,
   canManagePluginReleases,
-  PAGE_PATHS,
   pluginPagePath,
 } from "@/lib/navigation";
 
 type PluginDialog =
+  | { type: "package-entry" }
   | {
       source: PluginPackageRequest;
       preview: PluginPackagePreviewResponse;
@@ -75,6 +90,19 @@ export function PluginsPage() {
   const orgId = activeOrg?.id ?? "";
   const { data: plugins = [], isLoading, error } = useOrgPlugins();
   const releasesQuery = usePluginReleases(canInstallPackages);
+  const officialQuery = useOfficialPlugins();
+  const installOfficial = useInstallOfficialPlugin();
+  const official = officialQuery.data?.plugins ?? [];
+  const releases = canInstallPackages
+    ? (releasesQuery.data?.releases ?? [])
+    : [];
+  const pluginIds = [
+    ...new Set([
+      ...plugins.map((plugin) => plugin.pluginId),
+      ...official.map((plugin) => plugin.id),
+      ...releases.map((release) => release.pluginId),
+    ]),
+  ];
   const previewPackage = usePreviewPluginPackage();
   const installPackage = useInstallPluginPackage();
   const removeRelease = useRemovePluginRelease();
@@ -89,6 +117,12 @@ export function PluginsPage() {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [accessDialog, setAccessDialog] = useState<{
+    orgId: string;
+    plugin: OrgPluginDetail;
+  } | null>(null);
+  const agentAccess = usePluginAgentAccess();
+  const accessData = isPlatformAdmin ? agentAccess.data : undefined;
 
   const busy = [
     previewPackage,
@@ -102,6 +136,7 @@ export function PluginsPage() {
     uninstallOrg,
     purgeData,
     reinstallOfficial,
+    installOfficial,
   ].some((mutation) => mutation.isPending);
 
   function rememberFocus(target: EventTarget | null) {
@@ -112,6 +147,8 @@ export function PluginsPage() {
 
   function closeDialog() {
     setDialog(null);
+    setAccessDialog(null);
+    setActionError(null);
     queueMicrotask(() => restoreFocusRef.current?.focus());
   }
 
@@ -142,7 +179,7 @@ export function PluginsPage() {
   }
 
   async function confirmDialog() {
-    if (!dialog) {
+    if (!dialog || dialog.type === "package-entry") {
       return;
     }
 
@@ -206,24 +243,33 @@ export function PluginsPage() {
     );
   }
 
-  const errorMessage = actionError ?? (error ? formatError(error) : null);
+  const queryError =
+    error ??
+    officialQuery.error ??
+    (canInstallPackages ? releasesQuery.error : null);
+  const errorMessage =
+    actionError ?? (queryError ? formatError(queryError) : null);
 
   return (
-    <div className="min-w-0 p-4 sm:p-5">
+    <div className="min-w-0">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="type-section-title">Plugins</h2>
         {canInstallPackages ? (
-          <PluginPackageForm
-            busy={busy}
-            onPreview={(source) => {
-              rememberFocus(document.activeElement);
-              void previewNpmPackage(source);
+          <Button
+            disabled={busy}
+            onClick={(event) => {
+              rememberFocus(event.currentTarget);
+              setActionError(null);
+              setDialog({ type: "package-entry" });
             }}
-          />
+            size="sm"
+          >
+            Install external plugin
+          </Button>
         ) : null}
       </div>
 
-      {errorMessage ? (
+      {errorMessage && !dialog ? (
         <p
           className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-sm"
           role="alert"
@@ -232,77 +278,104 @@ export function PluginsPage() {
         </p>
       ) : null}
 
-      <OfficialPluginsCatalog
-        busy={busy}
-        canManage={canManage}
-        onAction={(plugin, action) => {
-          setActionError(null);
-          const mutation =
-            action === "reinstall" ? reinstallOfficial : enableOrg;
-          void mutation
-            .mutateAsync({
-              expectedRevision: plugin.revision,
-              pluginId: plugin.pluginId,
-            })
-            .catch((error) => setActionError(formatError(error)));
-        }}
-        onError={setActionError}
-        plugins={plugins}
-        reinstalling={reinstallOfficial.isPending}
-      />
-
-      {plugins.length === 0 ? (
+      {pluginIds.length === 0 ? (
         <p className="py-10 text-center text-muted-foreground text-sm">
-          {canInstallPackages
-            ? "No plugins installed."
-            : "No plugins in this org."}
+          {officialQuery.isLoading
+            ? "Loading plugins…"
+            : "No plugins available."}
         </p>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border">
-          {plugins.map((plugin) => (
-            <PluginRow
-              busy={busy || isPluginLifecycleBusy(plugin)}
-              canInstallPackages={canInstallPackages}
-              canManage={canManage}
-              key={plugin.pluginId}
-              onAction={(type, event) => {
-                rememberFocus(event.currentTarget);
-                if (type === "update") {
-                  const version = nextPluginVersions(plugin)[0];
-                  if (version) {
-                    void handleUpdate(plugin, version);
-                  }
-                  return;
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          {pluginIds.map((pluginId) => {
+            const plugin = plugins.find((item) => item.pluginId === pluginId);
+            const catalog = official.find((item) => item.id === pluginId);
+            const pluginReleases = releases.filter(
+              (item) => item.pluginId === pluginId
+            );
+            return (
+              <PluginRow
+                accessCount={accessData?.counts[pluginId]}
+                busy={busy || Boolean(plugin && isPluginLifecycleBusy(plugin))}
+                canManage={canManage}
+                canManageAgentAccess={isPlatformAdmin}
+                icon={
+                  plugin?.icon ??
+                  catalog?.icon ??
+                  pluginReleases[0]?.manifest.icon
                 }
-                setDialog({ plugin, type });
-              }}
-              plugin={plugin}
-            />
-          ))}
+                key={pluginId}
+                name={
+                  plugin?.name ??
+                  catalog?.name ??
+                  pluginReleases[0]?.manifest.name ??
+                  pluginId
+                }
+                official={Boolean(catalog)}
+                onAction={(type, target) => {
+                  rememberFocus(target);
+                  setActionError(null);
+                  if (type === "install" && catalog) {
+                    void installOfficial
+                      .mutateAsync(pluginId)
+                      .catch((err) => setActionError(formatError(err)));
+                    return;
+                  }
+                  if (!plugin) {
+                    return;
+                  }
+                  if (type === "access") {
+                    setAccessDialog({ orgId, plugin });
+                    return;
+                  }
+                  if (type === "reinstall") {
+                    void reinstallOfficial
+                      .mutateAsync({
+                        expectedRevision: plugin.revision,
+                        pluginId,
+                      })
+                      .catch((err) => setActionError(formatError(err)));
+                    return;
+                  }
+                  if (type === "update") {
+                    const version = nextPluginVersions(plugin)[0];
+                    if (version) {
+                      void handleUpdate(plugin, version);
+                    }
+                    return;
+                  }
+                  setDialog({ plugin, type });
+                }}
+                onRemove={(release, event) => {
+                  rememberFocus(event.currentTarget);
+                  setDialog({
+                    pluginId,
+                    type: "remove-release",
+                    version: release.version,
+                  });
+                }}
+                plugin={plugin}
+                pluginId={pluginId}
+                releases={pluginReleases}
+              />
+            );
+          })}
         </ul>
       )}
 
-      {canInstallPackages ? (
-        <PluginReleasesList
-          busy={busy}
-          onRemove={(release, event) => {
-            rememberFocus(event.currentTarget);
-            setDialog({
-              pluginId: release.pluginId,
-              type: "remove-release",
-              version: release.version,
-            });
-          }}
-          plugins={plugins}
-          releases={releasesQuery.data?.releases ?? []}
+      {isPlatformAdmin && accessDialog?.orgId === orgId ? (
+        <PluginAgentAccessDialog
+          key={`${orgId}:${accessDialog.plugin.pluginId}`}
+          onClose={closeDialog}
+          plugin={accessDialog.plugin}
         />
       ) : null}
-
       <PluginConfirmDialog
         busy={busy}
         dialog={dialog}
+        error={actionError}
         onClose={closeDialog}
         onConfirm={() => void confirmDialog()}
+        onPreview={(source) => void previewNpmPackage(source)}
         orgId={orgId}
       />
     </div>
@@ -311,16 +384,18 @@ export function PluginsPage() {
 
 function PluginPackageForm({
   busy,
+  onClose,
   onPreview,
 }: {
   busy: boolean;
+  onClose(): void;
   onPreview(source: PluginPackageRequest): void;
 }) {
   const [packageName, setPackageName] = useState("");
   const [packageVersion, setPackageVersion] = useState("");
   return (
     <form
-      className="flex flex-wrap items-center gap-2"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
         onPreview({
@@ -329,31 +404,46 @@ function PluginPackageForm({
         });
       }}
     >
-      <Input
-        aria-label="npm package name"
-        className="w-64"
-        disabled={busy}
-        onChange={(event) => setPackageName(event.target.value)}
-        placeholder="@team/nakama-notes"
-        required
-        value={packageName}
-      />
-      <Input
-        aria-label="Exact package version"
-        className="w-28"
-        disabled={busy}
-        onChange={(event) => setPackageVersion(event.target.value)}
-        placeholder="1.0.0"
-        required
-        value={packageVersion}
-      />
-      <Button
-        disabled={busy || !packageName.trim() || !packageVersion.trim()}
-        size="sm"
-        type="submit"
-      >
-        Preview package
-      </Button>
+      <label className="grid gap-2 text-sm">
+        npm package
+        <Input
+          aria-label="npm package name"
+          disabled={busy}
+          onChange={(event) => setPackageName(event.target.value)}
+          placeholder="@team/nakama-notes"
+          required
+          value={packageName}
+        />
+      </label>
+      <label className="grid gap-2 text-sm">
+        Version
+        <Input
+          aria-label="Exact package version"
+          disabled={busy}
+          onChange={(event) => setPackageVersion(event.target.value)}
+          placeholder="1.0.0"
+          required
+          value={packageVersion}
+        />
+      </label>
+      <DialogFooter>
+        <Button
+          disabled={busy}
+          onClick={onClose}
+          type="button"
+          variant="outline"
+        >
+          Cancel
+        </Button>
+        <Button
+          disabled={busy || !packageName.trim() || !packageVersion.trim()}
+          size="sm"
+          type="submit"
+        >
+          {busy ? <Spinner className="size-4" /> : null}
+          Preview package
+        </Button>
+      </DialogFooter>
     </form>
   );
 }
@@ -373,7 +463,7 @@ function PluginReleasesList({
     return null;
   }
   return (
-    <ul className="mt-6 divide-y divide-border rounded-md border border-border">
+    <ul className="divide-y divide-border">
       {releases.map((release) => {
         const inUse = plugins.some(
           (plugin) =>
@@ -383,15 +473,13 @@ function PluginReleasesList({
         );
         return (
           <li
-            className="flex items-center justify-between gap-3 px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-3 py-3"
             key={`${release.pluginId}@${release.version}`}
           >
             <div className="min-w-0">
-              <p className="font-medium text-sm">
-                {release.manifest.name} {release.version}
-              </p>
+              <p className="break-all font-mono text-xs">{release.version}</p>
               <p className="text-muted-foreground text-xs">
-                {release.pluginId}
+                {inUse ? "In use" : "Available"}
               </p>
             </div>
             <Button
@@ -412,201 +500,393 @@ function PluginReleasesList({
   );
 }
 
-function OfficialPluginsCatalog({
-  plugins,
+function PluginRow({
+  plugin,
+  icon,
+  pluginId,
+  name,
+  official,
+  releases,
   busy,
   canManage,
-  onError,
+  canManageAgentAccess,
+  accessCount,
   onAction,
-  reinstalling,
+  onRemove,
 }: {
-  plugins: OrgPluginDetail[];
+  plugin?: OrgPluginDetail;
+  icon?: string;
+  pluginId: string;
+  name: string;
+  official: boolean;
+  releases: PluginReleaseSummary[];
   busy: boolean;
   canManage: boolean;
-  onError(error: string | null): void;
-  onAction(plugin: OrgPluginDetail, action: "enable" | "reinstall"): void;
-  reinstalling: boolean;
+  canManageAgentAccess: boolean;
+  accessCount?: number;
+  onAction(
+    type:
+      | Exclude<
+          PluginDialog["type"],
+          "package" | "package-entry" | "remove-release"
+        >
+      | "reinstall"
+      | "access",
+    target: HTMLElement | null
+  ): void;
+  onRemove(release: PluginReleaseSummary, event: MouseEvent<HTMLElement>): void;
 }) {
-  const officialQuery = useOfficialPlugins();
-  const installOfficial = useInstallOfficialPlugin();
-  const official = officialQuery.data?.plugins ?? [];
-  const installing = busy || installOfficial.isPending;
-  function onInstall(id: string) {
-    onError(null);
-    void installOfficial
-      .mutateAsync(id)
-      .catch((error) => onError(formatError(error)));
-  }
-  if (officialQuery.error) {
-    return (
-      <p className="mb-4 text-destructive text-sm" role="alert">
-        {formatError(officialQuery.error)}
-      </p>
-    );
-  }
-  if (official.length === 0) {
-    return null;
-  }
+  const menuRef = useRef<HTMLButtonElement | null>(null);
+  const actions = plugin ? pluginRowActions(plugin) : null;
+  const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
+  const canInstall = !plugin?.installed && (official || Boolean(plugin));
+  const secondaryActions = [
+    ["disable", "Disable", actions?.disable],
+    ["update", "Update", actions?.update],
+    ["reinstall", "Reinstall", official && plugin?.installed],
+    ["uninstall", "Uninstall", actions?.uninstall],
+    ["purge", "Delete data", actions?.purge],
+  ] as const;
+  const hasMenu =
+    (canManageAgentAccess && plugin?.lifecycleState === "enabled") ||
+    (canManage && secondaryActions.some(([, , visible]) => visible));
+
   return (
-    <section aria-label="Official plugins" className="mb-6">
-      <h2 className="type-section-title mb-3">Official plugins</h2>
-      {official.map((item) => {
-        const installed = plugins.find(
-          (plugin) => plugin.pluginId === item.id && plugin.installed
-        );
-        return (
-          <div
-            className="flex items-center justify-between gap-4 rounded-md border border-border p-4"
-            key={item.id}
-          >
-            <span className="font-medium">{item.name}</span>
-            <div className="flex items-center gap-3">
-              {installed?.lifecycleState === "enabled" ? (
-                <Link
-                  className="text-sm underline underline-offset-4"
-                  to={pluginPagePath(item.id)}
-                >
-                  Open
-                </Link>
-              ) : (
-                <Button
-                  disabled={installing || !canManage}
-                  onClick={() =>
-                    installed
-                      ? onAction(installed, "enable")
-                      : onInstall(item.id)
-                  }
-                  type="button"
-                >
-                  {installing
-                    ? "Installing…"
-                    : installed
-                      ? "Enable"
-                      : "Install"}
-                </Button>
-              )}
-              {installed && canManage && (
-                <Button
-                  disabled={installing || isPluginLifecycleBusy(installed)}
-                  onClick={() => onAction(installed, "reinstall")}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  {reinstalling ? "Reinstalling…" : "Reinstall"}
-                </Button>
-              )}
-            </div>
+    <li className="px-4 py-4 sm:px-5">
+      <div className="flex items-center gap-3">
+        <PluginIcon icon={icon} pluginId={pluginId} />
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-medium text-sm">{name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
+            <span className="inline-flex items-center gap-1.5 capitalize">
+              <span
+                className={
+                  plugin?.lifecycleState === "enabled"
+                    ? "size-1.5 rounded-full bg-emerald-500"
+                    : "size-1.5 rounded-full bg-muted-foreground/40"
+                }
+              />
+              {plugin?.lifecycleState ?? "Available"}
+            </span>
+            {official ? (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                Official
+              </span>
+            ) : null}
           </div>
-        );
-      })}
-    </section>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {canOpen ? (
+            <Button
+              nativeButton={false}
+              render={<Link to={pluginPagePath(pluginId)} />}
+              size="sm"
+              variant="outline"
+            >
+              Open
+            </Button>
+          ) : null}
+          {canManage && (canInstall || actions?.enable) ? (
+            <Button
+              disabled={busy}
+              onClick={(event) =>
+                onAction(canInstall ? "install" : "enable", event.currentTarget)
+              }
+              size="sm"
+            >
+              {canInstall ? "Install" : "Enable"}
+            </Button>
+          ) : null}
+          {hasMenu ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    aria-label={`Actions for ${name}`}
+                    disabled={busy}
+                    ref={menuRef}
+                    size="icon-sm"
+                    variant="ghost"
+                  />
+                }
+              >
+                <MoreHorizontalIcon aria-hidden="true" className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {canManageAgentAccess &&
+                plugin?.lifecycleState === "enabled" ? (
+                  <DropdownMenuItem
+                    disabled={busy}
+                    onClick={() => onAction("access", menuRef.current)}
+                  >
+                    Manage agent access
+                  </DropdownMenuItem>
+                ) : null}
+                {secondaryActions
+                  .filter(([, , visible]) => canManage && visible)
+                  .map(([type, label]) => (
+                    <DropdownMenuItem
+                      disabled={busy}
+                      key={type}
+                      onClick={() => onAction(type, menuRef.current)}
+                      variant={
+                        type === "purge" || type === "uninstall"
+                          ? "destructive"
+                          : "default"
+                      }
+                    >
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
+      </div>
+      {plugin?.lastLifecycleError ? (
+        <p className="mt-2 break-words text-destructive text-xs" role="alert">
+          {plugin.lastLifecycleError}
+        </p>
+      ) : null}
+      {plugin || releases.length > 0 ? (
+        <details className="mt-3 sm:ml-13">
+          <summary className="w-fit cursor-pointer rounded text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+            Details
+          </summary>
+          <div className="mt-3 border-border border-t pt-3 text-muted-foreground text-xs">
+            <p className="break-all">
+              {pluginId}
+              {plugin?.selectedVersion ? ` · ${plugin.selectedVersion}` : ""}
+            </p>
+            {accessCount !== undefined &&
+            plugin?.lifecycleState === "enabled" ? (
+              <p className="mt-2">
+                Available to {accessCount}{" "}
+                {accessCount === 1 ? "agent" : "agents"}
+              </p>
+            ) : null}
+            {plugin?.description ? (
+              <p className="mt-2">{plugin.description}</p>
+            ) : null}
+            <PluginReleasesList
+              busy={busy}
+              onRemove={onRemove}
+              plugins={plugin ? [plugin] : []}
+              releases={releases}
+            />
+          </div>
+        </details>
+      ) : null}
+    </li>
   );
 }
 
-function PluginRow({
+function PluginAgentAccessDialog({
   plugin,
-  busy,
-  canManage,
-  canInstallPackages,
-  onAction,
+  onClose,
 }: {
   plugin: OrgPluginDetail;
-  busy: boolean;
-  canManage: boolean;
-  canInstallPackages: boolean;
-  onAction: (
-    type:
-      | Exclude<PluginDialog["type"], "package" | "remove-release" | "update">
-      | "update",
-    event: MouseEvent<HTMLButtonElement>
-  ) => void;
+  onClose(): void;
 }) {
-  const actions = pluginRowActions(plugin);
-  const canOpen = plugin.lifecycleState === "enabled" && plugin.ui !== null;
+  const access = usePluginAgentAccess();
+  const save = useSavePluginAgentAccess();
+  const [changes, setChanges] = useState<Record<string, boolean>>({});
+  const data = access.data;
+  const hasResources =
+    data &&
+    [...data.tools, ...data.skills].some(
+      (item) => item.pluginId === plugin.pluginId
+    );
+  const busy = save.isPending;
+  const pendingChanges = Object.fromEntries(
+    Object.entries(changes).filter(([id, selected]) => {
+      const profile = data?.profiles.find((item) => item.id === id);
+      if (!(profile && data)) {
+        return false;
+      }
+      const state = pluginAgentAccessState(profile, plugin.pluginId, data);
+      return selected ? !state.full : state.assigned > 0;
+    })
+  );
+
+  async function onSave() {
+    try {
+      await save.mutateAsync({
+        changes: pendingChanges,
+        pluginId: plugin.pluginId,
+      });
+      onClose();
+    } catch {
+      // Keep the selection available for retry after refreshing assignments.
+    }
+  }
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <p className="font-medium text-sm">{plugin.name}</p>
-        <p className="text-muted-foreground text-xs">
-          {plugin.pluginId}
-          {plugin.selectedVersion ? ` · ${plugin.selectedVersion}` : ""}
-          {` · ${plugin.lifecycleState}`}
-          {plugin.ui ? "" : " · no page"}
-        </p>
-        {plugin.lastLifecycleError ? (
-          <p className="mt-1 text-destructive text-xs">
-            {plugin.lastLifecycleError}
+    <Dialog
+      onOpenChange={(open) => {
+        if (!(open || busy)) {
+          onClose();
+        }
+      }}
+      open
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Manage agent access</DialogTitle>
+          <DialogDescription>
+            {plugin.name} — selected agents receive all of this plugin’s tools
+            and skills.
+          </DialogDescription>
+        </DialogHeader>
+        {access.isPending ? (
+          <div className="flex justify-center py-6">
+            <Spinner className="size-5" />
+          </div>
+        ) : null}
+        {access.error ? (
+          <div className="space-y-2">
+            <p className="text-destructive text-sm" role="alert">
+              {formatError(access.error)}
+            </p>
+            <Button
+              disabled={access.isFetching}
+              onClick={() => void access.refetch()}
+              size="sm"
+              variant="outline"
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {data && !access.error ? (
+          hasResources ? (
+            <div className="max-h-80 space-y-1 overflow-y-auto">
+              {data.profiles.length === 0 ? (
+                <p className="py-4 text-muted-foreground text-sm">
+                  No agents in this organization.
+                </p>
+              ) : null}
+              {data.profiles.map((profile) => {
+                const state = pluginAgentAccessState(
+                  profile,
+                  plugin.pluginId,
+                  data
+                );
+                const partial =
+                  changes[profile.id] === undefined &&
+                  state.assigned > 0 &&
+                  !state.full;
+                return (
+                  <label
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 hover:bg-muted/50"
+                    key={profile.id}
+                  >
+                    <input
+                      checked={changes[profile.id] ?? state.full}
+                      className="size-4 shrink-0 accent-primary"
+                      disabled={busy}
+                      onChange={(event) =>
+                        setChanges((current) => ({
+                          ...current,
+                          [profile.id]: event.target.checked,
+                        }))
+                      }
+                      ref={(element) => {
+                        if (element) {
+                          element.indeterminate = partial;
+                        }
+                      }}
+                      type="checkbox"
+                    />
+                    <span className="min-w-0 flex-1 break-words text-sm">
+                      {profile.name}
+                    </span>
+                    {partial ? (
+                      <span className="text-muted-foreground text-xs">
+                        Partial access
+                      </span>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              This plugin has no tools or skills to assign.
+            </p>
+          )
+        ) : null}
+        {save.error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {formatError(save.error)} Some changes may have been saved. Review
+            the selection and retry.
           </p>
         ) : null}
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
-        {canOpen ? (
-          <Button
-            nativeButton={false}
-            render={<Link to={pluginPagePath(plugin.pluginId)} />}
-            size="sm"
-          >
-            Open
+        <DialogFooter>
+          <Button disabled={busy} onClick={onClose} variant="outline">
+            Cancel
           </Button>
-        ) : null}
-        {plugin.lifecycleState === "enabled" ? (
           <Button
-            disabled={busy}
-            nativeButton={false}
-            render={<Link to={PAGE_PATHS.profiles} />}
-            size="sm"
-            variant="outline"
+            disabled={
+              busy ||
+              access.isFetching ||
+              Boolean(access.error) ||
+              !hasResources ||
+              Object.keys(pendingChanges).length === 0
+            }
+            onClick={() => void onSave()}
           >
-            Assign
+            {busy ? <Spinner className="size-4" /> : null}Save
           </Button>
-        ) : null}
-        {canManage
-          ? (
-              [
-                ["install", "Install", !plugin.installed, "default"],
-                ["enable", "Enable", actions.enable, "default"],
-                ["disable", "Disable", actions.disable, "outline"],
-                ["update", "Update", actions.update, "outline"],
-                ["uninstall", "Uninstall", actions.uninstall, "ghost"],
-                ["purge", "Delete data", actions.purge, "ghost"],
-              ] as const
-            )
-              .filter(([, , visible]) => visible)
-              .map(([type, label, , variant]) => (
-                <Button
-                  disabled={busy}
-                  key={type}
-                  onClick={(event) => onAction(type, event)}
-                  size="sm"
-                  type="button"
-                  variant={variant}
-                >
-                  {label}
-                </Button>
-              ))
-          : null}
-        {canInstallPackages ? (
-          <span className="sr-only">{plugin.revision}</span>
-        ) : null}
-      </div>
-    </li>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PluginIcon({ icon, pluginId }: { icon?: string; pluginId: string }) {
+  const [failedIcon, setFailedIcon] = useState<string | null>(null);
+  const Icon =
+    pluginId === "workflows"
+      ? WorkflowSquare01Icon
+      : pluginId === "supermemory"
+        ? BrainIcon
+        : PackageIcon;
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden text-foreground">
+      {icon && icon !== failedIcon ? (
+        <img
+          alt=""
+          className="size-full object-contain"
+          height={40}
+          onError={() => setFailedIcon(icon)}
+          referrerPolicy="no-referrer"
+          src={icon}
+          width={40}
+        />
+      ) : (
+        <Icon aria-hidden="true" className="size-5" strokeWidth={1.75} />
+      )}
+    </div>
   );
 }
 
 function PluginConfirmDialog({
   dialog,
   busy,
+  error,
   orgId,
   onClose,
   onConfirm,
+  onPreview,
 }: {
   dialog: PluginDialog | null;
   busy: boolean;
+  error: string | null;
   orgId: string;
   onClose: () => void;
   onConfirm: () => void;
+  onPreview(source: PluginPackageRequest): void;
 }) {
   const title = dialogTitle(dialog);
   return (
@@ -631,21 +911,36 @@ function PluginConfirmDialog({
             <DialogDescription className="sr-only">{title}</DialogDescription>
           )}
         </DialogHeader>
-        {dialog ? <DialogBody dialog={dialog} orgId={orgId} /> : null}
-        <DialogFooter>
-          <Button
-            disabled={busy}
-            onClick={onClose}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button disabled={busy} onClick={onConfirm} type="button">
-            {busy ? <Spinner className="size-4" /> : null}
-            {confirmLabel(dialog)}
-          </Button>
-        </DialogFooter>
+        {error ? (
+          <p className="break-words text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {dialog?.type === "package-entry" ? (
+          <PluginPackageForm
+            busy={busy}
+            onClose={onClose}
+            onPreview={onPreview}
+          />
+        ) : (
+          <>
+            {dialog ? <DialogBody dialog={dialog} orgId={orgId} /> : null}
+            <DialogFooter>
+              <Button
+                disabled={busy}
+                onClick={onClose}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button disabled={busy} onClick={onConfirm} type="button">
+                {busy ? <Spinner className="size-4" /> : null}
+                {confirmLabel(dialog)}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -655,7 +950,7 @@ function DialogBody({
   dialog,
   orgId,
 }: {
-  dialog: PluginDialog;
+  dialog: Exclude<PluginDialog, { type: "package-entry" }>;
   orgId: string;
 }) {
   if (dialog.type === "package") {
@@ -714,6 +1009,9 @@ function DialogBody({
 function dialogTitle(dialog: PluginDialog | null): string {
   if (!dialog) {
     return "Plugin";
+  }
+  if (dialog.type === "package-entry") {
+    return "Install external plugin";
   }
   if (dialog.type === "package") {
     return "Install this package?";
