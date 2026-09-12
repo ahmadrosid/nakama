@@ -64,37 +64,22 @@ export class MemoryBackendService {
     orgId: string,
     profileId: string
   ): Pick<ToolContext, "memoryFiles" | "searchKnowledge"> {
-    const filename = async (path: string) => {
+    const readMemoryFile = async (path: string, content: string) => {
       const root = await realpath(getProfileSoulDir(orgId, profileId));
       const name = relative(root, path);
       return name === "MEMORY.md" ||
         /^memory-archive\/[0-9]{4}-[0-9]{2}\.md$/.test(name)
-        ? name
-        : null;
+        ? this.readMemory(orgId, profileId, name, content)
+        : content;
     };
     return {
       memoryFiles: {
-        read: async (path, content) => {
-          const name = await filename(path);
-          return name
-            ? this.readMemory(orgId, profileId, name, content)
-            : content;
-        },
+        read: readMemoryFile,
         remove: async (path) => {
-          const name = await filename(path);
-          if (name) {
-            await this.sync(
-              orgId,
-              JSON.stringify(["memory", profileId, name]),
-              []
-            );
-          }
+          await readMemoryFile(path, "");
         },
         write: async (path, content) => {
-          const name = await filename(path);
-          if (name) {
-            await this.readMemory(orgId, profileId, name, content);
-          }
+          await readMemoryFile(path, content);
         },
       },
       searchKnowledge: async (input) => {
@@ -150,10 +135,11 @@ export class MemoryBackendService {
     ) {
       return;
     }
-    await this.sync(
+    await this.withScope(
       orgId,
       `knowledge:${profileId}`,
-      await this.knowledgeEntries(orgId, profileId)
+      await this.knowledgeEntries(orgId, profileId),
+      async () => undefined
     );
   }
 
@@ -262,12 +248,10 @@ export class MemoryBackendService {
           ...(selected
             ? {
                 filters: {
-                  OR: [...documents]
-                    .filter(([id]) => selected.has(id))
-                    .map(([, doc]) => ({
-                      key: "nakamaOperation",
-                      value: doc.customId,
-                    })),
+                  OR: searched.map(([, doc]) => ({
+                    key: "nakamaOperation",
+                    value: doc.customId,
+                  })),
                 },
               }
             : {}),
@@ -276,14 +260,11 @@ export class MemoryBackendService {
           throw new Error("Invalid Supermemory search response");
         }
         const owned = new Map(
-          [...documents].map(([id, doc]) => [doc.id, { doc, id }])
+          searched.map(([id, doc]) => [doc.id, { doc, id }])
         );
         const matches: { id: string; text: string }[] = [];
         for (const hit of result.results) {
           const match = owned.get(hit.documentId);
-          if (selected && match && !selected.has(match.id)) {
-            continue;
-          }
           if (
             !match ||
             hit.metadata?.nakamaContainer !== tag ||
@@ -309,10 +290,6 @@ export class MemoryBackendService {
         return matches.slice(0, limit);
       }
     );
-  }
-
-  async sync(orgId: string, scope: string, entries: Entry[]): Promise<void> {
-    await this.withScope(orgId, scope, entries, async () => undefined);
   }
 
   private async withScope<T>(
