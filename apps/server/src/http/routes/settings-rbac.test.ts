@@ -184,30 +184,16 @@ async function callRoute(
 
 describe("install-wide settings writes require a platform admin", () => {
   for (const route of INSTALL_WRITES) {
-    test(`${route.method} ${route.path} -> 403 for a viewer`, async () => {
-      const { app, calls, session } = await login("viewer");
-      const response = await callRoute(app, session, route);
+    for (const role of ["viewer", "member", "admin"] as const) {
+      test(`${route.method} ${route.path} -> 403 for ${role}`, async () => {
+        const { app, calls, session } = await login(role);
+        const response = await callRoute(app, session, route);
 
-      expect(response.status).toBe(403);
-      // The guard must reject before the global config is touched.
-      expect(calls).toEqual([]);
-    });
-
-    test(`${route.method} ${route.path} -> 403 for a member`, async () => {
-      const { app, calls, session } = await login("member");
-      const response = await callRoute(app, session, route);
-
-      expect(response.status).toBe(403);
-      expect(calls).toEqual([]);
-    });
-
-    test(`${route.method} ${route.path} -> 403 for an org admin`, async () => {
-      const { app, calls, session } = await login("admin");
-      const response = await callRoute(app, session, route);
-
-      expect(response.status).toBe(403);
-      expect(calls).toEqual([]);
-    });
+        expect(response.status).toBe(403);
+        // The guard must reject before the global config is touched.
+        expect(calls).toEqual([]);
+      });
+    }
   }
 
   test("a platform admin who is only a viewer in the org still reaches them", async () => {
