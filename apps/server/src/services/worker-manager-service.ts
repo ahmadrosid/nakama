@@ -68,7 +68,7 @@ export class WorkerManagerService {
   constructor(
     private readonly projectRoot: string,
     pm2?: typeof import("pm2"),
-    private readonly getWorkerLlm?: () => unknown
+    private readonly getWorkerLlm?: (providerType?: "openai") => unknown
   ) {
     this.pm2Module = pm2 ?? null;
   }
@@ -311,6 +311,18 @@ export class WorkerManagerService {
         NAKAMA_PLUGIN_WORKER_ROOT: worker.registration.configDir ?? "",
         NAKAMA_WORKER_DATA_DIR: worker.directory,
       };
+      if (
+        worker.registration.pluginId === "supermemory" &&
+        worker.contribution.key === "server"
+      ) {
+        const path = join(worker.directory, "auto-provider.json");
+        await writeFile(
+          path + ".tmp",
+          JSON.stringify(this.getWorkerLlm?.("openai") ?? null),
+          { mode: 0o600 }
+        );
+        await rename(path + ".tmp", path);
+      }
       if (worker.contribution.useHostLlm) {
         const llm = this.getWorkerLlm?.();
 

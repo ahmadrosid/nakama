@@ -56,3 +56,23 @@ test("aborts a stalled request within the configured timeout", async () => {
     "timed out"
   );
 }, 15_000);
+
+test("whole-document reads can use an explicitly larger bounded response budget", async () => {
+  const content = "a".repeat(2_200_000);
+  const client = new SupermemoryClient(
+    { token: "secret", url: "http://localhost:3000" },
+    async () => Response.json({ content }),
+    3_000_000
+  );
+  expect((await client.request("GET", "/v3/documents/document")).content).toBe(
+    content
+  );
+  const limited = new SupermemoryClient(
+    { token: "secret", url: "http://localhost:3000" },
+    async () => Response.json({ content }),
+    2_000_000
+  );
+  await expect(
+    limited.request("GET", "/v3/documents/document")
+  ).rejects.toThrow();
+});

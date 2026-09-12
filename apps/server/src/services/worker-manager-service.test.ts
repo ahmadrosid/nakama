@@ -607,3 +607,29 @@ test("plugin workers are isolated, recover desired state, and unregister without
   );
   expect(service.isValidWorker(b!.name)).toBe(true);
 });
+
+test("Supermemory receives only the requested OpenAI configuration on each start", async () => {
+  const llm = mock((type?: "openai") =>
+    type === "openai"
+      ? { apiKey: "test-key", model: "test-model", type: "openai" }
+      : { apiKey: "restricted", type: "openai_compatible" }
+  );
+  const service = new WorkerManagerService(projectRoot, createMockPm2(), llm);
+  await writeFile(join(configDir!, "worker.js"), "");
+  const dataDir = join(configDir!, "supermemory");
+  await service.registerPluginWorkers(
+    {
+      dataDir,
+      orgId: "org",
+      pluginId: "supermemory",
+      releaseDir: configDir!,
+      version: "0.1.0",
+      workers: [{ entry: "worker.js", key: "server", name: "Supermemory" }],
+    },
+    true
+  );
+  expect(llm).toHaveBeenCalledWith("openai");
+  expect(
+    await Bun.file(join(dataDir, "workers/server/auto-provider.json")).json()
+  ).toEqual({ apiKey: "test-key", model: "test-model", type: "openai" });
+});

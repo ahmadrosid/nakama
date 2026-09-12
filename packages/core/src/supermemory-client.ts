@@ -45,7 +45,8 @@ export class SupermemoryError extends Error {
 export class SupermemoryClient {
   constructor(
     private readonly connection: Connection,
-    private readonly transport: Transport = fetch
+    private readonly transport: Transport = fetch,
+    private readonly maxResponseBytes = 2_097_152
   ) {}
 
   async request(
@@ -91,7 +92,7 @@ export class SupermemoryClient {
             break;
           }
           size += value.byteLength;
-          if (size > 2_097_152) {
+          if (size > this.maxResponseBytes) {
             throw new Error("Oversized response");
           }
           chunks.push(value);

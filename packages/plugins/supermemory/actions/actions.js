@@ -39,9 +39,11 @@ class SupermemoryError extends Error {
 class SupermemoryClient {
   connection;
   transport;
-  constructor(connection, transport = fetch) {
+  maxResponseBytes;
+  constructor(connection, transport = fetch, maxResponseBytes = 2097152) {
     this.connection = connection;
     this.transport = transport;
+    this.maxResponseBytes = maxResponseBytes;
   }
   async request(method, path, body) {
     const signal = AbortSignal.timeout(1e4);
@@ -77,7 +79,7 @@ class SupermemoryClient {
             break;
           }
           size += value.byteLength;
-          if (size > 2097152) {
+          if (size > this.maxResponseBytes) {
             throw new Error("Oversized response");
           }
           chunks.push(value);
@@ -193,7 +195,7 @@ async function run(input, context) {
     }
     if (action === "save_settings") {
       if (managed && existsSync(workerDir)) {
-        throw new Error("This connection is managed by Nakama Workers");
+        throw new Error("Supermemory automatically uses your saved OpenAI provider. Manage providers in Settings.");
       }
       const url = normalizeUrl(required(input.url, "server URL", 2048));
       return db.transaction(() => {
@@ -216,6 +218,9 @@ async function run(input, context) {
     }
     const config = connection();
     if (action === "get_settings") {
+      if (managed && existsSync(workerDir)) {
+        return { configured: !!config, managed: true, worker };
+      }
       return { configured: !!config, url: config?.url ?? "" };
     }
     if (action === "profiles") {

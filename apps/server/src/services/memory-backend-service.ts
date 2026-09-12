@@ -104,7 +104,7 @@ export class MemoryBackendService {
             )
             .map((entry) => [entry.id, entry])
         );
-        const hits = await this.search(
+        let hits = await this.search(
           orgId,
           `knowledge:${profileId}`,
           entries,
@@ -114,6 +114,62 @@ export class MemoryBackendService {
         );
         if (hits === null) {
           return null;
+        }
+        // Retry only empty results; provider and indexing failures remain explicit.
+        const keywords = [
+          ...new Set(input.query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []),
+        ]
+          .filter(
+            (word) =>
+              word.length >= 3 &&
+              !/^(the|and|for|with|from|what|when|where|how|does|this|that|about|please|explain|find|search|document)$/.test(
+                word
+              )
+          )
+          .slice(0, 8);
+        const retries = [
+          ...new Set([keywords.slice(0, 2).join(" "), keywords[0] ?? ""]),
+        ].filter((query) => query && query !== input.query.toLowerCase());
+        for (const query of retries) {
+          if (hits.length || !selected.size) {
+            break;
+          }
+          hits = await this.search(
+            orgId,
+            `knowledge:${profileId}`,
+            entries,
+            query,
+            input.maxResults,
+            [...selected.keys()]
+          );
+          if (hits === null) {
+            return null;
+          }
+        }
+        if (!hits.length && keywords.length) {
+          const limit = Math.min(input.maxResults, 100);
+          const matches: { file: string; line: number; text: string }[] = [];
+          for (const entry of selected.values()) {
+            const lines = entry.content.split("\n");
+            for (let index = 0; index < lines.length; index++) {
+              const text = lines[index]!;
+              if (
+                entry.line + index <= 3 ||
+                !text.toLowerCase().includes(keywords[0]!)
+              ) {
+                continue;
+              }
+              matches.push({
+                file: entry.file,
+                line: entry.line + index,
+                text: text.slice(0, 16_000),
+              });
+              if (matches.length > limit) {
+                return { matches: matches.slice(0, limit), truncated: true };
+              }
+            }
+          }
+          return { matches, truncated: false };
         }
         return {
           matches: hits.flatMap((hit) => {
@@ -155,16 +211,14 @@ export class MemoryBackendService {
       }
       const file = getKnowledgeBaseExtractedPath(orgId, profileId, document.id);
       const content = await readFile(file, "utf8");
-      // Stay below the local server's text limit, including multibyte UTF-8.
-      for (const chunk of chunks(content)) {
-        entries.push({
-          content: chunk.text,
-          file: relative(getProfileSoulDir(orgId, profileId), file),
-          filename: document.filename,
-          id: `${document.id}:${chunk.offset}`,
-          line: chunk.line,
-        });
-      }
+      // Preserve the full document so Supermemory chooses semantic boundaries.
+      entries.push({
+        content,
+        file: relative(getProfileSoulDir(orgId, profileId), file),
+        filename: document.filename,
+        id: document.id,
+        line: 1,
+      });
     }
     return entries;
   }
@@ -353,7 +407,9 @@ export class MemoryBackendService {
       }
       const client = new SupermemoryClient(
         { token: connection.token, url: normalizeUrl(connection.url) },
-        this.options.transport
+        this.options.transport,
+        // Whole extracted documents can exceed the default small-response budget.
+        scope.startsWith("knowledge:") ? 128 * 1024 * 1024 : undefined
       );
       // Persist the namespace before HTTP so uncertain writes retry with the same IDs.
       if (!saved) {
@@ -364,7 +420,14 @@ export class MemoryBackendService {
       state.scopes[scope] = receipts;
       const documents = new Map<string, Record<string, unknown>>();
       const wanted = new Map(
-        entries.map((entry) => [entry.id, hash(entry.content)])
+        entries.map((entry) => [
+          entry.id,
+          hash(
+            typeof connection.revision === "string"
+              ? JSON.stringify([entry.content, connection.revision])
+              : entry.content
+          ),
+        ])
       );
       const pendingDeletes = state.pendingDeletes ?? {};
       state.pendingDeletes = pendingDeletes;
@@ -415,7 +478,7 @@ export class MemoryBackendService {
         await writeTextFile(statePath, JSON.stringify(state));
       }
       for (const entry of entries) {
-        const digest = hash(entry.content);
+        const digest = wanted.get(entry.id)!;
         const customId = hash(JSON.stringify([tag, entry.id, digest]));
         let receipt = receipts[entry.id];
         if (!receipt) {
@@ -438,6 +501,7 @@ export class MemoryBackendService {
             content: entry.content || "\n",
             customId,
             metadata: { nakamaContainer: tag, nakamaOperation: customId },
+            taskType: scope.startsWith("knowledge:") ? "superrag" : "memory",
           });
           if (typeof response.id !== "string" || !response.id) {
             throw new Error(

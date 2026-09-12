@@ -149,7 +149,9 @@ export async function run(input: Input, context: Context): Promise<unknown> {
     }
     if (action === "save_settings") {
       if (managed && existsSync(workerDir)) {
-        throw new Error("This connection is managed by Nakama Workers");
+        throw new Error(
+          "Supermemory automatically uses your saved OpenAI provider. Manage providers in Settings."
+        );
       }
       const url = normalizeUrl(required(input.url, "server URL", 2048));
       return db
@@ -181,6 +183,9 @@ export async function run(input: Input, context: Context): Promise<unknown> {
     }
     const config = connection();
     if (action === "get_settings") {
+      if (managed && existsSync(workerDir)) {
+        return { configured: !!config, managed: true, worker };
+      }
       return { configured: !!config, url: config?.url ?? "" };
     }
     if (action === "profiles") {

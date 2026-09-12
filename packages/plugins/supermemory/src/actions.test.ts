@@ -509,3 +509,15 @@ test("existing external connections take precedence over managed state", async (
     managed: false,
   });
 });
+
+test("managed settings are automatic and reject manual connection changes", async () => {
+  mkdirSync(join(dir, "workers", "server"), { recursive: true });
+  expect(await invoke("get_settings")).toMatchObject({
+    configured: false,
+    managed: true,
+  });
+  expect(await invoke("profiles")).toMatchObject({ canConfigure: false });
+  await expect(
+    invoke("save_settings", { token: "secret", url: "http://localhost:9999" })
+  ).rejects.toThrow();
+});

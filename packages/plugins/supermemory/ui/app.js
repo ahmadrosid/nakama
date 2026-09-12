@@ -636,11 +636,16 @@ function createSettings(ctx) {
     const [token, setToken] = React.useState("");
     const [message, setMessage] = React.useState("");
     const [busy, setBusy] = React.useState(false);
+    const [managed, setManaged] = React.useState(false);
+    const [loaded, setLoaded] = React.useState(false);
     React.useEffect(() => {
       let alive = true;
       ctx.host.call("get_settings").then((value) => {
         if (alive) {
-          setUrl(value.url);
+          const settings = value;
+          setManaged(!!settings.managed);
+          setUrl(settings.url ?? "");
+          setLoaded(true);
         }
       }).catch((error) => {
         if (alive) {
@@ -687,12 +692,11 @@ function createSettings(ctx) {
         }
       },
       open: true
-    }, /* @__PURE__ */ React.createElement(DialogContent, null, /* @__PURE__ */ React.createElement(DialogHeader, null, /* @__PURE__ */ React.createElement(DialogTitle, null, "Supermemory settings")), /* @__PURE__ */ React.createElement("form", {
+    }, /* @__PURE__ */ React.createElement(DialogContent, null, /* @__PURE__ */ React.createElement(DialogHeader, null, /* @__PURE__ */ React.createElement(DialogTitle, null, "Supermemory settings")), loaded ? /* @__PURE__ */ React.createElement("form", {
       className: "sm-stack",
       onSubmit: save
-    }, /* @__PURE__ */ React.createElement("label", null, "Server URL", /* @__PURE__ */ React.createElement(Input, {
+    }, managed ? /* @__PURE__ */ React.createElement("p", null, "Supermemory automatically uses your saved OpenAI provider.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", null, "Server URL", /* @__PURE__ */ React.createElement(Input, {
       onChange: (event) => setUrl(event.target.value),
-      placeholder: "http://localhost:6767",
       required: true,
       value: url
     })), /* @__PURE__ */ React.createElement("label", null, "API token", /* @__PURE__ */ React.createElement(Input, {
@@ -700,19 +704,21 @@ function createSettings(ctx) {
       onChange: (event) => setToken(event.target.value),
       type: "password",
       value: token
-    })), /* @__PURE__ */ React.createElement("p", null, "Leave the token blank to keep it for the same server."), message && /* @__PURE__ */ React.createElement("p", {
+    })), /* @__PURE__ */ React.createElement("p", null, "Leave the token blank to keep it for the same server.")), message && /* @__PURE__ */ React.createElement("p", {
       role: "status"
     }, message), /* @__PURE__ */ React.createElement("div", {
       className: "sm-row"
     }, /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy,
+      disabled: busy || !loaded || managed,
       type: "submit"
-    }, "Save"), /* @__PURE__ */ React.createElement(Button, {
+    }, "Save"), !managed && /* @__PURE__ */ React.createElement(Button, {
       disabled: busy,
       onClick: check,
       type: "button",
       variant: "outline"
-    }, "Check saved connection")))));
+    }, "Check saved connection"))) : /* @__PURE__ */ React.createElement("p", {
+      role: "status"
+    }, message || "Loading…")));
   }
   return Settings;
 }

@@ -34,17 +34,19 @@ The same note you create on the page is the one the agent reads. Another organiz
 Use Supermemory for the agent memory, shared organization memory, and knowledge base you already use in Nakama. Your existing memory tools, approval flow, and knowledge uploads stay in place.
 
 1. An org admin opens **System → Plugins → Official plugins → Supermemory → Install**.
-2. Enable the plugin and wait for its worker to become ready. If you use a separately managed server, open **Supermemory → Settings**, save its URL and API token, and use **Check saved connection**.
+2. Enable the plugin. Nakama automatically uses your default OpenAI provider, or the first saved OpenAI provider if your default uses another service. If you use a separately managed server, open **Supermemory → Settings**, save its URL and API token, and use **Check saved connection**.
 3. Keep using your agent's memory and knowledge base. Existing content moves to Supermemory when it is next read or searched; new knowledge uploads also sync automatically. Shared organization facts still require the usual approval before they are saved.
 4. Ask your agent to search its knowledge base using everyday language. Explicit regular-expression searches still use the local extracted text.
 
-Supermemory needs a provider for extraction and embeddings. For a separately managed [Supermemory server](https://supermemory.ai/docs/self-hosting/quickstart#bunx), use its [provider settings](https://supermemory.ai/docs/self-hosting/configuration) and [embedding settings](https://supermemory.ai/docs/self-hosting/embeddings). Content processed by OpenAI leaves your local server.
+The managed worker automatically reuses a saved OpenAI provider’s API key, URL, and default model for extraction, with local embeddings. Add an OpenAI provider in **Settings** if none is available. ChatGPT subscription connections are not supported by this worker. Restart Supermemory in **Workers** after adding or changing your OpenAI provider. A changed provider configuration reindexes existing content on its next access, including failed documents. Verification makes a small API request; extraction and reindexing can incur provider charges. For a separately managed [Supermemory server](https://supermemory.ai/docs/self-hosting/quickstart#bunx), use its [provider settings](https://supermemory.ai/docs/self-hosting/configuration) and [embedding settings](https://supermemory.ai/docs/self-hosting/embeddings). Content processed by OpenAI leaves your local server.
 
 Nakama keeps local copies for recovery. Disabling the plugin returns your existing tools to those copies. Before the managed worker first becomes ready, memory stays local. After migration starts, an unavailable backend reports an error; restart the worker or disable the plugin to continue locally. Search can ask you to retry while new content is indexing.
 
 The plugin's separate **Memory** and **Knowledge** collections remain available for previously saved items and explicit plugin actions. They are separate from the built-in memory and knowledge base. Installing the plugin does not automatically capture every conversation.
 
 Documents show their processing state. Use **Check status** for an unresolved save and retry the same submission when asked. **Removal pending** means the item is excluded from plugin searches, but remote removal still needs retry. **Forget** is a soft deletion upstream, not permanent erasure.
+
+Knowledge documents are sent as complete extracted text. Supermemory chooses their search chunks and uses its SuperRAG mode, which skips personal-memory extraction. PDF text extraction stays local; this setup does not require a separate Gemini account. Existing documents are reindexed on their next access after upgrading.
 
 For built-in memory, replaced or removed versions stop appearing in search immediately. If Supermemory is still processing them, Nakama retries remote cleanup on later memory operations.
 

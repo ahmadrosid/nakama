@@ -18,13 +18,21 @@ export function createSettings(ctx: Context) {
     const [token, setToken] = React.useState("");
     const [message, setMessage] = React.useState("");
     const [busy, setBusy] = React.useState(false);
+    const [managed, setManaged] = React.useState(false);
+    const [loaded, setLoaded] = React.useState(false);
     React.useEffect(() => {
       let alive = true;
       ctx.host
         .call("get_settings")
         .then((value) => {
           if (alive) {
-            setUrl((value as { url: string }).url);
+            const settings = value as {
+              managed?: boolean;
+              url?: string;
+            };
+            setManaged(!!settings.managed);
+            setUrl(settings.url ?? "");
+            setLoaded(true);
           }
         })
         .catch((error) => {
@@ -78,41 +86,54 @@ export function createSettings(ctx: Context) {
           <DialogHeader>
             <DialogTitle>Supermemory settings</DialogTitle>
           </DialogHeader>
-          <form className="sm-stack" onSubmit={save}>
-            <label>
-              Server URL
-              <Input
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="http://localhost:6767"
-                required
-                value={url}
-              />
-            </label>
-            <label>
-              API token
-              <Input
-                autoComplete="new-password"
-                onChange={(event) => setToken(event.target.value)}
-                type="password"
-                value={token}
-              />
-            </label>
-            <p>Leave the token blank to keep it for the same server.</p>
-            {message && <p role="status">{message}</p>}
-            <div className="sm-row">
-              <Button disabled={busy} type="submit">
-                Save
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={check}
-                type="button"
-                variant="outline"
-              >
-                Check saved connection
-              </Button>
-            </div>
-          </form>
+          {loaded ? (
+            <form className="sm-stack" onSubmit={save}>
+              {managed ? (
+                <p>
+                  Supermemory automatically uses your saved OpenAI provider.
+                </p>
+              ) : (
+                <>
+                  <label>
+                    Server URL
+                    <Input
+                      onChange={(event) => setUrl(event.target.value)}
+                      required
+                      value={url}
+                    />
+                  </label>
+                  <label>
+                    API token
+                    <Input
+                      autoComplete="new-password"
+                      onChange={(event) => setToken(event.target.value)}
+                      type="password"
+                      value={token}
+                    />
+                  </label>
+                  <p>Leave the token blank to keep it for the same server.</p>
+                </>
+              )}
+              {message && <p role="status">{message}</p>}
+              <div className="sm-row">
+                <Button disabled={busy || !loaded || managed} type="submit">
+                  Save
+                </Button>
+                {!managed && (
+                  <Button
+                    disabled={busy}
+                    onClick={check}
+                    type="button"
+                    variant="outline"
+                  >
+                    Check saved connection
+                  </Button>
+                )}
+              </div>
+            </form>
+          ) : (
+            <p role="status">{message || "Loading…"}</p>
+          )}
         </DialogContent>
       </Dialog>
     );

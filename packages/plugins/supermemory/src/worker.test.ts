@@ -54,3 +54,135 @@ test("the worker rejects a binary whose checksum does not match the pinned relea
     await rm(directory, { force: true, recursive: true });
   }
 });
+
+test("worker refuses inherited chat credentials without explicit extraction settings", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "supermemory-provider-"));
+  try {
+    await Bun.write(
+      join(directory, "llm.json"),
+      JSON.stringify({
+        apiKey: "inherited-secret",
+        model: "big-pickle",
+        type: "openai_compatible",
+      })
+    );
+    const child = Bun.spawn(
+      [process.execPath, new URL("./worker.ts", import.meta.url).pathname],
+      {
+        env: {
+          ...process.env,
+          NAKAMA_PLUGIN_DATA_DIR: directory,
+          NAKAMA_WORKER_DATA_DIR: directory,
+        },
+        stderr: "pipe",
+        stdout: "pipe",
+      }
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).not.toBe(0);
+    expect(await Bun.file(join(directory, "status.json")).json()).toMatchObject(
+      { state: "error" }
+    );
+    expect(await Bun.file(join(directory, "connection.json")).exists()).toBe(
+      false
+    );
+    expect(stdout + stderr).not.toContain("inherited-secret");
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("extraction proxy translates legacy parameters and restricts access", async () => {
+  const { startExtractionProxy } = await import("./worker");
+  const requests: Record<string, unknown>[] = [];
+  const upstream = Bun.serve({
+    async fetch(request) {
+      expect(request.headers.get("Authorization")).toBe("Bearer real-key");
+      requests.push(await request.json());
+      return Response.json({ choices: [{ message: { content: "ok" } }] });
+    },
+    hostname: "127.0.0.1",
+    port: 0,
+  });
+  const proxy = startExtractionProxy({
+    apiKey: "real-key",
+    baseUrl: `http://127.0.0.1:${upstream.port}/v1`,
+    model: "gpt-5.6-luna",
+    revision: "test",
+  });
+  try {
+    const url = proxy.baseUrl + "/chat/completions";
+    expect((await fetch(url, { body: "{}", method: "POST" })).status).toBe(401);
+    const headers = {
+      Authorization: `Bearer ${proxy.token}`,
+      "Content-Type": "application/json",
+    };
+    expect(
+      (
+        await fetch(proxy.baseUrl + "/other", {
+          body: "{}",
+          headers,
+          method: "POST",
+        })
+      ).status
+    ).toBe(404);
+    const response = await fetch(url, {
+      body: JSON.stringify({
+        max_tokens: 100,
+        messages: [],
+        model: "other",
+        serviceTier: "auto",
+      }),
+      headers,
+      method: "POST",
+    });
+    expect(response.status).toBe(200);
+    expect(requests).toEqual([
+      {
+        max_completion_tokens: 100,
+        messages: [],
+        model: "gpt-5.6-luna",
+        service_tier: "auto",
+      },
+    ]);
+    await fetch(url, {
+      body: JSON.stringify({
+        max_completion_tokens: 200,
+        max_tokens: 1,
+        service_tier: "default",
+        serviceTier: "auto",
+      }),
+      headers,
+      method: "POST",
+    });
+    expect(requests[1]).toEqual({
+      max_completion_tokens: 200,
+      model: "gpt-5.6-luna",
+      service_tier: "default",
+    });
+    await fetch(url, {
+      body: JSON.stringify({
+        messages: [{ content: "Extract facts", role: "user" }],
+        reasoning_effort: "medium",
+        response_format: { type: "json_object" },
+        tools: [{ type: "function" }],
+      }),
+      headers,
+      method: "POST",
+    });
+    expect(requests[2]).toMatchObject({
+      messages: [
+        { content: "Return valid JSON.", role: "system" },
+        { content: "Extract facts", role: "user" },
+      ],
+      reasoning_effort: "none",
+    });
+  } finally {
+    await proxy.server.stop(true);
+    await upstream.stop(true);
+  }
+});

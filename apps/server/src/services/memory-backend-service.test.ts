@@ -42,6 +42,8 @@ async function setup() {
   let pending = false;
   let loseWriteResponse = false;
   let writes = 0;
+  let searchQuery: ((query: string) => boolean) | undefined;
+  const queries: string[] = [];
   const transport = async (url: string, init: RequestInit) => {
     if (unavailable) {
       return new Response(null, { status: 503 });
@@ -64,6 +66,10 @@ async function setup() {
       return Response.json({ id });
     }
     if (path === "/v3/search") {
+      queries.push(body.q);
+      if (searchQuery && !searchQuery(body.q)) {
+        return Response.json({ results: [] });
+      }
       return Response.json({
         results: [...documents.values()]
           .filter((doc) =>
@@ -118,9 +124,13 @@ async function setup() {
     loseNextWriteResponse: () => {
       loseWriteResponse = true;
     },
+    queries,
     service: new MemoryBackendService(db, { configDir, transport }),
     setPending: (value: boolean) => {
       pending = value;
+    },
+    setSearchQuery: (filter: (query: string) => boolean) => {
+      searchQuery = filter;
     },
     setUnavailable: (value: boolean) => {
       unavailable = value;
@@ -354,4 +364,116 @@ test("undo while indexing keeps the restored version out of deferred cleanup", a
   );
   expect(h.documents.size).toBe(1);
   expect(h.writes()).toBe(2);
+});
+
+test("a verified provider revision reindexes existing content once", async () => {
+  const h = await setup();
+  await h.enable("org");
+  await h.service.readMemory("org", "agent", "MEMORY.md", "Remember tea");
+  for (const document of h.documents.values()) {
+    document.status = "failed";
+  }
+  const connectionPath = join(
+    getOrgPluginDataDir("org", "supermemory", h.configDir),
+    "connection.json"
+  );
+  await writeFile(
+    connectionPath,
+    JSON.stringify({
+      revision: "verified-provider",
+      token: "test",
+      url: "http://127.0.0.1:9999",
+    })
+  );
+  expect(
+    await h.service.readMemory("org", "agent", "MEMORY.md", "Remember tea")
+  ).toBe("Remember tea");
+  expect(h.writes()).toBe(2);
+  expect(h.documents.size).toBe(1);
+  await h.service.readMemory("org", "agent", "MEMORY.md", "Remember tea");
+  expect(h.writes()).toBe(2);
+});
+
+test("knowledge search simplifies an empty query and falls back to scoped document text", async () => {
+  const h = await setup();
+  await h.enable("org");
+  await uploadKnowledgeBaseDocument("org", "agent", {
+    data: Buffer.from(
+      "Intro\nHackathon starts Friday\nHackathon prizes"
+    ).toString("base64"),
+    filename: "plan.txt",
+    mediaType: "text/plain",
+  });
+  await uploadKnowledgeBaseDocument("org", "agent", {
+    data: Buffer.from("Hackathon unrelated secret").toString("base64"),
+    filename: "other.txt",
+    mediaType: "text/plain",
+  });
+  const search = h.service.toolContext("org", "agent").searchKnowledge!;
+  const input = {
+    filename: "plan.txt",
+    maxResults: 10,
+    query:
+      "hackathon plan date schedule activities teams prizes judging submissions timeline responsibilities next steps 2026-09-13 September hackathon",
+    regex: false,
+  };
+  h.setSearchQuery((query) => query === "hackathon");
+  const result = await search(input);
+  expect(h.queries).toEqual([input.query, "hackathon plan", "hackathon"]);
+  expect(
+    result?.matches.some((match) =>
+      match.text.includes("Hackathon starts Friday")
+    )
+  ).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("unrelated secret");
+  h.setSearchQuery(() => false);
+  const fallback = await search({ ...input, maxResults: 1 });
+  expect(fallback?.matches).toHaveLength(1);
+  expect(fallback?.matches[0]?.text).toBe("Hackathon starts Friday");
+  expect(fallback?.truncated).toBe(true);
+  expect(
+    (await search({ ...input, filename: "missing.txt" }))?.matches
+  ).toEqual([]);
+  expect(
+    (await h.service.toolContext("org", "other-agent").searchKnowledge!(input))
+      ?.matches
+  ).toEqual([]);
+});
+
+test("knowledge uploads preserve full documents and use SuperRAG instead of memory extraction", async () => {
+  const h = await setup();
+  await h.enable("org");
+  const content =
+    "# Hackathon\n" + "Keep this paragraph together. ".repeat(2500);
+  const upload = await uploadKnowledgeBaseDocument("org", "agent", {
+    data: Buffer.from(content).toString("base64"),
+    filename: "guide.md",
+    mediaType: "text/markdown",
+  });
+  await h.service.syncKnowledge("org", "agent");
+  expect(h.writes()).toBe(1);
+  const document = [...h.documents.values()][0]!;
+  expect(document.taskType).toBe("superrag");
+  expect(String(document.content)).toContain(content.trim());
+  const statePath = join(
+    getOrgPluginDataDir("org", "supermemory", h.configDir),
+    "memory-backend.json"
+  );
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  const scope = state.scopes["knowledge:agent"];
+  expect(Object.keys(scope)).toEqual([upload.document.id]);
+  // Simulate receipts from the old pre-split implementation; the next access retires them.
+  scope[upload.document.id + ":0"] = scope[upload.document.id];
+  delete scope[upload.document.id];
+  await writeFile(statePath, JSON.stringify(state));
+  await h.service.syncKnowledge("org", "agent");
+  expect(
+    Object.keys(
+      JSON.parse(await readFile(statePath, "utf8")).scopes["knowledge:agent"]
+    )
+  ).toEqual([upload.document.id]);
+  await h.service.readMemory("org", "agent", "MEMORY.md", "Prefers tea");
+  expect(
+    [...h.documents.values()].some((doc) => doc.taskType === "memory")
+  ).toBe(true);
 });

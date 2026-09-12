@@ -261,7 +261,7 @@
       "effect": "write",
       "entry": "actions/actions.js",
       "exposeAsTool": false,
-      "description": "Save the connection or rotate its token.",
+      "description": "Configure an existing external Supermemory server.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -273,7 +273,7 @@
             "type": "string"
           }
         },
-        "required": ["url"]
+        "required": []
       }
     },
     {
@@ -314,8 +314,7 @@
     {
       "key": "server",
       "name": "Supermemory",
-      "entry": "workers/server.js",
-      "useHostLlm": true
+      "entry": "workers/server.js"
     }
   ]
 }
