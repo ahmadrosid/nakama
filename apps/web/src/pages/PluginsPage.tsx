@@ -500,6 +500,30 @@ function PluginReleasesList({
   );
 }
 
+interface PluginRowProps {
+  accessCount?: number;
+  busy: boolean;
+  canManage: boolean;
+  canManageAgentAccess: boolean;
+  icon?: string;
+  name: string;
+  official: boolean;
+  onAction(
+    type:
+      | Exclude<
+          PluginDialog["type"],
+          "package" | "package-entry" | "remove-release"
+        >
+      | "reinstall"
+      | "access",
+    target: HTMLElement | null
+  ): void;
+  onRemove(release: PluginReleaseSummary, event: MouseEvent<HTMLElement>): void;
+  plugin?: OrgPluginDetail;
+  pluginId: string;
+  releases: PluginReleaseSummary[];
+}
+
 function PluginRow({
   plugin,
   icon,
@@ -513,44 +537,7 @@ function PluginRow({
   accessCount,
   onAction,
   onRemove,
-}: {
-  plugin?: OrgPluginDetail;
-  icon?: string;
-  pluginId: string;
-  name: string;
-  official: boolean;
-  releases: PluginReleaseSummary[];
-  busy: boolean;
-  canManage: boolean;
-  canManageAgentAccess: boolean;
-  accessCount?: number;
-  onAction(
-    type:
-      | Exclude<
-          PluginDialog["type"],
-          "package" | "package-entry" | "remove-release"
-        >
-      | "reinstall"
-      | "access",
-    target: HTMLElement | null
-  ): void;
-  onRemove(release: PluginReleaseSummary, event: MouseEvent<HTMLElement>): void;
-}) {
-  const menuRef = useRef<HTMLButtonElement | null>(null);
-  const actions = plugin ? pluginRowActions(plugin) : null;
-  const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
-  const canInstall = !plugin?.installed && (official || Boolean(plugin));
-  const secondaryActions = [
-    ["disable", "Disable", actions?.disable],
-    ["update", "Update", actions?.update],
-    ["reinstall", "Reinstall", official && plugin?.installed],
-    ["uninstall", "Uninstall", actions?.uninstall],
-    ["purge", "Delete data", actions?.purge],
-  ] as const;
-  const hasMenu =
-    (canManageAgentAccess && plugin?.lifecycleState === "enabled") ||
-    (canManage && secondaryActions.some(([, , visible]) => visible));
-
+}: PluginRowProps) {
   return (
     <li className="px-4 py-4 sm:px-5">
       <div className="flex items-center gap-3">
@@ -575,110 +562,206 @@ function PluginRow({
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {canOpen ? (
-            <Button
-              nativeButton={false}
-              render={<Link to={pluginPagePath(pluginId)} />}
-              size="sm"
-              variant="outline"
-            >
-              Open
-            </Button>
-          ) : null}
-          {canManage && (canInstall || actions?.enable) ? (
-            <Button
-              disabled={busy}
-              onClick={(event) =>
-                onAction(canInstall ? "install" : "enable", event.currentTarget)
-              }
-              size="sm"
-            >
-              {canInstall ? "Install" : "Enable"}
-            </Button>
-          ) : null}
-          {hasMenu ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    aria-label={`Actions for ${name}`}
-                    disabled={busy}
-                    ref={menuRef}
-                    size="icon-sm"
-                    variant="ghost"
-                  />
-                }
-              >
-                <MoreHorizontalIcon aria-hidden="true" className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                {canManageAgentAccess &&
-                plugin?.lifecycleState === "enabled" ? (
-                  <DropdownMenuItem
-                    disabled={busy}
-                    onClick={() => onAction("access", menuRef.current)}
-                  >
-                    Manage agent access
-                  </DropdownMenuItem>
-                ) : null}
-                {secondaryActions
-                  .filter(([, , visible]) => canManage && visible)
-                  .map(([type, label]) => (
-                    <DropdownMenuItem
-                      disabled={busy}
-                      key={type}
-                      onClick={() => onAction(type, menuRef.current)}
-                      variant={
-                        type === "purge" || type === "uninstall"
-                          ? "destructive"
-                          : "default"
-                      }
-                    >
-                      {label}
-                    </DropdownMenuItem>
-                  ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-        </div>
+        <PluginRowControls
+          busy={busy}
+          canManage={canManage}
+          canManageAgentAccess={canManageAgentAccess}
+          name={name}
+          official={official}
+          onAction={onAction}
+          plugin={plugin}
+          pluginId={pluginId}
+        />
       </div>
       {plugin?.lastLifecycleError ? (
         <p className="mt-2 break-words text-destructive text-xs" role="alert">
           {plugin.lastLifecycleError}
         </p>
       ) : null}
-      {plugin || releases.length > 0 ? (
-        <details className="mt-3 sm:ml-13">
-          <summary className="w-fit cursor-pointer rounded text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-            Details
-          </summary>
-          <div className="mt-3 border-border border-t pt-3 text-muted-foreground text-xs">
-            <p className="break-all">
-              {pluginId}
-              {plugin?.selectedVersion ? ` · ${plugin.selectedVersion}` : ""}
-            </p>
-            {accessCount !== undefined &&
-            plugin?.lifecycleState === "enabled" ? (
-              <p className="mt-2">
-                Available to {accessCount}{" "}
-                {accessCount === 1 ? "agent" : "agents"}
-              </p>
-            ) : null}
-            {plugin?.description ? (
-              <p className="mt-2">{plugin.description}</p>
-            ) : null}
-            <PluginReleasesList
-              busy={busy}
-              onRemove={onRemove}
-              plugins={plugin ? [plugin] : []}
-              releases={releases}
-            />
-          </div>
-        </details>
-      ) : null}
+      <PluginRowDetails
+        accessCount={accessCount}
+        busy={busy}
+        onRemove={onRemove}
+        plugin={plugin}
+        pluginId={pluginId}
+        releases={releases}
+      />
     </li>
   );
+}
+
+function PluginRowControls({
+  plugin,
+  pluginId,
+  name,
+  official,
+  busy,
+  canManage,
+  canManageAgentAccess,
+  onAction,
+}: Pick<
+  PluginRowProps,
+  | "plugin"
+  | "pluginId"
+  | "name"
+  | "official"
+  | "busy"
+  | "canManage"
+  | "canManageAgentAccess"
+  | "onAction"
+>) {
+  const actions = plugin ? pluginRowActions(plugin) : null;
+  const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
+  const canInstall = !plugin?.installed && (official || Boolean(plugin));
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {canOpen ? (
+        <Button
+          nativeButton={false}
+          render={<Link to={pluginPagePath(pluginId)} />}
+          size="sm"
+          variant="outline"
+        >
+          Open
+        </Button>
+      ) : null}
+      {canManage && (canInstall || actions?.enable) ? (
+        <Button
+          disabled={busy}
+          onClick={(event) =>
+            onAction(canInstall ? "install" : "enable", event.currentTarget)
+          }
+          size="sm"
+        >
+          {canInstall ? "Install" : "Enable"}
+        </Button>
+      ) : null}
+      <PluginRowMenu
+        busy={busy}
+        canManage={canManage}
+        canManageAgentAccess={canManageAgentAccess}
+        name={name}
+        official={official}
+        onAction={onAction}
+        plugin={plugin}
+      />
+    </div>
+  );
+}
+
+function PluginRowMenu({
+  plugin,
+  name,
+  official,
+  busy,
+  canManage,
+  canManageAgentAccess,
+  onAction,
+}: Pick<
+  PluginRowProps,
+  | "plugin"
+  | "name"
+  | "official"
+  | "busy"
+  | "canManage"
+  | "canManageAgentAccess"
+  | "onAction"
+>) {
+  const menuRef = useRef<HTMLButtonElement | null>(null);
+  const actions = plugin ? pluginRowActions(plugin) : null;
+  const secondaryActions = [
+    ["disable", "Disable", actions?.disable],
+    ["update", "Update", actions?.update],
+    ["reinstall", "Reinstall", official && plugin?.installed],
+    ["uninstall", "Uninstall", actions?.uninstall],
+    ["purge", "Delete data", actions?.purge],
+  ] as const;
+  const hasMenu =
+    (canManageAgentAccess && plugin?.lifecycleState === "enabled") ||
+    (canManage && secondaryActions.some(([, , visible]) => visible));
+  return hasMenu ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={`Actions for ${name}`}
+            disabled={busy}
+            ref={menuRef}
+            size="icon-sm"
+            variant="ghost"
+          />
+        }
+      >
+        <MoreHorizontalIcon aria-hidden="true" className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        {canManageAgentAccess && plugin?.lifecycleState === "enabled" ? (
+          <DropdownMenuItem
+            disabled={busy}
+            onClick={() => onAction("access", menuRef.current)}
+          >
+            Manage agent access
+          </DropdownMenuItem>
+        ) : null}
+        {secondaryActions
+          .filter(([, , visible]) => canManage && visible)
+          .map(([type, label]) => (
+            <DropdownMenuItem
+              disabled={busy}
+              key={type}
+              onClick={() => onAction(type, menuRef.current)}
+              variant={
+                type === "purge" || type === "uninstall"
+                  ? "destructive"
+                  : "default"
+              }
+            >
+              {label}
+            </DropdownMenuItem>
+          ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null;
+}
+
+function PluginRowDetails({
+  plugin,
+  pluginId,
+  releases,
+  busy,
+  accessCount,
+  onRemove,
+}: Pick<
+  PluginRowProps,
+  "plugin" | "pluginId" | "releases" | "busy" | "accessCount" | "onRemove"
+>) {
+  return plugin || releases.length > 0 ? (
+    <details className="mt-3 sm:ml-13">
+      <summary className="w-fit cursor-pointer rounded text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+        Details
+      </summary>
+      <div className="mt-3 border-border border-t pt-3 text-muted-foreground text-xs">
+        <p className="break-all">
+          {pluginId}
+          {plugin?.selectedVersion ? ` · ${plugin.selectedVersion}` : ""}
+        </p>
+        {accessCount !== undefined && plugin?.lifecycleState === "enabled" ? (
+          <p className="mt-2">
+            Available to {accessCount} {accessCount === 1 ? "agent" : "agents"}
+          </p>
+        ) : null}
+        {plugin?.description ? (
+          <p className="mt-2">{plugin.description}</p>
+        ) : null}
+        <PluginReleasesList
+          busy={busy}
+          onRemove={onRemove}
+          plugins={plugin ? [plugin] : []}
+          releases={releases}
+        />
+      </div>
+    </details>
+  ) : null;
 }
 
 function PluginAgentAccessDialog({
