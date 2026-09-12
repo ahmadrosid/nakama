@@ -22,9 +22,9 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
-import { MoreHorizontalIcon } from "hugeicons-react";
+import { Add01Icon, MoreHorizontalIcon } from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import {
   formatPluginTrustLines,
@@ -58,6 +58,11 @@ import {
   pluginPagePath,
 } from "@/lib/navigation";
 
+const PLUGIN_DESCRIPTIONS: Record<string, string> = {
+  supermemory: "Save and search agent memories.",
+  workflows: "Automate tasks with your agents.",
+};
+
 type PluginDialog =
   | { type: "package-entry" }
   | {
@@ -79,6 +84,7 @@ type PluginDialog =
   | { pluginId: string; type: "remove-release"; version: string };
 
 export function PluginsPage() {
+  const { pluginId: selectedPluginId } = useParams<{ pluginId: string }>();
   const { user, activeOrg } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
@@ -208,9 +214,17 @@ export function PluginsPage() {
           },
         });
       } else if (dialog.type === "uninstall") {
+        let plugin = dialog.plugin;
+        if (plugin.lifecycleState === "enabled") {
+          plugin = await disableOrg.mutateAsync({
+            expectedRevision: plugin.revision,
+            pluginId: plugin.pluginId,
+          });
+          setDialog({ plugin, type: "uninstall" });
+        }
         await uninstallOrg.mutateAsync({
-          expectedRevision: dialog.plugin.revision,
-          pluginId: dialog.plugin.pluginId,
+          expectedRevision: plugin.revision,
+          pluginId: plugin.pluginId,
         });
       } else if (dialog.type === "purge") {
         await purgeData.mutateAsync({
@@ -232,11 +246,7 @@ export function PluginsPage() {
   }
 
   if (isLoading && plugins.length === 0) {
-    return (
-      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
-        <Spinner className="size-5" />
-      </div>
-    );
+    return <PluginEmptyState detail={Boolean(selectedPluginId)} loading />;
   }
 
   const queryError =
@@ -245,44 +255,38 @@ export function PluginsPage() {
     (canInstallPackages ? releasesQuery.error : null);
   const errorMessage =
     actionError ?? (queryError ? formatError(queryError) : null);
+  const visiblePluginIds = selectedPluginId
+    ? pluginIds.filter((id) => id === selectedPluginId)
+    : pluginIds;
 
   return (
     <div className="min-w-0">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="type-section-title">Plugins</h2>
-        {canInstallPackages ? (
-          <Button
-            disabled={busy}
-            onClick={(event) => {
-              rememberFocus(event.currentTarget);
-              setActionError(null);
-              setDialog({ type: "package-entry" });
-            }}
-            size="sm"
-          >
-            Install external plugin
-          </Button>
-        ) : null}
-      </div>
+      <PluginPageHeader
+        busy={busy}
+        canInstall={canInstallPackages}
+        detail={Boolean(selectedPluginId)}
+        error={dialog ? null : errorMessage}
+        onInstall={(event) => {
+          rememberFocus(event.currentTarget);
+          setActionError(null);
+          setDialog({ type: "package-entry" });
+        }}
+      />
 
-      {errorMessage && !dialog ? (
-        <p
-          className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-sm"
-          role="alert"
-        >
-          {errorMessage}
-        </p>
-      ) : null}
-
-      {pluginIds.length === 0 ? (
-        <p className="py-10 text-center text-muted-foreground text-sm">
-          {officialQuery.isLoading
-            ? "Loading plugins…"
-            : "No plugins available."}
-        </p>
+      {visiblePluginIds.length === 0 ? (
+        <PluginEmptyState
+          detail={Boolean(selectedPluginId)}
+          loading={officialQuery.isLoading || releasesQuery.isLoading}
+        />
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-          {pluginIds.map((pluginId) => {
+        <ul
+          className={
+            selectedPluginId
+              ? "min-w-0"
+              : "grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-x-8 gap-y-2 pt-3"
+          }
+        >
+          {visiblePluginIds.map((pluginId) => {
             const plugin = plugins.find((item) => item.pluginId === pluginId);
             const catalog = official.find((item) => item.id === pluginId);
             const pluginReleases = releases.filter(
@@ -294,6 +298,8 @@ export function PluginsPage() {
                 busy={busy || Boolean(plugin && isPluginLifecycleBusy(plugin))}
                 canManage={canManage}
                 canManageAgentAccess={isPlatformAdmin}
+                catalogDescription={catalog?.description}
+                detail={Boolean(selectedPluginId)}
                 icon={
                   plugin?.icon ??
                   catalog?.icon ??
@@ -374,6 +380,64 @@ export function PluginsPage() {
         onPreview={(source) => void previewNpmPackage(source)}
         orgId={orgId}
       />
+    </div>
+  );
+}
+
+function PluginEmptyState({
+  detail,
+  loading,
+}: {
+  detail: boolean;
+  loading: boolean;
+}) {
+  let message = detail ? "Plugin not found." : "No plugins available.";
+  if (loading) {
+    message = "Loading plugins…";
+  }
+  return (
+    <p className="py-10 text-center text-muted-foreground text-sm">{message}</p>
+  );
+}
+
+function PluginPageHeader({
+  busy,
+  canInstall,
+  detail,
+  error,
+  onInstall,
+}: {
+  busy: boolean;
+  canInstall: boolean;
+  detail: boolean;
+  error: string | null;
+  onInstall(event: MouseEvent<HTMLButtonElement>): void;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      {detail ? (
+        <Link
+          className="text-muted-foreground text-sm hover:text-foreground"
+          to="/system?tab=plugins"
+        >
+          ← Back to plugins
+        </Link>
+      ) : (
+        <h2 className="type-section-title">Plugins</h2>
+      )}
+      {canInstall && !detail ? (
+        <Button disabled={busy} onClick={onInstall} size="sm">
+          Install external plugin
+        </Button>
+      ) : null}
+      {error ? (
+        <p
+          className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -501,6 +565,8 @@ interface PluginRowProps {
   busy: boolean;
   canManage: boolean;
   canManageAgentAccess: boolean;
+  catalogDescription?: string;
+  detail?: boolean;
   icon?: string;
   name: string;
   official: boolean;
@@ -521,6 +587,8 @@ interface PluginRowProps {
 }
 
 function PluginRow({
+  catalogDescription,
+  detail = false,
   plugin,
   icon,
   pluginId,
@@ -535,11 +603,97 @@ function PluginRow({
   onRemove,
 }: PluginRowProps) {
   return (
-    <li className="px-4 py-4 sm:px-5">
-      <div className="flex items-center gap-3">
-        <PluginIcon icon={icon} pluginId={pluginId} />
-        <div className="min-w-0 flex-1">
-          <p className="break-words font-medium text-sm">{name}</p>
+    <li className={detail ? "min-w-0" : "min-w-0 py-5"}>
+      <div className="flex flex-wrap items-center gap-3">
+        <PluginIdentity
+          catalogDescription={catalogDescription}
+          detail={detail}
+          icon={icon}
+          name={name}
+          official={official}
+          plugin={plugin}
+          pluginId={pluginId}
+          releases={releases}
+        />
+        <PluginRowControls
+          busy={busy}
+          canManage={canManage}
+          canManageAgentAccess={canManageAgentAccess}
+          detail={detail}
+          name={name}
+          official={official}
+          onAction={onAction}
+          plugin={plugin}
+          pluginId={pluginId}
+        />
+      </div>
+      {plugin?.lastLifecycleError ? (
+        <p className="mt-2 break-words text-destructive text-xs" role="alert">
+          {plugin.lastLifecycleError}
+        </p>
+      ) : null}
+      {detail ? (
+        <PluginRowDetails
+          accessCount={accessCount}
+          busy={busy}
+          onRemove={onRemove}
+          plugin={plugin}
+          pluginId={pluginId}
+          releases={releases}
+        />
+      ) : null}
+    </li>
+  );
+}
+
+function PluginIdentity({
+  catalogDescription,
+  detail,
+  icon,
+  name,
+  official,
+  plugin,
+  pluginId,
+  releases,
+}: Pick<
+  PluginRowProps,
+  | "catalogDescription"
+  | "detail"
+  | "icon"
+  | "name"
+  | "official"
+  | "plugin"
+  | "pluginId"
+  | "releases"
+>) {
+  const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
+  return (
+    <div
+      className={`relative flex min-w-0 flex-1 items-center gap-3 ${detail ? "" : "p-3"}`}
+    >
+      {detail ? null : (
+        <Link
+          aria-label={`${canOpen ? "Open" : "View details for"} ${name}`}
+          className="absolute inset-0 rounded-md hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
+          to={
+            canOpen
+              ? pluginPagePath(pluginId)
+              : `/system/plugins/${encodeURIComponent(pluginId)}`
+          }
+        />
+      )}
+      <PluginIcon icon={icon} pluginId={pluginId} />
+      <div className="min-w-0 flex-1">
+        <h2
+          className={
+            detail
+              ? "break-words font-medium text-lg"
+              : "break-words font-medium text-sm"
+          }
+        >
+          {name}
+        </h2>
+        {detail ? (
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
             <span className="inline-flex items-center gap-1.5 capitalize">
               <span
@@ -557,36 +711,21 @@ function PluginRow({
               </span>
             ) : null}
           </div>
-        </div>
-        <PluginRowControls
-          busy={busy}
-          canManage={canManage}
-          canManageAgentAccess={canManageAgentAccess}
-          name={name}
-          official={official}
-          onAction={onAction}
-          plugin={plugin}
-          pluginId={pluginId}
-        />
+        ) : (
+          <p className="mt-1 line-clamp-2 text-muted-foreground text-sm">
+            {PLUGIN_DESCRIPTIONS[pluginId] ||
+              plugin?.description ||
+              catalogDescription ||
+              releases[0]?.manifest.description}
+          </p>
+        )}
       </div>
-      {plugin?.lastLifecycleError ? (
-        <p className="mt-2 break-words text-destructive text-xs" role="alert">
-          {plugin.lastLifecycleError}
-        </p>
-      ) : null}
-      <PluginRowDetails
-        accessCount={accessCount}
-        busy={busy}
-        onRemove={onRemove}
-        plugin={plugin}
-        pluginId={pluginId}
-        releases={releases}
-      />
-    </li>
+    </div>
   );
 }
 
 function PluginRowControls({
+  detail,
   plugin,
   pluginId,
   name,
@@ -598,6 +737,7 @@ function PluginRowControls({
 }: Pick<
   PluginRowProps,
   | "plugin"
+  | "detail"
   | "pluginId"
   | "name"
   | "official"
@@ -611,7 +751,7 @@ function PluginRowControls({
   const canInstall = !plugin?.installed && (official || Boolean(plugin));
   return (
     <div className="flex shrink-0 items-center gap-1">
-      {canOpen ? (
+      {canOpen && detail ? (
         <Button
           nativeButton={false}
           render={<Link to={pluginPagePath(pluginId)} />}
@@ -622,30 +762,62 @@ function PluginRowControls({
         </Button>
       ) : null}
       {canManage && (canInstall || actions?.enable) ? (
-        <Button
-          disabled={busy}
-          onClick={(event) =>
-            onAction(canInstall ? "install" : "enable", event.currentTarget)
-          }
-          size="sm"
-        >
-          {canInstall ? "Install" : "Enable"}
-        </Button>
+        <PluginInstallButton
+          busy={busy}
+          canInstall={canInstall}
+          detail={detail}
+          name={name}
+          onAction={onAction}
+        />
       ) : null}
       <PluginRowMenu
         busy={busy}
         canManage={canManage}
         canManageAgentAccess={canManageAgentAccess}
+        detail={detail}
         name={name}
         official={official}
         onAction={onAction}
         plugin={plugin}
+        pluginId={pluginId}
       />
     </div>
   );
 }
 
+function PluginInstallButton({
+  busy,
+  canInstall,
+  detail,
+  name,
+  onAction,
+}: Pick<PluginRowProps, "busy" | "detail" | "name" | "onAction"> & {
+  canInstall: boolean;
+}) {
+  return (
+    <Button
+      aria-label={canInstall ? `Install ${name}` : undefined}
+      disabled={busy}
+      onClick={(event) =>
+        onAction(canInstall ? "install" : "enable", event.currentTarget)
+      }
+      size={canInstall && !detail ? "icon-sm" : "sm"}
+      variant={canInstall && !detail ? "ghost" : "default"}
+    >
+      {canInstall && !detail ? (
+        <Add01Icon aria-hidden="true" className="size-5" />
+      ) : canInstall ? (
+        "Install"
+      ) : (
+        "Enable"
+      )}
+    </Button>
+  );
+}
+
 function PluginRowMenu({
+  detail,
+  pluginId,
   plugin,
   name,
   official,
@@ -656,6 +828,8 @@ function PluginRowMenu({
 }: Pick<
   PluginRowProps,
   | "plugin"
+  | "pluginId"
+  | "detail"
   | "name"
   | "official"
   | "busy"
@@ -673,6 +847,7 @@ function PluginRowMenu({
     ["purge", "Delete data", actions?.purge],
   ] as const;
   const hasMenu =
+    !detail ||
     (canManageAgentAccess && plugin?.lifecycleState === "enabled") ||
     (canManage && secondaryActions.some(([, , visible]) => visible));
   return hasMenu ? (
@@ -691,6 +866,15 @@ function PluginRowMenu({
         <MoreHorizontalIcon aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
+        {detail ? null : (
+          <DropdownMenuItem
+            render={
+              <Link to={`/system/plugins/${encodeURIComponent(pluginId)}`} />
+            }
+          >
+            Details
+          </DropdownMenuItem>
+        )}
         {canManageAgentAccess && plugin?.lifecycleState === "enabled" ? (
           <DropdownMenuItem
             disabled={busy}
@@ -731,11 +915,8 @@ function PluginRowDetails({
   PluginRowProps,
   "plugin" | "pluginId" | "releases" | "busy" | "accessCount" | "onRemove"
 >) {
-  return plugin || releases.length > 0 ? (
-    <details className="mt-3 sm:ml-13">
-      <summary className="w-fit cursor-pointer rounded text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-        Details
-      </summary>
+  return (
+    <div className="mt-4">
       <div className="mt-3 border-border border-t pt-3 text-muted-foreground text-xs">
         <p className="break-all">
           {pluginId}
@@ -756,8 +937,8 @@ function PluginRowDetails({
           releases={releases}
         />
       </div>
-    </details>
-  ) : null;
+    </div>
+  );
 }
 
 function PluginAgentAccessDialog({
@@ -927,7 +1108,7 @@ function PluginIcon({ icon, pluginId }: { icon?: string; pluginId: string }) {
   const [failedIcon, setFailedIcon] = useState<string | null>(null);
   const Icon = pluginIcon(pluginId);
   return (
-    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden text-foreground">
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted text-foreground">
       {icon && icon !== failedIcon ? (
         <img
           alt=""

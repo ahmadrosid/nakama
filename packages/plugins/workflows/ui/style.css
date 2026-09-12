@@ -1,25 +1,35 @@
 [data-plugin-id="workflows"] {
   &:has(> .workflows-page) {
+    display: flex;
+    flex-direction: column;
     padding: 0;
     container-type: inline-size;
+    overflow: hidden;
   }
 
   .workflows-page {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
     min-width: 0;
+    min-height: 0;
     font-size: 14px;
     line-height: 1.5;
     color: var(--foreground);
   }
   .workflow-layout {
     display: grid;
+    flex: 1;
     grid-template-columns: 240px minmax(0, 1fr);
-    min-height: min(760px, 85dvh);
+    min-height: 0;
     overflow: hidden;
   }
   .workflow-sidebar {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
     border-right: 1px solid var(--border);
   }
   .workflow-sidebar ul,
@@ -228,10 +238,35 @@
     white-space: pre-wrap;
   }
   .workflow-error {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 14px;
+    margin: 16px 16px 0;
     color: var(--destructive);
+    background: color-mix(in srgb, var(--destructive) 6%, var(--background));
+    border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
+    border-radius: 6px;
+  }
+  .workflow-error > svg {
+    flex-shrink: 0;
+  }
+  .workflow-error p {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .workflow-error a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   @container (max-width: 760px) {
     .workflow-layout {
+      grid-template-rows: auto minmax(0, 1fr);
       grid-template-columns: minmax(0, 1fr);
     }
     .workflow-sidebar {
@@ -354,6 +389,7 @@
 
 [data-plugin-id="workflows"] {
   .workflow-layout[data-empty="true"] {
+    grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
   }
   .workflow-welcome {

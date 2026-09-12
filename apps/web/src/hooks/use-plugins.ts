@@ -544,7 +544,9 @@ export function pluginRowActions(plugin: OrgPluginDetail): {
     disable: plugin.lifecycleState === "enabled",
     enable: plugin.installed && plugin.lifecycleState === "disabled",
     purge: plugin.lifecycleState === "retained",
-    uninstall: plugin.installed && plugin.lifecycleState === "disabled",
+    uninstall:
+      plugin.installed &&
+      ["enabled", "disabled"].includes(plugin.lifecycleState),
     update:
       plugin.installed &&
       plugin.lifecycleState === "disabled" &&

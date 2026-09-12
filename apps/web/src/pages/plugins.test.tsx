@@ -9,7 +9,7 @@ import type {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
   AuthContext,
   type AuthContextValue,
@@ -135,6 +135,49 @@ function renderEnable() {
 }
 
 describe("plugin management authority and mutations", () => {
+  test.each(["/system", "/system/plugins/notes", "/system/plugins/missing"])(
+    "plugin details are addressable separately from the grid: %s",
+    (path) => {
+      queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
+        plugins: [
+          plugin({ description: "Saved notes for your agents" }),
+          plugin({ name: "Other plugin", pluginId: "other" }),
+        ],
+      });
+      queryClient.setQueryData(["official-plugins"], { plugins: [] });
+      queryClient.setQueryData(queryKeys.plugins.releases, { releases: [] });
+      const html = renderToString(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={authValue}>
+            <MemoryRouter initialEntries={[path]}>
+              <Routes>
+                <Route element={<PluginsPage />} path="/system" />
+                <Route
+                  element={<PluginsPage />}
+                  path="/system/plugins/:pluginId"
+                />
+              </Routes>
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      expect(html).not.toContain("<details");
+      if (path === "/system") {
+        expect(html).toContain('href="/system/plugins/notes"');
+        expect(html).toContain("Other plugin");
+        expect(html).toContain("Saved notes for your agents");
+        expect(html).not.toContain("1.0.0");
+      } else {
+        expect(html).toContain('href="/system?tab=plugins"');
+        expect(html).not.toContain("Other plugin");
+        expect(html).toContain(
+          path.endsWith("notes")
+            ? "Saved notes for your agents"
+            : "Plugin not found."
+        );
+      }
+    }
+  );
   test.each([false, true])(
     "external install entry is platform-admin-only: %s",
     (isPlatformAdmin) => {
@@ -210,11 +253,13 @@ describe("plugin management authority and mutations", () => {
       expect(html.match(/>Supermemory</g)).toHaveLength(1);
       expect(html.includes('href="/plugins/supermemory"')).toBe(false);
       expect(html).not.toContain("No plugins installed.");
-      expect(html).toContain("<details");
-      expect(html).not.toMatch(/<details[^>]*\bopen/);
-      expect(html.includes('aria-label="Actions for Workflows"')).toBe(
+      expect(html).toContain('aria-label="Open Workflows"');
+      expect(html).not.toContain(">Open</a>");
+      expect(html.includes('aria-label="Install Supermemory"')).toBe(
         role === "admin"
       );
+      expect(html).not.toMatch(/<details[^>]*\bopen/);
+      expect(html).toContain('aria-label="Actions for Workflows"');
     }
   );
   test.each([false, true])(
@@ -309,9 +354,7 @@ describe("plugin management authority and mutations", () => {
       expect(buttons.filter(Boolean)).toEqual(
         actions.some((action) => action === "Enable") ? ["Enable"] : []
       );
-      expect(html.includes('aria-label="Actions for Notes"')).toBe(
-        role === "admin"
-      );
+      expect(html).toContain('aria-label="Actions for Notes"');
       expect(html.includes('href="/plugins/notes"')).toBe(state === "enabled");
     }
   );
@@ -386,7 +429,7 @@ describe("plugin management authority and mutations", () => {
     expect(installPackage).toHaveBeenCalled();
   });
 
-  test("update and uninstall only while disabled; purge only while retained", () => {
+  test("uninstall is available while enabled; update requires disabled and purge requires retained", () => {
     const enabled = plugin({
       availableVersions: ["1.0.0", "1.1.0"],
       lifecycleState: "enabled",
@@ -396,7 +439,7 @@ describe("plugin management authority and mutations", () => {
       disable: true,
       enable: false,
       purge: false,
-      uninstall: false,
+      uninstall: true,
       update: false,
     });
 
