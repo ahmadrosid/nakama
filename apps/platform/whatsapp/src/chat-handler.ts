@@ -3,6 +3,7 @@ import {
   extractPairedTurnArtifacts,
   isAttachOnlyCommand,
   isFreshReportRequest,
+  isScratchArtifactPath,
   pushDeliverableArtifact,
 } from "@nakama/core";
 import { formatClientError } from "@nakama/core/api-error";
@@ -550,11 +551,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       });
       await sessionStore.save();
 
+      // Scratch-looking writes stay retrievable via /attach but never blast
+      // into the group unasked.
+      const deliverable = artifacts.filter(
+        (artifact) => !isScratchArtifactPath(artifact.path)
+      );
       const postTurnSocket = getSocket();
       if (!postTurnSocket) {
         return;
       }
-      for (const artifact of artifacts) {
+      for (const artifact of deliverable) {
         await sendArtifactDocumentForPath({
           ...artifact,
           client,

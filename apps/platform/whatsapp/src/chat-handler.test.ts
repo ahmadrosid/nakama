@@ -1764,6 +1764,68 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
+  test("skips scratch-looking writes when delivering post-turn documents", async () => {
+    await withArtifactChat(
+      {
+        messages: [
+          { content: "save", role: "user" as const },
+          {
+            content: "",
+            role: "assistant" as const,
+            toolCalls: [
+              {
+                arguments: {
+                  content: "a,b\n1,2",
+                  path: "artifacts/laporan-final.csv",
+                },
+                id: "tool_1",
+                name: "write_file",
+              },
+              {
+                arguments: {
+                  content: '{"x":1}',
+                  path: "artifacts/_scratch-debug.json",
+                },
+                id: "tool_2",
+                name: "write_file",
+              },
+            ],
+          },
+          {
+            content: JSON.stringify({
+              bytesWritten: 7,
+              path: "/home/.nakama/orgs/org/profiles/default/artifacts/laporan-final.csv",
+            }),
+            name: "write_file",
+            role: "tool" as const,
+            toolCallId: "tool_1",
+          },
+          {
+            content: JSON.stringify({
+              bytesWritten: 7,
+              path: "/home/.nakama/orgs/org/profiles/default/artifacts/_scratch-debug.json",
+            }),
+            name: "write_file",
+            role: "tool" as const,
+            toolCallId: "tool_2",
+          },
+          { content: "Saved.", role: "assistant" as const },
+        ],
+      },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "save it and send me the csv",
+        });
+        expect(documentSendCount(ctx.sent)).toBe(1);
+        expect(
+          ctx.sent.find((message) => message.content.document !== undefined)
+            ?.content.fileName
+        ).toBe("laporan-final.csv");
+      }
+    );
+  });
+
   test.each([false, true])(
     "attaches in a group (new artifact on retry: %s)",
     async (retry) => {
