@@ -1,7 +1,7 @@
 import { convertDocumentBytes } from "../anydoc-text";
 import { DOCX_MEDIA_TYPE, LEGACY_DOC_MEDIA_TYPE } from "../artifact-mime";
 import { convertDocxToMarkdown } from "../docx-text";
-import { MAX_DOCUMENT_BYTES } from "../message-content";
+import { MAX_KNOWLEDGE_DOCUMENT_BYTES } from "../message-content";
 
 const KB_ALLOWED_MEDIA_TYPES = new Set([
   "application/pdf",
@@ -53,9 +53,9 @@ export async function extractText(
   filename: string,
   bytes: Buffer
 ): Promise<string> {
-  if (bytes.length > MAX_DOCUMENT_BYTES) {
+  if (bytes.length > MAX_KNOWLEDGE_DOCUMENT_BYTES) {
     throw new Error(
-      `Document must be at most ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.`
+      `Document must be at most ${MAX_KNOWLEDGE_DOCUMENT_BYTES / (1024 * 1024)} MB.`
     );
   }
 

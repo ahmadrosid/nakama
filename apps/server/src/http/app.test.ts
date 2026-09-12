@@ -140,6 +140,24 @@ describe("createHonoApp", () => {
     expect(importLimitResponse.status).toBe(413);
   });
 
+  test("knowledge uploads allow a base64-encoded 20 MiB document through the body limit", async () => {
+    const app = createHonoApp(createServerOptions());
+    const request = (size: number) =>
+      new Request("http://localhost:4310/v1/profiles/example/knowledge-base", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(size),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    expect(
+      (await app.fetch(request(Math.ceil((20 * 1024 * 1024) / 3) * 4 + 1024)))
+        .status
+    ).not.toBe(413);
+    expect((await app.fetch(request(30 * 1024 * 1024 + 1))).status).toBe(413);
+  });
+
   test("liveness stays up while readiness tracks a closed and reopened database", async () => {
     const database = await createSqliteDatabase(":memory:");
     const { app } = createMinimalHonoApp({

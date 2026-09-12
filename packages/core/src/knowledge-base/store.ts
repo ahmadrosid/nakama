@@ -17,7 +17,7 @@ import {
   writeTextFile,
 } from "../fs";
 import { createId } from "../ids";
-import { MAX_DOCUMENT_BYTES } from "../message-content";
+import { MAX_KNOWLEDGE_DOCUMENT_BYTES } from "../message-content";
 import { getProfileSoulDir } from "../soul/resolve";
 import {
   buildExtractedTextHeader,
@@ -267,9 +267,9 @@ export async function uploadKnowledgeBaseDocument(
     throw new Error("Document data must not be empty.");
   }
 
-  if (bytes.length > MAX_DOCUMENT_BYTES) {
+  if (bytes.length > MAX_KNOWLEDGE_DOCUMENT_BYTES) {
     throw new Error(
-      `Document must be at most ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.`
+      `Document must be at most ${MAX_KNOWLEDGE_DOCUMENT_BYTES / (1024 * 1024)} MB.`
     );
   }
 

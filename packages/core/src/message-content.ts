@@ -15,6 +15,7 @@ import {
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_KNOWLEDGE_DOCUMENT_BYTES = 20 * 1024 * 1024;
 export const TOKENS_PER_IMAGE_ESTIMATE = 1500;
 export const TOKENS_PER_DOCUMENT_ESTIMATE = 2000;
 
