@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,6 +32,35 @@ describe("isProviderConfigured", () => {
       )
     ).toBe(true);
   });
+
+  test("treats a mounted API key file as configured", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "nakama-provider-key-"));
+    const keyPath = join(directory, "openai");
+    await writeFile(keyPath, "sk-mounted\n");
+    const id = createProviderInstanceId();
+
+    try {
+      expect(
+        isProviderConfigured(
+          {
+            defaultProviderId: id,
+            providers: [
+              {
+                apiKey: "",
+                createdAt: "2026-06-07T10:00:00.000Z",
+                id,
+                label: "OpenAI",
+                type: "openai",
+              },
+            ],
+          },
+          { OPENAI_API_KEY_FILE: keyPath }
+        )
+      ).toBe(true);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("ensureProviderConfigured", () => {
@@ -40,6 +69,7 @@ describe("ensureProviderConfigured", () => {
     "NAKAMA_CONFIG_DIR",
     "NAKAMA_PROVIDER",
     "OPENAI_API_KEY",
+    "OPENAI_API_KEY_FILE",
     "ANTHROPIC_API_KEY",
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",
@@ -89,5 +119,23 @@ describe("ensureProviderConfigured", () => {
     expect(loaded?.defaultProviderId).toBe(userConfig?.defaultProviderId);
     expect(isProviderConfigured(loaded, process.env)).toBe(true);
     expect(getUserConfigPath()).toContain(configDir);
+  });
+
+  test("bootstraps from a mounted API key without persisting the secret", async () => {
+    snapshotEnv();
+    configDir = await mkdtemp(join(tmpdir(), "nakama-setup-key-file-"));
+    const keyPath = join(configDir, "openai-secret");
+    await writeFile(keyPath, "sk-mounted\n");
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    process.env.NAKAMA_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY_FILE = keyPath;
+
+    const { provider, userConfig } = await ensureProviderConfigured();
+
+    expect(provider).not.toBeNull();
+    expect(userConfig?.providers[0]?.apiKey).toBe("");
+    expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
+      "sk-mounted"
+    );
   });
 });

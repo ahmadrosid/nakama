@@ -10,6 +10,7 @@ import {
   serializeCustomModels,
   validateDisplayName,
 } from "./compatible-provider-config";
+import { readEnvValue } from "./config";
 import type {
   ChatgptOAuthCredentials,
   CustomModelEntry,
@@ -205,7 +206,7 @@ export function isProviderConfigured(
       }
 
       const envVar = apiKeyEnvVarForProvider(active.type);
-      return Boolean(envVar && env[envVar]?.trim());
+      return Boolean(envVar && readEnvValue(env, envVar));
     }
 
     return true;
@@ -216,7 +217,7 @@ export function isProviderConfigured(
   }
 
   const envVar = apiKeyEnvVarForProvider(active.type);
-  return Boolean(envVar && env[envVar]?.trim());
+  return Boolean(envVar && readEnvValue(env, envVar));
 }
 
 export function isValidTimezone(timezone: string): boolean {
