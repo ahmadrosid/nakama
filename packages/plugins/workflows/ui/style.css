@@ -309,6 +309,8 @@
   }
   .workflow-step-drawer[data-expanded="true"] {
     width: 100%;
+    border-left: 0;
+    box-shadow: none;
   }
   .workflow-drawer-header {
     display: flex;

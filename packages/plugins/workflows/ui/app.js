@@ -310,6 +310,8 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-step-drawer[data-expanded="true"] {
     width: 100%;
+    border-left: 0;
+    box-shadow: none;
   }
   .workflow-drawer-header {
     display: flex;
@@ -555,6 +557,14 @@ function apply(ctx) {
     SelectValue,
     SelectContent,
     SelectItem,
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    Command,
+    CommandInput,
+    CommandList,
+    CommandEmpty,
+    CommandItem,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -587,6 +597,44 @@ function apply(ctx) {
       key: option.value,
       value: option.value
     }, option.label))));
+  }
+  function ToolChoice({
+    value,
+    options,
+    onChange,
+    disabled
+  }) {
+    const [open, setOpen] = React.useState(false);
+    return /* @__PURE__ */ React.createElement(Popover, {
+      onOpenChange: setOpen,
+      open
+    }, /* @__PURE__ */ React.createElement(PopoverTrigger, {
+      "aria-label": "Tool",
+      disabled,
+      render: /* @__PURE__ */ React.createElement(Button, {
+        className: "w-full justify-between",
+        variant: "outline"
+      })
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "min-w-0 truncate"
+    }, value || "Select tool"), /* @__PURE__ */ React.createElement("span", {
+      "aria-hidden": "true"
+    }, "⌄")), /* @__PURE__ */ React.createElement(PopoverContent, {
+      className: "overflow-hidden p-0 shadow-sm"
+    }, /* @__PURE__ */ React.createElement(Command, null, /* @__PURE__ */ React.createElement(CommandInput, {
+      "aria-label": "Search tools",
+      placeholder: "Search tools…"
+    }), /* @__PURE__ */ React.createElement(CommandList, null, /* @__PURE__ */ React.createElement(CommandEmpty, null, "No tools found."), options.map((option) => /* @__PURE__ */ React.createElement(CommandItem, {
+      "data-checked": value === option.value ? true : undefined,
+      key: option.value,
+      onSelect: () => {
+        onChange(option.value);
+        setOpen(false);
+      },
+      value: option.value
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "min-w-0 break-all"
+    }, option.label)))))));
   }
   function Icon({
     kind
@@ -1195,9 +1243,8 @@ function apply(ctx) {
       value: selectedStep.id
     })), (stepFields[selectedStep.kind] ?? []).map((field) => field === "tool" ? /* @__PURE__ */ React.createElement("label", {
       key: field
-    }, "Tool", /* @__PURE__ */ React.createElement(Choice, {
+    }, "Tool", /* @__PURE__ */ React.createElement(ToolChoice, {
       disabled: busy,
-      label: "Tool",
       onChange: (value) => updateStep(selectedStep.key, {
         fields: {
           ...selectedStep.fields,

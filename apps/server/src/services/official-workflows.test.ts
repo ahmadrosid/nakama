@@ -268,6 +268,12 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
         run: async () => ({ ok: true }),
       },
       {
+        description: "Save a memory",
+        name: "plugin_supermemory__save_memory",
+        parameters: { type: "object" },
+        run: async (input: unknown) => ({ saved: input }),
+      },
+      {
         name: "plugin_workflows__run_workflow",
         run: async () => {
           throw new Error("Recursion");
@@ -294,6 +300,11 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
   await expect(host({ op: "legacy_workflows" }, context)).rejects.toThrow();
   expect(await host({ agentId: "normal", op: "tools" }, context)).toEqual([
     { description: "allowed", name: "allowed", parameters: { type: "object" } },
+    {
+      description: "Save a memory",
+      name: "plugin_supermemory__save_memory",
+      parameters: { type: "object" },
+    },
   ]);
   expect(
     await host(
@@ -306,6 +317,28 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
     context
   );
   expect(denied).toHaveProperty("error");
+  expect(
+    await host(
+      {
+        agentId: "normal",
+        input: { text: "Meeting summary" },
+        name: "plugin_supermemory__save_memory",
+        op: "execute_tool",
+      },
+      context
+    )
+  ).toEqual({ saved: { text: "Meeting summary" } });
+  for (const name of [
+    "plugin_workflows__run_workflow",
+    "plugin_supermemory__unassigned",
+  ]) {
+    expect(
+      await host(
+        { agentId: "normal", input: {}, name, op: "execute_tool" },
+        context
+      )
+    ).toHaveProperty("error");
+  }
 });
 
 test("official dependencies are checked before publishing or changing org state", async () => {

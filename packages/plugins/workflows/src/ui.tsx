@@ -101,6 +101,14 @@ export function apply(ctx: Context) {
     SelectValue,
     SelectContent,
     SelectItem,
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    Command,
+    CommandInput,
+    CommandList,
+    CommandEmpty,
+    CommandItem,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -149,6 +157,58 @@ export function apply(ctx: Context) {
           ))}
         </SelectContent>
       </Select>
+    );
+  }
+
+  function ToolChoice({
+    value,
+    options,
+    onChange,
+    disabled,
+  }: {
+    value: string;
+    options: Array<{ value: string; label: string }>;
+    onChange(value: string): void;
+    disabled: boolean;
+  }) {
+    const [open, setOpen] = React.useState(false);
+    return (
+      <Popover onOpenChange={setOpen} open={open}>
+        <PopoverTrigger
+          aria-label="Tool"
+          disabled={disabled}
+          render={
+            <Button className="w-full justify-between" variant="outline" />
+          }
+        >
+          <span className="min-w-0 truncate">{value || "Select tool"}</span>
+          <span aria-hidden="true">⌄</span>
+        </PopoverTrigger>
+        <PopoverContent className="overflow-hidden p-0 shadow-sm">
+          <Command>
+            <CommandInput
+              aria-label="Search tools"
+              placeholder="Search tools…"
+            />
+            <CommandList>
+              <CommandEmpty>No tools found.</CommandEmpty>
+              {options.map((option) => (
+                <CommandItem
+                  data-checked={value === option.value ? true : undefined}
+                  key={option.value}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  value={option.value}
+                >
+                  <span className="min-w-0 break-all">{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     );
   }
 
@@ -1039,9 +1099,8 @@ export function apply(ctx: Context) {
                         field === "tool" ? (
                           <label key={field}>
                             Tool
-                            <Choice
+                            <ToolChoice
                               disabled={busy}
-                              label="Tool"
                               onChange={(value) =>
                                 updateStep(selectedStep.key, {
                                   fields: {

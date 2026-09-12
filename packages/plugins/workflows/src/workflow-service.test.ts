@@ -2,7 +2,48 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { run } from "./actions";
 import { WorkflowService } from "./workflow-service";
+
+test("save action finishes updating before closing its database", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workflow-save-"));
+  const databasePath = join(dir, "data.sqlite");
+  const service = new WorkflowService(databasePath, "org_a");
+  try {
+    service.db.exec(
+      await readFile(
+        new URL("../migrations/001-workflows.sql", import.meta.url),
+        "utf8"
+      )
+    );
+    const context = {
+      actionKey: "create_workflow",
+      databasePath,
+      host: async ({ op }: Record<string, unknown>) =>
+        op === "profiles" ? [{ id: "profile", isDefault: true }] : [],
+      orgId: "org_a",
+    } as Parameters<typeof run>[1];
+    const created = (await run(
+      {
+        name: "Original",
+        steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
+      },
+      context
+    )) as { id: string };
+    await run(
+      { name: "Updated", workflowId: created.id },
+      {
+        ...context,
+        actionKey: "update_workflow",
+      }
+    );
+    expect((await service.get(created.id))?.name).toBe("Updated");
+    expect((await service.get(created.id))?.version).toBe(2);
+  } finally {
+    service.close();
+    await rm(dir, { force: true, recursive: true });
+  }
+});
 
 test("database prevents overlapping subprocess runs and imports transactionally", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workflow-db-"));
