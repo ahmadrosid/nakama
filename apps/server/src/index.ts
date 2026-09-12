@@ -201,18 +201,31 @@ agent.setAutomationRunHistoryTools(
 );
 agent.setAutomationRunner(automationRunner);
 
-const workerManager = new WorkerManagerService(projectRoot, undefined, () => {
-  const configured = getActiveProviderInstance(agent.getUserConfig());
-  if (!configured) {
-    return null;
+const workerManager = new WorkerManagerService(
+  projectRoot,
+  undefined,
+  (providerType) => {
+    const userConfig = agent.getUserConfig();
+    const active = getActiveProviderInstance(userConfig);
+    const configured = providerType
+      ? active?.type === providerType && active.apiKey.trim()
+        ? active
+        : userConfig?.providers.find(
+            (provider) =>
+              provider.type === providerType && provider.apiKey.trim()
+          )
+      : active;
+    if (!configured) {
+      return null;
+    }
+    return {
+      apiKey: configured.apiKey,
+      baseUrl: configured.baseUrl,
+      model: resolveDefaultModelForInstance(configured),
+      type: configured.type,
+    };
   }
-  return {
-    apiKey: configured.apiKey,
-    baseUrl: configured.baseUrl,
-    model: resolveDefaultModelForInstance(configured),
-    type: configured.type,
-  };
-});
+);
 
 const orgService = new OrgService(database.adapter, authService);
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {

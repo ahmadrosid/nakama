@@ -2,6 +2,7 @@ import type {
   KnowledgeBaseDocument,
   KnowledgeBaseSource,
 } from "@nakama/core/contract";
+import { MAX_KNOWLEDGE_DOCUMENT_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
@@ -124,7 +125,8 @@ export function KnowledgeTabPanel({
           <p className="text-muted-foreground text-xs tabular-nums">
             {formatDocumentCount(documents.length)}
             {readyCount === documents.length ? "" : ` · ${readyCount} ready`}
-            {" · "}txt, md, csv, pdf · 5 MB max
+            {" · "}txt, md, csv, pdf ·{" "}
+            {MAX_KNOWLEDGE_DOCUMENT_BYTES / (1024 * 1024)} MB max
           </p>
 
           <div>

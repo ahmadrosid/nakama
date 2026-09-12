@@ -374,3 +374,17 @@ test("document detail URL loads full content and links back to knowledge", async
     }
   }
 });
+
+test("failed settings load never displays connection credential fields", async () => {
+  const view = await mount(async (action) => {
+    if (action === "profiles") {
+      return { ...profiles, configured: false };
+    }
+    throw new Error("Settings unavailable");
+  });
+  await act(async () => button(view, "Settings").props.onClick());
+  expect(
+    view.root.findAll((node) => String(node.type) === "Input")
+  ).toHaveLength(0);
+  expect(button(view, "Save")).toBeUndefined();
+});

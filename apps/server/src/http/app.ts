@@ -167,7 +167,18 @@ export function createHonoApp(options: ServerOptions) {
     maxSize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
     onError: rejectOversizedBody,
   });
+  // Base64 expands a 20 MiB knowledge document to roughly 27 MiB.
+  const knowledgeBodyLimit = bodyLimit({
+    maxSize: 30 * 1024 * 1024,
+    onError: rejectOversizedBody,
+  });
   app.use("*", (c, next) => {
+    if (
+      c.req.method === "POST" &&
+      /^\/v1\/profiles\/[^/]+\/knowledge-base$/.test(c.req.path)
+    ) {
+      return knowledgeBodyLimit(c, next);
+    }
     const limit = LARGE_BODY_ROUTES.has(c.req.path)
       ? importBodyLimit
       : defaultBodyLimit;

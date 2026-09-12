@@ -2478,6 +2478,12 @@ export interface ToolContext {
   isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
+  /** Host-owned memory storage; file guards run before these callbacks. */
+  memoryFiles?: {
+    read(path: string, content: string): Promise<string>;
+    write(path: string, content: string): Promise<void>;
+    remove(path: string): Promise<void>;
+  };
   /** Invalidates the cached skills catalog after a live skill mutation. */
   onSkillCatalogChange?: () => void;
   orgId?: string;
@@ -2507,6 +2513,15 @@ export interface ToolContext {
     optimized: boolean;
     outputTokens: number;
   }) => void;
+  searchKnowledge?: (input: {
+    query: string;
+    filename?: string;
+    maxResults: number;
+    regex: boolean;
+  }) => Promise<{
+    matches: { file: string; line: number; text: string }[];
+    truncated: boolean;
+  } | null>;
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;

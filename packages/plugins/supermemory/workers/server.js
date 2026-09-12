@@ -10,6 +10,73 @@ import {
   writeFile
 } from "fs/promises";
 import { join } from "path";
+
+// ../../core/src/supermemory-client.ts
+function normalizeUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Invalid server URL");
+  }
+  const host = url.hostname;
+  const octets = host.split(".").map(Number);
+  const privateHost = host === "localhost" || host === "[::1]" || octets.length === 4 && octets.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) && (octets[0] === 127 || octets[0] === 10 || octets[0] === 192 && octets[1] === 168 || octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31);
+  if (url.username || url.password || url.search || url.hash || !(url.protocol === "https:" || url.protocol === "http:" && privateHost)) {
+    throw new Error("Use HTTPS, or HTTP on a private IP or localhost; omit credentials, query and fragment");
+  }
+  return url.toString().replace(/\/+$/, "");
+}
+// src/client.ts
+async function validateExtraction(config) {
+  if (!(config.apiKey?.trim() && config.model?.trim() && config.revision?.trim())) {
+    throw new Error("Configure an extraction API key and model in Supermemory Settings");
+  }
+  const response = await fetch(`${normalizeUrl(config.baseUrl)}/chat/completions`, {
+    body: JSON.stringify({
+      messages: [
+        { content: "Return JSON with ok set to true.", role: "user" }
+      ],
+      model: config.model,
+      response_format: {
+        json_schema: {
+          name: "connection_check",
+          schema: {
+            additionalProperties: false,
+            properties: { ok: { type: "boolean" } },
+            required: ["ok"],
+            type: "object"
+          },
+          strict: true
+        },
+        type: "json_schema"
+      }
+    }),
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    method: "POST",
+    redirect: "error",
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!response.ok) {
+    const body2 = await response.json().catch(() => ({}));
+    const reason = typeof body2?.error?.message === "string" ? body2.error.message : `HTTP ${response.status}`;
+    throw new Error(`Extraction provider rejected the check: ${reason.replaceAll(config.apiKey, "[REDACTED]").replace(/Bearer\s+[^\s,"}]+/gi, "Bearer [REDACTED]").slice(0, 300)}`);
+  }
+  const body = await response.json().catch(() => ({}));
+  const content = body?.choices?.[0]?.message?.content;
+  let valid = false;
+  try {
+    valid = typeof content === "string" && JSON.parse(content)?.ok === true;
+  } catch {}
+  if (!valid) {
+    throw new Error("Extraction model did not return the required structured response");
+  }
+}
+
+// src/worker.ts
 var VERSION = "0.0.8";
 var CHECKSUMS = {
   "darwin-arm64": "12b7817a105ed0a9e70f96c461fb6f8dded5d70eaeb6034e774778c257bed78a",
@@ -17,38 +84,6 @@ var CHECKSUMS = {
   "linux-arm64": "eeb9e62a8bf59646bd799a05d1a2981b945413a03640c3a39f4f267ad2d2bf37",
   "linux-x64": "87f32433d0179be80bb9d8a1bafbac65af4128324342a27ecb8bd1a77b5506f3"
 };
-function providerEnvironment(config) {
-  if (!config) {
-    throw new Error("Configure an AI provider in Nakama Settings, then restart Supermemory in Workers.");
-  }
-  const key = config.apiKey?.trim();
-  if (config.type === "anthropic" && key) {
-    return { ANTHROPIC_API_KEY: key };
-  }
-  if (config.type === "gemini" && key) {
-    return { GEMINI_API_KEY: key };
-  }
-  const baseUrls = {
-    deepseek: "https://api.deepseek.com/v1",
-    ollama: "http://localhost:11434/v1",
-    openai: "https://api.openai.com/v1",
-    openrouter: "https://openrouter.ai/api/v1",
-    together: "https://api.together.xyz/v1",
-    xai: "https://api.x.ai/v1"
-  };
-  let baseUrl = (config.baseUrl || baseUrls[config.type])?.replace(/\/$/, "");
-  if (config.type === "ollama" && baseUrl && !baseUrl.endsWith("/v1")) {
-    baseUrl += "/v1";
-  }
-  if ((key || config.type === "ollama") && baseUrl && !["chatgpt", "xai_oauth", "cloudflare"].includes(config.type)) {
-    return {
-      OPENAI_API_KEY: key || "ollama",
-      OPENAI_BASE_URL: baseUrl.replace(/\/$/, ""),
-      ...config.model ? { OPENAI_MODEL: config.model } : {}
-    };
-  }
-  throw new Error("Select an API-key or local AI provider in Nakama Settings, then restart Supermemory in Workers. Subscription sign-ins are not supported by the local Supermemory server.");
-}
 async function sha256(path) {
   const hash = createHash("sha256");
   for await (const chunk of Bun.file(path).stream()) {
@@ -102,6 +137,70 @@ async function installServer(directory, signal) {
   }
   return path;
 }
+function startExtractionProxy(config, signal) {
+  const token = randomUUID();
+  const upstream = `${normalizeUrl(config.baseUrl)}/chat/completions`;
+  const server = Bun.serve({
+    async fetch(request) {
+      if (request.headers.get("Authorization") !== `Bearer ${token}`) {
+        return new Response(null, { status: 401 });
+      }
+      if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/chat/completions") {
+        return new Response(null, { status: 404 });
+      }
+      try {
+        const body = await request.json();
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return new Response(null, { status: 400 });
+        }
+        if (body.serviceTier !== undefined) {
+          body.service_tier ??= body.serviceTier;
+          delete body.serviceTier;
+        }
+        if (body.max_tokens !== undefined) {
+          body.max_completion_tokens ??= body.max_tokens;
+          delete body.max_tokens;
+        }
+        if (body.response_format?.type === "json_object" && Array.isArray(body.messages)) {
+          body.messages = [
+            { content: "Return valid JSON.", role: "system" },
+            ...body.messages
+          ];
+        }
+        if (config.model === "gpt-5.6-luna" && Array.isArray(body.tools) && body.tools.length > 0) {
+          body.reasoning_effort = "none";
+        }
+        body.model = config.model;
+        const response = await fetch(upstream, {
+          body: JSON.stringify(body),
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            "Content-Type": "application/json"
+          },
+          method: "POST",
+          redirect: "error",
+          signal: AbortSignal.any([
+            request.signal,
+            AbortSignal.timeout(120000),
+            ...signal ? [signal] : []
+          ])
+        });
+        return new Response(response.body, {
+          headers: {
+            "Content-Type": response.headers.get("Content-Type") ?? "application/json"
+          },
+          status: response.status
+        });
+      } catch {
+        return Response.json({ error: { message: "Extraction provider request failed" } }, { status: 502 });
+      }
+    },
+    hostname: "127.0.0.1",
+    maxRequestBodySize: 2 * 1024 * 1024,
+    port: 0
+  });
+  return { baseUrl: `http://127.0.0.1:${server.port}/v1`, server, token };
+}
 async function runWorker(directory, pluginDataDir) {
   await mkdir(directory, { mode: 448, recursive: true });
   const statusPath = join(directory, "status.json");
@@ -113,6 +212,7 @@ async function runWorker(directory, pluginDataDir) {
   };
   await status("starting");
   let child;
+  let proxy;
   let stopping = false;
   const abort = new AbortController;
   const stop = () => {
@@ -131,8 +231,24 @@ async function runWorker(directory, pluginDataDir) {
       }
       return;
     }
-    const config = JSON.parse(await readFile(join(directory, "llm.json"), "utf8"));
-    const provider = providerEnvironment(config);
+    const automatic = await Bun.file(join(directory, "auto-provider.json")).json().catch(() => null);
+    if (automatic?.type !== "openai" || !automatic.apiKey?.trim()) {
+      throw new Error("Add an OpenAI provider in Settings, then restart Supermemory in Workers.");
+    }
+    const config = {
+      apiKey: automatic.apiKey,
+      baseUrl: automatic.baseUrl?.trim() || "https://api.openai.com/v1",
+      model: automatic.model,
+      revision: createHash("sha256").update(JSON.stringify([
+        "openai-parameters-v1",
+        automatic.apiKey,
+        automatic.baseUrl,
+        automatic.model
+      ])).digest("hex")
+    };
+    await status("validating", "Checking the extraction provider");
+    await validateExtraction(config);
+    proxy = startExtractionProxy(config, abort.signal);
     console.log("Preparing Supermemory server " + VERSION);
     const binary = await installServer(join(directory, "cache"), abort.signal);
     if (stopping) {
@@ -154,8 +270,10 @@ async function runWorker(directory, pluginDataDir) {
       cwd: directory,
       env: {
         HOME: home,
+        OPENAI_API_KEY: proxy.token,
+        OPENAI_BASE_URL: proxy.baseUrl,
+        OPENAI_MODEL: config.model,
         PATH: process.env.PATH,
-        ...provider,
         PORT: String(port),
         SUPERMEMORY_DATA_DIR: store,
         SUPERMEMORY_DISABLE_TELEMETRY: "1",
@@ -187,7 +305,7 @@ async function runWorker(directory, pluginDataDir) {
         await response.body?.cancel();
         if (response.ok) {
           const path = join(directory, "connection.json");
-          await writeFile(path + ".tmp", JSON.stringify({ token, url }), {
+          await writeFile(path + ".tmp", JSON.stringify({ revision: config.revision, token, url }), {
             mode: 384
           });
           await rename(path + ".tmp", path);
@@ -225,6 +343,7 @@ async function runWorker(directory, pluginDataDir) {
         await child.exited;
       }
     }
+    await proxy?.server.stop(true);
     if (stopping) {
       await status("stopped");
     }
@@ -240,5 +359,5 @@ if (import.meta.main) {
 }
 export {
   installServer,
-  providerEnvironment
+  startExtractionProxy
 };
