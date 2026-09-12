@@ -84,38 +84,6 @@ var CHECKSUMS = {
   "linux-arm64": "eeb9e62a8bf59646bd799a05d1a2981b945413a03640c3a39f4f267ad2d2bf37",
   "linux-x64": "87f32433d0179be80bb9d8a1bafbac65af4128324342a27ecb8bd1a77b5506f3"
 };
-function providerEnvironment(config) {
-  if (!config) {
-    throw new Error("Configure an AI provider in Nakama Settings, then restart Supermemory in Workers.");
-  }
-  const key = config.apiKey?.trim();
-  if (config.type === "anthropic" && key) {
-    return { ANTHROPIC_API_KEY: key };
-  }
-  if (config.type === "gemini" && key) {
-    return { GEMINI_API_KEY: key };
-  }
-  const baseUrls = {
-    deepseek: "https://api.deepseek.com/v1",
-    ollama: "http://localhost:11434/v1",
-    openai: "https://api.openai.com/v1",
-    openrouter: "https://openrouter.ai/api/v1",
-    together: "https://api.together.xyz/v1",
-    xai: "https://api.x.ai/v1"
-  };
-  let baseUrl = (config.baseUrl || baseUrls[config.type])?.replace(/\/$/, "");
-  if (config.type === "ollama" && baseUrl && !baseUrl.endsWith("/v1")) {
-    baseUrl += "/v1";
-  }
-  if ((key || config.type === "ollama") && baseUrl && !["chatgpt", "xai_oauth", "cloudflare"].includes(config.type)) {
-    return {
-      OPENAI_API_KEY: key || "ollama",
-      OPENAI_BASE_URL: baseUrl.replace(/\/$/, ""),
-      ...config.model ? { OPENAI_MODEL: config.model } : {}
-    };
-  }
-  throw new Error("Select an API-key or local AI provider in Nakama Settings, then restart Supermemory in Workers. Subscription sign-ins are not supported by the local Supermemory server.");
-}
 async function sha256(path) {
   const hash = createHash("sha256");
   for await (const chunk of Bun.file(path).stream()) {
@@ -281,12 +249,6 @@ async function runWorker(directory, pluginDataDir) {
     await status("validating", "Checking the extraction provider");
     await validateExtraction(config);
     proxy = startExtractionProxy(config, abort.signal);
-    const provider = providerEnvironment({
-      ...config,
-      apiKey: proxy.token,
-      baseUrl: proxy.baseUrl,
-      type: "openai_compatible"
-    });
     console.log("Preparing Supermemory server " + VERSION);
     const binary = await installServer(join(directory, "cache"), abort.signal);
     if (stopping) {
@@ -308,8 +270,10 @@ async function runWorker(directory, pluginDataDir) {
       cwd: directory,
       env: {
         HOME: home,
+        OPENAI_API_KEY: proxy.token,
+        OPENAI_BASE_URL: proxy.baseUrl,
+        OPENAI_MODEL: config.model,
         PATH: process.env.PATH,
-        ...provider,
         PORT: String(port),
         SUPERMEMORY_DATA_DIR: store,
         SUPERMEMORY_DISABLE_TELEMETRY: "1",
@@ -395,6 +359,5 @@ if (import.meta.main) {
 }
 export {
   installServer,
-  providerEnvironment,
   startExtractionProxy
 };

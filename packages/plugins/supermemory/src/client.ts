@@ -11,7 +11,6 @@ export interface ExtractionConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
-  providerId?: string;
   revision: string;
 }
 
