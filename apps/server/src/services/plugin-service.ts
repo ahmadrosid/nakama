@@ -211,7 +211,8 @@ let activeMutations = 0;
 const MIGRATION_LEDGER_TABLE = "_nakama_plugin_migrations";
 const DEFAULT_DRAIN_TIMEOUT_MS = 6000;
 
-export function resetPluginAdmissionForTests(): void {
+export async function resetPluginAdmissionForTests(): Promise<void> {
+  await shutdownPluginRuntime(DEFAULT_DRAIN_TIMEOUT_MS);
   admissionGates.clear();
   pluginWorkerManagers.clear();
   pluginLifecycleTestHooks = {};

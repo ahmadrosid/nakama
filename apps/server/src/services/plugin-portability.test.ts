@@ -176,13 +176,13 @@ describe("plugin portability", () => {
   const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
   beforeEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     configDir = await mkdtemp(join(tmpdir(), "nakama-plugin-u8-port-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
   afterEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
@@ -611,6 +611,7 @@ describe("plugin portability", () => {
   });
 
   test("export fails and releases the barrier when a plugin write cannot drain", async () => {
+    const controller = new AbortController();
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir, { drainTimeoutMs: 80 });
     await service.installPluginPackage(hangBundle());
@@ -623,6 +624,7 @@ describe("plugin portability", () => {
       input: {},
       orgId: ORG,
       pluginId: "hang",
+      signal: controller.signal,
     });
 
     await Bun.sleep(30);
@@ -639,6 +641,7 @@ describe("plugin portability", () => {
         input: {},
         orgId: ORG,
         pluginId: "hang",
+        signal: controller.signal,
       })
       .catch((error) => {
         rejected = error;
@@ -646,8 +649,19 @@ describe("plugin portability", () => {
     await Bun.sleep(40);
     expect(rejected).toBeUndefined();
 
-    hung.catch(() => undefined);
-    second.catch(() => undefined);
+    const settled = Promise.allSettled([hung, second]);
+    try {
+      await resetPluginAdmissionForTests();
+      expect(
+        await Promise.race([
+          settled.then(() => true),
+          Bun.sleep(500).then(() => false),
+        ])
+      ).toBe(true);
+    } finally {
+      controller.abort();
+      await settled;
+    }
   });
 
   test.each([false, true])(

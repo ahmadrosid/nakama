@@ -220,12 +220,12 @@ describe("plugin lifecycle", () => {
   let configDir: string;
 
   beforeEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     configDir = await mkdtemp(join(tmpdir(), "nakama-plugin-u4-"));
   });
 
   afterEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     await rm(configDir, { force: true, recursive: true });
   });
 

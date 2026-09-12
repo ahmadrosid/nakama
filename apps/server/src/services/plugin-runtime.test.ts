@@ -149,12 +149,12 @@ describe("plugin runtime", () => {
   let configDir: string;
 
   beforeEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     configDir = await mkdtemp(join(tmpdir(), "nakama-plugin-u3-"));
   });
 
   afterEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     await rm(configDir, { force: true, recursive: true });
   });
 
