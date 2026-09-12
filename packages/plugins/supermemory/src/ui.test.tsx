@@ -111,6 +111,11 @@ test("switching agents discards a late response from the previous agent", async 
   });
   expect(JSON.stringify(view.toJSON())).toContain("Bob only");
   expect(JSON.stringify(view.toJSON())).not.toContain("Private Alice");
+  expect(
+    view.root.findByType("SelectValue" as React.ElementType).props.children
+  ).toBe("Bob");
+  expect(button(view, "Previous")).toBeUndefined();
+  expect(button(view, "Next")).toBeUndefined();
 });
 
 test("an uncertain save retains its submission key when retried", async () => {
@@ -125,7 +130,7 @@ test("an uncertain save retains its submission key when retried", async () => {
     }
     return { items: [] };
   });
-  await act(async () => button(view, "Remember").props.onClick());
+  await act(async () => button(view, "Add memory").props.onClick());
   await act(async () =>
     view.root
       .findByType("Textarea" as React.ElementType)

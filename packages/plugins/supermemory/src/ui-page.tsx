@@ -92,22 +92,24 @@ export function createPage(ctx: Context) {
       error,
       loading,
     } = usePage(ctx);
+    const controls = (
+      <div className="sm-row sm-controls">
+        {configured && <span className="sm-ready">Ready</span>}
+        {canConfigure && (
+          <Button onClick={() => setSettings(true)} variant="ghost">
+            Settings
+          </Button>
+        )}
+      </div>
+    );
     return (
-      <section className="sm-page sm-stack">
-        <header className="sm-row">
-          <h1 className="sm-title">Supermemory</h1>
-          {configured && <span>Ready</span>}
-          {canConfigure && (
-            <Button onClick={() => setSettings(true)} variant="outline">
-              Settings
-            </Button>
-          )}
-        </header>
+      <section aria-label="Supermemory" className="sm-page sm-stack">
+        {!configured && controls}
         {error && <p role="alert">{error}</p>}
         {loading ? (
           <p role="status">Loading…</p>
         ) : configured ? (
-          <Browser profiles={profiles} />
+          <Browser controls={controls} profiles={profiles} />
         ) : (
           <div className="sm-stack">
             <p role={worker?.state === "error" ? "alert" : "status"}>

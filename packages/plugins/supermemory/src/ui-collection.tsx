@@ -1,6 +1,7 @@
 /** @jsxRuntime classic */
 /** @jsx React.createElement */
 /** @jsxFrag React.Fragment */
+import type { ReactNode } from "react";
 import type { Context } from "./ui-context";
 import { createEditor } from "./ui-editor";
 import { createItems } from "./ui-items";
@@ -13,7 +14,11 @@ export function createCollection(ctx: Context) {
   function Collection({
     agentId,
     kind,
+    toolbar,
+    tabs,
   }: {
+    toolbar: ReactNode;
+    tabs: ReactNode;
     agentId: string;
     kind: "memory" | "knowledge";
   }) {
@@ -36,6 +41,13 @@ export function createCollection(ctx: Context) {
     } = model;
     return (
       <div className="sm-stack">
+        <div className="sm-row sm-toolbar">
+          {toolbar}
+          <Button disabled={busy} onClick={() => setEditing(true)}>
+            {memory ? "Add memory" : "Add text"}
+          </Button>
+        </div>
+        {tabs}
         <div className="sm-row">
           <form
             className="sm-search"
@@ -56,9 +68,6 @@ export function createCollection(ctx: Context) {
               Search
             </Button>
           </form>
-          <Button disabled={busy} onClick={() => setEditing(true)}>
-            {memory ? "Remember" : "Add text"}
-          </Button>
           <Button
             disabled={busy}
             onClick={() => {
@@ -73,8 +82,8 @@ export function createCollection(ctx: Context) {
         {error && <p role="alert">{error}</p>}
         {editing && <Editor model={model} />}
         <Items model={model} />
-        {!activeQuery && (
-          <div className="sm-row">
+        {!activeQuery && (page > 1 || hasMore) && (
+          <div className="sm-row sm-pagination">
             <Button
               disabled={page === 1 || busy}
               onClick={() => setPage((value) => value - 1)}

@@ -67,10 +67,12 @@ function createItems(ctx) {
     const { loading, items, activeQuery, memory, busy, act } = model;
     return loading ? /* @__PURE__ */ React.createElement("p", {
       role: "status"
-    }, "Loading…") : items.length === 0 ? /* @__PURE__ */ React.createElement("p", null, activeQuery ? "No matching results" : memory ? "No memories yet" : "No documents yet") : /* @__PURE__ */ React.createElement("ul", {
+    }, "Loading…") : items.length === 0 ? /* @__PURE__ */ React.createElement("p", {
+      className: "sm-empty"
+    }, activeQuery ? "No matching results" : memory ? "No memories yet" : "No documents yet") : /* @__PURE__ */ React.createElement("ul", {
       className: "sm-list"
     }, items.map((item) => /* @__PURE__ */ React.createElement("li", {
-      className: "sm-card",
+      className: "sm-item",
       key: item.id
     }, /* @__PURE__ */ React.createElement("div", {
       className: "sm-row"
@@ -351,7 +353,9 @@ function createCollection(ctx) {
   const Items = createItems(ctx);
   function Collection({
     agentId,
-    kind
+    kind,
+    toolbar,
+    tabs
   }) {
     const model = useCollection(ctx, agentId, kind);
     const {
@@ -373,6 +377,11 @@ function createCollection(ctx) {
     return /* @__PURE__ */ React.createElement("div", {
       className: "sm-stack"
     }, /* @__PURE__ */ React.createElement("div", {
+      className: "sm-row sm-toolbar"
+    }, toolbar, /* @__PURE__ */ React.createElement(Button, {
+      disabled: busy,
+      onClick: () => setEditing(true)
+    }, memory ? "Add memory" : "Add text")), tabs, /* @__PURE__ */ React.createElement("div", {
       className: "sm-row"
     }, /* @__PURE__ */ React.createElement("form", {
       className: "sm-search",
@@ -393,9 +402,6 @@ function createCollection(ctx) {
       variant: "outline"
     }, "Search")), /* @__PURE__ */ React.createElement(Button, {
       disabled: busy,
-      onClick: () => setEditing(true)
-    }, memory ? "Remember" : "Add text"), /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy,
       onClick: () => {
         setError("");
         setRevision((value) => value + 1);
@@ -407,8 +413,8 @@ function createCollection(ctx) {
       model
     }), /* @__PURE__ */ React.createElement(Items, {
       model
-    }), !activeQuery && /* @__PURE__ */ React.createElement("div", {
-      className: "sm-row"
+    }), !activeQuery && (page > 1 || hasMore) && /* @__PURE__ */ React.createElement("div", {
+      className: "sm-row sm-pagination"
     }, /* @__PURE__ */ React.createElement(Button, {
       disabled: page === 1 || busy,
       onClick: () => setPage((value) => value - 1),
@@ -434,36 +440,49 @@ function createBrowser(ctx) {
     SelectItem
   } = ctx.ui;
   const Collection = createCollection(ctx);
-  return function Browser({ profiles }) {
+  return function Browser({
+    profiles,
+    controls
+  }) {
     const [agentId, setAgentId] = React.useState(profiles[0]?.id ?? "");
     const [kind, setKind] = React.useState("memory");
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Select, {
+    const selector = /* @__PURE__ */ React.createElement(Select, {
       onValueChange: (value) => setAgentId(value ?? ""),
       value: agentId
     }, /* @__PURE__ */ React.createElement(SelectTrigger, {
       "aria-label": "Agent"
     }, /* @__PURE__ */ React.createElement(SelectValue, {
       placeholder: "Choose agent"
-    })), /* @__PURE__ */ React.createElement(SelectContent, null, profiles.map((profile) => /* @__PURE__ */ React.createElement(SelectItem, {
+    }, profiles.find((profile) => profile.id === agentId)?.name)), /* @__PURE__ */ React.createElement(SelectContent, null, profiles.map((profile) => /* @__PURE__ */ React.createElement(SelectItem, {
       key: profile.id,
       value: profile.id
-    }, profile.name)))), /* @__PURE__ */ React.createElement("div", {
+    }, profile.name))));
+    const tabs = /* @__PURE__ */ React.createElement("div", {
       "aria-label": "Collection",
-      className: "sm-row",
+      className: "sm-tabs",
       role: "group"
     }, /* @__PURE__ */ React.createElement(Button, {
       "aria-pressed": kind === "memory",
+      className: "sm-tab",
       onClick: () => setKind("memory"),
-      variant: kind === "memory" ? "default" : "ghost"
+      variant: "ghost"
     }, "Memory"), /* @__PURE__ */ React.createElement(Button, {
       "aria-pressed": kind === "knowledge",
+      className: "sm-tab",
       onClick: () => setKind("knowledge"),
-      variant: kind === "knowledge" ? "default" : "ghost"
-    }, "Knowledge")), agentId ? /* @__PURE__ */ React.createElement(Collection, {
+      variant: "ghost"
+    }, "Knowledge"));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, agentId ? /* @__PURE__ */ React.createElement(Collection, {
       agentId,
       key: `${agentId}:${kind}`,
-      kind
-    }) : /* @__PURE__ */ React.createElement("p", null, "No agents available"));
+      kind,
+      tabs,
+      toolbar: /* @__PURE__ */ React.createElement(React.Fragment, null, selector, controls)
+    }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", {
+      className: "sm-row"
+    }, selector, controls), /* @__PURE__ */ React.createElement("p", {
+      className: "sm-empty"
+    }, "No agents available")));
   };
 }
 
@@ -635,20 +654,23 @@ function createPage(ctx) {
       error,
       loading
     } = usePage(ctx);
-    return /* @__PURE__ */ React.createElement("section", {
-      className: "sm-page sm-stack"
-    }, /* @__PURE__ */ React.createElement("header", {
-      className: "sm-row"
-    }, /* @__PURE__ */ React.createElement("h1", {
-      className: "sm-title"
-    }, "Supermemory"), configured && /* @__PURE__ */ React.createElement("span", null, "Ready"), canConfigure && /* @__PURE__ */ React.createElement(Button, {
+    const controls = /* @__PURE__ */ React.createElement("div", {
+      className: "sm-row sm-controls"
+    }, configured && /* @__PURE__ */ React.createElement("span", {
+      className: "sm-ready"
+    }, "Ready"), canConfigure && /* @__PURE__ */ React.createElement(Button, {
       onClick: () => setSettings(true),
-      variant: "outline"
-    }, "Settings")), error && /* @__PURE__ */ React.createElement("p", {
+      variant: "ghost"
+    }, "Settings"));
+    return /* @__PURE__ */ React.createElement("section", {
+      "aria-label": "Supermemory",
+      className: "sm-page sm-stack"
+    }, !configured && controls, error && /* @__PURE__ */ React.createElement("p", {
       role: "alert"
     }, error), loading ? /* @__PURE__ */ React.createElement("p", {
       role: "status"
     }, "Loading…") : configured ? /* @__PURE__ */ React.createElement(Browser, {
+      controls,
       profiles
     }) : /* @__PURE__ */ React.createElement("div", {
       className: "sm-stack"
@@ -670,7 +692,7 @@ function createPage(ctx) {
 // src/ui.tsx
 var inject = ["slots", "host", "styles", "ui"];
 function apply(ctx) {
-  ctx.styles(".sm-page{max-width:960px;margin:0 auto;padding:24px;width:100%;box-sizing:border-box}.sm-stack{display:flex;flex-direction:column;gap:16px}.sm-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sm-title{flex:1;min-width:0;overflow-wrap:anywhere}.sm-page h1{font-size:24px;font-weight:600}.sm-search{display:flex;gap:8px;flex:1;min-width:180px}.sm-card{border:1px solid var(--border);border-radius:10px;padding:16px}.sm-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}.sm-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}.sm-source{font-size:13px;overflow-wrap:anywhere;opacity:.7}.sm-stack label{display:grid;gap:6px}@media(max-width:600px){.sm-page{padding:16px}.sm-search{flex-basis:100%}}");
+  ctx.styles('.sm-page{margin:0;padding:0;width:100%;box-sizing:border-box}.sm-stack{display:flex;flex-direction:column;gap:16px}.sm-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sm-title{flex:1;min-width:0;overflow-wrap:anywhere}.sm-toolbar{gap:12px}.sm-toolbar>[role=combobox]{width:auto;min-width:160px;max-width:100%}.sm-controls{margin-left:auto}.sm-ready{font-size:12px;color:var(--muted-foreground);display:inline-flex;align-items:center;gap:6px}.sm-ready:before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}.sm-tabs{display:flex;gap:20px;border-bottom:1px solid var(--border)}.sm-page .sm-tab{border-radius:0;border-bottom:2px solid transparent;padding:10px 0;height:auto;background:transparent;color:var(--muted-foreground)}.sm-page .sm-tab[aria-pressed=true]{border-bottom-color:var(--foreground);color:var(--foreground)}.sm-empty{padding:40px 0;text-align:center;color:var(--muted-foreground);font-size:14px}.sm-pagination{justify-content:flex-end;font-size:13px}.sm-search{display:flex;gap:8px;flex:1;min-width:180px}.sm-card{border:1px solid var(--border);border-radius:10px;padding:16px}.sm-list{list-style:none;margin:0;padding:0}.sm-item{padding:16px 0;border-bottom:1px solid var(--border)}.sm-item:first-child{border-top:1px solid var(--border)}.sm-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}.sm-source{font-size:13px;overflow-wrap:anywhere;opacity:.7}.sm-stack label{display:grid;gap:6px}@media(max-width:600px){.sm-toolbar{gap:8px}.sm-search{flex-basis:100%}}');
   ctx.slots.register("page", createPage(ctx));
 }
 export {

@@ -11,7 +11,7 @@ export function createItems(ctx: Context) {
     return loading ? (
       <p role="status">Loading…</p>
     ) : items.length === 0 ? (
-      <p>
+      <p className="sm-empty">
         {activeQuery
           ? "No matching results"
           : memory
@@ -21,7 +21,7 @@ export function createItems(ctx: Context) {
     ) : (
       <ul className="sm-list">
         {items.map((item) => (
-          <li className="sm-card" key={item.id}>
+          <li className="sm-item" key={item.id}>
             <div className="sm-row">
               <strong className="sm-title">{item.title}</strong>
               <span>
