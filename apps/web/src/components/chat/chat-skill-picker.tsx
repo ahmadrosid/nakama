@@ -62,7 +62,7 @@ export function ChatSkillPicker({
   return (
     <div
       aria-label="Available slash commands and skills"
-      className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-md overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+      className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-md overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-sm"
       role="listbox"
     >
       {suggestions.length === 0 ? (

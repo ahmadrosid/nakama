@@ -1,4 +1,10 @@
+import uFuzzy from "@leeoniya/ufuzzy";
 import type { SkillSummary } from "@nakama/core/contract";
+
+const commandSearch = new uFuzzy({
+  compare: () => 0,
+  intraIns: Number.POSITIVE_INFINITY,
+});
 
 export interface SkillSlashRange {
   end: number;
@@ -12,7 +18,7 @@ export interface SkillTokenRange {
   start: number;
 }
 
-export type ComposerAddCommandAction = "add-mcp" | "add-tool";
+export type ComposerAddCommandAction = "add-mcp" | "add-tool" | "add-plugin";
 
 export interface ReservedSlashCommand {
   action?: ComposerAddCommandAction;
@@ -43,6 +49,11 @@ export const RESERVED_COMPOSER_SLASH_COMMANDS: ReservedSlashCommand[] = [
 
 /** Opens a dialog instead of inserting text. Shown when the user can assign tools. */
 export const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
+  {
+    action: "add-plugin",
+    description: "Enable a plugin for this agent",
+    name: "add-plugin",
+  },
   {
     action: "add-tool",
     description: "Assign a tool to this agent",
@@ -94,10 +105,18 @@ export function filterReservedSlashCommands(
     return [...commands];
   }
 
-  // Name-prefix only — description matching made "/re" steal focus via "reusable".
-  return commands.filter((command) =>
-    command.name.toLowerCase().startsWith(normalized)
+  // Search names only: description matches can steal focus from commands.
+  const needle = normalized.replace(/[-_]/g, "");
+  if (!needle) {
+    return [];
+  }
+  const [indices, info, order] = commandSearch.search(
+    commands.map((command) => command.name.toLowerCase().replace(/[-_]/g, "")),
+    needle
   );
+  const matches =
+    info && order ? order.map((index) => info.idx[index]) : indices;
+  return (matches ?? []).map((index) => commands[index]);
 }
 
 export function matchComposerAddCommand(
