@@ -7,10 +7,6 @@ export function createItems(ctx: Context) {
   const React = ctx.React;
   const {
     Button,
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -27,32 +23,33 @@ export function createItems(ctx: Context) {
   }) {
     const { busy, act, memory } = model;
     const [dialog, setDialog] = React.useState<"delete" | null>(null);
-    const Action = memory ? Button : DropdownMenuItem;
     const controls = (
       <>
-        {" "}
-        <Action
+        <Button
+          className={
+            memory ? undefined : "text-destructive hover:text-destructive"
+          }
           disabled={busy}
           onClick={() => {
             setDialog("delete");
           }}
-          variant={memory ? "ghost" : "destructive"}
+          variant="ghost"
         >
           {item.state === "deleting"
             ? "Retry removal"
             : memory
               ? "Forget"
               : "Delete"}
-        </Action>
+        </Button>
         {["unknown", "pending", "submitting"].includes(item.state) && (
-          <Action
+          <Button
             disabled={busy}
             onClick={() => {
               void act(item, false);
             }}
           >
             Check status
-          </Action>
+          </Button>
         )}
       </>
     );
@@ -93,20 +90,20 @@ export function createItems(ctx: Context) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        {memory ? (
-          controls
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={`Actions for ${item.title}`}
-              disabled={busy}
-              render={<Button size="icon" variant="ghost" />}
-            >
-              <span aria-hidden="true">⋯</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">{controls}</DropdownMenuContent>
-          </DropdownMenu>
+        {!memory && (
+          <Button
+            render={
+              <a
+                aria-label={`View ${item.title}`}
+                href={`/plugins/supermemory?agent=${encodeURIComponent(model.agentId)}&document=${encodeURIComponent(item.id)}`}
+              />
+            }
+            variant="outline"
+          >
+            View
+          </Button>
         )}
+        {controls}
       </div>
     );
   }

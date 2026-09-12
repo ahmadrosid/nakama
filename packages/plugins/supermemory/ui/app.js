@@ -64,10 +64,6 @@ function createItems(ctx) {
   const React = ctx.React;
   const {
     Button,
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -81,14 +77,14 @@ function createItems(ctx) {
   }) {
     const { busy, act, memory } = model;
     const [dialog, setDialog] = React.useState(null);
-    const Action = memory ? Button : DropdownMenuItem;
-    const controls = /* @__PURE__ */ React.createElement(React.Fragment, null, " ", /* @__PURE__ */ React.createElement(Action, {
+    const controls = /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Button, {
+      className: memory ? undefined : "text-destructive hover:text-destructive",
       disabled: busy,
       onClick: () => {
         setDialog("delete");
       },
-      variant: memory ? "ghost" : "destructive"
-    }, item.state === "deleting" ? "Retry removal" : memory ? "Forget" : "Delete"), ["unknown", "pending", "submitting"].includes(item.state) && /* @__PURE__ */ React.createElement(Action, {
+      variant: "ghost"
+    }, item.state === "deleting" ? "Retry removal" : memory ? "Forget" : "Delete"), ["unknown", "pending", "submitting"].includes(item.state) && /* @__PURE__ */ React.createElement(Button, {
       disabled: busy,
       onClick: () => {
         act(item, false);
@@ -113,18 +109,13 @@ function createItems(ctx) {
         act(item, true);
       },
       variant: "destructive"
-    }, memory ? "Forget" : "Delete")))), memory ? controls : /* @__PURE__ */ React.createElement(DropdownMenu, null, /* @__PURE__ */ React.createElement(DropdownMenuTrigger, {
-      "aria-label": `Actions for ${item.title}`,
-      disabled: busy,
-      render: /* @__PURE__ */ React.createElement(Button, {
-        size: "icon",
-        variant: "ghost"
-      })
-    }, /* @__PURE__ */ React.createElement("span", {
-      "aria-hidden": "true"
-    }, "⋯")), /* @__PURE__ */ React.createElement(DropdownMenuContent, {
-      align: "end"
-    }, controls)));
+    }, memory ? "Forget" : "Delete")))), !memory && /* @__PURE__ */ React.createElement(Button, {
+      render: /* @__PURE__ */ React.createElement("a", {
+        "aria-label": `View ${item.title}`,
+        href: `/plugins/supermemory?agent=${encodeURIComponent(model.agentId)}&document=${encodeURIComponent(item.id)}`
+      }),
+      variant: "outline"
+    }, "View"), controls);
   }
   function DocumentTable({ model }) {
     return /* @__PURE__ */ React.createElement("div", {
@@ -839,7 +830,7 @@ function createPage(ctx) {
 // src/ui.tsx
 var inject = ["slots", "host", "styles", "ui"];
 function apply(ctx) {
-  ctx.styles('.sm-page{margin:0;padding:0;width:100%;box-sizing:border-box}.sm-stack{display:flex;flex-direction:column;gap:16px}.sm-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sm-title{flex:1;min-width:0;overflow-wrap:anywhere}.sm-toolbar{gap:12px}.sm-toolbar>[role=combobox]{width:auto;min-width:160px;max-width:100%}.sm-controls{margin-left:auto}.sm-ready{font-size:12px;color:var(--muted-foreground);display:inline-flex;align-items:center;gap:6px}.sm-ready:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--color-emerald-500,#10b981)}.sm-tabs{display:flex;gap:20px;border-bottom:1px solid var(--border)}.sm-page .sm-tab{border-radius:0;border-bottom:2px solid transparent;padding:10px 0;height:auto;background:transparent;color:var(--muted-foreground)}.sm-page .sm-tab[aria-pressed=true]{border-bottom-color:var(--foreground);color:var(--foreground)}.sm-empty{padding:40px 0;text-align:center;color:var(--muted-foreground);font-size:14px}.sm-pagination{justify-content:flex-end;font-size:13px}.sm-search{display:flex;gap:8px;flex:1;min-width:180px}.sm-card{border:1px solid var(--border);border-radius:10px;padding:16px}.sm-list{list-style:none;margin:0;padding:0}.sm-item{padding:16px 0;border-bottom:1px solid var(--border)}.sm-item:first-child{border-top:1px solid var(--border)}.sm-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}.sm-source{font-size:13px;overflow-wrap:anywhere;opacity:.7}.sm-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}.sm-table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}.sm-table th{font-weight:500;color:var(--muted-foreground);font-size:12px}.sm-table th,.sm-table td{padding:12px 16px;vertical-align:middle}.sm-table thead,.sm-table tbody tr:not(:last-child){border-bottom:1px solid var(--border)}.sm-table th:first-child{width:100%}.sm-table td:first-child{min-width:220px;overflow-wrap:anywhere}.sm-document-name{font-weight:500;text-decoration:none;color:inherit}.sm-document-name:hover{text-decoration:underline}.sm-document-name:focus-visible{outline:2px solid var(--ring);outline-offset:4px}.sm-table .sm-source{white-space:nowrap;overflow-wrap:normal}.sm-table tbody tr:hover{background:var(--muted)}.sm-table .sm-excerpt{font-size:13px;color:var(--muted-foreground);margin:6px 0 0}.sm-table td:last-child{width:56px;padding:8px 12px}.sm-table td:last-child .sm-row{justify-content:flex-end}.sm-table .sm-excerpt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.sm-document-status{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-transform:capitalize;font-size:12px;color:var(--muted-foreground)}.sm-document-status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}.sm-document-status[data-state=ready]{color:var(--color-emerald-500,#10b981)}.sm-stack label{display:grid;gap:6px}@media(max-width:600px){.sm-toolbar{gap:8px}.sm-search{flex-basis:100%}}');
+  ctx.styles('.sm-page{margin:0;padding:0;width:100%;box-sizing:border-box}.sm-stack{display:flex;flex-direction:column;gap:16px}.sm-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sm-title{flex:1;min-width:0;overflow-wrap:anywhere}.sm-toolbar{gap:12px}.sm-toolbar>[role=combobox]{width:auto;min-width:160px;max-width:100%}.sm-controls{margin-left:auto}.sm-ready{font-size:12px;color:var(--muted-foreground);display:inline-flex;align-items:center;gap:6px}.sm-ready:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--color-emerald-500,#10b981)}.sm-tabs{display:flex;gap:20px;border-bottom:1px solid var(--border)}.sm-page .sm-tab{border-radius:0;border-bottom:2px solid transparent;padding:10px 0;height:auto;background:transparent;color:var(--muted-foreground)}.sm-page .sm-tab[aria-pressed=true]{border-bottom-color:var(--foreground);color:var(--foreground)}.sm-empty{padding:40px 0;text-align:center;color:var(--muted-foreground);font-size:14px}.sm-pagination{justify-content:flex-end;font-size:13px}.sm-search{display:flex;gap:8px;flex:1;min-width:180px}.sm-card{border:1px solid var(--border);border-radius:10px;padding:16px}.sm-list{list-style:none;margin:0;padding:0}.sm-item{padding:16px 0;border-bottom:1px solid var(--border)}.sm-item:first-child{border-top:1px solid var(--border)}.sm-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}.sm-source{font-size:13px;overflow-wrap:anywhere;opacity:.7}.sm-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}.sm-table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}.sm-table th{font-weight:500;color:var(--muted-foreground);font-size:12px}.sm-table th,.sm-table td{padding:12px 16px;vertical-align:middle}.sm-table thead,.sm-table tbody tr:not(:last-child){border-bottom:1px solid var(--border)}.sm-table th:first-child{width:100%}.sm-table td:first-child{min-width:220px;overflow-wrap:anywhere}.sm-document-name{font-weight:500;text-decoration:none;color:inherit}.sm-document-name:hover{text-decoration:underline}.sm-document-name:focus-visible{outline:2px solid var(--ring);outline-offset:4px}.sm-table .sm-source{white-space:nowrap;overflow-wrap:normal}.sm-table tbody tr:hover{background:var(--muted)}.sm-table .sm-excerpt{font-size:13px;color:var(--muted-foreground);margin:6px 0 0}.sm-table td:last-child{width:56px;padding:8px 12px}.sm-table td:last-child .sm-row{justify-content:flex-end;flex-wrap:nowrap;gap:8px}.sm-table .sm-excerpt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.sm-document-status{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-transform:capitalize;font-size:12px;color:var(--muted-foreground)}.sm-document-status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}.sm-document-status[data-state=ready]{color:var(--color-emerald-500,#10b981)}.sm-stack label{display:grid;gap:6px}@media(max-width:600px){.sm-toolbar{gap:8px}.sm-search{flex-basis:100%}}');
   ctx.slots.register("page", createPage(ctx));
 }
 export {

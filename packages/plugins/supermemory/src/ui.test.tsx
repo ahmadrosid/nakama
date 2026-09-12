@@ -322,8 +322,7 @@ test("document links preserve agent context and cancelling delete preserves the 
     view.root
       .findAll(
         (node) =>
-          String(node.type) === "DropdownMenuItem" &&
-          node.props.children === "Delete"
+          String(node.type) === "Button" && node.props.children === "Delete"
       )[0]!
       .props.onClick()
   );
