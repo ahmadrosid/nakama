@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { resolve } from "node:path";
 import type { OrgRole } from "@nakama/core";
 import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
@@ -774,7 +774,12 @@ describe("plugin HTTP API", () => {
   test.each(["workflows", "supermemory"])(
     "org admin installs official %s; member and CSRF failures are blocked",
     async (pluginId) => {
+      const workerManager = {
+        registerPluginWorkers: mock(async () => {}),
+        unregisterPluginWorkers: mock(async () => {}),
+      };
       const { app, authService, databaseAdapter } = createApp({
+        workerManager,
         officialPackagesDir: resolve(
           import.meta.dir,
           "../../../../../packages/plugins"
@@ -809,6 +814,12 @@ describe("plugin HTTP API", () => {
       ).toBe(403);
       const installed = await jsonRequest(app, path, admin, { method: "POST" });
       expect(installed.status).toBe(200);
+      if (pluginId === "supermemory") {
+        expect(workerManager.registerPluginWorkers).toHaveBeenCalledWith(
+          expect.objectContaining({ orgId, pluginId }),
+          true
+        );
+      }
       const install = (await installed.json()).install;
       expect(install.lifecycleState).toBe("enabled");
       const reinstallPath = `/v1/plugins/official/${pluginId}/reinstall`;

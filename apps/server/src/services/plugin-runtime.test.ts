@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -160,11 +160,16 @@ describe("plugin runtime", () => {
 
   test("official Supermemory retains its private dataset across reinstall and uninstall", async () => {
     const db = createInMemoryDatabaseAdapter();
+    const workerManager = {
+      registerPluginWorkers: mock(async () => {}),
+      unregisterPluginWorkers: mock(async () => {}),
+    };
     const service = new PluginService(db, configDir, {
       officialPackagesDir: fileURLToPath(
         new URL("../../../../packages/plugins", import.meta.url)
       ),
       onHostRequest: async () => [{ id: "agent", name: "Agent" }],
+      workerManager,
     });
     const actor = { id: "admin", role: "admin" as const };
     const invoke = (actionKey: string, input: Record<string, unknown> = {}) =>
@@ -177,6 +182,10 @@ describe("plugin runtime", () => {
         pluginId: "supermemory",
       });
     await service.installOfficialPlugin("org_a", "supermemory", actor);
+    expect(workerManager.registerPluginWorkers).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org_a", pluginId: "supermemory" }),
+      true
+    );
     expect((await invoke("get_settings")).result).toEqual({
       configured: false,
       url: "",
