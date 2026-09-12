@@ -803,10 +803,6 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
 ]);
 
-/** Used when neither the instance entry nor the catalog knows the model. */
-const FALLBACK_CONTEXT_WINDOW = 128_000;
-const FALLBACK_MAX_OUTPUT_TOKENS = 8192;
-
 export const AVAILABLE_MODELS: ProviderModelOption[] = [
   ...BASE_MODELS,
   ...deriveChatgptModels(BASE_MODELS),
@@ -916,14 +912,9 @@ export function resolveModelLimits(
   const custom = findCustomModel(customModels, modelId);
 
   return {
-    contextWindow:
-      custom?.contextWindow ??
-      catalog?.contextWindow ??
-      FALLBACK_CONTEXT_WINDOW,
+    contextWindow: custom?.contextWindow ?? catalog?.contextWindow ?? 128_000,
     maxOutputTokens:
-      custom?.maxOutputTokens ??
-      catalog?.maxOutputTokens ??
-      FALLBACK_MAX_OUTPUT_TOKENS,
+      custom?.maxOutputTokens ?? catalog?.maxOutputTokens ?? 8192,
   };
 }
 
