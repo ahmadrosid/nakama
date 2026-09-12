@@ -29,6 +29,7 @@ import {
   Download04Icon,
 } from "hugeicons-react";
 import { type SyntheticEvent, useState } from "react";
+import { useAuth } from "@/context/use-auth";
 import {
   useAgentBrowserSettings,
   useInstallAgentBrowser,
@@ -847,6 +848,8 @@ export function SkillAssignPicker({
   onAssignBash,
   className,
 }: SkillAssignPickerProps) {
+  const { user } = useAuth();
+  const canInstallAgentBrowser = user?.isPlatformAdmin === true;
   const [open, setOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{
     id: string;
@@ -887,7 +890,12 @@ export function SkillAssignPicker({
 
   function handleInstallAgentBrowser(event: SyntheticEvent) {
     stopCommandItemSelect(event);
-    if (disabled || installingAgentBrowser || !bashAssigned) {
+    if (
+      disabled ||
+      !canInstallAgentBrowser ||
+      installingAgentBrowser ||
+      !bashAssigned
+    ) {
       return;
     }
 
@@ -962,7 +970,9 @@ export function SkillAssignPicker({
           <SkillAssignDialogBody
             agentBrowserInstallError={agentBrowserInstallError}
             agentBrowserInstallProgress={agentBrowserInstallProgress}
-            agentBrowserNeedsInstall={agentBrowserNeedsInstall}
+            agentBrowserNeedsInstall={
+              agentBrowserNeedsInstall && canInstallAgentBrowser
+            }
             agentBrowserReady={agentBrowserSettings?.ready}
             assigningBash={assigningBash}
             availableSkills={availableSkills}
@@ -991,7 +1001,10 @@ export function SkillAssignPicker({
             setDeleting={setDeleting}
             setOpen={setOpen}
             setPendingDelete={setPendingDelete}
-            showAgentBrowserPrereqs={showAgentBrowserPrereqs}
+            showAgentBrowserPrereqs={
+              showAgentBrowserPrereqs &&
+              (bashNeedsAssign || canInstallAgentBrowser)
+            }
           />
         </DialogContent>
       </Dialog>

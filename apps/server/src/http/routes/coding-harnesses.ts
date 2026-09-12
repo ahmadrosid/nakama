@@ -7,7 +7,7 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminOrPlatformAdminFromContext,
+  requirePlatformAdminFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -31,7 +31,7 @@ export function registerCodingHarnessSettingsRoutes(
   app.put("/v1/settings/coding-harnesses", async (c) => {
     // Workspace-global, same bar as other install-wide settings (#305).
     // Per-org isolation of this flag is #307.
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<{ providerPassthroughEnabled?: boolean }>(
       c.req.raw
     );

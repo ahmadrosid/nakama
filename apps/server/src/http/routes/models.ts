@@ -1636,7 +1636,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/email", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateEmailSettingsRequest>(c.req.raw);
 
     try {
@@ -1651,7 +1651,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/email/test", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const body = await readOptionalJson<SendEmailTestRequest>(c.req.raw, {});
 
     try {
@@ -1697,7 +1697,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/agent-browser/install", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     return streamAgentBrowserInstall(
       async (send, signal) => {

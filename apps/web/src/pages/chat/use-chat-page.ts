@@ -323,11 +323,12 @@ export function useChatPage() {
 
   const readOnlySession = isReadOnlySessionChannel(sessionChannel);
   const showThinking = shouldShowThinkingEffort(activeModelSupportsThinking);
-  const thinkingEffortVisible =
-    canManageInstallSettings &&
-    shouldShowThinkingEffort(activeModelSupportsThinking);
+  const thinkingEffortVisible = shouldShowThinkingEffort(
+    activeModelSupportsThinking
+  );
   const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
   const thinkingEffortDisabled =
+    !canManageInstallSettings ||
     busy ||
     thinkingSettingsLoading ||
     saveThinkingSettingsMutation.isPending ||

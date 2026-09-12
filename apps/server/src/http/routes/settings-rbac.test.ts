@@ -71,6 +71,18 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
     path: "/v1/settings/web-search",
   },
   {
+    body: { smtpHost: "smtp.example.com" },
+    method: "PUT",
+    path: "/v1/settings/email",
+  },
+  { method: "POST", path: "/v1/settings/email/test" },
+  { method: "POST", path: "/v1/settings/agent-browser/install" },
+  {
+    body: { providerPassthroughEnabled: false },
+    method: "PUT",
+    path: "/v1/settings/coding-harnesses",
+  },
+  {
     body: { dsn: "https://publickey@errors.example.com/42" },
     method: "PUT",
     path: "/v1/settings/error-tracking",
