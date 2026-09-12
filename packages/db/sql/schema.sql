@@ -337,6 +337,7 @@ CREATE TABLE IF NOT EXISTS org_memory_proposals (
 CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
 
 CREATE TABLE IF NOT EXISTS skill_proposals (
+  supporting_files TEXT,
   id TEXT PRIMARY KEY NOT NULL,
   org_id TEXT NOT NULL,
   profile_id TEXT NOT NULL,

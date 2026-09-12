@@ -44,6 +44,7 @@ export interface StageSkillProposalInput {
   relativePath?: string;
   sessionId?: string | null;
   skillName?: string;
+  supportingFiles?: StoredSkillProposal["supportingFiles"];
 }
 
 export interface StageSkillProposalResult {
@@ -168,7 +169,13 @@ export class SkillProposalService {
         orgId,
         proposal.profileId,
         content,
-        { changeMeta }
+        {
+          changeMeta,
+          supportingFiles: proposal.supportingFiles?.map((file) => ({
+            content: Buffer.from(file.contentBase64, "base64"),
+            path: file.path,
+          })),
+        }
       );
     } else if (proposal.action === "patch") {
       const oldString = proposal.patchOldString;
@@ -293,12 +300,29 @@ export class SkillProposalService {
       throw new NakamaApiError("content is required for create.", 400);
     }
     this.assertContentSize(content);
-
-    const { name } = parseRawProfileSkillContent(
+    let supportingBytes = 0;
+    if ((input.supportingFiles?.length ?? 0) > 500) {
+      throw new NakamaApiError("Too many supporting files.", 400);
+    }
+    const parsed = parseRawProfileSkillContent(
       content,
       input.orgId,
       input.profileId
     );
+    for (const file of input.supportingFiles ?? []) {
+      resolveProfileSkillSupportingFilePath(
+        input.orgId,
+        input.profileId,
+        parsed.name,
+        file.path
+      );
+      supportingBytes += Buffer.byteLength(file.contentBase64, "base64");
+    }
+    if (supportingBytes > 10 * 1024 * 1024) {
+      throw new NakamaApiError("Skill supporting files are too large.", 400);
+    }
+
+    const { name } = parsed;
 
     const db = this.requireDatabase();
     const existingByName = await db.getSkillByName(name, input.orgId);
@@ -645,6 +669,7 @@ export class SkillProposalService {
       sessionId: input.sessionId ?? null,
       skillName: input.skillName,
       status: "pending",
+      supportingFiles: input.supportingFiles ?? null,
     };
     await db.createSkillProposal(proposal);
     return proposal;

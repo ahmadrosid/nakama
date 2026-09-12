@@ -539,6 +539,9 @@ function migrateSkillProposalsTable(db: Database): void {
   if (!names.has("relative_path")) {
     db.exec("ALTER TABLE skill_proposals ADD COLUMN relative_path TEXT;");
   }
+  if (!names.has("supporting_files")) {
+    db.exec("ALTER TABLE skill_proposals ADD COLUMN supporting_files TEXT;");
+  }
   if (!names.has("consolidate_loser_skill_names")) {
     db.exec(
       "ALTER TABLE skill_proposals ADD COLUMN consolidate_loser_skill_names TEXT;"

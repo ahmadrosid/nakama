@@ -255,7 +255,8 @@ export async function writeProfileSkillSupportingFile(options: {
   profileId: string;
   name: string;
   relativePath: string;
-  content: string;
+  content: string | Uint8Array;
+  overwrite?: boolean;
 }): Promise<{ absolutePath: string; relativePath: string }> {
   const { absolutePath, relativePath } = resolveProfileSkillSupportingFilePath(
     options.orgId,
@@ -266,7 +267,9 @@ export async function writeProfileSkillSupportingFile(options: {
 
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await assertSupportingPathIsNotSymlink(absolutePath);
-  await writeFile(absolutePath, options.content, "utf8");
+  await writeFile(absolutePath, options.content, {
+    flag: options.overwrite === false ? "wx" : "w",
+  });
 
   return { absolutePath, relativePath };
 }

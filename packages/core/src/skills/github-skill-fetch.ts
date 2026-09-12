@@ -78,6 +78,155 @@ export async function fetchGitHubSkillMarkdown(url: string): Promise<string> {
   return new TextDecoder().decode(bytes);
 }
 
+export interface GitHubSkillBundle {
+  content: string;
+  files: { path: string; content: Uint8Array }[];
+}
+
+/** Fetch the complete skill directory before publishing any of it locally. */
+export async function fetchGitHubSkillBundle(
+  url: string
+): Promise<GitHubSkillBundle> {
+  try {
+    return await downloadGitHubSkillBundle(url);
+  } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
+    throw new NakamaApiError(
+      error instanceof Error
+        ? error.message
+        : "Failed to download GitHub skill.",
+      400
+    );
+  }
+}
+
+async function downloadGitHubSkillBundle(
+  url: string
+): Promise<GitHubSkillBundle> {
+  const input = new URL(url);
+  if (!["http:", "https:"].includes(input.protocol)) {
+    throw new Error("GitHub skill URL must use http or https.");
+  }
+  const parts = input.pathname.split("/").filter(Boolean);
+  if (
+    ["github.com", "www.github.com"].includes(input.hostname) &&
+    parts.length === 2
+  ) {
+    const repo = (await fetchGitHubJson(
+      `https://api.github.com/repos/${parts.join("/")}`
+    )) as { default_branch: string };
+    url = `https://github.com/${parts.join("/")}/blob/${encodeURIComponent(repo.default_branch)}/SKILL.md`;
+  }
+  const raw = new URL(resolveGitHubSkillRawUrl(url));
+  const [owner, repo, ref, ...fileParts] = raw.pathname.slice(1).split("/");
+  const commit = (await fetchGitHubJson(
+    `https://api.github.com/repos/${owner}/${repo}/commits/${ref}`
+  )) as { sha: string };
+  if (!/^[a-f0-9]{40}$/.test(commit.sha)) {
+    throw new NakamaApiError("GitHub returned an invalid commit.", 400);
+  }
+  const tree = (await fetchGitHubJson(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/${commit.sha}?recursive=1`
+  )) as {
+    sha: string;
+    truncated?: boolean;
+    tree: { path: string; type: string; mode: string }[];
+  };
+  if (
+    tree.truncated ||
+    !Array.isArray(tree.tree) ||
+    !/^[a-f0-9]{40}$/.test(tree.sha)
+  ) {
+    throw new NakamaApiError(
+      "GitHub returned an incomplete skill file listing.",
+      400
+    );
+  }
+  const directory = fileParts.slice(0, -1).map(decodeURIComponent).join("/");
+  const prefix = directory ? `${directory}/` : "";
+  const entries = tree.tree.filter(
+    (entry) => entry.path.startsWith(prefix) && entry.type !== "tree"
+  );
+  if (entries.length > 500) {
+    throw new NakamaApiError("Skill contains too many files (max 500).", 400);
+  }
+  const files: GitHubSkillBundle["files"] = [];
+  let content: string | undefined;
+  let total = 0;
+  for (const entry of entries) {
+    const relativePath = entry.path.slice(prefix.length);
+    if (
+      relativePath
+        .split("/")
+        .some(
+          (part) =>
+            !part ||
+            part === "." ||
+            part === ".." ||
+            part.includes("\\") ||
+            part.includes("\0")
+        )
+    ) {
+      throw new NakamaApiError("Invalid skill file path.", 400);
+    }
+    if (entry.type !== "blob" || !["100644", "100755"].includes(entry.mode)) {
+      throw new NakamaApiError(
+        "Skill symlinks and submodules are not supported.",
+        400
+      );
+    }
+    const downloadUrl = `https://${RAW_HOST}/${owner}/${repo}/${commit.sha}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
+    if (relativePath === "SKILL.md") {
+      content = await fetchGitHubSkillMarkdown(downloadUrl);
+      total += new TextEncoder().encode(content).byteLength;
+      if (total > 10 * 1024 * 1024) {
+        throw new NakamaApiError("Skill is too large.", 400);
+      }
+      continue;
+    }
+    const response = await fetchGitHubResponse(downloadUrl);
+    const bytes = await readResponseBodyCapped(
+      response,
+      Math.min(10 * 1024 * 1024 - total, 5 * 1024 * 1024)
+    );
+    total += bytes.byteLength;
+    files.push({ content: bytes, path: relativePath });
+  }
+  if (content === undefined) {
+    throw new NakamaApiError("Skill directory does not contain SKILL.md.", 400);
+  }
+  return { content, files };
+}
+
+async function fetchGitHubResponse(url: string): Promise<Response> {
+  const response = await fetch(
+    url,
+    withDisabledFetchIdle({
+      headers: { "User-Agent": "nakama-skill-install" },
+      redirect: "error",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
+  );
+  if (!response.ok) {
+    throw new NakamaApiError(
+      `Failed to fetch skill from GitHub (HTTP ${response.status}).`,
+      400
+    );
+  }
+  return response;
+}
+
+async function fetchGitHubJson(url: string): Promise<unknown> {
+  const response = await fetchGitHubResponse(url);
+  return JSON.parse(
+    new TextDecoder().decode(
+      await readResponseBodyCapped(response, 10 * 1024 * 1024)
+    )
+  );
+}
+
 async function readResponseBodyCapped(
   response: Response,
   maxBytes: number

@@ -567,6 +567,7 @@ export interface StoredSkillProposal {
   sessionId: string | null;
   skillName: string;
   status: SkillProposalStatus;
+  supportingFiles?: { path: string; contentBase64: string }[] | null;
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
