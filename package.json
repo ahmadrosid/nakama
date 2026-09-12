@@ -25,6 +25,7 @@
     "dev:web": "bun run --filter @nakama/web dev",
     "dev:whatsapp": "bun run --filter @nakama/whatsapp dev",
     "doctor": "npx react-doctor@latest",
+    "dupes": "bunx jscpd@4 --format typescript,tsx",
     "fix": "ultracite fix",
     "postinstall": "bun install --cwd docs/website",
     "knip": "knip",

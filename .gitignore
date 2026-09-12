@@ -38,3 +38,5 @@ tmp-repro-artifacts/
 tmp-repro-setup-auth.mjs
 .tmp-test-config/
 .vscode/
+# jscpd duplication report
+.jscpd-report/
