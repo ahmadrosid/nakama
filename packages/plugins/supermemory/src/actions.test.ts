@@ -1,6 +1,13 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginExecutionContext } from "@nakama/core";
@@ -455,4 +462,46 @@ test("wrong-container documents cannot be returned or remotely deleted", async (
   expect(
     calls.filter((call) => call.path === "/v3/documents/doc")
   ).toHaveLength(2);
+});
+
+test("managed connections become available only after readiness and never expose the token", async () => {
+  const workerDir = join(dir, "workers", "server");
+  mkdirSync(workerDir, { recursive: true });
+  writeFileSync(
+    join(workerDir, "connection.json"),
+    JSON.stringify({ token: "private-token", url: "http://127.0.0.1:5678" })
+  );
+  writeFileSync(
+    join(workerDir, "status.json"),
+    JSON.stringify({ state: "starting" })
+  );
+  expect(await invoke("profiles")).toMatchObject({
+    canConfigure: false,
+    configured: false,
+    managed: true,
+  });
+  writeFileSync(
+    join(workerDir, "status.json"),
+    JSON.stringify({ state: "ready" })
+  );
+  const ready = await invoke("profiles");
+  expect(ready).toMatchObject({ configured: true, managed: true });
+  expect(JSON.stringify(ready)).not.toContain("private-token");
+  writeFileSync(
+    join(workerDir, "status.json"),
+    JSON.stringify({ message: "Startup failed", state: "error" })
+  );
+  expect(await invoke("profiles")).toMatchObject({
+    configured: false,
+    worker: { state: "error" },
+  });
+});
+
+test("existing external connections take precedence over managed state", async () => {
+  await configure();
+  expect(await invoke("profiles")).toMatchObject({
+    canConfigure: true,
+    configured: true,
+    managed: false,
+  });
 });

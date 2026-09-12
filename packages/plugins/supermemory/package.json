@@ -7,10 +7,11 @@
     "actions",
     "migrations",
     "ui",
-    "skills"
+    "skills",
+    "workers"
   ],
   "scripts": {
-    "build": "bun build ./src/actions.ts --outdir actions --target bun && bun build ./src/ui.tsx --outfile ui/app.js --target browser",
+    "build": "bun build ./src/actions.ts --outdir actions --target bun && bun build ./src/ui.tsx --outfile ui/app.js --target browser && bun build ./src/worker.ts --outfile workers/server.js --target bun",
     "test": "bun test src"
   },
   "devDependencies": {

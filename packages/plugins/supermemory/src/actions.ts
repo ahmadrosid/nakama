@@ -91,7 +91,16 @@ export async function run(input: Input, context: Context): Promise<unknown> {
   }
   const db = new Database(context.databasePath);
   db.exec("PRAGMA busy_timeout = 5000");
-  const settingsPath = join(context.dataDir, "connection.json");
+  const externalSettingsPath = join(context.dataDir, "connection.json");
+  const managed = !existsSync(externalSettingsPath);
+  const workerDir = join(context.dataDir, "workers", "server");
+  const settingsPath = managed
+    ? join(workerDir, "connection.json")
+    : externalSettingsPath;
+  let worker: { state: string; message?: string } = { state: "starting" };
+  if (managed && existsSync(join(workerDir, "status.json"))) {
+    worker = JSON.parse(readFileSync(join(workerDir, "status.json"), "utf8"));
+  }
   const action = context.actionKey;
   try {
     const namespace = db
@@ -114,7 +123,7 @@ export async function run(input: Input, context: Context): Promise<unknown> {
       })
       .immediate();
     function connection(): Connection | undefined {
-      if (!existsSync(settingsPath)) {
+      if ((managed && worker.state !== "ready") || !existsSync(settingsPath)) {
         return;
       }
       chmodSync(settingsPath, 0o600);
@@ -139,6 +148,9 @@ export async function run(input: Input, context: Context): Promise<unknown> {
       throw new Error("Admin access required");
     }
     if (action === "save_settings") {
+      if (managed && existsSync(workerDir)) {
+        throw new Error("This connection is managed by Nakama Workers");
+      }
       const url = normalizeUrl(required(input.url, "server URL", 2048));
       return db
         .transaction(() => {
@@ -157,12 +169,12 @@ export async function run(input: Input, context: Context): Promise<unknown> {
           if (!token || /\s/.test(token)) {
             throw new Error("A replacement token is required");
           }
-          const temporary = `${settingsPath}.${randomUUID()}.tmp`;
+          const temporary = `${externalSettingsPath}.${randomUUID()}.tmp`;
           writeFileSync(temporary, JSON.stringify({ token, url }), {
             flag: "wx",
             mode: 0o600,
           });
-          renameSync(temporary, settingsPath);
+          renameSync(temporary, externalSettingsPath);
           return { configured: true, url };
         })
         .immediate();
@@ -173,13 +185,20 @@ export async function run(input: Input, context: Context): Promise<unknown> {
     }
     if (action === "profiles") {
       return {
-        canConfigure: context.actor.role === "admin",
+        canConfigure: context.actor.role === "admin" && !managed,
+        managed,
+        ...(managed ? { worker } : {}),
         configured: !!config,
         profiles: await context.host({ op: "profiles" }),
       };
     }
     if (!config) {
-      throw new Error("Ask an admin to connect Supermemory in plugin settings");
+      throw new Error(
+        managed
+          ? worker.message ||
+              "Supermemory is starting. Check its status in Workers."
+          : "Ask an admin to connect Supermemory in plugin settings"
+      );
     }
     let client = new SupermemoryClient(config);
     if (action === "check_connection") {

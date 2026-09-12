@@ -43,6 +43,7 @@ import type {
 import * as pacote from "pacote";
 import { Parser } from "tar";
 import { spawnJsonTool } from "./custom-tool-subprocess";
+import type { WorkerManagerService } from "./worker-manager-service";
 
 const MAX_COMPRESSED_BYTES = 20 * 1024 * 1024;
 const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
@@ -86,6 +87,7 @@ interface PluginContributionSummary {
   hasDatabase: boolean;
   hasUi: boolean;
   skillKeys: string[];
+  workerKeys?: string[];
 }
 
 interface InspectedPackage {
@@ -139,7 +141,23 @@ export interface PluginServiceOptions {
     context: PluginExecutionContext,
     signal?: AbortSignal
   ) => Promise<unknown>;
+  workerManager?: Pick<
+    WorkerManagerService,
+    "registerPluginWorkers" | "unregisterPluginWorkers"
+  > &
+    Partial<
+      Pick<
+        WorkerManagerService,
+        | "pausePluginWorkers"
+        | "resumePluginWorkers"
+        | "removeOrphanPluginWorkers"
+      >
+    >;
 }
+
+const pluginWorkerManagers = new Set<
+  NonNullable<PluginServiceOptions["workerManager"]>
+>();
 
 let pluginLifecycleTestHooks: {
   afterMigrationBeforePublish?: () => Promise<void>;
@@ -195,6 +213,7 @@ const DEFAULT_DRAIN_TIMEOUT_MS = 6000;
 
 export function resetPluginAdmissionForTests(): void {
   admissionGates.clear();
+  pluginWorkerManagers.clear();
   pluginLifecycleTestHooks = {};
   exportPending = false;
   activeMutations = 0;
@@ -228,6 +247,10 @@ export async function runWithPluginExportBarrier<T>(
   }
   exportPending = true;
   const timeoutMs = options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS;
+  const paused: {
+    manager: NonNullable<PluginServiceOptions["workerManager"]>;
+    names: string[];
+  }[] = [];
   try {
     const deadline = Date.now() + timeoutMs;
     while (activeMutations > 0 && Date.now() < deadline) {
@@ -241,9 +264,17 @@ export async function runWithPluginExportBarrier<T>(
     if (gates.some((gate) => gate.active > 0)) {
       throw new PluginExportBarrierError();
     }
+    for (const manager of pluginWorkerManagers) {
+      if (manager.pausePluginWorkers) {
+        paused.push({ manager, names: await manager.pausePluginWorkers() });
+      }
+    }
     return await work();
   } finally {
     exportPending = false;
+    for (const { manager, names } of paused) {
+      await manager.resumePluginWorkers?.(names);
+    }
   }
 }
 
@@ -305,6 +336,9 @@ export class PluginService {
     }
     this.configDir = configDir;
     this.options = options;
+    if (options.workerManager?.pausePluginWorkers) {
+      pluginWorkerManagers.add(options.workerManager);
+    }
   }
 
   async previewPluginPackage(
@@ -452,7 +486,10 @@ export class PluginService {
     for (const file of ["package.json", PLUGIN_MANIFEST_FILENAME]) {
       files.set(file, await readFile(join(directory, file)));
     }
-    for (const folder of ["actions", "migrations", "ui", "skills"]) {
+    for (const folder of ["actions", "migrations", "ui", "skills", "workers"]) {
+      if (!(await pathExists(join(directory, folder)))) {
+        continue;
+      }
       for (const entry of await readdir(join(directory, folder), {
         recursive: true,
         withFileTypes: true,
@@ -841,6 +878,7 @@ export class PluginService {
           targetGeneration,
           version: install.selectedVersion,
         });
+        await this.startPluginWorkers(orgId, pluginId, release.manifest, true);
         await pluginLifecycleTestHooks.afterMigrationBeforePublish?.();
         await this.publishInstallation({
           databaseGeneration: targetGeneration,
@@ -872,6 +910,10 @@ export class PluginService {
           throw error;
         }
         if (!published) {
+          await this.options.workerManager?.unregisterPluginWorkers(
+            orgId,
+            pluginId
+          );
           await this.discardUnpublishedGeneration(
             orgId,
             pluginId,
@@ -932,6 +974,10 @@ export class PluginService {
       });
 
       await this.closePluginAdmission(orgId, pluginId);
+      await this.options.workerManager?.unregisterPluginWorkers(
+        orgId,
+        pluginId
+      );
 
       return this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
@@ -1267,6 +1313,68 @@ export class PluginService {
     } catch {
       return null;
     }
+  }
+
+  private async startPluginWorkers(
+    orgId: string,
+    pluginId: string,
+    manifest: PluginManifest,
+    start: boolean
+  ) {
+    if (!manifest.workers?.length) {
+      return;
+    }
+    if (!this.options.workerManager) {
+      throw new PluginHostError("workers_unavailable");
+    }
+    await this.options.workerManager.registerPluginWorkers(
+      {
+        configDir: this.configDir,
+        dataDir: getOrgPluginDataDir(orgId, pluginId, this.configDir),
+        orgId,
+        pluginId,
+        releaseDir: getPluginReleaseDir(
+          pluginId,
+          manifest.version,
+          this.configDir
+        ),
+        version: manifest.version,
+        workers: manifest.workers,
+      },
+      start
+    );
+  }
+
+  async recoverPluginWorkers(): Promise<void> {
+    for (const install of await this.db.listOrgPlugins()) {
+      if (install.lifecycleState !== "enabled" || !install.selectedVersion) {
+        continue;
+      }
+      try {
+        const release = await this.resolveApprovedRelease(
+          install.pluginId,
+          install.selectedVersion
+        );
+        if (!release) {
+          throw new PluginHostError("package_unavailable");
+        }
+        await this.startPluginWorkers(
+          install.orgId,
+          install.pluginId,
+          release.manifest,
+          false
+        );
+      } catch (error) {
+        console.warn(
+          "Could not recover plugin worker",
+          install.pluginId,
+          lifecycleErrorMessage(error)
+        );
+      }
+    }
+    await this.options.workerManager?.removeOrphanPluginWorkers?.(
+      this.configDir
+    );
   }
 
   async recoverInterruptedPluginOperations(): Promise<void> {
@@ -2010,6 +2118,9 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
   return {
     contributions: {
       actionKeys: inspected.manifest.actions.map((action) => action.key),
+      ...(inspected.manifest.workers?.length
+        ? { workerKeys: inspected.manifest.workers.map((worker) => worker.key) }
+        : {}),
       hasDatabase: Boolean(inspected.manifest.database?.migrations.length),
       hasUi: Boolean(inspected.manifest.ui),
       skillKeys: inspected.manifest.skills.map((skill) => skill.key),
@@ -2239,7 +2350,7 @@ function assertReferencedFilesExist(
       throw new PluginHostError("missing_referenced_file");
     }
   }
-  for (const action of manifest.actions) {
+  for (const action of [...manifest.actions, ...(manifest.workers ?? [])]) {
     if (!files.has(action.entry)) {
       throw new PluginHostError("missing_referenced_file");
     }

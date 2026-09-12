@@ -214,6 +214,10 @@ describe("plugin portability", () => {
           "../../../../packages/plugins"
         ),
         onHostRequest: async () => [{ id: "agent", name: "Agent" }],
+        workerManager: {
+          registerPluginWorkers: async () => {},
+          unregisterPluginWorkers: async () => {},
+        },
       };
       const service = new PluginService(source.adapter, configDir, options);
       await service.installOfficialPlugin(ORG, "supermemory", ACTOR);

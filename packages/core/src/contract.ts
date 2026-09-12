@@ -178,6 +178,13 @@ export interface WhatsAppWorkerStatus {
   running: boolean;
 }
 
+export interface PluginWorkerStatus {
+  label: string;
+  name: string;
+  pluginId: string;
+  process: WorkerProcessInfo;
+}
+
 export interface WorkerLogsResponse {
   stderr: string;
   stdout: string;
@@ -2671,6 +2678,7 @@ export interface PluginPackageRequest {
 export interface PluginPackagePreviewResponse {
   contributions: {
     actionKeys: string[];
+    workerKeys?: string[];
     hasDatabase: boolean;
     hasUi: boolean;
     skillKeys: string[];

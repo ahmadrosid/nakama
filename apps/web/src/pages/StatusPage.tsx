@@ -26,6 +26,7 @@ import {
   useRefreshSystemStatus,
   useSystemStatusQuery,
 } from "@/hooks/use-system-status";
+import { usePluginWorkers } from "@/hooks/use-worker-actions";
 import { formatUsd } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatProviderLabel } from "@/lib/models";
@@ -70,12 +71,60 @@ export function StatusPage() {
         </div>
       ) : null}
 
+      <PluginWorkersSection />
       {isLoading && !status ? (
         <StatusSkeleton />
       ) : status ? (
         <StatusDashboard canManageWorkers={canManageWorkers} status={status} />
       ) : null}
     </div>
+  );
+}
+
+function PluginWorkersSection() {
+  const { data = [], error } = usePluginWorkers();
+  const { user, activeOrg } = useAuth();
+  const canManage = user?.isPlatformAdmin || activeOrg?.role === "admin";
+  if (error) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {formatError(error)}
+      </p>
+    );
+  }
+  if (!data.length) {
+    return null;
+  }
+  return (
+    <section aria-label="Plugin workers" className={sectionClass}>
+      <h2 className="border-border border-b px-4 py-3 font-medium text-sm">
+        Plugin workers
+      </h2>
+      <ul className="divide-y divide-border">
+        {data.map((worker) => (
+          <li className="space-y-3 p-4" key={worker.name}>
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                className="font-medium text-sm"
+                to={`/plugins/${encodeURIComponent(worker.pluginId)}`}
+              >
+                {worker.label}
+              </Link>
+              <span className="text-muted-foreground text-xs capitalize">
+                {worker.process.status ?? "Unavailable"}
+              </span>
+            </div>
+            {canManage ? (
+              <WorkerActionBar
+                pm2Managed={worker.process.managed}
+                running={worker.process.status === "online"}
+                workerName={worker.name}
+              />
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -501,3 +501,25 @@ describe("derivePluginToolName", () => {
     expect(derivePluginToolName("notes", longKey)).toBeNull();
   });
 });
+
+test("worker manifests preserve declarations and reject unsafe or duplicate entries", () => {
+  const base = { ...identity, apiVersion: 1, minNakamaVersion: "0.1.0" };
+  const worker = {
+    entry: "workers/engine.js",
+    key: "engine",
+    name: "Memory engine",
+    useHostLlm: true,
+  };
+  const result = validatePluginManifest({ ...base, workers: [worker] });
+  expect(result.ok && result.manifest.workers).toEqual([worker]);
+  for (const workers of [
+    [worker, worker],
+    [{ ...worker, entry: "../outside.js" }],
+    [{ ...worker, entry: "/tmp/outside.js" }],
+    [{ ...worker, entry: "worker.ts" }],
+    [{ ...worker, key: "../engine" }],
+    [{ ...worker, useHostLlm: "yes" }],
+  ]) {
+    expect(validatePluginManifest({ ...base, workers }).ok).toBe(false);
+  }
+});

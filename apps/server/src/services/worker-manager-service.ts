@@ -1,11 +1,14 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
 import {
   type PlatformWorkerName,
+  type PluginWorkerContribution,
   readRuntimeServerUrl,
   readWorkerDesiredState,
+  resolvePluginReleaseEntry,
   setWorkerDesiredRunning,
 } from "@nakama/core";
 
@@ -25,6 +28,23 @@ const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
 
 const VALID_WORKERS = Object.keys(WORKER_SCRIPTS);
 
+export interface PluginWorkerRegistration {
+  configDir?: string;
+  dataDir: string;
+  orgId: string;
+  pluginId: string;
+  releaseDir: string;
+  version: string;
+  workers: PluginWorkerContribution[];
+}
+
+interface RegisteredPluginWorker {
+  contribution: PluginWorkerContribution;
+  directory: string;
+  registration: PluginWorkerRegistration;
+  script: string;
+}
+
 function promisifyPm2<T>(
   fn: (cb: (err: Error | null, result?: T) => void) => void
 ): Promise<T> {
@@ -40,11 +60,15 @@ function promisifyPm2<T>(
 }
 
 export class WorkerManagerService {
+  private readonly pluginWorkers = new Map<string, RegisteredPluginWorker>();
+  private pluginWorkersPaused = false;
+  private pm2Queue: Promise<unknown> = Promise.resolve();
   private pm2Module: typeof import("pm2") | null = null;
 
   constructor(
     private readonly projectRoot: string,
-    pm2?: typeof import("pm2")
+    pm2?: typeof import("pm2"),
+    private readonly getWorkerLlm?: () => unknown
   ) {
     this.pm2Module = pm2 ?? null;
   }
@@ -69,19 +93,260 @@ export class WorkerManagerService {
   private async withPm2<T>(
     action: (pm2: NonNullable<typeof import("pm2")>) => Promise<T>
   ): Promise<T> {
-    const pm2 = await this.ensurePm2();
+    const operation = this.pm2Queue
+      .catch(() => {})
+      .then(async () => {
+        const pm2 = await this.ensurePm2();
+        await promisifyPm2<void>((cb) => pm2.connect(cb));
+        try {
+          return await action(pm2);
+        } finally {
+          pm2.disconnect();
+        }
+      });
+    this.pm2Queue = operation;
+    return operation;
+  }
 
-    await promisifyPm2<void>((cb) => pm2.connect(cb));
-
-    try {
-      return await action(pm2);
-    } finally {
-      pm2.disconnect();
+  async registerPluginWorkers(
+    registration: PluginWorkerRegistration,
+    start: boolean
+  ): Promise<void> {
+    for (const contribution of registration.workers) {
+      const name =
+        "plugin-" +
+        createHash("sha256")
+          .update(
+            JSON.stringify([
+              registration.dataDir,
+              registration.orgId,
+              registration.pluginId,
+              contribution.key,
+            ])
+          )
+          .digest("hex")
+          .slice(0, 32);
+      const script = resolvePluginReleaseEntry(
+        registration.releaseDir,
+        contribution.entry
+      );
+      if (!existsSync(script)) {
+        throw new Error("Plugin worker entry is missing");
+      }
+      const directory = join(registration.dataDir, "workers", contribution.key);
+      await mkdir(directory, { mode: 0o700, recursive: true });
+      this.pluginWorkers.set(name, {
+        contribution,
+        directory,
+        registration,
+        script,
+      });
+      let desired = true;
+      try {
+        desired = JSON.parse(
+          await readFile(join(directory, "desired.json"), "utf8")
+        );
+        if (typeof desired !== "boolean") {
+          throw new Error("Invalid worker desired state");
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+      if (start) {
+        await this.startWorker(name);
+      } else if (desired) {
+        const process = (await this.listAllPm2Processes()).find(
+          (item) => item.name === name
+        );
+        if (
+          process?.pm2_env?.status !== "online" ||
+          process.pm2_env.NAKAMA_PLUGIN_VERSION !== registration.version
+        ) {
+          await this.startWorker(name);
+        }
+      }
     }
   }
 
+  private async deletePluginProcess(pm2: typeof import("pm2"), name: string) {
+    const existing = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+      pm2.describe(name, cb)
+    );
+    if (existing.length) {
+      await promisifyPm2<void>((cb) => pm2.delete(name, (error) => cb(error)));
+    }
+  }
+
+  async clearPluginWorkers() {
+    const registrations = [...this.pluginWorkers.values()].map(
+      (worker) => worker.registration
+    );
+    for (const registration of registrations) {
+      await this.unregisterPluginWorkers(
+        registration.orgId,
+        registration.pluginId
+      );
+    }
+  }
+
+  async removeOrphanPluginWorkers(configDir: string) {
+    await this.withPm2(async (pm2) => {
+      const processes = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+        pm2.list(cb)
+      );
+      for (const process of processes) {
+        if (
+          process.name?.startsWith("plugin-") &&
+          process.pm2_env?.NAKAMA_PLUGIN_WORKER_ROOT === configDir &&
+          !this.pluginWorkers.has(process.name)
+        ) {
+          await this.deletePluginProcess(pm2, process.name);
+        }
+      }
+    });
+  }
+
+  async pausePluginWorkers(): Promise<string[]> {
+    this.pluginWorkersPaused = true;
+    const running: string[] = [];
+    if (!this.pluginWorkers.size) {
+      return running;
+    }
+    try {
+      await this.withPm2(async (pm2) => {
+        const processes = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+          pm2.list(cb)
+        );
+        for (const [name] of this.pluginWorkers) {
+          const process = processes.find((item) => item.name === name);
+          if (process && process.pm2_env?.status !== "stopped") {
+            const shouldResume = process.pm2_env?.status !== "errored";
+            await promisifyPm2<void>((cb) =>
+              pm2.stop(name, (error) => cb(error))
+            );
+            if (shouldResume) {
+              running.push(name);
+            }
+          }
+        }
+      });
+      return running;
+    } catch (error) {
+      await this.resumePluginWorkers(running);
+      throw error;
+    }
+  }
+
+  async resumePluginWorkers(names: string[]): Promise<void> {
+    this.pluginWorkersPaused = false;
+    for (const name of names) {
+      if (this.pluginWorkers.has(name)) {
+        await this.startWorker(name);
+      }
+    }
+  }
+
+  isPluginWorkerForOrg(name: string, orgId: string): boolean {
+    return this.pluginWorkers.get(name)?.registration.orgId === orgId;
+  }
+
+  async unregisterPluginWorkers(
+    orgId: string,
+    pluginId: string
+  ): Promise<void> {
+    const entries = [...this.pluginWorkers].filter(
+      ([, worker]) =>
+        worker.registration.orgId === orgId &&
+        worker.registration.pluginId === pluginId
+    );
+    for (const [name, worker] of entries) {
+      // Remove admission before awaiting PM2 so a concurrent Start cannot resurrect it.
+      this.pluginWorkers.delete(name);
+      try {
+        await this.withPm2((pm2) => this.deletePluginProcess(pm2, name));
+      } catch (error) {
+        this.pluginWorkers.set(name, worker);
+        throw error;
+      }
+    }
+  }
+
+  async listPluginWorkers(orgId: string) {
+    const statuses = await this.getAllWorkerStatuses();
+    return [...this.pluginWorkers]
+      .filter(([, worker]) => worker.registration.orgId === orgId)
+      .map(([name, worker]) => ({
+        label: worker.contribution.name,
+        name,
+        pluginId: worker.registration.pluginId,
+        process: statuses[name]!,
+      }));
+  }
+
+  private async writePluginWorkerDesired(
+    worker: RegisteredPluginWorker,
+    desired: boolean
+  ) {
+    const path = join(worker.directory, "desired.json");
+    await writeFile(path + ".tmp", JSON.stringify(desired), { mode: 0o600 });
+    await rename(path + ".tmp", path);
+  }
+
+  private async startPluginWorker(
+    name: string,
+    worker: RegisteredPluginWorker
+  ) {
+    await this.withPm2(async (pm2) => {
+      if (this.pluginWorkersPaused || this.pluginWorkers.get(name) !== worker) {
+        throw new Error("Plugin worker is disabled");
+      }
+      const env = {
+        ...this.workerProcessEnv(),
+        NAKAMA_ORG_ID: worker.registration.orgId,
+        NAKAMA_PLUGIN_DATA_DIR: worker.registration.dataDir,
+        NAKAMA_PLUGIN_ID: worker.registration.pluginId,
+        NAKAMA_PLUGIN_VERSION: worker.registration.version,
+        NAKAMA_PLUGIN_WORKER_ROOT: worker.registration.configDir ?? "",
+        NAKAMA_WORKER_DATA_DIR: worker.directory,
+      };
+      if (worker.contribution.useHostLlm) {
+        const llm = this.getWorkerLlm?.();
+
+        await writeFile(
+          join(worker.directory, "llm.json"),
+          JSON.stringify(llm ?? null),
+          { mode: 0o600 }
+        );
+      }
+      await this.deletePluginProcess(pm2, name);
+      await promisifyPm2<void>((cb) =>
+        pm2.start(
+          {
+            args: ["run", worker.script],
+            autorestart: true,
+            cwd: worker.registration.dataDir,
+            env,
+            error: join(worker.directory, "stderr.log"),
+            exp_backoff_restart_delay: 1000,
+            interpreter: "none",
+            kill_timeout: 10_000,
+            max_restarts: 5,
+            min_uptime: 10_000,
+            name,
+            output: join(worker.directory, "stdout.log"),
+            script: process.env.NAKAMA_BUN_BIN ?? "bun",
+          },
+          (error) => cb(error)
+        )
+      );
+      await this.writePluginWorkerDesired(worker, true);
+    });
+  }
+
   isValidWorker(name: string): boolean {
-    return VALID_WORKERS.includes(name);
+    return VALID_WORKERS.includes(name) || this.pluginWorkers.has(name);
   }
 
   private resolveWorkerScript(name: string): string {
@@ -102,11 +367,19 @@ export class WorkerManagerService {
     pm2: NonNullable<typeof import("pm2")>,
     name: string
   ): Promise<void> {
-    await promisifyPm2<void>((cb) => pm2.stop(name, cb)).catch(() => {});
-    await promisifyPm2<void>((cb) => pm2.delete(name, cb)).catch(() => {});
+    await promisifyPm2<void>((cb) =>
+      pm2.stop(name, (error) => cb(error))
+    ).catch(() => {});
+    await promisifyPm2<void>((cb) =>
+      pm2.delete(name, (error) => cb(error))
+    ).catch(() => {});
   }
 
   async startWorker(name: string): Promise<void> {
+    const pluginWorker = this.pluginWorkers.get(name);
+    if (pluginWorker) {
+      return this.startPluginWorker(name, pluginWorker);
+    }
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
@@ -125,7 +398,7 @@ export class WorkerManagerService {
             name,
             script: "bun",
           },
-          cb
+          (error) => cb(error)
         )
       );
     });
@@ -135,12 +408,23 @@ export class WorkerManagerService {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
-
+    const pluginWorker = this.pluginWorkers.get(name);
     await this.withPm2(async (pm2) => {
-      await promisifyPm2<void>((cb) => pm2.stop(name, cb));
+      if (
+        pluginWorker &&
+        (this.pluginWorkersPaused ||
+          this.pluginWorkers.get(name) !== pluginWorker)
+      ) {
+        throw new Error("Plugin worker is disabled");
+      }
+      await promisifyPm2<void>((cb) => pm2.stop(name, (error) => cb(error)));
+      if (pluginWorker) {
+        await this.writePluginWorkerDesired(pluginWorker, false);
+      }
     });
-
-    await setWorkerDesiredRunning(name as PlatformWorkerName, false);
+    if (!pluginWorker) {
+      await setWorkerDesiredRunning(name as PlatformWorkerName, false);
+    }
   }
 
   async recoverDesiredWorkers(): Promise<void> {
@@ -196,9 +480,10 @@ export class WorkerManagerService {
     return {
       cpuPercent: match.monit?.cpu ?? null,
       managed: true,
-      memoryMb: match.monit
-        ? Math.round((match.monit.memory / 1024 / 1024) * 100) / 100
-        : null,
+      memoryMb:
+        match.monit?.memory === undefined
+          ? null
+          : Math.round((match.monit.memory / 1024 / 1024) * 100) / 100,
       status: mappedStatus,
       uptimeSeconds: match.pm2_env?.pm_uptime
         ? Math.round((Date.now() - match.pm2_env.pm_uptime) / 1000)
@@ -235,14 +520,17 @@ export class WorkerManagerService {
       const list = await this.listAllPm2Processes();
 
       return Object.fromEntries(
-        VALID_WORKERS.map((name) => {
+        [...VALID_WORKERS, ...this.pluginWorkers.keys()].map((name) => {
           const match = list.find((p) => p.name === name);
           return [name, this.pm2ProcessToInfo(match)];
         })
       );
     } catch {
       return Object.fromEntries(
-        VALID_WORKERS.map((name) => [name, this.pm2UnavailableInfo()])
+        [...VALID_WORKERS, ...this.pluginWorkers.keys()].map((name) => [
+          name,
+          this.pm2UnavailableInfo(),
+        ])
       );
     }
   }
@@ -278,7 +566,7 @@ export class WorkerManagerService {
     }
 
     await this.withPm2(async (pm2) => {
-      await promisifyPm2<void>((cb) => pm2.flush(name, cb));
+      await promisifyPm2<void>((cb) => pm2.flush(name, (error) => cb(error)));
     });
   }
 
@@ -322,7 +610,7 @@ async function readLastLines(path: string, lineCount: number): Promise<string> {
 }
 
 interface Pm2ProcessDescription {
-  monit?: { cpu: number; memory: number };
+  monit?: { cpu?: number; memory?: number };
   name?: string;
   pid?: number;
   pm_id?: number;
@@ -331,6 +619,7 @@ interface Pm2ProcessDescription {
     pm_uptime?: number;
     pm_out_log_path?: string;
     pm_err_log_path?: string;
-    [key: string]: unknown;
+    NAKAMA_PLUGIN_VERSION?: string;
+    NAKAMA_PLUGIN_WORKER_ROOT?: string;
   };
 }

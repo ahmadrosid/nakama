@@ -6,7 +6,7 @@
   "minNakamaVersion": "0.4.10",
   "author": "Nakama",
   "license": "MIT",
-  "description": "Explicit agent memories and searchable text knowledge with your Supermemory server.",
+  "description": "Explicit agent memories and searchable text knowledge with a Nakama-managed Supermemory server.",
   "actions": [
     {
       "key": "remember",
@@ -309,5 +309,13 @@
     "entryModule": "ui/app.js",
     "assetsDir": "ui",
     "pageLabel": "Supermemory"
-  }
+  },
+  "workers": [
+    {
+      "key": "server",
+      "name": "Supermemory",
+      "entry": "workers/server.js",
+      "useHostLlm": true
+    }
+  ]
 }

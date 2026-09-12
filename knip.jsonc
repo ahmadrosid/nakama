@@ -4,6 +4,8 @@
   "workspaces": {
     "packages/plugins/supermemory": {
       "entry": [
+        "src/worker.ts",
+        "workers/server.js",
         "src/actions.ts",
         "src/ui.tsx",
         "actions/actions.js",

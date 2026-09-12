@@ -468,6 +468,9 @@ export function formatPluginTrustLines(
     `Digest ${digest}`,
     contributions.hasUi ? "Includes a page" : "No page",
     contributions.hasDatabase ? "Owns a database" : "No database",
+    ...(contributions.workerKeys?.length
+      ? [`Workers ${contributions.workerKeys.join(", ")}`]
+      : []),
     contributions.actionKeys.length > 0
       ? `Actions ${contributions.actionKeys.join(", ")}`
       : "No actions",

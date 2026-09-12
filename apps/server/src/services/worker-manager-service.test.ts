@@ -559,3 +559,51 @@ describe("WorkerManagerService", () => {
     });
   });
 });
+
+test("plugin workers are isolated, recover desired state, and unregister without deleting data", async () => {
+  const pm2 = createMockPm2();
+  const service = new WorkerManagerService(projectRoot, pm2);
+  const registration = {
+    dataDir: join(configDir!, "notes-a"),
+    orgId: "org-a",
+    pluginId: "notes",
+    releaseDir: configDir!,
+    version: "1.0.0",
+    workers: [{ entry: "worker.js", key: "indexer", name: "Notes indexer" }],
+  };
+  await writeFile(join(configDir!, "worker.js"), "");
+  await service.registerPluginWorkers(registration, true);
+  const [a] = await service.listPluginWorkers("org-a");
+  expect(a!.name).toMatch(/^plugin-/);
+  expect(service.isPluginWorkerForOrg(a!.name, "org-b")).toBe(false);
+  await service.registerPluginWorkers(
+    { ...registration, dataDir: join(configDir!, "notes-b"), orgId: "org-b" },
+    true
+  );
+  const [b] = await service.listPluginWorkers("org-b");
+  expect(a!.name).not.toBe(b!.name);
+  pm2.list = mock((cb: (error: Error | null, list: unknown[]) => void) =>
+    cb(null, [
+      { name: a!.name, pm2_env: { status: "waiting restart" } },
+      { name: b!.name, pm2_env: { status: "stopped" } },
+    ])
+  );
+  const paused = await service.pausePluginWorkers();
+  expect(paused).toEqual([a!.name]);
+  expect(pm2.stop).toHaveBeenCalledWith(a!.name, expect.any(Function));
+  await expect(service.startWorker(b!.name)).rejects.toThrow("disabled");
+  await service.resumePluginWorkers(paused);
+  await service.stopWorker(a!.name);
+  const starts = (pm2.start as ReturnType<typeof mock>).mock.calls.length;
+  await service.registerPluginWorkers(registration, false);
+  expect((pm2.start as ReturnType<typeof mock>).mock.calls).toHaveLength(
+    starts
+  );
+  await writeFile(join(registration.dataDir, "keep.txt"), "retained");
+  await service.unregisterPluginWorkers("org-a", "notes");
+  expect(service.isValidWorker(a!.name)).toBe(false);
+  expect(await Bun.file(join(registration.dataDir, "keep.txt")).text()).toBe(
+    "retained"
+  );
+  expect(service.isValidWorker(b!.name)).toBe(true);
+});

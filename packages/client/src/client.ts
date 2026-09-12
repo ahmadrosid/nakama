@@ -127,6 +127,7 @@ import type {
   PluginPackagePreviewResponse,
   PluginPackageRequest,
   PluginRevisionRequest,
+  PluginWorkerStatus,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
   ProfilePackImportResponse,
@@ -479,6 +480,12 @@ export class NakamaClient {
     return this.request<ProfilePackImportResponse>("/v1/profiles/pack/import", {
       body: JSON.stringify(request),
       method: "POST",
+    });
+  }
+
+  async listPluginWorkers(orgId?: string): Promise<PluginWorkerStatus[]> {
+    return this.request<PluginWorkerStatus[]>("/v1/workers/plugins", {
+      ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
     });
   }
 

@@ -567,28 +567,42 @@ function usePage(ctx) {
   const [canConfigure, setCanConfigure] = React.useState(false);
   const [configured, setConfigured] = React.useState(false);
   const [settings, setSettings] = React.useState(false);
+  const [worker, setWorker] = React.useState(null);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   React.useEffect(() => {
     let alive = true;
-    ctx.host.call("profiles").then((value) => {
-      if (!alive || ctx.signal.aborted) {
+    let inFlight = false;
+    const refresh = () => {
+      if (inFlight || !alive || ctx.signal.aborted) {
         return;
       }
-      const result = value;
-      setProfiles(result.profiles);
-      setConfigured(result.configured);
-      setCanConfigure(result.canConfigure);
-    }).catch((reason) => {
-      if (alive) {
-        setError(errorText(reason));
-      }
-    }).finally(() => {
-      if (alive) {
-        setLoading(false);
-      }
-    });
+      inFlight = true;
+      return ctx.host.call("profiles").then((value) => {
+        if (!alive || ctx.signal.aborted) {
+          return;
+        }
+        const result = value;
+        setError("");
+        setWorker(result.worker ?? null);
+        setProfiles(result.profiles);
+        setConfigured(result.configured);
+        setCanConfigure(result.canConfigure);
+      }).catch((reason) => {
+        if (alive) {
+          setError(errorText(reason));
+        }
+      }).finally(() => {
+        inFlight = false;
+        if (alive) {
+          setLoading(false);
+        }
+      });
+    };
+    refresh();
+    const timer = setInterval(() => void refresh(), 3000);
     return () => {
+      clearInterval(timer);
       alive = false;
     };
   }, []);
@@ -600,7 +614,8 @@ function usePage(ctx) {
     profiles,
     setConfigured,
     setSettings,
-    settings
+    settings,
+    worker
   };
 }
 function createPage(ctx) {
@@ -611,6 +626,7 @@ function createPage(ctx) {
   function Page() {
     const {
       profiles,
+      worker,
       canConfigure,
       configured,
       setConfigured,
@@ -625,7 +641,7 @@ function createPage(ctx) {
       className: "sm-row"
     }, /* @__PURE__ */ React.createElement("h1", {
       className: "sm-title"
-    }, "Supermemory"), configured && /* @__PURE__ */ React.createElement("span", null, "Configured"), canConfigure && /* @__PURE__ */ React.createElement(Button, {
+    }, "Supermemory"), configured && /* @__PURE__ */ React.createElement("span", null, "Ready"), canConfigure && /* @__PURE__ */ React.createElement(Button, {
       onClick: () => setSettings(true),
       variant: "outline"
     }, "Settings")), error && /* @__PURE__ */ React.createElement("p", {
@@ -634,7 +650,13 @@ function createPage(ctx) {
       role: "status"
     }, "Loading…") : configured ? /* @__PURE__ */ React.createElement(Browser, {
       profiles
-    }) : /* @__PURE__ */ React.createElement("p", null, canConfigure ? "Connect your Supermemory server in Settings." : "Ask an admin to connect Supermemory."), settings && /* @__PURE__ */ React.createElement(Settings, {
+    }) : /* @__PURE__ */ React.createElement("div", {
+      className: "sm-stack"
+    }, /* @__PURE__ */ React.createElement("p", {
+      role: worker?.state === "error" ? "alert" : "status"
+    }, worker?.message || (worker?.state === "stopped" ? "Supermemory is stopped." : "Preparing Supermemory…")), /* @__PURE__ */ React.createElement("a", {
+      href: "/workers"
+    }, "Open Workers")), settings && /* @__PURE__ */ React.createElement(Settings, {
       close: () => setSettings(false),
       saved: () => {
         setConfigured(true);

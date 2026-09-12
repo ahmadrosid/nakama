@@ -929,6 +929,83 @@ describe("createHonoApp", () => {
     expect(calls).toEqual(["stop:telegram"]);
   });
 
+  test("plugin worker controls and logs require an admin of the owning org", async () => {
+    const options = createServerOptions();
+    const calls: string[] = [];
+    let owner = "";
+    Object.assign(options.workerManager, {
+      isPluginWorkerForOrg: (name: string, orgId: string) =>
+        name === "plugin-owned" && orgId === owner,
+      listPluginWorkers: async (orgId: string) => {
+        calls.push("list:" + orgId);
+        return [];
+      },
+      startWorker: async (name: string) => {
+        calls.push(name);
+      },
+    });
+    const app = createHonoApp(options);
+    const admin = await setupFreshInstallSession(app, options.databaseAdapter);
+    owner = admin.orgId!;
+    for (const suffix of ["start", "logs", "clear-logs"]) {
+      const response = await app.fetch(
+        new Request(
+          "http://localhost:4310/v1/workers/plugin-foreign/" + suffix,
+          {
+            headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+            method: suffix === "logs" ? "GET" : "POST",
+          }
+        )
+      );
+      expect(response.status).toBe(404);
+    }
+    expect(calls).toEqual([]);
+    const allowed = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/plugin-owned/start", {
+        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+        method: "POST",
+      })
+    );
+    expect(allowed.status).toBe(200);
+    const listed = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/plugins", {
+        headers: admin.headers(),
+      })
+    );
+    expect(listed.status).toBe(200);
+    expect(calls).toEqual(["plugin-owned", "list:" + owner]);
+
+    const now = new Date().toISOString();
+    await options.databaseAdapter.createUser({
+      createdAt: now,
+      email: "worker-member@example.com",
+      id: "worker-member",
+      passwordHash: await options.authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+    await options.databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: owner,
+      role: "member",
+      userId: "worker-member",
+    });
+    const member = await loginUserSession(
+      app,
+      "worker-member@example.com",
+      "password123",
+      owner
+    );
+    for (const suffix of ["start", "logs", "clear-logs"]) {
+      const denied = await app.fetch(
+        new Request("http://localhost:4310/v1/workers/plugin-owned/" + suffix, {
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
+          method: suffix === "logs" ? "GET" : "POST",
+        })
+      );
+      expect(denied.status).toBe(403);
+    }
+  });
+
   test("creates and lists sessions through Hono routes", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);

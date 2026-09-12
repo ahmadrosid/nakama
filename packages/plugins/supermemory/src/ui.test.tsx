@@ -69,13 +69,14 @@ function button(view: ReactTestRenderer, label: string) {
   )[0]!;
 }
 
-test("members see setup unavailable without credential controls", async () => {
+test("members see managed worker startup without credential controls", async () => {
   const view = await mount(async () => ({
     ...profiles,
     canConfigure: false,
     configured: false,
   }));
-  expect(JSON.stringify(view.toJSON())).toContain("Ask an admin");
+  expect(view.root.findByProps({ role: "status" })).toBeDefined();
+  expect(view.root.findByProps({ href: "/workers" })).toBeDefined();
   expect(
     view.root.findAll(
       (node) => String(node.type) === "Input" && node.props.type === "password"

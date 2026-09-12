@@ -18,15 +18,37 @@ For local development, rebuild the plugin, then choose **System → Plugins → 
 
 ### Supermemory
 
-`packages/plugins/supermemory` is the official explicit-memory and text-knowledge plugin. Rebuild with `bun run --cwd packages/plugins/supermemory build` and include both bundles. It requires the existing profile host capability and performs no network setup during installation.
+`packages/plugins/supermemory` is the official explicit-memory and text-knowledge plugin. Rebuild with `bun run --cwd packages/plugins/supermemory build` and include the action, UI, and worker bundles. It requires the profile host capability and plugin-worker support. Enabling it starts an organization-scoped worker that downloads and verifies Supermemory server 0.0.8. The plugin page reports startup progress or an actionable error until authenticated readiness succeeds.
 
-The API target for initial contract verification is **Supermemory server 0.0.8**, with `OPENAI_MODEL=gpt-5.1`, `SUPERMEMORY_EMBEDDING_PROVIDER=openai`, `SUPERMEMORY_EMBEDDING_MODEL=text-embedding-3-small`, and `SUPERMEMORY_EMBEDDING_DIMENSIONS=1536`. Set `OPENAI_API_KEY` on the external server. Live OpenAI-backed verification remains a release gate; the deterministic tests exercise documented HTTP responses and must not be described as a live-server compatibility proof.
+The API target for initial contract verification is **Supermemory server 0.0.8**, with `OPENAI_MODEL=gpt-5.1`, `SUPERMEMORY_EMBEDDING_PROVIDER=openai`, `SUPERMEMORY_EMBEDDING_MODEL=text-embedding-3-small`, and `SUPERMEMORY_EMBEDDING_DIMENSIONS=1536`. The managed worker reuses Nakama’s selected API-key provider or local OpenAI-compatible provider, and defaults to local embeddings. Subscription sign-ins such as ChatGPT are not API keys; select a compatible provider in Nakama Settings and restart the worker when needed. Existing external connections remain external. Live upstream-server verification remains a release gate; the deterministic tests exercise documented HTTP responses and must not be described as a live-server compatibility proof.
 
 The plugin derives distinct memory/knowledge container tags from its persisted namespace, organization and validated profile. Tools use host profile context; the page passes `agentId`. It uses `/v4/memories` for explicit facts, memory-only `/v4/search`, and document-only `/v3/search` for knowledge. Search hits must match local receipts and the metadata written by this installation. Failed remote removal leaves a local tombstone, immediately excluding the item from plugin recall.
 
 Each save requires a stable `submissionKey`. Receipts reserve it under a SQLite uniqueness constraint before HTTP; changing content under the same key fails. Documents use a deterministic `customId`; unresolved memories reconcile with a scoped metadata-filtered list. No ambiguous write is automatically replayed. A process interrupted during submission becomes unknown after 30 seconds.
 
-Connection settings live in an atomic, owner-only `connection.json` under the plugin data directory. Redacted reads never return tokens. Settings updates and receipt reservations share the database write lock, without holding it during HTTP. The host restores files with owner-only permissions, which the plugin rechecks on use. Same-org backups preserve the namespace; a different-org dataset fails closed. Full backups contain credentials and need appropriate protection. External Supermemory data needs its own backup.
+Connection settings live in an atomic, owner-only `connection.json` under the plugin data directory. Redacted reads never return tokens. Settings updates and receipt reservations share the database write lock, without holding it during HTTP. The host restores files with owner-only permissions, which the plugin rechecks on use. Same-org backups preserve the namespace; a different-org dataset fails closed. Full backups contain credentials and need appropriate protection. External Supermemory data needs its own backup. Managed server data lives under the organization’s plugin data directory. Nakama stops plugin workers during export and resumes them afterwards; restored plugins stay disabled. Re-downloadable worker caches are excluded, and normal export/import size limits still apply.
+
+## Plugin workers
+
+Declare supervised Bun entrypoints in the manifest:
+
+```json
+{
+  "workers": [
+    { "key": "indexer", "name": "Document indexer", "entry": "workers/indexer.js", "useHostLlm": true }
+  ]
+}
+```
+
+Bundle each entry and include `workers/` in the npm package’s `files`. Up to eight workers can be declared per plugin. Entries must be relative JavaScript paths within the approved release; installation verifies that they exist.
+
+Enabling starts each worker through PM2. Disabling stops and unregisters it before completing. Updating a disabled plugin selects the next release’s entries on enable. Uninstall retains worker data; deleting retained plugin data removes it. Startup restores registrations from enabled installations and honors a manually stopped worker’s saved desired state. Stale processes from disabled or removed installations are removed.
+
+Workers receive `NAKAMA_ORG_ID`, `NAKAMA_PLUGIN_ID`, `NAKAMA_PLUGIN_VERSION`, `NAKAMA_PLUGIN_DATA_DIR`, and `NAKAMA_WORKER_DATA_DIR`. The working directory is the organization’s plugin data directory. Keep durable state there, never under the immutable release directory. Reserve `workers/<key>/cache/` for disposable downloads; exports exclude it.
+
+With `useHostLlm: true`, the host writes the active provider’s type, API key, base URL, and model to an owner-only `llm.json` in the worker directory on each start. It contains no subscription OAuth tokens. Workers are trusted plugin code, with the same server privileges as plugin actions. Handle SIGINT/SIGTERM and close child processes and database files promptly.
+
+`GET /v1/workers/plugins` lists workers for the active organization. Organization admins and platform admins can use the existing worker control/log endpoints for those returned names. The Workers page exposes the same controls.
 
 ## Package layout
 
