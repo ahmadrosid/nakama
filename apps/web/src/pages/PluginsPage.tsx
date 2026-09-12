@@ -83,17 +83,10 @@ type PluginDialog =
   | { plugin: OrgPluginDetail; type: "purge" }
   | { pluginId: string; type: "remove-release"; version: string };
 
-export function PluginsPage() {
-  const { pluginId: selectedPluginId } = useParams<{ pluginId: string }>();
-  const { user, activeOrg } = useAuth();
-  const isPlatformAdmin = user?.isPlatformAdmin === true;
-  const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
-  const canInstallPackages = canManagePluginReleases(isPlatformAdmin);
-  const orgId = activeOrg?.id ?? "";
+function usePluginCatalog(canInstallPackages: boolean) {
   const { data: plugins = [], isLoading, error } = useOrgPlugins();
   const releasesQuery = usePluginReleases(canInstallPackages);
   const officialQuery = useOfficialPlugins();
-  const installOfficial = useInstallOfficialPlugin();
   const official = officialQuery.data?.plugins ?? [];
   const releases = canInstallPackages
     ? (releasesQuery.data?.releases ?? [])
@@ -105,6 +98,37 @@ export function PluginsPage() {
       ...releases.map((release) => release.pluginId),
     ]),
   ];
+  return {
+    catalogLoading: officialQuery.isLoading || releasesQuery.isLoading,
+    error:
+      error ??
+      officialQuery.error ??
+      (canInstallPackages ? releasesQuery.error : null),
+    isLoading,
+    official,
+    pluginIds,
+    plugins,
+    releases,
+  };
+}
+
+export function PluginsPage() {
+  const { pluginId: selectedPluginId } = useParams<{ pluginId: string }>();
+  const { user, activeOrg } = useAuth();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
+  const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
+  const canInstallPackages = canManagePluginReleases(isPlatformAdmin);
+  const orgId = activeOrg?.id ?? "";
+  const {
+    plugins,
+    official,
+    releases,
+    pluginIds,
+    isLoading,
+    catalogLoading,
+    error: queryError,
+  } = usePluginCatalog(canInstallPackages);
+  const installOfficial = useInstallOfficialPlugin();
   const previewPackage = usePreviewPluginPackage();
   const installPackage = useInstallPluginPackage();
   const removeRelease = useRemovePluginRelease();
@@ -249,10 +273,6 @@ export function PluginsPage() {
     return <PluginEmptyState detail={Boolean(selectedPluginId)} loading />;
   }
 
-  const queryError =
-    error ??
-    officialQuery.error ??
-    (canInstallPackages ? releasesQuery.error : null);
   const errorMessage =
     actionError ?? (queryError ? formatError(queryError) : null);
   const visiblePluginIds = selectedPluginId
@@ -276,7 +296,7 @@ export function PluginsPage() {
       {visiblePluginIds.length === 0 ? (
         <PluginEmptyState
           detail={Boolean(selectedPluginId)}
-          loading={officialQuery.isLoading || releasesQuery.isLoading}
+          loading={catalogLoading}
         />
       ) : (
         <ul
