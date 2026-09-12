@@ -1008,3 +1008,25 @@ describe("migration SQL hardening", () => {
     }
   });
 });
+
+test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec("ALTER TABLE skill_proposals DROP COLUMN supporting_files");
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec(`INSERT INTO skill_proposals (id, org_id, profile_id, action, skill_name, content, status, created_at)
+      VALUES ('pending', 'org', 'profile', 'create', 'demo', 'original content', 'pending', '2026-01-01')`);
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(
+      db
+        .query(
+          "SELECT content, supporting_files FROM skill_proposals WHERE id = 'pending'"
+        )
+        .get()
+    ).toEqual({ content: "original content", supporting_files: null });
+  } finally {
+    db.close();
+  }
+});

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { readFile, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -58,13 +60,26 @@ describe("POST /v1/skills/install", () => {
   test("platform admin installs a valid public SKILL.md and assigns it", async () => {
     globalThis.fetch = mock(async (input: RequestInfo | URL) => {
       const url = String(input);
-      expect(url).toBe(
-        "https://raw.githubusercontent.com/acme/skills/main/weather/SKILL.md"
-      );
+      if (url.includes("api.github.com")) {
+        return Response.json({
+          sha: "a".repeat(40),
+          tree: [
+            { path: "weather/SKILL.md", type: "blob", mode: "100644" },
+            {
+              path: "weather/references/explainer.md",
+              type: "blob",
+              mode: "100644",
+            },
+          ],
+        });
+      }
+      if (url.endsWith("references/explainer.md")) {
+        return new Response("Explainer instructions");
+      }
       return new Response(VALID_SKILL, { status: 200 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
-    const { app, databaseAdapter } = createApp();
+    const { app, databaseAdapter, skillsService } = createApp();
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
@@ -97,15 +112,46 @@ describe("POST /v1/skills/install", () => {
     };
     expect(body.skill.name).toBe("github-weather");
     expect(body.skill.createdBy).toBe("human");
+    const installed = await databaseAdapter.getSkillByName(
+      "github-weather",
+      orgId
+    );
+    expect(
+      await readFile(
+        join(installed!.sourcePath, "references/explainer.md"),
+        "utf8"
+      )
+    ).toBe("Explainer instructions");
+
+    const reference = join(installed!.sourcePath, "references/explainer.md");
+    await unlink(reference);
+    await skillsService.installSkillFromGitHub(orgId, {
+      profileId,
+      url: "https://github.com/acme/skills/tree/main/weather",
+    });
+    expect(await readFile(reference, "utf8")).toBe("Explainer instructions");
+    await writeFile(reference, "Local edits");
+    await expect(
+      skillsService.installSkillFromGitHub(orgId, {
+        profileId,
+        url: "https://github.com/acme/skills/tree/main/weather",
+      })
+    ).rejects.toThrow();
+    expect(await readFile(reference, "utf8")).toBe("Local edits");
 
     const assigned = await databaseAdapter.listSkillsForProfile(profileId);
     expect(assigned.some((skill) => skill.id === body.skill.id)).toBe(true);
   });
 
   test("invalid frontmatter returns 400 and writes no skill", async () => {
-    globalThis.fetch = mock(
-      async () => new Response(INVALID_SKILL, { status: 200 })
-    ) as typeof fetch;
+    globalThis.fetch = mock(async (input: RequestInfo | URL) =>
+      String(input).includes("api.github.com")
+        ? Response.json({
+            sha: "a".repeat(40),
+            tree: [{ path: "broken/SKILL.md", type: "blob", mode: "100644" }],
+          })
+        : new Response(INVALID_SKILL, { status: 200 })
+    ) as unknown as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
     const adminSession = await setupFreshInstallSession(
@@ -260,9 +306,14 @@ describe("POST /v1/skills/install", () => {
   });
 
   test("installing the same skill onto a second profile returns 409", async () => {
-    globalThis.fetch = mock(
-      async () => new Response(VALID_SKILL, { status: 200 })
-    ) as typeof fetch;
+    globalThis.fetch = mock(async (input: RequestInfo | URL) =>
+      String(input).includes("api.github.com")
+        ? Response.json({
+            sha: "a".repeat(40),
+            tree: [{ path: "weather/SKILL.md", type: "blob", mode: "100644" }],
+          })
+        : new Response(VALID_SKILL, { status: 200 })
+    ) as unknown as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
     const adminSession = await setupFreshInstallSession(

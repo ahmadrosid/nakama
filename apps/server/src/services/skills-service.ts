@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   CreateSkillRequest,
@@ -27,7 +27,8 @@ import {
   discoverSkillDirectory,
   discoverSkills,
   extractExplicitSkillName,
-  fetchGitHubSkillMarkdown,
+  fetchGitHubSkillBundle,
+  type GitHubSkillBundle,
   isGlobalSkillSourcePath,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
@@ -39,6 +40,8 @@ import {
   patchSkillFile,
   pickPreferredSkillSourcePath,
   removeProfileSkillSupportingFile,
+  resolveProfileSkillDirectory,
+  resolveProfileSkillSupportingFilePath,
   SKILL_FILE_NAME,
   writeProfileSkillSupportingFile,
   writeRawProfileSkillMarkdown,
@@ -268,7 +271,8 @@ export class SkillsService {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
-    const content = await fetchGitHubSkillMarkdown(url);
+    const bundle = await fetchGitHubSkillBundle(url);
+    const { content } = bundle;
 
     try {
       parseSkillMarkdown(content, url);
@@ -286,7 +290,7 @@ export class SkillsService {
         orgId,
         profileId,
         content,
-        { createdBy: "human" }
+        { createdBy: "human", supportingFiles: bundle.files }
       );
       return { skill: installed.skill };
     } catch (error) {
@@ -318,7 +322,11 @@ export class SkillsService {
     orgId: string,
     profileId: string,
     content: string,
-    options?: { createdBy?: SkillCreatedBy; changeMeta?: ProfileChangeMeta }
+    options?: {
+      createdBy?: SkillCreatedBy;
+      changeMeta?: ProfileChangeMeta;
+      supportingFiles?: GitHubSkillBundle["files"];
+    }
   ): Promise<SkillResponse & { created: boolean }> {
     const { name } = parseRawProfileSkillContent(content, orgId, profileId);
     const createdBy = options?.createdBy ?? "agent";
@@ -354,12 +362,73 @@ export class SkillsService {
       }
     }
 
-    const written = await writeRawProfileSkillMarkdown({
-      allowExisting: true,
-      content,
-      orgId,
-      profileId,
-    });
+    // A reinstall may repair missing files, but must never overwrite local edits.
+    if (options?.supportingFiles) {
+      const directory = resolveProfileSkillDirectory(orgId, profileId, name);
+      try {
+        const existing = await readFile(
+          path.join(directory, SKILL_FILE_NAME),
+          "utf8"
+        );
+        if (existing.trimEnd() !== content.trimEnd()) {
+          throw new Error(
+            `Skill "${name}" already exists with different content.`
+          );
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+    }
+    const missingFiles: GitHubSkillBundle["files"] = [];
+    for (const file of options?.supportingFiles ?? []) {
+      const { absolutePath } = resolveProfileSkillSupportingFilePath(
+        orgId,
+        profileId,
+        name,
+        file.path
+      );
+      try {
+        const existing = await readFile(absolutePath);
+        if (!existing.equals(Buffer.from(file.content))) {
+          throw new Error(
+            `Supporting file "${file.path}" already exists with different content.`
+          );
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+        missingFiles.push(file);
+      }
+    }
+
+    // Publish SKILL.md last. If a disk write fails, remove only files this call added.
+    const addedPaths: string[] = [];
+    let written: Awaited<ReturnType<typeof writeRawProfileSkillMarkdown>>;
+    try {
+      for (const file of missingFiles) {
+        const added = await writeProfileSkillSupportingFile({
+          content: file.content,
+          name,
+          orgId,
+          overwrite: false,
+          profileId,
+          relativePath: file.path,
+        });
+        addedPaths.push(added.absolutePath);
+      }
+      written = await writeRawProfileSkillMarkdown({
+        allowExisting: true,
+        content,
+        orgId,
+        profileId,
+      });
+    } catch (error) {
+      await Promise.all(addedPaths.map((file) => unlink(file)));
+      throw error;
+    }
 
     // written.directory came from resolveProfileSkillDirectory (containment already
     // enforced); syncSkillRecordFromDirectory keys off that same path.

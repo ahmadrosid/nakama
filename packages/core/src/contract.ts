@@ -801,6 +801,7 @@ export interface SkillProposal {
   sessionId: string | null;
   skillName: string;
   status: SkillProposalStatus;
+  supportingFiles?: { path: string; contentBase64: string }[] | null;
   warnings?: string[];
 }
 
