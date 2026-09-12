@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { modelListRowVisionEnabled } from "./model-list-editor.shared";
+import {
+  modelListRowVisionEnabled,
+  normalizeModelListRows,
+} from "./model-list-editor.shared";
 
 describe("modelListRowVisionEnabled", () => {
   test("defaults on unless explicitly disabled", () => {
@@ -20,5 +23,19 @@ describe("modelListRowVisionEnabled", () => {
     expect(modelListRowVisionEnabled({ supportsVision: false }, false)).toBe(
       false
     );
+  });
+});
+
+describe("normalizeModelListRows context sizes", () => {
+  test("forwards the sizes and drops blank ones", () => {
+    expect(
+      normalizeModelListRows([
+        { contextWindow: 200_000, id: "a", maxOutputTokens: 16_384 },
+        { id: "b" },
+      ])
+    ).toEqual([
+      { contextWindow: 200_000, id: "a", maxOutputTokens: 16_384 },
+      { id: "b" },
+    ]);
   });
 });

@@ -1650,9 +1650,13 @@ export interface ApiErrorResponse {
 }
 
 export interface CustomModelEntry {
+  /** Total context the model accepts. Blank falls back to the catalog entry,
+   * then to a conservative default, so existing entries keep their behaviour. */
+  contextWindow?: number;
   default?: boolean;
   id: string;
   inputPerMillionUsd?: number;
+  maxOutputTokens?: number;
   name?: string;
   outputPerMillionUsd?: number;
   supportsThinking?: boolean;

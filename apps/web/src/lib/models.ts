@@ -1,6 +1,7 @@
 import type {
   ConfigureProviderRequest,
   CreateProviderRequest,
+  CustomModelEntry,
   OllamaHostMode,
   ProviderModelOption,
   WireApi,
@@ -473,86 +474,25 @@ export function modelsFromOpenRouterRows(
 }
 
 export function appendOpenRouterModelRow(
-  rows: Array<{
-    id: string;
-    name?: string;
-    default?: boolean;
-    inputPerMillionUsd?: number;
-    outputPerMillionUsd?: number;
-  }>,
+  rows: CustomModelEntry[],
   modelId: string,
   modelName: string,
-  pricing?: { inputPerMillionUsd?: number; outputPerMillionUsd?: number }
-): Array<{
-  id: string;
-  name: string;
-  default?: boolean;
-  inputPerMillionUsd?: number;
-  outputPerMillionUsd?: number;
-}> {
-  const base: Array<{
-    id: string;
-    name: string;
-    default?: boolean;
-    inputPerMillionUsd?: number;
-    outputPerMillionUsd?: number;
-  }> = [];
-
-  for (const row of rows) {
-    if (!row.id.trim()) {
-      continue;
-    }
-
-    base.push({
-      id: row.id,
+  extra?: Partial<CustomModelEntry>
+): CustomModelEntry[] {
+  // Spread rather than copying known keys, so anything the browse row carries
+  // (pricing, context window) survives instead of being silently dropped.
+  const base = rows
+    .filter((row) => row.id.trim())
+    .map(({ default: _wasDefault, ...row }) => ({
+      ...row,
       name: row.name ?? row.id,
-      ...(row.default ? { default: true } : {}),
-      ...(row.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: row.inputPerMillionUsd }),
-      ...(row.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: row.outputPerMillionUsd }),
-    });
-  }
+    }));
 
   if (base.some((row) => row.id === modelId)) {
-    return base.map((row) => ({
-      default: row.id === modelId,
-      id: row.id,
-      name: row.name ?? row.id,
-      ...(row.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: row.inputPerMillionUsd }),
-      ...(row.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: row.outputPerMillionUsd }),
-    }));
+    return base.map((row) => ({ ...row, default: row.id === modelId }));
   }
 
-  return [
-    ...base.map((row) => ({
-      id: row.id,
-      name: row.name ?? row.id,
-      ...(row.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: row.inputPerMillionUsd }),
-      ...(row.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: row.outputPerMillionUsd }),
-    })),
-    {
-      default: true,
-      id: modelId,
-      name: modelName,
-      ...(pricing?.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: pricing.inputPerMillionUsd }),
-      ...(pricing?.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: pricing.outputPerMillionUsd }),
-    },
-  ];
+  return [...base, { ...extra, default: true, id: modelId, name: modelName }];
 }
 
 export function resolveOpenRouterSetupModel(
