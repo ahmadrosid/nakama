@@ -1,3 +1,4 @@
+import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
   CreateMcpServerRequest,
   ListMcpServersResponse,
@@ -23,6 +24,62 @@ import {
   type McpClientManager,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
+import {
+  type McpOAuthGrant,
+  McpServerOAuthProvider,
+  readMcpOAuthGrant,
+  type StoredMcpHttpConfig,
+  serverAdvertisesOAuth,
+} from "./mcp-oauth";
+
+const INVALID_OAUTH_CALLBACK_MESSAGE =
+  "This sign-in link is no longer valid. Start it again from the MCP page.";
+
+const AUTHORIZATION_REQUIRED_MESSAGE =
+  "This server signs in with a browser. Add it, then approve the sign-in to connect.";
+
+export interface McpConnectOptions {
+  /** Origin the OAuth callback is reachable at; omitted means no OAuth. */
+  callbackBaseUrl?: string;
+  /**
+   * Whether this caller may start a fresh sign-in. False for startup and other
+   * unattended reconnects: they should refresh a grant they already have, not
+   * spend discovery on a link nobody will open, and not replace the state an
+   * operator is in the middle of using.
+   */
+  reauthorize?: boolean;
+}
+
+function buildOAuthProvider(
+  server: Pick<StoredMcpServerRecord, "config" | "id" | "transport">,
+  options: McpConnectOptions,
+  persist: (grant: McpOAuthGrant) => Promise<void>
+): McpServerOAuthProvider | undefined {
+  if (server.transport !== "http" || !options.callbackBaseUrl) {
+    return;
+  }
+
+  const provider = new McpServerOAuthProvider(
+    server.id,
+    options.callbackBaseUrl,
+    readMcpOAuthGrant(server.config),
+    persist
+  );
+
+  if (options.reauthorize === false && !provider.hasTokens()) {
+    return;
+  }
+
+  return provider;
+}
+
+function withOAuthGrant(config: unknown, grant?: McpOAuthGrant): unknown {
+  if (!grant) {
+    return config;
+  }
+
+  return { ...(config as StoredMcpHttpConfig), oauth: grant };
+}
 
 export class McpService {
   constructor(
@@ -49,7 +106,8 @@ export class McpService {
   }
 
   async createServer(
-    request: CreateMcpServerRequest
+    request: CreateMcpServerRequest,
+    options: McpConnectOptions = {}
   ): Promise<McpServerResponse> {
     const name = request.name.trim();
 
@@ -83,15 +141,43 @@ export class McpService {
     // Connect before persisting so a failed initial connection is a client
     // error (4xx) and never leaves a broken server row behind.
     if (request.connect !== false && record.enabled) {
+      // A grant started here has no row to write to yet, so it is captured and
+      // stored with the record below.
+      let grant: McpOAuthGrant | undefined;
+      const provider = buildOAuthProvider(record, options, async (next) => {
+        grant = next;
+      });
+
       try {
-        const cachedTools = await this.manager.connect(record);
+        const cachedTools = await this.manager.connect(record, {
+          ...(provider ? { authProvider: provider } : {}),
+        });
         record = { ...record, cachedTools, status: "connected" };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new NakamaApiError(
-          `Could not connect MCP server "${name}": ${message}`,
-          422
-        );
+        if (!provider?.authorizationUrl) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          throw new NakamaApiError(
+            `Could not connect MCP server "${name}": ${message}`,
+            422
+          );
+        }
+
+        // Authorization is a step, not a failure: keep the row so the callback
+        // has something to complete, and say so in the status rather than
+        // reporting a connection error the operator cannot fix by editing.
+        record = {
+          ...record,
+          config: withOAuthGrant(record.config, grant),
+          lastError: null,
+          status: "needs_auth",
+        };
+        await this.db.upsertMcpServer(record);
+
+        return {
+          authorizationUrl: provider.authorizationUrl,
+          server: toMcpServerDetail(record),
+        };
       }
     }
 
@@ -192,15 +278,24 @@ export class McpService {
     }
   }
 
-  async connectServer(serverId: string): Promise<McpServerResponse> {
+  async connectServer(
+    serverId: string,
+    options: McpConnectOptions = {}
+  ): Promise<McpServerResponse> {
     const server = await this.requireServer(serverId);
 
     if (!server.enabled) {
       throw new Error(`MCP server "${server.name}" is disabled.`);
     }
 
+    const provider = buildOAuthProvider(server, options, (grant) =>
+      this.saveOAuthGrant(serverId, grant)
+    );
+
     try {
-      const cachedTools = await this.manager.connect(server);
+      const cachedTools = await this.manager.connect(server, {
+        ...(provider ? { authProvider: provider } : {}),
+      });
       const updated: StoredMcpServerRecord = {
         ...server,
         cachedTools,
@@ -214,23 +309,93 @@ export class McpService {
       return { server: toMcpServerDetail(updated) };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const authorizationUrl = provider?.authorizationUrl;
+      // Re-read: the provider persisted the pending grant during the attempt,
+      // and the record this method started from predates it.
+      const stored = (await this.db.getMcpServer(serverId)) ?? server;
       const updated: StoredMcpServerRecord = {
-        ...server,
-        lastError: message,
-        status: "error",
+        ...stored,
+        lastError: authorizationUrl ? null : message,
+        status: authorizationUrl ? "needs_auth" : "error",
         updatedAt: new Date().toISOString(),
       };
 
       await this.db.upsertMcpServer(updated);
+
+      if (authorizationUrl) {
+        return { authorizationUrl, server: toMcpServerDetail(updated) };
+      }
+
       throw new Error(message);
     }
   }
 
-  async syncServer(serverId: string): Promise<McpServerResponse> {
+  /**
+   * Finishes the browser half of the flow: the provider redirected the operator
+   * back with a code, which is exchanged for tokens before reconnecting.
+   */
+  async completeOAuth(
+    serverId: string,
+    options: { code: string; state: string; callbackBaseUrl: string }
+  ): Promise<McpServerResponse> {
+    // One message for a wrong id, a server that never started a flow and a
+    // wrong state: this endpoint is public, so it says nothing about which
+    // server ids exist.
+    const server = await this.db.getMcpServer(serverId);
+
+    if (!server || server.transport !== "http") {
+      throw new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400);
+    }
+
+    // The base the flow actually started from wins: the token exchange must
+    // repeat that redirect_uri verbatim.
+    const pending = readMcpOAuthGrant(server.config);
+    const callbackBaseUrl = pending?.callbackBaseUrl ?? options.callbackBaseUrl;
+    const provider = buildOAuthProvider(server, { callbackBaseUrl }, (grant) =>
+      this.saveOAuthGrant(serverId, grant)
+    );
+
+    if (!provider?.matchesPendingState(options.state)) {
+      throw new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400);
+    }
+
+    const result = await auth(provider, {
+      authorizationCode: options.code,
+      serverUrl: (server.config as StoredMcpHttpConfig).url,
+    });
+
+    if (result !== "AUTHORIZED") {
+      throw new NakamaApiError("MCP authorization did not complete.", 400);
+    }
+
+    return this.connectServer(serverId, { callbackBaseUrl });
+  }
+
+  private async saveOAuthGrant(
+    serverId: string,
+    grant: McpOAuthGrant
+  ): Promise<void> {
+    const server = await this.db.getMcpServer(serverId);
+
+    if (!server) {
+      return;
+    }
+
+    await this.db.upsertMcpServer({
+      ...server,
+      config: withOAuthGrant(server.config, grant),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async syncServer(
+    serverId: string,
+    options: McpConnectOptions = {}
+  ): Promise<McpServerResponse> {
     const server = await this.requireServer(serverId);
 
     if (!this.manager.isConnected(serverId, server.transport)) {
-      return this.connectServer(serverId);
+      return this.connectServer(serverId, options);
     }
 
     try {
@@ -294,16 +459,22 @@ export class McpService {
         tools: toCachedMcpToolSummaries(tools),
       };
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const requiresAuthorization =
+        normalizedTransport === "http" &&
+        (await serverAdvertisesOAuth((resolvedConfig as McpHttpConfig).url));
+
       return {
-        error: error instanceof Error ? error.message : String(error),
+        error: requiresAuthorization ? AUTHORIZATION_REQUIRED_MESSAGE : message,
         ok: false,
+        ...(requiresAuthorization ? { requiresAuthorization } : {}),
         toolCount: 0,
         tools: [],
       };
     }
   }
 
-  async connectEnabledServers(): Promise<void> {
+  async connectEnabledServers(options: McpConnectOptions = {}): Promise<void> {
     const servers = await this.db.listMcpServers();
 
     for (const server of servers) {
@@ -312,7 +483,7 @@ export class McpService {
       }
 
       try {
-        await this.connectServer(server.id);
+        await this.connectServer(server.id, options);
       } catch (error) {
         console.warn(
           `Could not connect MCP server "${server.name}":`,
@@ -409,6 +580,7 @@ function toMcpServerDetail(
     ...toMcpServerSummary(server, assignedProfileCount),
     cachedTools: toCachedMcpToolSummaries(server.cachedTools),
     config: redactMcpConfig(server.transport, server.config),
+    usesOAuth: Boolean(readMcpOAuthGrant(server.config)),
   };
 }
 
@@ -457,12 +629,16 @@ function mergeMcpConfig(
 function mergeMcpHttpConfig(
   previous: McpHttpConfig,
   next: McpHttpConfig
-): McpHttpConfig {
+): StoredMcpHttpConfig {
   const url = next.url?.trim() || previous.url;
+  // An OAuth grant belongs to one endpoint, so it survives every edit except
+  // moving the server somewhere else.
+  const grant = url === previous.url ? readMcpOAuthGrant(previous) : undefined;
 
   return {
     headers: mergeRedactedStringRecord(previous.headers, next.headers),
     url,
+    ...(grant ? { oauth: grant } : {}),
   };
 }
 

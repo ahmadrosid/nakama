@@ -1873,7 +1873,12 @@ export interface SyncSkillsResponse {
   updated: number;
 }
 
-export type McpServerStatus = "connected" | "disconnected" | "error";
+export type McpServerStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  /** Waiting for someone to approve the server's OAuth sign-in in a browser. */
+  | "needs_auth";
 export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
@@ -1911,6 +1916,8 @@ export interface McpServerSummary {
 export interface McpServerDetail extends McpServerSummary {
   cachedTools: CachedMcpToolSummary[];
   config: McpServerConfig;
+  /** Authenticated by a browser sign-in rather than by headers. */
+  usesOAuth: boolean;
 }
 
 export interface ListMcpServersResponse {
@@ -1918,6 +1925,11 @@ export interface ListMcpServersResponse {
 }
 
 export interface McpServerResponse {
+  /**
+   * Present when the server needs a browser sign-in before it can connect.
+   * Open it, approve, and the OAuth callback finishes the connection.
+   */
+  authorizationUrl?: string;
   server: McpServerDetail;
 }
 
@@ -1945,6 +1957,8 @@ export interface AssignMcpServerRequest {
 export interface TestMcpServerResponse {
   error?: string;
   ok: boolean;
+  /** The server answers 401 and advertises OAuth: sign-in, not a broken config. */
+  requiresAuthorization?: boolean;
   toolCount: number;
   tools: CachedMcpToolSummary[];
 }

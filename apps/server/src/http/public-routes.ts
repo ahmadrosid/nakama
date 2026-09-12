@@ -23,6 +23,10 @@ export function isPublicRouteRequest(
   return (
     PUBLIC_ROUTES.has(pathname) ||
     /^\/v1\/notify\/[^/]+$/.test(pathname) ||
+    // OAuth provider redirect: it carries a single-use code and state, and the
+    // browser arriving here has no Nakama session.
+    (method === "GET" &&
+      /^\/v1\/mcp\/oauth\/callback\/[^/]+$/.test(pathname)) ||
     (method === "GET" &&
       /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname))
   );

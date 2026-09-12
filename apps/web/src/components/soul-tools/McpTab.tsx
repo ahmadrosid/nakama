@@ -1,4 +1,7 @@
-import type { McpServerSummary } from "@nakama/core/contract";
+import type {
+  McpServerResponse,
+  McpServerSummary,
+} from "@nakama/core/contract";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import { Button } from "@nakama/ui/button";
 import {
@@ -10,7 +13,8 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { McpServerAuthorizeDialog } from "@/components/soul-tools/mcp-tab/McpServerAuthorizeDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import {
   McpPageState,
@@ -27,8 +31,22 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 
+/** The callback connects the server on its own, so the list is re-read until it lands. */
+const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
+
 export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
-  const { data: servers = [], isLoading, error } = useMcpServersQuery();
+  const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
+    serverId: string;
+    url: string;
+  } | null>(null);
+  const {
+    data: servers = [],
+    isLoading,
+    error,
+  } = useMcpServersQuery(
+    pendingAuth ? { refetchInterval: AUTHORIZATION_POLL_INTERVAL_MS } : {}
+  );
   const createMutation = useCreateMcpServerMutation();
   const updateMutation = useUpdateMcpServerMutation();
   const deleteMutation = useDeleteMcpServerMutation();
@@ -41,6 +59,9 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
     null
   );
+  const pendingAuthStatus = pendingAuth
+    ? servers.find((server) => server.id === pendingAuth.serverId)?.status
+    : undefined;
   const editServer =
     servers.find((server) => server.id === editServerId) ?? null;
   const detailServer =
@@ -54,6 +75,26 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     connectMutation.isPending ||
     syncMutation.isPending;
   const errorMessage = actionError ?? (error ? formatError(error) : null);
+
+  useEffect(() => {
+    if (pendingAuthStatus === "connected") {
+      setPendingAuth(null);
+    }
+  }, [pendingAuthStatus]);
+
+  function startAuthorization(response: McpServerResponse): boolean {
+    if (!response.authorizationUrl) {
+      return false;
+    }
+
+    setPendingAuth({
+      name: response.server.name,
+      serverId: response.server.id,
+      url: response.authorizationUrl,
+    });
+
+    return true;
+  }
 
   function requestDelete(server: McpServerSummary) {
     if (
@@ -88,7 +129,12 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     setActionError(null);
 
     try {
-      await connectMutation.mutateAsync(serverId);
+      const response = await connectMutation.mutateAsync(serverId);
+
+      if (startAuthorization(response)) {
+        return;
+      }
+
       setDetailServerId(serverId);
     } catch (err) {
       setActionError(formatError(err));
@@ -117,6 +163,17 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
           {errorMessage}
         </p>
       ) : null}
+
+      <McpServerAuthorizeDialog
+        authorizationUrl={pendingAuth?.url ?? null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setPendingAuth(null);
+          }
+        }}
+        open={pendingAuth !== null}
+        serverName={pendingAuth?.name ?? ""}
+      />
 
       <McpServersSection
         busy={busy}
@@ -157,6 +214,11 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
               connect: true,
             });
             setCreateOpen(false);
+
+            if (startAuthorization(response)) {
+              return;
+            }
+
             setDetailServerId(response.server.id);
           } catch (err) {
             const message = formatError(err);

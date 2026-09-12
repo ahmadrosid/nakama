@@ -176,6 +176,7 @@ function McpServerDialogCreateForm({
         headers={state.headers}
         idPrefix={state.idPrefix}
         isEdit={state.isEdit}
+        kind={state.kind}
         loadingForm={state.loadingForm}
         name={state.name}
         nameAutoFocus={nameAutoFocus}
@@ -186,7 +187,7 @@ function McpServerDialogCreateForm({
         onCommandChange={(value) => {
           state.setCommand(value);
           if (value.trim()) {
-            state.setTransport("stdio");
+            state.selectKind("stdio");
           }
           state.clearTestResult();
         }}
@@ -198,27 +199,20 @@ function McpServerDialogCreateForm({
           state.setHeaders(nextHeaders);
           state.clearTestResult();
         }}
+        onKindChange={state.selectKind}
         onNameChange={(value) => {
           state.setName(value);
           state.clearTestResult();
         }}
         onOpenImport={state.openImportDialog}
         onTestConnection={() => void state.handleTestConnection()}
-        onTransportChange={(nextTransport) => {
-          state.setTransport(nextTransport);
-          state.clearTestResult();
-        }}
         onUrlChange={(value) => {
           state.setUrl(value);
-          if (value.trim()) {
-            state.setTransport("http");
-          }
           state.clearTestResult();
         }}
         submitError={state.submitError}
         testing={state.testing}
         testResult={state.testResult}
-        transport={state.transport}
         url={state.url}
       />
 
@@ -232,7 +226,15 @@ function McpServerDialogCreateForm({
           Cancel
         </Button>
         <Button disabled={state.formDisabled || !state.canSubmit} type="submit">
-          {busy ? <Spinner className="size-4" /> : submitLabel}
+          {busy ? (
+            <Spinner className="size-4" />
+          ) : (state.kind === "signin" ||
+              state.testResult?.requiresAuthorization) &&
+            !state.isEdit ? (
+            "Add and sign in"
+          ) : (
+            submitLabel
+          )}
         </Button>
       </DialogFooter>
     </form>

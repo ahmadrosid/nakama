@@ -110,6 +110,18 @@ function McpServerActions({
 
   return (
     <div className="flex shrink-0 items-center gap-1">
+      {server.status === "needs_auth" ? (
+        <Button
+          disabled={busy}
+          onClick={onConnect}
+          size="sm"
+          type="button"
+          variant="default"
+        >
+          Sign in
+        </Button>
+      ) : null}
+
       <Button
         aria-label={`View tools for ${server.name}`}
         onClick={onViewTools}
@@ -137,7 +149,8 @@ function McpServerActions({
           <MoreVerticalIcon aria-hidden className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-40">
-          {server.status === "connected" ? null : (
+          {server.status === "connected" ||
+          server.status === "needs_auth" ? null : (
             <DropdownMenuItem disabled={busy} onClick={onConnect}>
               <Plug01Icon aria-hidden />
               Connect
@@ -238,6 +251,11 @@ export function McpServersSection({
                       <p className="font-medium text-foreground text-sm">
                         {server.name}
                       </p>
+                      {server.status === "needs_auth" ? (
+                        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-700 text-xs dark:text-amber-300">
+                          Sign-in required
+                        </span>
+                      ) : null}
                       {assignedProfileCount > 0 ? (
                         <Tooltip>
                           <TooltipTrigger

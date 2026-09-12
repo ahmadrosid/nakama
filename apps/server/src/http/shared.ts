@@ -441,6 +441,43 @@ export function errorResponse(
   );
 }
 
+/**
+ * The page an OAuth provider's redirect lands on. A browser gets it, not a
+ * client, so it answers HTML on success and on failure alike.
+ */
+export function oauthResultPage(
+  title: string,
+  detail: string,
+  link: { href: string; label: string },
+  status = 200
+): Response {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${Bun.escapeHTML(title)} - Nakama</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    a { color: #0b57d0; }
+  </style>
+</head>
+<body>
+  <h1>${Bun.escapeHTML(title)}</h1>
+  <p>${Bun.escapeHTML(detail)}</p>
+  <p><a href="${Bun.escapeHTML(link.href)}">${Bun.escapeHTML(link.label)}</a></p>
+</body>
+</html>`,
+    {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      status,
+    }
+  );
+}
+
 const CHANNEL_LIST = `${AGENT_CHANNELS.slice(0, -1).join(", ")}, or ${
   AGENT_CHANNELS[AGENT_CHANNELS.length - 1]
 }`;

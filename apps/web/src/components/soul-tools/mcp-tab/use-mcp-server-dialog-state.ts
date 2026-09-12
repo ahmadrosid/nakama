@@ -22,16 +22,30 @@ import {
   parseMcpConfigJson,
 } from "@/lib/mcp-config-import";
 
+export type McpServerKind = "http" | "signin" | "stdio";
+
+export function mcpServerKind(
+  transport: McpTransport,
+  signIn: boolean
+): McpServerKind {
+  if (transport === "stdio") {
+    return "stdio";
+  }
+
+  return signIn ? "signin" : "http";
+}
+
 type McpTestResult = {
   ok: boolean;
   toolCount: number;
   message: string;
+  requiresAuthorization: boolean;
   tools: CachedMcpToolSummary[];
 };
 
 type McpFormSetters = {
   setName: (value: string) => void;
-  setTransport: (value: McpTransport) => void;
+  setKind: (value: McpServerKind) => void;
   setUrl: (value: string) => void;
   setHeaders: (value: McpHeaderRow[]) => void;
   setCommand: (value: string) => void;
@@ -50,7 +64,7 @@ function applyImportedServer(
   setters: Pick<
     McpFormSetters,
     | "setName"
-    | "setTransport"
+    | "setKind"
     | "setCommand"
     | "setArgs"
     | "setEnv"
@@ -59,7 +73,8 @@ function applyImportedServer(
   >
 ) {
   setters.setName(imported.name);
-  setters.setTransport(imported.transport);
+  // A pasted config carries a URL or a command, never an OAuth grant.
+  setters.setKind(mcpServerKind(imported.transport, false));
 
   if (imported.transport === "stdio") {
     const stdioConfig = imported.config as McpStdioConfig;
@@ -99,7 +114,7 @@ function applyMcpFormReset({
 
   if (!server) {
     setters.setName("");
-    setters.setTransport("http");
+    setters.setKind("http");
     setters.setUrl("");
     setters.setHeaders([emptyHeaderRow()]);
     setters.setCommand("");
@@ -116,7 +131,7 @@ function applyMcpFormReset({
   }
 
   setters.setName(detail.name);
-  setters.setTransport(detail.transport);
+  setters.setKind(mcpServerKind(detail.transport, detail.usesOAuth));
   setters.setSubmitError(null);
   setters.setTestResult(null);
   setters.setTesting(false);
@@ -148,6 +163,7 @@ function buildMcpServerRequest({
   headers,
   name,
   isEdit,
+  signIn,
   server,
 }: {
   transport: McpTransport;
@@ -158,6 +174,7 @@ function buildMcpServerRequest({
   headers: McpHeaderRow[];
   name: string;
   isEdit: boolean;
+  signIn: boolean;
   server?: McpServerSummary | null;
 }): CreateMcpServerRequest {
   const activeTransport = resolveFormTransport(transport, command, url);
@@ -178,7 +195,8 @@ function buildMcpServerRequest({
 
   return {
     config: {
-      headers: headersToRecord(headers, isEdit),
+      // The provider issues the credential, so there is no header to keep.
+      ...(signIn ? {} : { headers: headersToRecord(headers, isEdit) }),
       url: url.trim(),
     },
     connect: false,
@@ -192,6 +210,7 @@ function mcpConnectionTestResult(result: {
   ok: boolean;
   toolCount: number;
   error?: string;
+  requiresAuthorization?: boolean;
   tools: CachedMcpToolSummary[];
 }): McpTestResult {
   if (result.ok) {
@@ -201,6 +220,7 @@ function mcpConnectionTestResult(result: {
           ? "Connected, but no tools were returned."
           : `Connected. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`,
       ok: true,
+      requiresAuthorization: false,
       toolCount: result.toolCount,
       tools: result.tools,
     };
@@ -209,6 +229,7 @@ function mcpConnectionTestResult(result: {
   return {
     message: result.error ?? "Connection test failed.",
     ok: false,
+    requiresAuthorization: result.requiresAuthorization === true,
     toolCount: 0,
     tools: [],
   };
@@ -221,7 +242,7 @@ function tryImportMcpJson(
   setters: Pick<
     McpFormSetters,
     | "setName"
-    | "setTransport"
+    | "setKind"
     | "setCommand"
     | "setArgs"
     | "setEnv"
@@ -267,7 +288,7 @@ export function useMcpServerDialogState({
     open && server ? server.id : null
   );
   const [name, setName] = useState("");
-  const [transport, setTransport] = useState<McpTransport>("http");
+  const [kind, setKind] = useState<McpServerKind>("http");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [command, setCommand] = useState("");
@@ -275,16 +296,13 @@ export function useMcpServerDialogState({
   const [env, setEnv] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    ok: boolean;
-    toolCount: number;
-    message: string;
-    tools: CachedMcpToolSummary[];
-  } | null>(null);
+  const [testResult, setTestResult] = useState<McpTestResult | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
 
+  const transport: McpTransport = kind === "stdio" ? "stdio" : "http";
+  const signIn = kind === "signin";
   const idPrefix = server ? `mcp-edit-${server.id}` : "mcp-create";
   const loadingForm = isEdit && loadingDetail && !detail;
   const formDisabled = busy || testing || loadingForm;
@@ -312,11 +330,11 @@ export function useMcpServerDialogState({
     setImportDraft,
     setImportError,
     setImportOpen,
+    setKind,
     setName,
     setSubmitError,
     setTesting,
     setTestResult,
-    setTransport,
     setUrl,
   };
 
@@ -334,6 +352,7 @@ export function useMcpServerDialogState({
       isEdit,
       name,
       server,
+      signIn,
       transport,
       url,
     });
@@ -341,6 +360,18 @@ export function useMcpServerDialogState({
 
   function clearTestResult() {
     setTestResult(null);
+  }
+
+  function selectKind(next: McpServerKind) {
+    setTestResult(null);
+    setKind(next);
+
+    if (next === "stdio") {
+      setUrl("");
+      return;
+    }
+
+    setCommand("");
   }
 
   async function handleTestConnection() {
@@ -359,6 +390,7 @@ export function useMcpServerDialogState({
       setTestResult({
         message: formatError(error),
         ok: false,
+        requiresAuthorization: false,
         toolCount: 0,
         tools: [],
       });
@@ -438,9 +470,11 @@ export function useMcpServerDialogState({
     importError,
     importOpen,
     isEdit,
+    kind,
     loadingForm,
     name,
     openImportDialog,
+    selectKind,
     setArgs,
     setCommand,
     setEnv,
@@ -449,7 +483,6 @@ export function useMcpServerDialogState({
     setImportError,
     setImportOpen,
     setName,
-    setTransport,
     setUrl,
     submitError,
     testing,

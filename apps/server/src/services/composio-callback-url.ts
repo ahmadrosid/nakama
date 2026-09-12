@@ -170,7 +170,20 @@ export function resolveComposioCallbackBaseUrl(
     return fromBrowser;
   }
 
-  const self = resolveRequestSelfOrigin(options.request);
+  return fallbackCallbackBaseUrl(options.request);
+}
+
+/**
+ * Callback base for a request that arrives *from* the OAuth provider. Its
+ * `Origin` and `Referer` belong to the provider, so the only answers worth
+ * trusting are the configured public URL and the host the request landed on.
+ */
+export function resolveCallbackBaseUrlFromRedirect(request: Request): string {
+  return resolveWebPublicUrl() ?? fallbackCallbackBaseUrl(request);
+}
+
+function fallbackCallbackBaseUrl(request?: Request): string {
+  const self = resolveRequestSelfOrigin(request);
   if (self) {
     return self;
   }
