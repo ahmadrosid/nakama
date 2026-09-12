@@ -517,6 +517,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_active_path_unique
   ON artifact_shares (org_id, profile_id, source_path)
   WHERE revoked_at IS NULL;
 
+-- Security audit ledger. Deliberately has no foreign keys so account or org
+-- erasure cannot remove the historical record.
+CREATE TABLE IF NOT EXISTS audit_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  actor_user_id TEXT,
+  org_id TEXT,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  request_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS audit_events_created
+  ON audit_events (created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS audit_events_org_created
+  ON audit_events (org_id, created_at DESC, id DESC);
+
+CREATE TRIGGER IF NOT EXISTS audit_events_no_update
+BEFORE UPDATE ON audit_events
+BEGIN
+  SELECT RAISE(ABORT, 'audit_events are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
+BEFORE DELETE ON audit_events
+BEGIN
+  SELECT RAISE(ABORT, 'audit_events are append-only');
+END;
+
 -- Append-only profile change ledger (no UPDATE/DELETE API; cascade only with org/profile cleanup).
 CREATE TABLE IF NOT EXISTS profile_change_events (
   id TEXT PRIMARY KEY NOT NULL,

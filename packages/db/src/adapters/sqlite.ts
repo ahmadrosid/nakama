@@ -19,6 +19,7 @@ import type {
   PublishOrgPluginReleaseInput,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
+  StoredAuditEvent,
   StoredAutomationRecord,
   StoredAutomationRunRecord,
   StoredBrowserSessionRecord,
@@ -73,6 +74,18 @@ interface AutomationRow {
   profile_id: string;
   updated_at: string;
   version: number;
+}
+
+interface AuditEventRow {
+  action: string;
+  actor_user_id: string | null;
+  created_at: string;
+  id: string;
+  metadata: string;
+  org_id: string | null;
+  request_id: string | null;
+  resource_id: string | null;
+  resource_type: string;
 }
 
 interface AutomationRunRow {
@@ -1637,6 +1650,23 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM users WHERE is_platform_admin = 1"
   );
 
+  const createAuditEventStmt = db.prepare(`
+    INSERT INTO audit_events (
+      id, actor_user_id, org_id, action, resource_type, resource_id,
+      metadata, request_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const listAuditEventsStmt = db.prepare(`
+    SELECT
+      id, actor_user_id, org_id, action, resource_type, resource_id,
+      metadata, request_id, created_at
+    FROM audit_events
+    WHERE (? IS NULL OR org_id = ?)
+      AND (? IS NULL OR action = ?)
+    ORDER BY created_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `);
+
   const createBrowserSessionStmt = db.prepare(`
     INSERT INTO browser_sessions (
       id,
@@ -2474,6 +2504,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.revokedAt
       );
     },
+    async createAuditEvent(record) {
+      createAuditEventStmt.run(
+        record.id,
+        record.actorUserId,
+        record.orgId,
+        record.action,
+        record.resourceType,
+        record.resourceId,
+        JSON.stringify(record.metadata),
+        record.requestId,
+        record.createdAt
+      );
+    },
 
     async createBrowserSession(record) {
       createBrowserSessionStmt.run(
@@ -3175,6 +3218,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listAttachmentsForSessionStmt
         .all(sessionId)
         .map((row) => toAttachmentRecord(row as AttachmentRow));
+    },
+
+    async listAuditEvents(options = {}) {
+      const action = options.action ?? null;
+      const orgId = options.orgId ?? null;
+      const rows = listAuditEventsStmt.all(
+        orgId,
+        orgId,
+        action,
+        action,
+        options.limit ?? 100,
+        options.offset ?? 0
+      ) as AuditEventRow[];
+      return rows.map(toAuditEventRecord);
     },
 
     async listAutomationRuns(automationId, limit = 20) {
@@ -4582,6 +4639,27 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     skillsWriteApproval: row.skills_write_approval !== 0,
     slug: row.slug,
     updatedAt: row.updated_at,
+  };
+}
+
+function toAuditEventRecord(row: AuditEventRow): StoredAuditEvent {
+  let metadata: StoredAuditEvent["metadata"] = {};
+  try {
+    metadata = JSON.parse(row.metadata) as StoredAuditEvent["metadata"];
+  } catch {
+    metadata = {};
+  }
+
+  return {
+    action: row.action,
+    actorUserId: row.actor_user_id,
+    createdAt: row.created_at,
+    id: row.id,
+    metadata,
+    orgId: row.org_id,
+    requestId: row.request_id,
+    resourceId: row.resource_id,
+    resourceType: row.resource_type,
   };
 }
 
