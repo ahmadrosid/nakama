@@ -1750,6 +1750,20 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
+  test("runs the agent on a freshness request instead of serving a stale file", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: [] },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "tolong kirim laporan harian",
+        });
+        expect(ctx.calls.sendStream).toBe(1);
+        expect(documentSendCount(ctx.sent)).toBe(0);
+      }
+    );
+  });
+
   test.each([false, true])(
     "attaches in a group (new artifact on retry: %s)",
     async (retry) => {
