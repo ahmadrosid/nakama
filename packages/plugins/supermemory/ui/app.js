@@ -448,7 +448,6 @@ function createCollection(ctx) {
       hasMore,
       busy,
       error,
-      setError,
       editing,
       setEditing,
       setRevision
@@ -479,14 +478,7 @@ function createCollection(ctx) {
       disabled: busy,
       type: "submit",
       variant: "outline"
-    }, "Search")), /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy,
-      onClick: () => {
-        setError("");
-        setRevision((value) => value + 1);
-      },
-      variant: "ghost"
-    }, "Refresh")), error && /* @__PURE__ */ React.createElement("p", {
+    }, "Search"))), error && /* @__PURE__ */ React.createElement("p", {
       role: "alert"
     }, error), editing && /* @__PURE__ */ React.createElement(Editor, {
       model

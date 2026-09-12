@@ -34,7 +34,6 @@ export function createCollection(ctx: Context) {
       hasMore,
       busy,
       error,
-      setError,
       editing,
       setEditing,
       setRevision,
@@ -68,16 +67,6 @@ export function createCollection(ctx: Context) {
               Search
             </Button>
           </form>
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setError("");
-              setRevision((value) => value + 1);
-            }}
-            variant="ghost"
-          >
-            Refresh
-          </Button>
         </div>
         {error && <p role="alert">{error}</p>}
         {editing && <Editor model={model} />}
