@@ -88,63 +88,57 @@ export function SettingsPage() {
             </div>
           ) : null}
 
-          {isOrgAdmin ? (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="font-medium text-foreground text-sm">
-                    Timezone
-                  </p>
-                  {timezoneHint ? (
-                    <p
-                      className="text-emerald-700 text-xs dark:text-emerald-300"
-                      role="status"
-                    >
-                      {timezoneHint}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <TimezoneSelect
-                    className="w-44 min-w-0 sm:w-52"
-                    disabled={saveTimezoneMutation.isPending}
-                    emptyLabel="Select timezone"
-                    id="timezone"
-                    onValueChange={(nextTimezone) => {
-                      if (nextTimezone) {
-                        setTimezone(nextTimezone);
-                        setTimezoneHint(null);
-                      }
-                    }}
-                    value={timezone}
-                  />
-                  <Button
-                    disabled={
-                      saveTimezoneMutation.isPending || !timezone.trim()
-                    }
-                    onClick={handleSaveTimezone}
-                    size="sm"
-                    type="button"
+          {isPlatformAdmin ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0 space-y-0.5">
+                <p className="font-medium text-foreground text-sm">Timezone</p>
+                {timezoneHint ? (
+                  <p
+                    className="text-emerald-700 text-xs dark:text-emerald-300"
+                    role="status"
                   >
-                    {saveTimezoneMutation.isPending ? (
-                      <>
-                        <Spinner className="mr-2" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save"
-                    )}
-                  </Button>
-                </div>
+                    {timezoneHint}
+                  </p>
+                ) : null}
               </div>
-
-              <WebPublicUrlSettingsRow />
-            </>
+              <div className="flex items-center gap-2">
+                <TimezoneSelect
+                  className="w-44 min-w-0 sm:w-52"
+                  disabled={saveTimezoneMutation.isPending}
+                  emptyLabel="Select timezone"
+                  id="timezone"
+                  onValueChange={(nextTimezone) => {
+                    if (nextTimezone) {
+                      setTimezone(nextTimezone);
+                      setTimezoneHint(null);
+                    }
+                  }}
+                  value={timezone}
+                />
+                <Button
+                  disabled={saveTimezoneMutation.isPending || !timezone.trim()}
+                  onClick={handleSaveTimezone}
+                  size="sm"
+                  type="button"
+                >
+                  {saveTimezoneMutation.isPending ? (
+                    <>
+                      <Spinner className="mr-2" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+              </div>
+            </div>
           ) : null}
+
+          {isOrgAdmin ? <WebPublicUrlSettingsRow /> : null}
         </CardContent>
       </Card>
 
-      {isOrgAdmin ? (
+      {isPlatformAdmin ? (
         <>
           <ProviderSettingsCard
             formError={formError}
