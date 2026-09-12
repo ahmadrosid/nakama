@@ -345,6 +345,7 @@ export async function runWriteFile(
   }
 
   await mkdir(path.dirname(filePath), { recursive: true });
+  await context.memoryFiles?.write(filePath, parsed.content);
   await writeFile(filePath, parsed.content, "utf8");
 
   return { bytesWritten: contentBytes, path: filePath };
@@ -419,6 +420,7 @@ export async function runDeleteFile(
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseSkillLocalToolFileWrite(guarded.resolved);
+  await context.memoryFiles?.remove(guarded.resolved);
   await unlink(guarded.resolved);
 
   return { deleted: true, path: guarded.resolved };
@@ -480,7 +482,12 @@ export async function runEditFile(
     );
   }
 
-  const rawBuffer = await readFile(filePath);
+  let rawBuffer = await readFile(filePath);
+  if (context.memoryFiles) {
+    rawBuffer = Buffer.from(
+      await context.memoryFiles.read(filePath, rawBuffer.toString("utf8"))
+    );
+  }
   const hasBom =
     rawBuffer.length >= 3 &&
     rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
@@ -527,6 +534,7 @@ export async function runEditFile(
     bytesWritten,
     guardOptions
   );
+  await context.memoryFiles?.write(filePath, outputContent);
   await writeFile(filePath, outputContent, "utf8");
 
   return {
@@ -746,7 +754,10 @@ export async function runReadFile(
     );
   }
 
-  const rawContent = await readFileAsText(filePath);
+  const localContent = await readFileAsText(filePath);
+  const rawContent = context.memoryFiles
+    ? await context.memoryFiles.read(filePath, localContent)
+    : localContent;
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;
   const startLine = Math.min(

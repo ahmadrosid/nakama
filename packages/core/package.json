@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./supermemory-client": "./src/supermemory-client.ts",
     ".": "./src/index.ts",
     "./agent-questionnaire": "./src/agent-questionnaire.ts",
     "./artifact-mime": "./src/artifact-mime.ts",

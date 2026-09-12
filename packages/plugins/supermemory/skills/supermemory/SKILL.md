@@ -1,9 +1,11 @@
 ---
 name: supermemory
-description: Save and recall explicit agent facts and search submitted text knowledge through the assigned Supermemory plugin tools.
+description: Use Nakama memory and knowledge with Supermemory storage, and retrieve older items saved through the plugin tools.
 ---
 
-Use only the Supermemory actions assigned to this agent. Discover available tools before calling them.
+Nakama automatically uses Supermemory for its existing memory and knowledge when this plugin is enabled and ready. Keep using `update-profile-memory`, `archive-profile-memory`, org-memory tools, and `knowledge_base_search`. Nakama preserves approvals, history, original uploads, and local recovery copies. Do not save the same fact again with a plugin action.
+
+The actions below manage items previously saved directly through the plugin. Use them only for that separate collection, or when the user explicitly requests it. Discover assigned tools before calling them.
 
 - Save a fact only when the user explicitly asks to remember it. Do not capture conversation turns automatically.
 - Use memory actions for explicit facts and knowledge actions for documents. These collections are separate for every agent and organization.

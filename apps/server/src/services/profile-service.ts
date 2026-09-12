@@ -69,6 +69,7 @@ import {
   isCustomToolType,
 } from "./custom-tool-handlers";
 import { toMcpServerSummaries } from "./mcp-service";
+import { MemoryBackendService } from "./memory-backend-service";
 import {
   type ProfileChangeMeta,
   recordProfileChangeEvent,
@@ -153,7 +154,10 @@ function slugifyProfileName(name: string): string {
 }
 
 export class ProfileService {
-  constructor(private readonly db: DatabaseAdapter) {}
+  private readonly memoryBackend: MemoryBackendService;
+  constructor(private readonly db: DatabaseAdapter) {
+    this.memoryBackend = new MemoryBackendService(db);
+  }
 
   async listProfiles(orgId: string): Promise<ListProfilesResponse> {
     const profiles = await this.db.listProfilesForOrg(orgId);
@@ -847,6 +851,7 @@ export class ProfileService {
         document,
         onDuplicate
       );
+      await this.memoryBackend.syncKnowledge(orgId, profileId);
       return {
         document: uploaded.document,
         outcome: uploaded.outcome,
@@ -876,6 +881,9 @@ export class ProfileService {
       profileId,
       documentId
     );
+
+    // A retry must also finish a remote deletion after the local file is gone.
+    await this.memoryBackend.syncKnowledge(orgId, profileId);
 
     if (!deleted) {
       throw new NakamaApiError("Knowledge base document not found.", 404);

@@ -11,7 +11,7 @@ import {
 } from "fs";
 import { join } from "path";
 
-// src/client.ts
+// ../../core/src/supermemory-client.ts
 function normalizeUrl(value) {
   let url;
   try {
@@ -104,7 +104,6 @@ class SupermemoryClient {
     }
   }
 }
-
 // src/actions.ts
 var hash = (parts) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 function required(value, name, max = 1000) {

@@ -291,6 +291,16 @@ async function withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Host-owned backend I/O shares lifecycle and export exclusion with plugins. */
+export function withPluginDataLock<T>(
+  directory: string,
+  work: () => Promise<T>
+): Promise<T> {
+  return withPluginMutation(() =>
+    withKeyedLock(lifecycleLocks, directory, work)
+  );
+}
+
 export async function vacuumPluginDatabaseInto(
   sourcePath: string,
   targetPath: string
@@ -1611,12 +1621,9 @@ export class PluginService {
   ): Promise<T> {
     // Keep the lock through filesystem cleanup, after revision checks can no
     // longer protect an installation whose database record has been deleted.
-    return withPluginMutation(() =>
-      withKeyedLock(
-        lifecycleLocks,
-        getOrgPluginDataDir(orgId, pluginId, this.configDir),
-        work
-      )
+    return withPluginDataLock(
+      getOrgPluginDataDir(orgId, pluginId, this.configDir),
+      work
     );
   }
 

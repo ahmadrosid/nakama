@@ -31,18 +31,22 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 ## Supermemory
 
-Keep an agent's saved facts and reference documents available across conversations. The Supermemory plugin adds separate **Memory** and **Knowledge** collections for each agent.
+Use Supermemory for the agent memory, shared organization memory, and knowledge base you already use in Nakama. Your existing memory tools, approval flow, and knowledge uploads stay in place.
 
 1. An org admin opens **System → Plugins → Official plugins → Supermemory → Install**.
-2. Open **Supermemory → Settings** and save your server URL and API token. Use **Check saved connection** to verify access.
-3. Choose an agent. Use **Remember** for a fact, or **Knowledge → Add text** to paste text or select a UTF-8 `.txt` or `.md` file up to 256 KiB.
-4. A platform admin assigns the plugin skill and tools to that agent to use them in chat. Ask it to remember a fact or search a saved document.
+2. Enable the plugin and wait for its worker to become ready. If you use a separately managed server, open **Supermemory → Settings**, save its URL and API token, and use **Check saved connection**.
+3. Keep using your agent's memory and knowledge base. Existing content moves to Supermemory when it is next read or searched; new knowledge uploads also sync automatically. Shared organization facts still require the usual approval before they are saved.
+4. Ask your agent to search its knowledge base using everyday language. Explicit regular-expression searches still use the local extracted text.
 
-The plugin connects to a separately managed [Supermemory server](https://supermemory.ai/docs/self-hosting/quickstart#bunx). Configure OpenAI for extraction and embeddings on that server using the [provider settings](https://supermemory.ai/docs/self-hosting/configuration) and [embedding settings](https://supermemory.ai/docs/self-hosting/embeddings). Content processed by OpenAI leaves your local server.
+Supermemory needs a provider for extraction and embeddings. For a separately managed [Supermemory server](https://supermemory.ai/docs/self-hosting/quickstart#bunx), use its [provider settings](https://supermemory.ai/docs/self-hosting/configuration) and [embedding settings](https://supermemory.ai/docs/self-hosting/embeddings). Content processed by OpenAI leaves your local server.
 
-Saves are explicit. Installing this plugin does not automatically capture conversations or move existing Nakama memory and knowledge. Source links are citations; the plugin does not fetch them. PDFs must be extracted to text separately.
+Nakama keeps local copies for recovery. Disabling the plugin returns your existing tools to those copies. Before the managed worker first becomes ready, memory stays local. After migration starts, an unavailable backend reports an error; restart the worker or disable the plugin to continue locally. Search can ask you to retry while new content is indexing.
+
+The plugin's separate **Memory** and **Knowledge** collections remain available for previously saved items and explicit plugin actions. They are separate from the built-in memory and knowledge base. Installing the plugin does not automatically capture every conversation.
 
 Documents show their processing state. Use **Check status** for an unresolved save and retry the same submission when asked. **Removal pending** means the item is excluded from plugin searches, but remote removal still needs retry. **Forget** is a soft deletion upstream, not permanent erasure.
+
+For built-in memory, replaced or removed versions stop appearing in search immediately. If Supermemory is still processing them, Nakama retries remote cleanup on later memory operations.
 
 Use a dedicated Supermemory server per organization. Once content has been saved, the plugin keeps that server address fixed; an admin can still rotate its token. Disabling or uninstalling retains the external data. Back up the Supermemory server separately: Nakama's backup contains the connection and tracking records, not the external dataset. Restore into the same organization to retain access; moving records to a different organization requires fresh ingestion.
 
