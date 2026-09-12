@@ -15,6 +15,37 @@ import {
 } from "./seed";
 
 describe("seed cleanup", () => {
+  test("preserves plugin tools and their profile assignments across startup", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertProfile({
+      createdAt: now,
+      id: "plugin_profile",
+      isSuper: false,
+      model: null,
+      name: "Plugin profile",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.upsertTool({
+      createdAt: now,
+      description: "Save memory",
+      handlerConfig: {},
+      handlerType: "plugin",
+      id: "plugin_memory",
+      name: "plugin_supermemory__remember",
+      pluginId: "supermemory",
+      pluginKey: "remember",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("plugin_profile", "plugin_memory");
+    await seedDatabase(db);
+    await seedDatabase(db);
+    expect(await db.getTool("plugin_memory")).not.toBeNull();
+    expect(
+      (await db.listToolsForProfile("plugin_profile")).map((tool) => tool.id)
+    ).toContain("plugin_memory");
+  });
   test("keeps a tool an operator unassigned from a profile", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();

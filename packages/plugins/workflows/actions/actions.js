@@ -723,7 +723,7 @@ async function run(input, context) {
           Object.assign(changes, { [key]: input[key] });
         }
       }
-      return context.actionKey === "create_workflow" ? service.create(changes, agentId, allowed) : service.update(input.workflowId, changes, allowed);
+      return context.actionKey === "create_workflow" ? await service.create(changes, agentId, allowed) : await service.update(input.workflowId, changes, allowed);
     }
     if (context.actionKey === "run_workflow") {
       const runner = new WorkflowRunner(service, {

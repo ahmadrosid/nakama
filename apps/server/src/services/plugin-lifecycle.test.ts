@@ -15,8 +15,10 @@ import {
   PluginHostError,
   PluginService,
   resetPluginAdmissionForTests,
+  runWithPluginExportBarrier,
   setPluginLifecycleTestHooks,
 } from "./plugin-service";
+import { WorkerManagerService } from "./worker-manager-service";
 
 const MIGRATION_001 = `
 CREATE TABLE items (
@@ -218,12 +220,12 @@ describe("plugin lifecycle", () => {
   let configDir: string;
 
   beforeEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     configDir = await mkdtemp(join(tmpdir(), "nakama-plugin-u4-"));
   });
 
   afterEach(async () => {
-    resetPluginAdmissionForTests();
+    await resetPluginAdmissionForTests();
     await rm(configDir, { force: true, recursive: true });
   });
 
@@ -768,5 +770,170 @@ describe("plugin lifecycle", () => {
     await expect(
       service.addOrgPlugin("org_a", "notes", "1.0.0")
     ).rejects.toMatchObject({ code: "incompatible" });
+  });
+  test("plugin workers run bundled code per org and stop before disable completes", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const processes = new Map<string, ReturnType<typeof Bun.spawn>>();
+    const pm2 = {
+      connect: (cb: (error: Error | null, value?: unknown) => void) => cb(null),
+      delete: (
+        name: string,
+        cb: (error: Error | null, value?: unknown) => void
+      ) => {
+        const child = processes.get(name);
+        if (!child) {
+          cb(null);
+          return;
+        }
+        child.kill();
+        void child.exited.then(() => {
+          processes.delete(name);
+          cb(null);
+        });
+      },
+      describe: (
+        name: string,
+        cb: (error: Error | null, value?: unknown) => void
+      ) => cb(null, processes.has(name) ? [{ name }] : []),
+      disconnect() {},
+      list: (cb: (error: Error | null, value?: unknown) => void) =>
+        cb(
+          null,
+          [...processes].map(([name]) => ({
+            name,
+            pm2_env: { status: "online" },
+          }))
+        ),
+      start: (
+        options: {
+          name: string;
+          script: string;
+          args: string[];
+          cwd: string;
+          env: Record<string, string>;
+        },
+        cb: (error: Error | null, value?: unknown) => void
+      ) => {
+        const child = Bun.spawn([options.script, ...options.args], {
+          cwd: options.cwd,
+          env: { ...process.env, ...options.env },
+          stderr: "ignore",
+          stdout: "ignore",
+        });
+        processes.set(options.name, child);
+        cb(null);
+      },
+      stop: (
+        name: string,
+        cb: (error: Error | null, value?: unknown) => void
+      ) => {
+        const child = processes.get(name);
+        if (!child) {
+          cb(null);
+          return;
+        }
+        child.kill();
+        void child.exited.then(() => cb(null));
+      },
+    } as unknown as typeof import("pm2");
+    const workerManager = new WorkerManagerService(configDir, pm2);
+    const service = new PluginService(db, configDir, { workerManager });
+    const source = pluginPackage({
+      "nakama.plugin.json": JSON.stringify(
+        baseManifest("notes", "1.0.0", {
+          actions: [],
+          database: undefined,
+          skills: [],
+          workers: [{ entry: "worker.js", key: "index", name: "Indexer" }],
+        })
+      ),
+      "worker.js": `await Bun.write(process.env.NAKAMA_PLUGIN_DATA_DIR + "/started", process.env.NAKAMA_ORG_ID); setInterval(() => {}, 1000);`,
+    });
+    try {
+      await service.installPluginPackage(source);
+      const a = await added(service, "org-a", "notes");
+      const b = await added(service, "org-b", "notes");
+      const enabled = await service.enableOrgPlugin(
+        "org-a",
+        "notes",
+        a.revision
+      );
+      await service.enableOrgPlugin("org-b", "notes", b.revision);
+      const marker = join(
+        getOrgPluginDataDir("org-a", "notes", configDir),
+        "started"
+      );
+      for (let i = 0; i < 100 && !existsSync(marker); i++) {
+        await Bun.sleep(10);
+      }
+      expect(await Bun.file(marker).text()).toBe("org-a");
+      expect(processes.size).toBe(2);
+      await runWithPluginExportBarrier(async () => {
+        expect(
+          await Promise.race([
+            Promise.all(
+              [...processes.values()].map((child) => child.exited)
+            ).then(() => true),
+            Bun.sleep(100).then(() => false),
+          ])
+        ).toBe(true);
+        const [worker] = await workerManager.listPluginWorkers("org-a");
+        await expect(workerManager.startWorker(worker!.name)).rejects.toThrow();
+      });
+      expect(
+        [...processes.values()].every((child) => child.exitCode === null)
+      ).toBe(true);
+      await service.disableOrgPlugin("org-a", "notes", enabled.revision);
+      expect(processes.size).toBe(1);
+      expect(await workerManager.listPluginWorkers("org-a")).toEqual([]);
+      expect(await Bun.file(marker).text()).toBe("org-a");
+      expect((await db.getOrgPlugin("org-a", "notes"))?.lifecycleState).toBe(
+        "disabled"
+      );
+    } finally {
+      await workerManager.unregisterPluginWorkers("org-a", "notes");
+      await workerManager.unregisterPluginWorkers("org-b", "notes");
+      for (const child of processes.values()) {
+        child.kill();
+      }
+    }
+  });
+
+  test("a worker start failure leaves the plugin disabled and retryable", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    let fail = true;
+    const service = new PluginService(db, configDir, {
+      workerManager: {
+        registerPluginWorkers: async () => {
+          if (fail) {
+            throw new Error("Could not start worker");
+          }
+        },
+        unregisterPluginWorkers: async () => {},
+      },
+    });
+    const source = pluginPackage({
+      "nakama.plugin.json": JSON.stringify(
+        baseManifest("notes", "1.0.0", {
+          actions: [],
+          database: undefined,
+          skills: [],
+          workers: [{ entry: "worker.js", key: "index", name: "Indexer" }],
+        })
+      ),
+      "worker.js": "setInterval(() => {}, 1000)",
+    });
+    await service.installPluginPackage(source);
+    const install = await added(service, "org-a", "notes");
+    await expect(
+      service.enableOrgPlugin("org-a", "notes", install.revision)
+    ).rejects.toThrow();
+    const failed = (await db.getOrgPlugin("org-a", "notes"))!;
+    expect(failed.lifecycleState).toBe("disabled");
+    fail = false;
+    expect(
+      (await service.enableOrgPlugin("org-a", "notes", failed.revision))
+        .lifecycleState
+    ).toBe("enabled");
   });
 });

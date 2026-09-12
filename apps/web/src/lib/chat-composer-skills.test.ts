@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { SkillSummary } from "@nakama/core/contract";
 import {
   filterComposerSlashSuggestions,
+  filterReservedSlashCommands,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
   getReservedCommandTokenRanges,
@@ -110,6 +111,38 @@ describe("filterSkillsForSlashQuery", () => {
 });
 
 describe("filterComposerSlashSuggestions", () => {
+  test.each([
+    ["addto", "add-tool"],
+    ["ADD_TO", "add-tool"],
+    ["add-pl", "add-plugin"],
+    ["addpl", "add-plugin"],
+    ["addmc", "add-mcp"],
+    ["adtl", "add-tool"],
+    ["tool", "add-tool"],
+  ])("matches command query %s", (query, name) => {
+    const commands = filterComposerSlashSuggestions([], query, {
+      enableAddCommands: true,
+    }).filter((item) => item.kind === "command");
+    expect(commands.map((item) => item.command.name)).toEqual([name]);
+    expect(filterComposerSlashSuggestions([], query)).toEqual([]);
+  });
+
+  test("does not turn separator-only input into every command", () => {
+    expect(
+      filterComposerSlashSuggestions([], "-_", { enableAddCommands: true })
+    ).toEqual([]);
+  });
+
+  test("ranks contiguous matches ahead of scattered letters", () => {
+    const commands = ["add-tool", "atlas"].map((name) => ({
+      description: "",
+      name,
+    }));
+    expect(
+      filterReservedSlashCommands("atl", commands).map((c) => c.name)
+    ).toEqual(["atlas", "add-tool"]);
+    expect(filterReservedSlashCommands("zzzz", commands)).toEqual([]);
+  });
   test("lists reserved /learn ahead of skills when manage-skills is assigned", () => {
     expect(
       filterComposerSlashSuggestions([manageSkillsSkill, weatherSkill], "").map(
@@ -160,7 +193,7 @@ describe("filterComposerSlashSuggestions", () => {
     ).toEqual([]);
   });
 
-  test("lists /add-tool and /add-mcp only when add commands are enabled", () => {
+  test("lists add commands only when enabled", () => {
     expect(
       filterComposerSlashSuggestions([weatherSkill], "add").filter(
         (item) => item.kind === "command"
@@ -172,7 +205,7 @@ describe("filterComposerSlashSuggestions", () => {
       }).map((item) =>
         item.kind === "command" ? item.command.name : item.skill.name
       )
-    ).toEqual(["add-tool", "add-mcp"]);
+    ).toEqual(["add-plugin", "add-tool", "add-mcp"]);
     expect(
       filterComposerSlashSuggestions([weatherSkill], "add-t", {
         enableAddCommands: true,
@@ -187,6 +220,8 @@ describe("matchComposerAddCommand", () => {
   test("matches a bare add command", () => {
     expect(matchComposerAddCommand("  /add-tool  ")).toBe("add-tool");
     expect(matchComposerAddCommand("/add-mcp")).toBe("add-mcp");
+    expect(matchComposerAddCommand("/add-plugin")).toBe("add-plugin");
+    expect(matchComposerAddCommand("/add-plugin workflows")).toBeNull();
     expect(matchComposerAddCommand("/add-tool please")).toBeNull();
   });
 });

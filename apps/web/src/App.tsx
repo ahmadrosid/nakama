@@ -62,6 +62,10 @@ const SkillDetailPage = lazyPage(
 );
 const StatusPage = lazyPage(() => import("@/pages/StatusPage"), "StatusPage");
 const PluginPage = lazyPage(() => import("@/pages/PluginPage"), "PluginPage");
+const PluginsPage = lazyPage(
+  () => import("@/pages/PluginsPage"),
+  "PluginsPage"
+);
 const SystemPage = lazyPage(() => import("@/pages/SystemPage"), "SystemPage");
 const ToolPlaygroundPage = lazyPage(
   () => import("@/pages/ToolPlaygroundPage"),
@@ -132,6 +136,12 @@ function AppShell() {
                     path="/system/playground/:toolId"
                   />
                   <Route element={<SystemPage />} path="/system" />
+                  <Route element={<PlatformAdminGuard allowOrgAdmin />}>
+                    <Route
+                      element={<PluginsPage />}
+                      path="/system/plugins/:pluginId"
+                    />
+                  </Route>
                   <Route element={<PluginPage />} path="/plugins/:pluginId" />
                   <Route element={<PlatformAdminGuard allowOrgAdmin />}>
                     <Route element={<ProfilesPage />} path="/profiles" />

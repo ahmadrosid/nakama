@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { resolve } from "node:path";
 import type { OrgRole } from "@nakama/core";
 import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
@@ -771,89 +771,103 @@ describe("plugin HTTP API", () => {
     });
   });
 
-  test("org admin installs official workflows with one request; member and CSRF failures are blocked", async () => {
-    const { app, authService, databaseAdapter } = createApp({
-      officialPackagesDir: resolve(
-        import.meta.dir,
-        "../../../../../packages/plugins"
-      ),
-      onHostRequest: async () => [],
-    });
-    const admin = await setupFreshInstallSession(app, databaseAdapter);
-    const orgId = admin.orgId!;
-    const catalog = await jsonRequest(app, "/v1/plugins/official", admin);
-    expect(catalog.status).toBe(200);
-    expect((await catalog.json()).plugins[0].id).toBe("workflows");
-    const path = "/v1/plugins/official/workflows/install";
-    const denied = await jsonRequest(app, path, admin, {
-      method: "POST",
-      headers: { "X-CSRF-Token": "invalid" },
-    });
-    expect(denied.status).toBe(403);
-    await seedUser(databaseAdapter, authService, {
-      email: "official-member@example.com",
-      orgId,
-      role: "member",
-      userId: "official_member",
-    });
-    const member = await loginUserSession(
-      app,
-      "official-member@example.com",
-      PASSWORD,
-      orgId
-    );
-    expect(
-      (await jsonRequest(app, path, member, { method: "POST" })).status
-    ).toBe(403);
-    const installed = await jsonRequest(app, path, admin, { method: "POST" });
-    expect(installed.status).toBe(200);
-    const install = (await installed.json()).install;
-    expect(install.lifecycleState).toBe("enabled");
-    const reinstallPath = "/v1/plugins/official/workflows/reinstall";
-    const reinstallRequest = {
-      method: "POST",
-      body: JSON.stringify({ expectedRevision: install.revision }),
-    };
-    expect(
-      (await jsonRequest(app, reinstallPath, member, reinstallRequest)).status
-    ).toBe(403);
-    expect(
-      (
-        await jsonRequest(app, reinstallPath, admin, {
-          ...reinstallRequest,
-          headers: { "X-CSRF-Token": "invalid" },
-        })
-      ).status
-    ).toBe(403);
-    expect(
-      (
-        await jsonRequest(app, reinstallPath, admin, {
-          method: "POST",
-          body: "{}",
-        })
-      ).status
-    ).toBe(400);
-    const reinstalled = await jsonRequest(
-      app,
-      reinstallPath,
-      admin,
-      reinstallRequest
-    );
-    expect(reinstalled.status).toBe(200);
-    const refreshed = (await reinstalled.json()).install;
-    expect(refreshed.lifecycleState).toBe("enabled");
-    expect(refreshed.selectedVersion).not.toBe(install.selectedVersion);
-    expect(
-      (await jsonRequest(app, reinstallPath, admin, reinstallRequest)).status
-    ).toBe(409);
-    const listed = await jsonRequest(app, "/v1/plugins", member);
-    expect(
-      (await listed.json()).plugins.some(
-        (plugin: { pluginId: string; enabled: boolean }) =>
-          plugin.pluginId === "workflows" && plugin.lifecycleState === "enabled"
-      )
-    ).toBe(true);
-  });
+  test.each(["workflows", "supermemory"])(
+    "org admin installs official %s; member and CSRF failures are blocked",
+    async (pluginId) => {
+      const workerManager = {
+        registerPluginWorkers: mock(async () => {}),
+        unregisterPluginWorkers: mock(async () => {}),
+      };
+      const { app, authService, databaseAdapter } = createApp({
+        workerManager,
+        officialPackagesDir: resolve(
+          import.meta.dir,
+          "../../../../../packages/plugins"
+        ),
+        onHostRequest: async () => [],
+      });
+      const admin = await setupFreshInstallSession(app, databaseAdapter);
+      const orgId = admin.orgId!;
+      const catalog = await jsonRequest(app, "/v1/plugins/official", admin);
+      expect(catalog.status).toBe(200);
+      expect((await catalog.json()).plugins[0].id).toBe("workflows");
+      const path = `/v1/plugins/official/${pluginId}/install`;
+      const denied = await jsonRequest(app, path, admin, {
+        method: "POST",
+        headers: { "X-CSRF-Token": "invalid" },
+      });
+      expect(denied.status).toBe(403);
+      await seedUser(databaseAdapter, authService, {
+        email: "official-member@example.com",
+        orgId,
+        role: "member",
+        userId: "official_member",
+      });
+      const member = await loginUserSession(
+        app,
+        "official-member@example.com",
+        PASSWORD,
+        orgId
+      );
+      expect(
+        (await jsonRequest(app, path, member, { method: "POST" })).status
+      ).toBe(403);
+      const installed = await jsonRequest(app, path, admin, { method: "POST" });
+      expect(installed.status).toBe(200);
+      if (pluginId === "supermemory") {
+        expect(workerManager.registerPluginWorkers).toHaveBeenCalledWith(
+          expect.objectContaining({ orgId, pluginId }),
+          true
+        );
+      }
+      const install = (await installed.json()).install;
+      expect(install.lifecycleState).toBe("enabled");
+      const reinstallPath = `/v1/plugins/official/${pluginId}/reinstall`;
+      const reinstallRequest = {
+        method: "POST",
+        body: JSON.stringify({ expectedRevision: install.revision }),
+      };
+      expect(
+        (await jsonRequest(app, reinstallPath, member, reinstallRequest)).status
+      ).toBe(403);
+      expect(
+        (
+          await jsonRequest(app, reinstallPath, admin, {
+            ...reinstallRequest,
+            headers: { "X-CSRF-Token": "invalid" },
+          })
+        ).status
+      ).toBe(403);
+      expect(
+        (
+          await jsonRequest(app, reinstallPath, admin, {
+            method: "POST",
+            body: "{}",
+          })
+        ).status
+      ).toBe(400);
+      const reinstalled = await jsonRequest(
+        app,
+        reinstallPath,
+        admin,
+        reinstallRequest
+      );
+      expect(reinstalled.status).toBe(200);
+      const refreshed = (await reinstalled.json()).install;
+      expect(refreshed.lifecycleState).toBe("enabled");
+      expect(refreshed.selectedVersion).not.toBe(install.selectedVersion);
+      expect(
+        (await jsonRequest(app, reinstallPath, admin, reinstallRequest)).status
+      ).toBe(409);
+      const listed = await jsonRequest(app, "/v1/plugins", member);
+      expect(
+        (await listed.json()).plugins.some(
+          (plugin: { pluginId: string; enabled: boolean }) =>
+            plugin.pluginId === pluginId && plugin.lifecycleState === "enabled"
+        )
+      ).toBe(true);
+    }
+  );
 
   test("openapi documents plugin routes", async () => {
     const { app } = createApp();

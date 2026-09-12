@@ -29,6 +29,23 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 **5. Update or remove (org admin).** Disable the plugin first. Then pick an approved newer release and update, or uninstall. Uninstall keeps the organization's plugin data until you confirm a separate delete.
 
+## Supermemory
+
+Keep an agent's saved facts and reference documents available across conversations. The Supermemory plugin adds separate **Memory** and **Knowledge** collections for each agent.
+
+1. An org admin opens **System → Plugins → Official plugins → Supermemory → Install**.
+2. Open **Supermemory → Settings** and save your server URL and API token. Use **Check saved connection** to verify access.
+3. Choose an agent. Use **Remember** for a fact, or **Knowledge → Add text** to paste text or select a UTF-8 `.txt` or `.md` file up to 256 KiB.
+4. A platform admin assigns the plugin skill and tools to that agent to use them in chat. Ask it to remember a fact or search a saved document.
+
+The plugin connects to a separately managed [Supermemory server](https://supermemory.ai/docs/self-hosting/quickstart#bunx). Configure OpenAI for extraction and embeddings on that server using the [provider settings](https://supermemory.ai/docs/self-hosting/configuration) and [embedding settings](https://supermemory.ai/docs/self-hosting/embeddings). Content processed by OpenAI leaves your local server.
+
+Saves are explicit. Installing this plugin does not automatically capture conversations or move existing Nakama memory and knowledge. Source links are citations; the plugin does not fetch them. PDFs must be extracted to text separately.
+
+Documents show their processing state. Use **Check status** for an unresolved save and retry the same submission when asked. **Removal pending** means the item is excluded from plugin searches, but remote removal still needs retry. **Forget** is a soft deletion upstream, not permanent erasure.
+
+Use a dedicated Supermemory server per organization. Once content has been saved, the plugin keeps that server address fixed; an admin can still rotate its token. Disabling or uninstalling retains the external data. Back up the Supermemory server separately: Nakama's backup contains the connection and tracking records, not the external dataset. Restore into the same organization to retain access; moving records to a different organization requires fresh ingestion.
+
 ## Who can do what
 
 | Action | Who |

@@ -25,6 +25,37 @@ const identity = {
 };
 
 describe("validatePluginManifest", () => {
+  test("preserves an optional HTTPS icon", () => {
+    const icon = "https://example.com/plugin.svg";
+    const result = validatePluginManifest({
+      ...identity,
+      apiVersion: 1,
+      icon,
+      minNakamaVersion: "0.1.0",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.manifest).toHaveProperty("icon", icon);
+    }
+  });
+
+  test.each([
+    "",
+    123,
+    "javascript:alert(1)",
+    "file:///tmp/icon.png",
+    "http://example.com/icon.png",
+    "/icon.png",
+  ])("rejects invalid icon %s", (icon) => {
+    expect(
+      validatePluginManifest({
+        ...identity,
+        apiVersion: 1,
+        icon,
+        minNakamaVersion: "0.1.0",
+      }).ok
+    ).toBe(false);
+  });
   test("accepts a skills-only manifest", () => {
     const result = validatePluginManifest({
       apiVersion: PLUGIN_MANIFEST_API_VERSION,
@@ -469,4 +500,26 @@ describe("derivePluginToolName", () => {
     const longKey = "k".repeat(PLUGIN_TOOL_NAME_MAX_LENGTH);
     expect(derivePluginToolName("notes", longKey)).toBeNull();
   });
+});
+
+test("worker manifests preserve declarations and reject unsafe or duplicate entries", () => {
+  const base = { ...identity, apiVersion: 1, minNakamaVersion: "0.1.0" };
+  const worker = {
+    entry: "workers/engine.js",
+    key: "engine",
+    name: "Memory engine",
+    useHostLlm: true,
+  };
+  const result = validatePluginManifest({ ...base, workers: [worker] });
+  expect(result.ok && result.manifest.workers).toEqual([worker]);
+  for (const workers of [
+    [worker, worker],
+    [{ ...worker, entry: "../outside.js" }],
+    [{ ...worker, entry: "/tmp/outside.js" }],
+    [{ ...worker, entry: "worker.ts" }],
+    [{ ...worker, key: "../engine" }],
+    [{ ...worker, useHostLlm: "yes" }],
+  ]) {
+    expect(validatePluginManifest({ ...base, workers }).ok).toBe(false);
+  }
 });

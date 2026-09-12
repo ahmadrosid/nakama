@@ -5,12 +5,9 @@ import type {
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
 import {
-  Alert02Icon,
   ArrowDownLeft01Icon,
   ArrowUpRight01Icon,
-  CancelCircleIcon,
-  CheckmarkCircle01Icon,
-  Clock01Icon,
+  type Clock01Icon,
   Coins01Icon,
   SparklesIcon,
   ZapIcon,
@@ -26,21 +23,15 @@ import {
   useRefreshSystemStatus,
   useSystemStatusQuery,
 } from "@/hooks/use-system-status";
+import { usePluginWorkers } from "@/hooks/use-worker-actions";
 import { formatUsd } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatProviderLabel } from "@/lib/models";
-import { PAGE_PATHS } from "@/lib/navigation";
-import {
-  buildServiceColumns,
-  deriveSummary,
-  type StatusTone,
-} from "@/pages/status-page.shared";
+import { PAGE_PATHS, pluginIcon } from "@/lib/navigation";
+import { buildServiceColumns } from "@/pages/status-page.shared";
 
 const sectionClass =
   "min-w-0 overflow-hidden rounded-md border border-border bg-card";
-const iconTileClass =
-  "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40";
-
 export function StatusPage() {
   const { data: status, error, isLoading } = useSystemStatusQuery();
   const { user } = useAuth();
@@ -75,7 +66,63 @@ export function StatusPage() {
       ) : status ? (
         <StatusDashboard canManageWorkers={canManageWorkers} status={status} />
       ) : null}
+      <PluginWorkersSection />
     </div>
+  );
+}
+
+function PluginWorkersSection() {
+  const { data = [], error } = usePluginWorkers();
+  const { user, activeOrg } = useAuth();
+  const canManage = user?.isPlatformAdmin || activeOrg?.role === "admin";
+  if (error) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {formatError(error)}
+      </p>
+    );
+  }
+  if (!data.length) {
+    return null;
+  }
+  return (
+    <section aria-label="Plugin workers" className={sectionClass}>
+      <h2 className="border-border border-b px-4 py-3 font-medium text-sm">
+        Plugin workers
+      </h2>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
+          <WorkerTableHeader canManage={Boolean(canManage)} />
+          <tbody>
+            {data.map((worker) => {
+              const running = worker.process.status === "online";
+              const labels = {
+                errored: "Errored",
+                online: "Online",
+                stopped: "Offline",
+              };
+              return (
+                <WorkerServiceRow
+                  canManage={Boolean(canManage)}
+                  icon={pluginIcon(worker.pluginId)}
+                  key={worker.name}
+                  status={
+                    worker.process.status
+                      ? labels[worker.process.status]
+                      : "Unavailable"
+                  }
+                  title={worker.label}
+                  titleHref={`/plugins/${encodeURIComponent(worker.pluginId)}`}
+                  tone={running ? "ok" : worker.process.status ? "bad" : "warn"}
+                  worker={{ process: worker.process, running }}
+                  workerName={worker.name}
+                />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -86,7 +133,6 @@ function StatusDashboard({
   status: SystemStatusResponse;
   canManageWorkers: boolean;
 }) {
-  const summary = useMemo(() => deriveSummary(status), [status]);
   const services = useMemo(() => buildServiceColumns(status), [status]);
   const { automationWorker, telegramWorker, whatsappWorker, discordWorker } =
     status;
@@ -124,8 +170,6 @@ function StatusDashboard({
 
   return (
     <section className={sectionClass}>
-      <SummaryStrip status={status} summary={summary} />
-
       <div className="grid grid-cols-1 divide-y divide-border border-border border-b sm:grid-cols-2 sm:divide-x sm:divide-y-0">
         <QuickStat
           label="Scheduled jobs"
@@ -140,30 +184,7 @@ function StatusDashboard({
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
-          <thead className="text-muted-foreground text-xs">
-            <tr>
-              <th className="border-border border-b px-5 py-2.5 font-medium">
-                Service
-              </th>
-              <th className="border-border border-b px-5 py-2.5 font-medium">
-                Status
-              </th>
-              <th className="border-border border-b px-5 py-2.5 font-medium">
-                {canManageWorkers ? (
-                  "Actions"
-                ) : (
-                  <span className="sr-only">Actions</span>
-                )}
-              </th>
-              <th className="border-border border-b px-5 py-2.5 font-medium">
-                {canManageWorkers ? (
-                  "Logs"
-                ) : (
-                  <span className="sr-only">Logs</span>
-                )}
-              </th>
-            </tr>
-          </thead>
+          <WorkerTableHeader canManage={canManageWorkers} />
           <tbody>
             {workerRows.map((row) => (
               <WorkerServiceRow
@@ -593,61 +614,6 @@ function UsageInlineMetric({
   );
 }
 
-function SummaryStrip({
-  status,
-  summary,
-}: {
-  status: SystemStatusResponse;
-  summary: ReturnType<typeof deriveSummary>;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap items-start gap-3 border-border border-b px-5 py-4 sm:gap-4",
-        summary.tone === "warn" &&
-          "bg-amber-500/[0.04] dark:bg-amber-400/[0.05]",
-        summary.tone === "bad" && "bg-destructive/5"
-      )}
-    >
-      <div
-        className={cn(
-          iconTileClass,
-          summary.tone === "ok" && "bg-background/70",
-          summary.tone === "warn" && "border-amber-500/25 bg-amber-500/10",
-          summary.tone === "bad" && "border-destructive/25 bg-destructive/10"
-        )}
-      >
-        <ToneIcon className="size-5" tone={summary.tone} />
-      </div>
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="text-balance font-semibold text-foreground text-sm">
-          {summary.title}
-        </p>
-        <p className="text-pretty text-muted-foreground text-sm">
-          {summary.description}
-        </p>
-        {summary.action ? (
-          <Link
-            className="inline-flex min-h-10 items-center font-medium text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50"
-            to={summary.action.to}
-          >
-            {summary.action.label}
-          </Link>
-        ) : null}
-      </div>
-      <div className="ml-auto flex basis-full items-center justify-end gap-1.5 text-muted-foreground text-xs leading-none sm:basis-auto">
-        <Clock01Icon aria-hidden className="size-3.5 shrink-0 opacity-70" />
-        <span title={formatDate(status.checkedAt)}>
-          Updated{" "}
-          <span className="tabular-nums">
-            {formatRelativeTime(status.checkedAt)}
-          </span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function QuickStat({
   label,
   value,
@@ -704,9 +670,31 @@ function ServiceStatusBadge({
   );
 }
 
+function WorkerTableHeader({ canManage }: { canManage: boolean }) {
+  return (
+    <thead className="text-muted-foreground text-xs">
+      <tr>
+        <th className="border-border border-b px-5 py-2.5 font-medium">
+          Service
+        </th>
+        <th className="border-border border-b px-5 py-2.5 font-medium">
+          Status
+        </th>
+        <th className="border-border border-b px-5 py-2.5 font-medium">
+          {canManage ? "Actions" : <span className="sr-only">Actions</span>}
+        </th>
+        <th className="border-border border-b px-5 py-2.5 font-medium">
+          {canManage ? "Logs" : <span className="sr-only">Logs</span>}
+        </th>
+      </tr>
+    </thead>
+  );
+}
+
 function WorkerServiceRow({
   icon: Icon,
   title,
+  titleHref,
   status,
   tone,
   worker,
@@ -716,6 +704,7 @@ function WorkerServiceRow({
 }: {
   icon: typeof Clock01Icon;
   title: string;
+  titleHref?: string;
   status: string;
   tone: ServiceStatusTone;
   worker: Pick<SystemStatusResponse["automationWorker"], "running" | "process">;
@@ -730,7 +719,18 @@ function WorkerServiceRow({
       <td className="border-border border-b px-5 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate font-medium text-foreground">{title}</span>
+          {titleHref ? (
+            <Link
+              className="truncate font-medium text-foreground hover:underline"
+              to={titleHref}
+            >
+              {title}
+            </Link>
+          ) : (
+            <span className="truncate font-medium text-foreground">
+              {title}
+            </span>
+          )}
         </div>
       </td>
       <td className="border-border border-b px-5 py-3">
@@ -770,39 +770,6 @@ function WorkerServiceRow({
   );
 }
 
-function ToneIcon({
-  tone,
-  className,
-}: {
-  tone: StatusTone;
-  className?: string;
-}) {
-  if (tone === "ok") {
-    return (
-      <CheckmarkCircle01Icon
-        aria-hidden
-        className={cn("text-emerald-600 dark:text-emerald-400", className)}
-      />
-    );
-  }
-
-  if (tone === "warn") {
-    return (
-      <Alert02Icon
-        aria-hidden
-        className={cn("text-amber-600 dark:text-amber-400", className)}
-      />
-    );
-  }
-
-  return (
-    <CancelCircleIcon
-      aria-hidden
-      className={cn("text-destructive", className)}
-    />
-  );
-}
-
 function StatusSkeleton() {
   return (
     <div
@@ -815,24 +782,4 @@ function StatusSkeleton() {
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString();
-}
-
-function formatRelativeTime(value: string): string {
-  const deltaMs = Date.now() - new Date(value).getTime();
-  const seconds = Math.max(0, Math.round(deltaMs / 1000));
-
-  if (seconds < 10) {
-    return "just now";
-  }
-
-  if (seconds < 60) {
-    return `${seconds}s ago`;
-  }
-
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
-
-  return formatDate(value);
 }

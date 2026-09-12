@@ -5,6 +5,8 @@ import type {
   OrgPluginDetail,
   PluginPackagePreviewResponse,
   PluginPackageRequest,
+  ProfileDetail,
+  SkillSummary,
   ToolSummary,
   UpdateOrgPluginRequest,
 } from "@nakama/core/contract";
@@ -44,6 +46,139 @@ export function groupPluginTools(tools: ToolSummary[]) {
     }
   }
   return [...groups.values()];
+}
+
+export function pluginAgentAccessState(
+  profile: ProfileDetail,
+  pluginId: string,
+  resources: { tools: ToolSummary[]; skills: SkillSummary[] }
+) {
+  const tools = resources.tools.filter((tool) => tool.pluginId === pluginId);
+  const skills = resources.skills.filter(
+    (skill) => skill.pluginId === pluginId
+  );
+  const assigned =
+    tools.filter((tool) => profile.tools.some((item) => item.id === tool.id))
+      .length +
+    skills.filter((skill) =>
+      profile.skills.some((item) => item.id === skill.id)
+    ).length;
+  const total = tools.length + skills.length;
+  return { assigned, full: total > 0 && assigned === total, total };
+}
+
+export function usePluginAgentAccess() {
+  const { activeOrg, user } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+  return useQuery({
+    enabled: Boolean(orgId) && user?.isPlatformAdmin === true,
+    queryFn: async () => {
+      const [list, tools, skills] = await Promise.all([
+        client.listProfiles(orgId),
+        client.listTools(orgId),
+        client.listSkills(orgId),
+      ]);
+      const profiles = await Promise.all(
+        list.profiles.map(
+          async (profile) =>
+            (await client.getProfile(profile.id, orgId)).profile
+        )
+      );
+      const resources = { skills: skills.skills, tools: tools.tools };
+      const pluginIds = [
+        ...new Set(
+          [...resources.tools, ...resources.skills].flatMap((item) =>
+            item.pluginId ? [item.pluginId] : []
+          )
+        ),
+      ];
+      const counts = Object.fromEntries(
+        pluginIds.map((id) => [
+          id,
+          profiles.filter(
+            (profile) =>
+              pluginAgentAccessState(profile, id, resources).assigned > 0
+          ).length,
+        ])
+      );
+      return { profiles, ...resources, counts };
+    },
+    queryKey: [...queryKeys.profiles.all, "plugin-access", orgId],
+  });
+}
+
+export async function savePluginAgentAccess(
+  orgId: string,
+  pluginId: string,
+  changes: Record<string, boolean>
+) {
+  const [plugin, tools, skills] = await Promise.all([
+    client.getOrgPlugin(pluginId, orgId),
+    client.listTools(orgId),
+    client.listSkills(orgId),
+  ]);
+  if (plugin.lifecycleState !== "enabled") {
+    throw new Error("Enable this plugin before changing agent access.");
+  }
+  const pluginTools = tools.tools.filter((item) => item.pluginId === pluginId);
+  const pluginSkills = skills.skills.filter(
+    (item) => item.pluginId === pluginId
+  );
+  const results = await Promise.allSettled(
+    Object.entries(changes).map(async ([profileId, selected]) => {
+      const { profile } = await client.getProfile(profileId, orgId);
+      const operations = [
+        ...pluginTools.flatMap((tool) => {
+          if (selected === profile.tools.some((item) => item.id === tool.id)) {
+            return [];
+          }
+          return [
+            selected
+              ? client.assignTool(profileId, { toolId: tool.id }, orgId)
+              : client.unassignTool(profileId, tool.id, orgId),
+          ];
+        }),
+        ...pluginSkills.flatMap((skill) => {
+          if (
+            selected === profile.skills.some((item) => item.id === skill.id)
+          ) {
+            return [];
+          }
+          return [
+            selected
+              ? client.assignSkill(profileId, { skillId: skill.id }, orgId)
+              : client.unassignSkill(profileId, skill.id, orgId),
+          ];
+        }),
+      ];
+      const outcomes = await Promise.allSettled(operations);
+      const failure = outcomes.find((outcome) => outcome.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
+    })
+  );
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") {
+    throw failure.reason;
+  }
+}
+
+export function useSavePluginAgentAccess() {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      pluginId,
+      changes,
+    }: {
+      pluginId: string;
+      changes: Record<string, boolean>;
+    }) => savePluginAgentAccess(orgId, pluginId, changes),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+  });
 }
 
 export function orgPluginsQueryOptions(orgId: string) {
@@ -333,6 +468,9 @@ export function formatPluginTrustLines(
     `Digest ${digest}`,
     contributions.hasUi ? "Includes a page" : "No page",
     contributions.hasDatabase ? "Owns a database" : "No database",
+    ...(contributions.workerKeys?.length
+      ? [`Workers ${contributions.workerKeys.join(", ")}`]
+      : []),
     contributions.actionKeys.length > 0
       ? `Actions ${contributions.actionKeys.join(", ")}`
       : "No actions",
@@ -406,7 +544,9 @@ export function pluginRowActions(plugin: OrgPluginDetail): {
     disable: plugin.lifecycleState === "enabled",
     enable: plugin.installed && plugin.lifecycleState === "disabled",
     purge: plugin.lifecycleState === "retained",
-    uninstall: plugin.installed && plugin.lifecycleState === "disabled",
+    uninstall:
+      plugin.installed &&
+      ["enabled", "disabled"].includes(plugin.lifecycleState),
     update:
       plugin.installed &&
       plugin.lifecycleState === "disabled" &&

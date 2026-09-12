@@ -85,12 +85,22 @@ export interface PluginMigrationContribution {
   path: string;
 }
 
+export interface PluginWorkerContribution {
+  /** Bundled Bun entry, run as a supervised process per organization. */
+  entry: string;
+  key: string;
+  name: string;
+  useHostLlm?: boolean;
+}
+
 export interface PluginManifest {
   actions: PluginActionContribution[];
   apiVersion: typeof PLUGIN_MANIFEST_API_VERSION;
   author: string;
   database?: { migrations: PluginMigrationContribution[] };
   description: string;
+  /** HTTPS URL of the plugin's display icon. */
+  icon?: string;
   id: string;
   license: string;
   minNakamaVersion: string;
@@ -98,6 +108,7 @@ export interface PluginManifest {
   skills: PluginSkillContribution[];
   ui?: PluginUiContribution;
   version: string;
+  workers?: PluginWorkerContribution[];
 }
 
 export type PluginValidationResult =
@@ -167,6 +178,20 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
     return fail("invalid_version");
   }
 
+  if (
+    value.icon !== undefined &&
+    (typeof value.icon !== "string" ||
+      value.icon.length > 2048 ||
+      !URL.canParse(value.icon) ||
+      new URL(value.icon).protocol !== "https:")
+  ) {
+    return fail("invalid_identity");
+  }
+
+  const workersResult = parseWorkers(value.workers);
+  if (!workersResult.ok) {
+    return workersResult;
+  }
   const skillsResult = parseSkills(value.skills);
   if (!skillsResult.ok) {
     return skillsResult;
@@ -194,10 +219,14 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
   return {
     manifest: {
       actions: actionsResult.actions,
+      ...(workersResult.workers.length
+        ? { workers: workersResult.workers }
+        : {}),
       apiVersion: PLUGIN_MANIFEST_API_VERSION,
       author: value.author,
       ...(databaseResult.database ? { database: databaseResult.database } : {}),
       description: value.description,
+      ...(typeof value.icon === "string" ? { icon: value.icon } : {}),
       id: value.id,
       license: value.license,
       minNakamaVersion: value.minNakamaVersion,
@@ -540,6 +569,56 @@ function parseSkills(
   }
 
   return { ok: true, skills };
+}
+
+function parseWorkers(
+  value: unknown
+):
+  | { ok: true; workers: PluginWorkerContribution[] }
+  | { ok: false; code: PluginManifestValidationCode } {
+  if (value === undefined) {
+    return { ok: true, workers: [] };
+  }
+  if (!Array.isArray(value) || value.length > 8) {
+    return fail("missing_field");
+  }
+  const workers: PluginWorkerContribution[] = [];
+  const keys = new Set<string>();
+  for (const item of value) {
+    if (
+      !(
+        isRecord(item) &&
+        isNonEmptyString(item.key) &&
+        CONTRIBUTION_KEY.test(item.key) &&
+        isNonEmptyString(item.name)
+      )
+    ) {
+      return fail("invalid_identity");
+    }
+    if (
+      !(
+        isNonEmptyString(item.entry) &&
+        isRelativePluginPath(item.entry) &&
+        /\.m?js$/.test(item.entry)
+      )
+    ) {
+      return fail("invalid_path");
+    }
+    if (item.useHostLlm !== undefined && typeof item.useHostLlm !== "boolean") {
+      return fail("missing_field");
+    }
+    if (keys.has(item.key)) {
+      return fail("duplicate_key");
+    }
+    keys.add(item.key);
+    workers.push({
+      entry: item.entry,
+      key: item.key,
+      name: item.name,
+      ...(item.useHostLlm === undefined ? {} : { useHostLlm: item.useHostLlm }),
+    });
+  }
+  return { ok: true, workers };
 }
 
 function parseActions(

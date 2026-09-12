@@ -657,9 +657,13 @@ export function ChatComposer(props: ChatComposerProps) {
           onMcpOpenChange={(open) => {
             setAddDialog(open ? "add-mcp" : null);
           }}
+          onPluginOpenChange={(open) =>
+            setAddDialog(open ? "add-plugin" : null)
+          }
           onToolOpenChange={(open) => {
             setAddDialog(open ? "add-tool" : null);
           }}
+          pluginOpen={addDialog === "add-plugin"}
           profileId={addProfileId}
           toolOpen={addDialog === "add-tool"}
         />
@@ -724,7 +728,9 @@ function ChatComposerTextarea({
         suggestion.kind === "command" ? suggestion.command.action : undefined;
       if (
         onAddCommand &&
-        (addAction === "add-tool" || addAction === "add-mcp")
+        (addAction === "add-tool" ||
+          addAction === "add-mcp" ||
+          addAction === "add-plugin")
       ) {
         controller.textInput.setInput(
           `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
@@ -816,7 +822,10 @@ function ChatComposerTextarea({
             return;
           }
 
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (
+            (event.key === "Enter" || event.key === "Tab") &&
+            !event.shiftKey
+          ) {
             event.preventDefault();
             const suggestion = suggestions[safeActiveIndex];
             if (suggestion) {

@@ -29,6 +29,7 @@ import {
   DEFAULT_SERVER_HOST,
   DEFAULT_SERVER_PORT,
   ensureBundledSkillFiles,
+  getActiveProviderInstance,
   getUserConfigDir,
   loadConfig,
   NAKAMA_API_VERSION,
@@ -68,7 +69,10 @@ import {
   PluginService,
   shutdownPluginRuntime,
 } from "./services/plugin-service";
-import { resolveProfileProviderSelection } from "./services/provider-instance-helpers";
+import {
+  resolveDefaultModelForInstance,
+  resolveProfileProviderSelection,
+} from "./services/provider-instance-helpers";
 import { SkillCuratorService } from "./services/skill-curator-service";
 import { SkillProposalService } from "./services/skill-proposal-service";
 import { SkillSuggestionService } from "./services/skill-suggestion-service";
@@ -197,12 +201,24 @@ agent.setAutomationRunHistoryTools(
 );
 agent.setAutomationRunner(automationRunner);
 
-const workerManager = new WorkerManagerService(projectRoot);
+const workerManager = new WorkerManagerService(projectRoot, undefined, () => {
+  const configured = getActiveProviderInstance(agent.getUserConfig());
+  if (!configured) {
+    return null;
+  }
+  return {
+    apiKey: configured.apiKey,
+    baseUrl: configured.baseUrl,
+    model: resolveDefaultModelForInstance(configured),
+    type: configured.type,
+  };
+});
 
 const orgService = new OrgService(database.adapter, authService);
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   officialPackagesDir: join(projectRoot, "packages/plugins"),
   onHostRequest: createPluginAgentHost(database.adapter, agent),
+  workerManager,
 });
 try {
   await pluginService.recoverInterruptedPluginOperations();
@@ -329,6 +345,7 @@ void initializeOptionalServices({
 
 try {
   await workerManager.recoverDesiredWorkers();
+  await pluginService.recoverPluginWorkers();
 } catch (error) {
   console.warn("Could not recover platform workers:", error);
 }

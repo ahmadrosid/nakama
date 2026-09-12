@@ -1,26 +1,36 @@
 // ui/style.css
 var style_default = `[data-plugin-id="workflows"] {
   &:has(> .workflows-page) {
+    display: flex;
+    flex-direction: column;
     padding: 0;
     container-type: inline-size;
+    overflow: hidden;
   }
 
   .workflows-page {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
     min-width: 0;
+    min-height: 0;
     font-size: 14px;
     line-height: 1.5;
     color: var(--foreground);
   }
   .workflow-layout {
     display: grid;
+    flex: 1;
     grid-template-columns: 240px minmax(0, 1fr);
-    min-height: min(760px, 85dvh);
+    min-height: 0;
     overflow: hidden;
   }
   .workflow-sidebar {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
     border-right: 1px solid var(--border);
   }
   .workflow-sidebar ul,
@@ -229,10 +239,35 @@ var style_default = `[data-plugin-id="workflows"] {
     white-space: pre-wrap;
   }
   .workflow-error {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 14px;
+    margin: 16px 16px 0;
     color: var(--destructive);
+    background: color-mix(in srgb, var(--destructive) 6%, var(--background));
+    border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
+    border-radius: 6px;
+  }
+  .workflow-error > svg {
+    flex-shrink: 0;
+  }
+  .workflow-error p {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .workflow-error a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   @container (max-width: 760px) {
     .workflow-layout {
+      grid-template-rows: auto minmax(0, 1fr);
       grid-template-columns: minmax(0, 1fr);
     }
     .workflow-sidebar {
@@ -275,6 +310,8 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-step-drawer[data-expanded="true"] {
     width: 100%;
+    border-left: 0;
+    box-shadow: none;
   }
   .workflow-drawer-header {
     display: flex;
@@ -355,6 +392,7 @@ var style_default = `[data-plugin-id="workflows"] {
 
 [data-plugin-id="workflows"] {
   .workflow-layout[data-empty="true"] {
+    grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
   }
   .workflow-welcome {
@@ -519,6 +557,14 @@ function apply(ctx) {
     SelectValue,
     SelectContent,
     SelectItem,
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    Command,
+    CommandInput,
+    CommandList,
+    CommandEmpty,
+    CommandItem,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -552,6 +598,44 @@ function apply(ctx) {
       value: option.value
     }, option.label))));
   }
+  function ToolChoice({
+    value,
+    options,
+    onChange,
+    disabled
+  }) {
+    const [open, setOpen] = React.useState(false);
+    return /* @__PURE__ */ React.createElement(Popover, {
+      onOpenChange: setOpen,
+      open
+    }, /* @__PURE__ */ React.createElement(PopoverTrigger, {
+      "aria-label": "Tool",
+      disabled,
+      render: /* @__PURE__ */ React.createElement(Button, {
+        className: "w-full justify-between",
+        variant: "outline"
+      })
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "min-w-0 truncate"
+    }, value || "Select tool"), /* @__PURE__ */ React.createElement("span", {
+      "aria-hidden": "true"
+    }, "⌄")), /* @__PURE__ */ React.createElement(PopoverContent, {
+      className: "overflow-hidden p-0 shadow-sm"
+    }, /* @__PURE__ */ React.createElement(Command, null, /* @__PURE__ */ React.createElement(CommandInput, {
+      "aria-label": "Search tools",
+      placeholder: "Search tools…"
+    }), /* @__PURE__ */ React.createElement(CommandList, null, /* @__PURE__ */ React.createElement(CommandEmpty, null, "No tools found."), options.map((option) => /* @__PURE__ */ React.createElement(CommandItem, {
+      "data-checked": value === option.value ? true : undefined,
+      key: option.value,
+      onSelect: () => {
+        onChange(option.value);
+        setOpen(false);
+      },
+      value: option.value
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "min-w-0 break-all"
+    }, option.label)))))));
+  }
   function Icon({
     kind
   }) {
@@ -563,6 +647,7 @@ function apply(ctx) {
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9"
     };
     return /* @__PURE__ */ React.createElement("svg", {
@@ -580,6 +665,17 @@ function apply(ctx) {
     }));
   }
   ctx.styles(style_default);
+  function WorkflowError({ message }) {
+    const connectionError = /^MCP server "([^"]+)" is not connected\.$/.exec(message);
+    return /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-error",
+      role: "alert"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "warning"
+    }), /* @__PURE__ */ React.createElement("p", null, connectionError ? `${connectionError[1]} isn’t connected.` : message), connectionError ? /* @__PURE__ */ React.createElement("a", {
+      href: "/system?tab=mcp"
+    }, "Open MCP settings") : null);
+  }
   const action = async (name, input) => await ctx.host.call(name, input);
   function WorkflowRunCard({ input, result, status }) {
     const workflowId = typeof input?.workflowId === "string" ? input.workflowId : null;
@@ -968,10 +1064,9 @@ function apply(ctx) {
       },
       type: "button",
       variant: "ghost"
-    }, title(tab)))), error && /* @__PURE__ */ React.createElement("p", {
-      className: "workflow-error",
-      role: "alert"
-    }, error), view === "runs" && /* @__PURE__ */ React.createElement("section", {
+    }, title(tab)))), error && /* @__PURE__ */ React.createElement(WorkflowError, {
+      message: error
+    }), view === "runs" && /* @__PURE__ */ React.createElement("section", {
       "aria-label": "Run history",
       className: "workflow-scroll workflow-runs"
     }, !runs.length && /* @__PURE__ */ React.createElement("p", {
@@ -1148,9 +1243,8 @@ function apply(ctx) {
       value: selectedStep.id
     })), (stepFields[selectedStep.kind] ?? []).map((field) => field === "tool" ? /* @__PURE__ */ React.createElement("label", {
       key: field
-    }, "Tool", /* @__PURE__ */ React.createElement(Choice, {
+    }, "Tool", /* @__PURE__ */ React.createElement(ToolChoice, {
       disabled: busy,
-      label: "Tool",
       onChange: (value) => updateStep(selectedStep.key, {
         fields: {
           ...selectedStep.fields,

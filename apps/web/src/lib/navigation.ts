@@ -1,15 +1,18 @@
 import {
   Brain03Icon,
+  BrainIcon,
   Building03Icon,
   Chat01Icon,
   DashboardSquare01Icon,
   Folder01Icon,
   Notification01Icon,
+  PackageIcon,
   PlusSignSquareIcon,
   Settings01Icon,
   SharedWifiIcon,
   UserSquareIcon,
   WebhookIcon,
+  WorkflowSquare01Icon,
 } from "hugeicons-react";
 
 type NavIcon = typeof SharedWifiIcon;
@@ -243,6 +246,17 @@ export function pluginIdFromPath(pathname: string): string | null {
     return decodeURIComponent(rest);
   } catch {
     return rest;
+  }
+}
+
+export function pluginIcon(pluginId: string): NavIcon {
+  switch (pluginId) {
+    case "workflows":
+      return WorkflowSquare01Icon;
+    case "supermemory":
+      return BrainIcon;
+    default:
+      return PackageIcon;
   }
 }
 

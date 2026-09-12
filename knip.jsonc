@@ -2,6 +2,16 @@
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
+    "packages/plugins/supermemory": {
+      "entry": [
+        "src/worker.ts",
+        "workers/server.js",
+        "src/actions.ts",
+        "src/ui.tsx",
+        "actions/actions.js",
+        "ui/app.js"
+      ]
+    },
     "packages/plugins/workflows": {
       "entry": [
         "src/actions.ts",

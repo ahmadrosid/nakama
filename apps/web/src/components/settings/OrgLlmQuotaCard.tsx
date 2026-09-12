@@ -37,11 +37,13 @@ export function OrgLlmQuotaCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>LLM monthly quota</CardTitle>
+    <Card className="overflow-hidden shadow-none">
+      <CardHeader className="border-border border-b px-4 py-3">
+        <CardTitle className="font-medium text-sm leading-normal tracking-normal">
+          LLM monthly quota
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
+      <CardContent className="space-y-2 p-4 text-sm">
         {error ? <p className="text-destructive">{error}</p> : null}
         {quota ? (
           <>
