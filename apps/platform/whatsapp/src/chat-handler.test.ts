@@ -1826,6 +1826,34 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
+  test("delivers the full set on a natural-language retry, not just newest", async () => {
+    await withArtifactChat(
+      {
+        deliverableArtifacts: [
+          {
+            ...SAMPLE_ARTIFACT,
+            filename: "laporan-part1.csv",
+            path: "laporan-part1.csv",
+          },
+          {
+            ...SAMPLE_ARTIFACT,
+            filename: "laporan-part2.csv",
+            path: "laporan-part2.csv",
+          },
+        ],
+        messages: [],
+      },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "send it to this group",
+        });
+        expect(ctx.calls.sendStream).toBe(0);
+        expect(documentSendCount(ctx.sent)).toBe(2);
+      }
+    );
+  });
+
   test.each([false, true])(
     "attaches in a group (new artifact on retry: %s)",
     async (retry) => {
