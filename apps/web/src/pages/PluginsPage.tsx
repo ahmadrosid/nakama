@@ -22,12 +22,7 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
-import {
-  BrainIcon,
-  MoreHorizontalIcon,
-  PackageIcon,
-  WorkflowSquare01Icon,
-} from "hugeicons-react";
+import { MoreHorizontalIcon } from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
@@ -59,6 +54,7 @@ import { formatError } from "@/lib/client";
 import {
   canAccessSystemPage,
   canManagePluginReleases,
+  pluginIcon,
   pluginPagePath,
 } from "@/lib/navigation";
 
@@ -929,12 +925,7 @@ function PluginAgentAccessDialog({
 
 function PluginIcon({ icon, pluginId }: { icon?: string; pluginId: string }) {
   const [failedIcon, setFailedIcon] = useState<string | null>(null);
-  const Icon =
-    pluginId === "workflows"
-      ? WorkflowSquare01Icon
-      : pluginId === "supermemory"
-        ? BrainIcon
-        : PackageIcon;
+  const Icon = pluginIcon(pluginId);
   return (
     <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden text-foreground">
       {icon && icon !== failedIcon ? (

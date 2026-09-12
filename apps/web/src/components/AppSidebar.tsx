@@ -5,7 +5,6 @@ import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  CubeIcon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
@@ -28,6 +27,7 @@ import {
   navHrefForPage,
   type PageId,
   pageIdFromPath,
+  pluginIcon,
   pluginIdFromPath,
   visibleNavGroups,
 } from "@/lib/navigation";
@@ -158,10 +158,10 @@ function PluginsNavGroup({
           <SidebarNavButton
             active={entry.pluginId === activePluginId}
             collapsed={collapsed}
-            icon={CubeIcon}
+            icon={pluginIcon(entry.pluginId)}
             item={{
               description: entry.pluginId,
-              icon: CubeIcon,
+              icon: pluginIcon(entry.pluginId),
               id: "plugins",
               label: entry.label,
             }}
