@@ -270,6 +270,7 @@ test("failed document removal excludes search immediately and retries safely", a
     ) {
       return Response.json({
         containerTags: [meta.nakamaContainer],
+        content: "Full document content",
         customId,
         id: "doc-1",
         status: "done",
@@ -293,6 +294,9 @@ test("failed document removal excludes search immediately and retries safely", a
     submissionKey: "guide",
     title: "Guide",
   })) as { id: string };
+  expect(
+    await invoke("get_document", { agentId: "alice", id: saved.id })
+  ).toMatchObject({ content: "Full document content", state: "ready" });
   expect(
     await invoke("search_knowledge", { agentId: "alice", query: "guide" })
   ).toMatchObject({ items: [{ excerpt: "Guide excerpt", id: saved.id }] });

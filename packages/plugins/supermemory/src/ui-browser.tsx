@@ -4,7 +4,7 @@
 
 import type { ReactNode } from "react";
 import { createCollection } from "./ui-collection";
-import type { Context, Profile } from "./ui-context";
+import { type Context, errorText, type Profile } from "./ui-context";
 export function createBrowser(ctx: Context) {
   const React = ctx.React;
   const {
@@ -16,6 +16,88 @@ export function createBrowser(ctx: Context) {
     SelectItem,
   } = ctx.ui;
   const Collection = createCollection(ctx);
+  function DocumentPage({
+    agentId,
+    documentId,
+  }: {
+    agentId: string;
+    documentId: string;
+  }) {
+    const [document, setDocument] = React.useState<{
+      title: string;
+      content: string | null;
+      source: string;
+    } | null>(null);
+    const [error, setError] = React.useState("");
+    React.useEffect(() => {
+      let active = true;
+      ctx.host
+        .call("get_document", { agentId, id: documentId })
+        .then((result) => {
+          if (active) {
+            setDocument(
+              result as {
+                title: string;
+                content: string | null;
+                source: string;
+              }
+            );
+          }
+        })
+        .catch((reason) => {
+          if (active) {
+            setError(errorText(reason));
+          }
+        });
+      return () => {
+        active = false;
+      };
+    }, [agentId, documentId]);
+    return (
+      <article className="sm-stack">
+        <div>
+          <Button
+            render={
+              <a
+                aria-label="Back to Knowledge"
+                href={`/plugins/supermemory?agent=${encodeURIComponent(agentId)}&tab=knowledge`}
+              />
+            }
+            variant="ghost"
+          >
+            ← Back to Knowledge
+          </Button>
+        </div>
+        {error ? (
+          <p role="alert">{error}</p>
+        ) : document ? (
+          <>
+            <h1
+              style={{
+                fontSize: "24px",
+                fontWeight: 600,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {document.title}
+            </h1>
+            {document.source && <p className="sm-source">{document.source}</p>}
+            <div
+              style={{
+                lineHeight: 1.7,
+                overflowWrap: "anywhere",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {document.content ?? "Content is not available yet."}
+            </div>
+          </>
+        ) : (
+          <p role="status">Loading…</p>
+        )}
+      </article>
+    );
+  }
   return function Browser({
     profiles,
     controls,
@@ -23,8 +105,28 @@ export function createBrowser(ctx: Context) {
     profiles: Profile[];
     controls: ReactNode;
   }) {
-    const [agentId, setAgentId] = React.useState(profiles[0]?.id ?? "");
-    const [kind, setKind] = React.useState<"memory" | "knowledge">("memory");
+    const params = new URLSearchParams(
+      typeof window === "undefined" ? "" : window.location.search
+    );
+    const requestedAgent = params.get("agent");
+    const documentId = params.get("document");
+    const [agentId, setAgentId] = React.useState(
+      profiles.find((profile) => profile.id === requestedAgent)?.id ??
+        profiles[0]?.id ??
+        ""
+    );
+    const [kind, setKind] = React.useState<"memory" | "knowledge">(
+      params.get("tab") === "knowledge" ? "knowledge" : "memory"
+    );
+    if (documentId) {
+      return (
+        <DocumentPage
+          agentId={requestedAgent ?? agentId}
+          documentId={documentId}
+          key={`${requestedAgent}:${documentId}`}
+        />
+      );
+    }
     const selector = (
       <Select
         onValueChange={(value) => setAgentId(value ?? "")}

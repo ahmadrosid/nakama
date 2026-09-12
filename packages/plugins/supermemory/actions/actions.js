@@ -292,7 +292,10 @@ async function run(input, context) {
       if (kind === "knowledge") {
         try {
           const document = await ownedDocument(row);
-          return update(row, document.status === "done" ? "ready" : document.status === "failed" ? "failed" : "pending", required(document.id, "document ID"));
+          return {
+            content: typeof document.content === "string" ? document.content : undefined,
+            ...update(row, document.status === "done" ? "ready" : document.status === "failed" ? "failed" : "pending", required(document.id, "document ID"))
+          };
         } catch (error) {
           if (error instanceof SupermemoryError && error.status === 404) {
             return update(row, "unknown");
@@ -384,7 +387,10 @@ async function run(input, context) {
     if (action === "get_document") {
       const row = rowById(required(input.id, "item ID", 100));
       const refreshed = await refresh(row);
-      return publicReceipt(refreshed);
+      return {
+        ...publicReceipt(refreshed),
+        content: refreshed.content ?? null
+      };
     }
     if (action === "search_memory" || action === "search_knowledge") {
       const query = required(input.query, "query", 4000);

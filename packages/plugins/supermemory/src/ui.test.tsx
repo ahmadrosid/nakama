@@ -17,6 +17,10 @@ afterEach(async () => {
 const primitives = Object.fromEntries(
   [
     "Button",
+    "DropdownMenu",
+    "DropdownMenuTrigger",
+    "DropdownMenuContent",
+    "DropdownMenuItem",
     "Input",
     "Textarea",
     "Select",
@@ -28,10 +32,14 @@ const primitives = Object.fromEntries(
     "DialogContent",
     "DialogHeader",
     "DialogTitle",
+    "DialogDescription",
+    "DialogFooter",
   ].map((name) => [
     name,
     (props: Record<string, unknown>) =>
-      React.createElement(name, props, props.children as React.ReactNode),
+      name === "Dialog" && !props.open
+        ? null
+        : React.createElement(name, props, props.children as React.ReactNode),
   ])
 ) as unknown as typeof UI;
 async function mount(
@@ -173,6 +181,15 @@ test("forget uses the selected local id", async () => {
       )[1]!
       .props.onClick()
   );
+  expect(removed).toEqual([]);
+  await act(async () =>
+    view.root
+      .findAll(
+        (node) =>
+          String(node.type) === "Button" && node.props.variant === "destructive"
+      )[0]!
+      .props.onClick()
+  );
   expect(removed).toEqual([{ agentId: "alice", id: "second" }]);
   expect(JSON.stringify(view.toJSON())).toContain("One");
   expect(JSON.stringify(view.toJSON())).not.toContain('"Two"');
@@ -278,6 +295,83 @@ test("pending document polling pauses when hidden and stops on unmount", async (
       Object.defineProperty(globalThis, "document", originalDocument);
     } else {
       Reflect.deleteProperty(globalThis, "document");
+    }
+  }
+});
+
+test("document links preserve agent context and cancelling delete preserves the document", async () => {
+  const calls: string[] = [];
+  const view = await mount(async (action) => {
+    calls.push(action);
+    if (action === "profiles") {
+      return profiles;
+    }
+    if (action === "get_document") {
+      return { content: "Full transcript text" };
+    }
+    return {
+      items: [{ id: "doc", source: "desk", state: "ready", title: "Meeting" }],
+    };
+  });
+  await act(async () => button(view, "Knowledge").props.onClick());
+  expect(calls).not.toContain("get_document");
+  expect(
+    view.root.findByProps({ className: "sm-document-name" }).props.href
+  ).toBe("/plugins/supermemory?agent=alice&document=doc");
+  await act(async () =>
+    view.root
+      .findAll(
+        (node) =>
+          String(node.type) === "DropdownMenuItem" &&
+          node.props.children === "Delete"
+      )[0]!
+      .props.onClick()
+  );
+  expect(calls).not.toContain("delete_document");
+  await act(async () => button(view, "Cancel").props.onClick());
+  expect(calls).not.toContain("delete_document");
+  expect(
+    view.root.findAll((node) => node.props.children === "Meeting").length
+  ).toBeGreaterThan(0);
+});
+
+test("document detail URL loads full content and links back to knowledge", async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { location: { search: "?agent=bob&document=doc" } },
+  });
+  try {
+    const view = await mount(async (action, input) => {
+      if (action === "profiles") {
+        return profiles;
+      }
+      expect(action).toBe("get_document");
+      expect(input).toEqual({ agentId: "bob", id: "doc" });
+      return {
+        content: "Full transcript text",
+        source: "desk",
+        title: "Meeting",
+      };
+    });
+    expect(
+      view.root.findAll(
+        (node) => node.props.children === "Full transcript text"
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      view.root.findAll((node) => String(node.type) === "Dialog")
+    ).toHaveLength(0);
+    expect(button(view, "← Back to Knowledge").props.render.props.href).toBe(
+      "/plugins/supermemory?agent=bob&tab=knowledge"
+    );
+    await act(async () => view.unmount());
+    renderer = undefined;
+  } finally {
+    if (originalWindow) {
+      Object.defineProperty(globalThis, "window", originalWindow);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
     }
   }
 });

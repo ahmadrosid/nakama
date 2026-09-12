@@ -243,6 +243,7 @@ export function useCollection(
   return {
     act,
     activeQuery,
+    agentId,
     busy,
     content,
     editing,

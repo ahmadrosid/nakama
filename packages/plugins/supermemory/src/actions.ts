@@ -295,7 +295,9 @@ export async function run(input: Input, context: Context): Promise<unknown> {
       }
       return document;
     }
-    async function refresh(row: Receipt): Promise<Receipt> {
+    async function refresh(
+      row: Receipt
+    ): Promise<Receipt & { content?: string }> {
       if (
         row.state === "deleted" ||
         (row.state === "submitting" && Date.now() - row.updated_at < 30_000)
@@ -305,15 +307,21 @@ export async function run(input: Input, context: Context): Promise<unknown> {
       if (kind === "knowledge") {
         try {
           const document = await ownedDocument(row);
-          return update(
-            row,
-            document.status === "done"
-              ? "ready"
-              : document.status === "failed"
-                ? "failed"
-                : "pending",
-            required(document.id, "document ID")
-          );
+          return {
+            content:
+              typeof document.content === "string"
+                ? document.content
+                : undefined,
+            ...update(
+              row,
+              document.status === "done"
+                ? "ready"
+                : document.status === "failed"
+                  ? "failed"
+                  : "pending",
+              required(document.id, "document ID")
+            ),
+          };
         } catch (error) {
           if (error instanceof SupermemoryError && error.status === 404) {
             return update(row, "unknown");
@@ -469,7 +477,10 @@ export async function run(input: Input, context: Context): Promise<unknown> {
     if (action === "get_document") {
       const row = rowById(required(input.id, "item ID", 100));
       const refreshed = await refresh(row);
-      return publicReceipt(refreshed);
+      return {
+        ...publicReceipt(refreshed),
+        content: refreshed.content ?? null,
+      };
     }
     if (action === "search_memory" || action === "search_knowledge") {
       const query = required(input.query, "query", 4000);
