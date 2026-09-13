@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type EmailOutboundAdapter,
+  getOrgConfigDir,
   getProfileSoulDir,
   NakamaApiError,
 } from "@nakama/core";
@@ -873,6 +874,86 @@ describe("OrgService", () => {
       bootstrapped.organization.id
     );
     expect(resolved).toBe(second.organization.id);
+  });
+
+  test("permanently deletes an archived org and its files", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-permanent-delete" },
+    });
+    const kept = await orgService.createOrganization(
+      { name: "Beta", slug: "beta-permanent-delete" },
+      bootstrapped.user.id
+    );
+    const orgDir = getOrgConfigDir(bootstrapped.organization.id);
+    await mkdir(orgDir, { recursive: true });
+    await writeFile(join(orgDir, "private-data.txt"), "private data");
+    const deletedProfile = (
+      await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
+    )[0]!;
+    await databaseAdapter.createBrowserSession({
+      activeOrgId: bootstrapped.organization.id,
+      createdAt: new Date().toISOString(),
+      csrfTokenHash: "csrf_permanent_delete",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      id: "session_permanent_delete",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "token_permanent_delete",
+      userId: bootstrapped.user.id,
+    });
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+
+    await orgService.permanentlyDeleteOrganization(
+      bootstrapped.organization.id
+    );
+
+    expect(
+      await databaseAdapter.getOrganizationById(bootstrapped.organization.id)
+    ).toBeNull();
+    expect(await databaseAdapter.getProfile(deletedProfile.id)).toBeNull();
+    expect(
+      await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
+    ).toEqual([]);
+    expect(
+      await databaseAdapter.getOrganizationById(kept.organization.id)
+    ).not.toBeNull();
+    expect(
+      await databaseAdapter.getUserById(bootstrapped.user.id)
+    ).not.toBeNull();
+    expect(
+      await databaseAdapter.getBrowserSessionBySessionTokenHash(
+        "token_permanent_delete"
+      )
+    ).toMatchObject({ activeOrgId: null });
+    await expect(access(orgDir)).rejects.toThrow();
+  });
+
+  test("refuses to permanently delete an active org", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-active-delete",
+    });
+    const orgDir = getOrgConfigDir(created.organization.id);
+
+    await expect(
+      orgService.permanentlyDeleteOrganization(created.organization.id)
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(
+      await databaseAdapter.getOrganizationById(created.organization.id)
+    ).not.toBeNull();
+    await expect(access(orgDir)).resolves.toBeNull();
   });
 
   test("clears a stale session org when the user has no remaining memberships", async () => {

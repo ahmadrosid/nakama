@@ -105,6 +105,41 @@ describe("organization archive persistence", () => {
     expect((await db.getOrganizationById("org_a"))?.archivedAt).toBe(now);
   });
 
+  test("deleteOrganization removes dependent profiles and org-owned resources", async () => {
+    const db = createSqliteMemoryAdapter();
+    const now = "2026-08-21T00:00:00.000Z";
+    await seedTwoActiveOrgs(db, now);
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_a",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "A",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.upsertTool({
+      createdAt: now,
+      description: "Org tool",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_a",
+      name: "org_tool",
+      orgId: "org_a",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("profile_a", "tool_a");
+
+    expect(await db.deleteOrganization("org_a")).toBe(true);
+
+    expect(await db.getOrganizationById("org_a")).toBeNull();
+    expect(await db.getProfile("profile_a")).toBeNull();
+    expect(await db.getTool("tool_a")).toBeNull();
+    expect(await db.getOrganizationById("org_b")).not.toBeNull();
+  });
+
   test("tryMarkOrganizationArchived stamps updated_at separately from archived_at", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;

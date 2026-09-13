@@ -1,7 +1,9 @@
+import { rm } from "node:fs/promises";
 import {
   createEmailOutboundAdapter,
   type EmailOutboundAdapter,
   generateTemporaryPassword,
+  getOrgConfigDir,
   getProfileSoulDir,
   initSoulDirectory,
   NakamaApiError,
@@ -123,6 +125,26 @@ export class OrgService {
       archivedAt: now,
       updatedAt: now,
     });
+  }
+
+  async permanentlyDeleteOrganization(orgId: string): Promise<void> {
+    const organization = await this.databaseAdapter.getOrganizationById(orgId);
+    if (!organization) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    if (!organization.archivedAt) {
+      throw new NakamaApiError(
+        "Archive the organization before deleting it permanently.",
+        409
+      );
+    }
+
+    // Keep the database row available for a safe retry if disk cleanup fails.
+    await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
+    const deleted = await this.databaseAdapter.deleteOrganization(orgId);
+    if (!deleted) {
+      throw new NakamaApiError("Not found", 404);
+    }
   }
 
   async updateOrganization(

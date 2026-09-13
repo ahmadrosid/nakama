@@ -1684,6 +1684,37 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND archived_at IS NULL
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
   `);
+  const deleteOrganizationStmt = db.prepare(
+    "DELETE FROM organizations WHERE id = ?"
+  );
+  const organizationExistsStmt = db.prepare(
+    "SELECT 1 FROM organizations WHERE id = ?"
+  );
+  const deleteOrganizationTransaction = db.transaction((orgId: string) => {
+    if (!organizationExistsStmt.get(orgId)) {
+      return false;
+    }
+
+    db.query(
+      "UPDATE browser_sessions SET active_org_id = NULL WHERE active_org_id = ?"
+    ).run(orgId);
+
+    // These tables gained org_id through migrations rather than FK-backed
+    // schema definitions, so the organization cascade cannot remove them.
+    for (const table of [
+      "llm_turn_usage",
+      "llm_usage_stats",
+      "mcp_servers",
+      "skills",
+      "tool_output_savings",
+      "tools",
+      "workspace_settings",
+    ]) {
+      db.query(`DELETE FROM ${table} WHERE org_id = ?`).run(orgId);
+    }
+
+    return deleteOrganizationStmt.run(orgId).changes > 0;
+  });
   const upsertOrganizationStmt = db.prepare(`
     INSERT INTO organizations (id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2620,6 +2651,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteNotificationDestination(id) {
       const result = deleteNotificationDestinationStmt.run(id);
       return result.changes > 0;
+    },
+
+    async deleteOrganization(id) {
+      const foreignKeys = db.query("PRAGMA foreign_keys").get() as {
+        foreign_keys: number;
+      };
+      const restoreForeignKeys = foreignKeys.foreign_keys === 0;
+      if (restoreForeignKeys) {
+        db.exec("PRAGMA foreign_keys = ON");
+      }
+
+      try {
+        return deleteOrganizationTransaction(id);
+      } finally {
+        if (restoreForeignKeys) {
+          db.exec("PRAGMA foreign_keys = OFF");
+        }
+      }
     },
 
     async deleteOrgMember(orgId, userId) {
