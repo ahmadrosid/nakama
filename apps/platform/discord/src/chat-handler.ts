@@ -37,6 +37,7 @@ import {
   type ButtonInteraction,
   ButtonStyle,
   type ChatInputCommandInteraction,
+  ComponentType,
   type Message,
   StringSelectMenuBuilder,
   type StringSelectMenuInteraction,
@@ -920,6 +921,11 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     );
     const reply = (content: string) =>
       interaction.editReply({ components: [], content });
+    const action = selection?.[3];
+    if (action === "cancel") {
+      await reply("Selection cancelled.");
+      return;
+    }
     if (orgs.length === 0) {
       await reply("No organizations are configured yet.");
       return;
@@ -942,16 +948,36 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    if ("values" in interaction) {
-      const picked = choices.find(
-        (entry) => entry.id === interaction.values[0]
-      );
-      if (interaction.values.length !== 1 || !picked) {
-        await reply(
-          "That choice is no longer available. Open the picker again."
+    let selectedId: string | undefined;
+    if ("values" in interaction && interaction.values.length === 1) {
+      selectedId = interaction.values[0];
+    } else if (action === "apply" && "message" in interaction) {
+      // The bot-rendered default option holds the pending choice without persisting it.
+      const menu = interaction.message.components
+        .flatMap((row) =>
+          row.type === ComponentType.ActionRow ? row.components : []
+        )
+        .find(
+          (component) =>
+            component.type === ComponentType.StringSelect &&
+            component.customId.startsWith(
+              `nakama:${kind}:${interaction.user.id}:`
+            ) &&
+            component.customId.split(":")[4] === selection?.[4]
         );
-        return;
+      if (menu?.type === ComponentType.StringSelect) {
+        const selected = menu.options.filter((option) => option.default);
+        if (selected.length === 1) {
+          selectedId = selected[0]?.value;
+        }
       }
+    }
+    const picked = choices.find((entry) => entry.id === selectedId);
+    if (("values" in interaction || action === "apply") && !picked) {
+      await reply("That choice is no longer available. Open the picker again.");
+      return;
+    }
+    if (action === "apply" && picked) {
       if (kind === "org") {
         if (picked.id !== org?.id) {
           orgStore.set(channelOrgKey, picked.id);
@@ -975,7 +1001,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const page = Number.isSafeInteger(requestedPage)
       ? Math.max(0, Math.min(requestedPage, lastPage))
       : 0;
-    const customId = (pageIndex: number) =>
+    const customId = (pageIndex: number | "apply" | "cancel") =>
       `nakama:${kind}:${interaction.user.id}:${pageIndex}${kind === "profile" ? `:${org!.id}` : ""}`;
     const currentId =
       kind === "org" ? org?.id : await resolveSessionProfileId(conversationKey);
@@ -986,7 +1012,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       )
       .addOptions(
         choices.slice(page * 25, (page + 1) * 25).map((entry) => ({
-          default: entry.id === currentId,
+          default: entry.id === (selectedId ?? currentId),
           label: (entry.name || entry.id).slice(0, 100),
           value: entry.id,
         }))
@@ -1011,6 +1037,19 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         )
       );
     }
+    components.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(customId("apply"))
+          .setLabel("Apply")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(!picked),
+        new ButtonBuilder()
+          .setCustomId(customId("cancel"))
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
     await interaction.editReply({
       components,
       content: kind === "org" ? "Organization" : `Profile · ${org!.name}`,

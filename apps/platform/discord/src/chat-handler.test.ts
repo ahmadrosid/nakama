@@ -37,7 +37,8 @@ import { ThreadStore } from "./thread-store";
 function createPickerInteraction(
   customId: string,
   values?: string[],
-  userId?: string
+  userId?: string,
+  payload?: ReturnType<ReturnType<typeof readPickerPayload>>
 ) {
   const mock = createSlashInteraction({
     commandName: "org",
@@ -50,13 +51,26 @@ function createPickerInteraction(
     interaction: {
       ...interaction,
       customId,
+      message: {
+        components:
+          payload?.components.map((row) => ({
+            components: row.components.map(({ custom_id, ...component }) => ({
+              ...component,
+              customId: custom_id,
+            })),
+            type: 1,
+          })) ?? [],
+      },
       ...(values ? { values } : {}),
     } as unknown as StringSelectMenuInteraction | ButtonInteraction,
   };
 }
 
 function readPickerPayload(
-  interaction: ReturnType<typeof createSlashInteraction>["interaction"]
+  interaction:
+    | ReturnType<typeof createSlashInteraction>["interaction"]
+    | ButtonInteraction
+    | StringSelectMenuInteraction
 ) {
   const edit = spyOn(interaction, "editReply");
   return () =>
@@ -64,11 +78,31 @@ function readPickerPayload(
       components: Array<{
         components: Array<{
           custom_id: string;
-          options?: Array<{ value: string }>;
+          type: number;
+          label?: string;
+          options?: Array<{ value: string; default?: boolean }>;
           disabled?: boolean;
         }>;
       }>;
     };
+}
+
+async function selectAndApply(
+  handler: ReturnType<typeof createChatHandler>,
+  customId: string,
+  value: string
+) {
+  const pick = createPickerInteraction(customId, [value]);
+  const preview = readPickerPayload(pick.interaction);
+  await handler.handleSelectionInteraction(pick.interaction);
+  const apply = preview()
+    .components.flatMap((row) => row.components)
+    .find((button) => button.label === "Apply")!;
+  expect(apply.disabled).toBe(false);
+  await handler.handleSelectionInteraction(
+    createPickerInteraction(apply.custom_id, undefined, undefined, preview())
+      .interaction
+  );
 }
 
 afterEach(() => {
@@ -236,6 +270,57 @@ describe("createChatHandler logging", () => {
 });
 
 describe("Discord selection pickers", () => {
+  test("selecting previews the choice until Apply, and Cancel preserves the session", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        orgs: createMultiTestOrgs(),
+      });
+      const key = "g:guild_channel_1:t:thread_1";
+      handler.orgStore.set(key, "org_a");
+      handler.threadStore.add("thread_1");
+      await handler.handleMessage(
+        createGuildChatMessage({
+          content: "hello",
+          inThread: true,
+          threadId: "thread_1",
+        }).message
+      );
+      const session = handler.sessionStore.get(key);
+      const command = createSlashInteraction({
+        commandName: "org",
+        inThread: true,
+      });
+      const initial = readPickerPayload(command.interaction);
+      await handler.handleSlashCommand(command.interaction);
+      expect(
+        initial()
+          .components.flatMap((row) => row.components)
+          .find((button) => button.label === "Apply")?.disabled
+      ).toBe(true);
+      const pick = createPickerInteraction("nakama:org:424242424242424242:0", [
+        "org_b",
+      ]);
+      const preview = readPickerPayload(
+        pick.interaction as unknown as typeof command.interaction
+      );
+      await handler.handleSelectionInteraction(pick.interaction);
+      expect(handler.orgStore.get(key)?.orgId).toBe("org_a");
+      expect(handler.sessionStore.get(key)).toEqual(session);
+      const cancel = preview()
+        .components.flatMap((row) => row.components)
+        .find((button) => button.label === "Cancel")!;
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(
+          cancel.custom_id,
+          undefined,
+          undefined,
+          preview()
+        ).interaction
+      );
+      expect(handler.orgStore.get(key)?.orgId).toBe("org_a");
+      expect(handler.sessionStore.get(key)).toEqual(session);
+    });
+  });
   test("a failed org save cannot leave the previous session hot", async () => {
     await withTempHome(async (homeDir) => {
       const handler = await createPairedHandler(homeDir, {
@@ -256,9 +341,10 @@ describe("Discord selection pickers", () => {
       );
       const log = spyOn(console, "error").mockImplementation(() => {});
       try {
-        await handler.handleSelectionInteraction(
-          createPickerInteraction("nakama:org:424242424242424242:0", ["org_b"])
-            .interaction
+        await selectAndApply(
+          handler,
+          "nakama:org:424242424242424242:0",
+          "org_b"
         );
         expect(handler.sessionStore.get(key)).toBeUndefined();
         expect(handler.sessionStore.getHotSession(key)).toBeUndefined();
@@ -345,10 +431,7 @@ describe("Discord selection pickers", () => {
         "org_b",
         "org_a",
       ]);
-      await handler.handleSelectionInteraction(
-        createPickerInteraction("nakama:org:424242424242424242:0", ["org_b"])
-          .interaction
-      );
+      await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_b");
       await send("thread_1", "continue");
       expect(sent.at(-1)?.orgId).toBe("org_b");
       expect(sent.at(-1)?.sessionId).not.toBe(sent[0]?.sessionId);
@@ -381,11 +464,10 @@ describe("Discord selection pickers", () => {
           (option) => option.value
         )
       ).toEqual(["org_25"]);
-      await handler.handleSelectionInteraction(
-        createPickerInteraction(
-          nextPayload().components[0]!.components[0]!.custom_id,
-          ["org_25"]
-        ).interaction
+      await selectAndApply(
+        handler,
+        nextPayload().components[0]!.components[0]!.custom_id,
+        "org_25"
       );
       expect(handler.orgStore.get("g:guild_channel_1:t:thread_1")?.orgId).toBe(
         "org_25"
@@ -410,15 +492,9 @@ describe("Discord selection pickers", () => {
       const siblingKey = "g:guild_channel_1:t:thread_2";
       const sibling =
         handler.sessionStore.getHotSession<RemoteChatSession>(siblingKey);
-      await handler.handleSelectionInteraction(
-        createPickerInteraction("nakama:org:424242424242424242:0", ["org_a"])
-          .interaction
-      );
+      await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_a");
       expect(handler.sessionStore.getHotSession(key)).toBeDefined();
-      await handler.handleSelectionInteraction(
-        createPickerInteraction("nakama:org:424242424242424242:0", ["org_b"])
-          .interaction
-      );
+      await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_b");
       expect(handler.sessionStore.get(key)).toBeUndefined();
       expect(handler.sessionStore.getHotSession(key)).toBeUndefined();
       expect(
@@ -463,13 +539,30 @@ describe("Discord selection pickers", () => {
         createPickerInteraction(menu.custom_id, ["super"]).interaction
       );
       expect(handler.calls.createSession).toBe(0);
+      const pick = createPickerInteraction(menu.custom_id, ["support"]);
+      const preview = readPickerPayload(pick.interaction);
+      await handler.handleSelectionInteraction(pick.interaction);
+      expect(handler.createdSessionProfileIds).toEqual([]);
+      const apply = preview()
+        .components.flatMap((row) => row.components)
+        .find((button) => button.label === "Apply")!;
       await handler.handleSelectionInteraction(
-        createPickerInteraction(menu.custom_id, ["support"]).interaction
+        createPickerInteraction(
+          apply.custom_id,
+          undefined,
+          undefined,
+          preview()
+        ).interaction
       );
       expect(handler.createdSessionProfileIds).toEqual(["support"]);
       handler.orgStore.set("g:guild_channel_1:t:thread_1", "org_b");
       await handler.handleSelectionInteraction(
-        createPickerInteraction(menu.custom_id, ["default"]).interaction
+        createPickerInteraction(
+          apply.custom_id,
+          undefined,
+          undefined,
+          preview()
+        ).interaction
       );
       expect(handler.createdSessionProfileIds).toEqual(["support"]);
     });
@@ -482,12 +575,33 @@ describe("Discord selection pickers", () => {
         orgs: createMultiTestOrgs(),
       });
       const id = "nakama:org:424242424242424242:0";
+      const pick = createPickerInteraction(id, ["org_b"]);
+      const preview = readPickerPayload(pick.interaction);
+      await handler.handleSelectionInteraction(pick.interaction);
+      const applyId = preview()
+        .components.flatMap((row) => row.components)
+        .find((button) => button.label === "Apply")!.custom_id;
       await handler.handleSelectionInteraction(
-        createPickerInteraction(id, ["org_b"], "999999999999999999").interaction
+        createPickerInteraction(
+          applyId,
+          undefined,
+          "999999999999999999",
+          preview()
+        ).interaction
       );
+      const unauthorizedPayload = JSON.parse(
+        JSON.stringify(preview()).replaceAll(
+          "424242424242424242",
+          "888888888888888888"
+        )
+      ) as ReturnType<typeof preview>;
       await handler.handleSelectionInteraction(
-        createPickerInteraction("nakama:org:888:0", ["org_b"], "888")
-          .interaction
+        createPickerInteraction(
+          "nakama:org:888888888888888888:apply",
+          undefined,
+          "888888888888888888",
+          unauthorizedPayload
+        ).interaction
       );
       expect(
         handler.orgStore.get("g:guild_channel_1:t:thread_1")
