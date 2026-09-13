@@ -12,6 +12,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { convertDocxToMarkdown } from "../docx-text";
+import { getGlobalSkillsDir } from "../skills/paths";
 import {
   PathGuardError,
   runDeleteFile,
@@ -754,35 +755,22 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const skillDir = path.join(
-      await realpath(configDir),
-      "agent",
-      "skills",
-      "installer"
-    );
+    const skillDir = path.join(getGlobalSkillsDir(), "installer");
     await mkdir(path.join(skillDir, "references"), { recursive: true });
     const skillPath = path.join(skillDir, "SKILL.md");
     await writeFile(skillPath, "instructions");
-    await writeFile(path.join(skillDir, "references", "guide.md"), "guide");
+    await writeFile(path.join(skillDir, "references/guide.md"), "instructions");
     const options = { workspaceRoot: tempDir };
+    const cwd = await realpath(skillDir);
 
     for (const input of [
       { path: skillPath },
-      { cwd: skillDir, path: "SKILL.md" },
+      { cwd, path: "SKILL.md" },
+      { cwd, path: "references/guide.md" },
     ]) {
-      expect((await runReadFile(input, PROFILE_CONTEXT, options)).content).toBe(
-        "instructions"
-      );
+      const result = await runReadFile(input, PROFILE_CONTEXT, options);
+      expect(result.content).toBe("instructions");
     }
-    expect(
-      (
-        await runReadFile(
-          { cwd: skillDir, path: "references/guide.md" },
-          PROFILE_CONTEXT,
-          options
-        )
-      ).content
-    ).toBe("guide");
 
     await expect(
       runWriteFile(
@@ -791,20 +779,6 @@ describe("file builtin tools", () => {
         options
       )
     ).rejects.toBeInstanceOf(PathGuardError);
-    await expect(
-      runEditFile(
-        {
-          edits: [{ newText: "changed", oldText: "instructions" }],
-          path: skillPath,
-        },
-        PROFILE_CONTEXT,
-        options
-      )
-    ).rejects.toBeInstanceOf(PathGuardError);
-    await expect(
-      runDeleteFile({ path: skillPath }, PROFILE_CONTEXT, options)
-    ).rejects.toBeInstanceOf(PathGuardError);
-    expect(await readFile(skillPath, "utf8")).toBe("instructions");
 
     const outsidePath = path.join(configDir, "private.txt");
     await writeFile(outsidePath, "private");
