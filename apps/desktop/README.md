@@ -44,3 +44,29 @@ bun run --cwd apps/desktop test:runtime
 ```
 
 The runtime test uses temporary data and verifies setup, saved login after a restart, web serving, and shutdown after the parent disconnects. `NAKAMA_DESKTOP_TEST_RUNTIME` can point it at the `Contents/Resources/runtime` directory of a packaged app.
+
+## Automatic updates
+
+Packaged apps check at startup and every six hours, downloading updates in the background. Choose **Restart now** to stop the local server and workers before installation, or **Later** to keep working. Ordinary quitting does not install an update. Local data is preserved; running tasks are interrupted by a restart.
+
+macOS requires a signed app for automatic updates. Install the first signed release manually if you currently use an unsigned preview. Development runs do not check for updates.
+
+## Publish a release
+
+Add these GitHub Actions repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `MAC_CSC_LINK` | Base64-encoded Developer ID Application certificate exported as a `.p12`, including its private key |
+| `MAC_CSC_KEY_PASSWORD` | Password for the `.p12` |
+| `APPLE_ID` | Apple developer account email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization |
+| `APPLE_TEAM_ID` | Apple developer team ID |
+
+Use the same signing identity for subsequent releases. The workflow requires signing and successful notarization before publishing.
+
+1. Bump `apps/desktop/package.json` to a stable version, run `bun install`, and commit the changes.
+2. Push the commit and a matching tag, for example `git tag desktop-v0.2.0` followed by `git push origin desktop-v0.2.0`.
+3. The **Desktop Release** workflow builds on macOS ARM64, tests the bundled server, signs and notarizes the app, and publishes the DMG and ZIP in that version's GitHub release.
+
+After all installers are published, the workflow promotes `latest-mac.yml` in the separate `desktop-updates` release. That metadata points to the immutable versioned downloads, so regular server releases cannot change the desktop update feed. Retries reuse published checksums, and older releases cannot move the channel backward. Do not manually replace published installers.

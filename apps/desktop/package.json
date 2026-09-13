@@ -10,8 +10,11 @@
     "build:runtime": "bun scripts/build-runtime.mjs",
     "dev": "bun run build:runtime && electron .",
     "package": "bun run build:runtime && electron-builder --mac --arm64 --publish never",
-    "test": "electron tests/smoke.mjs --smoke-test",
+    "test": "bun test scripts/publish-release.test.mjs && electron tests/smoke.mjs --smoke-test",
     "test:runtime": "electron tests/smoke.mjs --smoke-test --runtime-test"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "electron": "44.3.0",

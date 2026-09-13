@@ -3,6 +3,56 @@ import { mkdir, open } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { app, BrowserWindow, dialog, shell } from "electron";
 
+export function configureUpdates(
+  updater,
+  stopServer,
+  prompt = dialog.showMessageBox
+) {
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = false;
+  updater.allowPrerelease = false;
+  updater.allowDowngrade = false;
+  let installing = false;
+  const updateFailed = (error) => {
+    console.warn("Desktop update failed:", error.message);
+    if (installing) {
+      dialog.showErrorBox(
+        "Could not install update",
+        "Reopen Nakama to try again."
+      );
+      app.quit();
+    }
+  };
+  const check = () =>
+    void updater
+      .checkForUpdates()
+      .catch((error) => console.warn("Update check failed:", error.message));
+  updater.on("error", updateFailed);
+  updater.on("update-downloaded", async ({ version }) => {
+    try {
+      const { response } = await prompt({
+        buttons: ["Restart now", "Later"],
+        cancelId: 1,
+        defaultId: 1,
+        detail:
+          "Restarting stops running local tasks. Your saved data is kept.",
+        message: `Nakama ${version} is ready to install`,
+        type: "info",
+      });
+      if (response === 0 && (await stopServer())) {
+        installing = true;
+        updater.quitAndInstall();
+      }
+    } catch (error) {
+      updateFailed(error);
+    }
+  });
+  check();
+  const timer = setInterval(check, 6 * 60 * 60 * 1000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 export async function startLocalServer(runtime, dataDir) {
   await mkdir(dataDir, { mode: 0o700, recursive: true });
   const log = await open(join(dataDir, "server.log"), "w", 0o600);
@@ -226,6 +276,20 @@ if (!process.argv.includes("--smoke-test")) {
           }
         });
         return createWindow(`${localServer.url}/chat`);
+      })
+      .then(async () => {
+        if (app.isPackaged && !quitting) {
+          const { autoUpdater } = (await import("electron-updater")).default;
+          configureUpdates(autoUpdater, async () => {
+            if (quitting) {
+              return false;
+            }
+            quitting = true;
+            await localServer?.stop();
+            localServer = undefined;
+            return true;
+          });
+        }
       })
       .catch((error) => {
         dialog.showErrorBox("Cannot open Nakama", error.message);

@@ -7,7 +7,9 @@ directories:
 files:
   - main.mjs
   - package.json
-  - '!node_modules/**'
+publish:
+  provider: generic
+  url: https://github.com/ahmadrosid/nakama/releases/download/desktop-updates
 extraResources:
   - from: dist/runtime
     to: runtime
@@ -19,6 +21,11 @@ extraResources:
     filter:
       - '**/*'
 mac:
+  hardenedRuntime: true
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
+  binaries:
+    - Contents/Resources/runtime/bin/bun
   icon: ../web/public/icons/icon-512.png
   category: public.app-category.productivity
   minimumSystemVersion: '26.0'

@@ -1,0 +1,70 @@
+name: Desktop Release
+
+on:
+  push:
+    tags: ['desktop-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Validate version and signing credentials
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test "$(uname -m)" = arm64
+          bun -e 'const v = (await Bun.file("apps/desktop/package.json").json()).version; if (!/^\d+\.\d+\.\d+$/.test(v) || process.env.RELEASE_TAG !== `desktop-v${v}`) throw new Error("Tag must match the stable desktop package version")'
+          for key in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            test -n "${!key}" || { echo "Missing release secret: $key"; exit 1; }
+          done
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build runtime and run smoke tests
+        run: |
+          bun run --cwd apps/desktop test
+          bun run --cwd apps/desktop build:runtime
+          bun run --cwd apps/desktop test:runtime
+
+      - name: Sign, notarize, and package
+        working-directory: apps/desktop
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun x electron-builder --mac --arm64 --publish never -c.forceCodeSigning=true
+
+      - name: Verify packaged app
+        run: |
+          codesign --verify --deep --strict apps/desktop/dist/electron/mac-arm64/Nakama.app
+          xcrun stapler validate apps/desktop/dist/electron/mac-arm64/Nakama.app
+          spctl --assess --type execute apps/desktop/dist/electron/mac-arm64/Nakama.app
+          NAKAMA_DESKTOP_TEST_RUNTIME="$PWD/apps/desktop/dist/electron/mac-arm64/Nakama.app/Contents/Resources/runtime" bun run --cwd apps/desktop test:runtime
+
+      - name: Publish version and update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          bun apps/desktop/scripts/publish-release.mjs

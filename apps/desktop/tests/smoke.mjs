@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { app } from "electron";
-import { createWindow, serverUrl, startLocalServer } from "../main.mjs";
+import {
+  configureUpdates,
+  createWindow,
+  serverUrl,
+  startLocalServer,
+} from "../main.mjs";
 
 app.on("window-all-closed", () => {});
 
@@ -19,6 +25,40 @@ const timeout = setTimeout(
 );
 async function run() {
   app.setPath("userData", await mkdtemp(join(tmpdir(), "nakama-wrapper-")));
+  const updater = new EventEmitter();
+  let checks = 0;
+  let choice = 1;
+  const order = [];
+  let finishStop;
+  updater.checkForUpdates = async () => {
+    checks += 1;
+  };
+  updater.quitAndInstall = () => order.push("install");
+  const cancelUpdates = configureUpdates(
+    updater,
+    async () => {
+      order.push("stop");
+      await new Promise((resolve) => {
+        finishStop = resolve;
+      });
+      return true;
+    },
+    async () => ({ response: choice })
+  );
+  assert.equal(checks, 1);
+  assert.equal(updater.autoInstallOnAppQuit, false);
+  assert.equal(updater.allowDowngrade, false);
+  updater.emit("update-downloaded", { version: "0.2.0" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, []);
+  choice = 0;
+  updater.emit("update-downloaded", { version: "0.2.0" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ["stop"]);
+  finishStop();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ["stop", "install"]);
+  cancelUpdates();
   for (const value of [
     "file:///etc/passwd",
     "javascript:alert(1)",
