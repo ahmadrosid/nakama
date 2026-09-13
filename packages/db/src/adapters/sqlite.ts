@@ -390,6 +390,7 @@ interface OrgMemoryProposalRow {
   reviewed_at: string | null;
   reviewer_user_id: string | null;
   session_id: string | null;
+  source_document_ids: string | null;
   status: string;
 }
 
@@ -1770,8 +1771,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const createOrgMemoryProposalStmt = db.prepare(`
     INSERT INTO org_memory_proposals (
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const createProfileChangeEventStmt = db.prepare(`
     INSERT INTO profile_change_events (
@@ -1791,7 +1792,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND status = ?
     ORDER BY created_at DESC
@@ -1799,7 +1800,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAllOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ?
     ORDER BY created_at DESC
@@ -1807,7 +1808,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getOrgMemoryProposalStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND id = ?
     LIMIT 1
@@ -1815,7 +1816,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getPendingOrgMemoryProposalByBulletStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND bullet = ? AND status = 'pending'
     LIMIT 1
@@ -2513,6 +2514,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.sessionId,
         record.proposedByUserId,
         record.bullet,
+        record.sourceDocumentIds.length > 0
+          ? JSON.stringify(record.sourceDocumentIds)
+          : null,
         record.status,
         record.pinned ? 1 : 0,
         record.reviewerUserId,
@@ -4602,6 +4606,24 @@ function toOrgInviteRecord(row: OrgInviteRow): StoredOrgInviteRecord {
   };
 }
 
+function parseOrgMemorySourceDocumentIds(raw: string | null): string[] {
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((item) => typeof item === "string")
+    ) {
+      return parsed;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
 function toOrgMemoryProposalRecord(
   row: OrgMemoryProposalRow
 ): StoredOrgMemoryProposal {
@@ -4616,6 +4638,7 @@ function toOrgMemoryProposalRecord(
     reviewedAt: row.reviewed_at,
     reviewerUserId: row.reviewer_user_id,
     sessionId: row.session_id,
+    sourceDocumentIds: parseOrgMemorySourceDocumentIds(row.source_document_ids),
     status: row.status as OrgMemoryProposalStatus,
   };
 }

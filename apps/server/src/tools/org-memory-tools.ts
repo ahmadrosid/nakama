@@ -42,6 +42,17 @@ function readString(input: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function readStringArray(input: unknown, key: string): string[] {
+  if (typeof input !== "object" || input === null || !(key in input)) {
+    return [];
+  }
+  const value = (input as Record<string, unknown>)[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
 export function createOrgMemoryTools(
   service: OrgMemoryService
 ): ToolDefinition[] {
@@ -83,7 +94,7 @@ export function createOrgMemoryTools(
     },
     {
       description:
-        "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log.",
+        "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log. When the fact came from a knowledge-base document, pass its document id(s) in sourceDocumentIds.",
       name: "propose_org_memory",
       parallelSafe: false,
       parameters: {
@@ -93,6 +104,12 @@ export function createOrgMemoryTools(
             description:
               "A single concise org-wide fact to propose for admin review.",
             type: "string",
+          },
+          sourceDocumentIds: {
+            description:
+              "Optional knowledge-base document ids the fact was derived from. Pass these when the bullet summarizes or cites uploaded documents.",
+            items: { type: "string" },
+            type: "array",
           },
         },
         required: ["bullet"],
@@ -109,6 +126,7 @@ export function createOrgMemoryTools(
           profileId: context.profileId ?? null,
           proposedByUserId: context.userId ?? null,
           sessionId: context.sessionId ?? null,
+          sourceDocumentIds: readStringArray(input, "sourceDocumentIds"),
         });
       },
     },

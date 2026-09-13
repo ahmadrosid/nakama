@@ -33,6 +33,28 @@ import { MemoryBackendService } from "./memory-backend-service";
 const SUMMARY_BYTE_CAP = 2048;
 const MAX_PROPOSAL_BULLET_LENGTH = 500;
 
+function normalizeSourceDocumentIds(
+  value: string[] | null | undefined
+): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const id = entry.trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 export interface OrgMemoryContent {
   content: string;
 }
@@ -68,6 +90,7 @@ export interface ProposeOrgMemoryInput {
   profileId?: string | null;
   proposedByUserId?: string | null;
   sessionId?: string | null;
+  sourceDocumentIds?: string[] | null;
 }
 
 export interface OrgMemoryServiceOptions {
@@ -523,6 +546,9 @@ export class OrgMemoryService {
       };
     }
 
+    const sourceDocumentIds = normalizeSourceDocumentIds(
+      input.sourceDocumentIds
+    );
     const now = new Date().toISOString();
     const proposal: StoredOrgMemoryProposal = {
       bullet: text,
@@ -535,6 +561,7 @@ export class OrgMemoryService {
       reviewedAt: null,
       reviewerUserId: null,
       sessionId: input.sessionId ?? null,
+      sourceDocumentIds,
       status: "pending",
     };
     await db.createOrgMemoryProposal(proposal);

@@ -497,6 +497,7 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
       session_id TEXT,
       proposed_by_user_id TEXT,
       bullet TEXT NOT NULL,
+      source_document_ids TEXT,
       status TEXT NOT NULL,
       pinned INTEGER NOT NULL DEFAULT 0,
       reviewer_user_id TEXT,
@@ -506,6 +507,16 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(org_memory_proposals)")
+    .all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("source_document_ids")) {
+    db.exec(
+      "ALTER TABLE org_memory_proposals ADD COLUMN source_document_ids TEXT;"
+    );
+  }
 }
 
 function migrateSkillProposalsTable(db: Database): void {

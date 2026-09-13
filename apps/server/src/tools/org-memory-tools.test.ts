@@ -86,6 +86,25 @@ describe("org memory tools", () => {
       proposeTool.run({ bullet: "fact" }, context("org_a", "viewer"))
     ).rejects.toThrow("Viewers cannot access org memory.");
   });
+  test("propose_org_memory stores optional sourceDocumentIds", async () => {
+    const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
+    const proposeTool = createOrgMemoryTools(service)[2];
+    const result = await proposeTool.run(
+      {
+        bullet: "policy comes from the handbook PDF",
+        sourceDocumentIds: ["kb_doc_1"],
+      },
+      {
+        ...context("org_a", "member"),
+        profileId: "profile_1",
+        sessionId: "session_1",
+        userId: "user_1",
+      }
+    );
+    expect(result.outcome).toBe("created");
+    const proposal = await service.getProposal("org_a", result.proposalId!);
+    expect(proposal.sourceDocumentIds).toEqual(["kb_doc_1"]);
+  });
 });
 
 function spyOnSearch(

@@ -326,6 +326,7 @@ CREATE TABLE IF NOT EXISTS org_memory_proposals (
   session_id TEXT,
   proposed_by_user_id TEXT,
   bullet TEXT NOT NULL,
+  source_document_ids TEXT,
   status TEXT NOT NULL,
   pinned INTEGER NOT NULL DEFAULT 0,
   reviewer_user_id TEXT,

@@ -759,6 +759,8 @@ export interface OrgMemoryProposal {
   reviewedAt: string | null;
   reviewerUserId: string | null;
   sessionId: string | null;
+  /** Knowledge-base document ids cited when the bullet was proposed. */
+  sourceDocumentIds: string[];
   status: OrgMemoryProposalStatus;
 }
 

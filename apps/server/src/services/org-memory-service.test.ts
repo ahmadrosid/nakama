@@ -207,6 +207,7 @@ describe("OrgMemoryService", () => {
       reviewedAt: null,
       reviewerUserId: null,
       sessionId: null,
+      sourceDocumentIds: [],
       status: "pending",
     });
 
@@ -248,6 +249,38 @@ describe("OrgMemoryService", () => {
     expect(
       parsed.pinned.filter((bullet) => bullet === "always pin this")
     ).toEqual(["always pin this"]);
+  });
+
+  test("keeps source document ids through approval", async () => {
+    const service = await setup();
+    const proposed = await service.propose("org_a", {
+      bullet: "onboarding checklist lives in the handbook",
+      profileId: "profile_kb",
+      sourceDocumentIds: ["kb_handbook", "kb_handbook", "  ", "kb_faq"],
+    });
+    expect(proposed.outcome).toBe("created");
+    const pending = await service.getProposal("org_a", proposed.proposalId!);
+    expect(pending.sourceDocumentIds).toEqual(["kb_handbook", "kb_faq"]);
+
+    const approved = await service.approveProposal(
+      "org_a",
+      proposed.proposalId!,
+      "admin_user"
+    );
+    expect(approved.sourceDocumentIds).toEqual(["kb_handbook", "kb_faq"]);
+    expect(
+      (await service.getProposal("org_a", proposed.proposalId!))
+        .sourceDocumentIds
+    ).toEqual(["kb_handbook", "kb_faq"]);
+  });
+
+  test("proposals without source document ids load as an empty list", async () => {
+    const service = await setup();
+    const proposed = await service.propose("org_a", {
+      bullet: "standups stay async",
+    });
+    const proposal = await service.getProposal("org_a", proposed.proposalId!);
+    expect(proposal.sourceDocumentIds).toEqual([]);
   });
 
   test("search tags pinned and recent-log tiers", async () => {
