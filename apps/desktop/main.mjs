@@ -1,5 +1,90 @@
-import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { mkdir, open } from "node:fs/promises";
+import { delimiter, join } from "node:path";
 import { app, BrowserWindow, dialog, shell } from "electron";
+
+export async function startLocalServer(runtime, dataDir) {
+  await mkdir(dataDir, { mode: 0o700, recursive: true });
+  const log = await open(join(dataDir, "server.log"), "w", 0o600);
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("NAKAMA_"))
+  );
+  const child = spawn(
+    join(runtime, "bin/bun"),
+    ["run", "apps/server/src/index.ts"],
+    {
+      cwd: runtime,
+      env: {
+        ...env,
+        BUN_INSTALL_BIN: join(dataDir, "bin"),
+        BUN_INSTALL_GLOBAL_DIR: join(dataDir, "bun/install/global"),
+        DATABASE_URL: `file:${join(dataDir, "sqlite/nakama.sqlite")}`,
+        NAKAMA_CONFIG_DIR: dataDir,
+        NAKAMA_DESKTOP: "1",
+        NAKAMA_DISABLE_FIX_PATH: "1",
+        NAKAMA_HOST: "127.0.0.1",
+        NAKAMA_PORT: "0",
+        NODE_ENV: "production",
+        PATH: `${join(runtime, "bin")}${delimiter}${process.env.PATH ?? ""}`,
+        PM2_HOME: join(dataDir, "pm2"),
+      },
+      serialization: "json",
+      stdio: ["ignore", log.fd, log.fd, "ipc"],
+    }
+  );
+  void log.close();
+  const stop = async () => {
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
+      return;
+    }
+    await new Promise((resolve) => {
+      const timeout = setTimeout(() => child.kill("SIGKILL"), 8000);
+      child.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      child.kill("SIGTERM");
+    });
+  };
+  try {
+    const url = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => finish(new Error("Local server startup timed out")),
+        60_000
+      );
+      const onExit = () =>
+        finish(new Error("Local server exited during startup"));
+      const onError = (error) => finish(error);
+      const onMessage = (message) => {
+        if (message?.type === "nakama-ready") {
+          finish(null, message.url);
+        }
+      };
+      function finish(error, value) {
+        clearTimeout(timeout);
+        child.off("exit", onExit);
+        child.off("error", onError);
+        child.off("message", onMessage);
+        if (error) {
+          reject(error);
+        } else {
+          try {
+            resolve(serverUrl(value));
+          } catch (invalidUrl) {
+            reject(invalidUrl);
+          }
+        }
+      }
+      child.once("exit", onExit);
+      child.once("error", onError);
+      child.on("message", onMessage);
+    });
+    return { child, stop, url: url.replace(/\/$/, "") };
+  } catch (error) {
+    await stop();
+    throw new Error(`${error.message}. See ${join(dataDir, "server.log")}`);
+  }
+}
 
 export function serverUrl(value = "http://localhost:4310/chat") {
   const url = new URL(value);
@@ -98,6 +183,8 @@ export async function createWindow(url, { show = true } = {}) {
 }
 
 if (!process.argv.includes("--smoke-test")) {
+  let localServer;
+  let quitting = false;
   app.setName("Nakama");
   app.setPath(
     "userData",
@@ -114,12 +201,44 @@ if (!process.argv.includes("--smoke-test")) {
     });
     app
       .whenReady()
-      .then(() => createWindow(serverUrl(process.env.NAKAMA_DESKTOP_URL)))
+      .then(async () => {
+        if (process.env.NAKAMA_DESKTOP_URL) {
+          return createWindow(serverUrl(process.env.NAKAMA_DESKTOP_URL));
+        }
+        localServer = await startLocalServer(
+          app.isPackaged
+            ? join(process.resourcesPath, "runtime")
+            : join(app.getAppPath(), "dist/runtime"),
+          join(app.getPath("userData"), "server")
+        );
+        if (quitting) {
+          await localServer.stop();
+          app.exit();
+          return;
+        }
+        localServer.child.once("exit", () => {
+          if (!quitting) {
+            dialog.showErrorBox(
+              "Nakama server stopped",
+              "Reopen Nakama to restart the local server."
+            );
+            app.quit();
+          }
+        });
+        return createWindow(`${localServer.url}/chat`);
+      })
       .catch((error) => {
         dialog.showErrorBox("Cannot open Nakama", error.message);
         app.quit();
       });
     app.on("window-all-closed", () => app.quit());
+    app.on("before-quit", (event) => {
+      quitting = true;
+      if (localServer) {
+        event.preventDefault();
+        void localServer.stop().finally(() => app.exit());
+      }
+    });
   } else {
     app.quit();
   }

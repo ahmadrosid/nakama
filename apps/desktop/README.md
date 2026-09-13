@@ -1,34 +1,46 @@
 # Nakama Desktop
 
-A thin Electron window that loads the existing Nakama web app. It uses the same UI and server behavior; there is no separate desktop frontend, API client, or backend.
+The existing Nakama web app with a bundled local server. Opening the app starts the server automatically; quitting stops the server and its background workers. No separate Bun, Node, Docker, or Nakama server installation is needed.
 
-## Run
+## Develop and build
 
-Start Nakama normally, then:
+From an Apple Silicon Mac with this Git checkout and Bun installed:
 
 ```sh
+bun install
 bun run dev:desktop
 ```
 
-The default address is `http://localhost:4310/chat`. To connect elsewhere:
+Create the macOS app, DMG, and ZIP:
+
+```sh
+bun run --cwd apps/desktop package
+```
+
+The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The preview targets macOS 26 ARM64 and is unsigned until Developer ID signing and notarization credentials are configured.
+
+## Local data
+
+Complete the normal setup wizard on first launch. Configure your model provider as on the web; cloud models still require internet access and provider credentials.
+
+Desktop stores its browser session in `~/Library/Application Support/Nakama Desktop Electron` and its server data under `server/` within that directory. Existing web-server data is not imported. Updates preserve this directory. Server diagnostics are in `server/server.log`.
+
+The server binds only to `127.0.0.1`, on an available port. Desktop waits for it to start before loading the UI. Closing the app stops its server; automations and channel workers run while the app is open.
+
+To use an existing server instead:
 
 ```sh
 NAKAMA_DESKTOP_URL=https://nakama.example/chat bun run dev:desktop
 ```
 
-Use HTTPS for remote servers. Sign in through the existing web form. Electron keeps its own browser session under `~/Library/Application Support/Nakama Desktop Electron`; it does not import the old GPUIX login or your browser's session. Web UI updates appear immediately when the server is updated.
+External links open in the system browser. Remote content has no Node access or preload bridge. Microphone, camera, and notification permissions remain disabled in this preview. Optional tools that need external programs, such as Python or a coding CLI, still require those programs to be installed.
 
-Links to other sites open in the system browser. Remote content has no Node.js integration, preload bridge, or local filesystem API. Files selected in the web UI use its normal upload flow.
-
-Microphone, camera, and notification permissions are disabled in this preview.
-
-## Verify and package
+## Verify
 
 ```sh
 bun run --cwd apps/desktop test
-bun run --cwd apps/desktop package
+bun run --cwd apps/desktop build:runtime
+bun run --cwd apps/desktop test:runtime
 ```
 
-The smoke test uses a hidden window and an isolated local HTTP fixture. Packaging writes the ARM64 app, DMG, and ZIP to `apps/desktop/dist/electron/`. End users need no separately installed Bun, Node, or Rust. The existing server must remain available.
-
-The preview targets macOS 26 ARM64. Configure Developer ID signing and notarization credentials before public distribution. An unsigned local package is not a public release. Updates replace the application manually.
+The runtime test uses temporary data and verifies setup, saved login after a restart, web serving, and shutdown after the parent disconnects. `NAKAMA_DESKTOP_TEST_RUNTIME` can point it at the `Contents/Resources/runtime` directory of a packaged app.

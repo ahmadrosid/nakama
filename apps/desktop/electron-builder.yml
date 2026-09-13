@@ -8,6 +8,16 @@ files:
   - main.mjs
   - package.json
   - '!node_modules/**'
+extraResources:
+  - from: dist/runtime
+    to: runtime
+    filter:
+      - '**/*'
+  # electron-builder skips node_modules at a resource root; copy its contents explicitly.
+  - from: dist/runtime/node_modules
+    to: runtime/node_modules
+    filter:
+      - '**/*'
 mac:
   icon: ../web/public/icons/icon-512.png
   category: public.app-category.productivity

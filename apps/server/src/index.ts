@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,6 +11,13 @@ import { ensureProcessPath } from "./lib/ensure-process-path";
 import { createPluginAgentHost } from "./services/plugin-agent-host";
 
 ensureProcessPath();
+if (process.env.NAKAMA_DESKTOP === "1") {
+  if (!process.connected) {
+    process.exit(0);
+  }
+  // Also covers losing Electron while the database is still initializing.
+  process.on("disconnect", () => process.kill(process.pid, "SIGTERM"));
+}
 // Position is cosmetic: ESM evaluates every import above before this line runs, so a throw
 // inside @nakama/db or @nakama/agent module init is already past. Everything after is covered.
 installErrorHandlers("server");
@@ -90,6 +98,7 @@ import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+let workerRecovery: Promise<void> = Promise.resolve();
 
 const host = process.env.NAKAMA_HOST ?? DEFAULT_SERVER_HOST;
 const requestedPort = parsePort(process.env.NAKAMA_PORT);
@@ -357,8 +366,11 @@ void initializeOptionalServices({
 });
 
 try {
-  await workerManager.recoverDesiredWorkers();
-  await pluginService.recoverPluginWorkers();
+  workerRecovery = (async () => {
+    await workerManager.recoverDesiredWorkers();
+    await pluginService.recoverPluginWorkers();
+  })();
+  await workerRecovery;
 } catch (error) {
   console.warn("Could not recover platform workers:", error);
 }
@@ -372,6 +384,9 @@ if (humanUserCount > 0 && !agent.providerConfigured) {
   console.warn(
     `Provider not configured — complete the setup wizard at ${serverUrl}/setup to enable chat and automations.`
   );
+}
+if (process.env.NAKAMA_DESKTOP === "1") {
+  process.send?.({ type: "nakama-ready", url: serverUrl });
 }
 
 function parsePort(value: string | undefined): number {
@@ -493,11 +508,55 @@ function registerRuntimeCleanup(
 
   process.on("exit", cleanup);
 
+  let stopping = false;
+  const shutdown = async () => {
+    if (stopping) {
+      return;
+    }
+    stopping = true;
+    if (process.env.NAKAMA_DESKTOP === "1") {
+      // A quit during startup must not race workers being recreated after shutdown.
+      await workerRecovery.catch(() => {});
+    }
+    // Desktop owns a private PM2 home; never stop a normal server's daemon.
+    if (
+      process.env.NAKAMA_DESKTOP === "1" &&
+      process.env.PM2_HOME &&
+      existsSync(join(process.env.PM2_HOME, "pm2.pid"))
+    ) {
+      const { default: pm2 } = await import("pm2");
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 3000);
+        pm2.connect((error) => {
+          if (error) {
+            clearTimeout(timeout);
+            resolve();
+            return;
+          }
+          pm2.killDaemon(() => {
+            clearTimeout(timeout);
+            pm2.disconnect();
+            resolve();
+          });
+        });
+      });
+    }
+    if (process.env.NAKAMA_DESKTOP === "1") {
+      await Promise.race([
+        Promise.allSettled([
+          shutdownPluginRuntime(1500),
+          mcpClientManager.disconnectAll(),
+        ]),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    }
+    cleanup();
+    server.stop(true);
+    process.exit(0);
+  };
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
-      cleanup();
-      server.stop(true);
-      process.exit(0);
+      void shutdown();
     });
   }
 }

@@ -3,8 +3,8 @@
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
     "apps/desktop": {
-      "entry": ["main.mjs", "tests/smoke.mjs"],
-      "project": ["*.mjs", "tests/*.mjs"]
+      "entry": ["tests/smoke.mjs"],
+      "project": ["*.mjs", "tests/*.mjs", "scripts/*.mjs"]
     },
     "packages/plugins/supermemory": {
       "entry": [

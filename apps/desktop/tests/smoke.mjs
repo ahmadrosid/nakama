@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { app } from "electron";
-import { createWindow, serverUrl } from "../main.mjs";
+import { createWindow, serverUrl, startLocalServer } from "../main.mjs";
 
-const timeout = setTimeout(() => {
-  console.error("Smoke test timed out");
-  app.exit(1);
-}, 20_000);
+app.on("window-all-closed", () => {});
+
+const timeout = setTimeout(
+  () => {
+    console.error("Smoke test timed out");
+    app.exit(1);
+  },
+  process.argv.includes("--runtime-test") ? 120_000 : 20_000
+);
 async function run() {
   app.setPath("userData", await mkdtemp(join(tmpdir(), "nakama-wrapper-")));
   for (const value of [
@@ -66,6 +73,96 @@ async function run() {
   );
   window.destroy();
   server.close();
+  if (process.argv.includes("--runtime-test")) {
+    const data = await mkdtemp(join(tmpdir(), "nakama-server-test-"));
+    const runtime =
+      process.env.NAKAMA_DESKTOP_TEST_RUNTIME ??
+      join(import.meta.dirname, "../dist/runtime");
+    await assert.rejects(startLocalServer(join(data, "missing"), data));
+    const previousPath = process.env.PATH;
+    process.env.PATH = "/usr/bin:/bin";
+    let local;
+    try {
+      local = await startLocalServer(runtime, data);
+      assert.equal(
+        (await (await fetch(`${local.url}/health`)).json()).ok,
+        true
+      );
+      assert.match(await (await fetch(`${local.url}/chat`)).text(), /<html/);
+      const setup = await fetch(`${local.url}/v1/auth/setup`, {
+        body: JSON.stringify({
+          admin: {
+            email: "desktop@example.test",
+            name: "Test",
+            password: "test-password-123",
+          },
+          organization: { name: "Desktop Test", slug: "desktop-test" },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      assert.equal(setup.ok, true);
+      await local.stop();
+      await assert.rejects(fetch(`${local.url}/health`));
+      local = await startLocalServer(runtime, data);
+      const login = await fetch(`${local.url}/v1/auth/login`, {
+        body: JSON.stringify({
+          email: "desktop@example.test",
+          password: "test-password-123",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      assert.equal(login.ok, true);
+      const worker = await promisify(execFile)(
+        join(runtime, "bin/bun"),
+        [
+          "-e",
+          `
+        const { default: pm2 } = await import('pm2');
+        pm2.connect(error => {
+          if (error) process.exit(1);
+          pm2.start({ name: 'desktop-smoke-worker', script: process.execPath,
+            args: ['-e', 'setInterval(() => {}, 1000)'], interpreter: 'none' }, (failure, processes) => {
+            if (failure) process.exit(1);
+            console.log('WORKER_PID=' + processes[0].pid);
+            pm2.disconnect();
+            process.exit(0);
+          });
+        });
+      `,
+        ],
+        {
+          cwd: join(runtime, "apps/server"),
+          env: { ...process.env, PM2_HOME: join(data, "pm2") },
+          timeout: 15_000,
+        }
+      );
+      const workerPid = Number(worker.stdout.match(/WORKER_PID=(\d+)/)?.[1]);
+      assert.ok(workerPid > 0);
+      const pm2Pid = await readFile(join(data, "pm2/pm2.pid"), "utf8").catch(
+        () => null
+      );
+      const exited = new Promise((resolve) =>
+        local.child.once("exit", resolve)
+      );
+      local.child.disconnect();
+      await exited;
+      await assert.rejects(fetch(`${local.url}/health`));
+      // PM2 acknowledges daemon shutdown before its process finishes exiting.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (pm2Pid) {
+        assert.throws(() => process.kill(Number(pm2Pid.trim()), 0));
+      }
+      assert.throws(() => process.kill(workerPid, 0));
+      console.log(
+        "Passed: bundled runtime, first setup, persistent account, shutdown, and parent disconnect cleanup."
+      );
+    } finally {
+      process.env.PATH = previousPath;
+      await local?.stop();
+    }
+  }
   clearTimeout(timeout);
   console.log(
     "Passed: existing page loads, renderer has no native bridge, HTTP-only session cookies and browser storage work."
