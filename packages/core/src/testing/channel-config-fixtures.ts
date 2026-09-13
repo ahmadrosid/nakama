@@ -283,6 +283,32 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
         });
       });
 
+      test("reads a bot token from a mounted secret file", async () => {
+        await withTempHomedir(tempPrefix, async (homeDir) => {
+          const secretPath = path.join(homeDir, "bot-token");
+          await writeFile(secretPath, "mounted-token\n", "utf8");
+
+          const resolved = tc.resolveConfigFromSources({
+            env: { [`${tc.env.botTokenKey}_FILE`]: secretPath },
+            file: null,
+          });
+
+          expect(resolved?.botToken).toBe("mounted-token");
+        });
+      });
+
+      test("prefers a direct bot token over its mounted-file companion", () => {
+        const resolved = tc.resolveConfigFromSources({
+          env: {
+            [tc.env.botTokenKey]: "direct-token",
+            [`${tc.env.botTokenKey}_FILE`]: "/missing/secret",
+          },
+          file: null,
+        });
+
+        expect(resolved?.botToken).toBe("direct-token");
+      });
+
       test("falls back to file config when env token is absent", () => {
         const resolved = tc.resolveConfigFromSources({
           env: {},

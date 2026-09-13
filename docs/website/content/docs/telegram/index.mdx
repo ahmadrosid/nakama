@@ -192,6 +192,9 @@ Environment-based setup is also supported. The main env var is:
 TELEGRAM_BOT_TOKEN
 ```
 
+For mounted secrets, set `TELEGRAM_BOT_TOKEN_FILE` to the path of a readable
+file containing the token. A directly set `TELEGRAM_BOT_TOKEN` takes priority.
+
 Nakama also supports:
 
 ```text
