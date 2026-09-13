@@ -283,6 +283,19 @@ describe("OrgMemoryService", () => {
     expect(proposal.sourceDocumentIds).toEqual([]);
   });
 
+  test("caps source document ids at twenty unique values", async () => {
+    const service = await setup();
+    const many = Array.from({ length: 25 }, (_, index) => `kb_doc_${index}`);
+    const proposed = await service.propose("org_a", {
+      bullet: "sourced from a large handbook set",
+      sourceDocumentIds: many,
+    });
+    const proposal = await service.getProposal("org_a", proposed.proposalId!);
+    expect(proposal.sourceDocumentIds).toHaveLength(20);
+    expect(proposal.sourceDocumentIds[0]).toBe("kb_doc_0");
+    expect(proposal.sourceDocumentIds.at(-1)).toBe("kb_doc_19");
+  });
+
   test("search tags pinned and recent-log tiers", async () => {
     const service = await setup();
     await service.addFact("org_a", "pinned fact", { pin: true });

@@ -79,7 +79,7 @@ function ProposalSources({
   variant?: "compact" | "detail";
 }) {
   const sourceDocumentIds = proposal.sourceDocumentIds ?? [];
-  const { data } = useKnowledgeBaseQuery(proposal.profileId);
+  const { data, isPending } = useKnowledgeBaseQuery(proposal.profileId);
   const documentsById = new Map(
     (data?.documents ?? []).map((document) => [document.id, document])
   );
@@ -101,9 +101,16 @@ function ProposalSources({
         {sourceDocumentIds.map((documentId) => {
           const document = documentsById.get(documentId);
           if (!document) {
+            // Wait for KB before calling a miss "Removed"; without a profile we
+            // cannot resolve filenames, so show a shortened id instead.
+            if (proposal.profileId && isPending) {
+              return null;
+            }
             return (
               <li className="text-muted-foreground" key={documentId}>
-                Removed document
+                {proposal.profileId
+                  ? "Removed document"
+                  : shortenId(documentId)}
               </li>
             );
           }

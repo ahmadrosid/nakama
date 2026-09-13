@@ -32,6 +32,7 @@ import { MemoryBackendService } from "./memory-backend-service";
 
 const SUMMARY_BYTE_CAP = 2048;
 const MAX_PROPOSAL_BULLET_LENGTH = 500;
+const MAX_SOURCE_DOCUMENT_IDS = 20;
 
 function normalizeSourceDocumentIds(
   value: string[] | null | undefined
@@ -51,6 +52,9 @@ function normalizeSourceDocumentIds(
     }
     seen.add(id);
     ids.push(id);
+    if (ids.length >= MAX_SOURCE_DOCUMENT_IDS) {
+      break;
+    }
   }
   return ids;
 }
