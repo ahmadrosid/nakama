@@ -7,6 +7,7 @@ import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
 import { isOmniEnabled, omniRetrieveTool } from "../omni";
+import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
@@ -719,6 +720,7 @@ export async function runReadFile(
 ): Promise<ReadFileOutput> {
   const parsed = parseToolInput(readFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
+  guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
   const guarded = await guardFilePath(

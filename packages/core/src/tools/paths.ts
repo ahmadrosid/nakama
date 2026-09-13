@@ -37,7 +37,7 @@ export class PathGuardError extends Error {
 }
 
 const WORKSPACE_TRAVERSAL_MESSAGE =
-  "Path outside allowed directories. Use a relative path under the active profile workspace (e.g. SOUL.md or skills/<name>/SKILL.md). Bundled skills are listed in the system prompt and are not readable as arbitrary files.";
+  "Path outside allowed directories. Use a relative path under the active profile workspace (e.g. SOUL.md or skills/<name>/SKILL.md).";
 
 const WORKSPACE_REQUIRED_MESSAGE =
   "workspaceRoot is required; file tools cannot fall back to process.cwd().";
