@@ -284,16 +284,16 @@ describe("OrgMemoryService", () => {
       }
     );
 
-    const history = await service.listHistory("org_a");
+    const history = (await service.listHistory("org_a")).changes;
     expect(history).toHaveLength(2);
     expect(history[0]?.label).toBe("Second edit");
 
     const restored = await service.undoLastChange("org_a", "admin_user");
     expect(restored).toContain("- first fact");
     expect(await service.getMemory("org_a")).toContain("- first fact");
-    expect(await service.listHistory("org_a")).toHaveLength(3);
+    expect((await service.listHistory("org_a")).changes).toHaveLength(3);
 
-    const latest = (await service.listHistory("org_a"))[0]!;
+    const latest = (await service.listHistory("org_a")).changes[0]!;
     const revision = await service.getHistoryRevision("org_a", latest.id);
     expect(revision.content).toContain("- first fact");
     expect(revision.change.id).toBe(latest.id);
@@ -303,7 +303,7 @@ describe("OrgMemoryService", () => {
     const service = await setup();
     await service.setMemory("org_a", "first");
     await service.setMemory("org_a", "second");
-    const latest = (await service.listHistory("org_a"))[0]!;
+    const latest = (await service.listHistory("org_a")).changes[0]!;
     await writeFile(
       path.join(getOrgMemoryHistoryDir("org_a", tempDir), `${latest.id}.json`),
       "{"

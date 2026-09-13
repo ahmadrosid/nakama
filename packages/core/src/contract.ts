@@ -735,6 +735,10 @@ export interface OrgMemoryChangeLogEntry {
 
 export interface ListOrgMemoryHistoryResponse {
   changes: OrgMemoryChangeLogEntry[];
+  /** Soft cap kept on disk; older revisions are pruned. */
+  maxEntries: number;
+  /** True once pruning has discarded at least one older revision. */
+  truncated: boolean;
 }
 
 export interface RestoreOrgMemoryHistoryResponse {

@@ -10,7 +10,9 @@ import {
   getOrgMemoryDir,
   getOrgMemoryFilePath,
   getOrgMemoryHistoryEntry,
+  type ListOrgMemoryHistoryResponse,
   listOrgMemoryHistory,
+  listOrgMemoryHistoryWithCap,
   NakamaApiError,
   normalizeOrgMemoryBullet,
   normalizeOrgMemoryDedupKey,
@@ -177,8 +179,8 @@ export class OrgMemoryService {
   async listHistory(
     orgId: string,
     limit?: number
-  ): Promise<OrgMemoryChangeLogEntry[]> {
-    return listOrgMemoryHistory(orgId, limit, this.options.configDir);
+  ): Promise<ListOrgMemoryHistoryResponse> {
+    return listOrgMemoryHistoryWithCap(orgId, limit, this.options.configDir);
   }
 
   async getHistoryRevision(orgId: string, revisionId: string) {

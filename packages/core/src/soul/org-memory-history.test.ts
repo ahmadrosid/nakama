@@ -6,7 +6,9 @@ import {
   appendOrgMemoryHistory,
   createOrgMemoryChangeId,
   getOrgMemoryHistoryEntry,
+  isOrgMemoryHistoryTruncated,
   listOrgMemoryHistory,
+  listOrgMemoryHistoryWithCap,
   ORG_MEMORY_HISTORY_MAX_ENTRIES,
   pruneOrgMemoryHistory,
 } from "./org-memory-history";
@@ -243,12 +245,39 @@ describe("org memory history", () => {
     const historyDir = getOrgMemoryHistoryDir(orgId, tempDir);
     await expect(
       access(path.join(historyDir, `${malformedId}.json`))
-    ).resolves.toBeNull();
+    ).resolves.toBeUndefined();
     await expect(
       access(path.join(historyDir, `${malformedId}.md`))
-    ).resolves.toBeNull();
+    ).resolves.toBeUndefined();
     await expect(
       access(path.join(historyDir, "omh_00000001_valid.json"))
     ).rejects.toThrow();
+  });
+  test("reports the revision cap after pruning discards older entries", async () => {
+    const orgId = await setupOrg();
+    expect(await isOrgMemoryHistoryTruncated(orgId, tempDir)).toBe(false);
+
+    for (let index = 0; index < 3; index += 1) {
+      await appendOrgMemoryHistory(
+        orgId,
+        {
+          action: "edit",
+          actorUserId: "user_a",
+          createdAt: `2026-07-31T0${index}:00:00.000Z`,
+          id: createOrgMemoryChangeId(),
+          label: `edit-${index}`,
+          orgId,
+        },
+        `## Org Memory\n\n## Pinned\n\n- ${index}\n`,
+        tempDir
+      );
+    }
+
+    await pruneOrgMemoryHistory(orgId, 2, tempDir);
+    const listing = await listOrgMemoryHistoryWithCap(orgId, 50, tempDir);
+    expect(listing.maxEntries).toBe(ORG_MEMORY_HISTORY_MAX_ENTRIES);
+    expect(listing.truncated).toBe(true);
+    expect(listing.changes).toHaveLength(2);
+    expect(await isOrgMemoryHistoryTruncated(orgId, tempDir)).toBe(true);
   });
 });

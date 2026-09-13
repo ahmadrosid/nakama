@@ -10,6 +10,54 @@ import { assertConfigPathSegment, getOrgMemoryHistoryDir } from "./resolve";
 
 export const ORG_MEMORY_HISTORY_MAX_ENTRIES = 50;
 
+const ORG_MEMORY_HISTORY_TRUNCATED_MARKER = "truncated.json";
+
+function historyTruncatedMarkerPath(orgId: string, configDir?: string): string {
+  return join(
+    getOrgMemoryHistoryDir(orgId, configDir),
+    ORG_MEMORY_HISTORY_TRUNCATED_MARKER
+  );
+}
+
+export async function isOrgMemoryHistoryTruncated(
+  orgId: string,
+  configDir?: string
+): Promise<boolean> {
+  return pathExists(historyTruncatedMarkerPath(orgId, configDir));
+}
+
+async function markOrgMemoryHistoryTruncated(
+  orgId: string,
+  configDir?: string
+): Promise<void> {
+  const historyDir = getOrgMemoryHistoryDir(orgId, configDir);
+  await writeTextFile(
+    historyTruncatedMarkerPath(orgId, configDir),
+    `${JSON.stringify({ truncatedAt: new Date().toISOString() }, null, 2)}\n`,
+    { ensureDir: historyDir }
+  );
+}
+
+export async function listOrgMemoryHistoryWithCap(
+  orgId: string,
+  limit = ORG_MEMORY_HISTORY_MAX_ENTRIES,
+  configDir?: string
+): Promise<{
+  changes: OrgMemoryChangeLogEntry[];
+  maxEntries: number;
+  truncated: boolean;
+}> {
+  const [changes, truncated] = await Promise.all([
+    listOrgMemoryHistory(orgId, limit, configDir),
+    isOrgMemoryHistoryTruncated(orgId, configDir),
+  ]);
+  return {
+    changes,
+    maxEntries: ORG_MEMORY_HISTORY_MAX_ENTRIES,
+    truncated,
+  };
+}
+
 export interface OrgMemoryChangeLogRecord extends OrgMemoryChangeLogEntry {
   content: string;
 }
@@ -89,7 +137,12 @@ export async function listOrgMemoryHistory(
 
   const entries = await readDirectoryEntries(historyDir);
   const ids = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith(".json") &&
+        entry.name !== ORG_MEMORY_HISTORY_TRUNCATED_MARKER
+    )
     .map((entry) => entry.name.replace(/\.json$/, ""))
     .sort((left, right) => right.localeCompare(left));
 
@@ -163,4 +216,5 @@ export async function pruneOrgMemoryHistory(
       () => undefined
     );
   }
+  await markOrgMemoryHistoryTruncated(orgId, configDir);
 }
