@@ -48,8 +48,12 @@ export interface ListedArtifactCandidate {
 const FRESHNESS_MARKERS =
   "harian|hari\\s+ini|terbaru|today|daily|latest|yang\\s+baru|update|diperbarui";
 
+const FILENAME_TOKEN = /\S+\.[a-z0-9]{2,5}\b/gi;
+
 export function isFreshReportRequest(text: string): boolean {
-  const normalized = text.trim();
+  // Filenames can carry a marker word (`daily-report.csv`, `update-harga.csv`)
+  // and those requests still want the file itself, not a fresh agent turn.
+  const normalized = text.trim().replace(FILENAME_TOKEN, " ");
   if (!normalized) {
     return false;
   }

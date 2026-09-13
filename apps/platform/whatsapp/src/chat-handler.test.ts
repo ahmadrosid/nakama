@@ -1764,6 +1764,29 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
+  test("attaches a filename that carries a freshness word instead of running the agent", async () => {
+    await withArtifactChat(
+      {
+        deliverableArtifacts: [
+          {
+            ...SAMPLE_ARTIFACT,
+            filename: "daily-report.csv",
+            path: "daily-report.csv",
+          },
+        ],
+        messages: [],
+      },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "kirim file daily-report.csv",
+        });
+        expect(ctx.calls.sendStream).toBe(0);
+        expect(documentSendCount(ctx.sent)).toBe(1);
+      }
+    );
+  });
+
   test("skips scratch-looking writes when delivering post-turn documents", async () => {
     await withArtifactChat(
       {

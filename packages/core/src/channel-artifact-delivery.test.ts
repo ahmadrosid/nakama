@@ -51,6 +51,13 @@ describe("isFreshReportRequest", () => {
     expect(isFreshReportRequest("thanks")).toBe(false);
     expect(isFreshReportRequest("")).toBe(false);
   });
+
+  test("ignores markers that only appear inside a filename", () => {
+    expect(isFreshReportRequest("kirim file daily-report.csv")).toBe(false);
+    expect(isFreshReportRequest("send me update-harga.csv")).toBe(false);
+    expect(isFreshReportRequest("kirim file laporan-terbaru.csv")).toBe(false);
+    expect(isFreshReportRequest("send me the latest-report.pdf")).toBe(false);
+  });
 });
 
 describe("isAttachOnlyCommand", () => {
