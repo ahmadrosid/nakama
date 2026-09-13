@@ -2,9 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export function useWorkerLogs(workerName: string, lines = 500) {
+export function useWorkerLogs(
+  workerName: string,
+  lines = 500,
+  enabled = false
+) {
   return useQuery({
-    enabled: false,
+    enabled,
     queryFn: () => client.getWorkerLogs(workerName, lines),
     queryKey: [...queryKeys.workerLogs, workerName, lines],
   });
