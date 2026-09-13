@@ -8,6 +8,7 @@
     "providers",
     "---Deploy---",
     "docker",
+    "coolify",
     "tailscale",
     "backup-restore",
     "error-tracking",
