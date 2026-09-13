@@ -25,4 +25,27 @@ describe("validateCustomModels", () => {
       ])
     ).toThrow('Model "qwen3.6-35b" has invalid supportsThinking flag.');
   });
+
+  test("keeps context sizes and leaves them undefined when blank", () => {
+    const [sized, blank] = validateCustomModels([
+      {
+        contextWindow: 1_000_000,
+        id: "qwen3.6-35b",
+        maxOutputTokens: 32_768,
+      },
+      { contextWindow: "", id: "qwen3.6-7b" },
+    ]);
+
+    expect(sized?.contextWindow).toBe(1_000_000);
+    expect(sized?.maxOutputTokens).toBe(32_768);
+    expect(blank?.contextWindow).toBeUndefined();
+  });
+
+  test("rejects context sizes that are not positive whole token counts", () => {
+    for (const contextWindow of [0, -1, 1.5, "many"]) {
+      expect(() =>
+        validateCustomModels([{ contextWindow, id: "qwen3.6-35b" }])
+      ).toThrow(/invalid contextWindow/);
+    }
+  });
 });

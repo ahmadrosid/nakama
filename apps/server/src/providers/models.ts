@@ -898,6 +898,26 @@ export function getModelById(modelId: string): ProviderModelOption | undefined {
   return AVAILABLE_MODELS.find((model) => model.id === modelId);
 }
 
+/** Compaction sizing for one model.
+ *
+ * A custom model id is never in the built-in catalog, so without the instance
+ * entry every custom provider would silently compact at the fallback window.
+ * Entries that leave the sizes blank keep the catalog value, then the fallback.
+ */
+export function resolveModelLimits(
+  modelId: string,
+  customModels?: CustomModelEntry[]
+): { contextWindow: number; maxOutputTokens: number } {
+  const catalog = getModelById(modelId);
+  const custom = findCustomModel(customModels, modelId);
+
+  return {
+    contextWindow: custom?.contextWindow ?? catalog?.contextWindow ?? 128_000,
+    maxOutputTokens:
+      custom?.maxOutputTokens ?? catalog?.maxOutputTokens ?? 8192,
+  };
+}
+
 export function getModelsForProvider(
   provider: ProviderName
 ): ProviderModelOption[] {

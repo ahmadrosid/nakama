@@ -207,9 +207,9 @@ import {
   fetchFireworksGatewayModels,
   fetchOllamaModels,
   fetchRemoteOpenAIModels,
-  getModelById,
   getModelsForProviderInstance,
   isCostEstimated,
+  resolveModelLimits,
 } from "../providers";
 import {
   fetchChatgptCodexModels,
@@ -4104,12 +4104,7 @@ export class AgentService {
       return;
     }
 
-    const model = getModelById(resolved.model);
-
-    return {
-      contextWindow: model?.contextWindow ?? 128_000,
-      maxOutputTokens: model?.maxOutputTokens ?? 8192,
-    };
+    return resolveModelLimits(resolved.model, resolved.instance.customModels);
   }
 
   private resolveWorkspaceThinkingDefaults(): ThinkingSettings {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
+  appendOpenRouterModelRow,
   buildCreateProviderRequest,
   encodeModelSelection,
   filterVisionCapableProviderGroups,
@@ -714,5 +715,44 @@ describe("validateCustomModelsInput", () => {
     expect(validateCustomModelsInput([{ id: " " }])).toBe(
       "Add at least one model."
     );
+  });
+});
+
+describe("appendOpenRouterModelRow", () => {
+  test("keeps the context window the browse row carried", () => {
+    expect(
+      appendOpenRouterModelRow(
+        [],
+        "anthropic/claude-sonnet-4-6",
+        "Sonnet 4.6",
+        {
+          contextWindow: 1_000_000,
+        }
+      )
+    ).toEqual([
+      {
+        contextWindow: 1_000_000,
+        default: true,
+        id: "anthropic/claude-sonnet-4-6",
+        name: "Sonnet 4.6",
+      },
+    ]);
+  });
+
+  test("preserves existing rows and moves the default to the picked model", () => {
+    expect(
+      appendOpenRouterModelRow(
+        [
+          { contextWindow: 32_000, default: true, id: "a/one", name: "One" },
+          { id: "a/two" },
+          { id: "   " },
+        ],
+        "a/two",
+        "Two"
+      )
+    ).toEqual([
+      { contextWindow: 32_000, default: false, id: "a/one", name: "One" },
+      { default: true, id: "a/two", name: "a/two" },
+    ]);
   });
 });
