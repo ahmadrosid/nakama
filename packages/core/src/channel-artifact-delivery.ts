@@ -1,6 +1,7 @@
 import {
   type ChannelArtifactRef,
   extractPairedTurnArtifacts,
+  isScratchArtifactPath,
 } from "./channel-artifacts";
 import type { ChatMessage } from "./contract";
 
@@ -224,7 +225,9 @@ export async function deliverTurnArtifactShares(input: {
   };
 }): Promise<DeliverableChannelArtifact[]> {
   const messages = await input.session.getMessages();
-  const paired = extractPairedTurnArtifacts(messages);
+  const paired = extractPairedTurnArtifacts(messages).filter(
+    (artifact) => !isScratchArtifactPath(artifact.path)
+  );
   if (paired.length === 0) {
     return [];
   }
