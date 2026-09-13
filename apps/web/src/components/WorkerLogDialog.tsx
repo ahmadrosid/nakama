@@ -274,7 +274,7 @@ function WorkerLogPane({
   }
 
   return (
-    <pre className="flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
+    <pre className="min-h-64 flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
       {content}
     </pre>
   );
