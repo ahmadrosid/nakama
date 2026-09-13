@@ -243,12 +243,14 @@ describe("org memory history", () => {
     }
 
     const historyDir = getOrgMemoryHistoryDir(orgId, tempDir);
+    // Bun's fs.promises.access resolves to null (1.4) or undefined (older) —
+    // only the reject/resolve matter here.
     await expect(
       access(path.join(historyDir, `${malformedId}.json`))
-    ).resolves.toBeUndefined();
+    ).resolves.toBeFalsy();
     await expect(
       access(path.join(historyDir, `${malformedId}.md`))
-    ).resolves.toBeUndefined();
+    ).resolves.toBeFalsy();
     await expect(
       access(path.join(historyDir, "omh_00000001_valid.json"))
     ).rejects.toThrow();
