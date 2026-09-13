@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   extractLatestTurnMessages,
   extractPairedTurnArtifacts,
+  isScratchArtifactPath,
 } from "./channel-artifacts";
-import type { ChatMessage } from "./contract";
 
 const ARTIFACTS_ROOT =
   "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
@@ -482,6 +482,21 @@ describe("extractPairedTurnArtifacts", () => {
     expect(
       extractPairedTurnArtifacts(messages).map((artifact) => artifact.path)
     ).toEqual(["a.md", "cat.png"]);
+  });
+});
+
+describe("isScratchArtifactPath", () => {
+  test("flags dotfiles, underscore prefixes, and temp suffixes", () => {
+    expect(isScratchArtifactPath("_scratch-debug.json")).toBe(true);
+    expect(isScratchArtifactPath(".draft.md")).toBe(true);
+    expect(isScratchArtifactPath("notes.tmp")).toBe(true);
+    expect(isScratchArtifactPath("notes.bak")).toBe(true);
+    expect(isScratchArtifactPath("notes~")).toBe(true);
+  });
+
+  test("keeps real deliverables", () => {
+    expect(isScratchArtifactPath("laporan-final.csv")).toBe(false);
+    expect(isScratchArtifactPath("report.md")).toBe(false);
   });
 });
 

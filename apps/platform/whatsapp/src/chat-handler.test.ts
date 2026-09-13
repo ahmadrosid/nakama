@@ -1750,6 +1750,110 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
+  test("runs the agent on a freshness request instead of serving a stale file", async () => {
+    await withArtifactChat(
+      { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: [] },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "tolong kirim laporan harian",
+        });
+        expect(ctx.calls.sendStream).toBe(1);
+        expect(documentSendCount(ctx.sent)).toBe(0);
+      }
+    );
+  });
+
+  test("skips scratch-looking writes when delivering post-turn documents", async () => {
+    await withArtifactChat(
+      {
+        messages: [
+          { content: "save", role: "user" as const },
+          {
+            content: "",
+            role: "assistant" as const,
+            toolCalls: [
+              {
+                arguments: {
+                  content: "a,b\n1,2",
+                  path: "artifacts/laporan-final.csv",
+                },
+                id: "tool_1",
+                name: "write_file",
+              },
+              {
+                arguments: {
+                  content: '{"x":1}',
+                  path: "artifacts/_scratch-debug.json",
+                },
+                id: "tool_2",
+                name: "write_file",
+              },
+            ],
+          },
+          {
+            content: JSON.stringify({
+              bytesWritten: 7,
+              path: "/home/.nakama/orgs/org/profiles/default/artifacts/laporan-final.csv",
+            }),
+            name: "write_file",
+            role: "tool" as const,
+            toolCallId: "tool_1",
+          },
+          {
+            content: JSON.stringify({
+              bytesWritten: 7,
+              path: "/home/.nakama/orgs/org/profiles/default/artifacts/_scratch-debug.json",
+            }),
+            name: "write_file",
+            role: "tool" as const,
+            toolCallId: "tool_2",
+          },
+          { content: "Saved.", role: "assistant" as const },
+        ],
+      },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "save it and send me the csv",
+        });
+        expect(documentSendCount(ctx.sent)).toBe(1);
+        expect(
+          ctx.sent.find((message) => message.content.document !== undefined)
+            ?.content.fileName
+        ).toBe("laporan-final.csv");
+      }
+    );
+  });
+
+  test("delivers the full set on a natural-language retry, not just newest", async () => {
+    await withArtifactChat(
+      {
+        deliverableArtifacts: [
+          {
+            ...SAMPLE_ARTIFACT,
+            filename: "laporan-part1.csv",
+            path: "laporan-part1.csv",
+          },
+          {
+            ...SAMPLE_ARTIFACT,
+            filename: "laporan-part2.csv",
+            path: "laporan-part2.csv",
+          },
+        ],
+        messages: [],
+      },
+      async (ctx) => {
+        await ctx.handleMessage({
+          jid: PAIRED_JID,
+          text: "send it to this group",
+        });
+        expect(ctx.calls.sendStream).toBe(0);
+        expect(documentSendCount(ctx.sent)).toBe(2);
+      }
+    );
+  });
+
   test.each([false, true])(
     "attaches in a group (new artifact on retry: %s)",
     async (retry) => {

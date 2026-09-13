@@ -45,6 +45,20 @@ export interface ListedArtifactCandidate {
   updatedAt: string;
 }
 
+const FRESHNESS_MARKERS =
+  "harian|hari\\s+ini|terbaru|today|daily|latest|yang\\s+baru|update|diperbarui";
+
+export function isFreshReportRequest(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  return new RegExp(String.raw`\b(?:${FRESHNESS_MARKERS})\b`, "i").test(
+    normalized
+  );
+}
+
 export function isAttachIntent(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) {

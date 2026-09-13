@@ -4,6 +4,7 @@ import {
   formatArtifactShareFooter,
   isAttachIntent,
   isAttachOnlyCommand,
+  isFreshReportRequest,
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
   resolveArtifactForAttach,
@@ -33,6 +34,22 @@ describe("isAttachIntent", () => {
     expect(isAttachIntent("save a report")).toBe(false);
     expect(isAttachIntent("jangan kirim csv ke grup")).toBe(false);
     expect(isAttachIntent("tidak usah kirimkan file")).toBe(false);
+  });
+});
+
+describe("isFreshReportRequest", () => {
+  test("matches time-bound report requests in both languages", () => {
+    expect(isFreshReportRequest("tolong kirim laporan harian")).toBe(true);
+    expect(isFreshReportRequest("send today's report")).toBe(true);
+    expect(isFreshReportRequest("kirim laporan terbaru")).toBe(true);
+    expect(isFreshReportRequest("buatkan laporan hari ini")).toBe(true);
+  });
+
+  test("does not match plain attach or thanks", () => {
+    expect(isFreshReportRequest("kirim file rekap-well-test.csv")).toBe(false);
+    expect(isFreshReportRequest("send me the file")).toBe(false);
+    expect(isFreshReportRequest("thanks")).toBe(false);
+    expect(isFreshReportRequest("")).toBe(false);
   });
 });
 
