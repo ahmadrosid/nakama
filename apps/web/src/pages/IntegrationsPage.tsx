@@ -94,11 +94,13 @@ function resolveSection(value: string | null): IntegrationSectionId {
 }
 
 function IntegrationSectionPanel({
+  canUseOrgIntegrations,
   section,
-  isOrgAdmin,
+  isPlatformAdmin,
 }: {
+  canUseOrgIntegrations: boolean;
   section: IntegrationSectionId;
-  isOrgAdmin: boolean;
+  isPlatformAdmin: boolean;
 }) {
   if (section === "token") {
     return <LocalAuthTokenCard />;
@@ -114,9 +116,11 @@ function IntegrationSectionPanel({
 
   if (section === "composio") {
     return (
-      <div className={cn(isOrgAdmin && "space-y-4")}>
-        {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
-        <ComposioConnectionsCard bordered embedded />
+      <div className={cn(isPlatformAdmin && "space-y-4")}>
+        {isPlatformAdmin ? <ComposioSettingsCard embedded /> : null}
+        {canUseOrgIntegrations ? (
+          <ComposioConnectionsCard bordered embedded />
+        ) : null}
       </div>
     );
   }
@@ -140,14 +144,33 @@ function IntegrationSectionPanel({
   return <WhatsAppSettingsCard />;
 }
 
-function IntegrationsPageBody({ isOrgAdmin }: { isOrgAdmin: boolean }) {
+function IntegrationsPageBody({
+  canUseOrgIntegrations,
+  isOrgAdmin,
+  isPlatformAdmin,
+}: {
+  canUseOrgIntegrations: boolean;
+  isOrgAdmin: boolean;
+  isPlatformAdmin: boolean;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const section = resolveSection(
-    isOrgAdmin ? searchParams.get("section") : "composio"
-  );
-  const visibleSections = isOrgAdmin
-    ? INTEGRATION_SECTIONS
-    : INTEGRATION_SECTIONS.filter((item) => item.id === "composio");
+  const requestedSection = resolveSection(searchParams.get("section"));
+  const visibleSections = INTEGRATION_SECTIONS.filter((item) => {
+    if (item.id === "composio") {
+      return true;
+    }
+    if (
+      item.id === "discord" ||
+      item.id === "whatsapp" ||
+      item.id === "error-tracking"
+    ) {
+      return isPlatformAdmin;
+    }
+    return isOrgAdmin;
+  });
+  const section = visibleSections.some((item) => item.id === requestedSection)
+    ? requestedSection
+    : visibleSections[0].id;
 
   function setSection(nextSection: IntegrationSectionId) {
     setSearchParams(
@@ -190,7 +213,11 @@ function IntegrationsPageBody({ isOrgAdmin }: { isOrgAdmin: boolean }) {
         </aside>
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
-          <IntegrationSectionPanel isOrgAdmin={isOrgAdmin} section={section} />
+          <IntegrationSectionPanel
+            canUseOrgIntegrations={canUseOrgIntegrations}
+            isPlatformAdmin={isPlatformAdmin}
+            section={section}
+          />
         </div>
       </div>
     </section>
@@ -198,7 +225,8 @@ function IntegrationsPageBody({ isOrgAdmin }: { isOrgAdmin: boolean }) {
 }
 
 export function IntegrationsPage() {
-  const { activeOrg, isLoading } = useAuth();
+  const { activeOrg, isLoading, user } = useAuth();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
 
   if (isLoading) {
     return (
@@ -208,11 +236,17 @@ export function IntegrationsPage() {
     );
   }
 
-  if (activeOrg?.role === "viewer") {
+  if (activeOrg?.role === "viewer" && !isPlatformAdmin) {
     return <Navigate replace to="/chat" />;
   }
 
-  return <IntegrationsPageBody isOrgAdmin={activeOrg?.role === "admin"} />;
+  return (
+    <IntegrationsPageBody
+      canUseOrgIntegrations={Boolean(activeOrg && activeOrg.role !== "viewer")}
+      isOrgAdmin={activeOrg?.role === "admin"}
+      isPlatformAdmin={isPlatformAdmin}
+    />
+  );
 }
 
 function SidebarButton({

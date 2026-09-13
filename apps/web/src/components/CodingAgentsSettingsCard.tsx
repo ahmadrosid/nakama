@@ -6,6 +6,7 @@ import { cn } from "@nakama/ui/utils";
 import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { CodingAgentLogo } from "@/components/coding-agent-logos";
+import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
 function CopyCommandButton({ command }: { command: string }) {
@@ -103,6 +104,8 @@ function AgentRow({
 }
 
 export function CodingAgentsSettingsCard() {
+  const { user } = useAuth();
+  const canManageSettings = user?.isPlatformAdmin === true;
   const [settings, setSettings] =
     useState<CodingHarnessSettingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +177,7 @@ export function CodingAgentsSettingsCard() {
           aria-label="Use Nakama keys"
           checked={passthrough}
           className="relative after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2"
-          disabled={saving || !settings}
+          disabled={!canManageSettings || saving || !settings}
           onCheckedChange={toggle}
         />
       </div>

@@ -11,13 +11,18 @@ setupTestConfigDir("nakama-settings-rbac-test-");
 const ORG_ID = "org_settings_rbac";
 const PASSWORD = "password123";
 
-// Provider and channel settings are workspace-global: whoever writes them
-// changes the config every org runs on.
-const GLOBAL_WRITES: Array<{ body?: unknown; method: string; path: string }> = [
+// These settings are install-wide: changing them affects every organization.
+const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   { method: "POST", path: "/v1/xai-oauth/device/start" },
   {
     method: "POST",
     path: "/v1/xai-oauth/device/complete",
+    body: { sessionId: "invalid" },
+  },
+  { method: "POST", path: "/v1/chatgpt-oauth/device/start" },
+  {
+    method: "POST",
+    path: "/v1/chatgpt-oauth/device/complete",
     body: { sessionId: "invalid" },
   },
   { body: { provider: "openai" }, method: "POST", path: "/v1/providers" },
@@ -32,11 +37,15 @@ const GLOBAL_WRITES: Array<{ body?: unknown; method: string; path: string }> = [
     method: "PUT",
     path: "/v1/settings/provider",
   },
-  { body: { provider: "openai" }, method: "POST", path: "/v1/models/discover" },
   {
     body: { timezone: "Asia/Jakarta" },
     method: "PUT",
     path: "/v1/settings/timezone",
+  },
+  {
+    body: { effort: "medium", enabled: true },
+    method: "PUT",
+    path: "/v1/settings/thinking",
   },
   { body: { enabled: true }, method: "PUT", path: "/v1/settings/vision" },
   {
@@ -49,12 +58,6 @@ const GLOBAL_WRITES: Array<{ body?: unknown; method: string; path: string }> = [
     method: "PUT",
     path: "/v1/settings/image-generation",
   },
-  { body: { botToken: "t" }, method: "PUT", path: "/v1/settings/telegram" },
-  {
-    body: { botToken: "t" },
-    method: "POST",
-    path: "/v1/settings/telegram/handshake",
-  },
   { body: { botToken: "d" }, method: "PUT", path: "/v1/settings/discord" },
   {
     body: { botToken: "d" },
@@ -66,6 +69,18 @@ const GLOBAL_WRITES: Array<{ body?: unknown; method: string; path: string }> = [
     body: { apiKey: "exa-key", provider: "exa" },
     method: "PUT",
     path: "/v1/settings/web-search",
+  },
+  {
+    body: { smtpHost: "smtp.example.com" },
+    method: "PUT",
+    path: "/v1/settings/email",
+  },
+  { method: "POST", path: "/v1/settings/email/test" },
+  { method: "POST", path: "/v1/settings/agent-browser/install" },
+  {
+    body: { providerPassthroughEnabled: false },
+    method: "PUT",
+    path: "/v1/settings/coding-harnesses",
   },
   {
     body: { dsn: "https://publickey@errors.example.com/42" },
@@ -104,6 +119,7 @@ function createApp() {
       setErrorTrackingSettings: record("setErrorTrackingSettings"),
       setImageGenerationSettings: record("setImageGenerationSettings"),
       setTelegramSettings: record("setTelegramSettings"),
+      setThinkingSettings: record("setThinkingSettings"),
       setTranscriptionSettings: record("setTranscriptionSettings"),
       setUserTimezone: record("setUserTimezone"),
       setVisionSettings: record("setVisionSettings"),
@@ -178,24 +194,18 @@ async function callRoute(
   );
 }
 
-describe("workspace-global settings writes require an org admin", () => {
-  for (const route of GLOBAL_WRITES) {
-    test(`${route.method} ${route.path} -> 403 for a viewer`, async () => {
-      const { app, calls, session } = await login("viewer");
-      const response = await callRoute(app, session, route);
+describe("install-wide settings writes require a platform admin", () => {
+  for (const route of INSTALL_WRITES) {
+    for (const role of ["viewer", "member", "admin"] as const) {
+      test(`${route.method} ${route.path} -> 403 for ${role}`, async () => {
+        const { app, calls, session } = await login(role);
+        const response = await callRoute(app, session, route);
 
-      expect(response.status).toBe(403);
-      // The guard must reject before the global config is touched.
-      expect(calls).toEqual([]);
-    });
-
-    test(`${route.method} ${route.path} -> 403 for a member`, async () => {
-      const { app, calls, session } = await login("member");
-      const response = await callRoute(app, session, route);
-
-      expect(response.status).toBe(403);
-      expect(calls).toEqual([]);
-    });
+        expect(response.status).toBe(403);
+        // The guard must reject before the global config is touched.
+        expect(calls).toEqual([]);
+      });
+    }
   }
 
   test("a platform admin who is only a viewer in the org still reaches them", async () => {
@@ -210,21 +220,21 @@ describe("workspace-global settings writes require an org admin", () => {
     expect(calls).toEqual(["updateProvider"]);
   });
 
-  test("an org admin still reaches provider settings", async () => {
+  test("an org admin can still change org-scoped Telegram settings", async () => {
     const { app, calls, session } = await login("admin");
     const response = await callRoute(app, session, {
-      body: { baseUrl: "https://example.com/v1" },
-      method: "PATCH",
-      path: "/v1/providers/provider_1",
+      body: { botToken: "telegram-token" },
+      method: "PUT",
+      path: "/v1/settings/telegram",
     });
 
     expect(response.status).not.toBe(403);
-    expect(calls).toEqual(["updateProvider"]);
+    expect(calls).toEqual(["setTelegramSettings"]);
   });
 });
 
-test("an admin completes Grok device sign-in through authenticated HTTP routes", async () => {
-  const { app, session } = await login("admin");
+test("a platform admin completes Grok device sign-in through authenticated HTTP routes", async () => {
+  const { app, session } = await login("admin", true);
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input) => {
     const url = String(input);
