@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
+import { NakamaClient, type RemoteChatSession } from "@nakama/client";
 import {
   hasActiveStreams,
   resetActiveStreamsForTests,
@@ -7,6 +8,10 @@ import {
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
+import type {
+  ButtonInteraction,
+  StringSelectMenuInteraction,
+} from "discord.js";
 import { DiscordAuthStore } from "./auth-store";
 import {
   chatLockOptions,
@@ -28,6 +33,77 @@ import {
   writeDiscordConfigIni,
 } from "./test-helpers";
 import { ThreadStore } from "./thread-store";
+
+function createPickerInteraction(
+  customId: string,
+  values?: string[],
+  userId?: string,
+  payload?: ReturnType<ReturnType<typeof readPickerPayload>>
+) {
+  const mock = createSlashInteraction({
+    commandName: "org",
+    inThread: true,
+    userId,
+  });
+  const { commandName: _commandName, ...interaction } = mock.interaction;
+  return {
+    ...mock,
+    interaction: {
+      ...interaction,
+      customId,
+      message: {
+        components:
+          payload?.components.map((row) => ({
+            components: row.components.map(({ custom_id, ...component }) => ({
+              ...component,
+              customId: custom_id,
+            })),
+            type: 1,
+          })) ?? [],
+      },
+      ...(values ? { values } : {}),
+    } as unknown as StringSelectMenuInteraction | ButtonInteraction,
+  };
+}
+
+function readPickerPayload(
+  interaction:
+    | ReturnType<typeof createSlashInteraction>["interaction"]
+    | ButtonInteraction
+    | StringSelectMenuInteraction
+) {
+  const edit = spyOn(interaction, "editReply");
+  return () =>
+    JSON.parse(JSON.stringify(edit.mock.calls.at(-1)?.[0])) as {
+      components: Array<{
+        components: Array<{
+          custom_id: string;
+          type: number;
+          label?: string;
+          options?: Array<{ value: string; default?: boolean }>;
+          disabled?: boolean;
+        }>;
+      }>;
+    };
+}
+
+async function selectAndApply(
+  handler: ReturnType<typeof createChatHandler>,
+  customId: string,
+  value: string
+) {
+  const pick = createPickerInteraction(customId, [value]);
+  const preview = readPickerPayload(pick.interaction);
+  await handler.handleSelectionInteraction(pick.interaction);
+  const apply = preview()
+    .components.flatMap((row) => row.components)
+    .find((button) => button.label === "Apply")!;
+  expect(apply.disabled).toBe(false);
+  await handler.handleSelectionInteraction(
+    createPickerInteraction(apply.custom_id, undefined, undefined, preview())
+      .interaction
+  );
+}
 
 afterEach(() => {
   resetChatLocksForTests();
@@ -63,16 +139,8 @@ async function waitForCondition(
 
 async function createPairedHandler(
   homeDir: string,
-  options: {
-    messages?: ChatMessage[];
-    onSendStream?: Parameters<typeof createMockClient>[0]["onSendStream"];
-    questionnaire?: Parameters<typeof createMockClient>[0]["questionnaire"];
-    orgs?: Parameters<typeof createMockClient>[0]["orgs"];
-    profiles?: Parameters<typeof createMockClient>[0]["profiles"];
-    listedArtifacts?: Parameters<typeof createMockClient>[0]["listedArtifacts"];
-    artifactContentBytes?: Parameters<
-      typeof createMockClient
-    >[0]["artifactContentBytes"];
+  options: NonNullable<Parameters<typeof createMockClient>[0]> & {
+    apiClient?: NakamaClient;
     configProfileId?: string;
     pairedUserIds?: string[];
     allowedUserIds?: string[];
@@ -86,7 +154,9 @@ async function createPairedHandler(
 
   const authStore = new DiscordAuthStore();
   await authStore.reload();
-  const { client, calls, createdSessionProfileIds } = createMockClient(options);
+  const mockClient = createMockClient(options);
+  const { calls, createdSessionProfileIds } = mockClient;
+  const client = options.apiClient ?? mockClient.client;
   const sessionStore = new SessionStore(
     path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
   );
@@ -121,6 +191,28 @@ async function createPairedHandler(
 }
 
 describe("createChatHandler logging", () => {
+  test("numeric chat replies preserve the selected org and session", async () => {
+    await withTempHome(async (homeDir) => {
+      const inputs: unknown[] = [];
+      const { handleMessage, orgStore, calls } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async (input) => {
+            inputs.push(input);
+            return "ok";
+          },
+          orgs: createMultiTestOrgs(),
+        }
+      );
+      orgStore.set("u:424242424242424242", "org_a");
+      for (const content of ["hello", "2", "continue"]) {
+        await handleMessage(createDmMessage({ content }).message);
+      }
+      expect(inputs).toHaveLength(3);
+      expect(orgStore.get("u:424242424242424242")?.orgId).toBe("org_a");
+      expect(calls.createSession).toBe(1);
+    });
+  });
   test("logs message metadata without private content when debug is on", async () => {
     await withTempHome(async (homeDir) => {
       const privateMessage = "private 🔒 message";
@@ -173,6 +265,347 @@ describe("createChatHandler logging", () => {
           process.env.NAKAMA_CH_DEBUG = previousDebug;
         }
       }
+    });
+  });
+});
+
+describe("Discord selection pickers", () => {
+  test("selecting previews the choice until Apply, and Cancel preserves the session", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        orgs: createMultiTestOrgs(),
+      });
+      const key = "g:guild_channel_1:t:thread_1";
+      handler.orgStore.set(key, "org_a");
+      handler.threadStore.add("thread_1");
+      await handler.handleMessage(
+        createGuildChatMessage({
+          content: "hello",
+          inThread: true,
+          threadId: "thread_1",
+        }).message
+      );
+      const session = handler.sessionStore.get(key);
+      const command = createSlashInteraction({
+        commandName: "org",
+        inThread: true,
+      });
+      const initial = readPickerPayload(command.interaction);
+      await handler.handleSlashCommand(command.interaction);
+      expect(
+        initial()
+          .components.flatMap((row) => row.components)
+          .find((button) => button.label === "Apply")?.disabled
+      ).toBe(true);
+      const pick = createPickerInteraction("nakama:org:424242424242424242:0", [
+        "org_b",
+      ]);
+      const preview = readPickerPayload(
+        pick.interaction as unknown as typeof command.interaction
+      );
+      await handler.handleSelectionInteraction(pick.interaction);
+      expect(handler.orgStore.get(key)?.orgId).toBe("org_a");
+      expect(handler.sessionStore.get(key)).toEqual(session);
+      const cancel = preview()
+        .components.flatMap((row) => row.components)
+        .find((button) => button.label === "Cancel")!;
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(
+          cancel.custom_id,
+          undefined,
+          undefined,
+          preview()
+        ).interaction
+      );
+      expect(handler.orgStore.get(key)?.orgId).toBe("org_a");
+      expect(handler.sessionStore.get(key)).toEqual(session);
+    });
+  });
+  test("a failed org save cannot leave the previous session hot", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        orgs: createMultiTestOrgs(),
+      });
+      const key = "g:guild_channel_1:t:thread_1";
+      handler.orgStore.set(key, "org_a");
+      handler.threadStore.add("thread_1");
+      await handler.handleMessage(
+        createGuildChatMessage({
+          content: "hello",
+          inThread: true,
+          threadId: "thread_1",
+        }).message
+      );
+      const save = spyOn(handler.orgStore, "save").mockRejectedValueOnce(
+        new Error("disk unavailable")
+      );
+      const log = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        await selectAndApply(
+          handler,
+          "nakama:org:424242424242424242:0",
+          "org_b"
+        );
+        expect(handler.sessionStore.get(key)).toBeUndefined();
+        expect(handler.sessionStore.getHotSession(key)).toBeUndefined();
+      } finally {
+        save.mockRestore();
+        log.mockRestore();
+      }
+    });
+  });
+  test("concurrent real client sessions retain their org across a picker switch", async () => {
+    await withTempHome(async (homeDir) => {
+      const sessionOrgs = new Map<string, string>();
+      const sent: Array<{ sessionId: string; orgId: string | null }> = [];
+      let releaseFirst!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let firstStarted = false;
+      const apiClient = new NakamaClient({
+        baseUrl: "http://discord-test.invalid",
+        fetch: (async (input, init) => {
+          const request = new Request(input, init);
+          const pathname = new URL(request.url).pathname;
+          const orgId = request.headers.get("X-Org-Id");
+          if (pathname === "/v1/auth/orgs") {
+            return Response.json({ orgs: createMultiTestOrgs() });
+          }
+          if (pathname === "/v1/profiles") {
+            return Response.json({
+              profiles: [{ id: "default", name: "Default" }],
+            });
+          }
+          if (pathname === "/v1/sessions") {
+            const sessionId = `session_${sessionOrgs.size}`;
+            sessionOrgs.set(sessionId, orgId!);
+            return Response.json({ sessionId });
+          }
+          const sessionId = pathname.split("/")[3]!;
+          if (pathname.endsWith("/messages") && request.method === "POST") {
+            sent.push({ orgId, sessionId });
+            if (sent.length === 1) {
+              firstStarted = true;
+              await gate;
+            }
+            if (sessionOrgs.get(sessionId) !== orgId) {
+              return Response.json(
+                { error: "Session not found" },
+                { status: 404 }
+              );
+            }
+            return new Response('data: {"type":"done","reply":"ok"}\n\n', {
+              headers: { "Content-Type": "text/event-stream" },
+            });
+          }
+          if (pathname.endsWith("/messages")) {
+            return Response.json({ messages: [] });
+          }
+          throw new Error(`Unexpected request: ${pathname}`);
+        }) as typeof fetch,
+      });
+      const handler = await createPairedHandler(homeDir, { apiClient });
+      handler.orgStore.set("g:guild_channel_1", "org_a");
+      handler.orgStore.set("g:guild_channel_1:t:thread_2", "org_b");
+      handler.threadStore.add("thread_1");
+      handler.threadStore.add("thread_2");
+      const send = (threadId: string, content: string) =>
+        handler.handleMessage(
+          createGuildChatMessage({ content, inThread: true, threadId }).message
+        );
+      const first = send("thread_1", "hello");
+      try {
+        await waitForCondition(
+          () => firstStarted,
+          "first stream never started"
+        );
+        await send("thread_2", "hello");
+      } finally {
+        releaseFirst();
+      }
+      await first;
+      await send("thread_1", "2");
+      expect(sent.map((entry) => entry.orgId)).toEqual([
+        "org_a",
+        "org_b",
+        "org_a",
+      ]);
+      await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_b");
+      await send("thread_1", "continue");
+      expect(sent.at(-1)?.orgId).toBe("org_b");
+      expect(sent.at(-1)?.sessionId).not.toBe(sent[0]?.sessionId);
+      expect(sessionOrgs.size).toBe(3);
+    });
+  });
+  test("org picker paginates and accepts a choice beyond the first 25", async () => {
+    await withTempHome(async (homeDir) => {
+      const orgs = Array.from({ length: 26 }, (_, index) => ({
+        ...createMultiTestOrgs()[0]!,
+        id: `org_${index}`,
+        name: `Org ${index}`,
+      }));
+      const handler = await createPairedHandler(homeDir, { orgs });
+      const command = createSlashInteraction({
+        commandName: "org",
+        inThread: true,
+      });
+      const payload = readPickerPayload(command.interaction);
+      await handler.handleSlashCommand(command.interaction);
+      expect(payload().components[0]?.components[0]?.options).toHaveLength(25);
+      const nextId = payload().components[1]!.components[1]!.custom_id;
+      const next = createPickerInteraction(nextId);
+      const nextPayload = readPickerPayload(
+        next.interaction as unknown as typeof command.interaction
+      );
+      await handler.handleSelectionInteraction(next.interaction);
+      expect(
+        nextPayload().components[0]?.components[0]?.options?.map(
+          (option) => option.value
+        )
+      ).toEqual(["org_25"]);
+      await selectAndApply(
+        handler,
+        nextPayload().components[0]!.components[0]!.custom_id,
+        "org_25"
+      );
+      expect(handler.orgStore.get("g:guild_channel_1:t:thread_1")?.orgId).toBe(
+        "org_25"
+      );
+    });
+  });
+
+  test("org switch drops the old hot session and leaves sibling threads alone", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        orgs: createMultiTestOrgs(),
+      });
+      handler.orgStore.set("g:guild_channel_1", "org_a");
+      for (const threadId of ["thread_1", "thread_2"]) {
+        handler.threadStore.add(threadId);
+        await handler.handleMessage(
+          createGuildChatMessage({ content: "hello", inThread: true, threadId })
+            .message
+        );
+      }
+      const key = "g:guild_channel_1:t:thread_1";
+      const siblingKey = "g:guild_channel_1:t:thread_2";
+      const sibling =
+        handler.sessionStore.getHotSession<RemoteChatSession>(siblingKey);
+      await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_a");
+      expect(handler.sessionStore.getHotSession(key)).toBeDefined();
+      await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_b");
+      expect(handler.sessionStore.get(key)).toBeUndefined();
+      expect(handler.sessionStore.getHotSession(key)).toBeUndefined();
+      expect(
+        handler.sessionStore.getHotSession<RemoteChatSession>(siblingKey)
+      ).toBe(sibling);
+      expect(handler.orgStore.get(siblingKey)?.orgId).toBe("org_a");
+      expect(handler.orgStore.get("g:guild_channel_1")?.orgId).toBe("org_a");
+      await handler.handleMessage(
+        createGuildChatMessage({
+          content: "continue",
+          inThread: true,
+          threadId: "thread_1",
+        }).message
+      );
+      expect(handler.calls.createSession).toBe(3);
+    });
+  });
+
+  test("profile picker excludes Super Bot and rejects stale or unavailable choices", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        orgs: createMultiTestOrgs(),
+        profiles: [
+          { id: "default" },
+          { id: "support" },
+          { id: "super", isSuper: true },
+        ],
+      });
+      handler.orgStore.set("g:guild_channel_1", "org_a");
+      const command = createSlashInteraction({
+        commandName: "profile",
+        inThread: true,
+      });
+      const payload = readPickerPayload(command.interaction);
+      await handler.handleSlashCommand(command.interaction);
+      const menu = payload().components[0]!.components[0]!;
+      expect(menu.options?.map((option) => option.value)).toEqual([
+        "default",
+        "support",
+      ]);
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(menu.custom_id, ["super"]).interaction
+      );
+      expect(handler.calls.createSession).toBe(0);
+      const pick = createPickerInteraction(menu.custom_id, ["support"]);
+      const preview = readPickerPayload(pick.interaction);
+      await handler.handleSelectionInteraction(pick.interaction);
+      expect(handler.createdSessionProfileIds).toEqual([]);
+      const apply = preview()
+        .components.flatMap((row) => row.components)
+        .find((button) => button.label === "Apply")!;
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(
+          apply.custom_id,
+          undefined,
+          undefined,
+          preview()
+        ).interaction
+      );
+      expect(handler.createdSessionProfileIds).toEqual(["support"]);
+      handler.orgStore.set("g:guild_channel_1:t:thread_1", "org_b");
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(
+          apply.custom_id,
+          undefined,
+          undefined,
+          preview()
+        ).interaction
+      );
+      expect(handler.createdSessionProfileIds).toEqual(["support"]);
+    });
+  });
+
+  test("foreign and unauthorized users cannot apply picker selections", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        allowedUserIds: ["999999999999999999"],
+        orgs: createMultiTestOrgs(),
+      });
+      const id = "nakama:org:424242424242424242:0";
+      const pick = createPickerInteraction(id, ["org_b"]);
+      const preview = readPickerPayload(pick.interaction);
+      await handler.handleSelectionInteraction(pick.interaction);
+      const applyId = preview()
+        .components.flatMap((row) => row.components)
+        .find((button) => button.label === "Apply")!.custom_id;
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(
+          applyId,
+          undefined,
+          "999999999999999999",
+          preview()
+        ).interaction
+      );
+      const unauthorizedPayload = JSON.parse(
+        JSON.stringify(preview()).replaceAll(
+          "424242424242424242",
+          "888888888888888888"
+        )
+      ) as ReturnType<typeof preview>;
+      await handler.handleSelectionInteraction(
+        createPickerInteraction(
+          "nakama:org:888888888888888888:apply",
+          undefined,
+          "888888888888888888",
+          unauthorizedPayload
+        ).interaction
+      );
+      expect(
+        handler.orgStore.get("g:guild_channel_1:t:thread_1")
+      ).toBeUndefined();
     });
   });
 });

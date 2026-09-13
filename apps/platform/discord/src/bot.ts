@@ -3,6 +3,7 @@ import {
   Events,
   GatewayIntentBits,
   type Message,
+  MessageFlags,
   Partials,
 } from "discord.js";
 import {
@@ -67,6 +68,34 @@ export async function createBot(
   // HTTP interaction endpoint, verify signatures with the app public key before
   // handling the body; do not copy this gateway-only handler as-is.
   client.on(Events.InteractionCreate, async (interaction) => {
+    if (
+      (interaction.isStringSelectMenu() || interaction.isButton()) &&
+      /^nakama:(org|profile):/.test(interaction.customId)
+    ) {
+      try {
+        // Private pickers can update in place; copied/foreign controls cannot mutate state.
+        if (interaction.customId.split(":")[2] !== interaction.user.id) {
+          await interaction.reply({
+            content: "Open your own /org or /profile picker.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        await interaction.deferUpdate();
+        await handler.handleSelectionInteraction(interaction);
+      } catch (error) {
+        if (!isIgnorableInteractionError(error)) {
+          console.error("Selection interaction error:", error);
+          await interaction
+            .editReply({
+              components: [],
+              content: "Something went wrong. Open the picker again.",
+            })
+            .catch(() => {});
+        }
+      }
+      return;
+    }
     if (!interaction.isChatInputCommand()) {
       return;
     }

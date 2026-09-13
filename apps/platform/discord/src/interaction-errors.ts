@@ -1,3 +1,5 @@
+import { MessageFlags } from "discord.js";
+
 /** Discord: Unknown interaction (expired or already handled). */
 const UNKNOWN_INTERACTION = 10_062;
 /** Discord: Interaction has already been acknowledged. */
@@ -23,7 +25,9 @@ export function isIgnorableInteractionError(error: unknown): boolean {
 
 type SlashDeferInteraction = {
   commandName: string;
-  deferReply: () => Promise<unknown>;
+  deferReply: (options?: {
+    flags: typeof MessageFlags.Ephemeral;
+  }) => Promise<unknown>;
   reply: (options: { content: string }) => Promise<unknown>;
   editReply: (options: { content: string }) => Promise<unknown>;
 };
@@ -36,7 +40,11 @@ export async function deferSlashInteraction(
   interaction: SlashDeferInteraction
 ): Promise<boolean> {
   try {
-    await interaction.deferReply();
+    await interaction.deferReply(
+      interaction.commandName === "org" || interaction.commandName === "profile"
+        ? { flags: MessageFlags.Ephemeral }
+        : undefined
+    );
     return true;
   } catch (error) {
     if (isIgnorableInteractionError(error)) {

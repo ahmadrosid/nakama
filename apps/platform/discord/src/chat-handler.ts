@@ -15,7 +15,6 @@ import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   type ChannelOrgStore,
   findOrgBySelectionInput,
-  formatOrgSelectionPrompt,
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
@@ -25,7 +24,6 @@ import type { ImageAttachment, SendMessageInput } from "@nakama/core/contract";
 import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
 import {
   filterProfilesForChatAccess,
-  formatProfileSelectionPrompt,
   formatProfileSwitchConfirmation,
   isProfileSelectionIndexInput,
   type ProfileScope,
@@ -33,11 +31,18 @@ import {
   resolveProfileInput,
   resolveProfileInScopes,
 } from "@nakama/core/profiles";
-import type {
-  ChatInputCommandInteraction,
-  Message,
-  TextBasedChannel,
-  ThreadChannel,
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  type ButtonInteraction,
+  ButtonStyle,
+  type ChatInputCommandInteraction,
+  ComponentType,
+  type Message,
+  StringSelectMenuBuilder,
+  type StringSelectMenuInteraction,
+  type TextBasedChannel,
+  type ThreadChannel,
 } from "discord.js";
 import type { DiscordAuthStore } from "./auth-store";
 import {
@@ -116,6 +121,20 @@ export interface ChatHandlerDeps {
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
+  // Each event owns its API client. Concurrent threads must not borrow setOrgId.
+  const scoped = () =>
+    createScopedChatHandler({ ...deps, client: deps.client.forOrg(null) });
+  return {
+    handleMessage: (message: Message) => scoped().handleMessage(message),
+    handleSelectionInteraction: (
+      interaction: ButtonInteraction | StringSelectMenuInteraction
+    ) => scoped().handleSlashCommand(interaction),
+    handleSlashCommand: (interaction: ChatInputCommandInteraction) =>
+      scoped().handleSlashCommand(interaction),
+  };
+}
+
+function createScopedChatHandler(deps: ChatHandlerDeps) {
   const {
     client,
     config,
@@ -184,18 +203,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       isGuild,
       parentResolution
     );
-    // Threads share the parent channel's org selection — do not key by thread id.
-    const channelOrgKey = resolveChannelOrgKey(
-      parentChannelId,
-      userId,
-      isGuild
-    );
+    const parentOrgKey = resolveChannelOrgKey(parentChannelId, userId, isGuild);
     const conversationKey = resolveConversationKey(
       message,
       channelId,
       isGuild,
       parentResolution
     );
+    const channelOrgKey = isThread ? conversationKey : parentOrgKey;
 
     // Auth reload + pairing under the conversation lock so concurrent DMs cannot
     // race reload against a just-written pairing. Agent work still locks later so
@@ -226,6 +241,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
+    await inheritThreadOrg(channelOrgKey, parentOrgKey);
+
     if (isGuild && text && looksLikeHandshakeAttempt(text)) {
       await messenger.send(LINK_IN_PRIVATE_REPLY);
       return;
@@ -240,15 +257,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       : [];
 
     if (!bypassOrgGate) {
-      const orgGateText =
-        isGuild && text && botInfo
-          ? stripBotMention(text, botInfo, mentionedBotRoleIds)
-          : text;
-      const orgReady = await ensureOrgReady(
-        messenger,
-        channelOrgKey,
-        orgGateText
-      );
+      const orgReady = await ensureOrgReady(messenger, channelOrgKey);
       if (!orgReady) {
         debugLog(`[discord] skip org-gate ${channelOrgKey}`);
         return;
@@ -319,6 +328,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       if (thread) {
         replyChannel = thread;
         replyConversationKey = `g:${channelId}:t:${thread.id}`;
+        await inheritThreadOrg(replyConversationKey, channelOrgKey);
         replyMessenger = createDiscordMessenger(thread);
         replyIsThread = true;
         debugLog(`[discord] thread created ${thread.id}`);
@@ -335,6 +345,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     );
 
     await withChatLock(replyConversationKey, async () => {
+      // A picker may have changed the org while this message waited for a turn.
+      if (
+        !(await ensureOrgReady(
+          replyMessenger,
+          replyIsThread ? replyConversationKey : channelOrgKey
+        ))
+      ) {
+        return;
+      }
       await handleChatMessage(
         replyChannel,
         replyConversationKey,
@@ -465,7 +484,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function handleSlashCommand(
-    interaction: ChatInputCommandInteraction
+    interaction:
+      | ChatInputCommandInteraction
+      | ButtonInteraction
+      | StringSelectMenuInteraction
   ): Promise<void> {
     // Caller (bot.ts) already deferred — do not wait on withChatLock here.
     // Agent replies hold that lock for a long time and would leave commands stuck.
@@ -486,12 +508,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
     const orgChannelId =
       isGuild && isThread ? (threadParentId ?? channelId) : channelId;
-    const channelOrgKey = resolveChannelOrgKey(orgChannelId, userId, isGuild);
+    const parentOrgKey = resolveChannelOrgKey(orgChannelId, userId, isGuild);
     const conversationKey = isGuild
       ? isThread
         ? `g:${threadParentId ?? channelId}:t:${interaction.channel!.id}`
         : channelId
       : channelId;
+    const channelOrgKey = isThread ? conversationKey : parentOrgKey;
+    const selection =
+      "customId" in interaction ? interaction.customId.split(":") : undefined;
+    const commandName =
+      "commandName" in interaction ? interaction.commandName : selection?.[1];
 
     const messenger = createInteractionMessenger(
       (content) => interaction.followUp({ content: content.slice(0, 2000) }),
@@ -501,7 +528,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     try {
       await authStore.reload();
 
-      if (interaction.commandName === "allow") {
+      if (commandName === "allow" && "commandName" in interaction) {
         await handleAllowCommand(interaction, messenger, userId);
         return;
       }
@@ -512,11 +539,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           return;
         }
 
-        if (
-          interaction.commandName === "start" ||
-          interaction.commandName === "help"
-        ) {
-          await handlePairingSlash(interaction.commandName, messenger);
+        if (commandName === "start" || commandName === "help") {
+          await handlePairingSlash(commandName, messenger);
           return;
         }
 
@@ -524,15 +548,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      if (
-        interaction.commandName === "start" ||
-        interaction.commandName === "help"
-      ) {
+      if (commandName === "start" || commandName === "help") {
         await messenger.send(HELP_TEXT);
         return;
       }
 
-      if (interaction.commandName === "stop") {
+      if (commandName === "stop") {
         if (stopActiveStream(conversationKey)) {
           await messenger.send("Stopping…");
         } else {
@@ -541,21 +562,39 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      if (interaction.commandName === "close") {
+      if (commandName === "close" && "commandName" in interaction) {
         await handleCloseThread(interaction, conversationKey, messenger);
         return;
       }
 
-      const orgReady = await ensureOrgReady(
-        messenger,
-        channelOrgKey,
-        undefined
-      );
+      if (commandName === "org" || commandName === "profile") {
+        if (
+          selection &&
+          (selection[0] !== "nakama" || selection[2] !== userId)
+        ) {
+          await messenger.send("Open your own /org or /profile picker.");
+          return;
+        }
+        await withChatLock(conversationKey, async () => {
+          await inheritThreadOrg(channelOrgKey, parentOrgKey);
+          await handlePicker(
+            interaction,
+            commandName,
+            selection,
+            channelOrgKey,
+            conversationKey
+          );
+        });
+        return;
+      }
+
+      await inheritThreadOrg(channelOrgKey, parentOrgKey);
+      const orgReady = await ensureOrgReady(messenger, channelOrgKey);
       if (!orgReady) {
         return;
       }
 
-      switch (interaction.commandName) {
+      switch (commandName) {
         case "clear": {
           stopActiveStream(conversationKey);
           const session = await resolveSession(conversationKey);
@@ -827,8 +866,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function ensureOrgReady(
     messenger: DiscordMessenger,
-    channelOrgKey: string,
-    messageText: string | undefined
+    channelOrgKey: string
   ): Promise<boolean> {
     const orgContext = await prepareChannelOrgContext({
       getSelectedOrgId: () => orgStore.get(channelOrgKey)?.orgId,
@@ -837,7 +875,6 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         orgStore.set(channelOrgKey, orgId);
         await orgStore.save();
       },
-      text: messageText?.startsWith("/") ? undefined : messageText,
     });
 
     if (orgContext.status === "empty") {
@@ -846,18 +883,177 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (orgContext.status === "prompt") {
-      await replyChunks(messenger, orgContext.message);
+      await messenger.send(
+        "Use /org from Discord's command menu to choose an organization."
+      );
       return false;
     }
 
     client.setOrgId(orgContext.orgId);
 
-    if (orgContext.justSelected) {
-      await messenger.send(formatOrgSwitchConfirmation(orgContext.orgName));
-      return false;
+    return true;
+  }
+
+  async function inheritThreadOrg(
+    key: string,
+    parentKey: string
+  ): Promise<void> {
+    const parent = orgStore.get(parentKey);
+    if (key !== parentKey && !orgStore.get(key) && parent) {
+      orgStore.set(key, parent.orgId);
+      await orgStore.save();
+    }
+  }
+
+  async function handlePicker(
+    interaction:
+      | ChatInputCommandInteraction
+      | ButtonInteraction
+      | StringSelectMenuInteraction,
+    kind: "org" | "profile",
+    selection: string[] | undefined,
+    channelOrgKey: string,
+    conversationKey: string
+  ): Promise<void> {
+    const { orgs } = await client.listUserOrgs();
+    const org = orgs.find(
+      (entry) => entry.id === orgStore.get(channelOrgKey)?.orgId
+    );
+    const reply = (content: string) =>
+      interaction.editReply({ components: [], content });
+    const action = selection?.[3];
+    if (action === "cancel") {
+      await reply("Selection cancelled.");
+      return;
+    }
+    if (orgs.length === 0) {
+      await reply("No organizations are configured yet.");
+      return;
+    }
+    if (kind === "profile" && !org) {
+      await reply("Choose an organization with /org first.");
+      return;
+    }
+    if (selection && kind === "profile" && selection[4] !== org?.id) {
+      await reply("Organization changed. Open /profile again.");
+      return;
+    }
+    if (org) {
+      client.setOrgId(org.id);
+    }
+    const profiles = kind === "profile" ? await listSelectableProfiles() : [];
+    const choices = kind === "org" ? orgs : profiles;
+    if (choices.length === 0) {
+      await reply("No profiles are available.");
+      return;
     }
 
-    return true;
+    let selectedId: string | undefined;
+    if ("values" in interaction && interaction.values.length === 1) {
+      selectedId = interaction.values[0];
+    } else if (action === "apply" && "message" in interaction) {
+      // The bot-rendered default option holds the pending choice without persisting it.
+      const menu = interaction.message.components
+        .flatMap((row) =>
+          row.type === ComponentType.ActionRow ? row.components : []
+        )
+        .find(
+          (component) =>
+            component.type === ComponentType.StringSelect &&
+            component.customId.startsWith(
+              `nakama:${kind}:${interaction.user.id}:`
+            ) &&
+            component.customId.split(":")[4] === selection?.[4]
+        );
+      if (menu?.type === ComponentType.StringSelect) {
+        const selected = menu.options.filter((option) => option.default);
+        if (selected.length === 1) {
+          selectedId = selected[0]?.value;
+        }
+      }
+    }
+    const picked = choices.find((entry) => entry.id === selectedId);
+    if (("values" in interaction || action === "apply") && !picked) {
+      await reply("That choice is no longer available. Open the picker again.");
+      return;
+    }
+    if (action === "apply" && picked) {
+      if (kind === "org") {
+        if (picked.id !== org?.id) {
+          orgStore.set(channelOrgKey, picked.id);
+          sessionStore.delete(conversationKey);
+          await sessionStore.save();
+          await orgStore.save();
+        }
+        await reply(`Using ${picked.name}.`);
+      } else {
+        const currentProfileId = await resolveSessionProfileId(conversationKey);
+        if (picked.id !== currentProfileId) {
+          await createAndBindSession(conversationKey, picked.id);
+        }
+        await reply(`Using ${org!.name} · ${picked.name}.`);
+      }
+      return;
+    }
+
+    const lastPage = Math.floor((choices.length - 1) / 25);
+    const requestedPage = Number(selection?.[3] ?? 0);
+    const page = Number.isSafeInteger(requestedPage)
+      ? Math.max(0, Math.min(requestedPage, lastPage))
+      : 0;
+    const customId = (pageIndex: number | "apply" | "cancel") =>
+      `nakama:${kind}:${interaction.user.id}:${pageIndex}${kind === "profile" ? `:${org!.id}` : ""}`;
+    const currentId =
+      kind === "org" ? org?.id : await resolveSessionProfileId(conversationKey);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(customId(page))
+      .setPlaceholder(
+        kind === "org" ? "Choose an organization" : "Choose a profile"
+      )
+      .addOptions(
+        choices.slice(page * 25, (page + 1) * 25).map((entry) => ({
+          default: entry.id === (selectedId ?? currentId),
+          label: (entry.name || entry.id).slice(0, 100),
+          value: entry.id,
+        }))
+      );
+    const components: Array<
+      | ActionRowBuilder<StringSelectMenuBuilder>
+      | ActionRowBuilder<ButtonBuilder>
+    > = [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)];
+    if (lastPage > 0) {
+      components.push(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(customId(page - 1))
+            .setLabel("Previous")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 0),
+          new ButtonBuilder()
+            .setCustomId(customId(page + 1))
+            .setLabel("Next")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === lastPage)
+        )
+      );
+    }
+    components.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(customId("apply"))
+          .setLabel("Apply")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(!picked),
+        new ButtonBuilder()
+          .setCustomId(customId("cancel"))
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
+    await interaction.editReply({
+      components,
+      content: kind === "org" ? "Organization" : `Profile · ${org!.name}`,
+    });
   }
 
   async function handleOrgCommand(
@@ -876,9 +1072,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const arg = text.trim().split(/\s+/).slice(1).join(" ");
 
     if (!arg) {
-      await replyChunks(
-        messenger,
-        formatOrgSelectionPrompt(orgs, orgStore.get(channelOrgKey)?.orgId)
+      await messenger.send(
+        "Use /org from Discord's command menu to choose an organization."
       );
       return;
     }
@@ -912,6 +1107,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const { orgs } = await client.listUserOrgs();
     const currentOrgId = orgStore.get(channelOrgKey)?.orgId;
+    client.setOrgId(currentOrgId ?? null);
     const currentOrg = currentOrgId
       ? orgs.find((org) => org.id === currentOrgId)
       : undefined;
@@ -919,20 +1115,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const currentProfileId = await resolveSessionProfileId(conversationKey);
 
     if (!arg) {
-      const profiles = await listSelectableProfiles();
-
-      if (profiles.length === 0) {
-        await messenger.send("No profiles are available.");
-        return;
-      }
-
-      await replyChunks(
-        messenger,
-        formatProfileSelectionPrompt(
-          profiles,
-          currentProfileId,
-          currentOrg?.name
-        )
+      await messenger.send(
+        "Use /profile from Discord's command menu to choose a profile."
       );
       return;
     }
