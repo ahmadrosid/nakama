@@ -1,8 +1,11 @@
 import {
+  createEmailOutboundAdapter,
+  type EmailOutboundAdapter,
   generateTemporaryPassword,
   getProfileSoulDir,
   initSoulDirectory,
   NakamaApiError,
+  resolveWebPublicUrl,
 } from "@nakama/core";
 import type {
   AcceptOrgInviteRequest,
@@ -59,7 +62,11 @@ function assertOrgMemberUserIdShape(userId: string): void {
 export class OrgService {
   constructor(
     private readonly databaseAdapter: DatabaseAdapter,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly email: EmailOutboundAdapter = createEmailOutboundAdapter(),
+    private readonly getWebPublicUrl: () =>
+      | string
+      | undefined = resolveWebPublicUrl
   ) {}
 
   async listOrganizations(): Promise<OrganizationSummary[]> {
@@ -766,7 +773,7 @@ export class OrgService {
     role: OrgRole;
     invitedByUserId: string;
   }): Promise<OrgInviteCreatedResponse> {
-    await this.requireActiveOrganization(input.orgId);
+    const organization = await this.requireActiveOrganization(input.orgId);
 
     const email = normalizeEmail(input.email);
     if (!EMAIL_PATTERN.test(email)) {
@@ -821,9 +828,27 @@ export class OrgService {
 
     await this.databaseAdapter.createOrgInvite(record);
 
+    const webPublicUrl = this.getWebPublicUrl();
+    const acceptInstruction = webPublicUrl
+      ? `Accept your invitation: ${webPublicUrl}/accept-invite?token=${encodeURIComponent(token)}`
+      : `Invitation token: ${token}`;
+    const delivery = await this.email.send({
+      orgId: input.orgId,
+      subject: `You're invited to ${organization.name}`,
+      text: [
+        `You've been invited to join ${organization.name} as ${input.role}.`,
+        "",
+        acceptInstruction,
+        "",
+        `This invitation expires on ${record.expiresAt}.`,
+      ].join("\n"),
+      to: email,
+    });
+
     return {
+      delivered: delivery.ok,
       invite: toOrgInviteSummary(record),
-      token,
+      token: delivery.ok ? null : token,
     };
   }
 

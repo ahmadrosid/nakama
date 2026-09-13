@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getProfileSoulDir, NakamaApiError } from "@nakama/core";
+import {
+  type EmailOutboundAdapter,
+  getProfileSoulDir,
+  NakamaApiError,
+} from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -10,13 +14,21 @@ import { OrgService } from "./org-service";
 
 setupTestConfigDir("nakama-org-service-test-");
 
-function createOrgService() {
+function createOrgService(
+  email?: EmailOutboundAdapter,
+  getWebPublicUrl?: () => string | undefined
+) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   return {
     authService,
     databaseAdapter,
-    orgService: new OrgService(databaseAdapter, authService),
+    orgService: new OrgService(
+      databaseAdapter,
+      authService,
+      email,
+      getWebPublicUrl
+    ),
   };
 }
 
@@ -526,12 +538,66 @@ describe("OrgService", () => {
 
     const accepted = await orgService.acceptInvite({
       password: "secret123",
-      token: invite.token,
+      token: invite.token!,
     });
 
     expect(accepted.user.email).toBe("legacy@acme.com");
     expect(accepted.orgId).toBe(created.organization.id);
     expect(accepted.role).toBe("member");
+  });
+
+  test("emails an invite link without returning its raw token", async () => {
+    const sent: Array<{ subject: string; text: string; to: string }> = [];
+    const { orgService } = createOrgService(
+      {
+        send: async (input) => {
+          sent.push(input);
+          return { ok: true };
+        },
+      },
+      () => "https://nakama.example.com"
+    );
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-email-invite",
+    });
+
+    const invite = await orgService.createInvite({
+      email: "guest@acme.com",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "viewer",
+    });
+
+    expect(invite.delivered).toBe(true);
+    expect(invite.token).toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("guest@acme.com");
+    expect(sent[0]?.subject).toBe("You're invited to Acme");
+    expect(sent[0]?.text).toContain(
+      "https://nakama.example.com/accept-invite?token="
+    );
+    expect(sent[0]?.text).toContain("join Acme as viewer");
+  });
+
+  test("returns the invite token when email delivery fails", async () => {
+    const { orgService } = createOrgService({
+      send: async () => ({ error: "SMTP unavailable", ok: false }),
+    });
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-manual-invite",
+    });
+
+    const invite = await orgService.createInvite({
+      email: "guest@acme.com",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "member",
+    });
+
+    expect(invite.delivered).toBe(false);
+    expect(invite.token).toStartWith("tc_invite_");
   });
 
   test("rejects expired invites", async () => {
@@ -975,7 +1041,7 @@ describe("OrgService", () => {
     );
 
     await expect(
-      orgService.acceptInvite({ password: "secret123", token: invite.token })
+      orgService.acceptInvite({ password: "secret123", token: invite.token! })
     ).rejects.toMatchObject({ status: 404 });
   });
 

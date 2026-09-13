@@ -49,8 +49,8 @@ function OrgMemberInviteForm({
     <>
       {emailSettingsLoading || emailConfigured ? null : (
         <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
-          Configure the shared email mailbox before you can invite members by
-          email.{" "}
+          Email is not configured. You can still create an invite and share its
+          token manually.{" "}
           <Link
             className="font-medium text-foreground underline-offset-4 hover:underline"
             to="/system?tab=tools"

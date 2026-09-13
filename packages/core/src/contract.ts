@@ -609,8 +609,9 @@ export interface OrganizationResponse {
 }
 
 export interface OrgInviteCreatedResponse {
+  delivered: boolean;
   invite: OrgInviteSummary;
-  token: string;
+  token: string | null;
 }
 
 export interface AddOrgMemberResponse {
