@@ -4,6 +4,7 @@ import {
   extractPairedTurnArtifacts,
   isScratchArtifactPath,
 } from "./channel-artifacts";
+import type { ChatMessage } from "./contract";
 
 const ARTIFACTS_ROOT =
   "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
