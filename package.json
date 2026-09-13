@@ -18,6 +18,7 @@
     "dev": "bun run dev:web",
     "dev:automation": "bun run --filter @nakama/automation dev",
     "dev:cli": "bun run apps/cli/src/index.ts",
+    "dev:desktop": "bun run --cwd apps/desktop dev",
     "dev:discord": "bun run --filter @nakama/discord dev",
     "dev:docs": "bun run --cwd docs/website dev",
     "dev:server": "bun run apps/server/src/dev.ts",

@@ -1,0 +1,19 @@
+appId: com.nakama.desktop
+productName: Nakama
+asar: true
+npmRebuild: false
+directories:
+  output: dist/electron
+files:
+  - main.mjs
+  - package.json
+  - '!node_modules/**'
+mac:
+  icon: ../web/public/icons/icon-512.png
+  category: public.app-category.productivity
+  minimumSystemVersion: '26.0'
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
