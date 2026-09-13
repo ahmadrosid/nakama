@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { MessageFlags } from "discord.js";
 import {
   deferSlashInteraction,
   getDiscordErrorCode,
@@ -33,6 +34,20 @@ describe("getDiscordErrorCode", () => {
 });
 
 describe("deferSlashInteraction", () => {
+  test("org and profile pickers are private", async () => {
+    for (const commandName of ["org", "profile"]) {
+      let flags: number | undefined;
+      await deferSlashInteraction({
+        commandName,
+        deferReply: async (options) => {
+          flags = options?.flags;
+        },
+        editReply: async () => {},
+        reply: async () => {},
+      });
+      expect(flags).toBe(MessageFlags.Ephemeral);
+    }
+  });
   test("returns true when deferReply succeeds", async () => {
     const interaction = {
       commandName: "help",

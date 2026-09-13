@@ -14,6 +14,8 @@ const COMMAND_NAMES = [
   "close",
   "status",
   "allow",
+  "org",
+  "profile",
 ] as const;
 
 export function buildSlashCommands(): SlashCommandBuilder[] {
@@ -24,6 +26,8 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     compact: "Compact conversation history",
     help: "Show available commands",
     new: "Start a new conversation",
+    org: "Choose an organization",
+    profile: "Choose a bot profile",
     start: "Welcome and pairing help",
     status: "Show server and model status",
     stop: "Stop the current agent reply",

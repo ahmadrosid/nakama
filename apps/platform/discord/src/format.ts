@@ -121,8 +121,8 @@ export const HELP_TEXT = `Nakama Discord commands:
 /new — start a new conversation
 /close — close this bot conversation thread
 /allow — add a Discord user to the allowed list (admin)
-/org — choose or switch organization (send as text)
-/profile — choose or switch bot profile (send as text)
+/org — choose an organization from a dropdown
+/profile — choose a bot profile from a dropdown
 /status — server and model status
 
 In servers, @mention the bot (or a role it holds) or reply to it to chat — each mention in a parent channel opens a new thread. @mention inside another thread claims it. Pair in a DM first.`;

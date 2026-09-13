@@ -6,6 +6,31 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test("scoped clients keep session requests in their original organization", async () => {
+  const requests: Request[] = [];
+  const client = new NakamaClient({
+    authToken: "test-token",
+    baseUrl: "http://localhost:4310",
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({ messages: [] });
+    }) as typeof fetch,
+  });
+  const first = client.forOrg("org_a").createChatSession("first", "discord");
+  const second = client.forOrg("org_b").createChatSession("second", "discord");
+  client.setOrgId("org_c");
+  await Promise.all([first.getMessages(), second.getMessages()]);
+  expect(requests.map((request) => request.headers.get("X-Org-Id"))).toEqual([
+    "org_a",
+    "org_b",
+  ]);
+  expect(
+    requests.every(
+      (request) => request.headers.get("Authorization") === "Bearer test-token"
+    )
+  ).toBe(true);
+});
+
 test("plugin access requests retain their explicit organization", async () => {
   const requests: Request[] = [];
   const client = new NakamaClient({

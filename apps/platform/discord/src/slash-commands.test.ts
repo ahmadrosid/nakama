@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { buildSlashCommands } from "./slash-commands";
 
 describe("buildSlashCommands", () => {
+  test("registers org and profile pickers", () => {
+    const names = buildSlashCommands().map((command) => command.name);
+    expect(names).toContain("org");
+    expect(names).toContain("profile");
+  });
   test("registers allow with a required user option", () => {
     const commands = buildSlashCommands();
     expect(commands.map((command) => command.name)).toContain("allow");
