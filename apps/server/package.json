@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
-    "@composio/core": "^0.17.0",
+    "@composio/core": "^0.18.1",
     "@google/genai": "^2.7.0",
     "@hono/zod-openapi": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
