@@ -32,7 +32,6 @@ export function ChatCognitoControl({
     <div
       aria-label="Cognito mode"
       className="flex items-center gap-1.5"
-      id="chat-cognito-control"
       role="group"
     >
       {active ? (
@@ -48,7 +47,6 @@ export function ChatCognitoControl({
               render={
                 <SelectTrigger
                   className="h-7 max-w-[13rem] border-dashed bg-background/80 text-xs"
-                  id="chat-cognito-mode-select"
                   size="sm"
                 >
                   <SelectValue />
@@ -105,7 +103,7 @@ export function ChatCognitoControl({
               }
               size="icon-sm"
               type="button"
-              variant={active ? "default" : "ghost"}
+              variant="ghost"
             >
               <IncognitoIcon className="size-4" />
             </Button>
