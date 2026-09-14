@@ -138,6 +138,9 @@ import type {
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
   RegenerateNotificationDestinationKeyResponse,
+  RequestPasswordResetRequest,
+  RequestPasswordResetResponse,
+  ResetPasswordRequest,
   RestoreDataImportRequest,
   RestoreDataImportResponse,
   RestoreOrgMemoryHistoryResponse,
@@ -2168,6 +2171,25 @@ export class NakamaClient {
 
   async changePassword(request: ChangePasswordRequest): Promise<void> {
     await this.request("/v1/auth/change-password", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async requestPasswordReset(
+    request: RequestPasswordResetRequest
+  ): Promise<RequestPasswordResetResponse> {
+    return this.request<RequestPasswordResetResponse>(
+      "/v1/auth/password-reset/request",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+  }
+
+  async resetPassword(request: ResetPasswordRequest): Promise<void> {
+    await this.request("/v1/auth/password-reset/complete", {
       body: JSON.stringify(request),
       method: "POST",
     });

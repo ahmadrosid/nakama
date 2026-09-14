@@ -496,6 +496,15 @@ export interface StoredOrgInviteRecord {
   tokenHash: string;
 }
 
+export interface StoredPasswordResetTokenRecord {
+  consumedAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  tokenHash: string;
+  userId: string;
+}
+
 export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
 export type ProfileChangeSource =
@@ -649,6 +658,11 @@ export interface DatabaseAdapter {
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  consumePasswordResetToken(
+    tokenHash: string,
+    passwordHash: string,
+    consumedAt: string
+  ): Promise<boolean>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(
@@ -673,6 +687,10 @@ export interface DatabaseAdapter {
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
+
+  createPasswordResetToken(
+    record: StoredPasswordResetTokenRecord
+  ): Promise<void>;
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;

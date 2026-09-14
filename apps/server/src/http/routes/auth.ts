@@ -7,6 +7,9 @@ import {
   type CreateOrganizationResponse,
   type ListUserOrgsResponse,
   LocalAuthTokenManagedExternallyError,
+  type RequestPasswordResetRequest,
+  type RequestPasswordResetResponse,
+  type ResetPasswordRequest,
   type RotateLocalAuthTokenResponse,
   rotateLocalAuthToken,
   type SetActiveOrgRequest,
@@ -274,6 +277,21 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       newPassword: z.string(),
     })
     .openapi("ChangePasswordRequest");
+  const requestPasswordResetSchema = z
+    .object({ email: z.string() })
+    .openapi("RequestPasswordResetRequest");
+  const requestPasswordResetResponseSchema = z
+    .object({
+      delivered: z.boolean(),
+      token: z.string().nullable(),
+    })
+    .openapi("RequestPasswordResetResponse");
+  const resetPasswordSchema = z
+    .object({
+      newPassword: z.string(),
+      token: z.string(),
+    })
+    .openapi("ResetPasswordRequest");
   const changePasswordRoute = createRoute({
     method: "post",
     operationId: "changePassword",
@@ -309,6 +327,66 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       },
     },
     summary: "Change the current user's password",
+    tags: ["Auth"],
+  });
+  const requestPasswordResetRoute = createRoute({
+    method: "post",
+    operationId: "requestPasswordReset",
+    path: "/v1/auth/password-reset/request",
+    request: {
+      body: {
+        content: {
+          "application/json": { schema: requestPasswordResetSchema },
+        },
+        required: true,
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: requestPasswordResetResponseSchema },
+        },
+        description: "Password reset requested",
+      },
+      400: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Error",
+      },
+      500: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Error",
+      },
+    },
+    summary: "Request a password reset token",
+    tags: ["Auth"],
+  });
+  const resetPasswordRoute = createRoute({
+    method: "post",
+    operationId: "resetPassword",
+    path: "/v1/auth/password-reset/complete",
+    request: {
+      body: {
+        content: { "application/json": { schema: resetPasswordSchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ ok: z.boolean() }) },
+        },
+        description: "Password reset",
+      },
+      400: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Error",
+      },
+      500: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Error",
+      },
+    },
+    summary: "Reset a password with a single-use token",
     tags: ["Auth"],
   });
 
@@ -609,6 +687,44 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const response = c.json({ ok: true }, 200);
     clearBrowserSessionCookies(response.headers);
     return response;
+  });
+
+  app.openAPIRegistry.registerPath(requestPasswordResetRoute);
+  app.post("/v1/auth/password-reset/request", async (c) => {
+    if (!(authService && databaseAdapter && orgService)) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const body = await readJson<RequestPasswordResetRequest>(
+      c.req.raw,
+      requestPasswordResetSchema
+    );
+    const auth = await authenticateRequest(
+      c.req.raw,
+      authService,
+      databaseAdapter
+    );
+    const allowManualToken = auth?.isPlatformAdmin === true;
+    if (allowManualToken && auth) {
+      assertBrowserCsrf(c.req.raw, auth, authService);
+    }
+    return json<RequestPasswordResetResponse>(
+      await orgService.requestPasswordReset(body.email, allowManualToken)
+    );
+  });
+
+  app.openAPIRegistry.registerPath(resetPasswordRoute);
+  app.post("/v1/auth/password-reset/complete", async (c) => {
+    if (!orgService) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const body = await readJson<ResetPasswordRequest>(
+      c.req.raw,
+      resetPasswordSchema
+    );
+    await orgService.resetPassword(body);
+    return c.json({ ok: true }, 200);
   });
 
   app.openAPIRegistry.registerPath(acceptInviteRoute);

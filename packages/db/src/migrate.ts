@@ -43,6 +43,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
   atomic(migrateBrowserSessionsTable);
+  atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateWorkspaceSettingsTable);
@@ -1015,6 +1016,22 @@ function migrateBrowserSessionsTable(db: Database): void {
   if (!columnNames.has("active_org_id")) {
     db.exec("ALTER TABLE browser_sessions ADD COLUMN active_org_id TEXT;");
   }
+}
+
+function migratePasswordResetTokensTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_unique
+      ON password_reset_tokens (token_hash);
+  `);
 }
 
 const LEGACY_PROFILE_ID_MAP = [

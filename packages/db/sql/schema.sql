@@ -429,6 +429,19 @@ CREATE TABLE IF NOT EXISTS browser_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS browser_sessions_token_hash_unique
   ON browser_sessions (session_token_hash);
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_unique
+  ON password_reset_tokens (token_hash);
+
 CREATE TABLE IF NOT EXISTS workspace_settings (
   id TEXT PRIMARY KEY NOT NULL,
   vision_model TEXT,

@@ -9,6 +9,8 @@ export const PUBLIC_ROUTES = new Set([
   "/v1/auth/login",
   "/v1/auth/me",
   "/v1/auth/accept-invite",
+  "/v1/auth/password-reset/request",
+  "/v1/auth/password-reset/complete",
   "/v1/composio/oauth/callback",
 ]);
 
