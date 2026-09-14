@@ -138,9 +138,6 @@ export function AutomationListItem({
       >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
-            <p className="truncate font-medium text-foreground text-sm">
-              {automation.name}
-            </p>
             {unreadCount > 0 ? (
               <span
                 aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
@@ -149,6 +146,9 @@ export function AutomationListItem({
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             ) : null}
+            <p className="truncate font-medium text-foreground text-sm">
+              {automation.name}
+            </p>
           </div>
           <p className="truncate text-muted-foreground text-xs">
             {summarizeAutomationListMeta(automation)}
