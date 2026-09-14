@@ -8,6 +8,20 @@ import { createClientId } from "@/lib/client-id";
  * cannot be used, so it goes away. An active cognito chat keeps it, otherwise
  * there would be no way to see the mode or leave it.
  */
+/**
+ * Keys the welcome copy so React remounts it on every switch, which is what
+ * replays the entrance animation. The sub-mode is part of the key because the
+ * copy changes with it: keyed on cognito alone, that text would swap in
+ * silence and the user would not notice the mode changed under them.
+ */
+export function welcomeAnimationKey(cognito: CognitoOptions | null): string {
+  if (!cognito) {
+    return "greeting";
+  }
+
+  return cognito.personalized ? "cognito-personalized" : "cognito-neutral";
+}
+
 export function shouldShowCognitoControl(
   cognito: CognitoOptions | null,
   isEmptyState: boolean

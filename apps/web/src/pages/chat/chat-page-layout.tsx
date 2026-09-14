@@ -2,6 +2,7 @@ import type { CognitoOptions, ProfileSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { welcomeAnimationKey } from "@/pages/chat/chat-page.shared";
 
 export function ChatPageColumn({
   children,
@@ -76,13 +77,23 @@ export function ChatWelcome({
 }) {
   return (
     <div className="flex flex-col gap-2 px-4 pb-2">
-      {cognito ? (
-        <CognitoWelcome cognito={cognito} />
-      ) : (
-        <h2 className="type-section-title text-xl tracking-tight">
-          {greeting()}
-        </h2>
-      )}
+      {/*
+        Keyed so React remounts the block on every switch, which replays the
+        entrance. Switching sub-mode changes the copy too, so that counts as a
+        switch: without the mode in the key the text would swap in silence.
+      */}
+      <div
+        className="fade-in-0 slide-in-from-top-1 flex animate-in flex-col gap-2 duration-300 motion-reduce:animate-none"
+        key={welcomeAnimationKey(cognito)}
+      >
+        {cognito ? (
+          <CognitoWelcome cognito={cognito} />
+        ) : (
+          <h2 className="type-section-title text-xl tracking-tight">
+            {greeting()}
+          </h2>
+        )}
+      </div>
       <div className="flex items-center gap-2 self-start">
         <span className="type-body text-muted-foreground text-sm">
           Select profile
