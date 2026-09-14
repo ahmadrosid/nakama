@@ -41,7 +41,7 @@ export function ArtifactSharePublishDialogFromState({
         }
       }}
       onRefreshFromDialog={share.openRefreshFromDialog}
-      onRevoke={() => void share.handleRevokeFromDialog()}
+      onRevoke={share.handleRevokeFromDialog}
       onRotateLink={() => void share.handleRotateLink()}
       open={share.publishDialogOpen}
       publishDialogSucceeded={share.publishDialogSucceeded}

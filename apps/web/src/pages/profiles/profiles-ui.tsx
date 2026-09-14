@@ -1,5 +1,6 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +16,7 @@ import {
   Upload04Icon,
   UserGroup02Icon,
 } from "hugeicons-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   type ProfileSaveStatus,
@@ -106,43 +107,55 @@ export function EditableProfileAvatar({
   disabled: boolean;
   uploading: boolean;
   onPick: () => void;
-  onRemove?: () => void;
+  onRemove?: () => Promise<void>;
   size?: "xs" | "sm" | "md" | "ml" | "lg";
 }) {
+  const [removeOpen, setRemoveOpen] = useState(false);
   const triggerClassName =
     "group relative shrink-0 rounded-full transition-transform duration-150 ease-out active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
   if (profile.hasAvatar && onRemove) {
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              aria-label="Change or remove profile image"
-              className={triggerClassName}
-              disabled={disabled}
-              type="button"
-            />
-          }
-        >
-          <ProfileAvatar profile={profile} size={size} />
-          <ProfileAvatarOverlay size={size} uploading={uploading} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-40">
-          <DropdownMenuItem className="cursor-pointer" onClick={onPick}>
-            <Camera01Icon aria-hidden className="size-4" />
-            Change image
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onClick={onRemove}
-            variant="destructive"
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                aria-label="Change or remove profile image"
+                className={triggerClassName}
+                disabled={disabled}
+                type="button"
+              />
+            }
           >
-            <Delete02Icon aria-hidden className="size-4" />
-            Remove image
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <ProfileAvatar profile={profile} size={size} />
+            <ProfileAvatarOverlay size={size} uploading={uploading} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-40">
+            <DropdownMenuItem className="cursor-pointer" onClick={onPick}>
+              <Camera01Icon aria-hidden className="size-4" />
+              Change image
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => setRemoveOpen(true)}
+              variant="destructive"
+            >
+              <Delete02Icon aria-hidden className="size-4" />
+              Remove image
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {removeOpen ? (
+          <ConfirmDialog
+            confirmLabel="Remove"
+            description={`Remove the profile image for "${profile.name}"?`}
+            onClose={() => setRemoveOpen(false)}
+            onConfirm={onRemove}
+            title="Remove profile image?"
+          />
+        ) : null}
+      </>
     );
   }
 

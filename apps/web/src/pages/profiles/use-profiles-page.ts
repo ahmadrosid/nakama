@@ -1048,11 +1048,7 @@ export function useProfilesPage() {
 
     setError(null);
 
-    try {
-      await deleteAvatarMutation.mutateAsync(selectedId);
-    } catch (err) {
-      setError(formatError(err));
-    }
+    await deleteAvatarMutation.mutateAsync(selectedId);
   }
 
   function handleCreateOpenChange(open: boolean) {

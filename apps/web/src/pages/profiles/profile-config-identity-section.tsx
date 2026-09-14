@@ -98,7 +98,7 @@ export function ProfileConfigIdentitySection({
               deleteAvatarMutation.isPending
             }
             onPick={() => avatarInputRef.current?.click()}
-            onRemove={() => void handleAvatarRemove()}
+            onRemove={handleAvatarRemove}
             profile={detail}
             size="ml"
             uploading={

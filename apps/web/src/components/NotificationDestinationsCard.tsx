@@ -3,6 +3,7 @@ import type {
   NotificationDestinationWithSecret,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
@@ -190,6 +191,8 @@ export function NotificationDestinationsCard() {
   const rotateMutation = useRegenerateNotificationDestinationKey();
   const deleteMutation = useDeleteNotificationDestination();
   const updateMutation = useUpdateNotificationDestination();
+  const [deleteTarget, setDeleteTarget] =
+    useState<NotificationDestinationSummary | null>(null);
 
   const [name, setName] = useState("");
   const [topicLink, setTopicLink] = useState("");
@@ -268,17 +271,10 @@ export function NotificationDestinationsCard() {
 
   async function handleDelete(destinationId: string) {
     setFormError(null);
-
-    deleteMutation.mutate(destinationId, {
-      onError: (mutationError) => {
-        setFormError(formatError(mutationError));
-      },
-      onSuccess: () => {
-        if (latestSecret?.destination.id === destinationId) {
-          setLatestSecret(null);
-        }
-      },
-    });
+    await deleteMutation.mutateAsync(destinationId);
+    if (latestSecret?.destination.id === destinationId) {
+      setLatestSecret(null);
+    }
   }
 
   function startEditing(destination: (typeof destinations)[number]) {
@@ -397,7 +393,7 @@ export function NotificationDestinationsCard() {
               editingTopicId={editingTopicId}
               key={destination.id}
               latestSecret={latestSecret}
-              onDelete={() => handleDelete(destination.id)}
+              onDelete={() => setDeleteTarget(destination)}
               onEditingTopicIdChange={setEditingTopicId}
               onRotate={() => handleRotate(destination.id)}
               onSaveTopic={() => handleUpdateTopic(destination)}
@@ -409,6 +405,14 @@ export function NotificationDestinationsCard() {
           ))
         )}
       </div>
+      {deleteTarget ? (
+        <ConfirmDialog
+          description={`Delete "${deleteTarget.name}"? Its webhook will stop accepting notifications.`}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => handleDelete(deleteTarget.id)}
+          title="Delete notification destination?"
+        />
+      ) : null}
     </div>
   );
 }
