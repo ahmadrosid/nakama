@@ -18,6 +18,7 @@ import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-revie
 import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { extractModelId } from "@/lib/models";
+import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
@@ -70,7 +71,7 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-  const cognitoControl = (
+  const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
     <div className="flex shrink-0 justify-end px-4 pt-2 pb-1">
       <ChatCognitoControl
         cognito={cognito}
@@ -79,7 +80,7 @@ export function ChatPageContent(state: ChatPageState) {
         onCognitoChange={handleCognitoChange}
       />
     </div>
-  );
+  ) : null;
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);

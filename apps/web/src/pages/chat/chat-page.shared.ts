@@ -1,5 +1,19 @@
+import type { CognitoOptions } from "@nakama/core/contract";
 import type { ChatListItem, FailedChatTurn } from "@/lib/chat-history";
 import { createClientId } from "@/lib/client-id";
+
+/**
+ * The toggle only does anything before a conversation starts, because flipping
+ * it resets the chat. Once an ordinary chat is under way it is a control that
+ * cannot be used, so it goes away. An active cognito chat keeps it, otherwise
+ * there would be no way to see the mode or leave it.
+ */
+export function shouldShowCognitoControl(
+  cognito: CognitoOptions | null,
+  isEmptyState: boolean
+): boolean {
+  return cognito !== null || isEmptyState;
+}
 
 export function findRetryPrompt(
   messages: ChatListItem[],
