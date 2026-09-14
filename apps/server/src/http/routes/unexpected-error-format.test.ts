@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
@@ -7,9 +7,20 @@ setupTestConfigDir("nakama-unexpected-error-format-test-");
 
 describe("route error formatting", () => {
   const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  // reportError always writes one "[nakama:<kind>] <source>" line, tracker or not.
+  let reported: string[] = [];
+
+  beforeEach(() => {
+    reported = [];
+    console.error = (first: unknown) => {
+      reported.push(String(first));
+    };
+  });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
   });
 
   test("catalog fetch failure does not leak the upstream error's message", async () => {
@@ -36,6 +47,7 @@ describe("route error formatting", () => {
   test("send message does not leak an unexpected error's message", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp({
       agent: {
+        assertSessionProfileAccess: async () => undefined,
         beginSessionTurn: async () => true,
         resolveSession: async () => ({
           send: async () => {
@@ -62,5 +74,36 @@ describe("route error formatting", () => {
     await expect(response.json()).resolves.toEqual({
       error: "An unexpected server error occurred.",
     });
+    expect(
+      reported.some((line) => line.startsWith("[nakama:turn] server"))
+    ).toBe(true);
+  });
+
+  test("an unexpected throw that reaches onError is reported", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        assertSessionProfileAccess: async () => undefined,
+        beginSessionTurn: async () => true,
+        resolveSession: async () => {
+          throw new Error("SQLITE_CORRUPT: database disk image is malformed");
+        },
+      },
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/sessions/session_1/messages", {
+        body: JSON.stringify({ message: "hi" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(500);
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
   });
 });

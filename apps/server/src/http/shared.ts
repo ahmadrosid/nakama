@@ -10,6 +10,7 @@ import {
   formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  reportError,
   resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
@@ -744,11 +745,13 @@ export function streamMessage(
           ...(contextUsage ? { contextUsage } : {}),
         });
       } catch (error) {
+        const cancelled = turnSignal.aborted && !timedOut;
+        if (!(cancelled || error instanceof NakamaApiError)) {
+          // The stream already told the user; without this the operator never hears.
+          void reportError(error, { kind: "turn", source: "server" });
+        }
         send({
-          error:
-            turnSignal.aborted && !timedOut
-              ? "Turn cancelled."
-              : formatServerError(error),
+          error: cancelled ? "Turn cancelled." : formatServerError(error),
           type: "error",
         });
       } finally {
