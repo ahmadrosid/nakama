@@ -32,6 +32,10 @@ const IntegrationsPage = lazyPage(
   "IntegrationsPage"
 );
 const LoginPage = lazyPage(() => import("@/pages/LoginPage"), "LoginPage");
+const PasswordResetPage = lazyPage(
+  () => import("@/pages/PasswordResetPage"),
+  "PasswordResetPage"
+);
 const AcceptInvitePage = lazyPage(
   () => import("@/pages/AcceptInvitePage"),
   "AcceptInvitePage"
@@ -114,6 +118,14 @@ function AppShell() {
                 </RouteBoundary>
               }
               path="/login"
+            />
+            <Route
+              element={
+                <RouteBoundary fullScreen>
+                  <PasswordResetPage />
+                </RouteBoundary>
+              }
+              path="/reset-password"
             />
             <Route
               element={

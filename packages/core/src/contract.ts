@@ -881,6 +881,20 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface RequestPasswordResetResponse {
+  delivered: boolean;
+  token: string | null;
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string;
+  token: string;
+}
+
 export interface ChannelOrgMappingSummary {
   channel: ChannelType;
   channelUserId: string;

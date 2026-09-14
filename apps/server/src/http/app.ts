@@ -1,5 +1,10 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { formatServerError, log, NakamaApiError } from "@nakama/core";
+import {
+  formatServerError,
+  log,
+  NakamaApiError,
+  reportError,
+} from "@nakama/core";
 import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { tryServeStaticWeb } from "../static-web";
@@ -102,6 +107,9 @@ export function createHonoApp(options: ServerOptions) {
 
   app.onError((err) => {
     if (err instanceof NakamaApiError) {
+      if (err.status >= 500) {
+        void reportError(err, { kind: "http", source: "server" });
+      }
       return errorResponse(
         err.message,
         err.status,
@@ -113,6 +121,9 @@ export function createHonoApp(options: ServerOptions) {
       return errorResponse("Invalid JSON in request body.", 400);
     }
 
+    // A NakamaApiError is a refusal the route chose. Anything that reaches here
+    // is a bug the caller only sees as a generic 500, so the tracker must see it.
+    void reportError(err, { kind: "http", source: "server" });
     return errorResponse(formatServerError(err), 500);
   });
 

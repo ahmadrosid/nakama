@@ -2500,3 +2500,98 @@ describe("stream cleanup", () => {
     });
   });
 });
+
+describe("Discord session history", () => {
+  const key = "g:guild_channel_1:t:thread_1";
+  const summary = (id: string) => ({
+    channel: "discord" as const,
+    createdAt: "2026-09-14T08:00:00.000Z",
+    id,
+    messageCount: 2,
+    preview: `hello from ${id}`,
+    profileId: "default",
+    title: null,
+    updatedAt: "2026-09-14T09:30:00.000Z",
+  });
+  const inThread = { inThread: true, parentId: "guild_channel_1" };
+
+  test("/sessions offers only this chat's sessions and a pick resumes one", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        // sess_other belongs to another Discord chat on the same profile.
+        sessions: ["sess_a", "session_test", "sess_other"].map(summary),
+      });
+      handler.sessionStore.set(key, {
+        profileId: "default",
+        sessionId: "sess_a",
+        updatedAt: new Date().toISOString(),
+      });
+      await handler.handleSlashCommand(
+        createSlashInteraction({ commandName: "new", ...inThread }).interaction
+      );
+
+      const list = createSlashInteraction({
+        commandName: "sessions",
+        ...inThread,
+      });
+      const payload = readPickerPayload(list.interaction);
+      await handler.handleSlashCommand(list.interaction);
+      expect(
+        payload().components[0]?.components[0]?.options?.map((option) => [
+          option.value,
+          option.default,
+        ])
+      ).toEqual([
+        ["sess_a", false],
+        ["session_test", true],
+      ]);
+
+      await handler.handleSelectionInteraction(
+        createPickerInteraction("nakama:sessions:424242424242424242", [
+          "sess_a",
+        ]).interaction
+      );
+      expect(handler.sessionStore.get(key)).toMatchObject({
+        sessionId: "sess_a",
+        sessionIds: ["session_test", "sess_a"],
+      });
+    });
+  });
+
+  test("/resume refuses another chat's session and accepts a short ID", async () => {
+    await withTempHome(async (homeDir) => {
+      const handler = await createPairedHandler(homeDir, {
+        sessions: ["sess_a1234567", "sess_b", "sess_other"].map(summary),
+      });
+      handler.sessionStore.set(key, {
+        profileId: "default",
+        sessionId: "sess_b",
+        sessionIds: ["sess_a1234567", "sess_b"],
+        updatedAt: new Date().toISOString(),
+      });
+      const resume = (session: string) => {
+        const command = createSlashInteraction({
+          commandName: "resume",
+          ...inThread,
+          stringOptions: { session },
+        });
+        return handler
+          .handleSlashCommand(command.interaction)
+          .then(() => command.replies);
+      };
+
+      expect(await resume("sess_other")).toEqual([
+        "No session with that ID in this chat. Use /sessions to see the list.",
+      ]);
+      expect(await resume("sess_")).toEqual([
+        "That ID matches more than one session. Copy more of it from /sessions.",
+      ]);
+      expect(handler.sessionStore.get(key)?.sessionId).toBe("sess_b");
+
+      expect(await resume("sess_a12")).toEqual([
+        "Resumed hello from sess_a1234567 (sess_a12).",
+      ]);
+      expect(handler.sessionStore.get(key)?.sessionId).toBe("sess_a1234567");
+    });
+  });
+});

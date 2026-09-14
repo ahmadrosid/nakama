@@ -1,5 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { NakamaApiError, type WorkerLogsResponse } from "@nakama/core";
+import {
+  NakamaApiError,
+  reportError,
+  type WorkerLogsResponse,
+} from "@nakama/core";
 import type { Context } from "hono";
 import type { ServerOptions } from "../context";
 import {
@@ -194,6 +198,7 @@ export function registerWorkerRoutes(
 
       return json({ ok: true });
     } catch (err) {
+      void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message, 500);
     }
@@ -218,6 +223,7 @@ export function registerWorkerRoutes(
       const logs = await workerManager.getWorkerLogs(name, lines);
       return json<WorkerLogsResponse>(logs);
     } catch (err) {
+      void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message, 500);
     }
@@ -235,6 +241,7 @@ export function registerWorkerRoutes(
       await workerManager.clearWorkerLogs(name);
       return json({ ok: true });
     } catch (err) {
+      void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message, 500);
     }

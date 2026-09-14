@@ -18,6 +18,7 @@ import {
   AGENT_CHANNELS,
   formatServerError,
   NakamaApiError,
+  reportError,
 } from "@nakama/core";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
@@ -628,6 +629,9 @@ export function registerSessionRoutes(
         ...(contextUsage ? { contextUsage } : {}),
       });
     } catch (error) {
+      if (!(error instanceof NakamaApiError && error.status < 500)) {
+        void reportError(error, { kind: "turn", source: "server" });
+      }
       const message = formatServerError(error);
       sessionTurnRegistry.endTurn(sessionId, { error: message, type: "error" });
       return errorResponse(

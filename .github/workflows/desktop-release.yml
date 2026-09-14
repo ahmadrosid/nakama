@@ -3,6 +3,7 @@ name: Desktop Release
 on:
   push:
     tags: ['desktop-v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,6 +14,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name == 'push'
     environment: code-signing
     runs-on: macos-15
     timeout-minutes: 60
@@ -73,3 +75,38 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           bun apps/desktop/scripts/publish-release.mjs
+
+  windows-store:
+    if: github.event_name == 'workflow_dispatch'
+    environment: code-signing
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      WINDOWS_STORE_IDENTITY_NAME: ${{ secrets.WINDOWS_STORE_IDENTITY_NAME }}
+      WINDOWS_STORE_PUBLISHER: ${{ secrets.WINDOWS_STORE_PUBLISHER }}
+      WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
+      WINDOWS_STORE_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_DISPLAY_NAME }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Test desktop
+        run: bun run --cwd apps/desktop test
+      - name: Build unsigned Store package
+        run: bun run --cwd apps/desktop package:store
+      - name: Verify packaged runtime
+        shell: pwsh
+        run: |
+          $env:NAKAMA_DESKTOP_TEST_RUNTIME = Join-Path $PWD 'apps/desktop/dist/electron/win-unpacked/resources/runtime'
+          bun run --cwd apps/desktop test:runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nakama-windows-store
+          path: apps/desktop/dist/electron/*.msix
+          if-no-files-found: error

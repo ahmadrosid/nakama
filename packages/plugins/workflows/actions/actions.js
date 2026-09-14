@@ -137,7 +137,6 @@ var WORKFLOW_STEP_KINDS = [
   "summarize"
 ];
 var WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"];
-var SKIP_WORKFLOW_TOOLS = new Set(["web_search"]);
 function validateWorkflowSteps(steps, allowedTools) {
   if (steps.length === 0) {
     throw new Error("Workflow must include at least one step.");

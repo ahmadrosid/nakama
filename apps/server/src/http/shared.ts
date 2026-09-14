@@ -10,6 +10,7 @@ import {
   formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  reportError,
   resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
@@ -744,11 +745,20 @@ export function streamMessage(
           ...(contextUsage ? { contextUsage } : {}),
         });
       } catch (error) {
+        const cancelled = turnSignal.aborted && !timedOut;
+        // The first-token timeout is a NakamaApiError 504, and it is exactly the
+        // failure an operator needs, so only a 4xx refusal is skipped.
+        if (
+          !(
+            cancelled ||
+            (error instanceof NakamaApiError && error.status < 500)
+          )
+        ) {
+          // The stream already told the user; without this the operator never hears.
+          void reportError(error, { kind: "turn", source: "server" });
+        }
         send({
-          error:
-            turnSignal.aborted && !timedOut
-              ? "Turn cancelled."
-              : formatServerError(error),
+          error: cancelled ? "Turn cancelled." : formatServerError(error),
           type: "error",
         });
       } finally {

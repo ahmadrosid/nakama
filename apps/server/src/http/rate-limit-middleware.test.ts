@@ -85,6 +85,18 @@ describe("createRateLimitMiddleware", () => {
     expect((await call(app, "/v1/anything")).status).toBe(200);
   });
 
+  test("rate limits password reset requests as credential routes", async () => {
+    const app = buildApp({ authMax: 1, max: 50 });
+
+    expect((await call(app, "/v1/auth/password-reset/request")).status).toBe(
+      200
+    );
+    expect((await call(app, "/v1/auth/password-reset/complete")).status).toBe(
+      429
+    );
+    expect((await call(app, "/v1/anything")).status).toBe(200);
+  });
+
   test("ignores a forwarded address when the proxy is not trusted", async () => {
     const app = buildApp({ max: 1 });
     const spoofed = { "x-forwarded-for": "203.0.113.9" };

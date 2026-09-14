@@ -1677,6 +1677,38 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
+  const createPasswordResetTokenStmt = db.prepare(`
+    INSERT INTO password_reset_tokens (
+      id, user_id, token_hash, expires_at, consumed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const getUsablePasswordResetTokenStmt = db.prepare(`
+    SELECT user_id
+    FROM password_reset_tokens
+    WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?
+    LIMIT 1
+  `);
+  const consumePasswordResetTokensForUserStmt = db.prepare(`
+    UPDATE password_reset_tokens
+    SET consumed_at = ?
+    WHERE user_id = ? AND consumed_at IS NULL
+  `);
+  const consumePasswordResetTokenTransaction = db.transaction(
+    (tokenHash: string, passwordHash: string, consumedAt: string) => {
+      const token = getUsablePasswordResetTokenStmt.get(
+        tokenHash,
+        consumedAt
+      ) as { user_id: string } | null;
+      if (!token) {
+        return false;
+      }
+
+      consumePasswordResetTokensForUserStmt.run(consumedAt, token.user_id);
+      updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
+      revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
+      return true;
+    }
+  );
   const tryMarkOrganizationArchivedStmt = db.prepare(`
     UPDATE organizations
     SET archived_at = ?, updated_at = ?
@@ -2448,6 +2480,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return compareAndSetOrgPluginStateTx(input);
     },
 
+    async consumePasswordResetToken(tokenHash, passwordHash, consumedAt) {
+      return consumePasswordResetTokenTransaction.immediate(
+        tokenHash,
+        passwordHash,
+        consumedAt
+      );
+    },
+
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID) as {
         count: number;
@@ -2548,6 +2588,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.pinned ? 1 : 0,
         record.reviewerUserId,
         record.reviewedAt,
+        record.createdAt
+      );
+    },
+
+    async createPasswordResetToken(record) {
+      createPasswordResetTokenStmt.run(
+        record.id,
+        record.userId,
+        record.tokenHash,
+        record.expiresAt,
+        record.consumedAt,
         record.createdAt
       );
     },

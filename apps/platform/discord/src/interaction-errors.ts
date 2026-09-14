@@ -41,7 +41,7 @@ export async function deferSlashInteraction(
 ): Promise<boolean> {
   try {
     await interaction.deferReply(
-      interaction.commandName === "org" || interaction.commandName === "profile"
+      ["org", "profile", "sessions"].includes(interaction.commandName)
         ? { flags: MessageFlags.Ephemeral }
         : undefined
     );

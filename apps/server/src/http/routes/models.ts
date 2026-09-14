@@ -18,6 +18,7 @@ import {
   type ListTimezonesResponse,
   type ModelsResponse,
   NakamaApiError,
+  reportError,
   resetWhatsAppSessionForReconnect,
   type SendEmailTestRequest,
   type SendEmailTestResponse,
@@ -1329,6 +1330,7 @@ export function registerModelRoutes(
     try {
       return json(await getExternalModelCatalog(catalogId));
     } catch (error) {
+      void reportError(error, { kind: "http", source: "server" });
       return errorResponse(formatServerError(error), 502);
     }
   });
@@ -1592,6 +1594,9 @@ export function registerModelRoutes(
       return json<TranscribeAudioResponse>(await agent.transcribeAudio(body));
     } catch (error) {
       if (error instanceof NakamaApiError) {
+        if (error.status >= 500) {
+          void reportError(error, { kind: "http", source: "server" });
+        }
         return errorResponse(error.message, error.status);
       }
 
@@ -1633,6 +1638,9 @@ export function registerModelRoutes(
       return json<GenerateImageResponse>(await agent.generateImage(body));
     } catch (error) {
       if (error instanceof NakamaApiError) {
+        if (error.status >= 500) {
+          void reportError(error, { kind: "http", source: "server" });
+        }
         return errorResponse(error.message, error.status);
       }
 
