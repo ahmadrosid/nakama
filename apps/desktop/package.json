@@ -10,7 +10,8 @@
     "build:runtime": "bun scripts/build-runtime.mjs",
     "dev": "bun run build:runtime && electron .",
     "package": "bun run build:runtime && electron-builder --mac --arm64 --publish never",
-    "test": "bun test scripts/publish-release.test.mjs && electron tests/smoke.mjs --smoke-test",
+    "package:store": "pwsh -NoProfile -File scripts/package-store.ps1",
+    "test": "bun test scripts/publish-release.test.mjs tests/runtime.test.mjs && electron tests/smoke.mjs --smoke-test",
     "test:runtime": "electron tests/smoke.mjs --smoke-test --runtime-test"
   },
   "dependencies": {

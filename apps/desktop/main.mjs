@@ -60,7 +60,7 @@ export async function startLocalServer(runtime, dataDir) {
     Object.entries(process.env).filter(([key]) => !key.startsWith("NAKAMA_"))
   );
   const child = spawn(
-    join(runtime, "bin/bun"),
+    join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
     ["run", "apps/server/src/index.ts"],
     {
       cwd: runtime,
@@ -80,6 +80,7 @@ export async function startLocalServer(runtime, dataDir) {
       },
       serialization: "json",
       stdio: ["ignore", log.fd, log.fd, "ipc"],
+      windowsHide: true,
     }
   );
   void log.close();
@@ -93,7 +94,12 @@ export async function startLocalServer(runtime, dataDir) {
         clearTimeout(timeout);
         resolve();
       });
-      child.kill("SIGTERM");
+      // Disconnect lets Bun drain workers on Windows, where SIGTERM kills immediately.
+      if (child.connected) {
+        child.disconnect();
+      } else {
+        child.kill("SIGTERM");
+      }
     });
   };
   try {
@@ -288,7 +294,7 @@ if (!process.argv.includes("--smoke-test")) {
         return createWindow(`${localServer.url}/chat`);
       })
       .then(async () => {
-        if (app.isPackaged && !quitting) {
+        if (app.isPackaged && !process.windowsStore && !quitting) {
           const { autoUpdater } = (await import("electron-updater")).default;
           configureUpdates(autoUpdater, async () => {
             if (quitting) {

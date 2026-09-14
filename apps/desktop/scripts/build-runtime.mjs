@@ -4,8 +4,13 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const output = join(root, "apps/desktop/dist/runtime");
-if (process.platform !== "darwin" || process.arch !== "arm64") {
-  throw new Error("Build the desktop runtime on an Apple Silicon Mac.");
+if (
+  !(
+    (process.platform === "darwin" && process.arch === "arm64") ||
+    (process.platform === "win32" && process.arch === "x64")
+  )
+) {
+  throw new Error("Build the desktop runtime on macOS ARM64 or Windows x64.");
 }
 const web = Bun.spawn(
   [process.execPath, "run", "--filter", "@nakama/web", "build"],
@@ -16,13 +21,24 @@ if ((await web.exited) !== 0) {
 }
 await rm(output, { force: true, recursive: true });
 await mkdir(join(output, "bin"), { recursive: true });
-await cp(process.execPath, join(output, "bin/bun"));
+await cp(
+  process.execPath,
+  join(output, "bin", process.platform === "win32" ? "bun.exe" : "bun")
+);
 for (const name of ["package.json", "bun.lock"]) {
   await cp(join(root, name), join(output, name));
 }
 // Only tracked runtime files: never package local .env files or development databases.
 const tracked = Bun.spawnSync(
-  ["git", "ls-files", "-z", "apps/server", "apps/platform", "packages"],
+  [
+    "git",
+    "ls-files",
+    "-z",
+    "apps/server",
+    "apps/platform",
+    "packages",
+    "patches",
+  ],
   { cwd: root }
 );
 if (tracked.exitCode !== 0) {

@@ -4,6 +4,8 @@
   "workspaces": {
     "apps/desktop": {
       "entry": ["preload.cjs", "tests/smoke.mjs"],
+      // PowerShell 7 is supplied by the Windows build host.
+      "ignoreBinaries": ["pwsh"],
       "project": ["*.mjs", "*.cjs", "tests/*.mjs", "scripts/*.mjs"]
     },
     "packages/plugins/supermemory": {

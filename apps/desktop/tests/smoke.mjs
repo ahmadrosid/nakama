@@ -136,7 +136,10 @@ async function run() {
       join(import.meta.dirname, "../dist/runtime");
     await assert.rejects(startLocalServer(join(data, "missing"), data));
     const previousPath = process.env.PATH;
-    process.env.PATH = "/usr/bin:/bin";
+    process.env.PATH =
+      process.platform === "win32"
+        ? join(process.env.SystemRoot ?? "C:\\Windows", "System32")
+        : "/usr/bin:/bin";
     let local;
     try {
       local = await startLocalServer(runtime, data);
@@ -171,7 +174,7 @@ async function run() {
       });
       assert.equal(login.ok, true);
       const worker = await promisify(execFile)(
-        join(runtime, "bin/bun"),
+        join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
         [
           "-e",
           `
