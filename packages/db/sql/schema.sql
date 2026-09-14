@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   size_bytes INTEGER NOT NULL,
   storage_path TEXT NOT NULL,
   created_at TEXT NOT NULL,
+  ephemeral INTEGER DEFAULT 0 NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
   FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
   FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL

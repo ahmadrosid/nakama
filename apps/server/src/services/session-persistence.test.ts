@@ -295,6 +295,7 @@ describe("session persistence", () => {
     await db.insertAttachment({
       channel: "web",
       createdAt: now,
+      ephemeral: false,
       filename: "attachment.txt",
       id: "attachment",
       kind: "document",

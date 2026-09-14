@@ -33,6 +33,7 @@ export function createAttachmentSaver(
     const record: StoredAttachmentRecord = {
       channel: context.channel,
       createdAt: now,
+      ephemeral: false,
       filename: input.filename ?? null,
       id: attachmentId,
       kind: input.kind,
