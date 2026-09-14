@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
 import { setupTestConfigDir } from "../../test-config-dir";
+import type { ServerOptions } from "../context";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
@@ -43,6 +44,61 @@ describe("route error formatting", () => {
     await expect(response.json()).resolves.toEqual({
       error: "An unexpected server error occurred.",
     });
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
+  });
+
+  test("a worker action that fails answers 500 and is reported", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      workerManager: {
+        isValidWorker: () => true,
+        startWorker: async () => {
+          throw new Error("pm2 daemon is not reachable");
+        },
+      } as unknown as ServerOptions["workerManager"],
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/telegram/start", {
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(500);
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
+  });
+
+  test("a 5xx passed through from transcription is reported", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        transcribeAudio: async () => {
+          throw new NakamaApiError(
+            "Audio transcription returned empty text.",
+            502
+          );
+        },
+      },
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/audio/transcribe", {
+        body: JSON.stringify({ data: "AAAA", mimeType: "audio/webm" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(502);
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
   });
 
   test("send message does not leak an unexpected error's message", async () => {
