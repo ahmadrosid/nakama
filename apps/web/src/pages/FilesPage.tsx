@@ -78,7 +78,10 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
     refetch,
     fetchNextPage,
     hasNextPage,
-  } = useArtifactsInfiniteQuery(profileId);
+  } = useArtifactsInfiniteQuery(
+    profileId,
+    searchQuery.trim() ? "" : folderPrefix
+  );
   const deleteMutation = useDeleteArtifactMutation();
 
   const artifacts = useMemo(

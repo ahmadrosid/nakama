@@ -395,6 +395,7 @@ export function registerProfileRoutes(
       request: {
         params: profileIdParam,
         query: z.object({
+          folder: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(100).optional(),
           offset: z.coerce.number().int().min(0).optional(),
         }),
@@ -775,6 +776,7 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
+        folder: c.req.query("folder"),
         limit,
         offset,
       })

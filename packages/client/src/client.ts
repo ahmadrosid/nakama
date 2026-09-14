@@ -1162,9 +1162,12 @@ export class NakamaClient {
 
   async listProfileArtifacts(
     profileId: string,
-    options: { limit?: number; offset?: number } = {}
+    options: { folder?: string; limit?: number; offset?: number } = {}
   ): Promise<ListArtifactsResponse> {
     const query = new URLSearchParams();
+    if (options.folder) {
+      query.set("folder", options.folder);
+    }
     if (options.limit !== undefined) {
       query.set("limit", String(options.limit));
     }

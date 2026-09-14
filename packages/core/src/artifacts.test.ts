@@ -174,6 +174,35 @@ test("lists sidecar-less artifacts with an inferred mime type", async () => {
   expect(listing.total).toBe(listing.artifacts.length);
 });
 
+test("folder pagination excludes unrelated artifacts from its total", async () => {
+  await writeArtifact("video-test/clip.mp4", "video");
+  await writeArtifact("video-test/preview.html", "preview");
+  await writeArtifact("video-test-other/file.txt", "unrelated");
+  await writeArtifact("root.txt", "unrelated");
+
+  const first = await listArtifacts(ORG_ID, PROFILE_ID, {
+    folder: "video-test",
+    limit: 1,
+  });
+  expect(first.total).toBe(2);
+  expect(first.artifacts).toHaveLength(1);
+  expect(first.artifacts[0]?.filename.startsWith("video-test/")).toBe(true);
+  const second = await listArtifacts(ORG_ID, PROFILE_ID, {
+    folder: "video-test",
+    limit: 1,
+    offset: 1,
+  });
+  expect(second.total).toBe(2);
+  expect(second.artifacts).toHaveLength(1);
+  expect(second.artifacts[0]?.filename).not.toBe(first.artifacts[0]?.filename);
+  const empty = await listArtifacts(ORG_ID, PROFILE_ID, {
+    folder: "missing",
+    limit: 30,
+  });
+  expect(empty.total).toBe(0);
+  expect(empty.artifacts).toEqual([]);
+});
+
 test("paginates artifacts with limit and offset", async () => {
   for (let index = 0; index < 5; index += 1) {
     await writeArtifact(`file-${index}.txt`, `content ${index}`);

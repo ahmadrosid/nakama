@@ -536,7 +536,10 @@ export function useKnowledgeBaseQuery(profileId: string | null) {
 
 export const ARTIFACTS_PAGE_SIZE = 30;
 
-export function useArtifactsInfiniteQuery(profileId: string | null) {
+export function useArtifactsInfiniteQuery(
+  profileId: string | null,
+  folder = ""
+) {
   return useInfiniteQuery({
     enabled: Boolean(profileId),
     getNextPageParam: (lastPage) => {
@@ -546,10 +549,11 @@ export function useArtifactsInfiniteQuery(profileId: string | null) {
     initialPageParam: 0,
     queryFn: ({ pageParam }: { pageParam: number }) =>
       client.listProfileArtifacts(profileId!, {
+        folder,
         limit: ARTIFACTS_PAGE_SIZE,
         offset: pageParam,
       }),
-    queryKey: queryKeys.artifacts.profile(profileId ?? ""),
+    queryKey: [...queryKeys.artifacts.profile(profileId ?? ""), folder],
   });
 }
 

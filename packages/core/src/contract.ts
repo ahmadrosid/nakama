@@ -2159,6 +2159,7 @@ export interface ArtifactFile {
 }
 
 export interface ListArtifactsOptions {
+  folder?: string;
   limit?: number;
   offset?: number;
 }
