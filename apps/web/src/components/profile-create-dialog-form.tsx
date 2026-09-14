@@ -97,19 +97,13 @@ export function ProfileCreateDialogForm({
 
           <Field label="Avatar">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
-                {avatarPreview ? (
-                  <img
-                    alt=""
-                    className="size-full object-cover"
-                    src={avatarPreview}
-                  />
-                ) : (
-                  <span className="font-medium text-lg text-muted-foreground">
-                    {name.trim().charAt(0).toUpperCase() || "?"}
-                  </span>
-                )}
-              </div>
+              {avatarPreview ? (
+                <img
+                  alt="Avatar preview"
+                  className="size-10 shrink-0 rounded-md border border-border object-cover"
+                  src={avatarPreview}
+                />
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <input
                   accept="image/jpeg,image/png,image/gif,image/webp"
