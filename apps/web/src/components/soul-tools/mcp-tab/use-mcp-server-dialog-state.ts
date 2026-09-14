@@ -306,12 +306,12 @@ export function useMcpServerDialogState({
   const idPrefix = server ? `mcp-edit-${server.id}` : "mcp-create";
   const loadingForm = isEdit && loadingDetail && !detail;
   const formDisabled = busy || testing || loadingForm;
+  const requiredFields = [
+    name,
+    resolveFormTransport(transport, command, url) === "http" ? url : command,
+  ];
   const canSubmit =
-    name.trim().length > 0 &&
-    !loadingForm &&
-    (resolveFormTransport(transport, command, url) === "http"
-      ? url.trim().length > 0
-      : command.trim().length > 0);
+    !loadingForm && requiredFields.every((value) => value.trim().length > 0);
 
   const formResetKey = open
     ? server

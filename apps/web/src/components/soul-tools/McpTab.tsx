@@ -68,12 +68,13 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     servers.find((server) => server.id === detailServerId) ?? null;
 
   const loading = isLoading && servers.length === 0;
-  const busy =
-    createMutation.isPending ||
-    updateMutation.isPending ||
-    deleteMutation.isPending ||
-    connectMutation.isPending ||
-    syncMutation.isPending;
+  const busy = [
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    connectMutation,
+    syncMutation,
+  ].some((mutation) => mutation.isPending);
   const errorMessage = actionError ?? (error ? formatError(error) : null);
 
   useEffect(() => {
