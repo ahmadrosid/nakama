@@ -419,13 +419,12 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
         action={
           <Link
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
-            to={PAGE_PATHS.settings}
+            to={PAGE_PATHS.providers}
           >
-            Open Settings
+            Add provider
           </Link>
         }
-        description="Add an API key in Settings to start estimating token usage and API cost."
-        icon={SparklesIcon}
+        description="Add a provider to start tracking token usage and API cost."
         title="Connect a provider to track usage"
       />
     );
@@ -435,7 +434,6 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
     return (
       <LlmUsageEmptyState
         description="Usage appears here after chat messages, automation runs, or task executions."
-        icon={ZapIcon}
         title="No LLM calls yet"
       />
     );
@@ -465,29 +463,24 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
 }
 
 function LlmUsageEmptyState({
-  icon: Icon,
   title,
   description,
   action,
 }: {
-  icon: typeof Clock01Icon;
   title: string;
   description: string;
   action?: ReactNode;
 }) {
   return (
-    <div className="p-5">
-      <div className="flex flex-col items-center rounded-lg border border-border border-dashed bg-muted/15 px-6 py-10 text-center dark:bg-muted/10">
-        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-          <Icon aria-hidden className="size-5" />
-        </div>
-        <p className="font-medium text-foreground text-sm">{title}</p>
-        <p className="mt-1 max-w-sm text-muted-foreground text-sm">
+    <Card className="w-full shadow-none">
+      <CardContent className="flex flex-col items-center px-4 py-8 text-center">
+        <p className="text-muted-foreground text-sm">{title}</p>
+        <p className="mt-1 max-w-sm text-muted-foreground text-xs">
           {description}
         </p>
         {action ? <div className="mt-4">{action}</div> : null}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
