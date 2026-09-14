@@ -144,7 +144,7 @@ export function AutomationListItem({
             {unreadCount > 0 ? (
               <span
                 aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
-                className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
+                className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 font-medium text-[10px] text-primary-foreground tabular-nums leading-none"
               >
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
