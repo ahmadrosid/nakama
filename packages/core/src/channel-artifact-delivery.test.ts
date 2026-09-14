@@ -221,6 +221,11 @@ describe("deliverTurnArtifactShares", () => {
       savedAt: "2026-07-13T10:00:00.000Z",
       sizeBytes: 42,
     });
+    const scratchMeta = JSON.stringify({
+      mimeType: "application/json",
+      savedAt: "2026-07-13T10:00:01.000Z",
+      sizeBytes: 2,
+    });
     const messages: ChatMessage[] = [
       { content: "save report", role: "user" },
       {
@@ -238,6 +243,19 @@ describe("deliverTurnArtifactShares", () => {
               path: "artifacts/report.md.nakama-meta.json",
             },
             id: "tool_2",
+            name: "write_file",
+          },
+          {
+            arguments: { content: "{}", path: "artifacts/_scratch-debug.json" },
+            id: "tool_3",
+            name: "write_file",
+          },
+          {
+            arguments: {
+              content: scratchMeta,
+              path: "artifacts/_scratch-debug.json.nakama-meta.json",
+            },
+            id: "tool_4",
             name: "write_file",
           },
         ],
@@ -260,6 +278,24 @@ describe("deliverTurnArtifactShares", () => {
         role: "tool",
         toolCallId: "tool_2",
       },
+      {
+        content: JSON.stringify({
+          bytesWritten: 2,
+          path: `${artifactsRoot}/_scratch-debug.json`,
+        }),
+        name: "write_file",
+        role: "tool",
+        toolCallId: "tool_3",
+      },
+      {
+        content: JSON.stringify({
+          bytesWritten: scratchMeta.length,
+          path: `${artifactsRoot}/_scratch-debug.json.nakama-meta.json`,
+        }),
+        name: "write_file",
+        role: "tool",
+        toolCallId: "tool_4",
+      },
       { content: "Saved the report.", role: "assistant" },
     ];
 
@@ -275,15 +311,19 @@ describe("deliverTurnArtifactShares", () => {
     }> = [];
     let saved = false;
     const footers: string[] = [];
+    const published: string[] = [];
 
     const delivered = await deliverTurnArtifactShares({
       conversationKey: "chat:1",
-      publish: async () => ({
-        refreshed: false,
-        sharePath: "/s/tok_1",
-        shareUrl: "https://app.example/s/tok_1",
-        webPublicUrlConfigured: true,
-      }),
+      publish: async (path) => {
+        published.push(path);
+        return {
+          refreshed: false,
+          sharePath: "/s/tok_1",
+          shareUrl: "https://app.example/s/tok_1",
+          webPublicUrlConfigured: true,
+        };
+      },
       sendFooter: async (footer) => {
         footers.push(footer);
       },
@@ -319,7 +359,9 @@ describe("deliverTurnArtifactShares", () => {
       },
     ]);
     expect(saved).toBe(true);
+    expect(published).toEqual(["report.md"]);
     expect(registry.map((entry) => entry.path)).toEqual(["report.md"]);
+    expect(footers.join("\n")).not.toContain("_scratch-debug.json");
     expect(footers).toEqual(["report.md: https://app.example/s/tok_1"]);
   });
 
@@ -344,129 +386,5 @@ describe("deliverTurnArtifactShares", () => {
     });
 
     expect(delivered).toEqual([]);
-  });
-
-  test("omits scratch writes from share footers", async () => {
-    const artifactsRoot =
-      "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
-    const finalMeta = JSON.stringify({
-      mimeType: "text/csv",
-      savedAt: "2026-07-13T10:00:00.000Z",
-      sizeBytes: 12,
-    });
-    const scratchMeta = JSON.stringify({
-      mimeType: "application/json",
-      savedAt: "2026-07-13T10:00:01.000Z",
-      sizeBytes: 2,
-    });
-    const messages: ChatMessage[] = [
-      { content: "save report", role: "user" },
-      {
-        content: "",
-        role: "assistant",
-        toolCalls: [
-          {
-            arguments: {
-              content: "a,b\n1,2\n",
-              path: "artifacts/laporan-final.csv",
-            },
-            id: "tool_1",
-            name: "write_file",
-          },
-          {
-            arguments: {
-              content: finalMeta,
-              path: "artifacts/laporan-final.csv.nakama-meta.json",
-            },
-            id: "tool_2",
-            name: "write_file",
-          },
-          {
-            arguments: { content: "{}", path: "artifacts/_scratch-debug.json" },
-            id: "tool_3",
-            name: "write_file",
-          },
-          {
-            arguments: {
-              content: scratchMeta,
-              path: "artifacts/_scratch-debug.json.nakama-meta.json",
-            },
-            id: "tool_4",
-            name: "write_file",
-          },
-        ],
-      },
-      {
-        content: JSON.stringify({
-          bytesWritten: 8,
-          path: `${artifactsRoot}/laporan-final.csv`,
-        }),
-        name: "write_file",
-        role: "tool",
-        toolCallId: "tool_1",
-      },
-      {
-        content: JSON.stringify({
-          bytesWritten: finalMeta.length,
-          path: `${artifactsRoot}/laporan-final.csv.nakama-meta.json`,
-        }),
-        name: "write_file",
-        role: "tool",
-        toolCallId: "tool_2",
-      },
-      {
-        content: JSON.stringify({
-          bytesWritten: 2,
-          path: `${artifactsRoot}/_scratch-debug.json`,
-        }),
-        name: "write_file",
-        role: "tool",
-        toolCallId: "tool_3",
-      },
-      {
-        content: JSON.stringify({
-          bytesWritten: scratchMeta.length,
-          path: `${artifactsRoot}/_scratch-debug.json.nakama-meta.json`,
-        }),
-        name: "write_file",
-        role: "tool",
-        toolCallId: "tool_4",
-      },
-      { content: "Saved both.", role: "assistant" },
-    ];
-
-    const footers: string[] = [];
-    const published: string[] = [];
-    const delivered = await deliverTurnArtifactShares({
-      conversationKey: "chat:scratch",
-      publish: async (path) => {
-        published.push(path);
-        return {
-          refreshed: false,
-          sharePath: `/s/${path}`,
-          shareUrl: `https://app.example/s/${path}`,
-          webPublicUrlConfigured: true,
-        };
-      },
-      sendFooter: async (footer) => {
-        footers.push(footer);
-      },
-      session: {
-        getMessages: async () => messages,
-      },
-      sessionStore: {
-        getArtifactShareUrls: () => ({}),
-        getDeliverableArtifacts: () => [],
-        save: async () => undefined,
-        updateArtifactState: () => undefined,
-      },
-    });
-
-    expect(delivered.map((entry) => entry.path)).toEqual(["laporan-final.csv"]);
-    expect(published).toEqual(["laporan-final.csv"]);
-    expect(footers.join("\n")).not.toContain("_scratch-debug.json");
-    expect(footers).toEqual([
-      "laporan-final.csv: https://app.example/s/laporan-final.csv",
-    ]);
   });
 });
