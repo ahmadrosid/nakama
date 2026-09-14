@@ -1063,3 +1063,49 @@ test("upgrading skill proposals preserves pending content and adds supporting fi
     db.close();
   }
 });
+
+describe("ephemeral attachment marking", () => {
+  test("adds the ephemeral column and defaults existing rows to 0", () => {
+    const db = new Database(":memory:");
+
+    try {
+      // A pre-migration attachments table, as an older install has it.
+      db.exec(`
+        CREATE TABLE attachments (
+          id TEXT PRIMARY KEY NOT NULL,
+          org_id TEXT,
+          profile_id TEXT NOT NULL,
+          session_id TEXT,
+          channel TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          filename TEXT,
+          media_type TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          storage_path TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO attachments (
+          id, org_id, profile_id, session_id, channel, kind, filename,
+          media_type, size_bytes, storage_path, created_at
+        ) VALUES (
+          'att_old', NULL, 'profile_test', NULL, 'web', 'image', NULL,
+          'image/png', 10, 'a/b.png', '2026-09-01T00:00:00.000Z'
+        );
+      `);
+
+      migrateDatabase(db);
+
+      const columns = db
+        .prepare("PRAGMA table_info(attachments)")
+        .all() as Array<{ name: string }>;
+      expect(columns.some((column) => column.name === "ephemeral")).toBe(true);
+
+      const existing = db
+        .prepare("SELECT ephemeral FROM attachments WHERE id = 'att_old'")
+        .get() as { ephemeral: number };
+      expect(existing.ephemeral).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+});

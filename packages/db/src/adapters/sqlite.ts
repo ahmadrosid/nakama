@@ -178,6 +178,7 @@ interface SessionMessageRow {
 interface AttachmentRow {
   channel: string;
   created_at: string;
+  ephemeral: number;
   filename: string | null;
   id: string;
   kind: string;
@@ -1015,15 +1016,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const insertAttachmentStmt = db.prepare(`
     INSERT INTO attachments (
       id, org_id, profile_id, session_id, channel, kind, filename,
-      media_type, size_bytes, storage_path, created_at
+      media_type, size_bytes, storage_path, created_at, ephemeral
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getAttachmentStmt = db.prepare(
     "SELECT * FROM attachments WHERE id = ?"
   );
   const listAttachmentsForSessionStmt = db.prepare(
     "SELECT * FROM attachments WHERE session_id = ?"
+  );
+  const listEphemeralAttachmentsStmt = db.prepare(
+    "SELECT * FROM attachments WHERE ephemeral = 1"
   );
   const deleteAttachmentStmt = db.prepare(
     "DELETE FROM attachments WHERE id = ?"
@@ -3224,7 +3228,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.mediaType,
         record.sizeBytes,
         record.storagePath,
-        record.createdAt
+        record.createdAt,
+        record.ephemeral ? 1 : 0
       );
     },
 
@@ -3313,6 +3318,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) =>
           toComposioUserConnectionRecord(row as ComposioUserConnectionRow)
         );
+    },
+
+    async listEphemeralAttachments() {
+      return listEphemeralAttachmentsStmt
+        .all()
+        .map((row) => toAttachmentRecord(row as AttachmentRow));
     },
 
     async listLlmTurnUsage(orgId) {
@@ -4376,6 +4387,7 @@ function toAttachmentRecord(row: AttachmentRow): StoredAttachmentRecord {
   return {
     channel: row.channel,
     createdAt: row.created_at,
+    ephemeral: row.ephemeral === 1,
     filename: row.filename,
     id: row.id,
     kind: row.kind as StoredAttachmentRecord["kind"],

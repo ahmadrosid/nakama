@@ -138,6 +138,12 @@ export type AttachmentKind = "image" | "document";
 export interface StoredAttachmentRecord {
   channel: string;
   createdAt: string;
+  /**
+   * True for attachments made in a cognito session. They carry a null
+   * sessionId (there is no `sessions` row to reference), so this is what a
+   * startup sweep has to find the ones a hard restart left behind.
+   */
+  ephemeral: boolean;
   filename: string | null;
   id: string;
   kind: AttachmentKind;
@@ -927,6 +933,7 @@ export interface DatabaseAdapter {
     orgId: string,
     userId: string
   ): Promise<StoredComposioUserConnectionRecord[]>;
+  listEphemeralAttachments(): Promise<StoredAttachmentRecord[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
   listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;

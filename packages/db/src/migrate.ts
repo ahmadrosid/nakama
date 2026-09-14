@@ -1457,11 +1457,25 @@ function migrateAttachmentsTable(db: Database): void {
       size_bytes INTEGER NOT NULL,
       storage_path TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      ephemeral INTEGER DEFAULT 0 NOT NULL,
       FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
       FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
       FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL
     );
   `);
+
+  const columns = db.prepare("PRAGMA table_info(attachments)").all() as Array<{
+    name: string;
+  }>;
+
+  // A cognito session has no `sessions` row to hang the foreign key on, so its
+  // attachments carry a null session_id. This column is what a restart sweep
+  // has left to tell them apart from ordinary orphans.
+  if (!columns.some((column) => column.name === "ephemeral")) {
+    db.exec(`
+      ALTER TABLE attachments ADD COLUMN ephemeral INTEGER DEFAULT 0 NOT NULL;
+    `);
+  }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS attachments_session_id ON attachments (session_id);
