@@ -86,7 +86,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
           {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
           <details className="group">
             <summary className="cursor-pointer text-muted-foreground/55 text-sm">
-              History
+              Change histories
             </summary>
             <div className="pt-3">
               <ProfileHistoryTab profileId={detail.id} />
