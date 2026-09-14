@@ -224,7 +224,10 @@ import {
   resolveXaiOAuthCredentials,
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
-import { createOrgMemoryTools } from "../tools/org-memory-tools";
+import {
+  createOrgMemoryTools,
+  PROPOSE_ORG_MEMORY_TOOL_NAME,
+} from "../tools/org-memory-tools";
 import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
 import {
   createSkillManageTools,
@@ -2065,10 +2068,22 @@ export class AgentService {
   }
 
   scheduleSessionTitleGeneration(sessionId: string): void {
+    // A cognito session has no row to title, and generating one would spend a
+    // turn summarising a conversation that is meant to leave no trace.
+    if (this.ephemeralSessions.has(sessionId)) {
+      return;
+    }
+
     this.sessionTitleService.scheduleSessionTitleGeneration(sessionId);
   }
 
   schedulePostTurnSkillReview(sessionId: string): void {
+    // The review writes skill suggestions, which is exactly the write-back a
+    // cognito session promises not to do.
+    if (this.ephemeralSessions.has(sessionId)) {
+      return;
+    }
+
     this.skillPostTurnReviewService.schedulePostTurnSkillReview(sessionId);
   }
 
@@ -3600,6 +3615,8 @@ export class AgentService {
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
       includeSkillManageTools?: boolean;
+      /** False in a cognito session: proposing org memory is a write-back. */
+      includeMemoryWriteTools?: boolean;
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
@@ -3730,6 +3747,12 @@ export class AgentService {
       resolved = [...resolved, ...this.orgMemoryTools];
     }
 
+    if (options.includeMemoryWriteTools === false) {
+      resolved = resolved.filter(
+        (tool) => tool.name !== PROPOSE_ORG_MEMORY_TOOL_NAME
+      );
+    }
+
     if (!includeSubAgentTool) {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
@@ -3750,7 +3773,11 @@ export class AgentService {
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const includeSkillManageTools = SKILL_MANAGE_CHANNELS[channel];
+    // skill_manage writes skills and expands /learn, both of which outlive the
+    // chat, so a cognito session never gets it whatever the channel allows.
+    const includeSkillManageTools = cognito
+      ? false
+      : SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
       channel === "telegram" || channel === "whatsapp" || channel === "discord"
         ? "member"
@@ -3762,6 +3789,7 @@ export class AgentService {
         pluginOrgRole === "viewer"
           ? pluginOrgRole
           : undefined,
+      includeMemoryWriteTools: !cognito,
       includeSkillManageTools,
       userId,
     });
@@ -3970,6 +3998,7 @@ export class AgentService {
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
         ...this.memoryBackend.toolContext(orgId, profileId),
+        forbidMemoryWrites: cognito ? true : undefined,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
         isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,

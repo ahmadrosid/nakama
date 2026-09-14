@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { GenerateChatInput } from "@nakama/core";
+import { ensureBundledSkillFiles, type GenerateChatInput } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
 
@@ -212,5 +213,146 @@ describe("cognito sessions are never persisted", () => {
     expect((await service.getSessionMessages(sessionId, ORG_ID))?.model).toBe(
       "provider-1::next-chat-model"
     );
+  });
+});
+
+/** Captures the tool list the provider is actually offered. */
+function stubHarnessCapturingTools(
+  service: AgentService,
+  captured: { names: string[] }
+): void {
+  const answer = {
+    assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
+    content: "ok",
+    toolCalls: [],
+  };
+  Object.assign(service, {
+    _providerConfigured: true,
+    createHarnessForProfile: () => ({
+      provider: {
+        generateChat(input: GenerateChatInput) {
+          captured.names = (input.tools ?? []).map((tool) => tool.name);
+          return Promise.resolve(answer);
+        },
+        name: "openai",
+        streamChat(input: GenerateChatInput) {
+          captured.names = (input.tools ?? []).map((tool) => tool.name);
+          return Promise.resolve(answer);
+        },
+      },
+    }),
+  });
+}
+
+async function seedProfileWithSkillManage(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
+): Promise<SkillsService> {
+  const now = new Date().toISOString();
+  await db.upsertProfile(createDefaultProfile());
+  // Platform tool groups only attach when the profile owns at least one tool.
+  await db.upsertTool({
+    createdAt: now,
+    description: "Test tool",
+    handlerConfig: { modulePath: "test.js" },
+    handlerType: "javascript",
+    id: "tool_cognito_seed",
+    name: "test_tool",
+    updatedAt: now,
+  });
+  await db.assignToolToProfile("profile_default", "tool_cognito_seed");
+
+  const skills = new SkillsService(db);
+  await ensureBundledSkillFiles();
+  await skills.syncDiscoveredSkills();
+  const manage = (await skills.listSkills()).skills.find(
+    (skill) => skill.name === "manage-skills"
+  );
+  await db.assignSkillToProfile("profile_default", manage!.id);
+  return skills;
+}
+
+describe("cognito sessions never write back", () => {
+  setupTestConfigDir("nakama-cognito-writeback-");
+
+  test("drops skill_manage and propose_org_memory but keeps reading org memory", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const skills = await seedProfileWithSkillManage(db);
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+    const captured = { names: [] as string[] };
+    stubHarnessCapturingTools(service, captured);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { cognito: { personalized: true }, orgRole: "admin" }
+    );
+    const session = await service.resolveSession(sessionId, ORG_ID);
+    await session?.send({ message: "what do you remember" });
+
+    expect(captured.names).not.toContain("skill_manage");
+    expect(captured.names).not.toContain("propose_org_memory");
+    // Personalized cognito still reads memory; it only refuses to write.
+    expect(captured.names).toContain("org_memory_search");
+  });
+
+  test("an ordinary session keeps both write paths", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const skills = await seedProfileWithSkillManage(db);
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+    const captured = { names: [] as string[] };
+    stubHarnessCapturingTools(service, captured);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+    const session = await service.resolveSession(sessionId, ORG_ID);
+    await session?.send({ message: "what do you remember" });
+
+    expect(captured.names).toContain("skill_manage");
+    expect(captured.names).toContain("propose_org_memory");
+  });
+
+  test("no title and no post-turn skill review are scheduled", async () => {
+    const { service } = await createService();
+    const scheduled: string[] = [];
+    Object.assign(service, {
+      sessionTitleService: {
+        scheduleSessionTitleGeneration: (id: string) =>
+          scheduled.push(`title:${id}`),
+      },
+      skillPostTurnReviewService: {
+        schedulePostTurnSkillReview: (id: string) =>
+          scheduled.push(`review:${id}`),
+      },
+    });
+
+    const cognitoId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { cognito: { personalized: true } }
+    );
+    service.scheduleSessionTitleGeneration(cognitoId);
+    service.schedulePostTurnSkillReview(cognitoId);
+    expect(scheduled).toEqual([]);
+
+    const normalId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null
+    );
+    service.scheduleSessionTitleGeneration(normalId);
+    service.schedulePostTurnSkillReview(normalId);
+    expect(scheduled).toEqual([`title:${normalId}`, `review:${normalId}`]);
   });
 });
