@@ -73,7 +73,7 @@ export function ProfileCreateDialogForm({
             />
           </Field>
 
-          <Field htmlFor="create-profile-id" label="Profile id">
+          <Field htmlFor="create-profile-id" label="Agent id">
             <Input
               aria-invalid={profileIdHasValue && !profileIdValid}
               className="font-mono text-sm focus-visible:ring-1 focus-visible:ring-inset aria-invalid:ring-1 aria-invalid:ring-inset"

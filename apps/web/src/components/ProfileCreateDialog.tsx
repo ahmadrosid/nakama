@@ -162,7 +162,7 @@ function ProfileCreateDialogContent({
   const profileIdHelpText =
     !profileIdHasValue || profileIdValid
       ? "From name. Letters, numbers, `_`, `-` only."
-      : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+      : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
   const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
   const selectableTools = availableTools;
@@ -222,7 +222,7 @@ function ProfileCreateDialogContent({
         type: "patch",
         values: {
           submitError: form.name.trim()
-            ? "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`."
+            ? "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`."
             : "Name is required.",
         },
       });
@@ -252,7 +252,7 @@ function ProfileCreateDialogContent({
             type: "patch",
             values: {
               submitError:
-                "Profile created, but the selected image could not be read.",
+                "Agent created, but the selected image could not be read.",
             },
           });
         }
@@ -281,9 +281,9 @@ function ProfileCreateDialogContent({
         onSubmit={handleSubmit}
       >
         <DialogHeader className="gap-2">
-          <DialogTitle>Create profile</DialogTitle>
+          <DialogTitle>Create agent</DialogTitle>
           <DialogDescription>
-            Set name and profile id.
+            Set name and agent id.
             {onAskSuperBot ? (
               <>
                 {" "}
