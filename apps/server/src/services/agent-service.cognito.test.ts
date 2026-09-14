@@ -61,7 +61,7 @@ async function createService(): Promise<{
 describe("cognito sessions are never persisted", () => {
   setupTestConfigDir("nakama-cognito-");
 
-  test("a turn writes no session row and no messages", async () => {
+  test("the turn is readable, and exists nowhere but memory", async () => {
     const { db, service } = await createService();
 
     const sessionId = await service.createSession(
@@ -72,34 +72,26 @@ describe("cognito sessions are never persisted", () => {
       { cognito: { personalized: true } }
     );
 
-    const session = await service.resolveSession(sessionId, ORG_ID);
-    expect(session).not.toBeNull();
-    await session?.send({ message: "remember my api key" });
+    const first = await service.resolveSession(sessionId, ORG_ID);
+    expect(first).not.toBeNull();
+    await first?.send({ message: "remember my api key" });
 
-    expect(await db.getSession(sessionId)).toBeNull();
-    expect(await db.listMessagesForSession(sessionId)).toEqual([]);
-    expect(await db.listSessions()).toEqual([]);
-  });
-
-  test("the turn is still readable while the session is alive", async () => {
-    const { service } = await createService();
-
-    const sessionId = await service.createSession(
-      ORG_ID,
-      "web",
-      "profile_default",
-      null,
-      { cognito: { personalized: true } }
-    );
-    const session = await service.resolveSession(sessionId, ORG_ID);
-    await session?.send({ message: "hello" });
-
+    // Readable for the rest of the session...
     const result = await service.getSessionMessages(sessionId, ORG_ID);
     expect(result?.messages.map((message) => message.role)).toEqual([
       "user",
       "assistant",
     ]);
     expect(result?.profileId).toBe("profile_default");
+
+    // ...and resolving again hands back the same object, because the history
+    // lives nowhere else and a rebuild would silently empty the chat.
+    expect(await service.resolveSession(sessionId, ORG_ID)).toBe(first);
+
+    // The assertions that make this fail without cognito.
+    expect(await db.getSession(sessionId)).toBeNull();
+    expect(await db.listMessagesForSession(sessionId)).toEqual([]);
+    expect(await db.listSessions()).toEqual([]);
   });
 
   test("an ordinary session still persists", async () => {
@@ -119,27 +111,8 @@ describe("cognito sessions are never persisted", () => {
     expect((await db.listSessions()).length).toBe(1);
   });
 
-  test("resolveSession returns the same object so history is never rebuilt", async () => {
-    const { service } = await createService();
-
-    const sessionId = await service.createSession(
-      ORG_ID,
-      "web",
-      "profile_default",
-      null,
-      { cognito: { personalized: false } }
-    );
-
-    const first = await service.resolveSession(sessionId, ORG_ID);
-    await first?.send({ message: "hello" });
-    const second = await service.resolveSession(sessionId, ORG_ID);
-
-    expect(second).toBe(first);
-    expect(second?.getHistory().length).toBe(2);
-  });
-
   test("deleting a cognito session makes it unreachable", async () => {
-    const { service } = await createService();
+    const { db, service } = await createService();
 
     const sessionId = await service.createSession(
       ORG_ID,
@@ -151,6 +124,8 @@ describe("cognito sessions are never persisted", () => {
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "hello" });
 
+    // There was never a row, so the delete has only the map to work with.
+    expect(await db.getSession(sessionId)).toBeNull();
     expect(await service.purgeSession(sessionId, ORG_ID)).toBe(true);
     expect(await service.resolveSession(sessionId, ORG_ID)).toBeNull();
     expect(await service.getSessionMessages(sessionId, ORG_ID)).toBeNull();
