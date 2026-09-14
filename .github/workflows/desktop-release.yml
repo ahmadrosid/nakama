@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   release:
+    environment: code-signing
     runs-on: macos-26
     timeout-minutes: 60
     steps:

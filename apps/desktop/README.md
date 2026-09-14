@@ -53,7 +53,7 @@ macOS requires a signed app for automatic updates. Install the first signed rele
 
 ## Publish a release
 
-Add these GitHub Actions repository secrets:
+In GitHub, open **Settings → Environments → code-signing** and add these environment secrets. The release job uses this environment:
 
 | Secret | Value |
 | --- | --- |
