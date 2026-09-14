@@ -564,3 +564,45 @@ describe("cognito leaves no skill-usage trail", () => {
     expect(await turnWith(false)).toBeGreaterThan(0);
   });
 });
+
+describe("cognito session state that is not the transcript", () => {
+  setupTestConfigDir("nakama-cognito-state-");
+
+  test("todos work in the session and persist nowhere", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { cognito: { personalized: true } }
+    );
+
+    const state = (
+      service as unknown as {
+        agentTodoState: {
+          write(
+            id: string,
+            input: {
+              merge: boolean;
+              todos: Array<{ content: string; id: string; status: string }>;
+            }
+          ): Promise<unknown>;
+        };
+      }
+    ).agentTodoState;
+    await state.write(sessionId, {
+      merge: false,
+      todos: [{ content: "draft the reply", id: "t1", status: "in_progress" }],
+    });
+
+    // Readable for the rest of the session,
+    expect(await service.getSessionTodos(sessionId, ORG_ID)).toMatchObject([
+      { content: "draft the reply", id: "t1" },
+    ]);
+    // but held in memory only, because the UPDATE has no row to match.
+    expect(await db.getSessionTodos(sessionId)).toEqual([]);
+    expect(await db.getSession(sessionId)).toBeNull();
+  });
+});
