@@ -1,38 +1,6 @@
-import { afterAll, expect, spyOn, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Window } from "happy-dom";
 import { act } from "react";
-
-const dom = new Window({ url: "http://localhost" });
-const globals = {
-  cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
-  DocumentFragment: dom.DocumentFragment,
-  document: dom.document,
-  Element: dom.Element,
-  getComputedStyle: dom.getComputedStyle.bind(dom),
-  HTMLElement: dom.HTMLElement,
-  IS_REACT_ACT_ENVIRONMENT: true,
-  KeyboardEvent: dom.KeyboardEvent,
-  MutationObserver: dom.MutationObserver,
-  Node: dom.Node,
-  navigator: dom.navigator,
-  ResizeObserver: dom.ResizeObserver,
-  requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
-  window: dom,
-};
-const originals = new Map(
-  Object.keys(globals).map((key) => [
-    key,
-    Object.getOwnPropertyDescriptor(globalThis, key),
-  ])
-);
-for (const [key, value] of Object.entries(globals)) {
-  Object.defineProperty(globalThis, key, {
-    configurable: true,
-    value,
-    writable: true,
-  });
-}
 
 const { createRoot } = await import("react-dom/client");
 const { ConfirmDialog } = await import("@nakama/ui/dialog");
@@ -40,17 +8,6 @@ const { WhatsAppAllowedPhonesDialog } = await import(
   "./WhatsAppAllowedPhonesDialog"
 );
 const { client } = await import("@/lib/client");
-
-afterAll(() => {
-  dom.happyDOM.abort();
-  for (const [key, descriptor] of originals) {
-    if (descriptor) {
-      Object.defineProperty(globalThis, key, descriptor);
-    } else {
-      Reflect.deleteProperty(globalThis, key);
-    }
-  }
-});
 
 test("confirmation cancels safely, blocks repeat submissions, and retries failures", async () => {
   const container = document.createElement("div");
