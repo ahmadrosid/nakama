@@ -3,6 +3,7 @@ import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { useCallback, useEffect, useState } from "react";
+import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
@@ -142,6 +143,12 @@ export function SettingsPage() {
         <p className="text-destructive text-sm" role="alert">
           {formError}
         </p>
+      ) : null}
+
+      {isOrgAdmin ? (
+        <section id="local-token">
+          <LocalAuthTokenCard />
+        </section>
       ) : null}
 
       {isPlatformAdmin ? (

@@ -94,6 +94,12 @@ export const NAV_GROUPS: NavGroup[] = [
         SharedWifiIcon
       ),
       navItem(
+        "integrations",
+        "Integrations",
+        "Bridges and Composio",
+        WebhookIcon
+      ),
+      navItem(
         "customize",
         "Customize",
         "Customize your workspace",
@@ -126,12 +132,6 @@ export const NAV_GROUPS: NavGroup[] = [
         "Automation and channel workers",
         DashboardSquare01Icon
       ),
-      navItem(
-        "integrations",
-        "Integrations",
-        "Bridges and Composio",
-        WebhookIcon
-      ),
       navItem("tools", "Tools", "Manage agent tools", LayoutGridIcon),
       navItem("mcp", "MCP", "Manage MCP servers", Plug01Icon),
       navItem(
@@ -158,6 +158,7 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "files",
   "profiles",
   "automations",
+  "integrations",
   "customize",
 ];
 

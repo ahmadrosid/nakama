@@ -126,8 +126,9 @@ export function AutomationListItem({
     <div
       className={cn(
         "group flex w-full items-start gap-2 transition-colors",
-        "focus-within:bg-muted/25 hover:bg-muted/25",
-        selected && "bg-muted/35"
+        selected
+          ? "bg-muted dark:bg-muted/50"
+          : "focus-within:bg-muted/25 hover:bg-muted/25"
       )}
     >
       <button

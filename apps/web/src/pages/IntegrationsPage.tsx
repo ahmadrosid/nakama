@@ -5,7 +5,6 @@ import {
   CodeIcon,
   CpuChargeIcon,
   HashtagIcon,
-  Key01Icon,
   Notification01Icon,
   Plug01Icon,
   TelegramIcon,
@@ -17,7 +16,6 @@ import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ErrorTrackingSettingsCard } from "@/components/ErrorTrackingSettingsCard";
-import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
@@ -51,11 +49,6 @@ const INTEGRATION_SECTIONS = [
     label: "Composio",
   },
   {
-    icon: Key01Icon,
-    id: "token",
-    label: "Local token",
-  },
-  {
     icon: CodeIcon,
     id: "coding-agents",
     label: "Coding agents",
@@ -76,7 +69,6 @@ type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
 
 function resolveSection(value: string | null): IntegrationSectionId {
   if (
-    value === "token" ||
     value === "notifications" ||
     value === "whatsapp" ||
     value === "discord" ||
@@ -100,10 +92,6 @@ function IntegrationSectionPanel({
   section: IntegrationSectionId;
   isPlatformAdmin: boolean;
 }) {
-  if (section === "token") {
-    return <LocalAuthTokenCard />;
-  }
-
   if (section === "optimization") {
     return <TokenOptimizationCard />;
   }
@@ -186,12 +174,12 @@ function IntegrationsPageBody({
   }
 
   return (
-    <section className="mx-auto w-full min-w-0 max-w-5xl">
-      <div className="flex min-w-0 flex-col gap-6 md:flex-row">
-        <aside className="shrink-0 self-start overflow-hidden rounded-xl border border-border bg-card max-md:w-full md:w-48">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+        <aside className="shrink-0 overflow-y-auto border-border md:w-60 md:border-r">
           <nav
             aria-label="Integration settings"
-            className="flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:divide-y md:divide-border md:overflow-visible [&::-webkit-scrollbar]:hidden"
+            className="flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
           >
             {visibleSections.map((item) => (
               <SidebarButton
@@ -205,12 +193,14 @@ function IntegrationsPageBody({
           </nav>
         </aside>
 
-        <div className="min-w-0 flex-1 space-y-8">
-          <IntegrationSectionPanel
-            canUseOrgIntegrations={canUseOrgIntegrations}
-            isPlatformAdmin={isPlatformAdmin}
-            section={section}
-          />
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          <div className="mx-auto w-full max-w-3xl space-y-8">
+            <IntegrationSectionPanel
+              canUseOrgIntegrations={canUseOrgIntegrations}
+              isPlatformAdmin={isPlatformAdmin}
+              section={section}
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -218,6 +208,7 @@ function IntegrationsPageBody({
 }
 
 export function IntegrationsPage() {
+  const [searchParams] = useSearchParams();
   const { activeOrg, isLoading, user } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
 
@@ -231,6 +222,10 @@ export function IntegrationsPage() {
 
   if (activeOrg?.role === "viewer" && !isPlatformAdmin) {
     return <Navigate replace to="/chat" />;
+  }
+
+  if (searchParams.get("section") === "token") {
+    return <Navigate replace to="/settings#local-token" />;
   }
 
   return (
@@ -259,7 +254,7 @@ function SidebarButton({
       className={cn(
         "flex shrink-0 items-center gap-3 px-4 py-3 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset md:w-full md:shrink",
         active
-          ? "bg-muted/50 text-foreground"
+          ? "bg-muted text-foreground dark:bg-muted/50"
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
       onClick={onClick}

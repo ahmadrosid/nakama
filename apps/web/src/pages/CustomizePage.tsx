@@ -23,7 +23,7 @@ export function CustomizePage() {
       title: "Workspace",
     },
     {
-      pages: ["providers", "tools", "mcp", "integrations", "plugin-management"],
+      pages: ["providers", "tools", "mcp", "plugin-management"],
       title: "Agent tools",
     },
   ].map(({ title, pages }) => ({
