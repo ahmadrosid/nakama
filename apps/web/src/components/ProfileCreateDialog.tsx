@@ -345,7 +345,7 @@ function ProfileCreateDialogContent({
           tools={tools}
         />
 
-        <DialogFooter className="gap-2 border-t-0 bg-transparent p-0 sm:justify-end">
+        <DialogFooter className="mx-0 mb-0 gap-2 border-t-0 bg-transparent p-0 sm:justify-end">
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}
