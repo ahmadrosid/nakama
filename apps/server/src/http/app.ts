@@ -107,6 +107,9 @@ export function createHonoApp(options: ServerOptions) {
 
   app.onError((err) => {
     if (err instanceof NakamaApiError) {
+      if (err.status >= 500) {
+        void reportError(err, { kind: "http", source: "server" });
+      }
       return errorResponse(
         err.message,
         err.status,

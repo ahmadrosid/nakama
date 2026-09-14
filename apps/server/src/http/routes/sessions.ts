@@ -629,7 +629,7 @@ export function registerSessionRoutes(
         ...(contextUsage ? { contextUsage } : {}),
       });
     } catch (error) {
-      if (!(error instanceof NakamaApiError)) {
+      if (!(error instanceof NakamaApiError && error.status < 500)) {
         void reportError(error, { kind: "turn", source: "server" });
       }
       const message = formatServerError(error);
