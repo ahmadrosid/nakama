@@ -138,10 +138,29 @@ function withContext(ops: DiffOp[], context: number): FileDiffRow[] {
 
 export function buildFileDiffRows(
   before: string | null,
-  after: string | null
+  after: string | null,
+  { formatJson = false }: { formatJson?: boolean } = {}
 ): FileDiffRow[] {
+  if (formatJson) {
+    before = formatJsonValue(before);
+    after = formatJsonValue(after);
+  }
   return withContext(
     diffLines(splitLines(before), splitLines(after)),
     CONTEXT_LINES
   );
+}
+
+function formatJsonValue(value: string | null): string | null {
+  if (!value) {
+    return value;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed !== null && typeof parsed === "object"
+      ? JSON.stringify(parsed, null, 2)
+      : value;
+  } catch {
+    return value;
+  }
 }
