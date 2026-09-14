@@ -58,9 +58,13 @@ export function registerSessionRoutes(
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
   const agentChannelSchema = z.enum(AGENT_CHANNELS).openapi("AgentChannel");
+  const cognitoOptionsSchema = z
+    .object({ personalized: z.boolean() })
+    .openapi("CognitoOptions");
   const createSessionRequestSchema = z
     .object({
       channel: agentChannelSchema,
+      cognito: cognitoOptionsSchema.optional(),
       model: z.string().trim().min(1).optional(),
       profileId: z.string().optional(),
     })
@@ -403,6 +407,7 @@ export function registerSessionRoutes(
       body.profileId,
       auth.user.id,
       {
+        cognito: body.cognito,
         excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
         isPlatformAdmin: auth.isPlatformAdmin,
         model: body.model,
