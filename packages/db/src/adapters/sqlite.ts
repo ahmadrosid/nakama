@@ -1688,11 +1688,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?
     LIMIT 1
   `);
-  const consumePasswordResetTokenStmt = db.prepare(`
-    UPDATE password_reset_tokens
-    SET consumed_at = ?
-    WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?
-  `);
   const consumePasswordResetTokensForUserStmt = db.prepare(`
     UPDATE password_reset_tokens
     SET consumed_at = ?
@@ -1705,15 +1700,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         consumedAt
       ) as { user_id: string } | null;
       if (!token) {
-        return false;
-      }
-
-      const consumed = consumePasswordResetTokenStmt.run(
-        consumedAt,
-        tokenHash,
-        consumedAt
-      );
-      if (consumed.changes !== 1) {
         return false;
       }
 
