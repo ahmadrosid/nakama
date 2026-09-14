@@ -32,11 +32,13 @@ import {
   DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
   getKnowledgeBaseDir,
+  getProfileSharedDocumentIds,
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
@@ -834,9 +836,27 @@ export class ProfileService {
     profileId: string
   ): Promise<ListKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
-    const documents = await listKnowledgeBaseDocuments(orgId, profileId);
+    const [documents, sharedDocumentIds, organizationDocuments] =
+      await Promise.all([
+        listKnowledgeBaseDocuments(orgId, profileId),
+        getProfileSharedDocumentIds(orgId, profileId),
+        listOrganizationKnowledgeBaseDocuments(orgId),
+      ]);
+    const shared = organizationDocuments
+      .filter((document) => sharedDocumentIds.includes(document.id))
+      .map((document) => ({ ...document, scope: "organization" as const }));
     const sources = DEFAULT_KNOWLEDGE_SOURCES;
-    return { documents, profileId, sources };
+    return {
+      documents: [
+        ...documents.map((document) => ({
+          ...document,
+          scope: "profile" as const,
+        })),
+        ...shared,
+      ],
+      profileId,
+      sources,
+    };
   }
 
   async uploadKnowledgeBaseDocument(

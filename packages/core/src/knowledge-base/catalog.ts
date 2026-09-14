@@ -1,11 +1,26 @@
 import { DEFAULT_KNOWLEDGE_SOURCES, NAKAMA_DOCS_LLMS_URL } from "./sources";
-import { listKnowledgeBaseDocuments } from "./store";
+import {
+  getProfileSharedDocumentIds,
+  listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
+} from "./store";
 
 export async function composeKnowledgeBaseCatalog(
   orgId: string,
   profileId: string
 ): Promise<string> {
-  const documents = await listKnowledgeBaseDocuments(orgId, profileId);
+  const [profileDocuments, sharedDocumentIds, organizationDocuments] =
+    await Promise.all([
+      listKnowledgeBaseDocuments(orgId, profileId),
+      getProfileSharedDocumentIds(orgId, profileId),
+      listOrganizationKnowledgeBaseDocuments(orgId),
+    ]);
+  const documents = [
+    ...profileDocuments.map((document) => ({ ...document, scope: "profile" })),
+    ...organizationDocuments
+      .filter((document) => sharedDocumentIds.includes(document.id))
+      .map((document) => ({ ...document, scope: "organization" })),
+  ];
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
@@ -23,7 +38,7 @@ export async function composeKnowledgeBaseCatalog(
       "Use knowledge_base_search to look up facts from uploaded documents on demand.",
       ...readyDocuments.map(
         (document) =>
-          `- ${document.filename} (${document.mediaType}) [id: ${document.id}]`
+          `- [${document.scope}] ${document.filename} (${document.mediaType}) [id: ${document.id}]`
       )
     );
   }

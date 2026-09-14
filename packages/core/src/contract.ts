@@ -2265,6 +2265,8 @@ export interface KnowledgeBaseDocument {
   filename: string;
   id: string;
   mediaType: string;
+  /** Absent in legacy profile responses; new responses may identify ownership. */
+  scope?: "organization" | "profile";
   sizeBytes: number;
   status: KnowledgeBaseDocumentStatus;
   uploadedAt: string;

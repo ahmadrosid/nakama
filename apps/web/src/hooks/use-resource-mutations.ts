@@ -526,6 +526,14 @@ export function useSoulStatusQuery(profileId: string | null) {
   });
 }
 
+export function useOrganizationKnowledgeBaseQuery(orgId: string | null) {
+  return useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.listOrganizationKnowledgeBase(orgId!),
+    queryKey: queryKeys.knowledgeBase.organization(orgId ?? ""),
+  });
+}
+
 export function useKnowledgeBaseQuery(profileId: string | null) {
   return useQuery({
     enabled: Boolean(profileId),
@@ -772,6 +780,44 @@ export function useUploadKnowledgeBaseDocumentMutation() {
       document: DocumentAttachment;
       onDuplicate?: KnowledgeBaseDuplicateAction;
     }) => client.uploadKnowledgeBaseDocument(profileId, document, onDuplicate),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
+export function useAttachSharedKnowledgeBaseDocumentMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      documentId,
+    }: {
+      profileId: string;
+      documentId: string;
+    }) => client.attachSharedKnowledgeBaseDocument(profileId, documentId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
+export function useDetachSharedKnowledgeBaseDocumentMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      documentId,
+    }: {
+      profileId: string;
+      documentId: string;
+    }) => client.detachSharedKnowledgeBaseDocument(profileId, documentId),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.knowledgeBase.profile(variables.profileId),

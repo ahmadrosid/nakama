@@ -21,7 +21,17 @@ import type {
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
 } from "@nakama/core";
-import { NakamaApiError } from "@nakama/core";
+import {
+  attachSharedKnowledgeBaseDocument,
+  deleteOrganizationKnowledgeBaseDocument,
+  detachSharedKnowledgeBaseDocument,
+  getProfileSharedDocumentIds,
+  KnowledgeBaseDocumentInUseError,
+  listOrganizationKnowledgeBaseDocuments,
+  NakamaApiError,
+  readOrganizationKnowledgeBaseDocumentContent,
+  uploadOrganizationKnowledgeBaseDocument,
+} from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
@@ -929,14 +939,24 @@ export function registerProfileRoutes(
       const orgId = requireActiveOrgIdFromContext(c);
       const profileId = decodeURIComponent(c.req.param("profileId"));
       const documentId = decodeURIComponent(c.req.param("documentId"));
+      await agent.getProfile(orgId, profileId);
       const render =
         c.req.query("render") === "text" ? ("text" as const) : undefined;
-      const document = await agent.readKnowledgeBaseDocument(
+      const sharedDocumentIds = await getProfileSharedDocumentIds(
         orgId,
-        profileId,
-        documentId,
-        { render }
+        profileId
       );
+      const document = sharedDocumentIds.includes(documentId)
+        ? await readOrganizationKnowledgeBaseDocumentContent(
+            orgId,
+            documentId,
+            {
+              render,
+            }
+          )
+        : await agent.readKnowledgeBaseDocument(orgId, profileId, documentId, {
+            render,
+          });
       const downloadName = document.filename.replace(/["\\]/g, "_");
       const disposition =
         c.req.query("inline") === "1" ? "inline" : "attachment";
@@ -946,6 +966,135 @@ export function registerProfileRoutes(
           "Content-Type": document.contentType,
         },
       });
+    }
+  );
+
+  app.get("/v1/orgs/:orgId/knowledge-base", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const documents = await listOrganizationKnowledgeBaseDocuments(orgId);
+    return json({
+      documents: documents.map((document) => ({
+        ...document,
+        scope: "organization",
+      })),
+    });
+  });
+
+  app.post("/v1/orgs/:orgId/knowledge-base", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const body = await readJson<UploadKnowledgeBaseRequest>(c.req.raw);
+    const result = await uploadOrganizationKnowledgeBaseDocument(
+      orgId,
+      body.document,
+      body.onDuplicate
+    );
+    return json(
+      { ...result, document: { ...result.document, scope: "organization" } },
+      result.outcome === "created" ? 201 : 200
+    );
+  });
+
+  app.delete("/v1/orgs/:orgId/knowledge-base/:documentId", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const documentId = decodeURIComponent(c.req.param("documentId"));
+    try {
+      const deleted = await deleteOrganizationKnowledgeBaseDocument(
+        orgId,
+        documentId
+      );
+      if (!deleted) {
+        throw new NakamaApiError("Knowledge base document not found.", 404);
+      }
+      return json({ deleted: true, documentId });
+    } catch (error) {
+      if (error instanceof KnowledgeBaseDocumentInUseError) {
+        return json(
+          {
+            documentId,
+            error: error.message,
+            profileIds: error.profileIds,
+          },
+          409
+        );
+      }
+      throw error;
+    }
+  });
+
+  app.get("/v1/orgs/:orgId/knowledge-base/:documentId/content", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const document = await readOrganizationKnowledgeBaseDocumentContent(
+      orgId,
+      decodeURIComponent(c.req.param("documentId")),
+      { render: c.req.query("render") === "text" ? "text" : undefined }
+    );
+    return new Response(document.bytes, {
+      headers: {
+        "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename="${document.filename.replace(/["\\]/g, "_")}"`,
+        "Content-Type": document.contentType,
+      },
+    });
+  });
+
+  app.put(
+    "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
+    async (c) => {
+      requirePlatformAdminFromContext(c);
+      const orgId = requireActiveOrgIdFromContext(c);
+      const profileId = decodeURIComponent(c.req.param("profileId"));
+      const documentId = decodeURIComponent(c.req.param("documentId"));
+      await agent.getProfile(orgId, profileId);
+      try {
+        await attachSharedKnowledgeBaseDocument(orgId, profileId, documentId);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "Shared knowledge base document not found."
+        ) {
+          throw new NakamaApiError(error.message, 404);
+        }
+        throw error;
+      }
+      return json({ attached: true, documentId, profileId });
+    }
+  );
+
+  app.delete(
+    "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
+    async (c) => {
+      requirePlatformAdminFromContext(c);
+      const orgId = requireActiveOrgIdFromContext(c);
+      const profileId = decodeURIComponent(c.req.param("profileId"));
+      const documentId = decodeURIComponent(c.req.param("documentId"));
+      await agent.getProfile(orgId, profileId);
+      const detached = await detachSharedKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        documentId
+      );
+      if (!detached) {
+        throw new NakamaApiError(
+          "Shared knowledge base document is not attached to this profile.",
+          404
+        );
+      }
+      return json({ detached: true, documentId, profileId });
     }
   );
 
