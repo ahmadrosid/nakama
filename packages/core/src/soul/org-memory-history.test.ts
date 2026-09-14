@@ -6,7 +6,6 @@ import {
   appendOrgMemoryHistory,
   createOrgMemoryChangeId,
   getOrgMemoryHistoryEntry,
-  isOrgMemoryHistoryTruncated,
   listOrgMemoryHistory,
   listOrgMemoryHistoryWithCap,
   ORG_MEMORY_HISTORY_MAX_ENTRIES,
@@ -255,17 +254,16 @@ describe("org memory history", () => {
       access(path.join(historyDir, "omh_00000001_valid.json"))
     ).rejects.toThrow();
   });
-  test("reports the revision cap after pruning discards older entries", async () => {
+  test("reports the revision cap after appending past the soft limit", async () => {
     const orgId = await setupOrg();
-    expect(await isOrgMemoryHistoryTruncated(orgId, tempDir)).toBe(false);
 
-    for (let index = 0; index < 3; index += 1) {
+    async function append(index: number): Promise<void> {
       await appendOrgMemoryHistory(
         orgId,
         {
           action: "edit",
           actorUserId: "user_a",
-          createdAt: `2026-07-31T0${index}:00:00.000Z`,
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
           id: createOrgMemoryChangeId(),
           label: `edit-${index}`,
           orgId,
@@ -275,11 +273,20 @@ describe("org memory history", () => {
       );
     }
 
-    await pruneOrgMemoryHistory(orgId, 2, tempDir);
-    const listing = await listOrgMemoryHistoryWithCap(orgId, 50, tempDir);
+    for (let index = 0; index < 3; index += 1) {
+      await append(index);
+    }
+    expect(
+      (await listOrgMemoryHistoryWithCap(orgId, 100, tempDir)).truncated
+    ).toBe(false);
+
+    for (let index = 3; index <= ORG_MEMORY_HISTORY_MAX_ENTRIES; index += 1) {
+      await append(index);
+    }
+
+    const listing = await listOrgMemoryHistoryWithCap(orgId, 100, tempDir);
     expect(listing.maxEntries).toBe(ORG_MEMORY_HISTORY_MAX_ENTRIES);
+    expect(listing.changes).toHaveLength(ORG_MEMORY_HISTORY_MAX_ENTRIES);
     expect(listing.truncated).toBe(true);
-    expect(listing.changes).toHaveLength(2);
-    expect(await isOrgMemoryHistoryTruncated(orgId, tempDir)).toBe(true);
   });
 });

@@ -1,5 +1,8 @@
 import { join } from "node:path";
-import type { OrgMemoryChangeLogEntry } from "../contract";
+import type {
+  ListOrgMemoryHistoryResponse,
+  OrgMemoryChangeLogEntry,
+} from "../contract";
 import {
   pathExists,
   readDirectoryEntries,
@@ -19,7 +22,7 @@ function historyTruncatedMarkerPath(orgId: string, configDir?: string): string {
   );
 }
 
-export async function isOrgMemoryHistoryTruncated(
+async function isOrgMemoryHistoryTruncated(
   orgId: string,
   configDir?: string
 ): Promise<boolean> {
@@ -42,11 +45,7 @@ export async function listOrgMemoryHistoryWithCap(
   orgId: string,
   limit = ORG_MEMORY_HISTORY_MAX_ENTRIES,
   configDir?: string
-): Promise<{
-  changes: OrgMemoryChangeLogEntry[];
-  maxEntries: number;
-  truncated: boolean;
-}> {
+): Promise<ListOrgMemoryHistoryResponse> {
   const [changes, truncated] = await Promise.all([
     listOrgMemoryHistory(orgId, limit, configDir),
     isOrgMemoryHistoryTruncated(orgId, configDir),
