@@ -1,5 +1,5 @@
 import { cn } from "@nakama/ui/utils";
-import { BrainIcon, WorkflowSquare01Icon } from "hugeicons-react";
+import { BrainIcon, SharedWifiIcon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import type { NotificationItem } from "@/hooks/use-notifications";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
@@ -11,7 +11,7 @@ function NotificationIcon({
   kind: NotificationItem["kind"];
   size?: "sm" | "md";
 }) {
-  const Icon = kind === "automation-run" ? WorkflowSquare01Icon : BrainIcon;
+  const Icon = kind === "automation-run" ? SharedWifiIcon : BrainIcon;
   return (
     <span
       className={cn(
