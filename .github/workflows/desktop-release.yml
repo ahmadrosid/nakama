@@ -4,6 +4,11 @@ on:
   push:
     tags: ['desktop-v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing desktop-vX.Y.Z release to build and upload to (blank for artifact only)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -77,22 +82,38 @@ jobs:
           bun apps/desktop/scripts/publish-release.mjs
 
   windows-store:
-    if: github.event_name == 'workflow_dispatch'
+    needs: release
+    if: ${{ !cancelled() && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch') }}
     environment: code-signing
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
-      contents: read
+      contents: write
     env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
       WINDOWS_STORE_IDENTITY_NAME: ${{ secrets.WINDOWS_STORE_IDENTITY_NAME }}
       WINDOWS_STORE_PUBLISHER: ${{ secrets.WINDOWS_STORE_PUBLISHER }}
       WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
       WINDOWS_STORE_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_DISPLAY_NAME }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
+      - name: Validate target release
+        if: env.RELEASE_TAG != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+$' -or $env:RELEASE_TAG -cne "desktop-v$version") {
+            throw 'Release tag must match the stable desktop package version.'
+          }
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Test desktop
@@ -110,3 +131,13 @@ jobs:
           name: nakama-windows-store
           path: apps/desktop/dist/electron/*.msix
           if-no-files-found: error
+      - name: Upload Windows package to release
+        if: env.RELEASE_TAG != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $packages = @(Get-ChildItem apps/desktop/dist/electron/*.msix | ForEach-Object { $_.FullName })
+          if ($packages.Count -eq 0) { throw 'No MSIX package found.' }
+          gh release upload $env:RELEASE_TAG @packages --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
