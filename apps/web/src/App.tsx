@@ -56,6 +56,10 @@ const PublicArtifactSharePage = lazyPage(
   () => import("@/pages/PublicArtifactSharePage"),
   "PublicArtifactSharePage"
 );
+const LlmProvidersPage = lazyPage(
+  () => import("@/pages/SettingsPage"),
+  "LlmProvidersPage"
+);
 const SettingsPage = lazyPage(
   () => import("@/pages/SettingsPage"),
   "SettingsPage"
@@ -220,6 +224,12 @@ function AppShell() {
                     element={<NotificationsPage />}
                     path="/notifications"
                   />
+                  <Route element={<PlatformAdminGuard />}>
+                    <Route
+                      element={<LlmProvidersPage />}
+                      path="/customize/providers"
+                    />
+                  </Route>
                   <Route element={<SettingsPage />} path="/settings" />
                   <Route element={<Navigate replace to="/chat" />} path="*" />
                 </Route>

@@ -30,6 +30,7 @@ describe("visibleNavGroups", () => {
       "organization",
       "plugin-management",
       "profiles",
+      "providers",
       "settings",
       "tools",
       "usage",
@@ -41,6 +42,7 @@ describe("visibleNavGroups", () => {
     const ids = pageIdsFor(false, "admin");
     expect(ids).toContain("tools");
     expect(ids).not.toContain("mcp");
+    expect(ids).not.toContain("providers");
     expect(ids).toContain("organization");
     expect(ids).toContain("profiles");
     expect(ids).toContain("integrations");

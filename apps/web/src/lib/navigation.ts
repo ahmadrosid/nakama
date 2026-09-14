@@ -31,6 +31,7 @@ export type PageId =
   | "integrations"
   | "organization"
   | "settings"
+  | "providers"
   | "notifications"
   | "workers"
   | "plugins"
@@ -134,9 +135,15 @@ export const NAV_GROUPS: NavGroup[] = [
       navItem("tools", "Tools", "Manage agent tools", LayoutGridIcon),
       navItem("mcp", "MCP", "Manage MCP servers", Plug01Icon),
       navItem(
+        "providers",
+        "LLM providers",
+        "Manage provider API keys and models",
+        BrainIcon
+      ),
+      navItem(
         "settings",
         "Settings",
-        "Provider API key and model",
+        "Appearance and preferences",
         Settings01Icon
       ),
     ],
@@ -169,6 +176,7 @@ export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
   "soul",
   "mcp",
+  "providers",
 ]);
 
 export function canAccessSystemPage(
@@ -390,6 +398,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   "plugin-management": "/customize/plugins",
   plugins: PLUGIN_PAGE_PREFIX,
   profiles: "/profiles",
+  providers: "/customize/providers",
   settings: "/settings",
   soul: "/system",
   tools: "/customize/tools",

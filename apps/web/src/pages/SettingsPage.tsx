@@ -140,11 +140,6 @@ export function SettingsPage() {
 
       {isPlatformAdmin ? (
         <>
-          <ProviderSettingsCard
-            formError={formError}
-            onFormError={setFormError}
-          />
-
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
               <VisionSettingsCard />
@@ -169,6 +164,15 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+export function LlmProvidersPage() {
+  const [formError, setFormError] = useState<string | null>(null);
+  return (
+    <div className="mx-auto max-w-3xl space-y-8">
+      <ProviderSettingsCard formError={formError} onFormError={setFormError} />
     </div>
   );
 }
