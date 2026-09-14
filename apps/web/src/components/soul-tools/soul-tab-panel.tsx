@@ -15,7 +15,6 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import {
   ArrowRight01Icon,
-  CheckmarkCircle01Icon,
   CircleIcon,
   File01Icon,
   Folder01Icon,
@@ -319,21 +318,12 @@ function FileStatusListItem({
           </p>
         </div>
 
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium text-xs",
-            present
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          {present ? (
-            <CheckmarkCircle01Icon className="size-3.5" />
-          ) : (
-            <CircleIcon className="size-3.5" />
-          )}
-          {present ? "Present" : "Missing"}
-        </span>
+        {!present && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
+            <CircleIcon aria-hidden className="size-3.5" />
+            Missing
+          </span>
+        )}
 
         <ArrowRight01Icon
           aria-hidden
