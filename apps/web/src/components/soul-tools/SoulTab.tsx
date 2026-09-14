@@ -350,7 +350,6 @@ export function SoulTab({
 
   const soulPanel = (
     <SoulTabPanel
-      busy={tab.busy}
       embedded={tab.embedded}
       onOpenFile={(fileKey) => {
         tab.setOpenFile(fileKey);
@@ -358,12 +357,7 @@ export function SoulTab({
         tab.setSavedContent("");
         tab.setDialogError(null);
       }}
-      onRefresh={() => {
-        tab.setError(null);
-        void Promise.all([tab.refetchProfiles(), tab.refetchStatus()]);
-      }}
       presentCount={tab.presentCount}
-      refreshing={tab.refreshing}
       selectedProfile={tab.selectedProfile}
       status={tab.status}
     />

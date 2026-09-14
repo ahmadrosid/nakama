@@ -31,18 +31,12 @@ export function SoulTabPanel({
   selectedProfile,
   status,
   presentCount,
-  busy,
-  refreshing,
-  onRefresh,
   onOpenFile,
 }: {
   embedded: boolean;
   selectedProfile: ProfileSummary | null;
   status: { directory: string; files: SoulFileStatus } | null;
   presentCount: number;
-  busy: boolean;
-  refreshing: boolean;
-  onRefresh: () => void;
   onOpenFile: (fileKey: keyof SoulStackFiles) => void;
 }) {
   return (
@@ -68,28 +62,6 @@ export function SoulTabPanel({
               {status.directory}
             </p>
           ) : null}
-        </div>
-
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-2",
-            !embedded && "hidden lg:flex"
-          )}
-        >
-          <Button
-            disabled={busy || refreshing}
-            onClick={onRefresh}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {refreshing ? (
-              <Spinner className="size-4" />
-            ) : (
-              <RefreshIcon aria-hidden className="size-4" />
-            )}
-            Refresh
-          </Button>
         </div>
       </div>
 
