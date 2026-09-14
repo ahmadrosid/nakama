@@ -49,7 +49,7 @@ start_server() {
 }
 
 cleanup() {
-  $AB --session "$SESSION" close --all 2>/dev/null || true
+  $AB --session "$SESSION" close 2>/dev/null || true
   stop_server
   rm -rf "$TEMP_CONFIG" "$COOKIE_JAR"
 }
@@ -86,7 +86,7 @@ stop_server
 (cd "$ROOT/apps/server" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" bun run scripts/seed-skill-proposal-docs.ts)
 start_server
 
-$AB --session "$SESSION" close --all 2>/dev/null || true
+$AB --session "$SESSION" close 2>/dev/null || true
 $AB --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
 $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
