@@ -23,6 +23,7 @@ import {
 import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDown01Icon,
   Building06Icon,
   CloudDownloadIcon,
   Copy01Icon,
@@ -84,9 +85,13 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       {canPack ? (
         <section className="space-y-4" id="profile-prompt">
           {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
-          <details className="group">
-            <summary className="cursor-pointer text-muted-foreground/55 text-sm">
-              Change histories
+          <details className="group/history">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <span>Change histories</span>
+              <ArrowDown01Icon
+                aria-hidden="true"
+                className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
+              />
             </summary>
             <div className="pt-3">
               <ProfileHistoryTab profileId={detail.id} />
