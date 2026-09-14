@@ -53,9 +53,10 @@ COPY apps/platform/telegram apps/platform/telegram
 COPY apps/platform/whatsapp apps/platform/whatsapp
 COPY apps/platform/discord apps/platform/discord
 COPY packages packages
-# Workspace stubs keep the lockfile valid without pulling web/cli sources.
+# Workspace stubs keep the lockfile valid without pulling web/cli/desktop sources.
 COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
+COPY apps/desktop/package.json apps/desktop/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
 RUN bun install --frozen-lockfile --production --ignore-scripts \
