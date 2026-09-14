@@ -99,6 +99,21 @@ describe("POST /v1/sessions with cognito", () => {
     });
     expect((await sendOverHttp(app, session, sessionId)).status).toBe(200);
 
+    // Readable over HTTP for the rest of the session,
+    const read = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${sessionId}/messages`, {
+        headers: session.headers(),
+      })
+    );
+    const { messages } = (await read.json()) as {
+      messages: Array<{ role: string }>;
+    };
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+
+    // but written nowhere.
     expect(await databaseAdapter.getSession(sessionId)).toBeNull();
     expect(await databaseAdapter.listMessagesForSession(sessionId)).toEqual([]);
     expect(await databaseAdapter.listSessions()).toEqual([]);
@@ -130,36 +145,16 @@ describe("POST /v1/sessions with cognito", () => {
     expect(ids).not.toContain(cognitoId);
   });
 
-  test("the turn is readable over HTTP while the session is alive", async () => {
-    const { app, session } = await createScenario();
-
-    const sessionId = await createSessionOverHttp(app, session, {
-      cognito: { personalized: true },
-    });
-    await sendOverHttp(app, session, sessionId);
-
-    const response = await app.fetch(
-      new Request(`http://localhost:4310/v1/sessions/${sessionId}/messages`, {
-        headers: session.headers(),
-      })
-    );
-    const { messages } = (await response.json()) as {
-      messages: Array<{ role: string }>;
-    };
-
-    expect(messages.map((message) => message.role)).toEqual([
-      "user",
-      "assistant",
-    ]);
-  });
-
   test("deleting it returns 204 and the id stops resolving", async () => {
-    const { app, session } = await createScenario();
+    const { app, databaseAdapter, session } = await createScenario();
 
     const sessionId = await createSessionOverHttp(app, session, {
       cognito: { personalized: true },
     });
     await sendOverHttp(app, session, sessionId);
+
+    // There was never a row, so the delete has only the map to work with.
+    expect(await databaseAdapter.getSession(sessionId)).toBeNull();
 
     const deleted = await app.fetch(
       new Request(`http://localhost:4310/v1/sessions/${sessionId}?purge=true`, {
