@@ -8,6 +8,7 @@ import {
 import { useMemo, useState } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
+import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProviderSetupForm } from "@/components/ProviderSetupForm";
@@ -56,7 +57,10 @@ export function ChatPageContent(state: ChatPageState) {
     handleModelChange,
     handleThinkingEffortChange,
     renderModelLabel,
+    cognito,
+    cognitoLocked,
     handleBranchMessage,
+    handleCognitoChange,
     handleEditMessage,
     handleTryAgainMessage,
     sendMessage,
@@ -66,6 +70,16 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const cognitoControl = (
+    <div className="flex shrink-0 justify-end px-4 pt-2 pb-1">
+      <ChatCognitoControl
+        cognito={cognito}
+        disabled={busy || readOnlySession}
+        locked={cognitoLocked}
+        onCognitoChange={handleCognitoChange}
+      />
+    </div>
+  );
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);
@@ -142,6 +156,14 @@ export function ChatPageContent(state: ChatPageState) {
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ChatPageColumn centered>
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
+          {cognitoControl}
+          {cognito ? (
+            <p className="px-4 pb-1 text-muted-foreground text-sm">
+              Cognito is on. This chat is not saved, does not appear in History,
+              and nothing from it is written to memory. Reloading the page ends
+              it.
+            </p>
+          ) : null}
           <ChatWelcome
             onProfileSwitch={handleProfileSwitch}
             profile={activeProfile}
@@ -158,6 +180,7 @@ export function ChatPageContent(state: ChatPageState) {
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <ChatPageColumn>
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+          {cognitoControl}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ChatMessageList
               actionsDisabled={busy || readOnlySession}
