@@ -54,7 +54,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: bun x electron-builder --mac --arm64 --publish never -c.forceCodeSigning=true
+        run: |
+          ulimit -n 65536
+          bun x electron-builder --mac --arm64 --publish never -c.forceCodeSigning=true
 
       - name: Verify packaged app
         run: |
