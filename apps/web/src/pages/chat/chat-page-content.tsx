@@ -74,7 +74,7 @@ export function ChatPageContent(state: ChatPageState) {
   const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
     // Pinned to the column's top-right corner, which is the top right of the
     // screen area. The backdrop keeps it readable over a scrolling transcript.
-    <div className="absolute top-2 right-3 z-20 rounded-full bg-background/80 p-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:right-6">
+    <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
       <ChatCognitoControl
         cognito={cognito}
         disabled={busy || readOnlySession}
