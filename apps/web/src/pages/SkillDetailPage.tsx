@@ -2,7 +2,7 @@ import { Button } from "@nakama/ui/button";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
-import { ArrowLeft01Icon, Delete02Icon } from "hugeicons-react";
+import { ArrowLeft02Icon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
   Link,
@@ -225,7 +225,7 @@ function BackLink() {
       type="button"
       variant="ghost"
     >
-      <ArrowLeft01Icon aria-hidden className="size-4" />
+      <ArrowLeft02Icon aria-hidden className="size-4" strokeWidth={1.75} />
       {label}
     </Button>
   );
