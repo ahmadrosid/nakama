@@ -157,47 +157,6 @@ export function catalogCustomModelsToCatalog(
   });
 }
 
-export function mergeOpenRouterCatalog(
-  staticModels: ProviderModelOption[],
-  customEntries: CustomModelEntry[]
-): ProviderModelOption[] {
-  const byId = new Map(staticModels.map((model) => [model.id, { ...model }]));
-
-  for (const entry of customEntries) {
-    const existing = byId.get(entry.id);
-    byId.set(entry.id, {
-      ...(existing ?? {
-        contextWindow: DEFAULT_CONTEXT_WINDOW,
-        id: entry.id,
-        maxOutputTokens: DEFAULT_MAX_OUTPUT,
-        provider: "openrouter" as const,
-      }),
-      id: entry.id,
-      name: entry.name?.trim() || existing?.name || entry.id,
-      provider: "openrouter",
-      supportsThinking: resolveOpenRouterCatalogThinking(entry),
-      ...(entry.supportsVision === undefined
-        ? {}
-        : { supportsVision: entry.supportsVision }),
-      ...(entry.default
-        ? { default: true }
-        : existing?.default
-          ? { default: true }
-          : {}),
-      ...(entry.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: entry.inputPerMillionUsd }),
-      ...(entry.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: entry.outputPerMillionUsd }),
-    });
-  }
-
-  return [...byId.values()].sort((left, right) =>
-    left.name.localeCompare(right.name)
-  );
-}
-
 export function customModelsToCatalog(
   entries: CustomModelEntry[],
   provider: ProviderName = "openai_compatible"

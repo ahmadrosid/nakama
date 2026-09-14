@@ -6,7 +6,6 @@ import {
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
   inferRemoteModelVision,
-  mergeOpenRouterCatalog,
 } from "./compatible-models";
 
 let mockServer: ReturnType<typeof serve> | undefined;
@@ -14,39 +13,6 @@ let mockServer: ReturnType<typeof serve> | undefined;
 afterEach(() => {
   mockServer?.stop(true);
   mockServer = undefined;
-});
-
-describe("mergeOpenRouterCatalog", () => {
-  test("merges custom display names over static entries", () => {
-    const staticModels = [
-      {
-        contextWindow: 200_000,
-        id: "anthropic/claude-sonnet-4-6",
-        maxOutputTokens: 8192,
-        name: "Claude Sonnet 4.6",
-        provider: "openrouter" as const,
-      },
-      {
-        contextWindow: 128_000,
-        id: "openai/gpt-5.4",
-        maxOutputTokens: 8192,
-        name: "GPT-5.4",
-        provider: "openrouter" as const,
-      },
-    ];
-    const merged = mergeOpenRouterCatalog(staticModels, [
-      { id: "anthropic/claude-sonnet-4-6", name: "My Sonnet" },
-      { id: "google/gemini-2.5-pro-preview", name: "Gemini Pro" },
-    ]);
-
-    expect(
-      merged.find((model) => model.id === "anthropic/claude-sonnet-4-6")?.name
-    ).toBe("My Sonnet");
-    expect(merged.some((model) => model.id === "openai/gpt-5.4")).toBe(true);
-    expect(
-      merged.some((model) => model.id === "google/gemini-2.5-pro-preview")
-    ).toBe(true);
-  });
 });
 
 describe("getModelsForProviderInstance openai", () => {
