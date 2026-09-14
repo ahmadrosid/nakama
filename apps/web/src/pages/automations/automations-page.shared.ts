@@ -4,8 +4,6 @@ import type {
   StoredAutomation,
 } from "@nakama/core/contract";
 
-export const sectionClass = "rounded-md border border-border bg-card";
-
 export const agentWorkPanelClassName =
   "flex min-h-0 flex-1 flex-col overflow-hidden";
 
