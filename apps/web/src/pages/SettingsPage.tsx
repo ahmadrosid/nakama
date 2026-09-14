@@ -138,23 +138,10 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {isPlatformAdmin ? (
-        <>
-          <Card className="w-full shadow-none">
-            <CardContent className="divide-y divide-border p-0">
-              <VisionSettingsCard />
-              <TranscriptionSettingsCard />
-              <ImageGenerationSettingsCard />
-              <WebSearchSettingsCard />
-            </CardContent>
-          </Card>
-
-          {formError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {formError}
-            </p>
-          ) : null}
-        </>
+      {formError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formError}
+        </p>
       ) : null}
 
       {isPlatformAdmin ? (
@@ -173,6 +160,14 @@ export function LlmProvidersPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <ProviderSettingsCard formError={formError} onFormError={setFormError} />
+      <Card className="w-full shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          <VisionSettingsCard />
+          <TranscriptionSettingsCard />
+          <ImageGenerationSettingsCard />
+          <WebSearchSettingsCard />
+        </CardContent>
+      </Card>
     </div>
   );
 }
