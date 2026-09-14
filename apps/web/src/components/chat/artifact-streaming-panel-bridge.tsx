@@ -131,10 +131,12 @@ function buildStablePanelBody({
   artifact,
   content,
   previewMode,
+  profileId,
 }: {
   artifact: ChatArtifactRef;
   content: string;
   previewMode: ArtifactPreviewMode;
+  profileId?: string | null;
 }) {
   const { isHtml, isMarkdown, isSpreadsheet } = streamingPreviewFlags(artifact);
 
@@ -148,6 +150,7 @@ function buildStablePanelBody({
         kind="html"
         loading={false}
         previewMode={previewMode}
+        profileId={profileId ?? undefined}
       />
     );
   }
@@ -461,6 +464,7 @@ export function ArtifactStreamingPanelBridge({
         artifact: stableContent.artifact,
         content: stableContent.content,
         previewMode,
+        profileId,
       }),
       defaultWidth: artifactPanelDefaultWidth(
         stableContent.artifact.filename,
@@ -480,7 +484,7 @@ export function ArtifactStreamingPanelBridge({
       title: header.title,
       typeLabel: header.typeLabel,
     });
-  }, [activeId, previewModeByPanel, stableContent, update]);
+  }, [activeId, previewModeByPanel, profileId, stableContent, update]);
 
   return null;
 }

@@ -358,6 +358,7 @@ export function useArtifactAttachmentPreviewPanel({
           kind="html"
           loading={loadingState}
           previewMode={mode}
+          profileId={profileId}
         />
       );
     }
