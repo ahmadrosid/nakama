@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, open } from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { app, BrowserWindow, dialog, shell } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, shell } from "electron";
 
 export function configureUpdates(
   updater,
@@ -177,9 +177,19 @@ export async function createWindow(url, { show = true } = {}) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: join(import.meta.dirname, "preload.cjs"),
       sandbox: true,
     },
     width: 1200,
+  });
+  window.webContents.ipc.on("nakama:theme", (event, theme) => {
+    if (
+      event.senderFrame === window.webContents.mainFrame &&
+      new URL(event.senderFrame.url).origin === origin &&
+      ["light", "dark", "system"].includes(theme)
+    ) {
+      nativeTheme.themeSource = theme;
+    }
   });
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     openInBrowser(target);

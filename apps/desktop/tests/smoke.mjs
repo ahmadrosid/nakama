@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { app } from "electron";
+import { app, nativeTheme } from "electron";
 import {
   configureUpdates,
   createWindow,
@@ -99,6 +99,21 @@ async function run() {
     "localStorage.setItem('test', 'saved')"
   );
   await window.loadURL(url);
+  for (const theme of ["dark", "system", "light", "system", "dark"]) {
+    await window.webContents.executeJavaScript(
+      `localStorage.setItem('nakama-theme', '${theme}'); document.documentElement.dataset.theme = '${theme}'`
+    );
+    const deadline = Date.now() + 2000;
+    while (nativeTheme.themeSource !== theme && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(nativeTheme.themeSource, theme);
+  }
+  await window.reload();
+  await new Promise((resolve) =>
+    window.webContents.once("did-finish-load", resolve)
+  );
+  assert.equal(nativeTheme.themeSource, "dark");
   assert.equal(
     await window.webContents.executeJavaScript("localStorage.getItem('test')"),
     "saved"
@@ -112,6 +127,7 @@ async function run() {
     "test-only"
   );
   window.destroy();
+  nativeTheme.themeSource = "system";
   server.close();
   if (process.argv.includes("--runtime-test")) {
     const data = await mkdtemp(join(tmpdir(), "nakama-server-test-"));

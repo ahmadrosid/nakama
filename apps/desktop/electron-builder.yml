@@ -6,6 +6,7 @@ directories:
   output: dist/electron
 files:
   - main.mjs
+  - preload.cjs
   - package.json
 publish:
   provider: generic

@@ -33,7 +33,7 @@ To use an existing server instead:
 NAKAMA_DESKTOP_URL=https://nakama.example/chat bun run dev:desktop
 ```
 
-External links open in the system browser. Remote content has no Node access or preload bridge. Microphone, camera, and notification permissions remain disabled in this preview. Optional tools that need external programs, such as Python or a coding CLI, still require those programs to be installed.
+External links open in the system browser. Remote content has no Node access or exposed native APIs. An isolated preload keeps the native title bar in sync with Nakama's Light, Dark, or System theme. Microphone, camera, and notification permissions remain disabled in this preview. Optional tools that need external programs, such as Python or a coding CLI, still require those programs to be installed.
 
 ## Verify
 
