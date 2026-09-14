@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, open } from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { app, BrowserWindow, dialog, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from "electron";
 
 export function configureUpdates(
   updater,
@@ -23,10 +23,79 @@ export function configureUpdates(
       app.quit();
     }
   };
-  const check = () =>
-    void updater
-      .checkForUpdates()
-      .catch((error) => console.warn("Update check failed:", error.message));
+  const check = async (manual = false) => {
+    const item =
+      Menu.getApplicationMenu()?.getMenuItemById("check-for-updates");
+    if (manual && item) {
+      item.enabled = false;
+      item.label = "Checking for Updates…";
+    }
+    try {
+      const result = await updater.checkForUpdates();
+      if (manual) {
+        await prompt({
+          detail: result?.isUpdateAvailable
+            ? "You’ll be asked to restart when the update is ready."
+            : undefined,
+          message: result?.isUpdateAvailable
+            ? `Downloading Nakama ${result.updateInfo.version}`
+            : result
+              ? "Nakama is up to date"
+              : "Updates are unavailable in this build",
+          type: "info",
+        });
+      }
+    } catch (error) {
+      console.warn("Update check failed:", error.message);
+      if (manual) {
+        await prompt({
+          detail: "Check your internet connection and try again.",
+          message: "Could not check for updates",
+          type: "error",
+        });
+      }
+    } finally {
+      if (manual && item) {
+        item.enabled = true;
+        item.label = "Check for Updates…";
+      }
+    }
+  };
+  const updateItem = {
+    click: () => void check(true),
+    id: "check-for-updates",
+    label: "Check for Updates…",
+  };
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(process.platform === "darwin"
+        ? [
+            {
+              label: app.name,
+              submenu: [
+                { role: "about" },
+                updateItem,
+                { type: "separator" },
+                { role: "services" },
+                { type: "separator" },
+                { role: "hide" },
+                { role: "hideOthers" },
+                { role: "unhide" },
+                { type: "separator" },
+                { role: "quit" },
+              ],
+            },
+          ]
+        : []),
+      { role: "fileMenu" },
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+      ...(process.platform === "darwin"
+        ? []
+        : [{ role: "help", submenu: [updateItem] }]),
+    ])
+  );
   updater.on("error", updateFailed);
   updater.on("update-downloaded", async ({ version }) => {
     try {

@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { app, nativeTheme } from "electron";
+import { app, Menu, nativeTheme } from "electron";
 import {
   configureUpdates,
   createWindow,
@@ -25,13 +25,24 @@ const timeout = setTimeout(
 );
 async function run() {
   app.setPath("userData", await mkdtemp(join(tmpdir(), "nakama-wrapper-")));
+  await app.whenReady();
   const updater = new EventEmitter();
   let checks = 0;
   let choice = 1;
   const order = [];
   let finishStop;
+  let checkError;
+  let updateAvailable = false;
+  const prompts = [];
   updater.checkForUpdates = async () => {
     checks += 1;
+    if (checkError) {
+      throw checkError;
+    }
+    return {
+      isUpdateAvailable: updateAvailable,
+      updateInfo: { version: "0.2.0" },
+    };
   };
   updater.quitAndInstall = () => order.push("install");
   const cancelUpdates = configureUpdates(
@@ -43,9 +54,32 @@ async function run() {
       });
       return true;
     },
-    async () => ({ response: choice })
+    async (options) => {
+      prompts.push(options);
+      return { response: choice };
+    }
   );
   assert.equal(checks, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(prompts.length, 0);
+  const updateItem =
+    Menu.getApplicationMenu().getMenuItemById("check-for-updates");
+  assert.ok(updateItem);
+  updateItem.click();
+  assert.equal(updateItem.enabled, false);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(checks, 2);
+  assert.equal(prompts.at(-1).message, "Nakama is up to date");
+  assert.equal(updateItem.enabled, true);
+  updateAvailable = true;
+  updateItem.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(prompts.at(-1).message, /0\.2\.0/);
+  checkError = new Error("Network unavailable");
+  updateItem.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(prompts.at(-1).type, "error");
+  assert.equal(updateItem.enabled, true);
   assert.equal(updater.autoInstallOnAppQuit, false);
   assert.equal(updater.allowDowngrade, false);
   updater.emit("update-downloaded", { version: "0.2.0" });
@@ -59,6 +93,14 @@ async function run() {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(order, ["stop", "install"]);
   cancelUpdates();
+  if (process.argv.includes("--updates-test")) {
+    clearTimeout(timeout);
+    console.log(
+      "Passed: update menu, manual checks, failure recovery, and restart installation."
+    );
+    app.exit(0);
+    return;
+  }
   for (const value of [
     "file:///etc/passwd",
     "javascript:alert(1)",
