@@ -172,6 +172,14 @@ agent.setServerTools({
 await agent.ensureVisionSettingsLoaded();
 await agent.ensureTranscriptionSettingsLoaded();
 await agent.ensureImageGenerationSettingsLoaded();
+// A restart drops the cognito session map, so whatever it was holding can no
+// longer be reached, let alone cleaned up on close.
+const sweptAttachments = await agent.sweepEphemeralAttachments();
+if (sweptAttachments > 0) {
+  console.info(
+    `[cognito] swept ${sweptAttachments} attachment(s) left by a previous run`
+  );
+}
 const mcpClientManager = new McpClientManager();
 const mcpService = new McpService(database.adapter, mcpClientManager);
 const composioService = new ComposioService(database.adapter, authService);

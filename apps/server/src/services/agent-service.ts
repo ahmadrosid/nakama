@@ -63,6 +63,7 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   RunToolResponse,
+  SaveInlineAttachment,
   SendEmailTestResponse,
   SendErrorTrackingTestResponse,
   SkillResponse,
@@ -3887,12 +3888,26 @@ export class AgentService {
     if (tools.length > 0) {
       tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
     }
-    const saveAttachment = createAttachmentSaver(this.db, {
+    const persistAttachment = createAttachmentSaver(this.db, {
       channel,
+      ephemeral: Boolean(cognito),
       orgId,
       profileId,
-      sessionId,
+      // No `sessions` row exists for a cognito session, and the column is a
+      // foreign key, so it has to be null rather than the session id.
+      sessionId: cognito ? null : sessionId,
     });
+    const trackEphemeralAttachment = cognito
+      ? (attachmentId: string) =>
+          this.ephemeralSessions.trackAttachment(sessionId, attachmentId)
+      : undefined;
+    const saveAttachment: SaveInlineAttachment = trackEphemeralAttachment
+      ? async (input) => {
+          const saved = await persistAttachment(input);
+          trackEphemeralAttachment(saved.attachmentId);
+          return saved;
+        }
+      : persistAttachment;
     const loadAttachment = createAttachmentLoader(this.db, {
       orgId,
       profileId,
@@ -4067,6 +4082,7 @@ export class AgentService {
         recordTurnUsage: this.turnUsageRecorderFor(orgId),
         sessionId,
         tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
+        trackEphemeralAttachment,
         userId: userId ?? undefined,
       }),
       tools,

@@ -194,11 +194,13 @@ export async function runGenerateImageTool(
 
   if (sessionId && channel) {
     try {
+      const trackEphemeral = context.trackEphemeralAttachment;
       const save = createAttachmentSaver(deps.db, {
         channel,
+        ephemeral: Boolean(trackEphemeral),
         orgId,
         profileId,
-        sessionId,
+        sessionId: trackEphemeral ? null : sessionId,
       });
       const saved = await save({
         bytes: Buffer.from(result.data),
@@ -207,6 +209,7 @@ export async function runGenerateImageTool(
         mediaType: result.mediaType,
       });
       attachmentId = saved.attachmentId;
+      trackEphemeral?.(attachmentId);
     } catch (error) {
       await unlink(targetPath).catch(() => undefined);
       return { error: errorMessage(error) };
