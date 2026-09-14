@@ -216,29 +216,33 @@ describe("cognito sessions are never persisted", () => {
   });
 });
 
-/** Captures the tool list the provider is actually offered. */
+interface CapturedTurn {
+  names: string[];
+  system: string;
+}
+
+/** Captures the tool list and system prompt the provider is actually sent. */
 function stubHarnessCapturingTools(
   service: AgentService,
-  captured: { names: string[] }
+  captured: CapturedTurn
 ): void {
   const answer = {
     assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
     content: "ok",
     toolCalls: [],
   };
+  const record = (input: GenerateChatInput) => {
+    captured.names = (input.tools ?? []).map((tool) => tool.name);
+    captured.system = input.system;
+    return Promise.resolve(answer);
+  };
   Object.assign(service, {
     _providerConfigured: true,
     createHarnessForProfile: () => ({
       provider: {
-        generateChat(input: GenerateChatInput) {
-          captured.names = (input.tools ?? []).map((tool) => tool.name);
-          return Promise.resolve(answer);
-        },
+        generateChat: record,
         name: "openai",
-        streamChat(input: GenerateChatInput) {
-          captured.names = (input.tools ?? []).map((tool) => tool.name);
-          return Promise.resolve(answer);
-        },
+        streamChat: record,
       },
     }),
   });
@@ -279,7 +283,7 @@ describe("cognito sessions never write back", () => {
     const skills = await seedProfileWithSkillManage(db);
     const service = new AgentService(null, null, db);
     service.setSkillsService(skills);
-    const captured = { names: [] as string[] };
+    const captured: CapturedTurn = { names: [], system: "" };
     stubHarnessCapturingTools(service, captured);
 
     const sessionId = await service.createSession(
@@ -303,7 +307,7 @@ describe("cognito sessions never write back", () => {
     const skills = await seedProfileWithSkillManage(db);
     const service = new AgentService(null, null, db);
     service.setSkillsService(skills);
-    const captured = { names: [] as string[] };
+    const captured: CapturedTurn = { names: [], system: "" };
     stubHarnessCapturingTools(service, captured);
 
     const sessionId = await service.createSession(
@@ -354,5 +358,69 @@ describe("cognito sessions never write back", () => {
     service.scheduleSessionTitleGeneration(normalId);
     service.schedulePostTurnSkillReview(normalId);
     expect(scheduled).toEqual([`title:${normalId}`, `review:${normalId}`]);
+  });
+});
+
+describe("the non-personalized cognito sub-mode", () => {
+  setupTestConfigDir("nakama-cognito-neutral-");
+
+  async function runTurn(
+    personalized: boolean
+  ): Promise<{ captured: CapturedTurn; skillName: string }> {
+    const db = createInMemoryDatabaseAdapter();
+    const skills = await seedProfileWithSkillManage(db);
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+    const captured: CapturedTurn = { names: [], system: "" };
+    stubHarnessCapturingTools(service, captured);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { cognito: { personalized }, orgRole: "admin" }
+    );
+    const session = await service.resolveSession(sessionId, ORG_ID);
+    await session?.send({ message: "hello" });
+
+    return { captured, skillName: "manage-skills" };
+  }
+
+  test("the prompt carries none of the profile's own layers", async () => {
+    const { captured, skillName } = await runTurn(false);
+
+    expect(captured.system).toContain("not personalized");
+    // The profile's own instruction, the skills catalog and the org memory
+    // section are each a personalization layer, and none survives.
+    expect(captured.system).not.toContain("You are helpful.");
+    expect(captured.system).not.toContain(skillName);
+    expect(captured.system).not.toContain("Org Memory");
+  });
+
+  test("the personalized sub-mode keeps those layers", async () => {
+    const { captured, skillName } = await runTurn(true);
+
+    expect(captured.system).toContain("You are helpful.");
+    expect(captured.system).toContain(skillName);
+    expect(captured.system).not.toContain("not personalized");
+  });
+
+  test("only neutral builtins are offered, no org-taught tools", async () => {
+    const { captured } = await runTurn(false);
+
+    // test_tool is the profile's own custom JavaScript tool.
+    expect(captured.names).not.toContain("test_tool");
+    expect(captured.names).not.toContain("org_memory_search");
+    expect(captured.names).not.toContain("org_memory_list");
+    expect(captured.names).not.toContain("sub_agent");
+    expect(captured.names).not.toContain("skill_manage");
+  });
+
+  test("the personalized sub-mode keeps the org-taught tools", async () => {
+    const { captured } = await runTurn(true);
+
+    expect(captured.names).toContain("test_tool");
+    expect(captured.names).toContain("org_memory_search");
   });
 });
