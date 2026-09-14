@@ -78,9 +78,9 @@ After all installers are published, the workflow promotes `latest-mac.yml` in th
 The Windows build produces an **unsigned MSIX for Partner Center upload**. Microsoft signs the package after Store certification; no purchased signing certificate is needed. This does not provide a signed installer for direct GitHub downloads. See [Microsoft's signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options).
 
 1. Register in [Partner Center](https://partner.microsoft.com/dashboard), reserve the app name, and open **Product identity**.
-2. Add these GitHub repository **Settings → Secrets and variables → Actions → Variables**, copying the values exactly:
+2. Add these GitHub environment secrets under **Settings → Environments → code-signing → Environment secrets**, copying the values exactly. The Windows job uses this environment and its approval rules.
 
-   | Variable | Partner Center value |
+   | Secret | Partner Center value |
    | --- | --- |
    | `WINDOWS_STORE_IDENTITY_NAME` | Package/Identity/Name |
    | `WINDOWS_STORE_PUBLISHER` | Package/Identity/Publisher, including `CN=` |
