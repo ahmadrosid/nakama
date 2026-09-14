@@ -96,7 +96,7 @@ export function AutomationsListSidebar(state: ListState) {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border border-border border-b">
+          <ul className="divide-y divide-muted border-muted border-b dark:divide-muted/50 dark:border-muted/50">
             {filteredAutomations.map((automation) => (
               <li key={automation.id}>
                 <AutomationListItem
