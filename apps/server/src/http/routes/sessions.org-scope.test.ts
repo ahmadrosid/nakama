@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  seedOrgSuperBotProfile,
+} from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -223,5 +226,93 @@ describe("session routes are scoped to the caller's active org", () => {
     expect(
       (await databaseAdapter.getSession(victimSessionId))?.model
     ).toBeNull();
+  });
+});
+
+describe("Super Bot sessions stay admin-only after they are created", () => {
+  async function createSuperBotScenario() {
+    const scenario = await createScenario();
+    await seedOrgAdmin(scenario.databaseAdapter, {
+      email: "member@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      role: "member",
+      userId: "user_member",
+    });
+    const superProfile = await seedOrgSuperBotProfile(
+      scenario.databaseAdapter,
+      VICTIM_ORG
+    );
+    const superSessionId = await scenario.agent.createSession(
+      VICTIM_ORG,
+      "web",
+      superProfile.id,
+      "user_victim",
+      { orgRole: "admin" }
+    );
+    await scenario.databaseAdapter.replaceMessagesForSession(superSessionId, [
+      {
+        createdAt: "2026-09-14T10:00:00.000Z",
+        id: "msg_super",
+        payload: { content: "admin-only task", role: "user" },
+        seq: 0,
+        sessionId: superSessionId,
+      },
+    ]);
+    const member = await loginUserSession(
+      scenario.app,
+      "member@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    return {
+      ...scenario,
+      member,
+      superProfileId: superProfile.id,
+      superSessionId,
+    };
+  }
+
+  for (const route of CROSS_ORG_ROUTES) {
+    test(`${route.method} ${route.path(":id")} -> 403 for a member`, async () => {
+      const { app, databaseAdapter, member, superSessionId } =
+        await createSuperBotScenario();
+
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${route.path(superSessionId)}`, {
+          body: route.body ? JSON.stringify(route.body) : undefined,
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
+          method: route.method,
+        })
+      );
+
+      expect(response.status).toBe(403);
+      expect(
+        await databaseAdapter.listMessagesForSession(superSessionId)
+      ).toHaveLength(1);
+    });
+  }
+
+  test("a member cannot list Super Bot sessions, an admin still can", async () => {
+    const { app, member, superProfileId, superSessionId } =
+      await createSuperBotScenario();
+    const admin = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const get = (user: typeof member, path: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310${path}`, { headers: user.headers() })
+      );
+    const listPath = `/v1/sessions?profileId=${superProfileId}&channel=web`;
+
+    expect((await get(member, listPath)).status).toBe(403);
+    expect((await get(admin, listPath)).status).toBe(200);
+    expect(
+      (await get(admin, `/v1/sessions/${superSessionId}/messages`)).status
+    ).toBe(200);
   });
 });

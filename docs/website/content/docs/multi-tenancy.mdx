@@ -80,6 +80,19 @@ That hides the organization from the switcher, chat, and workers. Members, profi
 
 ## Important limitation
 
+Organizations share a small set of installation settings. Only a **platform
+admin** can change:
+
+- provider credentials, endpoints, and defaults
+- timezone, thinking, vision, transcription, and image-generation defaults
+- web search and error tracking
+- Discord and WhatsApp bridge settings
+- the Composio project API key
+
+Those changes affect every organization. Telegram settings, enabled Composio
+apps, personal Composio connections, profiles, sessions, and organization
+memory stay scoped to one organization.
+
 Org admins manage members, but creating and cloning profiles (and most tool / MCP / skill provisioning) is still a platform-admin responsibility.
 
 **Exception:** org admins can **export and import a single profile pack** (secrets-free zip) for profiles in their active org. Import creates a new profile and re-links tools/MCP by name when they already exist in the destination — it does not open general profile create/clone or unrestricted tool assignment. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).

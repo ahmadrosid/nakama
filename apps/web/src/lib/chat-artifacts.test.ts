@@ -487,18 +487,37 @@ describe("toArtifactsRelativePath", () => {
 });
 
 describe("extractArtifactPathsFromText", () => {
-  test("finds inline artifact paths", () => {
+  test("finds bare and owner-qualified artifact paths", () => {
     expect(
       extractArtifactPathsFromText(
-        "Open artifacts/harness-engineering-slides.html when ready."
+        "Open artifacts/harness-engineering-slides.html, then profiles/video-producer/artifacts/shots/frame.png."
       )
-    ).toEqual(["harness-engineering-slides.html"]);
+    ).toEqual([
+      { path: "harness-engineering-slides.html" },
+      { ownerProfileId: "video-producer", path: "shots/frame.png" },
+    ]);
   });
 
   test("ignores meta sidecars", () => {
     expect(
       extractArtifactPathsFromText("artifacts/report.md.nakama-meta.json")
     ).toEqual([]);
+  });
+
+  test("keeps the same path in two profiles as two chips, each with its owner", () => {
+    const refs = extractTurnArtifacts([
+      {
+        content:
+          "Mine: artifacts/report.md. Theirs: profiles/video-producer/artifacts/report.md",
+        id: "assistant-1",
+        role: "assistant",
+      },
+    ]);
+
+    expect(refs.map((ref) => [ref.ownerProfileId, ref.path])).toEqual([
+      [undefined, "report.md"],
+      ["video-producer", "report.md"],
+    ]);
   });
 });
 

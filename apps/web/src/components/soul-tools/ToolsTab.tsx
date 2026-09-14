@@ -47,7 +47,7 @@ function isListedCustomTool(tool: ToolDetail): boolean {
 export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   const { navigateToNewChat } = useAppNavigation();
   const { user, activeOrg } = useAuth();
-  const isOrgAdmin = activeOrg?.role === "admin";
+  const canConfigureEmail = user?.isPlatformAdmin === true;
   const canUsePlayground = canUseToolPlayground(
     user?.isPlatformAdmin === true,
     activeOrg?.role
@@ -139,8 +139,8 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
         <div className="space-y-6">
           <ToolListSection
             busy={busy}
+            canConfigureEmail={canConfigureEmail}
             canUsePlayground={canUsePlayground}
-            isOrgAdmin={isOrgAdmin}
             onConfigureEmail={() => setEmailConfigOpen(true)}
             onCreateTool={goToCreateTool}
             onDelete={requestDeleteTool}
@@ -150,8 +150,8 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
           <ToolListSection
             busy={busy}
+            canConfigureEmail={canConfigureEmail}
             canUsePlayground={canUsePlayground}
-            isOrgAdmin={isOrgAdmin}
             onConfigureEmail={() => setEmailConfigOpen(true)}
             onDelete={requestDeleteTool}
             title="Built-in tools"
@@ -180,7 +180,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
         )}
       </div>
 
-      {isOrgAdmin ? (
+      {canConfigureEmail ? (
         <EmailSettingsDialog
           onOpenChange={setEmailConfigOpen}
           open={emailConfigOpen}
@@ -234,7 +234,7 @@ function ToolListSection({
   tools,
   busy,
   canUsePlayground,
-  isOrgAdmin,
+  canConfigureEmail,
   onCreateTool,
   onDelete,
   onConfigureEmail,
@@ -243,7 +243,7 @@ function ToolListSection({
   tools: ToolDetail[];
   busy: boolean;
   canUsePlayground: boolean;
-  isOrgAdmin: boolean;
+  canConfigureEmail: boolean;
   onCreateTool?: () => void;
   onDelete: (toolId: string, toolName: string) => void;
   onConfigureEmail: () => void;
@@ -340,7 +340,7 @@ function ToolListSection({
                   busy={busy}
                   key={tool.id}
                   onConfigure={
-                    isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
+                    canConfigureEmail && tool.id === BUILTIN_TOOL_IDS.email
                       ? onConfigureEmail
                       : undefined
                   }

@@ -12,6 +12,7 @@ import {
   ensureUserConfigDir,
   getUserConfigPath,
   isChatgptProviderConnected,
+  isProviderConfigured,
   loadUserConfig,
   loadUserWebPublicUrl,
   normalizeProviderInstanceLabel,
@@ -401,6 +402,38 @@ created_at=2026-06-15T00:00:00.000Z
 });
 
 describe("chatgpt oauth helpers", () => {
+  test("recognizes a signed-in ChatGPT default provider without an API key", () => {
+    const provider = applyChatgptOAuthToInstance(
+      {
+        apiKey: "",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "chatgpt-1",
+        label: "ChatGPT",
+        type: "chatgpt",
+      },
+      {
+        accessToken: "test-access",
+        accountId: "test-account",
+        expiresAt: "2026-01-02T00:00:00.000Z",
+        refreshToken: "test-refresh",
+      }
+    );
+    const config = { defaultProviderId: provider.id, providers: [provider] };
+
+    expect(isProviderConfigured(config, {})).toBe(true);
+    for (const patch of [
+      { chatgptRefreshToken: "" },
+      { chatgptAccountId: "" },
+    ]) {
+      expect(
+        isProviderConfigured(
+          { ...config, providers: [{ ...provider, ...patch }] },
+          {}
+        )
+      ).toBe(false);
+    }
+  });
+
   test("isChatgptProviderConnected requires refresh token and account id", () => {
     expect(
       isChatgptProviderConnected({

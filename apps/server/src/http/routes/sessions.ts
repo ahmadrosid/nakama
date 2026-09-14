@@ -28,6 +28,7 @@ import {
 } from "../org-guards";
 import {
   errorResponse,
+  getRequestAuth,
   json,
   parseChannel,
   readJson,
@@ -42,6 +43,16 @@ export function registerSessionRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+  // createSession refuses Super Bot to non-admins. Every route that names an
+  // existing session repeats the check, or holding the ID would be enough.
+  const requireSessionAccess = async (
+    c: Parameters<typeof requireActiveOrgIdFromContext>[0]
+  ) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const sessionId = decodeURIComponent(c.req.param("sessionId") ?? "");
+    await agent.assertSessionProfileAccess(sessionId, orgId, getRequestAuth(c));
+    return { orgId, sessionId };
+  };
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -410,14 +421,13 @@ export function registerSessionRoutes(
     }
 
     return json<ListSessionsResponse>(
-      await agent.listSessions(orgId, profileId, channel)
+      await agent.listSessions(orgId, profileId, channel, getRequestAuth(c))
     );
   });
 
   app.delete("/v1/sessions/:sessionId", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const purge = c.req.query("purge") === "true";
     const cleared = purge
       ? await agent.purgeSession(sessionId, orgId)
@@ -432,8 +442,7 @@ export function registerSessionRoutes(
 
   app.patch("/v1/sessions/:sessionId", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const parsedBody = updateSessionRequestSchema.safeParse(
       await readJson<unknown>(c.req.raw)
     );
@@ -456,8 +465,7 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/compact", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const body = await readOptionalJson<CompactSessionRequest>(c.req.raw, {});
     const result = await agent.compactSession(
       sessionId,
@@ -475,8 +483,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/sessions/:sessionId/messages", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 
     if (!result) {
@@ -498,8 +505,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/sessions/:sessionId/status", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 
     if (!result) {
@@ -514,8 +520,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/sessions/:sessionId/stream", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 
     if (!result) {
@@ -533,8 +538,7 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const body = await readJson<BranchSessionRequest>(c.req.raw);
     const result = await agent.branchSession(
       sessionId,
@@ -551,8 +555,7 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
 
     const turnStarted = await agent.beginSessionTurn(sessionId, orgId);
     if (turnStarted === null) {

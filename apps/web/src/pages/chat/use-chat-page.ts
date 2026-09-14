@@ -88,7 +88,6 @@ import {
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
-import { SETUP_PATH } from "@/lib/navigation";
 import {
   buildAutoEnableThinkingPayload,
   DEFAULT_THINKING_EFFORT,
@@ -163,6 +162,7 @@ export function useChatPage() {
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
   const { user, activeOrg } = useAuth();
+  const canManageInstallSettings = user?.isPlatformAdmin === true;
   const {
     profileId: storeProfileId,
     setProfileId,
@@ -327,6 +327,7 @@ export function useChatPage() {
   );
   const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
   const thinkingEffortDisabled =
+    !canManageInstallSettings ||
     busy ||
     thinkingSettingsLoading ||
     saveThinkingSettingsMutation.isPending ||
@@ -434,7 +435,10 @@ export function useChatPage() {
 
   const handleThinkingEffortChange = useCallback(
     (effort: ThinkingEffort) => {
-      if (!profileId || effort === thinkingEffort) {
+      if (
+        !(canManageInstallSettings && profileId) ||
+        effort === thinkingEffort
+      ) {
         return;
       }
 
@@ -451,22 +455,31 @@ export function useChatPage() {
           setError(formatError(err));
         });
     },
-    [profileId, thinkingEffort, busy, saveThinkingSettingsMutation]
+    [
+      canManageInstallSettings,
+      profileId,
+      thinkingEffort,
+      busy,
+      saveThinkingSettingsMutation,
+    ]
   );
 
   useEffect(() => {
     if (
-      !shouldAutoEnableThinking(
-        thinkingSettings,
-        activeModelSupportsThinking,
-        busy,
-        thinkingAutoEnableRef.current,
-        {
-          hasMessages: messages.length > 0,
-          hasProfileId: Boolean(profileId),
-          hasRouteSession: Boolean(routeSession),
-          hasSession: Boolean(session),
-        }
+      !(
+        canManageInstallSettings &&
+        shouldAutoEnableThinking(
+          thinkingSettings,
+          activeModelSupportsThinking,
+          busy,
+          thinkingAutoEnableRef.current,
+          {
+            hasMessages: messages.length > 0,
+            hasProfileId: Boolean(profileId),
+            hasRouteSession: Boolean(routeSession),
+            hasSession: Boolean(session),
+          }
+        )
       )
     ) {
       return;
@@ -506,6 +519,7 @@ export function useChatPage() {
     };
   }, [
     thinkingSettings,
+    canManageInstallSettings,
     activeModelSupportsThinking,
     busy,
     profileId,
@@ -1197,7 +1211,6 @@ export function useChatPage() {
     isEmptyState,
     lastSuccessfulTurnAt,
     messages,
-    navigateSetup: () => navigate(SETUP_PATH),
     profileId,
     profiles,
     providerModelGroups,

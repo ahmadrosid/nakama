@@ -8,6 +8,7 @@ FROM --platform=${BUILDPLATFORM} oven/bun:1.3-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
 COPY apps apps
 COPY packages packages
 
@@ -47,6 +48,7 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
     fi
 
 COPY package.json bun.lock ./
+COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
 COPY apps/platform/telegram apps/platform/telegram
@@ -68,6 +70,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
   && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
   && test -f apps/server/src/services/javascript-tool-runner.js \
   && test -f apps/server/src/services/plugin-runner.js \
+  && rm -rf patches \
   && mkdir -p /nakama/data \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \

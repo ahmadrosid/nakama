@@ -276,3 +276,47 @@ test("names the artifact, not the server path, when the file is gone", async () 
     })
   ).rejects.toThrow("Artifact not found: missing.md");
 });
+
+test("a missing artifact is a 404, not a server error", async () => {
+  await expect(
+    readArtifactFile({
+      filename: "shots/review-frames.html",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toMatchObject({ status: 404 });
+
+  // A profile that has never written an artifact has no artifacts dir yet.
+  await expect(
+    readArtifactFile({
+      filename: "report.md",
+      orgId: ORG_ID,
+      profileId: "profile_without_artifacts",
+    })
+  ).rejects.toMatchObject({ status: 404 });
+
+  // The Files page passes the absolute path; the message must not echo it.
+  const absolute = path.join(
+    getProfileArtifactsDir(ORG_ID, PROFILE_ID),
+    "review-frames.html"
+  );
+  await expect(
+    readArtifactFile({
+      filename: absolute,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toMatchObject({
+    message: "Artifact not found: review-frames.html",
+    status: 404,
+  });
+
+  await writeArtifact("report.md", "# Title\n");
+  await expect(
+    readArtifactFile({
+      filename: "report.md/nested.md",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toMatchObject({ status: 404 });
+});

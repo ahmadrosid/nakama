@@ -7,6 +7,7 @@ mock.module("electron", () => ({
   app: {},
   BrowserWindow: {},
   dialog: {},
+  Menu: {},
   nativeTheme: {},
   shell: {},
 }));

@@ -17,7 +17,7 @@ Create the macOS app, DMG, and ZIP:
 bun run --cwd apps/desktop package
 ```
 
-The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The macOS preview targets macOS 26 ARM64 and is unsigned until Developer ID signing and notarization credentials are configured. Windows targets Windows 10 build 19041 or later, x64, through the Microsoft Store.
+The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The app targets macOS 15 (Sequoia) or later on Apple Silicon and is unsigned until Developer ID signing and notarization credentials are configured. Release builds and runtime tests run on macOS 15. Windows targets Windows 10 build 19041 or later, x64, through the Microsoft Store.
 
 ## Local data
 

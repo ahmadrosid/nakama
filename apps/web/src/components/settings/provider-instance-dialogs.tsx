@@ -170,7 +170,7 @@ function ProviderModelsDialogShell({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
+      <DialogContent className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? (

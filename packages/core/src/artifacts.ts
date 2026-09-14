@@ -137,6 +137,24 @@ async function readArtifactMeta(
   }
 }
 
+// Callers may pass the absolute path listArtifacts returned, so name only the
+// basename: the full path is the server filesystem layout.
+function artifactNotFound(filename: string): NakamaApiError {
+  return new NakamaApiError(
+    `Artifact not found: ${path.basename(filename)}`,
+    404
+  );
+}
+
+// A stale chat link, or a profile that never wrote an artifact, is a missing
+// resource. Left as a raw fs error it answers 500 and logs a stack per click.
+function artifactNotFoundOr(error: unknown, filename: string): unknown {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR"
+    ? artifactNotFound(filename)
+    : error;
+}
+
 export async function readArtifactFile(input: {
   orgId: string;
   profileId: string;
@@ -148,16 +166,22 @@ export async function readArtifactFile(input: {
   render?: "markdown";
 }): Promise<{ bytes: Buffer; contentType: string; filePath: string }> {
   const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
-  const resolvedArtifactsDir = await realpath(artifactsDir);
+  const resolvedArtifactsDir = await realpath(artifactsDir).catch(
+    (error: unknown) => {
+      throw artifactNotFoundOr(error, input.filename);
+    }
+  );
   const guarded = await guardFilePath(input.filename, null, undefined, {
     allowedDirs: [resolvedArtifactsDir],
     cwd: resolvedArtifactsDir,
   });
   const filePath = guarded.resolved;
-  const fileStat = await stat(filePath);
+  const fileStat = await stat(filePath).catch((error: unknown) => {
+    throw artifactNotFoundOr(error, input.filename);
+  });
 
   if (!fileStat.isFile()) {
-    throw new Error(`Artifact not found: ${input.filename}`);
+    throw artifactNotFound(input.filename);
   }
 
   const metadata = await readArtifactMeta(
