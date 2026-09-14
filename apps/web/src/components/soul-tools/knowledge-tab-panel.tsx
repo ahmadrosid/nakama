@@ -127,7 +127,7 @@ export function KnowledgeTabPanel({
               ) : (
                 <Upload04Icon aria-hidden className="size-3.5" />
               )}
-              Upload
+              Add document
             </Button>
           </div>
         </div>
