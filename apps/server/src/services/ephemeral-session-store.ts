@@ -22,20 +22,22 @@ export interface EphemeralSession {
 
 /** A tab closed without toggling cognito off leaves an entry behind. */
 const IDLE_EVICTION_MS = 12 * 60 * 60 * 1000;
-const SWEEP_INTERVAL_MS = 30 * 60 * 1000;
 
 export class EphemeralSessionStore {
   private readonly entries = new Map<string, EphemeralSession>();
-  private sweep: ReturnType<typeof setInterval> | null = null;
 
   /** Runs on delete and on idle eviction, to purge what the session left. */
   constructor(
     private readonly onEvict: (entry: EphemeralSession) => Promise<void>
   ) {}
 
-  set(entry: EphemeralSession): void {
+  async set(entry: EphemeralSession): Promise<void> {
+    // ponytail: eviction rides on the next cognito session rather than a timer.
+    // An abandoned entry therefore survives until someone opens another cognito
+    // chat, or until a restart, whose attachment sweep collects what it left.
+    // Add a timer if idle sessions ever need collecting sooner than that.
+    await this.evictIdle();
     this.entries.set(entry.record.id, entry);
-    this.startSweep();
   }
 
   get(sessionId: string): EphemeralSession | undefined {
@@ -65,39 +67,15 @@ export class EphemeralSessionStore {
 
     this.entries.delete(sessionId);
     await this.onEvict(entry);
-    this.stopSweepWhenEmpty();
     return true;
   }
 
-  /** Exposed for tests; the timer calls it with the current clock. */
+  /** `now` is injectable so the 12-hour threshold can be tested in one tick. */
   async evictIdle(now = Date.now()): Promise<void> {
     for (const [sessionId, entry] of [...this.entries]) {
       if (now - entry.lastActiveAt >= IDLE_EVICTION_MS) {
         await this.delete(sessionId);
       }
     }
-  }
-
-  private startSweep(): void {
-    if (this.sweep) {
-      return;
-    }
-
-    this.sweep = setInterval(() => {
-      void this.evictIdle().catch((error) => {
-        console.error("[cognito] idle eviction failed", error);
-      });
-    }, SWEEP_INTERVAL_MS);
-    // The server should still be able to exit while cognito chats are open.
-    this.sweep.unref?.();
-  }
-
-  private stopSweepWhenEmpty(): void {
-    if (this.entries.size > 0 || !this.sweep) {
-      return;
-    }
-
-    clearInterval(this.sweep);
-    this.sweep = null;
   }
 }

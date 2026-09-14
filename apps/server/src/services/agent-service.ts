@@ -1737,7 +1737,7 @@ export class AgentService {
     );
 
     if (cognito) {
-      this.ephemeralSessions.set({
+      await this.ephemeralSessions.set({
         attachmentIds: new Set(),
         lastActiveAt: Date.now(),
         personalized: cognito.personalized,
@@ -1853,7 +1853,7 @@ export class AgentService {
 
     entry.record.model = model;
     entry.session = session;
-    this.ephemeralSessions.set(entry);
+    await this.ephemeralSessions.set(entry);
     return true;
   }
 
