@@ -157,7 +157,7 @@ export function ChatPageContent(state: ChatPageState) {
 
   const content = isEmptyState ? (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
-      <ChatPageColumn centered>
+      <ChatPageColumn centered cognito={cognito !== null}>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
           <ChatWelcome
@@ -175,7 +175,7 @@ export function ChatPageContent(state: ChatPageState) {
   ) : (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
-      <ChatPageColumn>
+      <ChatPageColumn cognito={cognito !== null}>
         {cognitoControl}
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
