@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
+  Alert02Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -129,8 +130,8 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   contextUsage?: ChatContextUsage | null;
   currentModelSelection: string | null;
   headerNotice?: ReactNode;
+  onConnectProvider?: () => void;
   onModelChange: (selection: string) => void;
-  onNavigateSetup?: () => void;
   onThinkingEffortChange?: (effort: ThinkingEffort) => void;
   primarySupportsVision?: boolean;
   profileId?: string | null;
@@ -181,27 +182,38 @@ function ChatComposerNotice({
 }
 
 function ChatComposerOfflineHint({
-  onNavigateSetup,
+  onConnectProvider,
 }: {
-  onNavigateSetup?: () => void;
+  onConnectProvider?: () => void;
 }) {
   return (
-    <p
-      className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-800 text-xs dark:text-amber-200"
+    <div
+      className="mx-4 mb-2 flex flex-col gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
       role="status"
     >
-      <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />
-      <span>
-        No provider configured — limited responses.{" "}
-        <button
-          className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
-          onClick={onNavigateSetup}
-          type="button"
-        >
-          Set up provider
-        </button>
-      </span>
-    </p>
+      <div className="flex min-w-0 items-start gap-2">
+        <Alert02Icon
+          aria-hidden="true"
+          className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300"
+        />
+        <div className="min-w-0 space-y-0.5">
+          <p className="font-semibold text-foreground text-sm">
+            One more step to start chatting
+          </p>
+          <p className="text-muted-foreground text-sm">
+            Connect an AI service so Nakama can respond to your messages.
+          </p>
+        </div>
+      </div>
+      <Button
+        className="shrink-0 self-start sm:self-auto"
+        onClick={onConnectProvider}
+        size="sm"
+        type="button"
+      >
+        Set up AI
+      </Button>
+    </div>
   );
 }
 
@@ -642,7 +654,7 @@ export function ChatComposer(props: ChatComposerProps) {
   return (
     <div className={cn("w-full shrink-0", props.className)}>
       {layout.showOfflineHint && isFullComposer(props) ? (
-        <ChatComposerOfflineHint onNavigateSetup={props.onNavigateSetup} />
+        <ChatComposerOfflineHint onConnectProvider={props.onConnectProvider} />
       ) : null}
       <ChatComposerMain
         displayError={displayError}
