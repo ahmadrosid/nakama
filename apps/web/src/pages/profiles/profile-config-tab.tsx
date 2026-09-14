@@ -146,7 +146,7 @@ function ProfileAdminMenu({ state }: { state: ProfilesPageState }) {
             }}
           >
             <Copy01Icon aria-hidden />
-            Clone
+            Clone agent
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer"
