@@ -7,6 +7,9 @@ import {
 } from "@nakama/core";
 import type { OrgMemoryService } from "../services/org-memory-service";
 
+/** The one org-memory tool that writes. Cognito sessions drop it. */
+export const PROPOSE_ORG_MEMORY_TOOL_NAME = "propose_org_memory";
+
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
   if (!orgId) {
@@ -130,7 +133,7 @@ export function createOrgMemoryTools(
     {
       description:
         "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log. When the fact came from a knowledge-base document, pass its document id(s) or filename(s) in sourceDocumentIds.",
-      name: "propose_org_memory",
+      name: PROPOSE_ORG_MEMORY_TOOL_NAME,
       parallelSafe: false,
       parameters: {
         additionalProperties: false,
