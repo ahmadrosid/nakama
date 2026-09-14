@@ -24,8 +24,6 @@ import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
 
-const sectionClass = "rounded-md border border-border bg-card";
-
 const INTEGRATION_SECTIONS = [
   {
     icon: TelegramIcon,
@@ -188,17 +186,12 @@ function IntegrationsPageBody({
   }
 
   return (
-    <section
-      className={cn(
-        sectionClass,
-        "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden"
-      )}
-    >
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="shrink-0 border-border border-b px-4 sm:px-5 md:w-56 md:border-r md:border-b-0 md:p-4">
+    <section className="mx-auto w-full min-w-0 max-w-5xl">
+      <div className="flex min-w-0 flex-col gap-6 md:flex-row">
+        <aside className="shrink-0 self-start overflow-hidden rounded-xl border border-border bg-card max-md:w-full md:w-48">
           <nav
             aria-label="Integration settings"
-            className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
+            className="flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:divide-y md:divide-border md:overflow-visible [&::-webkit-scrollbar]:hidden"
           >
             {visibleSections.map((item) => (
               <SidebarButton
@@ -212,7 +205,7 @@ function IntegrationsPageBody({
           </nav>
         </aside>
 
-        <div className="min-w-0 flex-1 p-4 sm:p-5">
+        <div className="min-w-0 flex-1 space-y-8">
           <IntegrationSectionPanel
             canUseOrgIntegrations={canUseOrgIntegrations}
             isPlatformAdmin={isPlatformAdmin}
@@ -262,10 +255,11 @@ function SidebarButton({
 }) {
   return (
     <button
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex shrink-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-[color,background-color,border-color,box-shadow,scale] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.96] sm:px-4 md:w-full md:shrink md:gap-3 md:rounded-md md:px-2",
+        "flex shrink-0 items-center gap-3 px-4 py-3 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset md:w-full md:shrink",
         active
-          ? "bg-primary/10 text-foreground"
+          ? "bg-muted/50 text-foreground"
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
       onClick={onClick}
@@ -279,7 +273,7 @@ function SidebarButton({
         )}
         strokeWidth={1.75}
       />
-      <span className="min-w-0 whitespace-nowrap font-medium text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
+      <span className="min-w-0 whitespace-nowrap font-normal text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
         {label}
       </span>
     </button>

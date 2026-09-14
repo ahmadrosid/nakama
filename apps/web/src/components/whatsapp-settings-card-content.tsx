@@ -91,10 +91,15 @@ export function WhatsAppSettingsCardContent({
   onRequireGroupMentionChange: (value: boolean) => void;
   onSave: () => void;
 }) {
-  const paneItemClass = embedded ? undefined : "px-0 py-0";
+  const paneItemClass = embedded ? undefined : "px-4 py-3";
 
   return (
-    <div className={cn(!embedded && "space-y-4 py-4")}>
+    <div
+      className={cn(
+        !embedded &&
+          "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+      )}
+    >
       {embedded ? null : (
         <IntegrationStatusHeader
           className={paneItemClass}
