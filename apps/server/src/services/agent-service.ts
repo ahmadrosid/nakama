@@ -3856,7 +3856,8 @@ export class AgentService {
       profile.systemPrompt,
       orgRole,
       skillUsageContext,
-      personalized
+      personalized,
+      !cognito
     );
     // Per-org override for the tool-output optimiser. Undefined leaves the
     // decision to the server's env var, so an operator who never opened the UI
@@ -4051,6 +4052,7 @@ export class AgentService {
 
                   return parts.filter(Boolean).join("\n\n");
                 },
+                recordUsage: !cognito,
                 usageContext: skillUsageContext,
               }
             );
@@ -4224,7 +4226,8 @@ export class AgentService {
     profilePrompt: string,
     orgRole?: OrgRole | null,
     usageContext?: import("./skills-service").SkillUsageRecordingContext,
-    personalized = true
+    personalized = true,
+    recordSkillUsage = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     // Every layer below this point is something the org taught the profile.
     // A non-personalized chat is the one place the user can see the model
@@ -4250,7 +4253,8 @@ export class AgentService {
       const skillsCatalog = await this.skillsService.composeCatalogForProfile(
         orgId,
         profileId,
-        usageContext
+        usageContext,
+        recordSkillUsage
       );
 
       if (skillsCatalog.trim()) {
