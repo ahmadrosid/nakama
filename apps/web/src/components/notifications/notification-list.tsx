@@ -1,5 +1,5 @@
 import { cn } from "@nakama/ui/utils";
-import { BrainIcon, SharedWifiIcon } from "hugeicons-react";
+import { ArrowRight01Icon, BrainIcon, SharedWifiIcon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import type { NotificationItem } from "@/hooks/use-notifications";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
@@ -82,6 +82,12 @@ function NotificationListItem({
           {item.description}
         </p>
       </div>
+      {!compact && (
+        <ArrowRight01Icon
+          aria-hidden
+          className="size-4 shrink-0 self-center text-muted-foreground"
+        />
+      )}
     </Link>
   );
 }
