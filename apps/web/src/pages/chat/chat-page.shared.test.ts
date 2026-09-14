@@ -14,6 +14,7 @@ import {
   nextSuccessfulTurnAt,
   planPromptBranch,
   shouldShowCognitoControl,
+  welcomeAnimationKey,
 } from "@/pages/chat/chat-page.shared";
 
 function user(
@@ -276,5 +277,22 @@ describe("cognito control visibility", () => {
     expect(shouldShowCognitoControl({ personalized: true }, false)).toBe(true);
     expect(shouldShowCognitoControl({ personalized: false }, false)).toBe(true);
     expect(shouldShowCognitoControl({ personalized: true }, true)).toBe(true);
+  });
+});
+
+describe("welcome copy animation key", () => {
+  test("every switch produces a different key, so the entrance replays", () => {
+    const greeting = welcomeAnimationKey(null);
+    const personalized = welcomeAnimationKey({ personalized: true });
+    const neutral = welcomeAnimationKey({ personalized: false });
+
+    expect(new Set([greeting, personalized, neutral]).size).toBe(3);
+  });
+
+  test("the same mode keeps the same key, so it does not replay on re-render", () => {
+    expect(welcomeAnimationKey({ personalized: true })).toBe(
+      welcomeAnimationKey({ personalized: true })
+    );
+    expect(welcomeAnimationKey(null)).toBe(welcomeAnimationKey(null));
   });
 });
