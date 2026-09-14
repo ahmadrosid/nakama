@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,6 +74,8 @@ const install = Bun.spawn(
     "--frozen-lockfile",
     "--production",
     "--ignore-scripts",
+    // MakeAppx cannot package Bun's isolated dependency directory links.
+    ...(process.platform === "win32" ? ["--linker", "hoisted"] : []),
     ...["server", "automation", "telegram", "whatsapp", "discord"].flatMap(
       (name) => ["--filter", `@nakama/${name}`]
     ),
@@ -82,5 +84,21 @@ const install = Bun.spawn(
 );
 if ((await install.exited) !== 0) {
   throw new Error("Runtime dependency installation failed");
+}
+if (process.platform === "win32") {
+  // Hoisting removes dependency links, but workspace packages remain junctions.
+  // Replace those with real directories before electron-builder walks the files.
+  const scope = join(output, "node_modules/@nakama");
+  for (const entry of await readdir(scope, { withFileTypes: true })) {
+    if (!entry.isSymbolicLink()) {
+      continue;
+    }
+    const link = join(scope, entry.name);
+    const target = await realpath(link);
+    const staged = `${link}.msix-stage`;
+    await cp(target, staged, { dereference: true, recursive: true });
+    await rm(link, { force: true });
+    await rename(staged, link);
+  }
 }
 console.log(`Desktop runtime ready: ${resolve(output)}`);
