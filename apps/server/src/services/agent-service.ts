@@ -340,6 +340,25 @@ import {
   type ServerToolOverrides,
 } from "./tool-resolver";
 
+/**
+ * The whole prompt for a non-personalized cognito chat. Deliberately bare: the
+ * point of the mode is to see the model without the soul, skills, memory or
+ * profile instructions layered on top. chat-prompt.ts still adds the tool
+ * instructions and the channel style on top of this.
+ */
+const NON_PERSONALIZED_SYSTEM_PROMPT = [
+  "You are Nakama, a helpful AI assistant.",
+  "",
+  "This conversation is not personalized. You have no memory of this user, no",
+  "org knowledge, no skills and no custom instructions, and nothing said here",
+  "is saved anywhere. Answer from what the user tells you in this conversation",
+  "and from what you know in general.",
+  "",
+  "If the user refers to something you would only know from memory or from a",
+  "skill, say plainly that this chat has none of that and ask them for the",
+  "detail instead of guessing.",
+].join("\n");
+
 interface StoredSession {
   channel: AgentChannel;
   pluginRevision: string;
@@ -3625,27 +3644,40 @@ export class AgentService {
       includeSkillManageTools?: boolean;
       /** False in a cognito session: proposing org memory is a write-back. */
       includeMemoryWriteTools?: boolean;
+      /**
+       * False in a non-personalized cognito session: everything the org has
+       * taught this profile is dropped, leaving the neutral builtins.
+       */
+      personalized?: boolean;
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
+    const personalized = options.personalized ?? true;
     const storedTools = await this.db.listToolsForProfile(profile.id);
-    const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+    // Custom JavaScript and Python tools are org-authored, and plugin tools are
+    // installed capability, so a non-personalized chat keeps neither.
+    const scopedTools = personalized
+      ? storedTools
+      : storedTools.filter((tool) => tool.handlerType === "builtin");
+    const tools = await resolveProfileStoredTools(scopedTools, this.db, [], {
       actorRole: options.actorRole ?? undefined,
       pluginService: this.pluginService,
       serverTools: this.serverTools,
       userConfig: this.userConfig,
     });
-    const includeAutomationTools = options.includeAutomationTools ?? true;
+    const includeAutomationTools =
+      personalized && (options.includeAutomationTools ?? true);
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
-    const includeSubAgentTool = options.includeSubAgentTool ?? true;
+    const includeSubAgentTool =
+      personalized && (options.includeSubAgentTool ?? true);
     // Default follows interactive automation-tool gate; messaging channels pass false.
     const includeSkillManageTools =
       options.includeSkillManageTools ?? includeAutomationTools;
 
     let resolved = [...tools];
 
-    if (this.mcpClientManager) {
+    if (personalized && this.mcpClientManager) {
       const mcpServers = await this.db.listMcpServersForProfile(profile.id);
       const orgId = profile.orgId;
 
@@ -3664,7 +3696,12 @@ export class AgentService {
       ];
     }
 
-    if (this.composioService && this.mcpClientManager && options.userId) {
+    if (
+      personalized &&
+      this.composioService &&
+      this.mcpClientManager &&
+      options.userId
+    ) {
       const orgId = profile.orgId;
 
       if (!orgId) {
@@ -3712,7 +3749,7 @@ export class AgentService {
       resolved = [...resolved, ...this.questionTools];
     }
 
-    if (this.skillsService) {
+    if (personalized && this.skillsService) {
       const orgId = profile.orgId;
 
       if (!orgId) {
@@ -3747,11 +3784,11 @@ export class AgentService {
       }
     }
 
-    if (profile.isSuper) {
+    if (personalized && profile.isSuper) {
       resolved = [...resolved, ...this.superBotTools];
     }
 
-    if (hasOwnTools) {
+    if (personalized && hasOwnTools) {
       resolved = [...resolved, ...this.orgMemoryTools];
     }
 
@@ -3781,6 +3818,7 @@ export class AgentService {
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
+    const personalized = cognito ? cognito.personalized : true;
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
     const includeSkillManageTools = cognito
@@ -3799,6 +3837,7 @@ export class AgentService {
           : undefined,
       includeMemoryWriteTools: !cognito,
       includeSkillManageTools,
+      personalized,
       userId,
     });
     if (channel === "discord" && tools.length > 0) {
@@ -3815,7 +3854,8 @@ export class AgentService {
       profileId,
       profile.systemPrompt,
       orgRole,
-      skillUsageContext
+      skillUsageContext,
+      personalized
     );
     // Per-org override for the tool-output optimiser. Undefined leaves the
     // decision to the server's env var, so an operator who never opened the UI
@@ -3832,7 +3872,10 @@ export class AgentService {
       ? (cognito.initialHistory ?? [])
       : await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
-    const userContext = await this.loadUserContextForUser(orgId, userId);
+    // USER.md is the user's own profile text, which is personalization too.
+    const userContext = personalized
+      ? await this.loadUserContextForUser(orgId, userId)
+      : undefined;
     const selectedModel = modelOverride
       ? this.normalizeSessionModelOverride(modelOverride)
       : profile.model;
@@ -3949,7 +3992,7 @@ export class AgentService {
           parts.push(todoContext.trim());
         }
 
-        if (this.composioService && userId) {
+        if (personalized && this.composioService && userId) {
           const composioContext =
             await this.composioService.formatProfileConnectionsContext(
               orgId,
@@ -3962,7 +4005,11 @@ export class AgentService {
           }
         }
 
-        if (this.skillsService && context?.userMessage?.trim()) {
+        if (
+          personalized &&
+          this.skillsService &&
+          context?.userMessage?.trim()
+        ) {
           const skillContext =
             await this.skillsService.formatMatchedSkillsForPrompt(
               orgId,
@@ -4160,8 +4207,19 @@ export class AgentService {
     profileId: string,
     profilePrompt: string,
     orgRole?: OrgRole | null,
-    usageContext?: import("./skills-service").SkillUsageRecordingContext
+    usageContext?: import("./skills-service").SkillUsageRecordingContext,
+    personalized = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
+    // Every layer below this point is something the org taught the profile.
+    // A non-personalized chat is the one place the user can see the model
+    // without any of it, so none of them are assembled.
+    if (!personalized) {
+      return {
+        soulActive: false,
+        systemPrompt: NON_PERSONALIZED_SYSTEM_PROMPT,
+      };
+    }
+
     const stack = await resolveSoulStackForProfile(
       orgId,
       profileId,
