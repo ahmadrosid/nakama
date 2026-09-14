@@ -105,6 +105,76 @@ describe("knowledge_base_search tool", () => {
     expect(result.root).toBe(getKnowledgeBaseDir(orgId, profileId));
   });
 
+  test("includes only shared organization documents attached to the profile", async () => {
+    await setupExtractedFile("private.txt", "private alpha context\n");
+
+    const organizationKnowledgeBaseDir = getKnowledgeBaseDir(orgId);
+    const sharedDocumentId = "kb_shared";
+    const unsharedDocumentId = "kb_unshared";
+    await mkdir(organizationKnowledgeBaseDir, { recursive: true });
+    await writeFile(
+      getKnowledgeBaseExtractedPath(orgId, undefined, sharedDocumentId),
+      "# source: shared.txt\n# mediaType: text/plain\n\nshared alpha context\n",
+      "utf8"
+    );
+    await writeFile(
+      getKnowledgeBaseExtractedPath(orgId, undefined, unsharedDocumentId),
+      "# source: unshared.txt\n# mediaType: text/plain\n\nsecret-unattached-token\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(organizationKnowledgeBaseDir, "manifest.json"),
+      JSON.stringify({
+        documents: [
+          {
+            filename: "shared.txt",
+            id: sharedDocumentId,
+            mediaType: "text/plain",
+            sizeBytes: 21,
+            status: "ready",
+            uploadedAt: "2026-06-13T00:00:00.000Z",
+          },
+          {
+            filename: "unshared.txt",
+            id: unsharedDocumentId,
+            mediaType: "text/plain",
+            sizeBytes: 24,
+            status: "ready",
+            uploadedAt: "2026-06-13T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8"
+    );
+
+    const profileManifestPath = path.join(
+      getKnowledgeBaseDir(orgId, profileId),
+      "manifest.json"
+    );
+    const profileManifest = JSON.parse(
+      await Bun.file(profileManifestPath).text()
+    );
+    profileManifest.sharedDocumentIds = [sharedDocumentId];
+    await writeFile(
+      profileManifestPath,
+      JSON.stringify(profileManifest),
+      "utf8"
+    );
+
+    const shared = await runKnowledgeBaseSearch(
+      { query: "shared alpha" },
+      { orgId, profileId }
+    );
+    expect(shared.matchCount).toBe(1);
+    expect(shared.matches[0]?.scope).toBe("organization");
+
+    const unattached = await runKnowledgeBaseSearch(
+      { query: "secret-unattached-token" },
+      { orgId, profileId }
+    );
+    expect(unattached.matchCount).toBe(0);
+  });
+
   test("filters by source filename", async () => {
     await setupExtractedFile("notes.txt", "unique-token-here\n");
 
