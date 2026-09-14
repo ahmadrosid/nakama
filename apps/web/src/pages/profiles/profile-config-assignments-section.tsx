@@ -49,7 +49,7 @@ export function ProfileConfigAssignmentsSection({
   }
 
   return (
-    <Tabs.Root className="min-w-0 pt-5" defaultValue="tools" key={detail.id}>
+    <Tabs.Root className="min-w-0" defaultValue="tools" key={detail.id}>
       <Tabs.List
         aria-label="Profile capabilities"
         className="flex gap-4 overflow-x-auto border-border border-b"
@@ -162,7 +162,7 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
       {installed.length === 0 ? (
         <p className="text-muted-foreground text-sm">No plugins installed.</p>
       ) : null}
-      <ul className="divide-y divide-border overflow-hidden rounded-md border border-border empty:hidden">
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card empty:hidden">
         {installed.map((plugin) => {
           const access = pluginAgentAccessState(detail, plugin.pluginId, {
             skills: allSkills,
@@ -171,7 +171,7 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
           const Icon = pluginIcon(plugin.pluginId);
           return (
             <li
-              className="flex items-center gap-3 px-3 py-3"
+              className="flex items-center gap-3 px-4 py-3"
               key={plugin.pluginId}
             >
               <Icon aria-hidden className="size-5 shrink-0" />
@@ -204,6 +204,7 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
                     pluginId: plugin.pluginId,
                   })
                 }
+                size="sm"
               />
             </li>
           );

@@ -20,7 +20,9 @@ export function ProfileMcpSection({
     <div className="pt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="type-section-title">MCP servers</h3>
+          <h3 className="font-normal text-muted-foreground/55 text-sm">
+            MCP servers
+          </h3>
           {detail.mcpServers.length > 0 ? (
             <p className="type-body mt-1 text-xs">
               {detail.mcpServers.length} assigned
@@ -44,10 +46,10 @@ export function ProfileMcpSection({
           Connect HTTP or command-based MCP servers.
         </p>
       ) : detail.mcpServers.length === 0 ? null : (
-        <ul className="divide-y divide-border rounded-md border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           {detail.mcpServers.map((server) => (
             <li
-              className="flex items-center justify-between gap-2 px-3 py-2 first:rounded-t-md last:rounded-b-md"
+              className="flex items-center justify-between gap-2 px-4 py-3"
               key={server.id}
             >
               <div className="min-w-0">

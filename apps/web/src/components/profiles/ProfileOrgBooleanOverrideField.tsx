@@ -32,7 +32,7 @@ function toStoredOverride(value: boolean | null | undefined): boolean | null {
 }
 
 function BooleanOverrideSwitch({
-  size,
+  size = "sm",
   avatar,
   busy,
   checked,

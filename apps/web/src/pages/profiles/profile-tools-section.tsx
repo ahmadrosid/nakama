@@ -39,7 +39,9 @@ export function ProfileToolsSection({
     <div className="pt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="type-section-title text-balance">Tools</h3>
+          <h3 className="font-normal text-muted-foreground/55 text-sm">
+            Tools
+          </h3>
           {detail.tools.length > 0 ? (
             <p className="type-body mt-1 text-xs tabular-nums">
               {groups.length} assigned
@@ -57,11 +59,11 @@ export function ProfileToolsSection({
       {detail.tools.length === 0 ? (
         <p className="type-body text-pretty text-xs">No tools assigned.</p>
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           {groups.map(({ tool, tools: members }) => {
             const name = (
               <div className="min-w-0">
-                <p className="truncate font-medium text-foreground text-sm leading-tight">
+                <p className="truncate font-normal text-foreground text-sm leading-tight">
                   {tool.pluginId ?? tool.name}
                 </p>
                 {isPluginOwned(tool) ? (
@@ -78,7 +80,7 @@ export function ProfileToolsSection({
 
             return (
               <li
-                className="flex items-center justify-between gap-2 px-3 py-2 transition-colors duration-150 ease-out hover:bg-muted/40"
+                className="flex items-center justify-between gap-2 px-4 py-3 transition-colors duration-150 ease-out hover:bg-muted/40"
                 key={tool.id}
               >
                 {canOpenPlayground && !tool.pluginId ? (

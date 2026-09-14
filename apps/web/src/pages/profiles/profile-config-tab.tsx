@@ -53,11 +53,12 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
   return (
     <div
       aria-labelledby="profile-detail-tab-profile"
+      className="mx-auto max-w-3xl space-y-8"
       id="profile-detail-panel-profile"
       role="tabpanel"
     >
       {canPack && !detail.isSuper ? (
-        <div className="mb-3 flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             aria-label="Import profile"
             disabled={busy}
