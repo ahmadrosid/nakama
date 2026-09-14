@@ -32,11 +32,13 @@ import {
 import { useState } from "react";
 import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { ProfileConfigAssignmentsSection } from "@/pages/profiles/profile-config-assignments-section";
 import { ProfileConfigIdentitySection } from "@/pages/profiles/profile-config-identity-section";
+import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
@@ -81,8 +83,21 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         </div>
       ) : null}
       <ProfileConfigIdentitySection state={state} />
+      {canPack ? (
+        <section className="space-y-4" id="profile-prompt">
+          {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
+          <details className="group">
+            <summary className="cursor-pointer text-muted-foreground/55 text-sm">
+              History
+            </summary>
+            <div className="pt-3">
+              <ProfileHistoryTab profileId={detail.id} />
+            </div>
+          </details>
+        </section>
+      ) : null}
       <ProfileSkillsSettingsSection disabled={busy} profile={detail} />
-      <ProfileConfigAssignmentsSection state={state} />
+      <ProfileConfigAssignmentsSection key={detail.id} state={state} />
     </div>
   );
 }

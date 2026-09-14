@@ -60,10 +60,8 @@ export function SoulTabPanel({
               ) : null}
             </div>
           )}
-          <p className={cn("type-body text-xs", !embedded && "mt-1")}>
-            Profile prompt · one stack per bot
-          </p>
-          {status ? (
+          <p className="font-normal text-muted-foreground/55 text-sm">Prompt</p>
+          {status && !embedded ? (
             <p
               className="type-code mt-2 truncate text-muted-foreground"
               title={status.directory}
@@ -107,7 +105,7 @@ export function SoulTabPanel({
         </p>
       </div>
 
-      <ul className="divide-y divide-border rounded-md border border-border">
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {SOUL_FILES.map((file) => (
           <FileStatusListItem
             description={file.description}
@@ -294,15 +292,14 @@ function FileStatusListItem({
       <button
         className={cn(
           "group flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition",
-          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset",
-          present && "bg-emerald-50/40 dark:bg-emerald-950/10"
+          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
         )}
         onClick={onClick}
         type="button"
       >
         <span
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background",
+            "flex size-4 shrink-0 items-center justify-center",
             present
               ? "text-emerald-700 dark:text-emerald-300"
               : "text-muted-foreground"

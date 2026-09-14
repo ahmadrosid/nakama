@@ -168,8 +168,10 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="type-section-title text-balance">History</h3>
-      <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+      <ul
+        aria-label="Profile change history"
+        className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+      >
         {events.map((event) => {
           const actor = event.actorUserId
             ? formatActorLabel(event.actorUserId)
