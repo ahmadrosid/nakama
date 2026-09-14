@@ -38,7 +38,10 @@ export function Layout() {
           data-app-shell-content=""
         >
           <AppShellHeader
-            hideDesktop={shell.pathname === PAGE_PATHS.profiles}
+            hideDesktop={
+              shell.pathname === PAGE_PATHS.profiles ||
+              shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`)
+            }
             label={shell.headerLabel}
             page={shell.page}
           />
