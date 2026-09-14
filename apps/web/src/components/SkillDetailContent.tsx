@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { isPluginOwned } from "@/hooks/use-plugins";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
-import { pluginsSystemPath } from "@/lib/navigation";
+import { pluginManagementPath } from "@/lib/navigation";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
@@ -144,7 +144,7 @@ export function SkillDetailContent({
         {skill.pluginId ? (
           <Link
             className="inline-block text-xs underline underline-offset-2"
-            to={pluginsSystemPath()}
+            to={pluginManagementPath()}
           >
             Edit in {skill.pluginId}
           </Link>

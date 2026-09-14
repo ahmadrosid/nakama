@@ -5,35 +5,35 @@ import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  PencilEdit02Icon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
-import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
-import { usePrefetchAppData } from "@/hooks/use-app-queries";
+import { usePrefetchAppData, useProfilesQuery } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
-import { useOrgPlugins } from "@/hooks/use-plugins";
+import { useHistorySessionsQuery } from "@/hooks/use-resource-mutations";
 import {
   useLocalStorageFlag,
   useSidebarCollapsed,
-  useSystemNavCollapsed,
 } from "@/hooks/use-sidebar-collapsed";
-import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
-  enabledPluginNavEntries,
-  type NavGroup,
+  buildChatPath,
+  chatProfileIdFromPath,
+  resolveRecentChatsProfileId,
+} from "@/lib/chat-history";
+import {
   type NavItem,
   navHrefForPage,
-  type PageId,
   pageIdFromPath,
-  pluginIcon,
-  pluginIdFromPath,
+  SIDEBAR_PAGE_IDS,
   visibleNavGroups,
 } from "@/lib/navigation";
 import {
-  getInitialPluginsNavCollapsed,
-  SIDEBAR_PLUGINS_NAV_COLLAPSED_KEY,
+  getInitialRecentsCollapsed,
+  SIDEBAR_RECENTS_COLLAPSED_KEY,
 } from "@/lib/sidebar";
 
 export function AppSidebar({
@@ -46,26 +46,16 @@ export function AppSidebar({
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const { user, activeOrg } = useAuth();
-  const { data: orgPlugins = [] } = useOrgPlugins();
-  const pluginNav = useMemo(
-    () => enabledPluginNavEntries(orgPlugins),
-    [orgPlugins]
-  );
-  const activePluginId = pluginIdFromPath(location.pathname);
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed: shellCollapsed, toggle } = useSidebarCollapsed();
-  const { collapsed: systemNavCollapsed, toggle: toggleSystemNav } =
-    useSystemNavCollapsed();
   const collapsed = variant === "shell" && shellCollapsed;
-  const navGroups = useMemo(
-    () =>
-      visibleNavGroups({
-        isPlatformAdmin: user?.isPlatformAdmin === true,
-        orgRole: activeOrg?.role,
-      }),
-    [activeOrg?.role, user?.isPlatformAdmin]
-  );
+  const items = visibleNavGroups({
+    isPlatformAdmin: user?.isPlatformAdmin === true,
+    orgRole: activeOrg?.role,
+  })
+    .flatMap((group) => group.items)
+    .filter((item) => SIDEBAR_PAGE_IDS.includes(item.id));
 
   return (
     <aside
@@ -81,95 +71,138 @@ export function AppSidebar({
         collapsible={variant === "shell"}
         onToggle={toggle}
       />
-      <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {navGroups.map((group) => (
-          <SidebarNavGroup
-            chatProfileId={chatProfileIdFromPath(location.pathname)}
-            collapsed={collapsed}
-            group={group}
-            key={group.id}
-            page={page}
-            prefetchAppData={prefetchAppData}
-            systemNavCollapsed={systemNavCollapsed}
-            toggleSystemNav={toggleSystemNav}
-            unreadTotal={automationUnreadTotal}
-          />
-        ))}
-        <PluginsNavGroup
-          activePluginId={activePluginId}
-          collapsed={collapsed}
-          entries={pluginNav}
-        />
+      <nav className="flex min-h-0 flex-1 flex-col">
+        <div className="sidebar-nav-group-items shrink-0">
+          {items.map((item) => (
+            <SidebarNavButton
+              active={
+                item.id === "customize"
+                  ? page === "customize" || !SIDEBAR_PAGE_IDS.includes(page)
+                  : item.id === page &&
+                    (page !== "chat" ||
+                      !chatProfileIdFromPath(location.pathname))
+              }
+              badge={
+                item.id === "automations" ? automationUnreadTotal : undefined
+              }
+              collapsed={collapsed}
+              icon={item.icon}
+              item={item}
+              key={item.id}
+              onPrefetch={
+                item.id === "automations" ? prefetchAppData : undefined
+              }
+              to={navHrefForPage(
+                item.id,
+                chatProfileIdFromPath(location.pathname)
+              )}
+            />
+          ))}
+        </div>
+        {collapsed ? null : <RecentChats />}
       </nav>
     </aside>
   );
 }
 
-function PluginsNavGroup({
-  entries,
-  collapsed,
-  activePluginId,
-}: {
-  entries: { href: string; label: string; pluginId: string }[];
-  collapsed: boolean;
-  activePluginId: string | null;
-}) {
-  const { collapsed: pluginsCollapsed, toggle } = useLocalStorageFlag(
-    SIDEBAR_PLUGINS_NAV_COLLAPSED_KEY,
-    getInitialPluginsNavCollapsed
+function RecentChats() {
+  const location = useLocation();
+  const { activeOrg } = useAuth();
+  const { profileId: liveChatProfileId, orgId } = useActiveChatProfile();
+  const { data: profiles = [] } = useProfilesQuery();
+  const profileId =
+    resolveRecentChatsProfileId({
+      liveChatProfileId:
+        chatProfileIdFromPath(location.pathname) ??
+        (orgId === activeOrg?.id ? liveChatProfileId : null),
+      orgId: activeOrg?.id,
+      profiles,
+      search: location.search,
+    }) ?? "";
+  const {
+    data: sessions,
+    isLoading,
+    error,
+  } = useHistorySessionsQuery(profileId);
+  const { collapsed, toggle } = useLocalStorageFlag(
+    SIDEBAR_RECENTS_COLLAPSED_KEY,
+    getInitialRecentsCollapsed
   );
-  const itemsVisible = collapsed || !pluginsCollapsed;
-  if (entries.length === 0) {
-    return null;
-  }
 
   return (
-    <div
-      aria-label="Plugins"
-      className="sidebar-nav-group"
-      data-items-hidden={itemsVisible ? undefined : true}
-      data-tree
-      role="group"
-    >
-      {collapsed ? null : (
+    <div className="mt-5 flex min-h-0 flex-1 flex-col">
+      <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
         <button
-          aria-expanded={!pluginsCollapsed}
-          className="sidebar-nav-group-label"
+          aria-expanded={!collapsed}
+          className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
           onClick={toggle}
           type="button"
         >
+          <span>Recents</span>
           <ArrowDown01Icon
             aria-hidden="true"
             className={cn(
-              "sidebar-nav-group-chevron",
-              pluginsCollapsed && "-rotate-90"
+              "sidebar-nav-group-chevron size-3.5",
+              collapsed && "-rotate-90"
             )}
             strokeWidth={1.75}
           />
-          <span className="truncate">Plugins</span>
         </button>
-      )}
-      <div
-        aria-hidden={!itemsVisible}
-        className="sidebar-nav-group-items"
-        inert={itemsVisible ? undefined : true}
-      >
-        {entries.map((entry) => (
-          <SidebarNavButton
-            active={entry.pluginId === activePluginId}
-            collapsed={collapsed}
-            icon={pluginIcon(entry.pluginId)}
-            item={{
-              description: entry.pluginId,
-              icon: pluginIcon(entry.pluginId),
-              id: "plugins",
-              label: entry.label,
-            }}
-            key={entry.pluginId}
-            to={entry.href}
-          />
-        ))}
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            aria-label="New chat"
+            className="text-muted-foreground/55"
+            render={<Link to={navHrefForPage("chat", profileId)} />}
+            size="icon-sm"
+            title="New chat"
+            variant="ghost"
+          >
+            <PencilEdit02Icon
+              aria-hidden="true"
+              className="size-4"
+              strokeWidth={1.75}
+            />
+          </Button>
+        </div>
       </div>
+      {!collapsed && (
+        <div className="no-scrollbar min-h-0 overflow-y-auto">
+          {isLoading && (
+            <p className="px-3 py-2 text-muted-foreground text-xs">
+              Loading chats…
+            </p>
+          )}
+          {error && (
+            <p
+              className="px-3 py-2 text-muted-foreground text-xs"
+              role="status"
+            >
+              Couldn’t load recent chats.
+            </p>
+          )}
+          {!(isLoading || error) && sessions.length === 0 && (
+            <p className="px-3 py-2 text-muted-foreground text-xs">
+              No recent chats
+            </p>
+          )}
+          {sessions.slice(0, 15).map((session) => {
+            const href = buildChatPath(profileId, session.id);
+            const title = session.title?.trim() || "Untitled chat";
+            return (
+              <Link
+                aria-current={location.pathname === href ? "page" : undefined}
+                className="sidebar-nav-link px-2 py-1.5"
+                data-active={location.pathname === href || undefined}
+                key={session.id}
+                title={title}
+                to={href}
+              >
+                <span className="truncate">{title}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -197,82 +230,6 @@ function SidebarHeader({
         <OrgSwitcher collapsed={false} />
       </div>
       {collapsible ? <SidebarCollapseButton onToggle={onToggle} /> : null}
-    </div>
-  );
-}
-
-function SidebarNavGroup({
-  chatProfileId,
-  collapsed,
-  group,
-  page,
-  prefetchAppData,
-  systemNavCollapsed,
-  toggleSystemNav,
-  unreadTotal,
-}: {
-  chatProfileId: string | null;
-  collapsed: boolean;
-  group: NavGroup;
-  page: PageId;
-  prefetchAppData: () => void;
-  systemNavCollapsed: boolean;
-  toggleSystemNav: () => void;
-  unreadTotal: number;
-}) {
-  const groupExpanded = !systemNavCollapsed;
-  // Icon rail always shows every destination; tree collapse only
-  // applies when labels are visible.
-  const itemsVisible = !group.collapsible || collapsed || groupExpanded;
-
-  return (
-    <div
-      aria-label={group.label}
-      className="sidebar-nav-group"
-      data-items-hidden={itemsVisible ? undefined : true}
-      data-tree={group.collapsible || undefined}
-      role="group"
-    >
-      {group.collapsible && !collapsed ? (
-        <button
-          aria-expanded={groupExpanded}
-          className="sidebar-nav-group-label"
-          onClick={toggleSystemNav}
-          type="button"
-        >
-          <ArrowDown01Icon
-            aria-hidden="true"
-            className={cn(
-              "sidebar-nav-group-chevron",
-              !groupExpanded && "-rotate-90"
-            )}
-            strokeWidth={1.75}
-          />
-          <span className="truncate">{group.label}</span>
-        </button>
-      ) : null}
-      <div
-        aria-hidden={!itemsVisible}
-        className="sidebar-nav-group-items"
-        inert={itemsVisible ? undefined : true}
-      >
-        {group.items.map((item) => (
-          <SidebarNavButton
-            active={item.id === page}
-            badge={item.id === "automations" ? unreadTotal : undefined}
-            collapsed={collapsed}
-            icon={item.icon}
-            item={item}
-            key={item.id}
-            onPrefetch={item.id === "automations" ? prefetchAppData : undefined}
-            to={
-              item.id === "soul"
-                ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
-                : navHrefForPage(item.id, chatProfileId)
-            }
-          />
-        ))}
-      </div>
     </div>
   );
 }

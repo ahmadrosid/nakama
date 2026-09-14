@@ -215,8 +215,8 @@ export function readInitialDraftChatProfileId(input: {
   );
 }
 
-/** Profile id for `/history` — URL when present, else live chat state / storage / default. */
-export function resolveHistoryProfileId(input: {
+/** Profile id for Recents — URL when present, else live chat state / storage / default. */
+export function resolveRecentChatsProfileId(input: {
   search: string;
   profiles: ReadonlyArray<{ id: string }>;
   liveChatProfileId?: string | null;
@@ -275,7 +275,6 @@ export function resolveActiveProfileIdFromLocation(input: {
   search: string;
   profiles: ReadonlyArray<{ id: string }>;
   liveChatProfileId?: string | null;
-  historyPath?: string;
   profilesPath?: string;
 }): string | null {
   const {
@@ -283,7 +282,6 @@ export function resolveActiveProfileIdFromLocation(input: {
     search,
     profiles,
     liveChatProfileId,
-    historyPath = "/history",
     profilesPath = "/profiles",
   } = input;
 
@@ -291,10 +289,6 @@ export function resolveActiveProfileIdFromLocation(input: {
     profileId: string | null | undefined
   ): profileId is string =>
     Boolean(profileId && profiles.some((profile) => profile.id === profileId));
-
-  if (pathname === historyPath) {
-    return resolveHistoryProfileId({ liveChatProfileId, profiles, search });
-  }
 
   if (isProfilesPath(pathname, profilesPath)) {
     return resolveProfilesPageProfileId({

@@ -1,14 +1,17 @@
 import type { ArtifactFile } from "@nakama/core/contract";
+import { cn } from "@nakama/ui/utils";
 import { useCallback, useMemo, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
   type ArtifactTypeFilter,
   artifactMatchesTypeFilter,
   availableArtifactTypeFilters,
 } from "@/components/soul-tools/artifacts-tab-filters";
+import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useArtifactsInfiniteQuery,
@@ -20,7 +23,6 @@ import {
   resolveFilesProfileId,
   setStoredFilesViewMode,
 } from "@/lib/files-page.shared";
-import { PAGE_PATHS } from "@/lib/navigation";
 import { ArtifactFolderBreadcrumb } from "@/pages/files/files-artifact-folder-breadcrumb";
 import {
   listArtifactsInFolder,
@@ -37,6 +39,56 @@ export function FilesPage() {
   const { profileId: activeProfileId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const canViewFiles = user?.isPlatformAdmin === true;
+  const knowledge = !canViewFiles || searchParams.get("tab") === "knowledge";
+
+  return (
+    <>
+      <nav
+        aria-label="Your files"
+        className="flex shrink-0 gap-2 border-border border-b px-4 sm:px-6"
+      >
+        {canViewFiles && (
+          <Link
+            aria-current={knowledge ? undefined : "page"}
+            className={cn(
+              "border-b-2 px-4 py-3 font-medium text-sm",
+              knowledge
+                ? "border-transparent text-muted-foreground"
+                : "border-foreground text-foreground"
+            )}
+            to="/files"
+          >
+            Files
+          </Link>
+        )}
+        <Link
+          aria-current={knowledge ? "page" : undefined}
+          className={cn(
+            "border-b-2 px-4 py-3 font-medium text-sm",
+            knowledge
+              ? "border-foreground text-foreground"
+              : "border-transparent text-muted-foreground"
+          )}
+          to="/files?tab=knowledge"
+        >
+          Knowledge
+        </Link>
+      </nav>
+      {knowledge ? (
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
+          <KnowledgeTab key={profileId} profileId={profileId} />
+        </div>
+      ) : (
+        <FilesArtifactsPage key={profileId} profileId={profileId} />
+      )}
+    </>
+  );
+}
+
+function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const folderPrefix = normalizeArtifactFolderPrefix(
     searchParams.get("folder") ?? ""
@@ -120,14 +172,6 @@ export function FilesPage() {
   function handleViewModeChange(mode: FilesViewMode) {
     setViewMode(mode);
     setStoredFilesViewMode(mode);
-  }
-
-  if (searchParams.get("tab") === "knowledge") {
-    const params = new URLSearchParams({ tab: "knowledge" });
-    if (profileId) {
-      params.set("profile", profileId);
-    }
-    return <Navigate replace to={`${PAGE_PATHS.profiles}?${params}`} />;
   }
 
   if (!profileId) {

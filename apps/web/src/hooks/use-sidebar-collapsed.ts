@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getInitialSidebarCollapsed,
-  getInitialSystemNavCollapsed,
   SIDEBAR_COLLAPSED_KEY,
-  SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY,
 } from "@/lib/sidebar";
 
 export function useLocalStorageFlag(key: string, getInitial: () => boolean) {
@@ -25,11 +23,4 @@ export function useLocalStorageFlag(key: string, getInitial: () => boolean) {
 
 export function useSidebarCollapsed() {
   return useLocalStorageFlag(SIDEBAR_COLLAPSED_KEY, getInitialSidebarCollapsed);
-}
-
-export function useSystemNavCollapsed() {
-  return useLocalStorageFlag(
-    SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY,
-    getInitialSystemNavCollapsed
-  );
 }

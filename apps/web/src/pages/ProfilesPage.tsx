@@ -14,10 +14,12 @@ export function ProfilesPage() {
   const { setProfileId } = useActiveChatProfile();
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
+  const legacyKnowledge = searchParams.get("tab") === "knowledge";
   const legacyArtifacts = searchParams.get("tab") === "artifacts";
+  const movedTab = legacyArtifacts || legacyKnowledge;
 
   useEffect(() => {
-    if (!legacyArtifacts || profilesLoading) {
+    if (!movedTab || profilesLoading) {
       return;
     }
 
@@ -28,9 +30,12 @@ export function ProfilesPage() {
     if (profileId) {
       setProfileId(profileId);
     }
-    navigate("/files", { replace: true });
+    navigate(legacyKnowledge ? "/files?tab=knowledge" : "/files", {
+      replace: true,
+    });
   }, [
-    legacyArtifacts,
+    movedTab,
+    legacyKnowledge,
     navigate,
     profiles,
     profilesLoading,
@@ -38,7 +43,7 @@ export function ProfilesPage() {
     setProfileId,
   ]);
 
-  if (legacyArtifacts) {
+  if (movedTab) {
     return null;
   }
 

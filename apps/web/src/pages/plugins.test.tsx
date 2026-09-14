@@ -135,49 +135,50 @@ function renderEnable() {
 }
 
 describe("plugin management authority and mutations", () => {
-  test.each(["/system", "/system/plugins/notes", "/system/plugins/missing"])(
-    "plugin details are addressable separately from the grid: %s",
-    (path) => {
-      queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
-        plugins: [
-          plugin({ description: "Saved notes for your agents" }),
-          plugin({ name: "Other plugin", pluginId: "other" }),
-        ],
-      });
-      queryClient.setQueryData(["official-plugins"], { plugins: [] });
-      queryClient.setQueryData(queryKeys.plugins.releases, { releases: [] });
-      const html = renderToString(
-        <QueryClientProvider client={queryClient}>
-          <AuthContext.Provider value={authValue}>
-            <MemoryRouter initialEntries={[path]}>
-              <Routes>
-                <Route element={<PluginsPage />} path="/system" />
-                <Route
-                  element={<PluginsPage />}
-                  path="/system/plugins/:pluginId"
-                />
-              </Routes>
-            </MemoryRouter>
-          </AuthContext.Provider>
-        </QueryClientProvider>
+  test.each([
+    "/customize/plugins",
+    "/customize/plugins/notes",
+    "/customize/plugins/missing",
+  ])("plugin details are addressable separately from the grid: %s", (path) => {
+    queryClient.setQueryData(queryKeys.plugins.all("org-a"), {
+      plugins: [
+        plugin({ description: "Saved notes for your agents" }),
+        plugin({ name: "Other plugin", pluginId: "other" }),
+      ],
+    });
+    queryClient.setQueryData(["official-plugins"], { plugins: [] });
+    queryClient.setQueryData(queryKeys.plugins.releases, { releases: [] });
+    const html = renderToString(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={authValue}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route element={<PluginsPage />} path="/customize/plugins" />
+              <Route
+                element={<PluginsPage />}
+                path="/customize/plugins/:pluginId"
+              />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    expect(html).not.toContain("<details");
+    if (path === "/customize/plugins") {
+      expect(html).toContain('href="/customize/plugins/notes"');
+      expect(html).toContain("Other plugin");
+      expect(html).toContain("Saved notes for your agents");
+      expect(html).not.toContain("1.0.0");
+    } else {
+      expect(html).toContain('href="/customize/plugins"');
+      expect(html).not.toContain("Other plugin");
+      expect(html).toContain(
+        path.endsWith("notes")
+          ? "Saved notes for your agents"
+          : "Plugin not found."
       );
-      expect(html).not.toContain("<details");
-      if (path === "/system") {
-        expect(html).toContain('href="/system/plugins/notes"');
-        expect(html).toContain("Other plugin");
-        expect(html).toContain("Saved notes for your agents");
-        expect(html).not.toContain("1.0.0");
-      } else {
-        expect(html).toContain('href="/system?tab=plugins"');
-        expect(html).not.toContain("Other plugin");
-        expect(html).toContain(
-          path.endsWith("notes")
-            ? "Saved notes for your agents"
-            : "Plugin not found."
-        );
-      }
     }
-  );
+  });
   test.each([false, true])(
     "external install entry is platform-admin-only: %s",
     (isPlatformAdmin) => {
@@ -691,7 +692,7 @@ describe("plugin page states and module contract", () => {
         })
       )
     );
-    expect(html).toContain("/system?tab=plugins");
+    expect(html).toContain("/customize/plugins");
     expect(html).not.toContain("<iframe");
     expect(html.match(/<h1\b/g)).toBeNull();
   });
@@ -708,7 +709,7 @@ describe("plugin page states and module contract", () => {
       )
     );
     expect(html).toContain("/chat");
-    expect(html).not.toContain("/system?tab=plugins");
+    expect(html).not.toContain("/customize/plugins");
     expect(html).not.toContain("<iframe");
   });
 });

@@ -1,7 +1,9 @@
+import { Button } from "@nakama/ui/button";
 import { TooltipProvider } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
+import { ArrowLeft02Icon } from "hugeicons-react";
 import { useMemo } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
@@ -16,6 +18,7 @@ import {
   type PageId,
   pageIdFromPath,
   pluginIdFromPath,
+  SIDEBAR_PAGE_IDS,
 } from "@/lib/navigation";
 
 export function Layout() {
@@ -105,6 +108,11 @@ function AppShellHeader({
   page: PageId;
 }) {
   const hideTitle = page === "soul" || page === "profiles";
+  const showCustomizeBack =
+    page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
+  const backLabel = page === "customize" ? "Back to Chat" : "Back to Customize";
+  const backPath =
+    page === "customize" ? PAGE_PATHS.chat : PAGE_PATHS.customize;
 
   return (
     <header
@@ -113,12 +121,28 @@ function AppShellHeader({
         // Standalone on iOS the shell owns the status bar, so the bar grows by
         // the top inset and paints its own background under the notch.
         "h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
-        // Chat gives its whole column to the conversation on desktop; on a
-        // phone the bar is the only way to reach navigation.
+        // Chat uses the full desktop column; phones still need the header
+        // to reach navigation.
         page === "chat" && "sm:hidden"
       )}
     >
       <MobileNavDrawer className="sm:hidden" />
+      {(showCustomizeBack || page === "customize") && (
+        <Button
+          aria-label={backLabel}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          render={<Link to={backPath} />}
+          size="icon-sm"
+          title={backLabel}
+          variant="ghost"
+        >
+          <ArrowLeft02Icon
+            aria-hidden="true"
+            className="size-4"
+            strokeWidth={1.75}
+          />
+        </Button>
+      )}
       {hideTitle ? null : (
         <h1 className="type-brand min-w-0 truncate">{label}</h1>
       )}

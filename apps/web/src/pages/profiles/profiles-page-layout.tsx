@@ -1,6 +1,5 @@
 import { createPortal } from "react-dom";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
-import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
@@ -88,14 +87,6 @@ function ProfilesHeaderTabs({
           Prompt
         </ProfileDetailTabButton>
       ) : null}
-      <ProfileDetailTabButton
-        active={detailTab === "knowledge"}
-        controls="profile-detail-panel-knowledge"
-        id="profile-detail-tab-knowledge"
-        onSelect={() => setDetailTab("knowledge")}
-      >
-        Knowledge
-      </ProfileDetailTabButton>
       {isOrgAdmin ? (
         <ProfileDetailTabButton
           active={detailTab === "proposals"}
@@ -186,19 +177,6 @@ function ProfilesPromptTab({
   );
 }
 
-function ProfilesKnowledgeTab({ profileId }: { profileId: string }) {
-  return (
-    <div
-      aria-labelledby="profile-detail-tab-knowledge"
-      className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
-      id="profile-detail-panel-knowledge"
-      role="tabpanel"
-    >
-      <KnowledgeTab profileId={profileId} />
-    </div>
-  );
-}
-
 function ProfilesDetailPanel({
   state,
   orgId,
@@ -233,10 +211,6 @@ function ProfilesDetailPanel({
         profileId={selectedId}
       />
     );
-  }
-
-  if (detailTab === "knowledge" && selectedId) {
-    return <ProfilesKnowledgeTab profileId={selectedId} />;
   }
 
   return null;

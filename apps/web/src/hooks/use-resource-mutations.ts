@@ -679,30 +679,6 @@ export function useSoulFileQuery(
   });
 }
 
-export function usePurgeSessionMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      sessionId,
-      channel = "web",
-    }: {
-      profileId: string;
-      sessionId: string;
-      channel?: AgentChannel;
-    }) => client.createChatSession(sessionId, channel).purge(),
-    onSuccess: async (_data, variables) => {
-      await Promise.all(
-        HISTORY_SESSION_CHANNELS.map((channel) =>
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.sessions(variables.profileId, channel),
-          })
-        )
-      );
-    },
-  });
-}
-
 export function useBranchSessionMutation() {
   const queryClient = useQueryClient();
 

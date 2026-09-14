@@ -4,6 +4,7 @@ import {
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
 import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +29,11 @@ import { formatError } from "@/lib/client";
 import {
   canUseToolPlayground,
   pluginIcon,
-  pluginsSystemPath,
+  pluginManagementPath,
   toolPlaygroundPath,
 } from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
 
-const sectionClass = "rounded-md border border-border bg-card";
 const toolSearchThreshold = 4;
 
 function isDeletableTool(tool: ToolDetail): boolean {
@@ -106,10 +106,10 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   const content = (
-    <div className="min-w-0 p-4 sm:p-5">
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className={cn("min-w-0 space-y-8", embedded && "p-4 sm:p-5")}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="type-section-title text-balance">All tools</h2>
+          <h2 className="font-normal text-sm">All tools</h2>
           <p className="type-body mt-1 text-pretty text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"
@@ -136,7 +136,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
           </Button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           <ToolListSection
             busy={busy}
             canConfigureEmail={canConfigureEmail}
@@ -164,20 +164,16 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div
+        className={cn("min-w-0 space-y-4", !embedded && "mx-auto max-w-3xl")}
+      >
         {errorMessage ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
             {errorMessage}
           </p>
         ) : null}
 
-        {embedded ? (
-          content
-        ) : (
-          <section className={cn(sectionClass, "overflow-hidden")}>
-            {content}
-          </section>
-        )}
+        {content}
       </div>
 
       {canConfigureEmail ? (
@@ -280,7 +276,9 @@ function ToolListSection({
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
-        <h3 className="type-section-title text-balance">{title}</h3>
+        <h3 className="font-normal text-muted-foreground/55 text-sm">
+          {title}
+        </h3>
         {tools.length > 0 ? (
           <span className="text-muted-foreground text-xs tabular-nums">
             {trimmedQuery
@@ -334,35 +332,39 @@ function ToolListSection({
               No tools match &ldquo;{trimmedQuery}&rdquo;.
             </p>
           ) : (
-            <ul className="divide-y divide-border rounded-md border border-border">
-              {standaloneTools.map((tool) => (
-                <ToolListItem
-                  busy={busy}
-                  key={tool.id}
-                  onConfigure={
-                    canConfigureEmail && tool.id === BUILTIN_TOOL_IDS.email
-                      ? onConfigureEmail
-                      : undefined
-                  }
-                  onDelete={() => onDelete(tool.id, tool.name)}
-                  playgroundHref={
-                    canUsePlayground && isDeletableTool(tool)
-                      ? toolPlaygroundPath(tool.id)
-                      : undefined
-                  }
-                  tool={tool}
-                />
-              ))}
-              {[...pluginGroups].map(([pluginId, group]) => (
-                <PluginToolGroup
-                  busy={busy}
-                  key={`${pluginId}:${Boolean(trimmedQuery)}`}
-                  pluginId={pluginId}
-                  searching={Boolean(trimmedQuery)}
-                  tools={group}
-                />
-              ))}
-            </ul>
+            <Card className="w-full overflow-hidden shadow-none">
+              <CardContent className="p-0">
+                <ul className="divide-y divide-border">
+                  {standaloneTools.map((tool) => (
+                    <ToolListItem
+                      busy={busy}
+                      key={tool.id}
+                      onConfigure={
+                        canConfigureEmail && tool.id === BUILTIN_TOOL_IDS.email
+                          ? onConfigureEmail
+                          : undefined
+                      }
+                      onDelete={() => onDelete(tool.id, tool.name)}
+                      playgroundHref={
+                        canUsePlayground && isDeletableTool(tool)
+                          ? toolPlaygroundPath(tool.id)
+                          : undefined
+                      }
+                      tool={tool}
+                    />
+                  ))}
+                  {[...pluginGroups].map(([pluginId, group]) => (
+                    <PluginToolGroup
+                      busy={busy}
+                      key={`${pluginId}:${Boolean(trimmedQuery)}`}
+                      pluginId={pluginId}
+                      searching={Boolean(trimmedQuery)}
+                      tools={group}
+                    />
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
@@ -389,7 +391,7 @@ function PluginToolGroup({
         <summary className="cursor-pointer rounded-md px-4 py-3 text-sm marker:text-muted-foreground hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
           <span className="ml-2 inline-flex items-center gap-2 align-middle">
             <Icon aria-hidden className="size-4" />
-            <span className="font-medium">{label}</span>
+            <span>{label}</span>
             <span className="text-muted-foreground text-xs tabular-nums">
               {tools.length} {tools.length === 1 ? "tool" : "tools"}
             </span>
@@ -422,7 +424,7 @@ function ToolListItem({
 
   const summary = (
     <div className="min-w-0">
-      <p className="font-medium text-foreground text-sm">{tool.name}</p>
+      <p className="font-normal text-foreground text-sm">{tool.name}</p>
       <p className="mt-0.5 line-clamp-2 text-pretty text-muted-foreground text-xs leading-relaxed">
         {tool.description}
       </p>
@@ -458,7 +460,7 @@ function ToolListItem({
         )}
         {tool.pluginId ? (
           <Button
-            render={<Link to={pluginsSystemPath()} />}
+            render={<Link to={pluginManagementPath()} />}
             size="sm"
             variant="outline"
           >
@@ -516,7 +518,7 @@ function PageState({
   return (
     <div
       className={cn(
-        !embedded && sectionClass,
+        !embedded && "mx-auto max-w-3xl",
         "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-muted-foreground text-sm"
       )}
     >

@@ -1,12 +1,13 @@
 import {
-  Brain03Icon,
   BrainIcon,
   Building03Icon,
-  Chat01Icon,
+  Coins01Icon,
   DashboardSquare01Icon,
   Folder01Icon,
+  LayoutGridIcon,
   Notification01Icon,
   PackageIcon,
+  Plug01Icon,
   PlusSignSquareIcon,
   Settings01Icon,
   SharedWifiIcon,
@@ -19,17 +20,21 @@ type NavIcon = typeof SharedWifiIcon;
 
 export type PageId =
   | "chat"
-  | "history"
+  | "customize"
+  | "usage"
   | "files"
   | "profiles"
   | "soul"
+  | "tools"
+  | "mcp"
   | "automations"
   | "integrations"
   | "organization"
   | "settings"
   | "notifications"
   | "workers"
-  | "plugins";
+  | "plugins"
+  | "plugin-management";
 
 export interface NavItem {
   description: string;
@@ -68,8 +73,7 @@ export const NAV_GROUPS: NavGroup[] = [
         "Start a new conversation",
         PlusSignSquareIcon
       ),
-      navItem("history", "Chats", "Browse and reopen saved chats", Chat01Icon),
-      navItem("files", "Files", "Manage profile artifacts", Folder01Icon),
+      navItem("files", "Your files", "Manage profile artifacts", Folder01Icon),
     ],
     label: "Chat",
   },
@@ -78,7 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       navItem(
         "profiles",
-        "Profiles",
+        "Agent config",
         "Manage bot configs and tool allowlists",
         UserSquareIcon
       ),
@@ -87,6 +91,12 @@ export const NAV_GROUPS: NavGroup[] = [
         "Automations",
         "Manage scheduled automations",
         SharedWifiIcon
+      ),
+      navItem(
+        "customize",
+        "Customize",
+        "Customize your workspace",
+        DashboardSquare01Icon
       ),
     ],
     label: "Agent",
@@ -107,6 +117,8 @@ export const NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     id: "system",
     items: [
+      navItem("usage", "Usage", "View token usage and costs", Coins01Icon),
+      navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
       navItem(
         "workers",
         "Workers",
@@ -119,12 +131,8 @@ export const NAV_GROUPS: NavGroup[] = [
         "Bridges and Composio",
         WebhookIcon
       ),
-      navItem(
-        "soul",
-        "System",
-        "Identity stack files and registered agent tools",
-        Brain03Icon
-      ),
+      navItem("tools", "Tools", "Manage agent tools", LayoutGridIcon),
+      navItem("mcp", "MCP", "Manage MCP servers", Plug01Icon),
       navItem(
         "settings",
         "Settings",
@@ -137,6 +145,14 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+
+export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
+  "chat",
+  "files",
+  "profiles",
+  "automations",
+  "customize",
+];
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
   notifications: navItem(
@@ -152,6 +168,7 @@ export const SETUP_PATH = "/setup";
 export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
   "soul",
+  "mcp",
 ]);
 
 export function canAccessSystemPage(
@@ -187,6 +204,10 @@ export function visibleNavGroups(access: {
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
       if (
+        item.id === "usage" ||
+        item.id === "plugin-management" ||
+        item.id === "files" ||
+        item.id === "tools" ||
         item.id === "soul" ||
         item.id === "profiles" ||
         item.id === "organization" ||
@@ -213,11 +234,10 @@ export function visibleNavGroups(access: {
 const queryPath = (path: string, params: Record<string, string>): string =>
   `${path}?${new URLSearchParams(params)}`;
 
-export const toolsTabPath = (): string =>
-  queryPath(PAGE_PATHS.soul, { tab: "tools" });
+export const toolsTabPath = (): string => PAGE_PATHS.tools;
 
-export const pluginsSystemPath = (): string =>
-  queryPath(PAGE_PATHS.soul, { tab: "plugins" });
+export const pluginManagementPath = (): string =>
+  PAGE_PATHS["plugin-management"];
 
 export const PLUGIN_PAGE_PREFIX = "/plugins";
 
@@ -361,19 +381,24 @@ export function orgSkillProposalsPath(profileId?: string): string {
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
+  customize: "/customize",
   files: "/files",
-  history: "/history",
   integrations: "/integrations",
+  mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
+  "plugin-management": "/customize/plugins",
   plugins: PLUGIN_PAGE_PREFIX,
   profiles: "/profiles",
   settings: "/settings",
   soul: "/system",
+  tools: "/customize/tools",
+  usage: "/customize/usage",
   workers: "/workers",
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
+  [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
   [PAGE_PATHS.soul, "soul"],
   [PAGE_PATHS.profiles, "profiles"],

@@ -12,7 +12,7 @@ import {
 import {
   canAccessSystemPage,
   PAGE_PATHS,
-  pluginsSystemPath,
+  pluginManagementPath,
 } from "@/lib/navigation";
 
 export function PluginPage() {
@@ -63,7 +63,7 @@ export function PluginPageState({
       <p className="type-page-title">{pluginPageStateMessage(kind)}</p>
       <Link
         className="text-sm underline underline-offset-2"
-        to={canManage ? pluginsSystemPath() : PAGE_PATHS.chat}
+        to={canManage ? pluginManagementPath() : PAGE_PATHS.chat}
       >
         {canManage ? "Plugins" : "Chat"}
       </Link>

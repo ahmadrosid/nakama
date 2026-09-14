@@ -8,7 +8,8 @@ import { Button } from "@nakama/ui/button";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
@@ -31,6 +32,8 @@ function toStoredOverride(value: boolean | null | undefined): boolean | null {
 }
 
 function BooleanOverrideSwitch({
+  size,
+  avatar,
   busy,
   checked,
   disabled,
@@ -40,6 +43,8 @@ function BooleanOverrideSwitch({
   onCheckedChange,
   onReset,
 }: {
+  size?: "default" | "sm";
+  avatar?: ReactNode;
   busy: boolean;
   checked: boolean;
   disabled: boolean;
@@ -52,10 +57,11 @@ function BooleanOverrideSwitch({
   return (
     <div className="flex items-center justify-between gap-3">
       <label
-        className="min-w-0 text-balance font-medium text-foreground text-sm"
+        className="flex min-w-0 items-center gap-3 text-balance font-medium text-foreground text-sm"
         htmlFor={id}
       >
-        {label}
+        {avatar}
+        <span>{label}</span>
       </label>
       <div className="flex shrink-0 items-center gap-2">
         {overridden ? (
@@ -76,6 +82,7 @@ function BooleanOverrideSwitch({
           disabled={disabled || busy}
           id={id}
           onCheckedChange={onCheckedChange}
+          size={size}
         />
       </div>
     </div>
@@ -197,6 +204,9 @@ function OrgSettingsProfileOverrideSwitch({
 
   return (
     <BooleanOverrideSwitch
+      avatar={
+        <ProfileAvatar className="rounded-md" profile={profile} size="sm" />
+      }
       busy={state.busy}
       checked={state.checked}
       disabled={disabled}
@@ -208,6 +218,7 @@ function OrgSettingsProfileOverrideSwitch({
         void state.persist(null);
       }}
       overridden={state.overridden}
+      size="sm"
     />
   );
 }

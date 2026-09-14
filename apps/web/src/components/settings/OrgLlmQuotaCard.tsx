@@ -1,5 +1,5 @@
 import type { OrgLlmQuotaStatusResponse } from "@nakama/core/contract";
-import { Card, CardContent, CardHeader, CardTitle } from "@nakama/ui/card";
+import { Card, CardContent } from "@nakama/ui/card";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
@@ -37,33 +37,50 @@ export function OrgLlmQuotaCard() {
   }
 
   return (
-    <Card className="overflow-hidden shadow-none">
-      <CardHeader className="border-border border-b px-4 py-3">
-        <CardTitle className="font-medium text-sm leading-normal tracking-normal">
-          LLM monthly quota
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 p-4 text-sm">
-        {error ? <p className="text-destructive">{error}</p> : null}
-        {quota ? (
-          <>
-            <p>
-              {quota.month} · {quota.status}
+    <section className="space-y-3">
+      <h2 className="font-normal text-muted-foreground/55 text-sm">
+        LLM monthly quota
+      </h2>
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="divide-y divide-border p-0 text-sm">
+          {error ? (
+            <p className="px-4 py-3 text-destructive" role="alert">
+              {error}
             </p>
-            <p>
-              {quota.turns} / {quota.turnLimit || "∞"} turns ·{" "}
-              {quota.tokens.toLocaleString()} /{" "}
-              {quota.tokenLimit ? quota.tokenLimit.toLocaleString() : "∞"}{" "}
-              tokens
-            </p>
-            <p className="text-muted-foreground">
-              Warning at {quota.warningPercent}% · month resets at 00:00 UTC
-            </p>
-          </>
-        ) : error ? null : (
-          <p className="text-muted-foreground">Loading usage…</p>
-        )}
-      </CardContent>
-    </Card>
+          ) : null}
+          {quota ? (
+            <>
+              {[
+                { label: "Month", value: quota.month },
+                { label: "Status", value: quota.status },
+                {
+                  label: "Turns",
+                  value: `${quota.turns.toLocaleString()} / ${quota.turnLimit ? quota.turnLimit.toLocaleString() : "∞"}`,
+                },
+                {
+                  label: "Tokens",
+                  value: `${quota.tokens.toLocaleString()} / ${quota.tokenLimit ? quota.tokenLimit.toLocaleString() : "∞"}`,
+                },
+              ].map(({ label, value }) => (
+                <div
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  key={label}
+                >
+                  <span>{label}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {value}
+                  </span>
+                </div>
+              ))}
+              <p className="px-4 py-3 text-muted-foreground text-xs">
+                Warning at {quota.warningPercent}% · month resets at 00:00 UTC
+              </p>
+            </>
+          ) : error ? null : (
+            <p className="px-4 py-3 text-muted-foreground">Loading usage…</p>
+          )}
+        </CardContent>
+      </Card>
+    </section>
   );
 }

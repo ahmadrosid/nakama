@@ -11,6 +11,8 @@ test.each([false, true])(
   "queued messages keep the sending session (branch override: %s)",
   async (branchOverride) => {
     const queryClient = new QueryClient();
+    const sessionsKey = ["sessions", "default", "web"];
+    queryClient.setQueryData(sessionsKey, []);
     const previousStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -91,6 +93,7 @@ test.each([false, true])(
         ["first", "second", "third"].map((message) => ({ message, sessionId }))
       );
       expect(createSession).toHaveBeenCalledTimes(branchOverride ? 0 : 1);
+      expect(queryClient.getQueryState(sessionsKey)?.isInvalidated).toBe(true);
     } finally {
       createSession.mockRestore();
       getMessages.mockRestore();
