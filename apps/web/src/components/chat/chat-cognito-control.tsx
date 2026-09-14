@@ -90,9 +90,13 @@ export function ChatCognitoControl({
               aria-label={active ? "Turn off cognito" : "Turn on cognito"}
               aria-pressed={active}
               className={cn(
-                "size-8 rounded-full",
-                active &&
-                  "bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+                // Off it still needs a visible target, so it keeps a muted
+                // disc instead of disappearing into the background the way a
+                // bare ghost button does.
+                "size-8 rounded-full transition-colors",
+                active
+                  ? "bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+                  : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
               disabled={disabled}
               id="chat-cognito-toggle"
