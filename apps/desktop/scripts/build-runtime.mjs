@@ -20,6 +20,11 @@ await cp(process.execPath, join(output, "bin/bun"));
 for (const name of ["package.json", "bun.lock"]) {
   await cp(join(root, name), join(output, name));
 }
+await mkdir(join(output, "patches"), { recursive: true });
+await cp(
+  join(root, "patches/@electron%2Fosx-sign@1.3.3.patch"),
+  join(output, "patches/@electron%2Fosx-sign@1.3.3.patch")
+);
 // Only tracked runtime files: never package local .env files or development databases.
 const tracked = Bun.spawnSync(
   ["git", "ls-files", "-z", "apps/server", "apps/platform", "packages"],
