@@ -1491,8 +1491,19 @@ export function registerModelRoutes(
   app.put("/v1/settings/provider", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<ConfigureProviderRequest>(c.req.raw);
-    const result = await agent.configureProvider(body);
-    return json<ConfigureProviderResponse>(result);
+
+    try {
+      return json<ConfigureProviderResponse>(
+        await agent.configureProvider(body)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.get("/v1/timezones", async (c) => {

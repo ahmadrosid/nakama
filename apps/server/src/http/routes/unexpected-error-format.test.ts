@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { ConfigureProviderRequest } from "@nakama/core";
+import { buildProviderInstanceFromCreateRequest } from "../../services/provider-instance-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
@@ -61,6 +63,46 @@ describe("route error formatting", () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
       error: "An unexpected server error occurred.",
+    });
+  });
+  test("invalid provider settings answer 400 with the validation message", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        // The real builder, mapped the way AgentService.configureProvider maps it,
+        // so the throw is the validation this route has to answer.
+        configureProvider: async (request: ConfigureProviderRequest) =>
+          buildProviderInstanceFromCreateRequest(
+            {
+              apiKey: request.apiKey,
+              baseUrl: request.baseUrl,
+              label: request.displayName,
+              model: request.model,
+              type: request.provider,
+            },
+            []
+          ),
+      },
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/provider", {
+        body: JSON.stringify({
+          apiKey: "sk-test",
+          baseUrl: "http://127.0.0.1:9/v1",
+          model: "test-model",
+          provider: "openai_compatible",
+        }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Provider name is required.",
     });
   });
 });
