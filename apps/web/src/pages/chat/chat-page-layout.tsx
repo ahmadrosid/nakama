@@ -15,7 +15,9 @@ export function ChatPageColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 min-w-0 flex-col transition-[width,opacity,padding] duration-200 ease-out motion-reduce:transition-none",
+        // `relative` so a page-level control can pin itself to this column's
+        // top-right corner, which is the top-right of the screen area.
+        "relative flex min-h-0 min-w-0 flex-col transition-[width,opacity,padding] duration-200 ease-out motion-reduce:transition-none",
         attachmentPanel.isFullscreen
           ? "pointer-events-none w-0 flex-none overflow-hidden px-0 opacity-0"
           : "flex-1 px-3 sm:px-6",

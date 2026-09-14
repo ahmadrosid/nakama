@@ -72,7 +72,9 @@ export function ChatPageContent(state: ChatPageState) {
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
-    <div className="flex shrink-0 justify-end px-4 pt-2 pb-1">
+    // Pinned to the column's top-right corner, which is the top right of the
+    // screen area. The backdrop keeps it readable over a scrolling transcript.
+    <div className="absolute top-2 right-3 z-20 rounded-full bg-background/80 p-0.5 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:right-6">
       <ChatCognitoControl
         cognito={cognito}
         disabled={busy || readOnlySession}
@@ -156,8 +158,8 @@ export function ChatPageContent(state: ChatPageState) {
   const content = isEmptyState ? (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ChatPageColumn centered>
+        {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-          {cognitoControl}
           {cognito ? (
             <p className="px-4 pb-1 text-muted-foreground text-sm">
               Cognito is on. This chat is not saved, does not appear in History,
@@ -180,8 +182,8 @@ export function ChatPageContent(state: ChatPageState) {
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <ChatPageColumn>
+        {cognitoControl}
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-          {cognitoControl}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ChatMessageList
               actionsDisabled={busy || readOnlySession}
