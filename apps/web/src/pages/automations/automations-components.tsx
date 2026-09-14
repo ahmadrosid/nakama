@@ -539,11 +539,9 @@ export function RunHistoryList({
   return (
     <div className="space-y-4">
       {groups.map((group) => (
-        <section key={group.label}>
-          <p className="sticky top-0 z-10 bg-card pb-2 text-muted-foreground text-xs">
-            {group.label}
-          </p>
-          <ul className="divide-y divide-border/60 border-border/60 border-y">
+        <section className="space-y-3" key={group.label}>
+          <p className="text-muted-foreground/55 text-xs">{group.label}</p>
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
             {group.runs.map((run) => (
               <RunHistoryItem
                 busy={busy}
@@ -879,7 +877,7 @@ function RunHistoryItem({
   const hasBody = runHasExpandableBody(run);
 
   return (
-    <li>
+    <li className="min-w-0 px-4">
       <div className="flex items-start gap-2 py-3">
         <RunHistoryItemSummary
           expanded={expanded}
