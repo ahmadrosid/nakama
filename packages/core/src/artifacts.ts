@@ -137,12 +137,21 @@ async function readArtifactMeta(
   }
 }
 
+// Callers may pass the absolute path listArtifacts returned, so name only the
+// basename: the full path is the server filesystem layout.
+function artifactNotFound(filename: string): NakamaApiError {
+  return new NakamaApiError(
+    `Artifact not found: ${path.basename(filename)}`,
+    404
+  );
+}
+
 // A stale chat link, or a profile that never wrote an artifact, is a missing
 // resource. Left as a raw fs error it answers 500 and logs a stack per click.
 function artifactNotFoundOr(error: unknown, filename: string): unknown {
   const code = (error as NodeJS.ErrnoException).code;
   return code === "ENOENT" || code === "ENOTDIR"
-    ? new NakamaApiError(`Artifact not found: ${filename}`, 404)
+    ? artifactNotFound(filename)
     : error;
 }
 
@@ -172,7 +181,7 @@ export async function readArtifactFile(input: {
   });
 
   if (!fileStat.isFile()) {
-    throw new NakamaApiError(`Artifact not found: ${input.filename}`, 404);
+    throw artifactNotFound(input.filename);
   }
 
   const metadata = await readArtifactMeta(
