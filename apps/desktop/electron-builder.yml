@@ -29,7 +29,7 @@ mac:
     - Contents/Resources/runtime/bin/bun
   icon: ../web/public/icons/icon-512.png
   category: public.app-category.productivity
-  minimumSystemVersion: '26.0'
+  minimumSystemVersion: '15.0'
   target:
     - target: dmg
       arch: [arm64]

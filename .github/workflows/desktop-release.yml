@@ -14,7 +14,7 @@ concurrency:
 jobs:
   release:
     environment: code-signing
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -60,6 +60,8 @@ jobs:
 
       - name: Verify packaged app
         run: |
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' apps/desktop/dist/electron/mac-arm64/Nakama.app/Contents/Info.plist)" = '15.0'
+          ELECTRON_RUN_AS_NODE=1 apps/desktop/dist/electron/mac-arm64/Nakama.app/Contents/MacOS/Nakama --version
           codesign --verify --deep --strict apps/desktop/dist/electron/mac-arm64/Nakama.app
           xcrun stapler validate apps/desktop/dist/electron/mac-arm64/Nakama.app
           spctl --assess --type execute apps/desktop/dist/electron/mac-arm64/Nakama.app

@@ -17,7 +17,7 @@ Create the macOS app, DMG, and ZIP:
 bun run --cwd apps/desktop package
 ```
 
-The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The preview targets macOS 26 ARM64 and is unsigned until Developer ID signing and notarization credentials are configured.
+The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The app targets macOS 15 (Sequoia) or later on Apple Silicon and is unsigned until Developer ID signing and notarization credentials are configured. Release builds and runtime tests run on macOS 15.
 
 ## Local data
 
