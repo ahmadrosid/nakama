@@ -8,7 +8,9 @@ import { ditherLogoSrc } from "@/lib/theme";
 
 export function PasswordResetPage() {
   const [searchParams] = useSearchParams();
-  const [token, setToken] = useState(searchParams.get("token")?.trim() ?? "");
+  const initialToken = searchParams.get("token")?.trim() ?? "";
+  const [token, setToken] = useState(initialToken);
+  const [enteringToken, setEnteringToken] = useState(Boolean(initialToken));
   const [email, setEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,7 @@ export function PasswordResetPage() {
       const response = await client.requestPasswordReset({ email });
       if (response.token) {
         setToken(response.token);
+        setEnteringToken(true);
       } else {
         setRequested(true);
       }
@@ -79,7 +82,7 @@ export function PasswordResetPage() {
           </Link>
         ) : null}
 
-        {token || requested ? null : (
+        {enteringToken || requested ? null : (
           <form className="space-y-4" onSubmit={handleRequest}>
             <div>
               <label className="mb-1 block font-medium text-sm" htmlFor="email">
@@ -98,11 +101,39 @@ export function PasswordResetPage() {
             <Button className="w-full" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Sending..." : "Send reset link"}
             </Button>
+            <Button
+              className="w-full"
+              onClick={() => {
+                setError(null);
+                setEnteringToken(true);
+              }}
+              type="button"
+              variant="outline"
+            >
+              Use reset token
+            </Button>
           </form>
         )}
 
-        {token && !completed ? (
+        {enteringToken && !completed ? (
           <form className="space-y-4" onSubmit={handleReset}>
+            <div>
+              <label
+                className="mb-1 block font-medium text-sm"
+                htmlFor="reset-token"
+              >
+                Reset token
+              </label>
+              <Input
+                autoCapitalize="none"
+                autoComplete="off"
+                id="reset-token"
+                onChange={(event) => setToken(event.target.value)}
+                required
+                spellCheck={false}
+                value={token}
+              />
+            </div>
             <div>
               <label
                 className="mb-1 block font-medium text-sm"

@@ -762,6 +762,34 @@ describe("OrgService", () => {
     });
   });
 
+  test("returns a public reset response without waiting for SMTP", async () => {
+    let finishDelivery: (result: { ok: boolean }) => void = () => undefined;
+    const delivery = new Promise<{ ok: boolean }>((resolve) => {
+      finishDelivery = resolve;
+    });
+    const { orgService, authService } = createOrgService({
+      send: () => delivery,
+    });
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-timing" },
+    });
+
+    const response = orgService.requestPasswordReset("admin@acme.com");
+    const settled = await Promise.race([
+      response,
+      Bun.sleep(100).then(() => null),
+    ]);
+    finishDelivery({ ok: true });
+
+    expect(settled).toEqual({ delivered: true, token: null });
+  });
+
   test("rejects expired invites", async () => {
     const { orgService, databaseAdapter } = createOrgService();
     const authService = new AuthService();

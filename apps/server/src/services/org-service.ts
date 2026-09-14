@@ -991,22 +991,29 @@ export class OrgService {
     const resetInstruction = webPublicUrl
       ? `Reset your password: ${webPublicUrl}/reset-password?token=${encodeURIComponent(token)}`
       : `Password reset token: ${token}`;
-    const delivery = await this.email.send({
-      subject: "Reset your Nakama password",
-      text: [
-        "A password reset was requested for your account.",
-        "",
-        resetInstruction,
-        "",
-        `This link expires on ${record.expiresAt}. If you did not request it, you can ignore this message.`,
-      ].join("\n"),
-      to: email,
-    });
+    const deliveryPromise = Promise.resolve().then(() =>
+      this.email.send({
+        subject: "Reset your Nakama password",
+        text: [
+          "A password reset was requested for your account.",
+          "",
+          resetInstruction,
+          "",
+          `This link expires on ${record.expiresAt}. If you did not request it, you can ignore this message.`,
+        ].join("\n"),
+        to: email,
+      })
+    );
 
     if (!allowManualToken) {
+      // Public callers get a response independent of SMTP latency. The
+      // adapter contains delivery errors, while this catch also protects
+      // against an injected adapter rejecting unexpectedly.
+      void deliveryPromise.catch(() => undefined);
       return { delivered: true, token: null };
     }
 
+    const delivery = await deliveryPromise;
     return { delivered: delivery.ok, token: delivery.ok ? null : token };
   }
 
