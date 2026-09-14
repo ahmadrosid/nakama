@@ -160,14 +160,8 @@ export function ChatPageContent(state: ChatPageState) {
       <ChatPageColumn centered>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-          {cognito ? (
-            <p className="px-4 pb-1 text-muted-foreground text-sm">
-              Cognito is on. This chat is not saved, does not appear in History,
-              and nothing from it is written to memory. Reloading the page ends
-              it.
-            </p>
-          ) : null}
           <ChatWelcome
+            cognito={cognito}
             onProfileSwitch={handleProfileSwitch}
             profile={activeProfile}
             profileId={profileId}
