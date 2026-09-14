@@ -523,3 +523,44 @@ describe("attachments left by a cognito session", () => {
     expect(await db.getAttachment(attachments[0]!.id)).not.toBeNull();
   });
 });
+
+describe("cognito leaves no skill-usage trail", () => {
+  setupTestConfigDir("nakama-cognito-usage-");
+
+  async function turnWith(cognito: boolean): Promise<number> {
+    const db = createInMemoryDatabaseAdapter();
+    const skills = await seedProfileWithSkillManage(db);
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+    const captured: CapturedTurn = { names: [], system: "" };
+    stubHarnessCapturingTools(service, captured);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      {
+        orgRole: "admin",
+        ...(cognito ? { cognito: { personalized: true } } : {}),
+      }
+    );
+    const session = await service.resolveSession(sessionId, ORG_ID);
+    await session?.send({ message: "help me manage skills" });
+    // The recorders are fired without await, so let them settle.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const usage = await db.listSkillUsageForProfile("profile_default");
+    return usage.length;
+  }
+
+  test("a personalized cognito turn records no skill usage", async () => {
+    // Reading the catalog is right in this sub-mode. Writing a row saying
+    // which skills the chat touched is still a trace of what it was about.
+    expect(await turnWith(true)).toBe(0);
+  });
+
+  test("an ordinary turn still records it", async () => {
+    expect(await turnWith(false)).toBeGreaterThan(0);
+  });
+});
