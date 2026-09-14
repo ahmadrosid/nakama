@@ -1,13 +1,8 @@
-import { createPortal } from "react-dom";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
-import {
-  PageState,
-  ProfileDetailTabButton,
-  ProfilesEmptyState,
-} from "@/pages/profiles/profiles-ui";
+import { PageState, ProfilesEmptyState } from "@/pages/profiles/profiles-ui";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 function useProfilesPageLayoutMeta(state: ProfilesPageState) {
@@ -21,40 +16,12 @@ function useProfilesPageLayoutMeta(state: ProfilesPageState) {
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;
-  const pageHeaderActions =
-    typeof document === "undefined"
-      ? null
-      : document.querySelector<HTMLElement>("[data-page-header-actions]");
 
   return {
     canCreateProfile,
     canPack,
     onAskSuperBot,
-    pageHeaderActions,
   };
-}
-
-function ProfilesHeaderTabs({
-  setDetailTab,
-}: {
-  setDetailTab: ProfilesPageState["setDetailTab"];
-}) {
-  return (
-    <div
-      aria-label="Profile settings"
-      className="flex h-full items-stretch"
-      role="tablist"
-    >
-      <ProfileDetailTabButton
-        active
-        controls="profile-detail-panel-profile"
-        id="profile-detail-tab-profile"
-        onSelect={() => setDetailTab("profile")}
-      >
-        Config
-      </ProfileDetailTabButton>
-    </div>
-  );
 }
 
 function ProfilesPageError({
@@ -151,16 +118,8 @@ function ProfilesMainSection({
 }
 
 export function ProfilesPageLayout(state: ProfilesPageState) {
-  const {
-    profiles,
-    profilesLoading,
-    error,
-    selectedId,
-    detail,
-    refetchDetail,
-    setDetailTab,
-  } = state;
-  const { canCreateProfile, canPack, onAskSuperBot, pageHeaderActions } =
+  const { profiles, profilesLoading, error, selectedId, refetchDetail } = state;
+  const { canCreateProfile, canPack, onAskSuperBot } =
     useProfilesPageLayoutMeta(state);
 
   if (profilesLoading && profiles.length === 0) {
@@ -169,12 +128,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
 
   return (
     <div className="space-y-4">
-      {pageHeaderActions && selectedId && detail
-        ? createPortal(
-            <ProfilesHeaderTabs setDetailTab={setDetailTab} />,
-            pageHeaderActions
-          )
-        : null}
       <ProfilesPageError
         error={error}
         onRetry={() => void refetchDetail()}

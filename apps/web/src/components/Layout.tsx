@@ -37,7 +37,11 @@ export function Layout() {
           className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
           data-app-shell-content=""
         >
-          <AppShellHeader label={shell.headerLabel} page={shell.page} />
+          <AppShellHeader
+            hideDesktop={shell.pathname === PAGE_PATHS.profiles}
+            label={shell.headerLabel}
+            page={shell.page}
+          />
           <AppShellError error={shell.error} />
           <main className={appShellMainClassName(shell.page, shell.pathname)}>
             <RouteBoundary resetKey={shell.pathname}>
@@ -101,9 +105,11 @@ function appShellMainClassName(page: PageId, pathname: string): string {
 }
 
 function AppShellHeader({
+  hideDesktop,
   label,
   page,
 }: {
+  hideDesktop: boolean;
   label: string | undefined;
   page: PageId;
 }) {
@@ -123,7 +129,7 @@ function AppShellHeader({
         "h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
         // Chat uses the full desktop column; phones still need the header
         // to reach navigation.
-        page === "chat" && "sm:hidden"
+        (page === "chat" || hideDesktop) && "sm:hidden"
       )}
     >
       <MobileNavDrawer className="sm:hidden" />

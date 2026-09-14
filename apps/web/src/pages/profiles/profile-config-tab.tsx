@@ -54,10 +54,8 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   return (
     <div
-      aria-labelledby="profile-detail-tab-profile"
       className="mx-auto max-w-3xl space-y-8"
       id="profile-detail-panel-profile"
-      role="tabpanel"
     >
       {canPack && !detail.isSuper ? (
         <div className="flex flex-wrap justify-end gap-2">
