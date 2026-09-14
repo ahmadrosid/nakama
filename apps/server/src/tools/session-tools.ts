@@ -95,7 +95,10 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
           throw new Error("profileId is required.");
         }
 
-        return await agent.listSessions(orgId, profileId, readChannel(input));
+        return await agent.listSessions(orgId, profileId, readChannel(input), {
+          isPlatformAdmin: context.isPlatformAdmin,
+          orgRole: context.orgRole,
+        });
       },
     },
     {

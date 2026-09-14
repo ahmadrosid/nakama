@@ -348,6 +348,11 @@ export interface CreateSessionOptions {
   orgRole?: OrgRole | null;
 }
 
+type ChatProfileAccess = Pick<
+  CreateSessionOptions,
+  "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
+>;
+
 export class AgentService {
   private harness: AgentDependencies;
   private userConfig: UserConfig | null;
@@ -1657,20 +1662,7 @@ export class AgentService {
       profileId
     );
     const profile = await this.requireProfile(orgId, resolvedProfileId);
-
-    if (
-      profile.isSuper &&
-      (options?.excludeSuperBot ||
-        !canAccessSuperBotProfile({
-          isPlatformAdmin: options?.isPlatformAdmin,
-          orgRole: options?.orgRole,
-        }))
-    ) {
-      throw new NakamaApiError(
-        "Super Bot is only available to org admins.",
-        403
-      );
-    }
+    this.assertChatProfileAccess(profile, options ?? {});
 
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
@@ -1706,6 +1698,36 @@ export class AgentService {
     });
 
     return sessionId;
+  }
+
+  async assertSessionProfileAccess(
+    sessionId: string,
+    orgId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    // A missing session is left to the route, which still answers 404.
+    if (record) {
+      this.assertChatProfileAccess(
+        await this.requireProfile(orgId, record.profileId),
+        access
+      );
+    }
+  }
+
+  private assertChatProfileAccess(
+    profile: StoredProfileRecord,
+    access: ChatProfileAccess
+  ): void {
+    if (
+      profile.isSuper &&
+      (access.excludeSuperBot || !canAccessSuperBotProfile(access))
+    ) {
+      throw new NakamaApiError(
+        "Super Bot is only available to org admins.",
+        403
+      );
+    }
   }
 
   async getSessionTodos(
@@ -1890,9 +1912,13 @@ export class AgentService {
   async listSessions(
     orgId: string,
     profileId: string,
-    channel: AgentChannel
+    channel: AgentChannel,
+    access: ChatProfileAccess
   ): Promise<ListSessionsResponse> {
-    await this.requireProfile(orgId, profileId);
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
 
     const sessions = await this.db.listSessionSummaries(profileId, channel);
 
