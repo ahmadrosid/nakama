@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ensureBundledSkillFiles, type GenerateChatInput } from "@nakama/core";
+import { pathExists } from "@nakama/core/fs";
 import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -422,5 +423,103 @@ describe("the non-personalized cognito sub-mode", () => {
 
     expect(captured.names).toContain("test_tool");
     expect(captured.names).toContain("org_memory_search");
+  });
+});
+
+/** 1x1 transparent PNG. */
+const TINY_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+async function sendImage(
+  service: AgentService,
+  sessionId: string
+): Promise<void> {
+  const session = await service.resolveSession(sessionId, ORG_ID);
+  await session?.send({
+    images: [{ data: TINY_PNG, mediaType: "image/png" }],
+    message: "what is this",
+  });
+}
+
+describe("attachments left by a cognito session", () => {
+  setupTestConfigDir("nakama-cognito-attachments-");
+
+  test("are marked ephemeral and reference no session", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { cognito: { personalized: true } }
+    );
+    await sendImage(service, sessionId);
+
+    const [attachment] = await db.listEphemeralAttachments();
+    expect(attachment).toBeDefined();
+    expect(attachment?.ephemeral).toBe(true);
+    // Null rather than the session id: attachments.session_id is a foreign key
+    // and a cognito session has no row to point at.
+    expect(attachment?.sessionId).toBeNull();
+    expect(await pathExists(attachment!.storagePath)).toBe(true);
+  });
+
+  test("are removed from disk and the table when the session ends", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { cognito: { personalized: true } }
+    );
+    await sendImage(service, sessionId);
+    const [attachment] = await db.listEphemeralAttachments();
+
+    expect(await service.purgeSession(sessionId, ORG_ID)).toBe(true);
+
+    expect(await db.getAttachment(attachment!.id)).toBeNull();
+    expect(await pathExists(attachment!.storagePath)).toBe(false);
+    expect(await db.listEphemeralAttachments()).toEqual([]);
+  });
+
+  test("a restart sweep clears what a hard stop left behind", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { cognito: { personalized: true } }
+    );
+    await sendImage(service, sessionId);
+    const [attachment] = await db.listEphemeralAttachments();
+
+    // The session map is gone after a restart, so the sweep is the only path
+    // left to these rows.
+    expect(await service.sweepEphemeralAttachments()).toBe(1);
+    expect(await db.getAttachment(attachment!.id)).toBeNull();
+    expect(await pathExists(attachment!.storagePath)).toBe(false);
+  });
+
+  test("an ordinary session's attachments are untouched by the sweep", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null
+    );
+    await sendImage(service, sessionId);
+
+    const attachments = await db.listAttachmentsForSession(sessionId);
+    expect(attachments.length).toBe(1);
+    expect(attachments[0]?.ephemeral).toBe(false);
+    expect(await service.sweepEphemeralAttachments()).toBe(0);
+    expect(await db.getAttachment(attachments[0]!.id)).not.toBeNull();
   });
 });

@@ -2566,6 +2566,12 @@ export interface ToolContext {
    * was never chosen, which falls back to the server's NAKAMA_OMNI env var.
    */
   tokenOptimizerEnabled?: boolean | null;
+  /**
+   * Present only in a cognito session. Attachments there have no `sessions`
+   * row to reference, so they are written with a null session_id and their
+   * ids reported here, which is the only handle on them for cleanup.
+   */
+  trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
   workflowId?: string;
   workflowRunId?: string;
