@@ -110,6 +110,7 @@ export function AutomationListItem({
   selected,
   unreadCount,
   busy,
+  running,
   onSelect,
   onDelete,
 }: {
@@ -117,6 +118,7 @@ export function AutomationListItem({
   selected: boolean;
   unreadCount: number;
   busy: boolean;
+  running: boolean;
   onSelect: () => void;
   onDelete: (automation: StoredAutomation) => void;
 }) {
@@ -152,13 +154,19 @@ export function AutomationListItem({
             {summarizeAutomationListMeta(automation)}
           </p>
           <div className="flex items-center gap-2">
-            <AutomationStateDot enabled={automation.enabled} />
+            {running ? (
+              <Spinner aria-hidden className="size-3 text-primary" />
+            ) : (
+              <AutomationStateDot enabled={automation.enabled} />
+            )}
             <p className="text-2xs text-muted-foreground">
-              {automation.nextRunAt
-                ? `Next ${formatFutureRelativeTime(automation.nextRunAt)}`
-                : automation.lastRunAt
-                  ? `Last ${formatSessionRelativeTime(automation.lastRunAt)}`
-                  : "No runs yet"}
+              {running
+                ? "Running"
+                : automation.nextRunAt
+                  ? `Next ${formatFutureRelativeTime(automation.nextRunAt)}`
+                  : automation.lastRunAt
+                    ? `Last ${formatSessionRelativeTime(automation.lastRunAt)}`
+                    : "No runs yet"}
             </p>
           </div>
         </div>

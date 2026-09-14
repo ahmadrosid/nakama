@@ -5,12 +5,13 @@ import { automationsQueryOptions } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export function useAutomationsQuery() {
+export function useAutomationsQuery(refetchInterval = 30_000) {
   const { isAuthenticated, isLoading } = useAuth();
 
   return useQuery({
     ...automationsQueryOptions,
     enabled: isAuthenticated && !isLoading,
+    refetchInterval,
   });
 }
 
@@ -29,6 +30,7 @@ export function useAutomationRunsQuery(automationId: string | null) {
     enabled: Boolean(automationId),
     queryFn: () => client.listAutomationRuns(automationId!),
     queryKey: queryKeys.automations.runs(automationId ?? ""),
+    refetchInterval: 5000,
   });
 }
 
