@@ -1,7 +1,6 @@
 import type { ArtifactFile } from "@nakama/core/contract";
-import { cn } from "@nakama/ui/utils";
 import { useCallback, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
   type ArtifactTypeFilter,
@@ -40,51 +39,21 @@ export function FilesPage() {
   const { data: profiles = [] } = useProfilesQuery();
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
   const canViewFiles = user?.isPlatformAdmin === true;
-  const knowledge = !canViewFiles || searchParams.get("tab") === "knowledge";
 
   return (
-    <>
-      <nav
-        aria-label="Your files"
-        className="flex shrink-0 gap-2 border-border border-b px-4 sm:px-6"
-      >
-        {canViewFiles && (
-          <Link
-            aria-current={knowledge ? undefined : "page"}
-            className={cn(
-              "border-b-2 px-4 py-3 font-medium text-sm",
-              knowledge
-                ? "border-transparent text-muted-foreground"
-                : "border-foreground text-foreground"
-            )}
-            to="/files"
-          >
-            Files
-          </Link>
-        )}
-        <Link
-          aria-current={knowledge ? "page" : undefined}
-          className={cn(
-            "border-b-2 px-4 py-3 font-medium text-sm",
-            knowledge
-              ? "border-foreground text-foreground"
-              : "border-transparent text-muted-foreground"
-          )}
-          to="/files?tab=knowledge"
-        >
-          Knowledge
-        </Link>
-      </nav>
-      {knowledge ? (
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
-          <KnowledgeTab key={profileId} profileId={profileId} />
+    <ChatAttachmentPanelProvider presentation="overlay">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="space-y-8">
+          <section aria-label="Knowledge" className="relative min-w-0">
+            <KnowledgeTab key={profileId} profileId={profileId} />
+          </section>
+          {canViewFiles ? (
+            <FilesArtifactsPage key={profileId} profileId={profileId} />
+          ) : null}
         </div>
-      ) : (
-        <FilesArtifactsPage key={profileId} profileId={profileId} />
-      )}
-    </>
+      </div>
+    </ChatAttachmentPanelProvider>
   );
 }
 
@@ -217,8 +186,8 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
   })();
 
   return (
-    <ChatAttachmentPanelProvider presentation="overlay">
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+    <>
+      <div className="min-w-0">
         <div className="space-y-4">
           <FilesToolbar
             isFetching={isFetching}
@@ -277,6 +246,6 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => void handleDelete()}
       />
-    </ChatAttachmentPanelProvider>
+    </>
   );
 }
