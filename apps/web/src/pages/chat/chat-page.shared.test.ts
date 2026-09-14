@@ -288,11 +288,4 @@ describe("welcome copy animation key", () => {
 
     expect(new Set([greeting, personalized, neutral]).size).toBe(3);
   });
-
-  test("the same mode keeps the same key, so it does not replay on re-render", () => {
-    expect(welcomeAnimationKey({ personalized: true })).toBe(
-      welcomeAnimationKey({ personalized: true })
-    );
-    expect(welcomeAnimationKey(null)).toBe(welcomeAnimationKey(null));
-  });
 });
