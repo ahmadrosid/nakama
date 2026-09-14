@@ -1,5 +1,6 @@
 import {
   emptyObjectSchema,
+  listKnowledgeBaseDocuments,
   type OrgRole,
   type ToolContext,
   type ToolDefinition,
@@ -42,15 +43,49 @@ function readString(input: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function readStringArray(input: unknown, key: string): string[] {
-  if (typeof input !== "object" || input === null || !(key in input)) {
+/**
+ * Agents usually see filenames in the KB catalog / search hits, not raw ids.
+ * Accept either and store only ids that resolve to a real document.
+ */
+async function resolveSourceDocumentIds(
+  orgId: string,
+  profileId: string | null | undefined,
+  raw: unknown
+): Promise<string[] | undefined> {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(raw)) {
     return [];
   }
-  const value = (input as Record<string, unknown>)[key];
-  if (!Array.isArray(value)) {
-    return [];
+  if (!profileId?.trim()) {
+    return raw.filter((entry): entry is string => typeof entry === "string");
   }
-  return value.filter((entry): entry is string => typeof entry === "string");
+
+  const documents = await listKnowledgeBaseDocuments(orgId, profileId);
+  const byId = new Map(documents.map((document) => [document.id, document]));
+  const byFilename = new Map(
+    documents.map((document) => [document.filename.toLowerCase(), document])
+  );
+
+  const resolved: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const key = entry.trim();
+    if (!key) {
+      continue;
+    }
+    const document = byId.get(key) ?? byFilename.get(key.toLowerCase()) ?? null;
+    if (!document || seen.has(document.id)) {
+      continue;
+    }
+    seen.add(document.id);
+    resolved.push(document.id);
+  }
+  return resolved;
 }
 
 export function createOrgMemoryTools(
@@ -94,7 +129,7 @@ export function createOrgMemoryTools(
     },
     {
       description:
-        "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log. When the fact came from a knowledge-base document, pass its document id(s) in sourceDocumentIds.",
+        "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log. When the fact came from a knowledge-base document, pass its document id(s) or filename(s) in sourceDocumentIds.",
       name: "propose_org_memory",
       parallelSafe: false,
       parameters: {
@@ -107,7 +142,7 @@ export function createOrgMemoryTools(
           },
           sourceDocumentIds: {
             description:
-              "Optional knowledge-base document ids the fact was derived from. Pass these when the bullet summarizes or cites uploaded documents.",
+              "Optional knowledge-base document ids or filenames the fact was derived from. Pass these when the bullet summarizes or cites uploaded documents.",
             items: { type: "string" },
             type: "array",
           },
@@ -121,12 +156,22 @@ export function createOrgMemoryTools(
         if (!bullet) {
           throw new Error("bullet is required.");
         }
+        const rawSourceIds =
+          typeof input === "object" &&
+          input !== null &&
+          "sourceDocumentIds" in input
+            ? (input as Record<string, unknown>).sourceDocumentIds
+            : undefined;
         return service.propose(orgId, {
           bullet,
           profileId: context.profileId ?? null,
           proposedByUserId: context.userId ?? null,
           sessionId: context.sessionId ?? null,
-          sourceDocumentIds: readStringArray(input, "sourceDocumentIds"),
+          sourceDocumentIds: await resolveSourceDocumentIds(
+            orgId,
+            context.profileId,
+            rawSourceIds
+          ),
         });
       },
     },

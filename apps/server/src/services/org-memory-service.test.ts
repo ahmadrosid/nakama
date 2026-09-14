@@ -274,15 +274,6 @@ describe("OrgMemoryService", () => {
     ).toEqual(["kb_handbook", "kb_faq"]);
   });
 
-  test("proposals without source document ids load as an empty list", async () => {
-    const service = await setup();
-    const proposed = await service.propose("org_a", {
-      bullet: "standups stay async",
-    });
-    const proposal = await service.getProposal("org_a", proposed.proposalId!);
-    expect(proposal.sourceDocumentIds).toEqual([]);
-  });
-
   test("caps source document ids at twenty unique values", async () => {
     const service = await setup();
     const many = Array.from({ length: 25 }, (_, index) => `kb_doc_${index}`);

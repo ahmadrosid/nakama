@@ -78,7 +78,7 @@ function ProposalSources({
   proposal: OrgMemoryProposal;
   variant?: "compact" | "detail";
 }) {
-  const sourceDocumentIds = proposal.sourceDocumentIds ?? [];
+  const sourceDocumentIds = proposal.sourceDocumentIds;
   const { data, isPending } = useKnowledgeBaseQuery(proposal.profileId);
   const documentsById = new Map(
     (data?.documents ?? []).map((document) => [document.id, document])
