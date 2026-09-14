@@ -18,9 +18,16 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
-import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import type {
+  ChannelSessionStore,
+  ChatSessionRecord,
+} from "@nakama/core/channel-session-store";
 import { createTypingLoop } from "@nakama/core/channel-typing-loop";
-import type { ImageAttachment, SendMessageInput } from "@nakama/core/contract";
+import type {
+  ImageAttachment,
+  SendMessageInput,
+  SessionSummary,
+} from "@nakama/core/contract";
 import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
 import {
   filterProfilesForChatAccess,
@@ -618,6 +625,19 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           await messenger.send("Started a new conversation.");
           return;
         }
+        case "sessions":
+          await handleSessionsPicker(interaction, conversationKey);
+          return;
+        case "resume":
+          if ("options" in interaction) {
+            await messenger.send(
+              await resumeSession(
+                conversationKey,
+                interaction.options.getString("session", true)
+              )
+            );
+          }
+          return;
         case "status":
           await replyStatus(messenger, conversationKey);
           return;
@@ -1230,6 +1250,11 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         lines.push("Chat runs in offline mode without an API key.");
       }
 
+      const sessionId = sessionStore.get(chatId)?.sessionId;
+      if (sessionId) {
+        lines.push(`Session: ${shortSessionId(sessionId)}`);
+      }
+
       await replyChunks(messenger, lines.join("\n"));
     } catch (error) {
       await messenger.send(formatClientError(error));
@@ -1269,15 +1294,115 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       profileId: resolvedProfileId,
     });
 
-    sessionStore.set(chatId, {
-      profileId: resolvedProfileId,
-      sessionId: session.id,
-      updatedAt: new Date().toISOString(),
-    });
+    sessionStore.set(
+      chatId,
+      nextSessionRecord(chatId, resolvedProfileId, session.id)
+    );
     sessionStore.setHotSession(chatId, session);
     await sessionStore.save();
 
     return session;
+  }
+
+  function nextSessionRecord(
+    chatId: string,
+    profileId: string,
+    sessionId: string
+  ): ChatSessionRecord {
+    const existing = sessionStore.get(chatId);
+    const known = existing ? (existing.sessionIds ?? [existing.sessionId]) : [];
+    return {
+      profileId,
+      sessionId,
+      // One select menu holds 25 options, so older sessions drop off.
+      sessionIds: [...known.filter((id) => id !== sessionId), sessionId].slice(
+        -25
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  // Every Discord user reaches the API as the same identity, so the server
+  // lists all Discord sessions on the profile. Offer only this chat's own.
+  async function listChatSessions(chatId: string): Promise<SessionSummary[]> {
+    const record = sessionStore.get(chatId);
+    if (!record) {
+      return [];
+    }
+    const known = record.sessionIds ?? [record.sessionId];
+    const { sessions } = await client.listSessions(
+      await resolveSessionProfileId(chatId),
+      "discord"
+    );
+    return sessions.filter((session) => known.includes(session.id));
+  }
+
+  async function resumeSession(chatId: string, input: string): Promise<string> {
+    const id = input.trim();
+    const matches = id
+      ? (await listChatSessions(chatId)).filter((session) =>
+          session.id.startsWith(id)
+        )
+      : [];
+    if (matches.length > 1) {
+      return "That ID matches more than one session. Copy more of it from /sessions.";
+    }
+    const picked = matches[0];
+    if (!picked) {
+      return "No session with that ID in this chat. Use /sessions to see the list.";
+    }
+
+    stopActiveStream(chatId);
+    sessionStore.set(
+      chatId,
+      nextSessionRecord(chatId, picked.profileId, picked.id)
+    );
+    await sessionStore.save();
+    return `Resumed ${sessionLabel(picked)} (${shortSessionId(picked.id)}).`;
+  }
+
+  async function handleSessionsPicker(
+    interaction:
+      | ChatInputCommandInteraction
+      | ButtonInteraction
+      | StringSelectMenuInteraction,
+    chatId: string
+  ): Promise<void> {
+    if ("values" in interaction) {
+      await interaction.editReply({
+        components: [],
+        content: await resumeSession(chatId, interaction.values[0] ?? ""),
+      });
+      return;
+    }
+
+    const sessions = await listChatSessions(chatId);
+    if (sessions.length === 0) {
+      await interaction.editReply({
+        components: [],
+        content: "No sessions in this chat yet. Send a message to start one.",
+      });
+      return;
+    }
+
+    const currentId = sessionStore.get(chatId)?.sessionId;
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`nakama:sessions:${interaction.user.id}`)
+      .setPlaceholder("Choose a session to resume")
+      .addOptions(
+        sessions.map((session) => ({
+          default: session.id === currentId,
+          description: `${shortSessionId(session.id)} · ${session.updatedAt.slice(0, 16).replace("T", " ")} UTC`,
+          label: sessionLabel(session),
+          value: session.id,
+        }))
+      );
+    await interaction.editReply({
+      components: [
+        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
+      ],
+      content: "Sessions",
+    });
   }
 
   async function resolveSessionProfileId(chatId: string): Promise<string> {
@@ -1320,6 +1445,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     sessionStore.set(conversationKey, {
       profileId: existing.profileId,
       sessionId: existing.sessionId,
+      sessionIds: existing.sessionIds,
       updatedAt: new Date().toISOString(),
     });
     await sessionStore.save();
@@ -1343,6 +1469,14 @@ function withGroupContext(
   }
 
   return { ...input, message: GROUP_MESSAGE_PREFIX.trim() };
+}
+
+function shortSessionId(id: string): string {
+  return id.slice(0, 8);
+}
+
+function sessionLabel(session: SessionSummary): string {
+  return (session.title || session.preview || "Untitled").slice(0, 100);
 }
 
 function deriveThreadName(messageText: string): string {

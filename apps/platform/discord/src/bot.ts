@@ -70,13 +70,13 @@ export async function createBot(
   client.on(Events.InteractionCreate, async (interaction) => {
     if (
       (interaction.isStringSelectMenu() || interaction.isButton()) &&
-      /^nakama:(org|profile):/.test(interaction.customId)
+      /^nakama:(org|profile|sessions):/.test(interaction.customId)
     ) {
       try {
         // Private pickers can update in place; copied/foreign controls cannot mutate state.
         if (interaction.customId.split(":")[2] !== interaction.user.id) {
           await interaction.reply({
-            content: "Open your own /org or /profile picker.",
+            content: "Open your own /org, /profile or /sessions picker.",
             flags: MessageFlags.Ephemeral,
           });
           return;
