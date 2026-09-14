@@ -279,7 +279,12 @@ export function refuseSkillLocalToolFileWrite(resolvedPath: string): void {
   );
 }
 
-function resolveWorkspaceRoot(
+/**
+ * Named apart from the `resolveWorkspaceRoot` in `paths.ts` and the one in
+ * `bash.ts`, which have different signatures and are easy to reach for by
+ * mistake.
+ */
+function fileToolWorkspaceRoot(
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): string {
@@ -295,7 +300,7 @@ function buildFileGuardOptions(
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
-  const workspaceRoot = resolveWorkspaceRoot(context, options);
+  const workspaceRoot = fileToolWorkspaceRoot(context, options);
 
   return {
     ...defaultGuardOptions,
@@ -363,7 +368,7 @@ export async function runWriteFile(
   refuseMemoryFileWrite(
     context,
     guarded.resolved,
-    resolveWorkspaceRoot(context, options)
+    fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const { orgId, profileId } = requireProfileScope(context);
@@ -439,7 +444,7 @@ export async function runWriteDocx(
   refuseMemoryFileWrite(
     context,
     guarded.resolved,
-    resolveWorkspaceRoot(context, options)
+    fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   // Same rule as write_file: never silently overwrite an existing artifact.
@@ -482,7 +487,7 @@ export async function runDeleteFile(
   refuseMemoryFileWrite(
     context,
     guarded.resolved,
-    resolveWorkspaceRoot(context, options)
+    fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   await context.memoryFiles?.remove(guarded.resolved);
@@ -522,7 +527,7 @@ export async function runEditFile(
   refuseMemoryFileWrite(
     context,
     guarded.resolved,
-    resolveWorkspaceRoot(context, options)
+    fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const filePath = guarded.resolved;
