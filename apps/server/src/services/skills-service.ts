@@ -894,14 +894,19 @@ export class SkillsService {
   async composeCatalogForProfile(
     orgId: string,
     profileId: string,
-    usageContext?: SkillUsageRecordingContext
+    usageContext?: SkillUsageRecordingContext,
+    // False in a cognito session: a usage row records which skills the chat
+    // touched, which is a durable trace of what it was about.
+    recordUsage = true
   ): Promise<string> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
     const skillIds = assigned
       .map((item) => item.record.id)
       .filter((skillId): skillId is string => Boolean(skillId));
 
-    void this.recordCatalogViews(orgId, profileId, skillIds, usageContext);
+    if (recordUsage) {
+      void this.recordCatalogViews(orgId, profileId, skillIds, usageContext);
+    }
 
     return composeSkillsCatalog(assigned.map((item) => item.discovered));
   }
@@ -922,6 +927,8 @@ export class SkillsService {
     userMessage: string,
     options: {
       appendContext?: (matched: DiscoveredSkill[]) => string | Promise<string>;
+      /** False in a cognito session, for the same reason as the catalog. */
+      recordUsage?: boolean;
       usageContext?: SkillUsageRecordingContext;
     } = {}
   ): Promise<string> {
@@ -940,7 +947,9 @@ export class SkillsService {
         )
         .filter((skillId): skillId is string => Boolean(skillId));
 
-      void this.recordMatches(orgId, profileId, matchedSkillIds);
+      if (options.recordUsage !== false) {
+        void this.recordMatches(orgId, profileId, matchedSkillIds);
+      }
     }
 
     const prompt = composeMatchedSkillsPrompt(matched, {

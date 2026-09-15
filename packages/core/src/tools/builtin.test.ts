@@ -630,6 +630,96 @@ describe("file builtin tools", () => {
     ).toBe("nested\n");
   });
 
+  test("file tools refuse memory files when forbidMemoryWrites", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-mem-"));
+    await mkdir(path.join(tempDir, "memory-archive"), { recursive: true });
+    await writeFile(path.join(tempDir, "MEMORY.md"), "remembered\n", "utf8");
+    await writeFile(
+      path.join(tempDir, "memory-archive", "2026-09.md"),
+      "archived\n",
+      "utf8"
+    );
+    const context = { ...PROFILE_CONTEXT, forbidMemoryWrites: true };
+
+    await expect(
+      runWriteFile({ content: "learned", path: "MEMORY.md" }, context, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runEditFile(
+        {
+          edits: [{ newText: "changed", oldText: "remembered" }],
+          path: "MEMORY.md",
+        },
+        context,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runDeleteFile({ path: "MEMORY.md" }, context, { workspaceRoot: tempDir })
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runWriteFile(
+        { content: "learned", path: "memory-archive/2026-09.md" },
+        context,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runWriteDocx({ markdown: "# hi", path: "MEMORY.docx" }, context, {
+        workspaceRoot: tempDir,
+      })
+    ).resolves.toBeDefined();
+
+    expect(await readFile(path.join(tempDir, "MEMORY.md"), "utf8")).toBe(
+      "remembered\n"
+    );
+  });
+
+  test("forbidMemoryWrites leaves ordinary workspace files writable", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-ok-"));
+    await mkdir(path.join(tempDir, "memory-archive"), { recursive: true });
+    await mkdir(path.join(tempDir, "notes"), { recursive: true });
+    const context = { ...PROFILE_CONTEXT, forbidMemoryWrites: true };
+
+    // Only MEMORY.md at the workspace root and memory-archive/YYYY-MM.md are
+    // memory. A same-named file one directory down is an ordinary artifact.
+    await runWriteFile({ content: "mine", path: "notes/MEMORY.md" }, context, {
+      workspaceRoot: tempDir,
+    });
+    await runWriteFile(
+      { content: "index", path: "memory-archive/index.md" },
+      context,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(
+      await readFile(path.join(tempDir, "notes", "MEMORY.md"), "utf8")
+    ).toBe("mine");
+    expect(
+      await readFile(path.join(tempDir, "memory-archive", "index.md"), "utf8")
+    ).toBe("index");
+  });
+
+  test("memory files stay writable when forbidMemoryWrites is unset", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-off-"));
+
+    await runWriteFile(
+      { content: "learned", path: "MEMORY.md" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(path.join(tempDir, "MEMORY.md"), "utf8")).toBe(
+      "learned"
+    );
+  });
+
   test("write_file, edit_file, and delete_file refuse skills/*/tool.js and tool.ts", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-skill-tool-"));
     await mkdir(path.join(tempDir, "skills", "notes"), { recursive: true });

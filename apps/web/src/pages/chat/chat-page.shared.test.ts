@@ -13,6 +13,8 @@ import {
   messagesWithoutFailedTurn,
   nextSuccessfulTurnAt,
   planPromptBranch,
+  shouldShowCognitoControl,
+  welcomeAnimationKey,
 } from "@/pages/chat/chat-page.shared";
 
 function user(
@@ -262,5 +264,28 @@ describe("the edit flow", () => {
     const plan = planPromptBranch(messages, edited);
 
     expect(plan?.initialMessages).toHaveLength(2);
+  });
+});
+
+describe("cognito control visibility", () => {
+  test("an ordinary chat shows it only before the first message", () => {
+    expect(shouldShowCognitoControl(null, true)).toBe(true);
+    expect(shouldShowCognitoControl(null, false)).toBe(false);
+  });
+
+  test("an active cognito chat keeps it, or there is no way out of the mode", () => {
+    expect(shouldShowCognitoControl({ personalized: true }, false)).toBe(true);
+    expect(shouldShowCognitoControl({ personalized: false }, false)).toBe(true);
+    expect(shouldShowCognitoControl({ personalized: true }, true)).toBe(true);
+  });
+});
+
+describe("welcome copy animation key", () => {
+  test("every switch produces a different key, so the entrance replays", () => {
+    const greeting = welcomeAnimationKey(null);
+    const personalized = welcomeAnimationKey({ personalized: true });
+    const neutral = welcomeAnimationKey({ personalized: false });
+
+    expect(new Set([greeting, personalized, neutral]).size).toBe(3);
   });
 });

@@ -914,8 +914,21 @@ export interface ListChannelOrgMappingsResponse {
   mappings: ChannelOrgMappingSummary[];
 }
 
+/**
+ * Cognito sessions live only in server memory: no `sessions` row, no
+ * `session_messages`, no generated title, and no write-back into profile or
+ * org memory. `personalized` only decides what is read in — a personalized
+ * cognito session still loads soul, skills, plugins and memory, it just
+ * leaves nothing behind.
+ */
+export interface CognitoOptions {
+  personalized: boolean;
+}
+
 export interface CreateSessionRequest {
   channel: AgentChannel;
+  /** Absent means an ordinary persisted session. */
+  cognito?: CognitoOptions;
   model?: string;
   profileId?: string;
 }
@@ -2523,6 +2536,12 @@ export interface ToolContext {
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
   /**
+   * When true (a cognito session), write_file / write_docx / edit_file / delete_file
+   * refuse MEMORY.md and memory-archive/YYYY-MM.md under the profile workspace, so a
+   * chat that leaves no trace cannot leave one through the file tools either.
+   */
+  forbidMemoryWrites?: boolean;
+  /**
    * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
@@ -2583,6 +2602,12 @@ export interface ToolContext {
    * was never chosen, which falls back to the server's NAKAMA_OMNI env var.
    */
   tokenOptimizerEnabled?: boolean | null;
+  /**
+   * Present only in a cognito session. Attachments there have no `sessions`
+   * row to reference, so they are written with a null session_id and their
+   * ids reported here, which is the only handle on them for cleanup.
+   */
+  trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
   workflowId?: string;
   workflowRunId?: string;

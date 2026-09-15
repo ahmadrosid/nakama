@@ -668,6 +668,7 @@ export class NakamaClient {
     const response = await this.request<CreateSessionResponse>("/v1/sessions", {
       body: JSON.stringify({
         channel,
+        cognito: options.cognito,
         model: options.model,
         profileId: options.profileId,
       }),

@@ -18,6 +18,7 @@ import {
   guardFilePath,
   PathGuardError,
   type PathGuardOptions,
+  resolveWithRealpath,
 } from "./paths";
 import {
   jsonSchemaFromZod,
@@ -214,6 +215,43 @@ export function refuseProfileSkillMarkdownWrite(
   );
 }
 
+/** Mirrors the archive names MemoryBackendService treats as memory. */
+const MEMORY_ARCHIVE_NAME = /^memory-archive\/[0-9]{4}-[0-9]{2}\.md$/;
+
+/**
+ * A cognito session promises the chat is never written back to memory, and
+ * memory is plain Markdown in the profile workspace rather than a dedicated
+ * tool, so the file tools are the path that has to refuse it.
+ *
+ * Matches exactly what `MemoryBackendService.toolContext` counts as memory:
+ * `MEMORY.md` at the workspace root and `memory-archive/YYYY-MM.md`. A
+ * same-named file deeper in the tree is an ordinary artifact and stays
+ * writable.
+ *
+ * Call after the path guard succeeds, so `resolvedPath` is already realpath'd.
+ */
+export function refuseMemoryFileWrite(
+  context: ToolContext,
+  resolvedPath: string,
+  workspaceRoot: string
+): void {
+  if (!context.forbidMemoryWrites) {
+    return;
+  }
+
+  const name = path
+    .relative(resolveWithRealpath(workspaceRoot), resolvedPath)
+    .replace(/\\/g, "/");
+
+  if (name !== "MEMORY.md" && !MEMORY_ARCHIVE_NAME.test(name)) {
+    return;
+  }
+
+  throw new Error(
+    `This is a cognito chat, so ${name} cannot be written or deleted. Nothing from this conversation is saved to memory. Answer from the conversation instead, and tell the user if they need it remembered.`
+  );
+}
+
 /**
  * Always refuse agent writes of skill-local executables under skills/<name>/.
  * Those modules are loaded via dynamic import and must stay admin-authored in Phase 1.
@@ -241,14 +279,28 @@ export function refuseSkillLocalToolFileWrite(resolvedPath: string): void {
   );
 }
 
-function buildFileGuardOptions(
+/**
+ * Named apart from the `resolveWorkspaceRoot` in `paths.ts` and the one in
+ * `bash.ts`, which have different signatures and are easy to reach for by
+ * mistake.
+ */
+function fileToolWorkspaceRoot(
   context: ToolContext,
   options: FileToolRunOptions = {}
-): PathGuardOptions {
+): string {
   const { orgId, profileId } = requireProfileScope(context);
   const workspaceRoot =
     options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
   assertAbsoluteWorkspaceRoot(workspaceRoot);
+
+  return workspaceRoot;
+}
+
+function buildFileGuardOptions(
+  context: ToolContext,
+  options: FileToolRunOptions = {}
+): PathGuardOptions {
+  const workspaceRoot = fileToolWorkspaceRoot(context, options);
 
   return {
     ...defaultGuardOptions,
@@ -313,6 +365,11 @@ export async function runWriteFile(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const { orgId, profileId } = requireProfileScope(context);
   const workspaceRoot =
@@ -384,6 +441,11 @@ export async function runWriteDocx(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   // Same rule as write_file: never silently overwrite an existing artifact.
   const filePath = isArtifactPath(parsed.path)
@@ -422,6 +484,11 @@ export async function runDeleteFile(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   await context.memoryFiles?.remove(guarded.resolved);
   await unlink(guarded.resolved);
@@ -457,6 +524,11 @@ export async function runEditFile(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const filePath = guarded.resolved;
 

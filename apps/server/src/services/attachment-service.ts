@@ -12,9 +12,12 @@ import type { DatabaseAdapter, StoredAttachmentRecord } from "@nakama/db";
 
 export interface AttachmentServiceContext {
   channel: AgentChannel;
+  /** True in a cognito session, which pairs with a null sessionId. */
+  ephemeral?: boolean;
   orgId: string;
   profileId: string;
-  sessionId: string;
+  /** Null in a cognito session: there is no `sessions` row to point at. */
+  sessionId: string | null;
 }
 
 export function createAttachmentSaver(
@@ -33,6 +36,7 @@ export function createAttachmentSaver(
     const record: StoredAttachmentRecord = {
       channel: context.channel,
       createdAt: now,
+      ephemeral: context.ephemeral ?? false,
       filename: input.filename ?? null,
       id: attachmentId,
       kind: input.kind,
