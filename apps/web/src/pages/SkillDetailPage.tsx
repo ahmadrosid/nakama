@@ -1,4 +1,5 @@
 import { Button } from "@nakama/ui/button";
+import { CodeBlock } from "@nakama/ui/code-block";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
@@ -18,7 +19,6 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { CodeBlock } from "@/components/ai-elements/code-block";
 import { RemoveSkillFromProfileDialog } from "@/components/RemoveSkillFromProfileDialog";
 import { SkillDetailContent } from "@/components/SkillDetailContent";
 import { useAuth } from "@/context/use-auth";

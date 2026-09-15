@@ -1,7 +1,7 @@
+import { CodeBlock } from "@nakama/ui/code-block";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CodeBlock } from "@/components/ai-elements/code-block";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { ArtifactMarkdownToc } from "@/components/chat/artifact-markdown-toc";
 import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
