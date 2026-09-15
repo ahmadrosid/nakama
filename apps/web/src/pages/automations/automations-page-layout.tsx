@@ -7,7 +7,6 @@ import {
   SelectValue,
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
 import { Message01Icon, RefreshIcon } from "hugeicons-react";
 import { AutomationDetailPanel } from "@/pages/automations/automation-detail-panel";
 import {
@@ -17,7 +16,6 @@ import {
   AutomationsEmptyState,
 } from "@/pages/automations/automations-components";
 import { AutomationsListSidebar } from "@/pages/automations/automations-list-sidebar";
-import { sectionClass } from "@/pages/automations/automations-page.shared";
 import type { AutomationsPageState } from "@/pages/automations/use-automations-page";
 
 export function AutomationsPageLayout(state: AutomationsPageState) {
@@ -41,7 +39,7 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
   } = state;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+    <div className="flex min-h-0 flex-1 flex-col">
       {error ? (
         <p
           className="shrink-0 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm"
@@ -51,12 +49,7 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
         </p>
       ) : null}
 
-      <section
-        className={cn(
-          sectionClass,
-          "flex min-h-0 flex-1 flex-col overflow-hidden"
-        )}
-      >
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 flex-col gap-3 border-border border-b p-4 lg:hidden">
           <div className="flex flex-wrap items-center gap-3">
             <Select

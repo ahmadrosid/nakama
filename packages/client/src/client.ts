@@ -138,6 +138,9 @@ import type {
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
   RegenerateNotificationDestinationKeyResponse,
+  RequestPasswordResetRequest,
+  RequestPasswordResetResponse,
+  ResetPasswordRequest,
   RestoreDataImportRequest,
   RestoreDataImportResponse,
   RestoreOrgMemoryHistoryResponse,
@@ -161,6 +164,8 @@ import type {
   SetupRestoreDataImportResponse,
   SkillCuratorLatestResponse,
   SkillCuratorRunResponse,
+  SkillFileResponse,
+  SkillFilesResponse,
   SkillProposalResponse,
   SkillResponse,
   SoulStackResponse,
@@ -1032,6 +1037,27 @@ export class NakamaClient {
     );
   }
 
+  async listSkillFiles(
+    skillId: string,
+    orgId: string
+  ): Promise<SkillFilesResponse> {
+    return this.request<SkillFilesResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/files`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async readSkillFile(
+    skillId: string,
+    filePath: string,
+    orgId: string
+  ): Promise<SkillFileResponse> {
+    return this.request<SkillFileResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/file?${new URLSearchParams({ path: filePath })}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
   async cloneProfile(
     profileId: string,
     request: CloneProfileRequest = {}
@@ -1160,9 +1186,12 @@ export class NakamaClient {
 
   async listProfileArtifacts(
     profileId: string,
-    options: { limit?: number; offset?: number } = {}
+    options: { folder?: string; limit?: number; offset?: number } = {}
   ): Promise<ListArtifactsResponse> {
     const query = new URLSearchParams();
+    if (options.folder) {
+      query.set("folder", options.folder);
+    }
     if (options.limit !== undefined) {
       query.set("limit", String(options.limit));
     }
@@ -2169,6 +2198,25 @@ export class NakamaClient {
 
   async changePassword(request: ChangePasswordRequest): Promise<void> {
     await this.request("/v1/auth/change-password", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async requestPasswordReset(
+    request: RequestPasswordResetRequest
+  ): Promise<RequestPasswordResetResponse> {
+    return this.request<RequestPasswordResetResponse>(
+      "/v1/auth/password-reset/request",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+  }
+
+  async resetPassword(request: ResetPasswordRequest): Promise<void> {
+    await this.request("/v1/auth/password-reset/complete", {
       body: JSON.stringify(request),
       method: "POST",
     });

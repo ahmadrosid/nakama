@@ -10,6 +10,7 @@ import {
   ArrowExpand01Icon,
   ArrowShrink02Icon,
   CheckmarkCircle01Icon,
+  Download04Icon,
 } from "hugeicons-react";
 
 export function ArtifactAttachmentPanelActions({
@@ -84,6 +85,7 @@ export function ArtifactAttachmentPanelActions({
                 link.remove();
               }}
             >
+              <Download04Icon aria-hidden className="size-4" />
               {downloadLabel}
             </DropdownMenuItem>
             {additionalMenuItems}

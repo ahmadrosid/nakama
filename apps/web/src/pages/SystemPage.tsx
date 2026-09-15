@@ -1,164 +1,27 @@
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
-import { useCallback } from "react";
-import { createPortal } from "react-dom";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { McpTab } from "@/components/soul-tools/McpTab";
-import { ToolsTab } from "@/components/soul-tools/ToolsTab";
 import { useAuth } from "@/context/use-auth";
-import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
-import { PluginsPage } from "@/pages/PluginsPage";
-import { LlmUsageTab } from "@/pages/StatusPage";
-import {
-  resolveSystemTab,
-  type SYSTEM_TABS,
-  type SystemTabId,
-  visibleSystemTabs,
-} from "@/pages/system-page.shared";
+import { canAccessSystemPage } from "@/lib/navigation";
+import { legacySystemDestination } from "@/pages/system-page.shared";
 
 export function SystemPage() {
   const { user, activeOrg, isLoading } = useAuth();
-  const isPlatformAdmin = user?.isPlatformAdmin === true;
-  const canAccess = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const pageHeaderActions =
-    typeof document === "undefined"
-      ? null
-      : document.querySelector<HTMLElement>("[data-page-header-actions]");
-
-  const setTab = useCallback(
-    (nextTab: SystemTabId) => {
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          if (nextTab === "tools") {
-            next.delete("tab");
-          } else {
-            next.set("tab", nextTab);
-          }
-          return next;
-        },
-        { replace: true }
-      );
-    },
-    [setSearchParams]
-  );
-
+  const [searchParams] = useSearchParams();
   if (isLoading) {
     return (
-      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
+      <div className="flex min-h-64 items-center justify-center">
         <Spinner className="size-5" />
       </div>
     );
   }
-
-  if (!canAccess) {
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
+  if (!canAccessSystemPage(isPlatformAdmin, activeOrg?.role)) {
     return <Navigate replace to="/chat" />;
   }
-
-  if (searchParams.get("tab") === "status") {
-    return <Navigate replace to={PAGE_PATHS.workers} />;
-  }
-
-  if (searchParams.get("tab") === "organization") {
-    const next = new URLSearchParams(searchParams);
-    next.delete("tab");
-    const qs = next.toString();
-    return (
-      <Navigate
-        replace
-        to={qs ? `${PAGE_PATHS.organization}?${qs}` : PAGE_PATHS.organization}
-      />
-    );
-  }
-
-  const tab = resolveSystemTab(searchParams.get("tab"), isPlatformAdmin);
-  const visibleTabs = visibleSystemTabs(isPlatformAdmin);
-
   return (
-    <>
-      {pageHeaderActions
-        ? createPortal(
-            <div
-              aria-label="System"
-              className="no-scrollbar flex h-full min-w-0 items-stretch overflow-x-auto"
-              role="tablist"
-            >
-              {visibleTabs.map((item) => (
-                <SystemTabButton
-                  active={tab === item.id}
-                  controls={`system-panel-${item.id}`}
-                  icon={item.icon}
-                  id={`system-tab-${item.id}`}
-                  key={item.id}
-                  label={item.label}
-                  onSelect={() => setTab(item.id)}
-                />
-              ))}
-            </div>,
-            pageHeaderActions
-          )
-        : null}
-      <section
-        className={
-          tab === "plugins"
-            ? "min-w-0"
-            : "overflow-hidden rounded-md border border-border bg-card"
-        }
-      >
-        <div
-          aria-labelledby={`system-tab-${tab}`}
-          id={`system-panel-${tab}`}
-          role="tabpanel"
-        >
-          {tab === "tools" ? (
-            <ToolsTab embedded />
-          ) : tab === "plugins" ? (
-            <PluginsPage />
-          ) : tab === "usage" ? (
-            <LlmUsageTab />
-          ) : (
-            <McpTab embedded />
-          )}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function SystemTabButton({
-  id,
-  label,
-  icon: Icon,
-  active,
-  controls,
-  onSelect,
-}: {
-  id: string;
-  label: string;
-  icon: (typeof SYSTEM_TABS)[number]["icon"];
-  active: boolean;
-  controls: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      aria-controls={controls}
-      aria-selected={active}
-      className={cn(
-        "relative inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
-        active
-          ? "border-foreground text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground"
-      )}
-      data-active={active || undefined}
-      id={id}
-      onClick={onSelect}
-      role="tab"
-      type="button"
-    >
-      <Icon aria-hidden className="size-4 shrink-0" />
-      {label}
-    </button>
+    <Navigate
+      replace
+      to={legacySystemDestination(searchParams, isPlatformAdmin)}
+    />
   );
 }

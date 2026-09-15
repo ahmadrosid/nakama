@@ -188,6 +188,12 @@ function resolveSafeCwd(
     return defaultCwd;
   }
   const expanded = expandHome(rawCwd.trim());
-  const absolute = path.resolve(expanded);
-  return isWithinDirs(absolute, allowedDirs) ? absolute : defaultCwd;
+  const absolute = resolveWithRealpath(path.resolve(defaultCwd, expanded));
+  if (!isWithinDirs(absolute, allowedDirs)) {
+    throw new PathGuardError(
+      "Working directory is outside allowed directories. Omit cwd to use the active profile workspace. To read a skill, pass its full instruction path as path and omit cwd.",
+      "TRAVERSAL"
+    );
+  }
+  return absolute;
 }

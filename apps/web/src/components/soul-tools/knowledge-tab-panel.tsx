@@ -70,54 +70,32 @@ export function KnowledgeTabPanel({
       </div>
 
       {sources.length > 0 ? (
-        <div className="rounded-md border border-border">
-          <div className="border-border border-b px-4 py-3">
-            <p className="text-muted-foreground text-xs tabular-nums">
-              {sources.length === 1
-                ? "1 inherited source"
-                : `${sources.length} inherited sources`}
-            </p>
-          </div>
-          <ul className="divide-y divide-border">
-            {sources.map((source) => (
-              <li
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
-                key={source.id}
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          {sources.map((source) => (
+            <li key={source.id}>
+              <a
+                className="flex items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                href={source.url}
+                rel="noreferrer"
+                target="_blank"
+                title={source.url}
               >
-                <div className="flex min-w-0 items-start gap-3">
-                  <Link01Icon
-                    aria-hidden
-                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-foreground text-sm">
-                      {source.title}
-                    </p>
-                    <p className="line-clamp-2 text-pretty text-muted-foreground text-xs">
-                      {source.description}
-                    </p>
-                    <a
-                      className="mt-1 inline-flex max-w-full items-center gap-1 text-primary text-xs hover:underline"
-                      href={source.url}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      <span className="truncate">{source.url}</span>
-                      <LinkSquare02Icon
-                        aria-hidden
-                        className="size-3 shrink-0"
-                      />
-                    </a>
-                  </div>
-                </div>
-
-                <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
-                  inherited
+                <Link01Icon
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+                <span className="min-w-0 flex-1 truncate">{source.title}</span>
+                <span className="shrink-0 text-muted-foreground text-xs">
+                  Inherited
                 </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+                <LinkSquare02Icon
+                  aria-hidden
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+              </a>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       <div className="rounded-md border border-border">
@@ -149,7 +127,7 @@ export function KnowledgeTabPanel({
               ) : (
                 <Upload04Icon aria-hidden className="size-3.5" />
               )}
-              Upload
+              Add document
             </Button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { Button } from "@nakama/ui/button";
 import {
+  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -11,6 +12,7 @@ import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
+import { useState } from "react";
 import type { PublishIntent } from "@/components/chat/use-artifact-share-controls";
 
 type ArtifactSharePublishDialogProps = {
@@ -28,7 +30,7 @@ type ArtifactSharePublishDialogProps = {
   onClose: () => void;
   onCopyLink: (url: string) => void;
   onRefreshFromDialog: () => void;
-  onRevoke: () => void;
+  onRevoke: () => Promise<void>;
   onRotateLink: () => void;
   onConfirmPublish: () => void;
 };
@@ -109,9 +111,10 @@ function ArtifactShareSuccessView({
   revokePending: boolean;
   onCopyLink: (url: string) => void;
   onRefreshFromDialog: () => void;
-  onRevoke: () => void;
+  onRevoke: () => Promise<void>;
   onClose: () => void;
 }) {
+  const [revokeOpen, setRevokeOpen] = useState(false);
   return (
     <>
       <DialogHeader>
@@ -165,7 +168,7 @@ function ArtifactShareSuccessView({
             </Button>
             <Button
               disabled={revokePending}
-              onClick={() => void onRevoke()}
+              onClick={() => setRevokeOpen(true)}
               type="button"
               variant="destructive"
             >
@@ -178,6 +181,15 @@ function ArtifactShareSuccessView({
           Done
         </Button>
       </DialogFooter>
+      {revokeOpen ? (
+        <ConfirmDialog
+          confirmLabel="Revoke"
+          description="Anyone with this link will lose access to the shared snapshot."
+          onClose={() => setRevokeOpen(false)}
+          onConfirm={onRevoke}
+          title="Revoke share link?"
+        />
+      ) : null}
     </>
   );
 }

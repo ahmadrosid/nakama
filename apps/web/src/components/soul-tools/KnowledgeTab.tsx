@@ -12,7 +12,6 @@ import {
 import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
 import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
-import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useDeleteKnowledgeBaseDocumentMutation,
@@ -182,8 +181,8 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   }
 
   return (
-    <ChatAttachmentPanelProvider presentation="overlay">
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
+    <>
+      <div className="min-w-0">
         {error ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
             {error}
@@ -275,6 +274,6 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </ChatAttachmentPanelProvider>
+    </>
   );
 }

@@ -16,7 +16,7 @@ if (process.env.NAKAMA_DESKTOP === "1") {
     process.exit(0);
   }
   // Also covers losing Electron while the database is still initializing.
-  process.on("disconnect", () => process.kill(process.pid, "SIGTERM"));
+  process.on("disconnect", () => process.emit("SIGTERM", "SIGTERM"));
 }
 // Position is cosmetic: ESM evaluates every import above before this line runs, so a throw
 // inside @nakama/db or @nakama/agent module init is already past. Everything after is covered.
@@ -357,7 +357,16 @@ const serverUrl = writeRuntimeServerUrl(
   `http://${server.hostname}:${server.port}`
 );
 
-registerRuntimeCleanup(server, serverUrl, database, mcpClientManager);
+const shutdownRuntime = registerRuntimeCleanup(
+  server,
+  serverUrl,
+  database,
+  mcpClientManager
+);
+// Stop before recovering workers if Electron disappeared during initialization.
+if (process.env.NAKAMA_DESKTOP === "1" && !process.connected) {
+  await shutdownRuntime();
+}
 
 if (server.port !== requestedPort) {
   console.log(`Port ${requestedPort} is busy. Using ${server.port} instead.`);
@@ -499,7 +508,7 @@ function registerRuntimeCleanup(
   serverUrl: string,
   database: Database,
   mcpClientManager: McpClientManager
-): void {
+): () => Promise<void> {
   let cleanedUp = false;
 
   const cleanup = () => {
@@ -567,6 +576,7 @@ function registerRuntimeCleanup(
       void shutdown();
     });
   }
+  return shutdown;
 }
 
 async function findRunningNakamaServerUrl(

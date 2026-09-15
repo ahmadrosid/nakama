@@ -178,7 +178,10 @@ async function run() {
       join(import.meta.dirname, "../dist/runtime");
     await assert.rejects(startLocalServer(join(data, "missing"), data));
     const previousPath = process.env.PATH;
-    process.env.PATH = "/usr/bin:/bin";
+    process.env.PATH =
+      process.platform === "win32"
+        ? join(process.env.SystemRoot ?? "C:\\Windows", "System32")
+        : "/usr/bin:/bin";
     let local;
     try {
       local = await startLocalServer(runtime, data);
@@ -195,6 +198,8 @@ async function run() {
             password: "test-password-123",
           },
           organization: { name: "Desktop Test", slug: "desktop-test" },
+          // The setup wizard always sends its own origin.
+          webPublicUrl: local.url,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -212,8 +217,39 @@ async function run() {
         method: "POST",
       });
       assert.equal(login.ok, true);
+      // The relaunch took a new port while setup saved the old origin, and a
+      // send from the new window must still pass the origin check (#1026).
+      const cookie = login.headers
+        .getSetCookie()
+        .map((entry) => entry.split(";")[0])
+        .join("; ");
+      const headers = {
+        "Content-Type": "application/json",
+        Cookie: cookie,
+        Origin: local.url,
+        "X-CSRF-Token": decodeURIComponent(
+          cookie.match(/nakama_csrf=([^;]+)/)?.[1] ?? ""
+        ),
+      };
+      const { profiles } = await (
+        await fetch(`${local.url}/v1/profiles`, { headers })
+      ).json();
+      const created = await fetch(`${local.url}/v1/sessions`, {
+        body: JSON.stringify({
+          channel: "web",
+          profileId: profiles.find((profile) => !profile.isSuper).id,
+        }),
+        headers,
+        method: "POST",
+      });
+      const { sessionId } = await created.json();
+      const sent = await fetch(
+        `${local.url}/v1/sessions/${sessionId}/messages`,
+        { body: JSON.stringify({ message: "hi" }), headers, method: "POST" }
+      );
+      assert.equal(sent.status, 200, await sent.text());
       const worker = await promisify(execFile)(
-        join(runtime, "bin/bun"),
+        join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
         [
           "-e",
           `
@@ -254,7 +290,7 @@ async function run() {
       }
       assert.throws(() => process.kill(workerPid, 0));
       console.log(
-        "Passed: bundled runtime, first setup, persistent account, shutdown, and parent disconnect cleanup."
+        "Passed: bundled runtime, first setup, persistent account, chat after relaunch, shutdown, and parent disconnect cleanup."
       );
     } finally {
       process.env.PATH = previousPath;

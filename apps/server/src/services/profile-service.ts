@@ -71,6 +71,7 @@ import {
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
+  describeProfileChangeEvents,
   type ProfileChangeMeta,
   recordProfileChangeEvent,
   soulFieldFromFileName,
@@ -775,7 +776,9 @@ export class ProfileService {
       profileId,
       options
     );
-    return { events };
+    return {
+      events: await describeProfileChangeEvents(this.db, orgId, events),
+    };
   }
 
   async uploadProfileAvatar(

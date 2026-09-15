@@ -13,7 +13,7 @@ VIEWPORT_WIDTH=1280
 VIEWPORT_HEIGHT=800
 
 cleanup() {
-  agent-browser --session "$SESSION" close --all 2>/dev/null || true
+  agent-browser --session "$SESSION" close 2>/dev/null || true
   if [[ -n "$SERVER_PID" ]]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
@@ -53,7 +53,7 @@ curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
   -d '{"type":"ollama","apiKey":"","hostMode":"local","model":"llama3.2"}' >/dev/null
 
-agent-browser --session "$SESSION" close --all 2>/dev/null || true
+agent-browser --session "$SESSION" close 2>/dev/null || true
 agent-browser --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
 agent-browser --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \

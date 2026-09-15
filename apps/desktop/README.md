@@ -4,7 +4,7 @@ The existing Nakama web app with a bundled local server. Opening the app starts 
 
 ## Develop and build
 
-From an Apple Silicon Mac with this Git checkout and Bun installed:
+From an Apple Silicon Mac or Windows x64 machine with this Git checkout and Bun installed:
 
 ```sh
 bun install
@@ -17,13 +17,13 @@ Create the macOS app, DMG, and ZIP:
 bun run --cwd apps/desktop package
 ```
 
-The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The app targets macOS 15 (Sequoia) or later on Apple Silicon and is unsigned until Developer ID signing and notarization credentials are configured. Release builds and runtime tests run on macOS 15.
+The build includes Bun, the production server and worker dependencies, and the built web UI. Outputs are in `apps/desktop/dist/electron/`. The app targets macOS 15 (Sequoia) or later on Apple Silicon and is unsigned until Developer ID signing and notarization credentials are configured. Release builds and runtime tests run on macOS 15. Windows targets Windows 10 build 19041 or later, x64, through the Microsoft Store.
 
 ## Local data
 
 Complete the normal setup wizard on first launch. Configure your model provider as on the web; cloud models still require internet access and provider credentials.
 
-Desktop stores its browser session in `~/Library/Application Support/Nakama Desktop Electron` and its server data under `server/` within that directory. Existing web-server data is not imported. Updates preserve this directory. Server diagnostics are in `server/server.log`.
+Desktop stores its browser session in `~/Library/Application Support/Nakama Desktop Electron` on macOS, or Electron's app-data directory under `Nakama Desktop Electron` on Windows. Store installs may virtualize the Windows app-data location. Server data is under `server/` within that directory. Existing web-server data is not imported. Updates preserve this directory. Server diagnostics are in `server/server.log`.
 
 The server binds only to `127.0.0.1`, on an available port. Desktop waits for it to start before loading the UI. Closing the app stops its server; automations and channel workers run while the app is open.
 
@@ -47,7 +47,9 @@ The runtime test uses temporary data and verifies setup, saved login after a res
 
 ## Automatic updates
 
-Packaged apps check at startup and every six hours, downloading updates in the background. Choose **Restart now** to stop the local server and workers before installation, or **Later** to keep working. Ordinary quitting does not install an update. Local data is preserved; running tasks are interrupted by a restart.
+Microsoft Store installs receive updates through the Store; they do not use the GitHub update feed.
+
+Other packaged apps check at startup and every six hours, downloading updates in the background. Choose **Restart now** to stop the local server and workers before installation, or **Later** to keep working. Ordinary quitting does not install an update. Local data is preserved; running tasks are interrupted by a restart.
 
 macOS requires a signed app for automatic updates. Install the first signed release manually if you currently use an unsigned preview. Development runs do not check for updates.
 
@@ -70,3 +72,30 @@ Use the same signing identity for subsequent releases. The workflow requires sig
 3. The **Desktop Release** workflow builds on macOS ARM64, tests the bundled server, signs and notarizes the app, and publishes the DMG and ZIP in that version's GitHub release.
 
 After all installers are published, the workflow promotes `latest-mac.yml` in the separate `desktop-updates` release. That metadata points to the immutable versioned downloads, so regular server releases cannot change the desktop update feed. Retries reuse published checksums, and older releases cannot move the channel backward. Do not manually replace published installers.
+
+## Windows: Microsoft Store signing
+
+The Windows build produces an **unsigned MSIX for Partner Center upload**. Microsoft signs the package after Store certification; no purchased signing certificate is needed. This does not provide a signed installer for direct GitHub downloads. See [Microsoft's signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options).
+
+1. Register in [Partner Center](https://partner.microsoft.com/dashboard), reserve the app name, and open **Product identity**.
+2. Add these GitHub environment secrets under **Settings → Environments → code-signing → Environment secrets**, copying the values exactly. The Windows job uses this environment and its approval rules.
+
+   | Secret | Partner Center value |
+   | --- | --- |
+   | `WINDOWS_STORE_IDENTITY_NAME` | Package/Identity/Name |
+   | `WINDOWS_STORE_PUBLISHER` | Package/Identity/Publisher, including `CN=` |
+   | `WINDOWS_STORE_PUBLISHER_DISPLAY_NAME` | Package/Properties/PublisherDisplayName |
+   | `WINDOWS_STORE_DISPLAY_NAME` | Reserved app display name |
+
+3. Run **Actions → Desktop Release → Run workflow** on the desired branch. Manual runs build Windows only; version tags continue to publish macOS. Each Store update requires a higher stable desktop package version; the generated fourth version component stays zero.
+4. Download the `nakama-windows-store` workflow artifact and upload its `.msix` to the app submission. Complete the listing, privacy policy, screenshots, age rating, and certification questions. Explain `runFullTrust`: Nakama runs an Electron desktop UI and a bundled local Bun server with background workers.
+5. Test the installed package through a Store package flight before making it public: first-run setup, chat, restart, worker shutdown, and an update that preserves saved data. The workflow tests the unpacked runtime; it cannot prove installed MSIX behavior or Store acceptance.
+
+To build locally, set the same four environment variables in PowerShell 7 on Windows x64, then run:
+
+```powershell
+bun install --frozen-lockfile
+bun run --cwd apps/desktop package:store
+```
+
+The pinned electron-builder uses its `appx` target to invoke Windows SDK MakeAppx with `.msix` output. Both use the same package manifest format. Required Store tile assets are generated from Nakama's existing icon. The unsigned output is for Store submission; ordinary sideloading requires a separately trusted signature.

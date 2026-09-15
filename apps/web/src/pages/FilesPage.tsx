@@ -1,14 +1,16 @@
 import type { ArtifactFile } from "@nakama/core/contract";
 import { useCallback, useMemo, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
   type ArtifactTypeFilter,
   artifactMatchesTypeFilter,
   availableArtifactTypeFilters,
 } from "@/components/soul-tools/artifacts-tab-filters";
+import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useArtifactsInfiniteQuery,
@@ -20,7 +22,6 @@ import {
   resolveFilesProfileId,
   setStoredFilesViewMode,
 } from "@/lib/files-page.shared";
-import { PAGE_PATHS } from "@/lib/navigation";
 import { ArtifactFolderBreadcrumb } from "@/pages/files/files-artifact-folder-breadcrumb";
 import {
   listArtifactsInFolder,
@@ -37,6 +38,26 @@ export function FilesPage() {
   const { profileId: activeProfileId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
+  const { user } = useAuth();
+  const canViewFiles = user?.isPlatformAdmin === true;
+
+  return (
+    <ChatAttachmentPanelProvider presentation="overlay">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="space-y-8">
+          <section aria-label="Knowledge" className="relative min-w-0">
+            <KnowledgeTab key={profileId} profileId={profileId} />
+          </section>
+          {canViewFiles ? (
+            <FilesArtifactsPage key={profileId} profileId={profileId} />
+          ) : null}
+        </div>
+      </div>
+    </ChatAttachmentPanelProvider>
+  );
+}
+
+function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const folderPrefix = normalizeArtifactFolderPrefix(
     searchParams.get("folder") ?? ""
@@ -57,7 +78,10 @@ export function FilesPage() {
     refetch,
     fetchNextPage,
     hasNextPage,
-  } = useArtifactsInfiniteQuery(profileId);
+  } = useArtifactsInfiniteQuery(
+    profileId,
+    searchQuery.trim() ? "" : folderPrefix
+  );
   const deleteMutation = useDeleteArtifactMutation();
 
   const artifacts = useMemo(
@@ -122,14 +146,6 @@ export function FilesPage() {
     setStoredFilesViewMode(mode);
   }
 
-  if (searchParams.get("tab") === "knowledge") {
-    const params = new URLSearchParams({ tab: "knowledge" });
-    if (profileId) {
-      params.set("profile", profileId);
-    }
-    return <Navigate replace to={`${PAGE_PATHS.profiles}?${params}`} />;
-  }
-
   if (!profileId) {
     return (
       <div className="p-4 sm:p-6">
@@ -173,8 +189,8 @@ export function FilesPage() {
   })();
 
   return (
-    <ChatAttachmentPanelProvider presentation="overlay">
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+    <>
+      <div className="min-w-0">
         <div className="space-y-4">
           <FilesToolbar
             isFetching={isFetching}
@@ -233,6 +249,6 @@ export function FilesPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => void handleDelete()}
       />
-    </ChatAttachmentPanelProvider>
+    </>
   );
 }

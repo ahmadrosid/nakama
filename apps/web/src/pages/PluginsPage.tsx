@@ -438,7 +438,7 @@ function PluginPageHeader({
       {detail ? (
         <Link
           className="text-muted-foreground text-sm hover:text-foreground"
-          to="/system?tab=plugins"
+          to="/customize/plugins"
         >
           ← Back to plugins
         </Link>
@@ -698,7 +698,7 @@ function PluginIdentity({
           to={
             canOpen
               ? pluginPagePath(pluginId)
-              : `/system/plugins/${encodeURIComponent(pluginId)}`
+              : `/customize/plugins/${encodeURIComponent(pluginId)}`
           }
         />
       )}
@@ -889,7 +889,7 @@ function PluginRowMenu({
         {detail ? null : (
           <DropdownMenuItem
             render={
-              <Link to={`/system/plugins/${encodeURIComponent(pluginId)}`} />
+              <Link to={`/customize/plugins/${encodeURIComponent(pluginId)}`} />
             }
           >
             Details

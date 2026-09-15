@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { NakamaApiError } from "@nakama/core";
+import { type ConfigureProviderRequest, NakamaApiError } from "@nakama/core";
+import { buildProviderInstanceFromCreateRequest } from "../../services/provider-instance-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
+import type { ServerOptions } from "../context";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
@@ -43,6 +45,61 @@ describe("route error formatting", () => {
     await expect(response.json()).resolves.toEqual({
       error: "An unexpected server error occurred.",
     });
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
+  });
+
+  test("a worker action that fails answers 500 and is reported", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      workerManager: {
+        isValidWorker: () => true,
+        startWorker: async () => {
+          throw new Error("pm2 daemon is not reachable");
+        },
+      } as unknown as ServerOptions["workerManager"],
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/telegram/start", {
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(500);
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
+  });
+
+  test("a 5xx passed through from transcription is reported", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        transcribeAudio: async () => {
+          throw new NakamaApiError(
+            "Audio transcription returned empty text.",
+            502
+          );
+        },
+      },
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/audio/transcribe", {
+        body: JSON.stringify({ data: "AAAA", mimeType: "audio/webm" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(502);
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(true);
   });
 
   test("send message does not leak an unexpected error's message", async () => {
@@ -147,5 +204,45 @@ describe("route error formatting", () => {
     expect(
       reported.some((line) => line.startsWith("[nakama:http] server"))
     ).toBe(true);
+  });
+  test("invalid provider settings answer 400 with the validation message", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        // The real builder, mapped the way AgentService.configureProvider maps it,
+        // so the throw is the validation this route has to answer.
+        configureProvider: async (request: ConfigureProviderRequest) =>
+          buildProviderInstanceFromCreateRequest(
+            {
+              apiKey: request.apiKey,
+              baseUrl: request.baseUrl,
+              label: request.displayName,
+              model: request.model,
+              type: request.provider,
+            },
+            []
+          ),
+      },
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/provider", {
+        body: JSON.stringify({
+          apiKey: "sk-test",
+          baseUrl: "http://127.0.0.1:9/v1",
+          model: "test-model",
+          provider: "openai_compatible",
+        }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Provider name is required.",
+    });
   });
 });

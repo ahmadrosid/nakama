@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureBundledSkillFiles } from "@nakama/core";
@@ -46,6 +46,107 @@ describe("SkillsService", () => {
 
     expect(weather).toBeDefined();
     expect(weather?.hasTool).toBe(true);
+  });
+
+  test.each([
+    [
+      "icon.png",
+      "image/png",
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5h8AAAAASUVORK5CYII=",
+        "base64"
+      ),
+    ],
+    [
+      "icon.svg",
+      "image/svg+xml",
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
+      ),
+    ],
+  ])("previews %s as image bytes", async (filename, mediaType, bytes) => {
+    const service = new SkillsService(createInMemoryDatabaseAdapter());
+    const skill = (await service.listSkills()).skills.find(
+      (item) => item.name === "weather"
+    )!;
+    await writeFile(join(skill.sourcePath, filename), bytes);
+    const result = await service.readSkillFile(ORG_ID, skill.id, filename);
+    expect(result.image?.mediaType).toBe(mediaType);
+    expect(Buffer.from(result.image!.dataBase64, "base64")).toEqual(bytes);
+    expect(result.content).toBeNull();
+    expect(result.unavailableReason).toBeUndefined();
+  });
+
+  test("browses nested skill files without exposing paths outside the skill", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    await service.syncDiscoveredSkills();
+    const skill = (await service.listSkills()).skills.find(
+      (item) => item.name === "weather"
+    )!;
+    const directory = join(configDir, "agent", "skills", "weather");
+    await mkdir(join(directory, "references", "nested"), { recursive: true });
+    await writeFile(
+      join(directory, "references", "nested", "guide.md"),
+      "# Guide"
+    );
+    await writeFile(join(directory, "empty.txt"), "");
+    await writeFile(join(directory, "image.bin"), Buffer.from([0, 255]));
+    await writeFile(join(directory, "large.txt"), "x".repeat(1024 * 1024 + 1));
+    const secret = join(configDir, "secret.txt");
+    await writeFile(secret, "private");
+    await symlink(secret, join(directory, "escape.txt"));
+
+    const listing = await service.listSkillFiles(ORG_ID, skill.id);
+    expect(listing.files).toContainEqual({
+      path: "references/nested",
+      type: "directory",
+    });
+    expect(listing.files).toContainEqual({
+      path: "references/nested/guide.md",
+      type: "file",
+    });
+    expect(listing.files.some((file) => file.path === "escape.txt")).toBe(
+      false
+    );
+    expect(listing.truncated).toBe(false);
+    expect(
+      (
+        await service.readSkillFile(
+          ORG_ID,
+          skill.id,
+          "references/nested/guide.md"
+        )
+      ).content
+    ).toBe("# Guide");
+    expect(
+      (await service.readSkillFile(ORG_ID, skill.id, "empty.txt")).content
+    ).toBe("");
+    expect(
+      (await service.readSkillFile(ORG_ID, skill.id, "image.bin")).content
+    ).toBeNull();
+    expect(
+      (await service.readSkillFile(ORG_ID, skill.id, "large.txt")).content
+    ).toBeNull();
+    for (const target of [
+      "../secret.txt",
+      secret,
+      "escape.txt",
+      "references",
+      "missing.md",
+      "",
+      "bad\0file",
+    ]) {
+      await expect(
+        service.readSkillFile(ORG_ID, skill.id, target)
+      ).rejects.toThrow();
+    }
+    const record = await db.getSkill(skill.id);
+    await db.upsertSkill({ ...record!, orgId: "another_org" });
+    await expect(service.listSkillFiles(ORG_ID, skill.id)).rejects.toThrow();
+    await expect(
+      service.readSkillFile(ORG_ID, skill.id, "SKILL.md")
+    ).rejects.toThrow();
   });
 
   test("matches weather skill instructions for weather questions", async () => {

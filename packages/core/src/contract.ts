@@ -51,6 +51,7 @@ export interface StoredAutomation extends AutomationDefinition {
   createdAt: string;
   enabled: boolean;
   lastRunAt?: string | null;
+  lastRunStatus?: AutomationRunStatus | null;
   nextRunAt?: string | null;
   orgId?: string | null;
   profileId: string;
@@ -879,6 +880,20 @@ export interface AcceptOrgInviteResponse {
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface RequestPasswordResetResponse {
+  delivered: boolean;
+  token: string | null;
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string;
+  token: string;
 }
 
 export interface ChannelOrgMappingSummary {
@@ -1840,6 +1855,8 @@ export interface SkillSummary {
   hasTool: boolean;
   id: string;
   name: string;
+  /** null means shared across organizations. */
+  orgId?: string | null;
   pluginId?: string | null;
   pluginKey?: string | null;
   sourcePath: string;
@@ -1857,6 +1874,18 @@ export interface ListSkillsResponse {
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface SkillFilesResponse {
+  files: { path: string; type: "file" | "directory" }[];
+  truncated: boolean;
+}
+
+export interface SkillFileResponse {
+  content: string | null;
+  image?: { mediaType: string; dataBase64: string };
+  path: string;
+  unavailableReason?: string;
 }
 
 export interface AssignSkillRequest {
@@ -2071,8 +2100,14 @@ export type ProfileChangeField =
   | "pack_import";
 
 export interface ProfileChangeEvent {
+  actorName?: string | null;
   actorUserId: string | null;
   afterValue: string | null;
+  assignmentChanges?: {
+    added: Array<{ id: string; name: string | null }>;
+    removed: Array<{ id: string; name: string | null }>;
+  };
+  assignmentNames?: Record<string, string | null>;
   beforeValue: string | null;
   createdAt: string;
   field: ProfileChangeField;
@@ -2157,6 +2192,7 @@ export interface ArtifactFile {
 }
 
 export interface ListArtifactsOptions {
+  folder?: string;
   limit?: number;
   offset?: number;
 }

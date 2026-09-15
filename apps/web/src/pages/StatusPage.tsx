@@ -3,6 +3,7 @@ import type {
   SystemStatusResponse,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
 import { cn } from "@nakama/ui/utils";
 import {
   ArrowDownLeft01Icon,
@@ -14,6 +15,7 @@ import {
 } from "hugeicons-react";
 import { type ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { OrgLlmQuotaCard } from "@/components/settings/OrgLlmQuotaCard";
 import {
   WorkerActionBar,
   WorkerViewLogsButton,
@@ -30,8 +32,6 @@ import { formatProviderLabel } from "@/lib/models";
 import { PAGE_PATHS, pluginIcon } from "@/lib/navigation";
 import { buildServiceColumns } from "@/pages/status-page.shared";
 
-const sectionClass =
-  "min-w-0 overflow-hidden rounded-md border border-border bg-card";
 export function StatusPage() {
   const { data: status, error, isLoading } = useSystemStatusQuery();
   const { user } = useAuth();
@@ -40,7 +40,7 @@ export function StatusPage() {
   const canManageWorkers = user?.isPlatformAdmin === true;
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="mx-auto max-w-3xl space-y-8">
       {errorMessage ? (
         <div
           className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3"
@@ -86,42 +86,37 @@ function PluginWorkersSection() {
     return null;
   }
   return (
-    <section aria-label="Plugin workers" className={sectionClass}>
-      <h2 className="border-border border-b px-4 py-3 font-medium text-sm">
-        Plugin workers
-      </h2>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
-          <WorkerTableHeader canManage={Boolean(canManage)} />
-          <tbody>
-            {data.map((worker) => {
-              const running = worker.process.status === "online";
-              const labels = {
-                errored: "Errored",
-                online: "Online",
-                stopped: "Offline",
-              };
-              return (
-                <WorkerServiceRow
-                  canManage={Boolean(canManage)}
-                  icon={pluginIcon(worker.pluginId)}
-                  key={worker.name}
-                  status={
-                    worker.process.status
-                      ? labels[worker.process.status]
-                      : "Unavailable"
-                  }
-                  title={worker.label}
-                  titleHref={`/plugins/${encodeURIComponent(worker.pluginId)}`}
-                  tone={running ? "ok" : worker.process.status ? "bad" : "warn"}
-                  worker={{ process: worker.process, running }}
-                  workerName={worker.name}
-                />
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <section aria-label="Plugin workers" className="space-y-3">
+      <h2 className="type-section-title">Plugin workers</h2>
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          {data.map((worker) => {
+            const running = worker.process.status === "online";
+            const labels = {
+              errored: "Errored",
+              online: "Online",
+              stopped: "Offline",
+            };
+            return (
+              <WorkerServiceRow
+                canManage={Boolean(canManage)}
+                icon={pluginIcon(worker.pluginId)}
+                key={worker.name}
+                status={
+                  worker.process.status
+                    ? labels[worker.process.status]
+                    : "Unavailable"
+                }
+                title={worker.label}
+                titleHref={`/plugins/${encodeURIComponent(worker.pluginId)}`}
+                tone={running ? "ok" : worker.process.status ? "bad" : "warn"}
+                worker={{ process: worker.process, running }}
+                workerName={worker.name}
+              />
+            );
+          })}
+        </CardContent>
+      </Card>
     </section>
   );
 }
@@ -169,23 +164,24 @@ function StatusDashboard({
   }));
 
   return (
-    <section className={sectionClass}>
-      <div className="grid grid-cols-1 divide-y divide-border border-border border-b sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-        <QuickStat
-          label="Scheduled jobs"
-          value={automationWorker.scheduledJobs}
-        />
-        <QuickStat
-          active={automationWorker.activeRuns > 0}
-          label="Automation runs"
-          value={automationWorker.activeRuns}
-        />
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
-          <WorkerTableHeader canManage={canManageWorkers} />
-          <tbody>
+    <div className="space-y-8">
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          <QuickStat
+            label="Scheduled jobs"
+            value={automationWorker.scheduledJobs}
+          />
+          <QuickStat
+            active={automationWorker.activeRuns > 0}
+            label="Automation runs"
+            value={automationWorker.activeRuns}
+          />
+        </CardContent>
+      </Card>
+      <section aria-label="Services" className="space-y-3">
+        <h2 className="type-section-title">Services</h2>
+        <Card className="w-full overflow-hidden shadow-none">
+          <CardContent className="divide-y divide-border p-0">
             {workerRows.map((row) => (
               <WorkerServiceRow
                 canManage={canManageWorkers}
@@ -199,10 +195,10 @@ function StatusDashboard({
                 workerName={row.workerName}
               />
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
   );
 }
 
@@ -212,7 +208,8 @@ export function LlmUsageTab() {
   const errorMessage = error ? formatError(error) : null;
 
   return (
-    <div className="min-w-0">
+    <div className="mx-auto max-w-3xl space-y-8">
+      <OrgLlmQuotaCard />
       {errorMessage ? (
         <div
           className="flex flex-wrap items-start justify-between gap-3 border-destructive/40 border-b bg-destructive/10 px-4 py-3"
@@ -284,12 +281,12 @@ function llmUsageCostNote(
     return "Browse or add models in Settings → Manage model to save pricing for cost estimates.";
   }
 
-  return "Add input/output $/1M per model in Settings → Manage models to estimate cost.";
+  return "Add input/output $/1M per model in Customize → LLM providers → Manage models to estimate cost.";
 }
 
 function LlmUsageHeader({ usage }: { usage: LlmUsageStatus }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 border-border border-b px-5 py-4">
+    <div className="flex flex-wrap items-start justify-between gap-4 px-4 py-3">
       <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <h2 className="type-section-title">LLM usage</h2>
@@ -330,77 +327,81 @@ function LlmUsageTrackedBody({
   const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
-    <div className="space-y-4 p-5">
-      <div className="rounded-lg border border-border bg-background/50 p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          <CompactUsageStat
-            icon={Coins01Icon}
-            label="API cost"
-            value={
-              usage.costEstimated ? formatUsd(usage.estimatedCostUsd) : "—"
-            }
-          />
-          <CompactUsageStat
-            icon={ZapIcon}
-            label="Requests"
-            value={usage.requestCount.toLocaleString()}
-          />
-          <CompactUsageStat
-            icon={ArrowDownLeft01Icon}
-            label="Input"
-            value={usage.inputTokens.toLocaleString()}
-          />
-          <CompactUsageStat
-            icon={ArrowUpRight01Icon}
-            label="Output"
-            value={usage.outputTokens.toLocaleString()}
-          />
-          <CompactUsageStat
-            icon={SparklesIcon}
-            label="Total"
-            value={usage.totalTokens.toLocaleString()}
-          />
-        </div>
-
-        <div className="mt-4 border-border border-t pt-4">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.12em]">
-              Token mix
-            </p>
-            <p className="text-muted-foreground text-xs tabular-nums">
-              {usage.inputTokens.toLocaleString()} in /{" "}
-              {usage.outputTokens.toLocaleString()} out
-            </p>
+    <div className="space-y-8">
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="p-0">
+          <div className="divide-y divide-border">
+            <CompactUsageStat
+              icon={Coins01Icon}
+              label="API cost"
+              value={
+                usage.costEstimated ? formatUsd(usage.estimatedCostUsd) : "—"
+              }
+            />
+            <CompactUsageStat
+              icon={ZapIcon}
+              label="Requests"
+              value={usage.requestCount.toLocaleString()}
+            />
+            <CompactUsageStat
+              icon={ArrowDownLeft01Icon}
+              label="Input"
+              value={usage.inputTokens.toLocaleString()}
+            />
+            <CompactUsageStat
+              icon={ArrowUpRight01Icon}
+              label="Output"
+              value={usage.outputTokens.toLocaleString()}
+            />
+            <CompactUsageStat
+              icon={SparklesIcon}
+              label="Total"
+              value={usage.totalTokens.toLocaleString()}
+            />
           </div>
-          <TokenMixBar
-            inputTokens={usage.inputTokens}
-            outputTokens={usage.outputTokens}
-          />
-        </div>
 
-        <p className="mt-4 text-muted-foreground text-xs leading-relaxed">
-          {llmUsageCostNote(usage, modelLabel, trackedModelCount)}
-        </p>
-      </div>
+          <div className="border-border border-t px-4 py-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.12em]">
+                Token mix
+              </p>
+              <p className="text-muted-foreground text-xs tabular-nums">
+                {usage.inputTokens.toLocaleString()} in /{" "}
+                {usage.outputTokens.toLocaleString()} out
+              </p>
+            </div>
+            <TokenMixBar
+              inputTokens={usage.inputTokens}
+              outputTokens={usage.outputTokens}
+            />
+          </div>
+
+          <p className="px-4 pb-3 text-muted-foreground text-xs leading-relaxed">
+            {llmUsageCostNote(usage, modelLabel, trackedModelCount)}
+          </p>
+        </CardContent>
+      </Card>
 
       {trackedModelCount > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="type-label">By model</p>
+            <h2 className="type-section-title">By model</h2>
             <p className="text-muted-foreground text-xs">
               {trackedModelCount} tracked
             </p>
           </div>
-          <div className="overflow-hidden rounded-lg border border-border bg-background/40">
-            {usage.models.map((modelUsage) => (
-              <ModelUsageRow
-                costEstimated={usage.costEstimated}
-                key={modelUsage.modelId}
-                maxTokens={maxModelTokens}
-                usage={modelUsage}
-              />
-            ))}
-          </div>
+          <Card className="w-full overflow-hidden shadow-none">
+            <CardContent className="p-0">
+              {usage.models.map((modelUsage) => (
+                <ModelUsageRow
+                  costEstimated={usage.costEstimated}
+                  key={modelUsage.modelId}
+                  maxTokens={maxModelTokens}
+                  usage={modelUsage}
+                />
+              ))}
+            </CardContent>
+          </Card>
         </div>
       ) : null}
     </div>
@@ -418,13 +419,12 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
         action={
           <Link
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
-            to={PAGE_PATHS.settings}
+            to={PAGE_PATHS.providers}
           >
-            Open Settings
+            Add provider
           </Link>
         }
-        description="Add an API key in Settings to start estimating token usage and API cost."
-        icon={SparklesIcon}
+        description="Add a provider to start tracking token usage and API cost."
         title="Connect a provider to track usage"
       />
     );
@@ -434,7 +434,6 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
     return (
       <LlmUsageEmptyState
         description="Usage appears here after chat messages, automation runs, or task executions."
-        icon={ZapIcon}
         title="No LLM calls yet"
       />
     );
@@ -445,11 +444,15 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
 
 function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   return (
-    <section className="min-w-0 overflow-hidden">
-      <LlmUsageHeader usage={usage} />
+    <section className="min-w-0 space-y-8">
+      <Card className="w-full shadow-none">
+        <CardContent className="p-0">
+          <LlmUsageHeader usage={usage} />
+        </CardContent>
+      </Card>
       <LlmUsageBody usage={usage} />
 
-      <div className="border-border border-t bg-muted/15 px-5 py-3 dark:bg-muted/10">
+      <div className="px-4">
         <p className="text-muted-foreground text-xs">
           Tracking since {formatDate(usage.trackedSince)}. Figures reset when
           the server restarts.
@@ -460,29 +463,24 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
 }
 
 function LlmUsageEmptyState({
-  icon: Icon,
   title,
   description,
   action,
 }: {
-  icon: typeof Clock01Icon;
   title: string;
   description: string;
   action?: ReactNode;
 }) {
   return (
-    <div className="p-5">
-      <div className="flex flex-col items-center rounded-lg border border-border border-dashed bg-muted/15 px-6 py-10 text-center dark:bg-muted/10">
-        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-          <Icon aria-hidden className="size-5" />
-        </div>
-        <p className="font-medium text-foreground text-sm">{title}</p>
-        <p className="mt-1 max-w-sm text-muted-foreground text-sm">
+    <Card className="w-full shadow-none">
+      <CardContent className="flex flex-col items-center px-4 py-8 text-center">
+        <p className="text-muted-foreground text-sm">{title}</p>
+        <p className="mt-1 max-w-sm text-muted-foreground text-xs">
           {description}
         </p>
         {action ? <div className="mt-4">{action}</div> : null}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -525,14 +523,12 @@ function CompactUsageStat({
   value: string;
 }) {
   return (
-    <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="flex items-center gap-2">
         <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <p className="text-2xs text-muted-foreground uppercase tracking-[0.12em]">
-          {label}
-        </p>
+        <p className="font-medium text-foreground text-sm">{label}</p>
       </div>
-      <p className="mt-1 font-semibold text-foreground text-lg tabular-nums tracking-tight">
+      <p className="font-medium text-foreground text-sm tabular-nums">
         {value}
       </p>
     </div>
@@ -626,14 +622,14 @@ function QuickStat({
   return (
     <div
       className={cn(
-        "space-y-1 px-5 py-4",
+        "flex items-center justify-between gap-3 px-4 py-3",
         active && "bg-primary/5 dark:bg-primary/10"
       )}
     >
-      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="font-medium text-foreground text-sm">{label}</p>
       <p
         className={cn(
-          "font-semibold text-2xl text-foreground tabular-nums tracking-tight",
+          "font-medium text-foreground text-sm tabular-nums",
           active && "text-primary"
         )}
       >
@@ -670,27 +666,6 @@ function ServiceStatusBadge({
   );
 }
 
-function WorkerTableHeader({ canManage }: { canManage: boolean }) {
-  return (
-    <thead className="text-muted-foreground text-xs">
-      <tr>
-        <th className="border-border border-b px-5 py-2.5 font-medium">
-          Service
-        </th>
-        <th className="border-border border-b px-5 py-2.5 font-medium">
-          Status
-        </th>
-        <th className="border-border border-b px-5 py-2.5 font-medium">
-          {canManage ? "Actions" : <span className="sr-only">Actions</span>}
-        </th>
-        <th className="border-border border-b px-5 py-2.5 font-medium">
-          {canManage ? "Logs" : <span className="sr-only">Logs</span>}
-        </th>
-      </tr>
-    </thead>
-  );
-}
-
 function WorkerServiceRow({
   icon: Icon,
   title,
@@ -715,39 +690,31 @@ function WorkerServiceRow({
   const pm2Managed = worker.process?.managed ?? false;
 
   return (
-    <tr className="last:[&>td]:border-b-0">
-      <td className="border-border border-b px-5 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          {titleHref ? (
-            <Link
-              className="truncate font-medium text-foreground hover:underline"
-              to={titleHref}
-            >
-              {title}
-            </Link>
-          ) : (
-            <span className="truncate font-medium text-foreground">
-              {title}
-            </span>
-          )}
-        </div>
-      </td>
-      <td className="border-border border-b px-5 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        {titleHref ? (
+          <Link
+            className="font-medium text-foreground text-sm hover:underline"
+            to={titleHref}
+          >
+            {title}
+          </Link>
+        ) : (
+          <span className="font-medium text-foreground text-sm">{title}</span>
+        )}
+        <ServiceStatusBadge status={status} tone={tone} />
+        {footerLink && (
+          <Link
+            className="text-primary text-xs underline underline-offset-4"
+            to={footerLink.to}
+          >
+            {footerLink.label}
+          </Link>
+        )}
+      </div>
+      {canManage && (
         <div className="flex flex-wrap items-center gap-2">
-          <ServiceStatusBadge status={status} tone={tone} />
-          {footerLink ? (
-            <Link
-              className="font-medium text-primary text-xs underline underline-offset-4 hover:text-primary/90"
-              to={footerLink.to}
-            >
-              {footerLink.label}
-            </Link>
-          ) : null}
-        </div>
-      </td>
-      <td className="border-border border-b px-5 py-3">
-        {canManage ? (
           <WorkerActionBar
             className="w-fit"
             pm2Managed={pm2Managed}
@@ -755,18 +722,10 @@ function WorkerServiceRow({
             showLogs={false}
             workerName={workerName}
           />
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
-      </td>
-      <td className="border-border border-b px-5 py-3">
-        {canManage && pm2Managed ? (
-          <WorkerViewLogsButton workerName={workerName} />
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
-      </td>
-    </tr>
+          {pm2Managed && <WorkerViewLogsButton workerName={workerName} />}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -258,7 +258,27 @@ export function registerProfileRoutes(
               schema: z.object({
                 events: z.array(
                   z.object({
+                    actorName: z.string().nullable().optional(),
+                    assignmentNames: z
+                      .record(z.string(), z.string().nullable())
+                      .optional(),
                     actorUserId: z.string().nullable(),
+                    assignmentChanges: z
+                      .object({
+                        added: z.array(
+                          z.object({
+                            id: z.string(),
+                            name: z.string().nullable(),
+                          })
+                        ),
+                        removed: z.array(
+                          z.object({
+                            id: z.string(),
+                            name: z.string().nullable(),
+                          })
+                        ),
+                      })
+                      .optional(),
                     afterValue: z.string().nullable(),
                     beforeValue: z.string().nullable(),
                     createdAt: z.string(),
@@ -395,6 +415,7 @@ export function registerProfileRoutes(
       request: {
         params: profileIdParam,
         query: z.object({
+          folder: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(100).optional(),
           offset: z.coerce.number().int().min(0).optional(),
         }),
@@ -775,6 +796,7 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
+        folder: c.req.query("folder"),
         limit,
         offset,
       })

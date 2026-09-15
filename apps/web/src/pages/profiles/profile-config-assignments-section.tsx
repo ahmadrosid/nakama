@@ -1,12 +1,16 @@
 import { Tabs } from "@base-ui/react/tabs";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { Switch } from "@nakama/ui/switch";
+import { useState } from "react";
+import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
+import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   pluginAgentAccessState,
   useOrgPlugins,
   useSavePluginAgentAccess,
 } from "@/hooks/use-plugins";
+import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { formatError } from "@/lib/client";
 import { pluginIcon } from "@/lib/navigation";
 import { ProfileComposioSection } from "@/pages/profiles/profile-composio-section";
@@ -42,6 +46,13 @@ export function ProfileConfigAssignmentsSection({
     selectedId,
   } = state;
   const { navigateToSkillDetail } = useAppNavigation();
+  const { activeOrg } = useAuth();
+  const isOrgAdmin = activeOrg?.role === "admin";
+  const [capability, setCapability] = useState("tools");
+  const { data: proposals } = useSkillProposals(
+    isOrgAdmin && selectedId ? activeOrg.id : null,
+    { profileId: selectedId ?? undefined, status: "pending" }
+  );
   const readOnly = busy || !canManageProfile;
 
   if (!detail) {
@@ -49,7 +60,19 @@ export function ProfileConfigAssignmentsSection({
   }
 
   return (
-    <Tabs.Root className="min-w-0 pt-5" defaultValue="tools" key={detail.id}>
+    <Tabs.Root
+      className="min-w-0"
+      key={detail.id}
+      onValueChange={(value) => {
+        if (value !== "proposals") {
+          setCapability(String(value));
+        }
+        state.setDetailTab(value === "proposals" ? "proposals" : "profile");
+      }}
+      value={
+        isOrgAdmin && state.detailTab === "proposals" ? "proposals" : capability
+      }
+    >
       <Tabs.List
         aria-label="Profile capabilities"
         className="flex gap-4 overflow-x-auto border-border border-b"
@@ -62,6 +85,14 @@ export function ProfileConfigAssignmentsSection({
           ...(composioToolkitsData?.configured
             ? [{ label: "Apps", value: "apps" }]
             : []),
+          ...(isOrgAdmin
+            ? [
+                {
+                  label: `Proposals${proposals?.pendingCount ? ` (${proposals.pendingCount})` : ""}`,
+                  value: "proposals",
+                },
+              ]
+            : []),
         ].map(({ value, label }) => (
           <Tabs.Tab
             className="shrink-0 border-transparent border-b-2 px-1 py-3 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:border-foreground data-[active]:text-foreground"
@@ -72,6 +103,11 @@ export function ProfileConfigAssignmentsSection({
           </Tabs.Tab>
         ))}
       </Tabs.List>
+      {isOrgAdmin && activeOrg ? (
+        <Tabs.Panel className="pt-5" value="proposals">
+          <SkillProposalsPanel orgId={activeOrg.id} profileId={detail.id} />
+        </Tabs.Panel>
+      ) : null}
       <Tabs.Panel value="tools">
         <ProfileToolsSection
           availableTools={availableTools.filter((tool) => !tool.pluginId)}
@@ -162,7 +198,7 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
       {installed.length === 0 ? (
         <p className="text-muted-foreground text-sm">No plugins installed.</p>
       ) : null}
-      <ul className="divide-y divide-border overflow-hidden rounded-md border border-border empty:hidden">
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card empty:hidden">
         {installed.map((plugin) => {
           const access = pluginAgentAccessState(detail, plugin.pluginId, {
             skills: allSkills,
@@ -171,7 +207,7 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
           const Icon = pluginIcon(plugin.pluginId);
           return (
             <li
-              className="flex items-center gap-3 px-3 py-3"
+              className="flex items-center gap-3 px-4 py-3"
               key={plugin.pluginId}
             >
               <Icon aria-hidden className="size-5 shrink-0" />
@@ -204,6 +240,7 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
                     pluginId: plugin.pluginId,
                   })
                 }
+                size="sm"
               />
             </li>
           );

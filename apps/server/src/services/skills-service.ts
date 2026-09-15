@@ -1,10 +1,19 @@
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import {
+  open,
+  readdir,
+  readFile,
+  realpath,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type {
   CreateSkillRequest,
   InstallSkillRequest,
   ListSkillsResponse,
   PatchSkillRequest,
+  SkillFileResponse,
+  SkillFilesResponse,
   SkillResponse,
   SkillSummary,
   SkillUsageSummary,
@@ -46,6 +55,7 @@ import {
   writeProfileSkillSupportingFile,
   writeRawProfileSkillMarkdown,
 } from "@nakama/core";
+import { inferArtifactMimeType } from "@nakama/core/artifact-mime";
 import type {
   DatabaseAdapter,
   SkillCreatedBy,
@@ -111,13 +121,13 @@ export class SkillsService {
     }
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
     await this.syncDiscoveredSkills();
 
     const profiles = await this.db.listProfiles();
 
     for (const profile of profiles) {
-      if (!profile.orgId) {
+      if (!profile.orgId || (orgId && profile.orgId !== orgId)) {
         continue;
       }
 
@@ -125,7 +135,11 @@ export class SkillsService {
     }
 
     const skills = await this.db.listSkills();
-    return { skills: skills.map(toSkillSummary) };
+    return {
+      skills: skills
+        .filter((skill) => !(orgId && skill.orgId) || skill.orgId === orgId)
+        .map(toSkillSummary),
+    };
   }
 
   async createSkill(
@@ -715,8 +729,11 @@ export class SkillsService {
     }
   }
 
-  async getSkill(skillId: string): Promise<SkillResponse> {
+  async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
     const record = await this.requireSkill(skillId);
+    if (orgId && record.orgId && record.orgId !== orgId) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
     const directory = await this.resolveSkillDirectory(record);
     const discovered = directory
       ? await discoverSkillDirectory(directory)
@@ -730,6 +747,148 @@ export class SkillsService {
         body,
       },
     };
+  }
+
+  private async skillFilesRoot(
+    orgId: string,
+    skillId: string
+  ): Promise<string> {
+    const record = await this.db.getSkill(skillId);
+    if (!record || (record.orgId && record.orgId !== orgId)) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
+    const directory = await this.resolveSkillDirectory(record);
+    if (!directory) {
+      throw new NakamaApiError("Skill files are unavailable.", 404);
+    }
+    try {
+      return await realpath(directory);
+    } catch {
+      throw new NakamaApiError("Skill files are unavailable.", 404);
+    }
+  }
+
+  async listSkillFiles(
+    orgId: string,
+    skillId: string
+  ): Promise<SkillFilesResponse> {
+    const root = await this.skillFilesRoot(orgId, skillId);
+    const files: SkillFilesResponse["files"] = [];
+    let truncated = false;
+    async function visit(
+      directory: string,
+      prefix: string,
+      depth: number
+    ): Promise<void> {
+      if (depth > 12) {
+        truncated = true;
+        return;
+      }
+      const entries = await readdir(directory, { withFileTypes: true });
+      entries.sort(
+        (a, b) =>
+          Number(b.isDirectory()) - Number(a.isDirectory()) ||
+          a.name.localeCompare(b.name)
+      );
+      for (const entry of entries) {
+        if (
+          entry.isSymbolicLink() ||
+          !(entry.isDirectory() || entry.isFile())
+        ) {
+          continue;
+        }
+        if (files.length >= 1000) {
+          truncated = true;
+          return;
+        }
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        files.push({
+          path: relative,
+          type: entry.isDirectory() ? "directory" : "file",
+        });
+        if (entry.isDirectory()) {
+          await visit(path.join(directory, entry.name), relative, depth + 1);
+        }
+      }
+    }
+    await visit(root, "", 0);
+    return { files, truncated };
+  }
+
+  async readSkillFile(
+    orgId: string,
+    skillId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    const root = await this.skillFilesRoot(orgId, skillId);
+    if (
+      !filePath ||
+      filePath.includes("\0") ||
+      filePath.includes("\\") ||
+      path.isAbsolute(filePath) ||
+      filePath.split("/").includes("..")
+    ) {
+      throw new NakamaApiError("Invalid skill file path.", 400);
+    }
+    let target: string;
+    try {
+      target = await realpath(path.join(root, filePath));
+    } catch {
+      throw new NakamaApiError("Skill file not found.", 404);
+    }
+    if (!target.startsWith(`${root}${path.sep}`)) {
+      throw new NakamaApiError("File is outside the skill directory.", 403);
+    }
+    const handle = await open(target, "r");
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile()) {
+        throw new NakamaApiError("Select a file.", 400);
+      }
+      const maxBytes = 1024 * 1024;
+      if (stat.size > maxBytes) {
+        return {
+          content: null,
+          path: filePath,
+          unavailableReason: "Preview is limited to files up to 1 MB.",
+        };
+      }
+      const buffer = Buffer.alloc(maxBytes + 1);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if (bytesRead > maxBytes) {
+        return {
+          content: null,
+          path: filePath,
+          unavailableReason: "Preview is limited to files up to 1 MB.",
+        };
+      }
+      const bytes = buffer.subarray(0, bytesRead);
+      const mediaType = inferArtifactMimeType(filePath);
+      if (mediaType.startsWith("image/")) {
+        return {
+          content: null,
+          image: { dataBase64: bytes.toString("base64"), mediaType },
+          path: filePath,
+        };
+      }
+      try {
+        if (bytes.includes(0)) {
+          throw new Error("Binary file");
+        }
+        return {
+          content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+          path: filePath,
+        };
+      } catch {
+        return {
+          content: null,
+          path: filePath,
+          unavailableReason: "Preview is unavailable for binary files.",
+        };
+      }
+    } finally {
+      await handle.close();
+    }
   }
 
   async composeCatalogForProfile(
@@ -1190,6 +1349,7 @@ function toSkillSummary(
     hasTool: record.hasTool,
     id: record.id,
     name: record.name,
+    orgId: record.orgId ?? null,
     pluginId: record.pluginId ?? null,
     pluginKey: record.pluginKey ?? null,
     sourcePath: record.sourcePath,

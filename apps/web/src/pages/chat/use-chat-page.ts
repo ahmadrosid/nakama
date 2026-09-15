@@ -9,6 +9,7 @@ import type {
   ProfileSummary,
   ThinkingEffort,
 } from "@nakama/core/contract";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -89,6 +90,7 @@ import {
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
+import { queryKeys } from "@/lib/query-keys";
 import {
   buildAutoEnableThinkingPayload,
   DEFAULT_THINKING_EFFORT,
@@ -156,6 +158,7 @@ function useChatComposerDraft({
 }
 
 export function useChatPage() {
+  const queryClient = useQueryClient();
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -905,6 +908,9 @@ export function useChatPage() {
           if (!cognitoRef.current) {
             syncChatUrl(profileId, activeSession.id);
           }
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.sessions(profileId, "web"),
+          });
         } catch (err) {
           setError(formatError(err));
           shouldDrainQueue = false;
@@ -1017,6 +1023,9 @@ export function useChatPage() {
         setCanStop(false);
         setBusy(false);
         setTurnStartedAt(null);
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions(profileId, "web"),
+        });
 
         const next = shouldDrainQueue ? messageQueueRef.current.shift() : null;
         if (next) {
@@ -1045,6 +1054,7 @@ export function useChatPage() {
       showThinking,
       activeModelSupportsVision,
       sessionModel,
+      queryClient,
     ]
   );
 

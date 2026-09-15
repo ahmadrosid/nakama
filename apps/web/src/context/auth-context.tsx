@@ -25,6 +25,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 function refreshAuthenticatedQueries(): void {
   queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
+  queryClient.removeQueries({ queryKey: queryKeys.skills.all });
   queryClient.removeQueries({
     predicate: (query) => query.queryKey[0] === "sessions",
   });

@@ -7,6 +7,7 @@
     "./button-variants": "./src/button-variants.ts",
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
+    "./code-block": "./src/code-block.tsx",
     "./command": "./src/command.tsx",
     "./dialog": "./src/dialog.tsx",
     "./dropdown-menu": "./src/dropdown-menu.tsx",

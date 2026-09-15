@@ -472,6 +472,38 @@ describe("AutomationService", () => {
   });
 });
 
+test("automation list reflects a run starting and finishing", async () => {
+  const db = await createTestDb();
+  const service = new AutomationService(db, {
+    getUserTimezone: async () => "UTC",
+  });
+  const automation = await service.create(
+    ORG_ID,
+    {
+      description: "Digest",
+      name: "Digest",
+      prompt: "Summarize",
+      trigger: { type: "manual" },
+    },
+    PROFILE_ID,
+    { orgRole: "member" }
+  );
+  expect(
+    (await service.listForOrg(ORG_ID)).automations[0]?.lastRunStatus
+  ).toBeNull();
+
+  const run = await service.createRun(automation.id);
+  expect((await service.listForOrg(ORG_ID)).automations[0]?.lastRunStatus).toBe(
+    "running"
+  );
+  expect((await service.listForOrg("another_org")).automations).toEqual([]);
+
+  await service.completeRun(run.id, automation.id, { output: "Done" });
+  expect((await service.listForOrg(ORG_ID)).automations[0]?.lastRunStatus).toBe(
+    "completed"
+  );
+});
+
 describe("AutomationRunner", () => {
   test("writes completed run records", async () => {
     const db = await createTestDb();

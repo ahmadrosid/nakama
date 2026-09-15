@@ -49,7 +49,10 @@ Preserve each bullet's original `## YYYY-MM-DD` section header from `MEMORY.md`.
 1. `read_file` `MEMORY.md` and identify the exact `- bullet` lines to archive.
 2. Confirm targets with the user when the request is ambiguous.
 3. Choose `memory-archive/{YYYY-MM}.md` for the current month.
-4. `read_file` the archive file if it exists.
+4. Check whether the archive file exists **before** calling `read_file`. With `bash`, run `if test -f memory-archive/{YYYY-MM}.md; then printf 'exists\n'; else printf 'missing\n'; fi` in the active profile workspace, replacing `{YYYY-MM}` with the chosen month. A missing file (or missing `memory-archive/` directory) is normal for the first archive:
+   - If the result is `exists`, `read_file` the archive to preserve its contents.
+   - If the result is `missing`, skip the read and create the archive in step 5.
+   - If `bash` is unavailable, use `read_file`; treat only a file-not-found result as a new archive. Stop on permission or other errors rather than overwriting an unread archive.
 5. **Append to the archive first** (reduces data-loss risk):
    - If the file does not exist, `write_file` with the template plus the append block.
    - If it exists, `edit_file` to append after the existing content (or `write_file` the full merged content).

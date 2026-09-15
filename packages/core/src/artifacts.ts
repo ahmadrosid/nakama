@@ -57,7 +57,13 @@ export async function listArtifacts(
   }
 
   const resolvedDirectory = await realpath(directory);
-  const artifacts = await walkArtifacts(resolvedDirectory, resolvedDirectory);
+  const files = await walkArtifacts(resolvedDirectory, resolvedDirectory);
+  const folder = options.folder
+    ?.replaceAll("\\", "/")
+    .replace(/^\/+|\/+$/g, "");
+  const artifacts = folder
+    ? files.filter((file) => file.filename.startsWith(`${folder}/`))
+    : files;
   artifacts.sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt)
   );

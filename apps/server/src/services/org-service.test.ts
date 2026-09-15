@@ -601,6 +601,195 @@ describe("OrgService", () => {
     expect(invite.token).toStartWith("tc_invite_");
   });
 
+  test("emails a password reset link without returning its raw token", async () => {
+    const sent: Array<{ subject: string; text: string; to: string }> = [];
+    const { orgService, authService } = createOrgService(
+      {
+        send: async (input) => {
+          sent.push(input);
+          return { ok: true };
+        },
+      },
+      () => "https://nakama.example.com"
+    );
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-email" },
+    });
+
+    const requested = await orgService.requestPasswordReset(" ADMIN@ACME.COM ");
+
+    expect(requested).toEqual({ delivered: true, token: null });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("admin@acme.com");
+    expect(sent[0]?.subject).toBe("Reset your Nakama password");
+    expect(sent[0]?.text).toContain(
+      "https://nakama.example.com/reset-password?token=tc_reset_"
+    );
+  });
+
+  test("resets once and revokes sessions and outstanding reset tokens", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService({
+      send: async () => ({ error: "SMTP unavailable", ok: false }),
+    });
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-once" },
+    });
+    const now = new Date().toISOString();
+    await databaseAdapter.createBrowserSession({
+      activeOrgId: bootstrapped.organization.id,
+      createdAt: now,
+      csrfTokenHash: "csrf_hash",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      id: "browser_reset",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "session_hash",
+      userId: bootstrapped.user.id,
+    });
+
+    const earlier = await orgService.requestPasswordReset(
+      "admin@acme.com",
+      true
+    );
+    const requested = await orgService.requestPasswordReset(
+      "admin@acme.com",
+      true
+    );
+    expect(requested.delivered).toBe(false);
+    expect(requested.token).toStartWith("tc_reset_");
+
+    await orgService.resetPassword({
+      newPassword: "new-password-123",
+      token: requested.token!,
+    });
+
+    const updated = await databaseAdapter.getUserById(bootstrapped.user.id);
+    expect(
+      await authService.verifyPassword(
+        "new-password-123",
+        updated!.passwordHash
+      )
+    ).toBe(true);
+    const session =
+      await databaseAdapter.getBrowserSessionBySessionTokenHash("session_hash");
+    expect(session?.revokedAt).not.toBeNull();
+    await expect(
+      orgService.resetPassword({
+        newPassword: "another-password-123",
+        token: requested.token!,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.resetPassword({
+        newPassword: "another-password-123",
+        token: earlier.token!,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rejects expired password reset tokens", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-expired" },
+    });
+    const token = "tc_reset_expired";
+    const now = new Date().toISOString();
+    await databaseAdapter.createPasswordResetToken({
+      consumedAt: null,
+      createdAt: now,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      id: "password_reset_expired",
+      tokenHash: authService.hashToken(token),
+      userId: bootstrapped.user.id,
+    });
+
+    await expect(
+      orgService.resetPassword({ newPassword: "new-password-123", token })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("does not reveal an unknown password reset address", async () => {
+    let sends = 0;
+    const { orgService } = createOrgService({
+      send: async () => {
+        sends += 1;
+        return { ok: true };
+      },
+    });
+
+    expect(await orgService.requestPasswordReset("missing@acme.com")).toEqual({
+      delivered: true,
+      token: null,
+    });
+    expect(sends).toBe(0);
+  });
+
+  test("does not expose a reset token when public delivery fails", async () => {
+    const { orgService, authService } = createOrgService({
+      send: async () => ({ error: "SMTP unavailable", ok: false }),
+    });
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-public" },
+    });
+
+    expect(await orgService.requestPasswordReset("admin@acme.com")).toEqual({
+      delivered: true,
+      token: null,
+    });
+  });
+
+  test("returns a public reset response without waiting for SMTP", async () => {
+    let finishDelivery: (result: { ok: boolean }) => void = () => undefined;
+    const delivery = new Promise<{ ok: boolean }>((resolve) => {
+      finishDelivery = resolve;
+    });
+    const { orgService, authService } = createOrgService({
+      send: () => delivery,
+    });
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-timing" },
+    });
+
+    const response = orgService.requestPasswordReset("admin@acme.com");
+    const settled = await Promise.race([
+      response,
+      Bun.sleep(100).then(() => null),
+    ]);
+    finishDelivery({ ok: true });
+
+    expect(settled).toEqual({ delivered: true, token: null });
+  });
+
   test("rejects expired invites", async () => {
     const { orgService, databaseAdapter } = createOrgService();
     const authService = new AuthService();

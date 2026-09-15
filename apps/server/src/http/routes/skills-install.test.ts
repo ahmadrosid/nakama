@@ -32,6 +32,10 @@ function createApp() {
   return {
     ...createMinimalHonoApp({
       agent: {
+        listSkillFiles: (orgId: string, skillId: string) =>
+          skillsService.listSkillFiles(orgId, skillId),
+        readSkillFile: (orgId: string, skillId: string, filePath: string) =>
+          skillsService.readSkillFile(orgId, skillId, filePath),
         installSkillFromGitHub: (orgId: string, request: unknown) =>
           skillsService.installSkillFromGitHub(
             orgId,
@@ -105,6 +109,24 @@ describe("POST /v1/skills/install", () => {
     };
     expect(body.skill.name).toBe("github-weather");
     expect(body.skill.createdBy).toBe("human");
+    const filesResponse = await app.fetch(
+      new Request(`${BASE}/v1/skills/${body.skill.id}/files`, {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+    expect(filesResponse.status).toBe(200);
+    expect((await filesResponse.json()).files).toContainEqual({
+      path: "references/explainer.md",
+      type: "file",
+    });
+    const fileResponse = await app.fetch(
+      new Request(
+        `${BASE}/v1/skills/${body.skill.id}/file?path=references%2Fexplainer.md`,
+        { headers: adminSession.headers({}, orgId) }
+      )
+    );
+    expect(fileResponse.status).toBe(200);
+    expect((await fileResponse.json()).content).toBe("Explainer instructions");
     const installed = await databaseAdapter.getSkillByName(
       "github-weather",
       orgId
@@ -249,6 +271,14 @@ describe("POST /v1/skills/install", () => {
       memberProvisioned.temporaryPassword,
       orgId
     );
+    for (const suffix of ["files", "file?path=SKILL.md"]) {
+      const result = await app.fetch(
+        new Request(`${BASE}/v1/skills/any-skill/${suffix}`, {
+          headers: memberSession.headers({}, orgId),
+        })
+      );
+      expect(result.status).toBe(403);
+    }
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
 

@@ -21,8 +21,8 @@ import {
   readStoredActiveChatProfileId,
   resolveActiveProfileIdFromLocation,
   resolveDefaultProfileId,
-  resolveHistoryProfileId,
   resolveProfilesPageProfileId,
+  resolveRecentChatsProfileId,
   storeChatDraft,
   storeComposerDraft,
   writeLastChatModel,
@@ -177,31 +177,6 @@ describe("chat history route helpers", () => {
 
     expect(
       resolveActiveProfileIdFromLocation({
-        pathname: "/history",
-        profiles,
-        search: "?profile=super",
-      })
-    ).toBe("super");
-
-    expect(
-      resolveActiveProfileIdFromLocation({
-        pathname: "/history",
-        profiles,
-        search: "",
-      })
-    ).toBe("default");
-
-    expect(
-      resolveActiveProfileIdFromLocation({
-        liveChatProfileId: "super",
-        pathname: "/history",
-        profiles,
-        search: "",
-      })
-    ).toBe("super");
-
-    expect(
-      resolveActiveProfileIdFromLocation({
         liveChatProfileId: "default",
         pathname: "/profiles",
         profiles,
@@ -245,7 +220,7 @@ describe("chat history route helpers", () => {
     ).toBe("super");
   });
 
-  test("resolveHistoryProfileId restores stored selection when URL has no profile", () => {
+  test("resolveRecentChatsProfileId restores stored selection when URL has no profile", () => {
     const profiles = [{ id: "default" }, { id: "super" }];
     const store = new Map<string, string>();
     const previousLocalStorage = globalThis.localStorage;
@@ -266,21 +241,21 @@ describe("chat history route helpers", () => {
       writeStoredActiveChatProfileId("super");
 
       expect(
-        resolveHistoryProfileId({
+        resolveRecentChatsProfileId({
           profiles,
           search: "",
         })
       ).toBe("super");
 
       expect(
-        resolveHistoryProfileId({
+        resolveRecentChatsProfileId({
           profiles,
           search: "?profile=default",
         })
       ).toBe("default");
 
       expect(
-        resolveHistoryProfileId({
+        resolveRecentChatsProfileId({
           liveChatProfileId: "default",
           profiles,
           search: "",
@@ -288,7 +263,7 @@ describe("chat history route helpers", () => {
       ).toBe("default");
 
       expect(
-        resolveHistoryProfileId({
+        resolveRecentChatsProfileId({
           liveChatProfileId: "from-other-org",
           profiles: [{ id: "org-b" }],
           search: "?profile=D2jz2yFd3vuHS04T6wmTu",

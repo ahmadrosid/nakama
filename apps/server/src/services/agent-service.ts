@@ -3142,12 +3142,20 @@ export class AgentService {
     );
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
-    return this.requireSkillsService().listSkills();
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
+    return this.requireSkillsService().listSkills(orgId);
   }
 
-  async getSkill(skillId: string): Promise<SkillResponse> {
-    return this.requireSkillsService().getSkill(skillId);
+  async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
+    return this.requireSkillsService().getSkill(skillId, orgId);
+  }
+
+  async listSkillFiles(orgId: string, skillId: string) {
+    return this.requireSkillsService().listSkillFiles(orgId, skillId);
+  }
+
+  async readSkillFile(orgId: string, skillId: string, filePath: string) {
+    return this.requireSkillsService().readSkillFile(orgId, skillId, filePath);
   }
 
   async cloneProfile(

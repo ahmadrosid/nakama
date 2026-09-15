@@ -52,15 +52,15 @@ export function ProfileCreateDialogForm({
   onRemoveTool: (toolId: string) => void;
 }) {
   return (
-    <div className="min-h-0 overflow-y-auto pr-1">
+    <div className="min-h-0 space-y-4 overflow-y-auto">
       {submitError ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-sm">
           {submitError}
         </p>
       ) : null}
 
-      <div className="mt-4 grid min-h-0 gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-6">
-        <div className="space-y-4">
+      <div className="space-y-4">
+        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           <Field htmlFor="create-profile-name" label="Name">
             <Input
               autoFocus
@@ -73,7 +73,7 @@ export function ProfileCreateDialogForm({
             />
           </Field>
 
-          <Field htmlFor="create-profile-id" label="Profile id">
+          <Field htmlFor="create-profile-id" label="Agent id">
             <Input
               aria-invalid={profileIdHasValue && !profileIdValid}
               className="font-mono text-sm focus-visible:ring-1 focus-visible:ring-inset aria-invalid:ring-1 aria-invalid:ring-inset"
@@ -97,19 +97,13 @@ export function ProfileCreateDialogForm({
 
           <Field label="Avatar">
             <div className="flex items-center gap-3">
-              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
-                {avatarPreview ? (
-                  <img
-                    alt=""
-                    className="size-full object-cover"
-                    src={avatarPreview}
-                  />
-                ) : (
-                  <span className="font-medium text-lg text-muted-foreground">
-                    {name.trim().charAt(0).toUpperCase() || "?"}
-                  </span>
-                )}
-              </div>
+              {avatarPreview ? (
+                <img
+                  alt="Avatar preview"
+                  className="size-10 shrink-0 rounded-md border border-border object-cover"
+                  src={avatarPreview}
+                />
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <input
                   accept="image/jpeg,image/png,image/gif,image/webp"
@@ -144,7 +138,7 @@ export function ProfileCreateDialogForm({
           </Field>
         </div>
 
-        <div className="space-y-4">
+        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           <Field label="Tools">
             {tools.length === 0 ? (
               <p className="text-muted-foreground text-sm">
@@ -180,26 +174,23 @@ export function ProfileCreateDialogForm({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-muted-foreground text-xs">
-                    Adds on select. Remove unwanted ones below.
-                  </p>
                 </div>
 
                 {selectedTools.length > 0 ? (
-                  <div className="rounded-md border border-border bg-muted/20 p-2">
-                    <div className="max-h-32 overflow-y-auto pr-1">
-                      <ul className="flex flex-wrap gap-2">
+                  <div className="rounded-md border border-border">
+                    <div className="max-h-40 overflow-y-auto">
+                      <ul className="divide-y divide-border">
                         {selectedTools.map((tool) => (
                           <li key={tool.id}>
                             <button
                               aria-label={`Remove ${tool.name}`}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-foreground text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-foreground text-sm transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={busy}
                               onClick={() => onRemoveTool(tool.id)}
                               title={tool.name}
                               type="button"
                             >
-                              <span className="max-w-52 truncate">
+                              <span className="min-w-0 truncate">
                                 {tool.name}
                               </span>
                               <Cancel01Icon
@@ -234,11 +225,19 @@ function Field({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <label className="text-muted-foreground text-xs" htmlFor={htmlFor}>
+    <div
+      className={cn(
+        "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start",
+        className
+      )}
+    >
+      <label
+        className="shrink-0 text-foreground text-sm sm:w-24 sm:pt-2"
+        htmlFor={htmlFor}
+      >
         {label}
       </label>
-      {children}
+      <div className="min-w-0 flex-1 space-y-2">{children}</div>
     </div>
   );
 }

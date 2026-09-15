@@ -1,8 +1,16 @@
 import { Button } from "@nakama/ui/button";
+import { CodeBlock } from "@nakama/ui/code-block";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
-import { ArrowLeft01Icon, Delete02Icon } from "hugeicons-react";
+import {
+  ArrowLeft02Icon,
+  ArrowRight01Icon,
+  Delete02Icon,
+  File02Icon,
+  Folder01Icon,
+  FolderOpenIcon,
+} from "hugeicons-react";
 import { useState } from "react";
 import {
   Link,
@@ -19,8 +27,9 @@ import {
   usePatchSkillMutation,
   useUnassignSkillMutation,
 } from "@/hooks/use-resource-mutations";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
+import { queryKeys } from "@/lib/query-keys";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
@@ -79,6 +88,7 @@ export function SkillDetailPage() {
       back={back}
       canRemoveFromProfile={canRemoveFromProfile}
       createdBy={profileSkill?.createdBy}
+      key={`${activeOrg?.id}:${skill.id}`}
       profileId={profileId}
       skill={skill}
       usageSummary={profileSkill?.usage}
@@ -112,6 +122,24 @@ function SkillDetailPageContent({
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(skill.body);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+  const [selectedFile, setSelectedFile] = useState("SKILL.md");
+  const filesQuery = useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.listSkillFiles(skill.id, orgId),
+    queryKey: [...queryKeys.skills.detail(skill.id), "files", orgId],
+  });
+  const fileQuery = useQuery({
+    enabled: Boolean(orgId) && selectedFile !== "SKILL.md",
+    queryFn: () => client.readSkillFile(skill.id, selectedFile, orgId),
+    queryKey: [
+      ...queryKeys.skills.detail(skill.id),
+      "file",
+      orgId,
+      selectedFile,
+    ],
+  });
   const busy = unassignSkillMutation.isPending || patchSkillMutation.isPending;
 
   function handleRemoveOpenChange(open: boolean) {
@@ -170,8 +198,8 @@ function SkillDetailPageContent({
   }
 
   return (
-    <div className="flex flex-col gap-4 px-6 py-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-border border-b px-4 py-3">
         <BackLink />
         {canRemoveFromProfile ? (
           <Button
@@ -188,19 +216,95 @@ function SkillDetailPageContent({
         ) : null}
       </div>
 
-      <SkillDetailContent
-        createdBy={createdBy}
-        editBody={editBody}
-        editing={editing}
-        onCancelEdit={handleCancelEdit}
-        onEditBodyChange={setEditBody}
-        onSaveEdit={() => void handleSaveEdit()}
-        onStartEdit={handleStartEdit}
-        saveBusy={patchSkillMutation.isPending}
-        saveError={saveError}
-        skill={skill}
-        usageSummary={usageSummary}
-      />
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className="max-h-60 shrink-0 overflow-auto border-border border-b p-2 md:max-h-none md:w-60 md:border-r md:border-b-0">
+          <h1 className="break-words px-2 py-3 font-semibold text-sm">
+            {skill.name}
+          </h1>
+          <nav aria-label="Skill files">
+            {filesQuery.isLoading && (
+              <p className="p-2 text-muted-foreground text-sm" role="status">
+                Loading files…
+              </p>
+            )}
+            {filesQuery.error && (
+              <Button onClick={() => void filesQuery.refetch()} variant="ghost">
+                Couldn’t load files. Retry
+              </Button>
+            )}
+            <SkillFileTree
+              disabled={editing || busy}
+              files={
+                filesQuery.data?.files ?? [{ path: "SKILL.md", type: "file" }]
+              }
+              onSelect={setSelectedFile}
+              selectedFile={selectedFile}
+            />
+            {filesQuery.data?.truncated && (
+              <p className="p-2 text-muted-foreground text-xs">
+                File list truncated.
+              </p>
+            )}
+          </nav>
+        </aside>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          {selectedFile === "SKILL.md" ? (
+            <SkillDetailContent
+              createdBy={createdBy}
+              editBody={editBody}
+              editing={editing}
+              onCancelEdit={handleCancelEdit}
+              onEditBodyChange={setEditBody}
+              onSaveEdit={() => void handleSaveEdit()}
+              onStartEdit={handleStartEdit}
+              saveBusy={patchSkillMutation.isPending}
+              saveError={saveError}
+              showTitle={false}
+              skill={skill}
+              usageSummary={usageSummary}
+            />
+          ) : (
+            <div className="space-y-4">
+              <h2 className="break-all font-medium text-sm">{selectedFile}</h2>
+              {fileQuery.isLoading && <p role="status">Loading file…</p>}
+              {fileQuery.error && (
+                <div role="alert">
+                  <p className="text-destructive text-sm">
+                    {formatError(fileQuery.error)}
+                  </p>
+                  <Button
+                    onClick={() => void fileQuery.refetch()}
+                    variant="outline"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+              {fileQuery.data?.content != null && (
+                <CodeBlock
+                  className="rounded-lg border border-border"
+                  code={fileQuery.data.content}
+                  lang={selectedFile.endsWith(".md") ? "markdown" : "text"}
+                />
+              )}
+              {fileQuery.data?.image && (
+                <div className="flex justify-center rounded-lg border border-border bg-muted/20 p-4">
+                  <img
+                    alt={selectedFile}
+                    className="max-h-[70vh] max-w-full object-contain"
+                    src={`data:${fileQuery.data.image.mediaType};base64,${fileQuery.data.image.dataBase64}`}
+                  />
+                </div>
+              )}
+              {fileQuery.data?.unavailableReason && (
+                <p className="text-muted-foreground text-sm">
+                  {fileQuery.data.unavailableReason}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <RemoveSkillFromProfileDialog
         busy={busy}
@@ -210,6 +314,82 @@ function SkillDetailPageContent({
         skillName={skill.name}
       />
     </div>
+  );
+}
+
+function SkillFileTree({
+  files,
+  selectedFile,
+  onSelect,
+  disabled,
+  parent = "",
+}: {
+  files: SkillFilesResponse["files"];
+  selectedFile: string;
+  onSelect: (path: string) => void;
+  disabled: boolean;
+  parent?: string;
+}) {
+  const children = files.filter((file) => {
+    const separator = file.path.lastIndexOf("/");
+    return (separator < 0 ? "" : file.path.slice(0, separator)) === parent;
+  });
+  return (
+    <ul className="space-y-0.5">
+      {children.map((file) => {
+        const name = file.path.split("/").at(-1);
+        return (
+          <li key={file.path}>
+            {file.type === "directory" ? (
+              <details>
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent/50 [&::-webkit-details-marker]:hidden">
+                  <ArrowRight01Icon
+                    aria-hidden
+                    className="size-3 shrink-0 text-muted-foreground [[open]>summary>&]:rotate-90"
+                  />
+                  <Folder01Icon
+                    aria-hidden
+                    className="size-4 shrink-0 text-muted-foreground [[open]>summary>&]:hidden"
+                  />
+                  <FolderOpenIcon
+                    aria-hidden
+                    className="hidden size-4 shrink-0 text-muted-foreground [[open]>summary>&]:block"
+                  />
+                  <span className="truncate">{name}</span>
+                </summary>
+                <div className="ml-3 pl-1">
+                  <SkillFileTree
+                    disabled={disabled}
+                    files={files}
+                    onSelect={onSelect}
+                    parent={file.path}
+                    selectedFile={selectedFile}
+                  />
+                </div>
+              </details>
+            ) : (
+              <button
+                aria-current={file.path === selectedFile ? "page" : undefined}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md py-2 pr-2 pl-7 text-left text-sm hover:bg-accent/50 disabled:opacity-50",
+                  file.path === selectedFile && "bg-accent font-medium"
+                )}
+                disabled={disabled}
+                onClick={() => onSelect(file.path)}
+                title={file.path}
+                type="button"
+              >
+                <File02Icon
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+                <span className="truncate">{name}</span>
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -225,7 +405,7 @@ function BackLink() {
       type="button"
       variant="ghost"
     >
-      <ArrowLeft01Icon aria-hidden className="size-4" />
+      <ArrowLeft02Icon aria-hidden className="size-4" strokeWidth={1.75} />
       {label}
     </Button>
   );
@@ -246,3 +426,6 @@ function PageState({ message }: { message: string }) {
     </div>
   );
 }
+
+import type { SkillFilesResponse } from "@nakama/core/contract";
+import { useQuery } from "@tanstack/react-query";

@@ -24,6 +24,7 @@ type ListState = Pick<
   | "filteredAutomations"
   | "setDeleteTarget"
   | "refresh"
+  | "runningId"
 >;
 
 export function AutomationsListSidebar(state: ListState) {
@@ -41,6 +42,7 @@ export function AutomationsListSidebar(state: ListState) {
     filteredAutomations,
     setDeleteTarget,
     refresh,
+    runningId,
   } = state;
 
   return (
@@ -94,7 +96,7 @@ export function AutomationsListSidebar(state: ListState) {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border border-border border-b">
+          <ul className="divide-y divide-muted border-muted border-b dark:divide-muted/50 dark:border-muted/50">
             {filteredAutomations.map((automation) => (
               <li key={automation.id}>
                 <AutomationListItem
@@ -102,6 +104,10 @@ export function AutomationsListSidebar(state: ListState) {
                   busy={busy}
                   onDelete={setDeleteTarget}
                   onSelect={() => setSelectedId(automation.id)}
+                  running={
+                    runningId === automation.id ||
+                    automation.lastRunStatus === "running"
+                  }
                   selected={selectedId === automation.id}
                   unreadCount={unreadByAutomationId[automation.id] ?? 0}
                 />

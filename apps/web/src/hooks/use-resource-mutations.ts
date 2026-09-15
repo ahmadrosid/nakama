@@ -536,7 +536,10 @@ export function useKnowledgeBaseQuery(profileId: string | null) {
 
 export const ARTIFACTS_PAGE_SIZE = 30;
 
-export function useArtifactsInfiniteQuery(profileId: string | null) {
+export function useArtifactsInfiniteQuery(
+  profileId: string | null,
+  folder = ""
+) {
   return useInfiniteQuery({
     enabled: Boolean(profileId),
     getNextPageParam: (lastPage) => {
@@ -546,10 +549,11 @@ export function useArtifactsInfiniteQuery(profileId: string | null) {
     initialPageParam: 0,
     queryFn: ({ pageParam }: { pageParam: number }) =>
       client.listProfileArtifacts(profileId!, {
+        folder,
         limit: ARTIFACTS_PAGE_SIZE,
         offset: pageParam,
       }),
-    queryKey: queryKeys.artifacts.profile(profileId ?? ""),
+    queryKey: [...queryKeys.artifacts.profile(profileId ?? ""), folder],
   });
 }
 
@@ -676,30 +680,6 @@ export function useSoulFileQuery(
       "file",
       fileKey ?? "",
     ] as const,
-  });
-}
-
-export function usePurgeSessionMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      sessionId,
-      channel = "web",
-    }: {
-      profileId: string;
-      sessionId: string;
-      channel?: AgentChannel;
-    }) => client.createChatSession(sessionId, channel).purge(),
-    onSuccess: async (_data, variables) => {
-      await Promise.all(
-        HISTORY_SESSION_CHANNELS.map((channel) =>
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.sessions(variables.profileId, channel),
-          })
-        )
-      );
-    },
   });
 }
 

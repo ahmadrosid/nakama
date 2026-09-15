@@ -405,6 +405,53 @@ describe("createHonoApp", () => {
     expect(csp).not.toContain("frame-ancestors");
   });
 
+  test.each(["/docs", "/docs/"])(
+    "allows the docs scripts on %s",
+    async (path) => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`)
+      );
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+      const scriptUrl = html.match(/<script src="([^"]+)"/)?.[1];
+      expect(inlineScript).toBeDefined();
+      expect(scriptUrl).toBeDefined();
+      const hash = new Bun.CryptoHasher("sha256")
+        .update(inlineScript!)
+        .digest("base64");
+      const csp = response.headers.get("Content-Security-Policy") ?? "";
+      const scriptSrc =
+        csp
+          .split(";")
+          .find((directive) => directive.trim().startsWith("script-src")) ?? "";
+      expect(scriptSrc).toContain(scriptUrl!);
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+      expect(scriptSrc).not.toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'unsafe-eval'");
+      expect(csp).toContain("font-src 'self' data: https://fonts.scalar.com;");
+      expect(csp).toContain(
+        "connect-src 'self' https://cdn.jsdelivr.net/sm/ https://api.scalar.com/vector/registry/;"
+      );
+    }
+  );
+
+  test.each(["/health", "/openapi.json", "/docs-other"])(
+    "keeps Scalar resource permissions off %s",
+    async (path) => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`)
+      );
+      const csp = response.headers.get("Content-Security-Policy") ?? "";
+      expect(csp).toContain("font-src 'self' data:;");
+      expect(csp).toContain("connect-src 'self';");
+      expect(csp).not.toContain("scalar.com");
+      expect(csp).not.toContain("jsdelivr.net");
+    }
+  );
+
   test("allows the theme bootstrap by hash instead of every inline script", async () => {
     const indexHtml = await Bun.file(
       resolve(import.meta.dir, "../../../web/index.html")

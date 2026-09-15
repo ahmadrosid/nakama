@@ -34,7 +34,7 @@ export function useAutomationsPage() {
     isFetching: automationsRefreshing,
     error: automationsError,
     refetch: refetchAutomations,
-  } = useAutomationsQuery();
+  } = useAutomationsQuery(5000);
   const automations = automationsData?.automations ?? EMPTY_AUTOMATIONS;
   const unreadByAutomationId =
     automationsData?.unread?.byAutomationId ?? EMPTY_UNREAD_BY_AUTOMATION_ID;

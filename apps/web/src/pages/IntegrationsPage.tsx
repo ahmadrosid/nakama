@@ -5,7 +5,6 @@ import {
   CodeIcon,
   CpuChargeIcon,
   HashtagIcon,
-  Key01Icon,
   Notification01Icon,
   Plug01Icon,
   TelegramIcon,
@@ -17,14 +16,11 @@ import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ErrorTrackingSettingsCard } from "@/components/ErrorTrackingSettingsCard";
-import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
-
-const sectionClass = "rounded-md border border-border bg-card";
 
 const INTEGRATION_SECTIONS = [
   {
@@ -53,11 +49,6 @@ const INTEGRATION_SECTIONS = [
     label: "Composio",
   },
   {
-    icon: Key01Icon,
-    id: "token",
-    label: "Local token",
-  },
-  {
     icon: CodeIcon,
     id: "coding-agents",
     label: "Coding agents",
@@ -78,7 +69,6 @@ type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
 
 function resolveSection(value: string | null): IntegrationSectionId {
   if (
-    value === "token" ||
     value === "notifications" ||
     value === "whatsapp" ||
     value === "discord" ||
@@ -102,10 +92,6 @@ function IntegrationSectionPanel({
   section: IntegrationSectionId;
   isPlatformAdmin: boolean;
 }) {
-  if (section === "token") {
-    return <LocalAuthTokenCard />;
-  }
-
   if (section === "optimization") {
     return <TokenOptimizationCard />;
   }
@@ -188,17 +174,12 @@ function IntegrationsPageBody({
   }
 
   return (
-    <section
-      className={cn(
-        sectionClass,
-        "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden"
-      )}
-    >
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="shrink-0 border-border border-b px-4 sm:px-5 md:w-56 md:border-r md:border-b-0 md:p-4">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+        <aside className="shrink-0 overflow-y-auto border-border md:w-60 md:border-r">
           <nav
             aria-label="Integration settings"
-            className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
+            className="flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
           >
             {visibleSections.map((item) => (
               <SidebarButton
@@ -212,12 +193,14 @@ function IntegrationsPageBody({
           </nav>
         </aside>
 
-        <div className="min-w-0 flex-1 p-4 sm:p-5">
-          <IntegrationSectionPanel
-            canUseOrgIntegrations={canUseOrgIntegrations}
-            isPlatformAdmin={isPlatformAdmin}
-            section={section}
-          />
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          <div className="mx-auto w-full max-w-3xl space-y-8">
+            <IntegrationSectionPanel
+              canUseOrgIntegrations={canUseOrgIntegrations}
+              isPlatformAdmin={isPlatformAdmin}
+              section={section}
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -225,6 +208,7 @@ function IntegrationsPageBody({
 }
 
 export function IntegrationsPage() {
+  const [searchParams] = useSearchParams();
   const { activeOrg, isLoading, user } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
 
@@ -238,6 +222,10 @@ export function IntegrationsPage() {
 
   if (activeOrg?.role === "viewer" && !isPlatformAdmin) {
     return <Navigate replace to="/chat" />;
+  }
+
+  if (searchParams.get("section") === "token") {
+    return <Navigate replace to="/settings#local-token" />;
   }
 
   return (
@@ -262,10 +250,11 @@ function SidebarButton({
 }) {
   return (
     <button
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex shrink-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-[color,background-color,border-color,box-shadow,scale] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.96] sm:px-4 md:w-full md:shrink md:gap-3 md:rounded-md md:px-2",
+        "flex shrink-0 items-center gap-3 px-4 py-3 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset md:w-full md:shrink",
         active
-          ? "bg-primary/10 text-foreground"
+          ? "bg-muted text-foreground dark:bg-muted/50"
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
       onClick={onClick}
@@ -279,7 +268,7 @@ function SidebarButton({
         )}
         strokeWidth={1.75}
       />
-      <span className="min-w-0 whitespace-nowrap font-medium text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
+      <span className="min-w-0 whitespace-nowrap font-normal text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
         {label}
       </span>
     </button>

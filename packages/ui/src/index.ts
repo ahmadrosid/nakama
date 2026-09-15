@@ -1,5 +1,6 @@
 export * from "./button";
 export * from "./card";
+export * from "./code-block";
 export * from "./command";
 export * from "./dialog";
 export * from "./dropdown-menu";

@@ -160,7 +160,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   return (
     <>
       {errorMessage ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
+        <p className="mx-auto mb-4 max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {errorMessage}
         </p>
       ) : null}

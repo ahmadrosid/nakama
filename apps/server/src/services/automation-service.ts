@@ -402,6 +402,7 @@ export class AutomationService {
     return {
       ...automation,
       lastRunAt: runs[0]?.startedAt ?? null,
+      lastRunStatus: runs[0]?.status ?? null,
       nextRunAt: isWorkerSchedulable(automation)
         ? this.computeNextRunAt(automation.trigger, userTimezone)
         : null,

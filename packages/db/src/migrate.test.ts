@@ -597,6 +597,39 @@ describe("browser session schema", () => {
   });
 });
 
+describe("password reset schema", () => {
+  test("creates single-use password reset token storage", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      const columns = db
+        .prepare("PRAGMA table_info(password_reset_tokens)")
+        .all() as Array<{ name: string }>;
+      const indexes = db
+        .prepare("PRAGMA index_list(password_reset_tokens)")
+        .all() as Array<{ name: string }>;
+
+      expect(columns.map((column) => column.name)).toEqual([
+        "id",
+        "user_id",
+        "token_hash",
+        "expires_at",
+        "consumed_at",
+        "created_at",
+      ]);
+      expect(
+        indexes.some(
+          (index) => index.name === "password_reset_tokens_token_hash_unique"
+        )
+      ).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("organization schema migration", () => {
   test("creates org tables and allows org with admin member", () => {
     const db = new Database(":memory:");

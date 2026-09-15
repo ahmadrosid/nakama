@@ -110,6 +110,7 @@ export function AutomationListItem({
   selected,
   unreadCount,
   busy,
+  running,
   onSelect,
   onDelete,
 }: {
@@ -117,6 +118,7 @@ export function AutomationListItem({
   selected: boolean;
   unreadCount: number;
   busy: boolean;
+  running: boolean;
   onSelect: () => void;
   onDelete: (automation: StoredAutomation) => void;
 }) {
@@ -124,8 +126,9 @@ export function AutomationListItem({
     <div
       className={cn(
         "group flex w-full items-start gap-2 transition-colors",
-        "focus-within:bg-muted/25 hover:bg-muted/25",
-        selected && "bg-muted/35"
+        selected
+          ? "bg-muted dark:bg-muted/50"
+          : "focus-within:bg-muted/25 hover:bg-muted/25"
       )}
     >
       <button
@@ -136,29 +139,35 @@ export function AutomationListItem({
       >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
-            <p className="truncate font-medium text-foreground text-sm">
-              {automation.name}
-            </p>
             {unreadCount > 0 ? (
               <span
                 aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
-                className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
+                className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 font-medium text-[10px] text-primary-foreground tabular-nums leading-none"
               >
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             ) : null}
+            <p className="truncate font-medium text-foreground text-sm">
+              {automation.name}
+            </p>
           </div>
           <p className="truncate text-muted-foreground text-xs">
             {summarizeAutomationListMeta(automation)}
           </p>
           <div className="flex items-center gap-2">
-            <AutomationStateDot enabled={automation.enabled} />
+            {running ? (
+              <Spinner aria-hidden className="size-3 text-primary" />
+            ) : (
+              <AutomationStateDot enabled={automation.enabled} />
+            )}
             <p className="text-2xs text-muted-foreground">
-              {automation.nextRunAt
-                ? `Next ${formatFutureRelativeTime(automation.nextRunAt)}`
-                : automation.lastRunAt
-                  ? `Last ${formatSessionRelativeTime(automation.lastRunAt)}`
-                  : "No runs yet"}
+              {running
+                ? "Running"
+                : automation.nextRunAt
+                  ? `Next ${formatFutureRelativeTime(automation.nextRunAt)}`
+                  : automation.lastRunAt
+                    ? `Last ${formatSessionRelativeTime(automation.lastRunAt)}`
+                    : "No runs yet"}
             </p>
           </div>
         </div>
@@ -531,11 +540,9 @@ export function RunHistoryList({
   return (
     <div className="space-y-4">
       {groups.map((group) => (
-        <section key={group.label}>
-          <p className="sticky top-0 z-10 bg-card pb-2 text-muted-foreground text-xs">
-            {group.label}
-          </p>
-          <ul className="divide-y divide-border/60 border-border/60 border-y">
+        <section className="space-y-3" key={group.label}>
+          <p className="text-muted-foreground/55 text-xs">{group.label}</p>
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
             {group.runs.map((run) => (
               <RunHistoryItem
                 busy={busy}
@@ -871,7 +878,7 @@ function RunHistoryItem({
   const hasBody = runHasExpandableBody(run);
 
   return (
-    <li>
+    <li className="min-w-0 px-4">
       <div className="flex items-start gap-2 py-3">
         <RunHistoryItemSummary
           expanded={expanded}

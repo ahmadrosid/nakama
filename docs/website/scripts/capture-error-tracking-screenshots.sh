@@ -20,7 +20,7 @@ else
 fi
 
 cleanup() {
-  $AB --session "$SESSION" close --all 2>/dev/null || true
+  $AB --session "$SESSION" close 2>/dev/null || true
   for pid in "$SERVER_PID" "$INGEST_PID"; do
     if [[ -n "$pid" ]]; then
       kill "$pid" 2>/dev/null || true
@@ -70,9 +70,9 @@ SESSION_VAL=$(awk '$6=="nakama_session"{print $7}' "$COOKIE_JAR")
 curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
-  -d '{"type":"openai","apiKey":"sk-docs-demo-placeholder-key","model":"gpt-4o-mini"}' >/dev/null
+  -d '{"type":"openai","apiKey":"sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","model":"gpt-4o-mini"}' >/dev/null
 
-$AB --session "$SESSION" close --all 2>/dev/null || true
+$AB --session "$SESSION" close 2>/dev/null || true
 $AB --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
 $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \

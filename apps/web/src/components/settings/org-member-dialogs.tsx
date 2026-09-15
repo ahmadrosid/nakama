@@ -53,9 +53,9 @@ function OrgMemberInviteForm({
           token manually.{" "}
           <Link
             className="font-medium text-foreground underline-offset-4 hover:underline"
-            to="/system?tab=tools"
+            to="/customize/tools"
           >
-            Configure in System → Tools
+            Configure in Customize → Tools
           </Link>
         </p>
       )}

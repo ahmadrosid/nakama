@@ -10,6 +10,7 @@ export function ProfileSkillsCuratorConsolidateField({
 }) {
   return (
     <ProfileOrgBooleanOverrideField
+      description="Merge overlapping skills and simplify their instructions."
       disabled={disabled}
       field="skillsCuratorConsolidateEnabled"
       id="profile-skills-curator-consolidate"
