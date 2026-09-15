@@ -181,6 +181,10 @@ export function SkillsPage() {
     }
   }
   const filtered = skills
+    .filter(
+      (skill) =>
+        Boolean(orgId) && (skill.orgId === null || skill.orgId === orgId)
+    )
     .filter((skill) =>
       `${skill.name} ${skill.description} ${skillSourceLabel(skill)}`
         .toLowerCase()

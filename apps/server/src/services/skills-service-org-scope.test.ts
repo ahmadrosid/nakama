@@ -123,6 +123,15 @@ describe("skills are scoped per org", () => {
       expect(
         skills.some((skill) => skill.name === "archive-profile-memory")
       ).toBe(true);
+      expect(
+        skills.every((skill) => skill.orgId === null || skill.orgId === orgId)
+      ).toBe(true);
+      const own = skills.find((skill) => skill.name === "deploy-notes")!;
+      expect(own.orgId).toBe(orgId);
+      expect((await service.getSkill(own.id, orgId)).skill.id).toBe(own.id);
+      await expect(
+        service.getSkill(own.id, orgId === "org_a" ? "org_b" : "org_a")
+      ).rejects.toThrow();
     }
   });
 

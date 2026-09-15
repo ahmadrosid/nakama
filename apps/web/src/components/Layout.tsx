@@ -101,6 +101,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
     page === "integrations" ||
     page === "files" ||
     page === "plugins" ||
+    pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) ||
     pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
   );
 }

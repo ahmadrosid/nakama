@@ -1842,6 +1842,8 @@ export interface SkillSummary {
   hasTool: boolean;
   id: string;
   name: string;
+  /** null means shared across organizations. */
+  orgId?: string | null;
   pluginId?: string | null;
   pluginKey?: string | null;
   sourcePath: string;
@@ -1859,6 +1861,18 @@ export interface ListSkillsResponse {
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface SkillFilesResponse {
+  files: { path: string; type: "file" | "directory" }[];
+  truncated: boolean;
+}
+
+export interface SkillFileResponse {
+  content: string | null;
+  image?: { mediaType: string; dataBase64: string };
+  path: string;
+  unavailableReason?: string;
 }
 
 export interface AssignSkillRequest {

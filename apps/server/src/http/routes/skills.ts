@@ -266,6 +266,56 @@ export function registerSkillRoutes(
     );
   });
 
+  for (const [suffix, operationId, summary] of [
+    ["files", "listSkillFiles", "List skill files and folders"],
+    ["file", "readSkillFile", "Read a skill file"],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: "get",
+        operationId,
+        path: `/v1/skills/{skillId}/${suffix}`,
+        request: {
+          params: skillIdParam,
+          ...(suffix === "file"
+            ? { query: z.object({ path: z.string() }) }
+            : {}),
+        },
+        responses: {
+          200: {
+            description: summary,
+            content: {
+              "application/json": { schema: z.object({}).passthrough() },
+            },
+          },
+        },
+        summary,
+        tags: ["Skills"],
+      })
+    );
+  }
+
+  app.get("/v1/skills/:skillId/files", async (c) => {
+    requirePlatformAdminFromContext(c);
+    return json(
+      await agent.listSkillFiles(
+        requireActiveOrgIdFromContext(c),
+        c.req.param("skillId")
+      )
+    );
+  });
+
+  app.get("/v1/skills/:skillId/file", async (c) => {
+    requirePlatformAdminFromContext(c);
+    return json(
+      await agent.readSkillFile(
+        requireActiveOrgIdFromContext(c),
+        c.req.param("skillId"),
+        c.req.query("path") ?? ""
+      )
+    );
+  });
+
   app.post("/v1/skills", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
@@ -291,7 +341,10 @@ export function registerSkillRoutes(
   app.get("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
     return json<SkillResponse>(
-      await agent.getSkill(decodeURIComponent(c.req.param("skillId")))
+      await agent.getSkill(
+        decodeURIComponent(c.req.param("skillId")),
+        requireActiveOrgIdFromContext(c)
+      )
     );
   });
 

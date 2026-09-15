@@ -164,6 +164,8 @@ import type {
   SetupRestoreDataImportResponse,
   SkillCuratorLatestResponse,
   SkillCuratorRunResponse,
+  SkillFileResponse,
+  SkillFilesResponse,
   SkillProposalResponse,
   SkillResponse,
   SoulStackResponse,
@@ -1031,6 +1033,27 @@ export class NakamaClient {
     return this.request<ListSkillsResponse>(
       "/v1/skills",
       orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
+  }
+
+  async listSkillFiles(
+    skillId: string,
+    orgId: string
+  ): Promise<SkillFilesResponse> {
+    return this.request<SkillFilesResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/files`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async readSkillFile(
+    skillId: string,
+    filePath: string,
+    orgId: string
+  ): Promise<SkillFileResponse> {
+    return this.request<SkillFileResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/file?${new URLSearchParams({ path: filePath })}`,
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 
