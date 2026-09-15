@@ -34,7 +34,9 @@ import { webSearchTool } from "./web-search";
 
 export const writeFileInputSchema = z
   .object({
-    content: requiredTrimmedString("content"),
+    content: z
+      .string({ error: "content is required." })
+      .regex(/\S/, "content is required."),
     cwd: trimmedOptionalString,
     path: requiredTrimmedString("path"),
   })
