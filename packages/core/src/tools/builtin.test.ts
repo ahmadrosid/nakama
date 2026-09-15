@@ -800,6 +800,17 @@ describe("file builtin tools", () => {
     const options = { workspaceRoot: tempDir };
     const cwd = await realpath(skillDir);
 
+    await expect(
+      runReadFile(
+        {
+          cwd: path.dirname(getGlobalSkillsDir()),
+          path: "skills/installer/SKILL.md",
+        },
+        PROFILE_CONTEXT,
+        options
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
+
     for (const input of [
       { path: skillPath },
       { cwd, path: "SKILL.md" },
@@ -864,16 +875,20 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
-  test("cwd injection falls back to profile workspace", async () => {
+  test("invalid cwd rejects writes without changing profile files", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
+    const targetPath = path.join(tempDir, "safe.txt");
+    await writeFile(targetPath, "original");
 
-    const result = await runWriteFile(
-      { content: "OK", cwd: "/etc", path: "safe.txt" },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir }
-    );
+    await expect(
+      runWriteFile(
+        { content: "OK", cwd: "/etc", path: "safe.txt" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
 
-    expect(result.path).toStartWith(await realpath(tempDir));
+    expect(await readFile(targetPath, "utf8")).toBe("original");
   });
 
   test("edit_file rejects oversized replacement result", async () => {

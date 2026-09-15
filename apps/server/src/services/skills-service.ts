@@ -111,13 +111,13 @@ export class SkillsService {
     }
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
     await this.syncDiscoveredSkills();
 
     const profiles = await this.db.listProfiles();
 
     for (const profile of profiles) {
-      if (!profile.orgId) {
+      if (!profile.orgId || (orgId && profile.orgId !== orgId)) {
         continue;
       }
 
@@ -125,7 +125,11 @@ export class SkillsService {
     }
 
     const skills = await this.db.listSkills();
-    return { skills: skills.map(toSkillSummary) };
+    return {
+      skills: skills
+        .filter((skill) => !(orgId && skill.orgId) || skill.orgId === orgId)
+        .map(toSkillSummary),
+    };
   }
 
   async createSkill(

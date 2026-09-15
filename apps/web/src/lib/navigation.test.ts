@@ -9,6 +9,7 @@ import {
   pluginIdFromPath,
   pluginManagementPath,
   pluginPagePath,
+  skillDetailBackTarget,
   visibleNavGroups,
 } from "./navigation";
 
@@ -19,6 +20,14 @@ const pageIdsFor = (isPlatformAdmin: boolean, orgRole: string | undefined) =>
     .sort();
 
 describe("visibleNavGroups", () => {
+  test("skills navigation returns to the organization catalog", () => {
+    expect(pageIdFromPath("/customize/skills")).toBe("skills");
+    expect(skillDetailBackTarget(new URLSearchParams("from=skills"))).toEqual({
+      href: "/customize/skills",
+      label: "Skills",
+    });
+    expect(pageIdsFor(false, "admin")).not.toContain("skills");
+  });
   test("a platform admin sees every destination", () => {
     expect(pageIdsFor(true, "admin")).toEqual([
       "automations",
@@ -32,6 +41,7 @@ describe("visibleNavGroups", () => {
       "profiles",
       "providers",
       "settings",
+      "skills",
       "tools",
       "usage",
       "workers",

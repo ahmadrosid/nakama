@@ -261,7 +261,9 @@ export function registerSkillRoutes(
 
   app.get("/v1/skills", async (c) => {
     requirePlatformAdminFromContext(c);
-    return json<ListSkillsResponse>(await agent.listSkills());
+    return json<ListSkillsResponse>(
+      await agent.listSkills(requireActiveOrgIdFromContext(c))
+    );
   });
 
   app.post("/v1/skills", async (c) => {

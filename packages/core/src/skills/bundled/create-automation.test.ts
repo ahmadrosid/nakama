@@ -94,4 +94,23 @@ describe("ensureBundledSkillFiles", () => {
       await readBundledSkillMarkdown("save-artifact")
     );
   });
+
+  test("refreshes an installed memory archive skill on startup", async () => {
+    const directory = join(
+      configDir,
+      "agent",
+      "skills",
+      "archive-profile-memory"
+    );
+    const skillPath = join(directory, "SKILL.md");
+    await mkdir(directory, { recursive: true });
+    await Bun.write(skillPath, "outdated bundled skill");
+
+    const refreshed = await ensureBundledSkillFiles();
+
+    expect(refreshed).toContain("archive-profile-memory");
+    expect(await readFile(skillPath, "utf8")).toBe(
+      await readBundledSkillMarkdown("archive-profile-memory")
+    );
+  });
 });

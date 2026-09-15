@@ -26,6 +26,10 @@ const CustomizePage = lazyPage(
   () => import("@/pages/CustomizePage"),
   "CustomizePage"
 );
+const SkillsPage = lazyPage(
+  () => import("@/pages/CustomizePage"),
+  "SkillsPage"
+);
 const FilesPage = lazyPage(() => import("@/pages/FilesPage"), "FilesPage");
 const IntegrationsPage = lazyPage(
   () => import("@/pages/IntegrationsPage"),
@@ -165,6 +169,9 @@ function AppShell() {
                     path="/chat/:profileId/:sessionId"
                   />
                   <Route element={<CustomizePage />} path="/customize" />
+                  <Route element={<PlatformAdminGuard />}>
+                    <Route element={<SkillsPage />} path={PAGE_PATHS.skills} />
+                  </Route>
                   <Route element={<PlatformAdminGuard allowOrgAdmin />}>
                     <Route element={<LlmUsageTab />} path={PAGE_PATHS.usage} />
                   </Route>

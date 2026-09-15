@@ -17,6 +17,7 @@ const sizeClasses = {
   ml: "size-11",
   sm: "size-7",
   xs: "size-5",
+  xxs: "size-[18px]",
 } as const;
 
 const sizePixels = {
@@ -25,6 +26,7 @@ const sizePixels = {
   ml: 44,
   sm: 28,
   xs: 20,
+  xxs: 18,
 } as const;
 
 /** Two OKLCH tones derived from the profile hash — same hash ⇒ same palette. */

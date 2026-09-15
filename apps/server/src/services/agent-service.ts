@@ -2950,8 +2950,8 @@ export class AgentService {
     );
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
-    return this.requireSkillsService().listSkills();
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
+    return this.requireSkillsService().listSkills(orgId);
   }
 
   async getSkill(skillId: string): Promise<SkillResponse> {

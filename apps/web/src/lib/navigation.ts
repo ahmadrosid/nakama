@@ -26,6 +26,7 @@ export type PageId =
   | "profiles"
   | "soul"
   | "tools"
+  | "skills"
   | "mcp"
   | "automations"
   | "integrations"
@@ -133,6 +134,7 @@ export const NAV_GROUPS: NavGroup[] = [
         DashboardSquare01Icon
       ),
       navItem("tools", "Tools", "Manage agent tools", LayoutGridIcon),
+      navItem("skills", "Skills", "Browse organization skills", BrainIcon),
       navItem("mcp", "MCP", "Manage MCP servers", Plug01Icon),
       navItem(
         "providers",
@@ -178,6 +180,7 @@ export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "soul",
   "mcp",
   "providers",
+  "skills",
 ]);
 
 export function canAccessSystemPage(
@@ -349,8 +352,11 @@ export const skillDetailBackTarget = (
   label: string;
 } =>
   backTarget(searchParams.get("profile"), {
-    href: PAGE_PATHS.profiles,
-    label: "Profiles",
+    href:
+      searchParams.get("from") === "skills"
+        ? PAGE_PATHS.skills
+        : PAGE_PATHS.profiles,
+    label: searchParams.get("from") === "skills" ? "Skills" : "Profiles",
   });
 
 export function toolPlaygroundPath(
@@ -401,6 +407,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   profiles: "/profiles",
   providers: "/customize/providers",
   settings: "/settings",
+  skills: "/customize/skills",
   soul: "/system",
   tools: "/customize/tools",
   usage: "/customize/usage",
