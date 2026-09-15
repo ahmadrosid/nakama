@@ -41,7 +41,11 @@ import { registerSetupImportRoutes } from "./routes/setup-import";
 import { registerSkillProposalRoutes } from "./routes/skill-proposals";
 import { registerSkillSuggestionRoutes } from "./routes/skill-suggestions";
 import { registerSkillRoutes } from "./routes/skills";
-import { registerSystemRoutes } from "./routes/system";
+import {
+  DOCS_SCRIPT_HASH,
+  DOCS_SCRIPT_URL,
+  registerSystemRoutes,
+} from "./routes/system";
 import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
@@ -136,9 +140,17 @@ export function createHonoApp(options: ServerOptions) {
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       }
+      const isDocs = c.req.path === "/docs" || c.req.path === "/docs/";
+      const docsScripts = isDocs
+        ? ` ${DOCS_SCRIPT_URL} '${DOCS_SCRIPT_HASH}'`
+        : "";
+      const docsFonts = isDocs ? " https://fonts.scalar.com" : "";
+      const docsConnections = isDocs
+        ? " https://cdn.jsdelivr.net/sm/ https://api.scalar.com/vector/registry/"
+        : "";
       headers.set(
         "Content-Security-Policy",
-        `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';`
+        `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
       // Also true behind a TLS terminator, which is where HSTS matters most.
       if (isSecureRequest(c.req.raw)) {
