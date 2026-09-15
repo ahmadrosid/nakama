@@ -3,6 +3,7 @@ import {
   formatMissingAttachArtifactMessage,
   getMostRecentDeliverableArtifact,
   isAttachIntent,
+  isScratchArtifactPath,
 } from "@nakama/core";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { WASocket } from "@whiskeysockets/baileys";
@@ -16,6 +17,10 @@ import {
  * When the user asks to attach/send a file and a registry artifact exists,
  * sends the WhatsApp document. Returns true when attach was attempted so the
  * chat handler can skip the agent turn (avoids invented "can't attach" replies).
+ *
+ * Natural-language retry sends the whole deliverable set (minus scratch):
+ * the post-turn path only fires on new writes, so older set members would
+ * otherwise be unreachable. `/attach` stays most-recent-only.
  */
 export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
   client: NakamaClient;
@@ -32,20 +37,22 @@ export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
     return false;
   }
 
-  const artifact = getMostRecentDeliverableArtifact(
-    input.sessionStore.getDeliverableArtifacts(input.conversationKey)
-  );
-  if (!artifact) {
+  const artifacts = input.sessionStore
+    .getDeliverableArtifacts(input.conversationKey)
+    .filter((artifact) => !isScratchArtifactPath(artifact.path));
+  if (artifacts.length === 0) {
     return false;
   }
 
-  await sendArtifactDocumentForPath({
-    ...input,
-    filename: artifact.filename,
-    mimeType: artifact.mimeType,
-    path: artifact.path,
-    sizeBytes: artifact.sizeBytes,
-  });
+  for (const artifact of artifacts) {
+    await sendArtifactDocumentForPath({
+      ...input,
+      filename: artifact.filename,
+      mimeType: artifact.mimeType,
+      path: artifact.path,
+      sizeBytes: artifact.sizeBytes,
+    });
+  }
   return true;
 }
 
