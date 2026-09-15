@@ -8,11 +8,17 @@ import {
   getKnowledgeBaseStoredDocumentPath,
 } from "./paths";
 import {
+  attachSharedKnowledgeBaseDocument,
   deleteKnowledgeBaseDocument,
+  deleteOrganizationKnowledgeBaseDocument,
+  detachSharedKnowledgeBaseDocument,
+  type KnowledgeBaseDocumentInUseError,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   readKnowledgeBaseDocumentContent,
   uploadKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument,
 } from "./store";
 
 const ORG_ID = "org_test";
@@ -95,6 +101,46 @@ describe("knowledge base store", () => {
     );
     expect(deleted).toBe(true);
     expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(0);
+  });
+
+  test("stores shared documents separately and protects attached documents", async () => {
+    const profileId = "profile_kb_shared";
+    await setupProfile(profileId);
+    const uploaded = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
+      data: Buffer.from("shared needle", "utf8").toString("base64"),
+      filename: "shared.txt",
+      mediaType: "text/plain",
+    });
+
+    expect(await listOrganizationKnowledgeBaseDocuments(ORG_ID)).toHaveLength(
+      1
+    );
+    expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(0);
+    await attachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      uploaded.document.id
+    );
+    await expect(
+      deleteOrganizationKnowledgeBaseDocument(ORG_ID, uploaded.document.id)
+    ).rejects.toMatchObject({
+      documentId: uploaded.document.id,
+      profileIds: [profileId],
+    } satisfies Partial<KnowledgeBaseDocumentInUseError>);
+
+    expect(
+      await detachSharedKnowledgeBaseDocument(
+        ORG_ID,
+        profileId,
+        uploaded.document.id
+      )
+    ).toBe(true);
+    expect(
+      await deleteOrganizationKnowledgeBaseDocument(
+        ORG_ID,
+        uploaded.document.id
+      )
+    ).toBe(true);
   });
 
   test("rejects duplicate uploads by default and supports skip/replace", async () => {

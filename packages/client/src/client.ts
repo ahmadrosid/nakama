@@ -1292,6 +1292,59 @@ export class NakamaClient {
     );
   }
 
+  async listOrganizationKnowledgeBase(
+    orgId: string
+  ): Promise<{ documents: ListKnowledgeBaseResponse["documents"] }> {
+    return this.request(`/v1/orgs/${encodeURIComponent(orgId)}/knowledge-base`);
+  }
+
+  async uploadOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
+  ): Promise<UploadKnowledgeBaseResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/knowledge-base`,
+      {
+        body: JSON.stringify({
+          document,
+          ...(onDuplicate ? { onDuplicate } : {}),
+        } satisfies UploadKnowledgeBaseRequest),
+        method: "POST",
+      }
+    );
+  }
+
+  async deleteOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string
+  ): Promise<DeleteKnowledgeBaseResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/knowledge-base/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async attachSharedKnowledgeBaseDocument(
+    profileId: string,
+    documentId: string
+  ): Promise<{ attached: true; documentId: string; profileId: string }> {
+    return this.request(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/shared/${encodeURIComponent(documentId)}`,
+      { method: "PUT" }
+    );
+  }
+
+  async detachSharedKnowledgeBaseDocument(
+    profileId: string,
+    documentId: string
+  ): Promise<{ detached: true; documentId: string; profileId: string }> {
+    return this.request(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/shared/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" }
+    );
+  }
+
   async listKnowledgeBase(
     profileId: string
   ): Promise<ListKnowledgeBaseResponse> {

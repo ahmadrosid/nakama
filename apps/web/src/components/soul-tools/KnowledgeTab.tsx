@@ -12,10 +12,14 @@ import {
 import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
 import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
+  useAttachSharedKnowledgeBaseDocumentMutation,
   useDeleteKnowledgeBaseDocumentMutation,
+  useDetachSharedKnowledgeBaseDocumentMutation,
   useKnowledgeBaseQuery,
+  useOrganizationKnowledgeBaseQuery,
   useUploadKnowledgeBaseDocumentMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
@@ -32,6 +36,7 @@ type DuplicatePrompt = {
 };
 
 export function KnowledgeTab({ profileId }: { profileId: string | null }) {
+  const { activeOrg } = useAuth();
   const { data: profiles = [], error: profilesError } = useProfilesQuery();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -39,8 +44,12 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     isLoading: knowledgeLoading,
     error: knowledgeError,
   } = useKnowledgeBaseQuery(profileId);
+  const { data: organizationKnowledgeBase = null } =
+    useOrganizationKnowledgeBaseQuery(activeOrg?.id ?? null);
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
+  const attachSharedMutation = useAttachSharedKnowledgeBaseDocumentMutation();
   const deleteMutation = useDeleteKnowledgeBaseDocumentMutation();
+  const detachSharedMutation = useDetachSharedKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<KnowledgeBaseDocument | null>(null);
@@ -50,6 +59,12 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const selectedProfile =
     profiles.find((profile) => profile.id === profileId) ?? null;
   const documents = knowledgeBase?.documents ?? [];
+  const organizationDocuments = organizationKnowledgeBase?.documents ?? [];
+  const attachedOrganizationDocumentIds = new Set(
+    documents
+      .filter((document) => document.scope === "organization")
+      .map((document) => document.id)
+  );
   const sources = knowledgeBase?.sources ?? [];
   const readyCount = documents.filter(
     (document) => document.status === "ready"
@@ -57,7 +72,9 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const loading = knowledgeLoading && !knowledgeBase;
   const busy =
     uploadMutation.isPending ||
+    attachSharedMutation.isPending ||
     deleteMutation.isPending ||
+    detachSharedMutation.isPending ||
     duplicatePrompt !== null;
 
   useEffect(() => {
@@ -145,6 +162,19 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     }
   }
 
+  async function handleAttachSharedDocument(documentId: string) {
+    if (!profileId) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await attachSharedMutation.mutateAsync({ documentId, profileId });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleDelete() {
     if (!(profileId && deleteTarget)) {
       return;
@@ -153,10 +183,17 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     setError(null);
 
     try {
-      await deleteMutation.mutateAsync({
-        documentId: deleteTarget.id,
-        profileId,
-      });
+      if (deleteTarget.scope === "organization") {
+        await detachSharedMutation.mutateAsync({
+          documentId: deleteTarget.id,
+          profileId,
+        });
+      } else {
+        await deleteMutation.mutateAsync({
+          documentId: deleteTarget.id,
+          profileId,
+        });
+      }
       setDeleteTarget(null);
     } catch (err) {
       setError(formatError(err));
@@ -189,6 +226,59 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           </p>
         ) : null}
 
+        <section className="mb-4 rounded-md border border-border">
+          <div className="border-border border-b px-4 py-3">
+            <h3 className="font-medium text-sm">
+              Shared organization knowledge
+            </h3>
+            <p className="mt-1 text-muted-foreground text-xs">
+              Attach an organization document to make it available to this
+              profile. Shared documents are managed by organization
+              administrators.
+            </p>
+          </div>
+          {organizationDocuments.length === 0 ? (
+            <p className="px-4 py-3 text-muted-foreground text-sm">
+              No shared organization documents yet.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {organizationDocuments.map((document) => {
+                const attached = attachedOrganizationDocumentIds.has(
+                  document.id
+                );
+                return (
+                  <li
+                    className="flex items-center justify-between gap-3 px-4 py-3"
+                    key={document.id}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-sm">
+                        {document.filename}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {document.status} ·{" "}
+                        {document.sizeBytes.toLocaleString()} bytes
+                      </p>
+                    </div>
+                    <Button
+                      disabled={busy || attached}
+                      onClick={() =>
+                        void handleAttachSharedDocument(document.id)
+                      }
+                      size="sm"
+                      type="button"
+                      variant={attached ? "outline" : "secondary"}
+                    >
+                      {attached ? "Attached" : "Attach"}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
         <KnowledgeTabPanel
           busy={busy}
           documents={documents}
@@ -208,10 +298,15 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete document</DialogTitle>
+            <DialogTitle>
+              {deleteTarget?.scope === "organization"
+                ? "Detach shared document"
+                : "Delete document"}
+            </DialogTitle>
             <DialogDescription>
-              Remove {deleteTarget?.filename} from{" "}
-              {selectedProfile?.name ?? "this profile"}?
+              {deleteTarget?.scope === "organization"
+                ? `Detach ${deleteTarget.filename} from ${selectedProfile?.name ?? "this profile"}? The organization document will remain available to other profiles.`
+                : `Remove ${deleteTarget?.filename} from ${selectedProfile?.name ?? "this profile"}?`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -223,13 +318,17 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
               Cancel
             </Button>
             <Button
-              disabled={deleteMutation.isPending}
+              disabled={
+                deleteMutation.isPending || detachSharedMutation.isPending
+              }
               onClick={() => void handleDelete()}
               type="button"
               variant="destructive"
             >
-              {deleteMutation.isPending ? <Spinner className="size-4" /> : null}
-              Delete
+              {deleteMutation.isPending || detachSharedMutation.isPending ? (
+                <Spinner className="size-4" />
+              ) : null}
+              {deleteTarget?.scope === "organization" ? "Detach" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

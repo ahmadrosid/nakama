@@ -153,6 +153,9 @@ export function KnowledgeTabPanel({
                       {document.filename}
                     </p>
                     <p className="text-pretty text-muted-foreground text-xs">
+                      {document.scope === "organization"
+                        ? "Shared organization document · "
+                        : "Profile document · "}
                       <span className="tabular-nums">
                         {formatBytes(document.sizeBytes)}
                       </span>
