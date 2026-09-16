@@ -109,7 +109,16 @@ test.each([false, true])(
   }
 );
 
-test.each(["switch", "stale success", "stale error", "stale status", "draft"])(
+const navigationScenarios = [
+  "switch",
+  "current error",
+  "stale success",
+  "stale error",
+  "stale status",
+  "draft",
+];
+
+test.each(navigationScenarios)(
   "session navigation keeps the requested chat: %s",
   async (scenario) => {
     const { act } = await import("react");
@@ -225,6 +234,12 @@ test.each(["switch", "stale success", "stale error", "stale status", "draft"])(
       if (scenario === "switch") {
         expect(page.session?.id).toBe("b");
         expect(getMessages.mock.calls.map(([id]) => id)).toEqual(["b"]);
+      } else if (scenario === "current error") {
+        expect(page.busy).toBe(true);
+        await act(async () => pending.reject(new Error("Load failed")));
+        expect(page.busy).toBe(false);
+        expect(page.error).not.toBeNull();
+        expect(pathname).toBe("/chat/default/b");
       } else if (scenario === "draft") {
         await act(async () => navigate("/chat?new=1&profile=default"));
         await act(async () => pending.resolve(response("b")));

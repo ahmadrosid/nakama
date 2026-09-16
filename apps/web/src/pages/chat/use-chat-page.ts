@@ -662,9 +662,9 @@ export function useChatPage() {
 
         setError(formatError(err));
       } finally {
+        setBusy((current) => (isCurrentLoad() ? false : current));
         if (isCurrentLoad()) {
           streamAbortRef.current = null;
-          setBusy(false);
           setTurnStartedAt(null);
         }
       }
