@@ -39,7 +39,7 @@ function withVisionDefaults(
 
 // ChatGPT sign-in has its own catalog and default context window, not API limits.
 // https://github.com/openai/codex/blob/main/codex-rs/models-manager/models.json
-// Codex does not publish an output ceiling; compaction uses its local fallback.
+// This catalog omits an output ceiling; compaction uses its local fallback.
 const CHATGPT_MODELS: ProviderModelOption[] = [
   { default: true, id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
   { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },

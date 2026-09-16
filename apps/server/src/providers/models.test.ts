@@ -45,9 +45,6 @@ describe("resolveModel", () => {
       "account-model"
     );
     expect(resolveModel("chatgpt", " gpt-5.4 ", customModels)).toBe("gpt-5.4");
-    expect(resolveModel("chatgpt", "account-model", customModels)).toBe(
-      "account-model"
-    );
   });
 
   test("uses xiaomi custom model shortlist when provided", () => {
