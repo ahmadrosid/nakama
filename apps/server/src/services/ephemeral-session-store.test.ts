@@ -12,7 +12,6 @@ function entry(id: string, lastActiveAt: number): EphemeralSession {
   return {
     attachmentIds: new Set<string>(),
     lastActiveAt,
-    personalized: true,
     record: { id } as StoredSessionRecord,
     session: {} as AgentChatSession,
   };

@@ -69,7 +69,7 @@ describe("cognito sessions are never persisted", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
 
     const first = await service.resolveSession(sessionId, ORG_ID);
@@ -119,7 +119,7 @@ describe("cognito sessions are never persisted", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "hello" });
@@ -167,7 +167,7 @@ describe("cognito sessions are never persisted", () => {
       "profile_default",
       null,
       {
-        cognito: { personalized: true },
+        cognito: true,
         model: "provider-1::chat-model",
       }
     );
@@ -267,14 +267,14 @@ describe("cognito sessions never write back", () => {
       "web",
       "profile_default",
       "user_1",
-      { cognito: { personalized: true }, orgRole: "admin" }
+      { cognito: true, orgRole: "admin" }
     );
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "what do you remember" });
 
     expect(captured.names).not.toContain("skill_manage");
     expect(captured.names).not.toContain("propose_org_memory");
-    // Personalized cognito still reads memory; it only refuses to write.
+    // Cognito still reads memory; it only refuses to write.
     expect(captured.names).toContain("org_memory_search");
   });
 
@@ -319,7 +319,7 @@ describe("cognito sessions never write back", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
     service.scheduleSessionTitleGeneration(cognitoId);
     service.schedulePostTurnSkillReview(cognitoId);
@@ -337,12 +337,15 @@ describe("cognito sessions never write back", () => {
   });
 });
 
-describe("the non-personalized cognito sub-mode", () => {
-  setupTestConfigDir("nakama-cognito-neutral-");
+/**
+ * A control, and green on main by design: cognito only closes the write-back
+ * paths, so everything the org taught the profile is still read in. If these
+ * ever go red the mode has started dropping context it was never meant to.
+ */
+describe("a cognito session still reads what an ordinary one reads", () => {
+  setupTestConfigDir("nakama-cognito-reads-");
 
-  async function runTurn(
-    personalized: boolean
-  ): Promise<{ captured: CapturedTurn; skillName: string }> {
+  async function runCognitoTurn(): Promise<CapturedTurn> {
     const db = createInMemoryDatabaseAdapter();
     const skills = await seedProfileWithSkillManage(db);
     const service = new AgentService(null, null, db);
@@ -355,47 +358,27 @@ describe("the non-personalized cognito sub-mode", () => {
       "web",
       "profile_default",
       "user_1",
-      { cognito: { personalized }, orgRole: "admin" }
+      { cognito: true, orgRole: "admin" }
     );
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "hello" });
 
-    return { captured, skillName: "manage-skills" };
+    return captured;
   }
 
-  test("the prompt carries none of the profile's own layers", async () => {
-    const { captured, skillName } = await runTurn(false);
+  test("the prompt keeps the profile's own layers", async () => {
+    const captured = await runCognitoTurn();
 
-    expect(captured.system).toContain("not personalized");
-    // The profile's own instruction, the skills catalog and the org memory
-    // section are each a personalization layer, and none survives.
-    expect(captured.system).not.toContain("You are helpful.");
-    expect(captured.system).not.toContain(skillName);
-    expect(captured.system).not.toContain("Org Memory");
-  });
-
-  test("the personalized sub-mode keeps those layers", async () => {
-    const { captured, skillName } = await runTurn(true);
-
+    // The profile's own instruction and the skills catalog are each a
+    // personalization layer, and cognito assembles both.
     expect(captured.system).toContain("You are helpful.");
-    expect(captured.system).toContain(skillName);
-    expect(captured.system).not.toContain("not personalized");
+    expect(captured.system).toContain("manage-skills");
   });
 
-  test("only neutral builtins are offered, no org-taught tools", async () => {
-    const { captured } = await runTurn(false);
+  test("the org-taught tools are still offered", async () => {
+    const captured = await runCognitoTurn();
 
     // test_tool is the profile's own custom JavaScript tool.
-    expect(captured.names).not.toContain("test_tool");
-    expect(captured.names).not.toContain("org_memory_search");
-    expect(captured.names).not.toContain("org_memory_list");
-    expect(captured.names).not.toContain("sub_agent");
-    expect(captured.names).not.toContain("skill_manage");
-  });
-
-  test("the personalized sub-mode keeps the org-taught tools", async () => {
-    const { captured } = await runTurn(true);
-
     expect(captured.names).toContain("test_tool");
     expect(captured.names).toContain("org_memory_search");
   });
@@ -427,7 +410,7 @@ describe("attachments left by a cognito session", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
     await sendImage(service, sessionId);
 
@@ -448,7 +431,7 @@ describe("attachments left by a cognito session", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
     await sendImage(service, sessionId);
     const [attachment] = await db.listEphemeralAttachments();
@@ -468,7 +451,7 @@ describe("attachments left by a cognito session", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
     await sendImage(service, sessionId);
     const [attachment] = await db.listEphemeralAttachments();
@@ -517,7 +500,7 @@ describe("cognito leaves no skill-usage trail", () => {
       "user_1",
       {
         orgRole: "admin",
-        ...(cognito ? { cognito: { personalized: true } } : {}),
+        ...(cognito ? { cognito: true } : {}),
       }
     );
     const session = await service.resolveSession(sessionId, ORG_ID);
@@ -529,9 +512,9 @@ describe("cognito leaves no skill-usage trail", () => {
     return usage.length;
   }
 
-  test("a personalized cognito turn records no skill usage", async () => {
-    // Reading the catalog is right in this sub-mode. Writing a row saying
-    // which skills the chat touched is still a trace of what it was about.
+  test("a cognito turn records no skill usage", async () => {
+    // Reading the catalog is right in cognito. Writing a row saying which
+    // skills the chat touched is still a trace of what it was about.
     expect(await turnWith(true)).toBe(0);
   });
 
@@ -551,7 +534,7 @@ describe("cognito session state that is not the transcript", () => {
       "web",
       "profile_default",
       null,
-      { cognito: { personalized: true } }
+      { cognito: true }
     );
 
     const state = (

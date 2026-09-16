@@ -5,7 +5,6 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
-  CognitoOptions,
   ProfileSummary,
   ThinkingEffort,
 } from "@nakama/core/contract";
@@ -181,7 +180,7 @@ export function useChatPage() {
       search: location.search,
     });
   const [session, setSession] = useState<RemoteChatSession | null>(null);
-  const [cognito, setCognito] = useState<CognitoOptions | null>(null);
+  const [cognito, setCognito] = useState(false);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
@@ -221,7 +220,7 @@ export function useChatPage() {
   const busyRef = useRef(busy);
   const activeSessionIdRef = useRef<string | null>(session?.id ?? null);
   // Read inside sendMessage, which is memoised on other deps.
-  const cognitoRef = useRef<CognitoOptions | null>(cognito);
+  const cognitoRef = useRef(cognito);
 
   useEffect(() => {
     cognitoRef.current = cognito;
@@ -671,22 +670,19 @@ export function useChatPage() {
   );
 
   /**
-   * Switching cognito on or off always starts a fresh chat. The two modes have
-   * different prompts, different tools and different persistence, so carrying
-   * a conversation across the boundary would be wrong in both directions.
+   * Switching cognito on or off always starts a fresh chat. The two modes
+   * persist differently, so carrying a conversation across the boundary would
+   * be wrong in both directions.
    */
   const handleCognitoChange = useCallback(
-    (next: CognitoOptions | null) => {
+    (next: boolean) => {
       if (busyRef.current) {
         return;
       }
 
       const current = cognitoRef.current;
-      const sameMode =
-        (current === null) === (next === null) &&
-        current?.personalized === next?.personalized;
 
-      if (sameMode) {
+      if (current === next) {
         return;
       }
 
@@ -890,7 +886,7 @@ export function useChatPage() {
       if (!activeSession) {
         try {
           activeSession = await client.createSession("web", {
-            cognito: cognitoRef.current ?? undefined,
+            cognito: cognitoRef.current || undefined,
             model: sessionModel ?? undefined,
             profileId,
           });
@@ -982,7 +978,7 @@ export function useChatPage() {
         if (message.includes("Session not found") && profileId) {
           try {
             const nextSession = await client.createSession("web", {
-              cognito: cognitoRef.current ?? undefined,
+              cognito: cognitoRef.current || undefined,
               model: sessionModel ?? undefined,
               profileId,
             });
@@ -1143,7 +1139,7 @@ export function useChatPage() {
           initialMessages = plan.initialMessages;
         } else {
           retrySession = await client.createSession("web", {
-            cognito: cognitoRef.current ?? undefined,
+            cognito: cognitoRef.current || undefined,
             model: sessionModel ?? undefined,
             profileId,
           });
@@ -1276,7 +1272,6 @@ export function useChatPage() {
     canStop,
     chatStatus,
     cognito,
-    cognitoLocked: messages.length > 0,
     composerDisabled,
     composerDraftKey,
     composerEntry,

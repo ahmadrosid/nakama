@@ -1,4 +1,4 @@
-import type { CognitoOptions, ProfileSummary } from "@nakama/core/contract";
+import type { ProfileSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -58,7 +58,7 @@ function greeting(): string {
  * In cognito the pleasantry is the least useful thing on screen, so the slot
  * says what the mode actually does instead.
  */
-function CognitoWelcome({ cognito }: { cognito: CognitoOptions }) {
+function CognitoWelcome() {
   return (
     <>
       <h2 className="type-section-title text-xl tracking-tight">
@@ -66,10 +66,8 @@ function CognitoWelcome({ cognito }: { cognito: CognitoOptions }) {
       </h2>
       <p className="type-body text-muted-foreground text-sm">
         Not saved, never in History, never written to memory. Reloading the page
-        ends it.{" "}
-        {cognito.personalized
-          ? "This one still uses memory, plugins, skills and this agent's instructions."
-          : "This one uses none of those: no memory, plugins, skills or agent instructions."}
+        ends it. It still uses memory, plugins, skills and this agent's
+        instructions.
       </p>
     </>
   );
@@ -81,28 +79,27 @@ export function ChatWelcome({
   profiles,
   onProfileSwitch,
   profileSwitchDisabled = false,
-  cognito = null,
+  cognito = false,
 }: {
   profile: ProfileSummary | undefined;
   profileId: string;
   profiles: ProfileSummary[];
   onProfileSwitch: (profileId: string) => void;
   profileSwitchDisabled?: boolean;
-  cognito?: CognitoOptions | null;
+  cognito?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 px-4 pb-2">
       {/*
         Keyed so React remounts the block on every switch, which replays the
-        entrance. Switching sub-mode changes the copy too, so that counts as a
-        switch: without the mode in the key the text would swap in silence.
+        entrance animation.
       */}
       <div
         className="fade-in-0 slide-in-from-top-1 flex animate-in flex-col gap-2 duration-300 motion-reduce:animate-none"
         key={welcomeAnimationKey(cognito)}
       >
         {cognito ? (
-          <CognitoWelcome cognito={cognito} />
+          <CognitoWelcome />
         ) : (
           <h2 className="type-section-title text-xl tracking-tight">
             {greeting()}

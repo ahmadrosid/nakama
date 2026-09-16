@@ -269,23 +269,18 @@ describe("the edit flow", () => {
 
 describe("cognito control visibility", () => {
   test("an ordinary chat shows it only before the first message", () => {
-    expect(shouldShowCognitoControl(null, true)).toBe(true);
-    expect(shouldShowCognitoControl(null, false)).toBe(false);
+    expect(shouldShowCognitoControl(false, true)).toBe(true);
+    expect(shouldShowCognitoControl(false, false)).toBe(false);
   });
 
   test("an active cognito chat keeps it, or there is no way out of the mode", () => {
-    expect(shouldShowCognitoControl({ personalized: true }, false)).toBe(true);
-    expect(shouldShowCognitoControl({ personalized: false }, false)).toBe(true);
-    expect(shouldShowCognitoControl({ personalized: true }, true)).toBe(true);
+    expect(shouldShowCognitoControl(true, false)).toBe(true);
+    expect(shouldShowCognitoControl(true, true)).toBe(true);
   });
 });
 
 describe("welcome copy animation key", () => {
-  test("every switch produces a different key, so the entrance replays", () => {
-    const greeting = welcomeAnimationKey(null);
-    const personalized = welcomeAnimationKey({ personalized: true });
-    const neutral = welcomeAnimationKey({ personalized: false });
-
-    expect(new Set([greeting, personalized, neutral]).size).toBe(3);
+  test("toggling produces a different key, so the entrance replays", () => {
+    expect(welcomeAnimationKey(true)).not.toBe(welcomeAnimationKey(false));
   });
 });

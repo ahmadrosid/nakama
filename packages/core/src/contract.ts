@@ -920,21 +920,15 @@ export interface ListChannelOrgMappingsResponse {
   mappings: ChannelOrgMappingSummary[];
 }
 
-/**
- * Cognito sessions live only in server memory: no `sessions` row, no
- * `session_messages`, no generated title, and no write-back into profile or
- * org memory. `personalized` only decides what is read in — a personalized
- * cognito session still loads soul, skills, plugins and memory, it just
- * leaves nothing behind.
- */
-export interface CognitoOptions {
-  personalized: boolean;
-}
-
 export interface CreateSessionRequest {
   channel: AgentChannel;
-  /** Absent means an ordinary persisted session. */
-  cognito?: CognitoOptions;
+  /**
+   * A cognito session lives only in server memory: no `sessions` row, no
+   * `session_messages`, no generated title, and no write-back into profile or
+   * org memory. It still loads soul, skills, plugins and memory, it just
+   * leaves nothing behind. Absent or false means an ordinary session.
+   */
+  cognito?: boolean;
   model?: string;
   profileId?: string;
 }

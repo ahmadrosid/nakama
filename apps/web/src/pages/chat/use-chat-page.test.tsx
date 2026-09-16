@@ -177,20 +177,18 @@ test("cognito sends the mode, stores no session id, and ends the old session", a
       </MemoryRouter>
     );
 
-    expect(page.cognito).toBeNull();
+    expect(page.cognito).toBe(false);
 
-    page.handleCognitoChange({ personalized: false });
+    page.handleCognitoChange(true);
     await page.sendMessage("what do you know about me");
 
-    expect(createSession.mock.calls[0]?.[1]).toMatchObject({
-      cognito: { personalized: false },
-    });
+    expect(createSession.mock.calls[0]?.[1]).toMatchObject({ cognito: true });
     // The id must not survive a reload; storing it would resurrect a chat
     // that is supposed to be gone.
     expect(Object.keys(stored)).toEqual([]);
 
     const cognitoSessionId = "created-1";
-    page.handleCognitoChange(null);
+    page.handleCognitoChange(false);
     await Promise.resolve();
     expect(purged).toEqual([cognitoSessionId]);
 

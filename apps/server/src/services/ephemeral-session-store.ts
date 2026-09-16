@@ -13,8 +13,6 @@ export interface EphemeralSession {
    */
   attachmentIds: Set<string>;
   lastActiveAt: number;
-  /** False drops soul, memory, skills, plugins and the profile's own prompt. */
-  personalized: boolean;
   /** Synthetic; shaped like a row so session paths can treat it as one. */
   record: StoredSessionRecord;
   session: AgentChatSession;

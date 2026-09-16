@@ -95,7 +95,7 @@ describe("POST /v1/sessions with cognito", () => {
     const { app, databaseAdapter, session } = await createScenario();
 
     const sessionId = await createSessionOverHttp(app, session, {
-      cognito: { personalized: true },
+      cognito: true,
     });
     expect((await sendOverHttp(app, session, sessionId)).status).toBe(200);
 
@@ -123,7 +123,7 @@ describe("POST /v1/sessions with cognito", () => {
     const { app, session } = await createScenario();
 
     const cognitoId = await createSessionOverHttp(app, session, {
-      cognito: { personalized: false },
+      cognito: true,
     });
     const normalId = await createSessionOverHttp(app, session, {});
     await sendOverHttp(app, session, cognitoId);
@@ -149,7 +149,7 @@ describe("POST /v1/sessions with cognito", () => {
     const { app, databaseAdapter, session } = await createScenario();
 
     const sessionId = await createSessionOverHttp(app, session, {
-      cognito: { personalized: true },
+      cognito: true,
     });
     await sendOverHttp(app, session, sessionId);
 
@@ -179,7 +179,7 @@ describe("POST /v1/sessions with cognito", () => {
       new Request("http://localhost:4310/v1/sessions", {
         body: JSON.stringify({
           channel: "web",
-          cognito: { personalized: "yes" },
+          cognito: "yes",
           profileId: "profile_owner",
         }),
         headers: session.headers({

@@ -1,6 +1,14 @@
-import type { CognitoOptions } from "@nakama/core/contract";
 import type { ChatListItem, FailedChatTurn } from "@/lib/chat-history";
 import { createClientId } from "@/lib/client-id";
+
+/**
+ * Keys the welcome copy so React remounts it when cognito is toggled, which is
+ * what replays the entrance animation. Without the remount the copy would swap
+ * in silence and the user would not notice the mode changed under them.
+ */
+export function welcomeAnimationKey(cognito: boolean): string {
+  return cognito ? "cognito" : "greeting";
+}
 
 /**
  * The toggle only does anything before a conversation starts, because flipping
@@ -8,25 +16,11 @@ import { createClientId } from "@/lib/client-id";
  * cannot be used, so it goes away. An active cognito chat keeps it, otherwise
  * there would be no way to see the mode or leave it.
  */
-/**
- * Keys the welcome copy so React remounts it on every switch, which is what
- * replays the entrance animation. The sub-mode is part of the key because the
- * copy changes with it: keyed on cognito alone, that text would swap in
- * silence and the user would not notice the mode changed under them.
- */
-export function welcomeAnimationKey(cognito: CognitoOptions | null): string {
-  if (!cognito) {
-    return "greeting";
-  }
-
-  return cognito.personalized ? "cognito-personalized" : "cognito-neutral";
-}
-
 export function shouldShowCognitoControl(
-  cognito: CognitoOptions | null,
+  cognito: boolean,
   isEmptyState: boolean
 ): boolean {
-  return cognito !== null || isEmptyState;
+  return cognito || isEmptyState;
 }
 
 export function findRetryPrompt(
