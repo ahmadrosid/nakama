@@ -18,6 +18,7 @@ import {
   type ListTimezonesResponse,
   type ModelsResponse,
   NakamaApiError,
+  reportError,
   resetWhatsAppSessionForReconnect,
   type SendEmailTestRequest,
   type SendEmailTestResponse,
@@ -67,6 +68,7 @@ import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requirePlatformAdminFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -1328,6 +1330,7 @@ export function registerModelRoutes(
     try {
       return json(await getExternalModelCatalog(catalogId));
     } catch (error) {
+      void reportError(error, { kind: "http", source: "server" });
       return errorResponse(formatServerError(error), 502);
     }
   });
@@ -1355,7 +1358,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/providers", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<CreateProviderRequest>(c.req.raw);
 
     try {
@@ -1371,7 +1374,7 @@ export function registerModelRoutes(
   });
 
   app.patch("/v1/providers/:providerId", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateProviderRequest>(c.req.raw);
 
     try {
@@ -1392,14 +1395,14 @@ export function registerModelRoutes(
   });
 
   app.delete("/v1/providers/:providerId", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     return json<DeleteProviderResponse>(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId")))
     );
   });
 
   app.post("/v1/xai-oauth/device/start", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
 
     try {
@@ -1415,7 +1418,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/xai-oauth/device/complete", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
     const body = await readJson<{ sessionId?: string }>(c.req.raw);
     const sessionId =
@@ -1448,7 +1451,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/chatgpt-oauth/device/start", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     try {
       return json(await startChatgptOAuthDeviceSession());
@@ -1463,7 +1466,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/chatgpt-oauth/device/complete", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<{ sessionId?: string }>(c.req.raw);
     const sessionId = body.sessionId?.trim();
 
@@ -1488,10 +1491,21 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/provider", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<ConfigureProviderRequest>(c.req.raw);
-    const result = await agent.configureProvider(body);
-    return json<ConfigureProviderResponse>(result);
+
+    try {
+      return json<ConfigureProviderResponse>(
+        await agent.configureProvider(body)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.get("/v1/timezones", async (c) => {
@@ -1507,7 +1521,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/timezone", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateTimezoneRequest>(c.req.raw);
     const timezone = await agent.setUserTimezone(body.timezone);
     return json<TimezoneSettingsResponse>({ timezone });
@@ -1519,7 +1533,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/thinking", async (c) => {
-    getRequestAuth(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateThinkingRequest>(c.req.raw);
     return json<ThinkingSettingsResponse>(
       await agent.setThinkingSettings(body)
@@ -1532,7 +1546,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/vision", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateVisionRequest>(c.req.raw);
 
     try {
@@ -1555,7 +1569,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/transcription", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateTranscriptionRequest>(c.req.raw);
 
     try {
@@ -1580,6 +1594,9 @@ export function registerModelRoutes(
       return json<TranscribeAudioResponse>(await agent.transcribeAudio(body));
     } catch (error) {
       if (error instanceof NakamaApiError) {
+        if (error.status >= 500) {
+          void reportError(error, { kind: "http", source: "server" });
+        }
         return errorResponse(error.message, error.status);
       }
 
@@ -1596,7 +1613,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/image-generation", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateImageGenerationRequest>(c.req.raw);
 
     try {
@@ -1621,6 +1638,9 @@ export function registerModelRoutes(
       return json<GenerateImageResponse>(await agent.generateImage(body));
     } catch (error) {
       if (error instanceof NakamaApiError) {
+        if (error.status >= 500) {
+          void reportError(error, { kind: "http", source: "server" });
+        }
         return errorResponse(error.message, error.status);
       }
 
@@ -1635,7 +1655,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/email", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateEmailSettingsRequest>(c.req.raw);
 
     try {
@@ -1650,7 +1670,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/email/test", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const body = await readOptionalJson<SendEmailTestRequest>(c.req.raw, {});
 
     try {
@@ -1667,12 +1687,12 @@ export function registerModelRoutes(
   });
 
   app.get("/v1/settings/web-search", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     return json<WebSearchSettingsResponse>(await agent.getWebSearchSettings());
   });
 
   app.put("/v1/settings/web-search", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateWebSearchSettingsRequest>(c.req.raw);
 
     try {
@@ -1696,7 +1716,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/agent-browser/install", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     return streamAgentBrowserInstall(
       async (send, signal) => {
@@ -1765,7 +1785,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/discord", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateDiscordSettingsRequest>(c.req.raw);
 
     try {
@@ -1782,7 +1802,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/discord/handshake", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     try {
       return json<DiscordSettingsResponse>(
         await agent.regenerateDiscordHandshake()
@@ -1799,7 +1819,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/composio", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateComposioSettingsRequest>(c.req.raw);
 
     try {
@@ -1824,7 +1844,7 @@ export function registerModelRoutes(
   app.put("/v1/settings/error-tracking", async (c) => {
     // Workspace-global config, so there is no org to scope it to and a role guard is
     // the only thing standing between a viewer and the whole install's error routing.
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateErrorTrackingSettingsRequest>(c.req.raw);
 
     try {
@@ -1841,7 +1861,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/error-tracking/test", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     try {
       return json<SendErrorTrackingTestResponse>(
@@ -1862,7 +1882,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/whatsapp", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateWhatsAppSettingsRequest>(c.req.raw);
 
     try {
@@ -1880,7 +1900,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/whatsapp/pairing-code", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     try {
       return json<WhatsAppSettingsResponse>(
         await agent.regenerateWhatsAppPairingCode()
@@ -1892,7 +1912,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/whatsapp/reconnect", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     try {
       await workerManager.stopWorker("whatsapp").catch(() => {});
       const settings = await resetWhatsAppSessionForReconnect();

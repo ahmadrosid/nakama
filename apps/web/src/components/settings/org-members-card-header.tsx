@@ -47,9 +47,9 @@ export function OrgMembersCardHeader({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 font-medium text-foreground text-sm leading-none">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="shrink-0 font-normal text-foreground text-sm leading-none">
           Organization
         </span>
         <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-2xs text-foreground leading-none sm:max-w-xs">

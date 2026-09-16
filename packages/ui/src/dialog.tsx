@@ -3,7 +3,9 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Cancel01Icon } from "hugeicons-react";
 import type * as React from "react";
+import { useRef, useState } from "react";
 import { Button } from "./button";
+import { Spinner } from "./spinner";
 import { cn } from "./utils";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -144,7 +146,84 @@ function DialogDescription({
   );
 }
 
+function ConfirmDialog({
+  title,
+  description,
+  confirmLabel = "Delete",
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  description: React.ReactNode;
+  confirmLabel?: string;
+  onConfirm: () => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const running = useRef(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    if (running.current) {
+      return;
+    }
+    running.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      await onConfirm();
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      running.current = false;
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog
+      onOpenChange={(open) => !(open || running.current) && onClose()}
+      open
+    >
+      <DialogContent showCloseButton={!pending}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="break-words">
+            {description}
+          </DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <p className="text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            disabled={pending}
+            onClick={onClose}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={pending}
+            onClick={() => void confirm()}
+            type="button"
+            variant="destructive"
+          >
+            {pending ? <Spinner className="size-4" /> : null}
+            {confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export {
+  ConfirmDialog,
   Dialog,
   DialogClose,
   DialogContent,

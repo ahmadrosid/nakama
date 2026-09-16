@@ -1,6 +1,5 @@
 import type { McpTransport } from "@nakama/core/contract";
 
-export const sectionClass = "rounded-md border border-border bg-card";
 const REDACTED_SECRET_VALUE = "••••••••";
 
 export type McpHeaderRow = {

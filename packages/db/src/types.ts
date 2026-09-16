@@ -496,6 +496,15 @@ export interface StoredOrgInviteRecord {
   tokenHash: string;
 }
 
+export interface StoredPasswordResetTokenRecord {
+  consumedAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  tokenHash: string;
+  userId: string;
+}
+
 export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
 export type ProfileChangeSource =
@@ -538,6 +547,8 @@ export interface StoredOrgMemoryProposal {
   reviewedAt: string | null;
   reviewerUserId: string | null;
   sessionId: string | null;
+  /** Knowledge-base document ids the bullet was derived from (optional). */
+  sourceDocumentIds: string[];
   status: OrgMemoryProposalStatus;
 }
 
@@ -567,6 +578,7 @@ export interface StoredSkillProposal {
   sessionId: string | null;
   skillName: string;
   status: SkillProposalStatus;
+  supportingFiles?: { path: string; contentBase64: string }[] | null;
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
@@ -648,6 +660,11 @@ export interface DatabaseAdapter {
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  consumePasswordResetToken(
+    tokenHash: string,
+    passwordHash: string,
+    consumedAt: string
+  ): Promise<boolean>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(
@@ -673,6 +690,10 @@ export interface DatabaseAdapter {
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
 
+  createPasswordResetToken(
+    record: StoredPasswordResetTokenRecord
+  ): Promise<void>;
+
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
 
@@ -688,6 +709,7 @@ export interface DatabaseAdapter {
   deleteMcpServer(id: string): Promise<boolean>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
+  deleteOrganization(id: string): Promise<boolean>;
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
   deleteOrgPlugin(
     orgId: string,

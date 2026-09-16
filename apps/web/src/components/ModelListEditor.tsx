@@ -58,7 +58,7 @@ export function ModelListEditor({
       {models.length > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table
-            className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[44rem]" : "min-w-[32rem]"}`}
+            className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[51rem]" : "min-w-[39rem]"}`}
           >
             <thead className="border-border border-b bg-muted/30 text-muted-foreground">
               <tr>
@@ -76,6 +76,7 @@ export function ModelListEditor({
                     <th className="px-2 py-2 font-medium">$/1M out</th>
                   </>
                 ) : null}
+                <th className="px-2 py-2 font-medium">Context</th>
                 <th aria-label="Actions" className="w-10 px-2 py-2" />
               </tr>
             </thead>
@@ -180,6 +181,25 @@ export function ModelListEditor({
                       </td>
                     </>
                   ) : null}
+                  <td className="px-2 py-1.5">
+                    <InputGroup>
+                      <InputGroupInput
+                        disabled={disabled}
+                        min={1}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          updateRow(index, {
+                            contextWindow:
+                              value === "" ? undefined : Number(value),
+                          });
+                        }}
+                        placeholder="auto"
+                        step={1}
+                        type="number"
+                        value={row.contextWindow ?? ""}
+                      />
+                    </InputGroup>
+                  </td>
                   <td className="px-2 py-1.5 text-right">
                     <Button
                       aria-label="Remove model"
@@ -197,6 +217,13 @@ export function ModelListEditor({
             </tbody>
           </table>
         </div>
+      ) : null}
+
+      {models.length > 0 ? (
+        <p className="text-muted-foreground text-xs">
+          Context is the total token window the model accepts. Leave it on auto
+          to use the built-in catalog value, or 128k when the model is unknown.
+        </p>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -1,9 +1,15 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type { WorkerLogsResponse } from "@nakama/core";
+import {
+  NakamaApiError,
+  reportError,
+  type WorkerLogsResponse,
+} from "@nakama/core";
 import type { Context } from "hono";
 import type { ServerOptions } from "../context";
 import {
+  requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
+  requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { errorResponse, json } from "../shared";
@@ -11,7 +17,18 @@ import type { AppEnv, HonoApp } from "../types";
 
 const PLATFORM_ADMIN_WORKERS = new Set(["telegram", "whatsapp", "discord"]);
 
-function requireWorkerAuthorization(c: Context<AppEnv>, name: string): void {
+function requireWorkerAuthorization(
+  c: Context<AppEnv>,
+  name: string,
+  manager: ServerOptions["workerManager"]
+): void {
+  if (name.startsWith("plugin-")) {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    if (!manager.isPluginWorkerForOrg(name, requireActiveOrgIdFromContext(c))) {
+      throw new NakamaApiError("Worker not found", 404);
+    }
+    return;
+  }
   if (PLATFORM_ADMIN_WORKERS.has(name)) {
     requirePlatformAdminFromContext(c);
   } else {
@@ -121,10 +138,50 @@ export function registerWorkerRoutes(
     })
   );
 
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/v1/workers/plugins",
+      operationId: "listPluginWorkers",
+      tags: ["Workers"],
+      summary: "List the active organization's plugin workers",
+      responses: {
+        200: {
+          description: "Plugin workers",
+          content: {
+            "application/json": {
+              schema: z.array(
+                z.object({
+                  name: z.string(),
+                  label: z.string(),
+                  pluginId: z.string(),
+                  process: z.object({
+                    managed: z.boolean(),
+                    status: z.enum(["online", "stopped", "errored"]).nullable(),
+                    cpuPercent: z.number().nullable(),
+                    memoryMb: z.number().nullable(),
+                    uptimeSeconds: z.number().nullable(),
+                  }),
+                })
+              ),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      requireNotViewerFromContext(c);
+      return c.json(
+        await workerManager.listPluginWorkers(requireActiveOrgIdFromContext(c)),
+        200
+      );
+    }
+  );
+
   app.post("/v1/workers/:name/:action{start|stop|restart}", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
     const action = c.req.param("action");
-    requireWorkerAuthorization(c, name);
+    requireWorkerAuthorization(c, name, workerManager);
 
     if (!workerManager.isValidWorker(name)) {
       return errorResponse(`Unknown worker: ${name}`, 400);
@@ -141,6 +198,7 @@ export function registerWorkerRoutes(
 
       return json({ ok: true });
     } catch (err) {
+      void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message, 500);
     }
@@ -148,7 +206,7 @@ export function registerWorkerRoutes(
 
   app.get("/v1/workers/:name/logs", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
-    requireWorkerAuthorization(c, name);
+    requireWorkerAuthorization(c, name, workerManager);
 
     if (!workerManager.isValidWorker(name)) {
       return errorResponse(`Unknown worker: ${name}`, 400);
@@ -165,6 +223,7 @@ export function registerWorkerRoutes(
       const logs = await workerManager.getWorkerLogs(name, lines);
       return json<WorkerLogsResponse>(logs);
     } catch (err) {
+      void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message, 500);
     }
@@ -172,7 +231,7 @@ export function registerWorkerRoutes(
 
   app.post("/v1/workers/:name/clear-logs", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
-    requireWorkerAuthorization(c, name);
+    requireWorkerAuthorization(c, name, workerManager);
 
     if (!workerManager.isValidWorker(name)) {
       return errorResponse(`Unknown worker: ${name}`, 400);
@@ -182,6 +241,7 @@ export function registerWorkerRoutes(
       await workerManager.clearWorkerLogs(name);
       return json({ ok: true });
     } catch (err) {
+      void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message, 500);
     }

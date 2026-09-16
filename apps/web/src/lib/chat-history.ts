@@ -215,8 +215,8 @@ export function readInitialDraftChatProfileId(input: {
   );
 }
 
-/** Profile id for `/history` — URL when present, else live chat state / storage / default. */
-export function resolveHistoryProfileId(input: {
+/** Profile id for Recents — URL when present, else live chat state / storage / default. */
+export function resolveRecentChatsProfileId(input: {
   search: string;
   profiles: ReadonlyArray<{ id: string }>;
   liveChatProfileId?: string | null;
@@ -275,7 +275,6 @@ export function resolveActiveProfileIdFromLocation(input: {
   search: string;
   profiles: ReadonlyArray<{ id: string }>;
   liveChatProfileId?: string | null;
-  historyPath?: string;
   profilesPath?: string;
 }): string | null {
   const {
@@ -283,7 +282,6 @@ export function resolveActiveProfileIdFromLocation(input: {
     search,
     profiles,
     liveChatProfileId,
-    historyPath = "/history",
     profilesPath = "/profiles",
   } = input;
 
@@ -291,10 +289,6 @@ export function resolveActiveProfileIdFromLocation(input: {
     profileId: string | null | undefined
   ): profileId is string =>
     Boolean(profileId && profiles.some((profile) => profile.id === profileId));
-
-  if (pathname === historyPath) {
-    return resolveHistoryProfileId({ liveChatProfileId, profiles, search });
-  }
 
   if (isProfilesPath(pathname, profilesPath)) {
     return resolveProfilesPageProfileId({
@@ -375,12 +369,15 @@ export interface ChatListItem {
   /** Live status from a running sub-agent child loop (e.g. "Reading SOUL.md"). */
   subAgentActivity?: string;
   thinking?: string;
+  thinkingDurationMs?: number;
   thinkingStreaming?: boolean;
   tool?: string;
   toolCallId?: string;
+  toolCompletedAt?: number;
   toolInput?: Record<string, unknown>;
   toolInputAccumulatedJson?: string;
   toolResult?: unknown;
+  toolStartedAt?: number;
   toolStatus?: "running" | "done";
   /** Tokens and cost of the LLM call(s) behind this reply; tool-call-only messages fold into the next visible one. */
   usage?: ChatUsage;
@@ -661,7 +658,9 @@ export function chatMessagesToListItems(
         historyIndex: index,
         id: `history-${index}`,
         role: "assistant",
-        ...(thinking ? { thinking } : {}),
+        ...(thinking
+          ? { thinking, thinkingDurationMs: message.thinkingDurationMs }
+          : {}),
         ...(usage ? { usage } : {}),
       });
       continue;
@@ -677,8 +676,10 @@ export function chatMessagesToListItems(
         role: "tool",
         tool: message.name,
         toolCallId: message.toolCallId,
+        toolCompletedAt: message.toolCompletedAt,
         toolInput: toolInputs.get(message.toolCallId),
         toolResult: parseToolResult(message.content),
+        toolStartedAt: message.toolStartedAt,
         toolStatus: "done",
       });
     }

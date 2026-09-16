@@ -188,6 +188,10 @@ export function isProviderConfigured(
     return false;
   }
 
+  if (active.type === "chatgpt") {
+    return isChatgptProviderConnected(active);
+  }
+
   if (active.type === "openai_compatible") {
     return Boolean(active.baseUrl?.trim() && active.label.trim());
   }

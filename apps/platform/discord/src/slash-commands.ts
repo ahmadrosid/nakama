@@ -14,6 +14,10 @@ const COMMAND_NAMES = [
   "close",
   "status",
   "allow",
+  "org",
+  "profile",
+  "sessions",
+  "resume",
 ] as const;
 
 export function buildSlashCommands(): SlashCommandBuilder[] {
@@ -24,6 +28,10 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     compact: "Compact conversation history",
     help: "Show available commands",
     new: "Start a new conversation",
+    org: "Choose an organization",
+    profile: "Choose a bot profile",
+    resume: "Resume an earlier conversation by ID",
+    sessions: "Pick an earlier conversation to resume",
     start: "Welcome and pairing help",
     status: "Show server and model status",
     stop: "Stop the current agent reply",
@@ -34,6 +42,15 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       .setName(name)
       .setDescription(descriptions[name])
       .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM);
+
+    if (name === "resume") {
+      builder.addStringOption((option) =>
+        option
+          .setName("session")
+          .setDescription("Session ID from /sessions (the short form works)")
+          .setRequired(true)
+      );
+    }
 
     if (name === "allow") {
       builder.addUserOption((option) =>

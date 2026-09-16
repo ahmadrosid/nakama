@@ -1,7 +1,7 @@
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import { useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
@@ -132,6 +132,14 @@ export function LoginPage() {
           <Button className="w-full" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Signing in..." : "Sign in"}
           </Button>
+          {demoLogin ? null : (
+            <Link
+              className="block text-center font-medium text-primary text-sm hover:underline"
+              to="/reset-password"
+            >
+              Forgot password?
+            </Link>
+          )}
         </form>
       </div>
     </div>

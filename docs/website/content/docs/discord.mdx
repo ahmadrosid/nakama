@@ -60,7 +60,7 @@ Keep the token secret. If you enable Message Content Intent after the bot is alr
 
 ## Step 2: Save in Nakama
 
-Open **Integrations → Discord**, then:
+Sign in as a platform admin and open **Integrations → Discord**, then:
 
 1. Paste the bot token
 2. Choose the default Nakama profile for Discord replies
@@ -152,6 +152,8 @@ Session control uses Discord slash commands. Org and profile switching use text 
 | `/clear` | Slash | Clear chat history |
 | `/compact` | Slash | Compact conversation history |
 | `/new` | Slash | Start a new conversation (same Discord thread) |
+| `/sessions` | Slash | Pick an earlier conversation from this DM, thread or channel and resume it |
+| `/resume` | Slash | Resume a conversation by the short ID `/sessions` shows |
 | `/close` | Slash | Close (archive) this bot conversation thread |
 | `/status` | Slash | Show server and model status |
 | `/org` | Text | Choose or switch organization |
@@ -194,6 +196,9 @@ Environment-based setup is also supported. The main env var is:
 ```text
 DISCORD_BOT_TOKEN
 ```
+
+For mounted secrets, set `DISCORD_BOT_TOKEN_FILE` to the path of a readable
+file containing the token. A directly set `DISCORD_BOT_TOKEN` takes priority.
 
 Nakama also supports:
 

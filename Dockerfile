@@ -8,6 +8,7 @@ FROM --platform=${BUILDPLATFORM} oven/bun:1.3-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
 COPY apps apps
 COPY packages packages
 
@@ -17,6 +18,9 @@ RUN bun install --frozen-lockfile --ignore-scripts \
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM oven/bun:1.3-slim AS runtime
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 # Tool-output optimiser, on by default so the dashboard toggle works on a fresh
 # image without a rebuild. Just under 10 MB unpacked. Build with
@@ -44,15 +48,17 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
     fi
 
 COPY package.json bun.lock ./
+COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
 COPY apps/platform/telegram apps/platform/telegram
 COPY apps/platform/whatsapp apps/platform/whatsapp
 COPY apps/platform/discord apps/platform/discord
 COPY packages packages
-# Workspace stubs keep the lockfile valid without pulling web/cli sources.
+# Workspace stubs keep the lockfile valid without pulling web/cli/desktop sources.
 COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
+COPY apps/desktop/package.json apps/desktop/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
 RUN bun install --frozen-lockfile --production --ignore-scripts \
@@ -64,6 +70,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
   && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
   && test -f apps/server/src/services/javascript-tool-runner.js \
   && test -f apps/server/src/services/plugin-runner.js \
+  && rm -rf patches \
   && mkdir -p /nakama/data \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \

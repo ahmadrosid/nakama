@@ -73,6 +73,19 @@ export async function runKnowledgeBaseSearch(
 
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
 
+  const backend = await context.searchKnowledge?.({
+    ...parsed,
+    regex: (input as { regex?: unknown }).regex === true,
+  });
+  if (backend) {
+    return {
+      ...backend,
+      matchCount: backend.matches.length,
+      query: parsed.query,
+      root: getKnowledgeBaseDir(orgId, profileId),
+    };
+  }
+
   await ensureKnowledgeBaseDirs(orgId, profileId);
 
   const workspaceRoot = await resolveWorkspaceRoot(

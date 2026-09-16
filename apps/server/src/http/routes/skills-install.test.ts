@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { readFile, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { zipSync } from "fflate";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -29,6 +32,10 @@ function createApp() {
   return {
     ...createMinimalHonoApp({
       agent: {
+        listSkillFiles: (orgId: string, skillId: string) =>
+          skillsService.listSkillFiles(orgId, skillId),
+        readSkillFile: (orgId: string, skillId: string, filePath: string) =>
+          skillsService.readSkillFile(orgId, skillId, filePath),
         installSkillFromGitHub: (orgId: string, request: unknown) =>
           skillsService.installSkillFromGitHub(
             orgId,
@@ -56,15 +63,20 @@ describe("POST /v1/skills/install", () => {
   });
 
   test("platform admin installs a valid public SKILL.md and assigns it", async () => {
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      expect(url).toBe(
-        "https://raw.githubusercontent.com/acme/skills/main/weather/SKILL.md"
-      );
-      return new Response(VALID_SKILL, { status: 200 });
-    }) as typeof fetch;
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          zipSync({
+            "skills-main/weather/SKILL.md": new TextEncoder().encode(
+              VALID_SKILL
+            ),
+            "skills-main/weather/references/explainer.md":
+              new TextEncoder().encode("Explainer instructions"),
+          })
+        )
+    ) as unknown as typeof fetch;
 
-    const { app, databaseAdapter } = createApp();
+    const { app, databaseAdapter, skillsService } = createApp();
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
@@ -97,6 +109,50 @@ describe("POST /v1/skills/install", () => {
     };
     expect(body.skill.name).toBe("github-weather");
     expect(body.skill.createdBy).toBe("human");
+    const filesResponse = await app.fetch(
+      new Request(`${BASE}/v1/skills/${body.skill.id}/files`, {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+    expect(filesResponse.status).toBe(200);
+    expect((await filesResponse.json()).files).toContainEqual({
+      path: "references/explainer.md",
+      type: "file",
+    });
+    const fileResponse = await app.fetch(
+      new Request(
+        `${BASE}/v1/skills/${body.skill.id}/file?path=references%2Fexplainer.md`,
+        { headers: adminSession.headers({}, orgId) }
+      )
+    );
+    expect(fileResponse.status).toBe(200);
+    expect((await fileResponse.json()).content).toBe("Explainer instructions");
+    const installed = await databaseAdapter.getSkillByName(
+      "github-weather",
+      orgId
+    );
+    expect(
+      await readFile(
+        join(installed!.sourcePath, "references/explainer.md"),
+        "utf8"
+      )
+    ).toBe("Explainer instructions");
+
+    const reference = join(installed!.sourcePath, "references/explainer.md");
+    await unlink(reference);
+    await skillsService.installSkillFromGitHub(orgId, {
+      profileId,
+      url: "https://github.com/acme/skills/tree/main/weather",
+    });
+    expect(await readFile(reference, "utf8")).toBe("Explainer instructions");
+    await writeFile(reference, "Local edits");
+    await expect(
+      skillsService.installSkillFromGitHub(orgId, {
+        profileId,
+        url: "https://github.com/acme/skills/tree/main/weather",
+      })
+    ).rejects.toThrow();
+    expect(await readFile(reference, "utf8")).toBe("Local edits");
 
     const assigned = await databaseAdapter.listSkillsForProfile(profileId);
     expect(assigned.some((skill) => skill.id === body.skill.id)).toBe(true);
@@ -104,8 +160,15 @@ describe("POST /v1/skills/install", () => {
 
   test("invalid frontmatter returns 400 and writes no skill", async () => {
     globalThis.fetch = mock(
-      async () => new Response(INVALID_SKILL, { status: 200 })
-    ) as typeof fetch;
+      async () =>
+        new Response(
+          zipSync({
+            "skills-main/broken/SKILL.md": new TextEncoder().encode(
+              INVALID_SKILL
+            ),
+          })
+        )
+    ) as unknown as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
     const adminSession = await setupFreshInstallSession(
@@ -208,6 +271,14 @@ describe("POST /v1/skills/install", () => {
       memberProvisioned.temporaryPassword,
       orgId
     );
+    for (const suffix of ["files", "file?path=SKILL.md"]) {
+      const result = await app.fetch(
+        new Request(`${BASE}/v1/skills/any-skill/${suffix}`, {
+          headers: memberSession.headers({}, orgId),
+        })
+      );
+      expect(result.status).toBe(403);
+    }
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
 
@@ -261,8 +332,15 @@ describe("POST /v1/skills/install", () => {
 
   test("installing the same skill onto a second profile returns 409", async () => {
     globalThis.fetch = mock(
-      async () => new Response(VALID_SKILL, { status: 200 })
-    ) as typeof fetch;
+      async () =>
+        new Response(
+          zipSync({
+            "skills-main/weather/SKILL.md": new TextEncoder().encode(
+              VALID_SKILL
+            ),
+          })
+        )
+    ) as unknown as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
     const adminSession = await setupFreshInstallSession(

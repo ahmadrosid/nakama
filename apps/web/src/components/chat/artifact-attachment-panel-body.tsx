@@ -1,17 +1,20 @@
+import { CodeBlock } from "@nakama/ui/code-block";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import { useMemo, useRef } from "react";
-import { CodeBlock } from "@/components/ai-elements/code-block";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { ArtifactMarkdownToc } from "@/components/chat/artifact-markdown-toc";
 import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
 import { SpreadsheetGrid } from "@/components/chat/artifact-spreadsheet-editor";
+import { useAuth } from "@/context/use-auth";
 import {
   ARTIFACT_HTML_IFRAME_SANDBOX,
   htmlForArtifactPreview,
+  resolveArtifactHtmlAssets,
 } from "@/lib/artifact-html-preview";
 import { parseSpreadsheetText } from "@/lib/artifact-spreadsheet";
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
+import { client, formatError } from "@/lib/client";
 import { extractMarkdownHeadings } from "@/lib/markdown-toc";
 
 type ArtifactPanelSharedProps = {
@@ -24,6 +27,10 @@ type ArtifactPanelSharedProps = {
 
 export type ArtifactAttachmentPanelBodyProps =
   | (ArtifactPanelSharedProps & {
+      kind: "pdf";
+      pdfPreviewUrl: string | null;
+    })
+  | (ArtifactPanelSharedProps & {
       kind: "image";
       imagePreviewUrl?: string | null;
     })
@@ -35,6 +42,7 @@ export type ArtifactAttachmentPanelBodyProps =
       kind: "html";
       content: string | null;
       htmlSandbox?: string;
+      profileId?: string;
     })
   | (ArtifactPanelSharedProps & {
       kind: "spreadsheet";
@@ -225,18 +233,69 @@ function ArtifactAttachmentVideoBody({
 
 function ArtifactHtmlPreview({
   content,
+  artifactPath,
   filename,
   htmlSandbox,
+  profileId,
 }: {
   content: string;
+  artifactPath: string;
   filename: string;
   htmlSandbox: string;
+  profileId?: string;
 }) {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id;
+  const [preview, setPreview] = useState<{
+    content: string;
+    orgId: string | undefined;
+    html: string;
+    error?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!profileId) {
+      return;
+    }
+    const controller = new AbortController();
+    const scopedClient = client.forOrg(orgId ?? null);
+    void resolveArtifactHtmlAssets(
+      content,
+      artifactPath,
+      (path) =>
+        scopedClient.readProfileArtifactContent(profileId, path, {
+          inline: true,
+        }),
+      controller.signal
+    )
+      .then((html) => {
+        if (!controller.signal.aborted) {
+          setPreview({ content, html, orgId });
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setPreview({ content, error: formatError(error), html: "", orgId });
+        }
+      });
+    return () => controller.abort();
+  }, [content, artifactPath, profileId, orgId]);
+
+  const current =
+    preview?.content === content && preview.orgId === orgId ? preview : null;
+  if (profileId && !current) {
+    return <LoadingState />;
+  }
+  if (current?.error) {
+    return <ArtifactBodyError error={current.error} />;
+  }
   return (
     <iframe
       className="min-h-0 w-full flex-1 border-0 bg-background"
       sandbox={htmlSandbox}
-      srcDoc={htmlForArtifactPreview(content)}
+      srcDoc={htmlForArtifactPreview(
+        profileId ? (current?.html ?? "") : content
+      )}
       title={filename}
     />
   );
@@ -249,6 +308,7 @@ function ArtifactAttachmentHtmlBody({
   canPreview,
   artifact,
   htmlSandbox = ARTIFACT_HTML_IFRAME_SANDBOX,
+  profileId,
   previewMode = "preview",
 }: Extract<ArtifactAttachmentPanelBodyProps, { kind: "html" }>) {
   const phase = resolveArtifactBodyPhase({
@@ -273,9 +333,12 @@ function ArtifactAttachmentHtmlBody({
         : null}
       {phase === "content" && content ? (
         <ArtifactHtmlPreview
+          artifactPath={artifact.path}
           content={content}
           filename={artifact.filename}
           htmlSandbox={htmlSandbox}
+          key={`${profileId}:${artifact.path}`}
+          profileId={profileId}
         />
       ) : null}
       {phase === "unavailable" ? <UnavailablePreview padded /> : null}
@@ -432,6 +495,25 @@ export function ArtifactAttachmentPanelBody(
   props: ArtifactAttachmentPanelBodyProps
 ) {
   switch (props.kind) {
+    case "pdf":
+      return (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {props.loading ? <LoadingState /> : null}
+          {props.error ? <ArtifactBodyError error={props.error} /> : null}
+          {!(props.loading || props.error) && props.pdfPreviewUrl ? (
+            <object
+              aria-label={props.artifact.filename}
+              className="min-h-0 w-full flex-1 border-0"
+              data={props.pdfPreviewUrl}
+              type="application/pdf"
+            >
+              <a download={props.artifact.filename} href={props.pdfPreviewUrl}>
+                Download PDF
+              </a>
+            </object>
+          ) : null}
+        </div>
+      );
     case "image":
       return <ArtifactAttachmentImageBody {...props} />;
     case "video":

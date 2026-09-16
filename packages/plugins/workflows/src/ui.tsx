@@ -101,6 +101,14 @@ export function apply(ctx: Context) {
     SelectValue,
     SelectContent,
     SelectItem,
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    Command,
+    CommandInput,
+    CommandList,
+    CommandEmpty,
+    CommandItem,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -152,6 +160,58 @@ export function apply(ctx: Context) {
     );
   }
 
+  function ToolChoice({
+    value,
+    options,
+    onChange,
+    disabled,
+  }: {
+    value: string;
+    options: Array<{ value: string; label: string }>;
+    onChange(value: string): void;
+    disabled: boolean;
+  }) {
+    const [open, setOpen] = React.useState(false);
+    return (
+      <Popover onOpenChange={setOpen} open={open}>
+        <PopoverTrigger
+          aria-label="Tool"
+          disabled={disabled}
+          render={
+            <Button className="w-full justify-between" variant="outline" />
+          }
+        >
+          <span className="min-w-0 truncate">{value || "Select tool"}</span>
+          <span aria-hidden="true">⌄</span>
+        </PopoverTrigger>
+        <PopoverContent className="overflow-hidden p-0 shadow-sm">
+          <Command>
+            <CommandInput
+              aria-label="Search tools"
+              placeholder="Search tools…"
+            />
+            <CommandList>
+              <CommandEmpty>No tools found.</CommandEmpty>
+              {options.map((option) => (
+                <CommandItem
+                  data-checked={value === option.value ? true : undefined}
+                  key={option.value}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  value={option.value}
+                >
+                  <span className="min-w-0 break-all">{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
   function Icon({
     kind,
   }: {
@@ -163,6 +223,7 @@ export function apply(ctx: Context) {
       | "expand"
       | "close"
       | "collapse"
+      | "warning"
       | "workflow";
   }) {
     const paths = {
@@ -173,6 +234,7 @@ export function apply(ctx: Context) {
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
     };
     return (
@@ -192,6 +254,22 @@ export function apply(ctx: Context) {
     );
   }
   ctx.styles(css);
+  function WorkflowError({ message }: { message: string }) {
+    const connectionError = /^MCP server "([^"]+)" is not connected\.$/.exec(
+      message
+    );
+    return (
+      <div className="workflow-error" role="alert">
+        <Icon kind="warning" />
+        <p>
+          {connectionError ? `${connectionError[1]} isn’t connected.` : message}
+        </p>
+        {connectionError ? (
+          <a href="/system?tab=mcp">Open MCP settings</a>
+        ) : null}
+      </div>
+    );
+  }
   const action = async <T,>(name: string, input?: unknown): Promise<T> =>
     (await ctx.host.call(name, input)) as T;
 
@@ -740,11 +818,7 @@ export function apply(ctx: Context) {
                 </Button>
               ))}
             </nav>
-            {error && (
-              <p className="workflow-error" role="alert">
-                {error}
-              </p>
-            )}
+            {error && <WorkflowError message={error} />}
             {view === "runs" && (
               <section
                 aria-label="Run history"
@@ -1025,9 +1099,8 @@ export function apply(ctx: Context) {
                         field === "tool" ? (
                           <label key={field}>
                             Tool
-                            <Choice
+                            <ToolChoice
                               disabled={busy}
-                              label="Tool"
                               onChange={(value) =>
                                 updateStep(selectedStep.key, {
                                   fields: {

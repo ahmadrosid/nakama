@@ -23,6 +23,7 @@ import {
 import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDown01Icon,
   Building06Icon,
   CloudDownloadIcon,
   Copy01Icon,
@@ -32,11 +33,13 @@ import {
 import { useState } from "react";
 import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { ProfileConfigAssignmentsSection } from "@/pages/profiles/profile-config-assignments-section";
 import { ProfileConfigIdentitySection } from "@/pages/profiles/profile-config-identity-section";
+import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
@@ -52,12 +55,11 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   return (
     <div
-      aria-labelledby="profile-detail-tab-profile"
+      className="mx-auto max-w-3xl space-y-8"
       id="profile-detail-panel-profile"
-      role="tabpanel"
     >
       {canPack && !detail.isSuper ? (
-        <div className="mb-3 flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             aria-label="Import profile"
             disabled={busy}
@@ -80,8 +82,25 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         </div>
       ) : null}
       <ProfileConfigIdentitySection state={state} />
+      {canPack ? (
+        <section className="space-y-4" id="profile-prompt">
+          {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
+          <details className="group/history">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <span>Change histories</span>
+              <ArrowDown01Icon
+                aria-hidden="true"
+                className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
+              />
+            </summary>
+            <div className="pt-3">
+              <ProfileHistoryTab profileId={detail.id} />
+            </div>
+          </details>
+        </section>
+      ) : null}
       <ProfileSkillsSettingsSection disabled={busy} profile={detail} />
-      <ProfileConfigAssignmentsSection state={state} />
+      <ProfileConfigAssignmentsSection key={detail.id} state={state} />
     </div>
   );
 }
@@ -127,7 +146,7 @@ function ProfileAdminMenu({ state }: { state: ProfilesPageState }) {
             }}
           >
             <Copy01Icon aria-hidden />
-            Clone
+            Clone agent
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer"

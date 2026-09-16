@@ -22,7 +22,8 @@ export async function composeKnowledgeBaseCatalog(
       "# Uploaded documents",
       "Use knowledge_base_search to look up facts from uploaded documents on demand.",
       ...readyDocuments.map(
-        (document) => `- ${document.filename} (${document.mediaType})`
+        (document) =>
+          `- ${document.filename} (${document.mediaType}) [id: ${document.id}]`
       )
     );
   }

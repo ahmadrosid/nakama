@@ -1,7 +1,7 @@
-import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
+import type { SoulStackFiles } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SoulFileEditorDialog } from "@/components/soul-tools/soul-file-editor-dialog";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
@@ -154,16 +154,6 @@ function applySoulFileContent(
   setSavedContent(fileContent);
 }
 
-function presentSoulFileCount(
-  status: { files: SoulFileStatus } | null
-): number {
-  if (!status) {
-    return 0;
-  }
-
-  return SOUL_FILES.filter((file) => status.files[file.key]).length;
-}
-
 function renderSoulTabGate({
   embedded,
   profilesLength,
@@ -247,8 +237,6 @@ function useSoulTab(controlledProfileId?: string | null) {
   const isDirty = editContent !== savedContent;
   const isWritable = openFileMeta?.writable ?? false;
 
-  const presentCount = useMemo(() => presentSoulFileCount(status), [status]);
-
   const setProfileId = useCallback(
     (nextProfileId: string) => {
       setProfileIdState(nextProfileId);
@@ -310,7 +298,6 @@ function useSoulTab(controlledProfileId?: string | null) {
     loading,
     openFile,
     openFileMeta,
-    presentCount,
     profileId,
     profiles,
     profilesFetching,
@@ -350,7 +337,6 @@ export function SoulTab({
 
   const soulPanel = (
     <SoulTabPanel
-      busy={tab.busy}
       embedded={tab.embedded}
       onOpenFile={(fileKey) => {
         tab.setOpenFile(fileKey);
@@ -358,12 +344,6 @@ export function SoulTab({
         tab.setSavedContent("");
         tab.setDialogError(null);
       }}
-      onRefresh={() => {
-        tab.setError(null);
-        void Promise.all([tab.refetchProfiles(), tab.refetchStatus()]);
-      }}
-      presentCount={tab.presentCount}
-      refreshing={tab.refreshing}
       selectedProfile={tab.selectedProfile}
       status={tab.status}
     />

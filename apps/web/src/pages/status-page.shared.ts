@@ -5,9 +5,6 @@ import {
   Message01Icon,
   SmartPhone01Icon,
 } from "hugeicons-react";
-import { PAGE_PATHS } from "@/lib/navigation";
-
-export type StatusTone = "ok" | "warn" | "bad";
 
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
 
@@ -114,72 +111,4 @@ function discordServiceStatus(
   }
 
   return { status: "Online", tone: "ok" };
-}
-
-export type StatusSummaryAction = {
-  label: string;
-  to: string;
-};
-
-export function deriveSummary(status: SystemStatusResponse): {
-  tone: StatusTone;
-  title: string;
-  description: string;
-  action?: StatusSummaryAction;
-} {
-  if (!status.server.ok) {
-    return {
-      description: "Restart Nakama and check your connection.",
-      title: "Server offline",
-      tone: "bad",
-    };
-  }
-
-  if (!status.automationWorker.ok) {
-    return {
-      description: "Start the automation worker to resume scheduled runs.",
-      title: "Automation worker stopped",
-      tone: "bad",
-    };
-  }
-
-  if (status.whatsappWorker.configured && !status.whatsappWorker.running) {
-    return {
-      action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
-      description: "Start the WhatsApp worker to receive messages.",
-      title: "WhatsApp offline",
-      tone: "warn",
-    };
-  }
-
-  if (status.discordWorker.configured && !status.discordWorker.running) {
-    return {
-      action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
-      description:
-        "Start the bridge worker from Integrations → Discord to receive messages.",
-      title: "Discord bridge offline",
-      tone: "warn",
-    };
-  }
-
-  if (
-    !(
-      status.server.providerConfigured &&
-      status.automationWorker.providerConfigured
-    )
-  ) {
-    return {
-      action: { label: "Open Settings", to: PAGE_PATHS.settings },
-      description:
-        "Configure an LLM provider before chat or automation runs can succeed.",
-      title: "Running with warnings",
-      tone: "warn",
-    };
-  }
-
-  return {
-    description: "Server, workers, and bridges are healthy.",
-    title: "All systems operational",
-    tone: "ok",
-  };
 }

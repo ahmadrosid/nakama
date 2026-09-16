@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getProfileSoulDir, NakamaApiError } from "@nakama/core";
+import {
+  type EmailOutboundAdapter,
+  getOrgConfigDir,
+  getProfileSoulDir,
+  NakamaApiError,
+} from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -10,13 +15,21 @@ import { OrgService } from "./org-service";
 
 setupTestConfigDir("nakama-org-service-test-");
 
-function createOrgService() {
+function createOrgService(
+  email?: EmailOutboundAdapter,
+  getWebPublicUrl?: () => string | undefined
+) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   return {
     authService,
     databaseAdapter,
-    orgService: new OrgService(databaseAdapter, authService),
+    orgService: new OrgService(
+      databaseAdapter,
+      authService,
+      email,
+      getWebPublicUrl
+    ),
   };
 }
 
@@ -526,12 +539,255 @@ describe("OrgService", () => {
 
     const accepted = await orgService.acceptInvite({
       password: "secret123",
-      token: invite.token,
+      token: invite.token!,
     });
 
     expect(accepted.user.email).toBe("legacy@acme.com");
     expect(accepted.orgId).toBe(created.organization.id);
     expect(accepted.role).toBe("member");
+  });
+
+  test("emails an invite link without returning its raw token", async () => {
+    const sent: Array<{ subject: string; text: string; to: string }> = [];
+    const { orgService } = createOrgService(
+      {
+        send: async (input) => {
+          sent.push(input);
+          return { ok: true };
+        },
+      },
+      () => "https://nakama.example.com"
+    );
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-email-invite",
+    });
+
+    const invite = await orgService.createInvite({
+      email: "guest@acme.com",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "viewer",
+    });
+
+    expect(invite.delivered).toBe(true);
+    expect(invite.token).toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("guest@acme.com");
+    expect(sent[0]?.subject).toBe("You're invited to Acme");
+    expect(sent[0]?.text).toContain(
+      "https://nakama.example.com/accept-invite?token="
+    );
+    expect(sent[0]?.text).toContain("join Acme as viewer");
+  });
+
+  test("returns the invite token when email delivery fails", async () => {
+    const { orgService } = createOrgService({
+      send: async () => ({ error: "SMTP unavailable", ok: false }),
+    });
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-manual-invite",
+    });
+
+    const invite = await orgService.createInvite({
+      email: "guest@acme.com",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "member",
+    });
+
+    expect(invite.delivered).toBe(false);
+    expect(invite.token).toStartWith("tc_invite_");
+  });
+
+  test("emails a password reset link without returning its raw token", async () => {
+    const sent: Array<{ subject: string; text: string; to: string }> = [];
+    const { orgService, authService } = createOrgService(
+      {
+        send: async (input) => {
+          sent.push(input);
+          return { ok: true };
+        },
+      },
+      () => "https://nakama.example.com"
+    );
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-email" },
+    });
+
+    const requested = await orgService.requestPasswordReset(" ADMIN@ACME.COM ");
+
+    expect(requested).toEqual({ delivered: true, token: null });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("admin@acme.com");
+    expect(sent[0]?.subject).toBe("Reset your Nakama password");
+    expect(sent[0]?.text).toContain(
+      "https://nakama.example.com/reset-password?token=tc_reset_"
+    );
+  });
+
+  test("resets once and revokes sessions and outstanding reset tokens", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService({
+      send: async () => ({ error: "SMTP unavailable", ok: false }),
+    });
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-once" },
+    });
+    const now = new Date().toISOString();
+    await databaseAdapter.createBrowserSession({
+      activeOrgId: bootstrapped.organization.id,
+      createdAt: now,
+      csrfTokenHash: "csrf_hash",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      id: "browser_reset",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "session_hash",
+      userId: bootstrapped.user.id,
+    });
+
+    const earlier = await orgService.requestPasswordReset(
+      "admin@acme.com",
+      true
+    );
+    const requested = await orgService.requestPasswordReset(
+      "admin@acme.com",
+      true
+    );
+    expect(requested.delivered).toBe(false);
+    expect(requested.token).toStartWith("tc_reset_");
+
+    await orgService.resetPassword({
+      newPassword: "new-password-123",
+      token: requested.token!,
+    });
+
+    const updated = await databaseAdapter.getUserById(bootstrapped.user.id);
+    expect(
+      await authService.verifyPassword(
+        "new-password-123",
+        updated!.passwordHash
+      )
+    ).toBe(true);
+    const session =
+      await databaseAdapter.getBrowserSessionBySessionTokenHash("session_hash");
+    expect(session?.revokedAt).not.toBeNull();
+    await expect(
+      orgService.resetPassword({
+        newPassword: "another-password-123",
+        token: requested.token!,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.resetPassword({
+        newPassword: "another-password-123",
+        token: earlier.token!,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("rejects expired password reset tokens", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-expired" },
+    });
+    const token = "tc_reset_expired";
+    const now = new Date().toISOString();
+    await databaseAdapter.createPasswordResetToken({
+      consumedAt: null,
+      createdAt: now,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      id: "password_reset_expired",
+      tokenHash: authService.hashToken(token),
+      userId: bootstrapped.user.id,
+    });
+
+    await expect(
+      orgService.resetPassword({ newPassword: "new-password-123", token })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("does not reveal an unknown password reset address", async () => {
+    let sends = 0;
+    const { orgService } = createOrgService({
+      send: async () => {
+        sends += 1;
+        return { ok: true };
+      },
+    });
+
+    expect(await orgService.requestPasswordReset("missing@acme.com")).toEqual({
+      delivered: true,
+      token: null,
+    });
+    expect(sends).toBe(0);
+  });
+
+  test("does not expose a reset token when public delivery fails", async () => {
+    const { orgService, authService } = createOrgService({
+      send: async () => ({ error: "SMTP unavailable", ok: false }),
+    });
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-public" },
+    });
+
+    expect(await orgService.requestPasswordReset("admin@acme.com")).toEqual({
+      delivered: true,
+      token: null,
+    });
+  });
+
+  test("returns a public reset response without waiting for SMTP", async () => {
+    let finishDelivery: (result: { ok: boolean }) => void = () => undefined;
+    const delivery = new Promise<{ ok: boolean }>((resolve) => {
+      finishDelivery = resolve;
+    });
+    const { orgService, authService } = createOrgService({
+      send: () => delivery,
+    });
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-reset-timing" },
+    });
+
+    const response = orgService.requestPasswordReset("admin@acme.com");
+    const settled = await Promise.race([
+      response,
+      Bun.sleep(100).then(() => null),
+    ]);
+    finishDelivery({ ok: true });
+
+    expect(settled).toEqual({ delivered: true, token: null });
   });
 
   test("rejects expired invites", async () => {
@@ -809,6 +1065,86 @@ describe("OrgService", () => {
     expect(resolved).toBe(second.organization.id);
   });
 
+  test("permanently deletes an archived org and its files", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-permanent-delete" },
+    });
+    const kept = await orgService.createOrganization(
+      { name: "Beta", slug: "beta-permanent-delete" },
+      bootstrapped.user.id
+    );
+    const orgDir = getOrgConfigDir(bootstrapped.organization.id);
+    await mkdir(orgDir, { recursive: true });
+    await writeFile(join(orgDir, "private-data.txt"), "private data");
+    const deletedProfile = (
+      await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
+    )[0]!;
+    await databaseAdapter.createBrowserSession({
+      activeOrgId: bootstrapped.organization.id,
+      createdAt: new Date().toISOString(),
+      csrfTokenHash: "csrf_permanent_delete",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      id: "session_permanent_delete",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "token_permanent_delete",
+      userId: bootstrapped.user.id,
+    });
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+
+    await orgService.permanentlyDeleteOrganization(
+      bootstrapped.organization.id
+    );
+
+    expect(
+      await databaseAdapter.getOrganizationById(bootstrapped.organization.id)
+    ).toBeNull();
+    expect(await databaseAdapter.getProfile(deletedProfile.id)).toBeNull();
+    expect(
+      await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
+    ).toEqual([]);
+    expect(
+      await databaseAdapter.getOrganizationById(kept.organization.id)
+    ).not.toBeNull();
+    expect(
+      await databaseAdapter.getUserById(bootstrapped.user.id)
+    ).not.toBeNull();
+    expect(
+      await databaseAdapter.getBrowserSessionBySessionTokenHash(
+        "token_permanent_delete"
+      )
+    ).toMatchObject({ activeOrgId: null });
+    await expect(access(orgDir)).rejects.toThrow();
+  });
+
+  test("refuses to permanently delete an active org", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-active-delete",
+    });
+    const orgDir = getOrgConfigDir(created.organization.id);
+
+    await expect(
+      orgService.permanentlyDeleteOrganization(created.organization.id)
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(
+      await databaseAdapter.getOrganizationById(created.organization.id)
+    ).not.toBeNull();
+    await expect(access(orgDir)).resolves.toBeNull();
+  });
+
   test("clears a stale session org when the user has no remaining memberships", async () => {
     const { orgService, authService, databaseAdapter } = createOrgService();
     const bootstrapped = await orgService.bootstrapInitialSetup({
@@ -975,7 +1311,7 @@ describe("OrgService", () => {
     );
 
     await expect(
-      orgService.acceptInvite({ password: "secret123", token: invite.token })
+      orgService.acceptInvite({ password: "secret123", token: invite.token! })
     ).rejects.toMatchObject({ status: 404 });
   });
 

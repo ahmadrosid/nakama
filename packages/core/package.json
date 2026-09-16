@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./supermemory-client": "./src/supermemory-client.ts",
     ".": "./src/index.ts",
     "./agent-questionnaire": "./src/agent-questionnaire.ts",
     "./artifact-mime": "./src/artifact-mime.ts",
@@ -68,6 +69,7 @@
     "@vscode/ripgrep": "^1.18.0",
     "croner": "^10.0.1",
     "docx": "^9.7.1",
+    "fflate": "^0.8.3",
     "imapflow": "^1.7.7",
     "mailparser": "^3.9.19",
     "marked": "^18.0.6",

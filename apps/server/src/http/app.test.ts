@@ -140,6 +140,24 @@ describe("createHonoApp", () => {
     expect(importLimitResponse.status).toBe(413);
   });
 
+  test("knowledge uploads allow a base64-encoded 20 MiB document through the body limit", async () => {
+    const app = createHonoApp(createServerOptions());
+    const request = (size: number) =>
+      new Request("http://localhost:4310/v1/profiles/example/knowledge-base", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(size),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    expect(
+      (await app.fetch(request(Math.ceil((20 * 1024 * 1024) / 3) * 4 + 1024)))
+        .status
+    ).not.toBe(413);
+    expect((await app.fetch(request(30 * 1024 * 1024 + 1))).status).toBe(413);
+  });
+
   test("liveness stays up while readiness tracks a closed and reopened database", async () => {
     const database = await createSqliteDatabase(":memory:");
     const { app } = createMinimalHonoApp({
@@ -386,6 +404,53 @@ describe("createHonoApp", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(csp).not.toContain("frame-ancestors");
   });
+
+  test.each(["/docs", "/docs/"])(
+    "allows the docs scripts on %s",
+    async (path) => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`)
+      );
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+      const scriptUrl = html.match(/<script src="([^"]+)"/)?.[1];
+      expect(inlineScript).toBeDefined();
+      expect(scriptUrl).toBeDefined();
+      const hash = new Bun.CryptoHasher("sha256")
+        .update(inlineScript!)
+        .digest("base64");
+      const csp = response.headers.get("Content-Security-Policy") ?? "";
+      const scriptSrc =
+        csp
+          .split(";")
+          .find((directive) => directive.trim().startsWith("script-src")) ?? "";
+      expect(scriptSrc).toContain(scriptUrl!);
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+      expect(scriptSrc).not.toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'unsafe-eval'");
+      expect(csp).toContain("font-src 'self' data: https://fonts.scalar.com;");
+      expect(csp).toContain(
+        "connect-src 'self' https://cdn.jsdelivr.net/sm/ https://api.scalar.com/vector/registry/;"
+      );
+    }
+  );
+
+  test.each(["/health", "/openapi.json", "/docs-other"])(
+    "keeps Scalar resource permissions off %s",
+    async (path) => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`)
+      );
+      const csp = response.headers.get("Content-Security-Policy") ?? "";
+      expect(csp).toContain("font-src 'self' data:;");
+      expect(csp).toContain("connect-src 'self';");
+      expect(csp).not.toContain("scalar.com");
+      expect(csp).not.toContain("jsdelivr.net");
+    }
+  );
 
   test("allows the theme bootstrap by hash instead of every inline script", async () => {
     const indexHtml = await Bun.file(
@@ -927,6 +992,83 @@ describe("createHonoApp", () => {
 
     expect(allowed.status).toBe(200);
     expect(calls).toEqual(["stop:telegram"]);
+  });
+
+  test("plugin worker controls and logs require an admin of the owning org", async () => {
+    const options = createServerOptions();
+    const calls: string[] = [];
+    let owner = "";
+    Object.assign(options.workerManager, {
+      isPluginWorkerForOrg: (name: string, orgId: string) =>
+        name === "plugin-owned" && orgId === owner,
+      listPluginWorkers: async (orgId: string) => {
+        calls.push("list:" + orgId);
+        return [];
+      },
+      startWorker: async (name: string) => {
+        calls.push(name);
+      },
+    });
+    const app = createHonoApp(options);
+    const admin = await setupFreshInstallSession(app, options.databaseAdapter);
+    owner = admin.orgId!;
+    for (const suffix of ["start", "logs", "clear-logs"]) {
+      const response = await app.fetch(
+        new Request(
+          "http://localhost:4310/v1/workers/plugin-foreign/" + suffix,
+          {
+            headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+            method: suffix === "logs" ? "GET" : "POST",
+          }
+        )
+      );
+      expect(response.status).toBe(404);
+    }
+    expect(calls).toEqual([]);
+    const allowed = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/plugin-owned/start", {
+        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+        method: "POST",
+      })
+    );
+    expect(allowed.status).toBe(200);
+    const listed = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/plugins", {
+        headers: admin.headers(),
+      })
+    );
+    expect(listed.status).toBe(200);
+    expect(calls).toEqual(["plugin-owned", "list:" + owner]);
+
+    const now = new Date().toISOString();
+    await options.databaseAdapter.createUser({
+      createdAt: now,
+      email: "worker-member@example.com",
+      id: "worker-member",
+      passwordHash: await options.authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+    await options.databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: owner,
+      role: "member",
+      userId: "worker-member",
+    });
+    const member = await loginUserSession(
+      app,
+      "worker-member@example.com",
+      "password123",
+      owner
+    );
+    for (const suffix of ["start", "logs", "clear-logs"]) {
+      const denied = await app.fetch(
+        new Request("http://localhost:4310/v1/workers/plugin-owned/" + suffix, {
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
+          method: suffix === "logs" ? "GET" : "POST",
+        })
+      );
+      expect(denied.status).toBe(403);
+    }
   });
 
   test("creates and lists sessions through Hono routes", async () => {

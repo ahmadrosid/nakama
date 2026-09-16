@@ -6,11 +6,13 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { convertDocxToMarkdown } from "../docx-text";
+import { getGlobalSkillsDir } from "../skills/paths";
 import {
   PathGuardError,
   runDeleteFile,
@@ -473,6 +475,43 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("oldText not found");
   });
 
+  test.each([
+    ["image/png", "89504e470d0a1a0a0000000d49484452"],
+    ["image/jpeg", "ffd8ffe000104a4649460001"],
+    ["image/gif", "47494638396101000100"],
+    ["image/webp", "52494646100000005745425056503820"],
+  ])(
+    "read_file detects %s from bytes, independent of filename",
+    async (mediaType, hex) => {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-image-"));
+      const bytes = Buffer.from(hex, "hex");
+      await writeFile(path.join(tempDir, "image.bin"), bytes);
+      const result = await runReadFile(
+        { limit: 1, offset: 100, path: "image.bin" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      );
+      expect(result.images).toEqual([
+        { data: bytes.toString("base64"), mediaType },
+      ]);
+      expect(result.bytesRead).toBe(bytes.length);
+      expect(result.content).not.toContain(bytes.toString("base64"));
+      expect(result.totalLines).toBe(0);
+    }
+  );
+
+  test("read_file rejects images above the attachment size limit", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-image-"));
+    const bytes = Buffer.alloc(5 * 1024 * 1024 + 1);
+    Buffer.from("89504e470d0a1a0a", "hex").copy(bytes);
+    await writeFile(path.join(tempDir, "large.png"), bytes);
+    await expect(
+      runReadFile({ path: "large.png" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow();
+  });
+
   test("read_file reads an existing file", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "sample.txt");
@@ -749,6 +788,60 @@ describe("file builtin tools", () => {
     expect(result.content).toContain("export async function run");
   });
 
+  test("system skills and references are readable but remain protected", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const skillDir = path.join(getGlobalSkillsDir(), "installer");
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    const skillPath = path.join(skillDir, "SKILL.md");
+    await writeFile(skillPath, "instructions");
+    await writeFile(path.join(skillDir, "references/guide.md"), "instructions");
+    const options = { workspaceRoot: tempDir };
+    const cwd = await realpath(skillDir);
+
+    await expect(
+      runReadFile(
+        {
+          cwd: path.dirname(getGlobalSkillsDir()),
+          path: "skills/installer/SKILL.md",
+        },
+        PROFILE_CONTEXT,
+        options
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
+
+    for (const input of [
+      { path: skillPath },
+      { cwd, path: "SKILL.md" },
+      { cwd, path: "references/guide.md" },
+    ]) {
+      const result = await runReadFile(input, PROFILE_CONTEXT, options);
+      expect(result.content).toBe("instructions");
+    }
+
+    await expect(
+      runWriteFile(
+        { content: "changed", path: skillPath },
+        PROFILE_CONTEXT,
+        options
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
+
+    const outsidePath = path.join(configDir, "private.txt");
+    await writeFile(outsidePath, "private");
+    await symlink(outsidePath, path.join(skillDir, "escape.md"));
+    for (const target of [
+      outsidePath,
+      path.join(skillDir, "escape.md"),
+      path.join(skillDir, "../../../private.txt"),
+    ]) {
+      await expect(
+        runReadFile({ path: target }, PROFILE_CONTEXT, options)
+      ).rejects.toBeInstanceOf(PathGuardError);
+    }
+  });
+
   test("read_file supports offset and limit", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "lines.txt");
@@ -782,16 +875,20 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
-  test("cwd injection falls back to profile workspace", async () => {
+  test("invalid cwd rejects writes without changing profile files", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
+    const targetPath = path.join(tempDir, "safe.txt");
+    await writeFile(targetPath, "original");
 
-    const result = await runWriteFile(
-      { content: "OK", cwd: "/etc", path: "safe.txt" },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir }
-    );
+    await expect(
+      runWriteFile(
+        { content: "OK", cwd: "/etc", path: "safe.txt" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
 
-    expect(result.path).toStartWith(await realpath(tempDir));
+    expect(await readFile(targetPath, "utf8")).toBe("original");
   });
 
   test("edit_file rejects oversized replacement result", async () => {

@@ -1,9 +1,16 @@
 import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
-import { useMemo } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import { useMemo, useState } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
+import { ProviderSetupForm } from "@/components/ProviderSetupForm";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
@@ -54,10 +61,11 @@ export function ChatPageContent(state: ChatPageState) {
     handleTryAgainMessage,
     sendMessage,
     stopStreaming,
-    navigateSetup,
     agentTodos,
     agentQuestionnaire,
   } = state;
+
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);
@@ -95,8 +103,8 @@ export function ChatPageContent(state: ChatPageState) {
         draftStorageKey={composerDraftKey}
         error={error}
         headerNotice={skillReviewBanner}
+        onConnectProvider={() => setProviderDialogOpen(true)}
         onModelChange={handleModelChange}
-        onNavigateSetup={navigateSetup}
         onStop={stopStreaming}
         onSubmit={(text, files) => {
           void sendMessage(text, files);
@@ -187,6 +195,18 @@ export function ChatPageContent(state: ChatPageState) {
       key={`${composerDraftKey}:${composerEntry.revision}`}
     >
       {content}
+      <Dialog onOpenChange={setProviderDialogOpen} open={providerDialogOpen}>
+        <DialogContent className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Connect provider</DialogTitle>
+          </DialogHeader>
+          <ProviderSetupForm
+            onSuccess={() => setProviderDialogOpen(false)}
+            showHeading={false}
+            submitLabel="Connect provider"
+          />
+        </DialogContent>
+      </Dialog>
     </PromptInputProvider>
   );
 }

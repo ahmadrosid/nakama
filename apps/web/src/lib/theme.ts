@@ -40,6 +40,7 @@ export function getInitialTheme(): Theme {
 }
 
 export function applyTheme(theme: Theme): void {
+  document.documentElement.dataset.theme = theme;
   const resolved = resolveTheme(theme);
   document.documentElement.classList.toggle("dark", resolved === "dark");
   document.documentElement.style.colorScheme = resolved;

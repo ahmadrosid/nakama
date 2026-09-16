@@ -268,6 +268,8 @@ export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
   const undoMutation = useUndoOrgMemoryChange(orgId);
   const { data: membersData } = useOrgMembers(orgId);
   const changes = data?.changes ?? [];
+  const maxEntries = data?.maxEntries ?? 50;
+  const truncated = data?.truncated === true;
   const { data: latestRevision } = useOrgMemoryHistoryRevision(
     orgId,
     changes[0]?.id ?? null
@@ -312,10 +314,17 @@ export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
   return (
     <div className="min-w-0">
       <div className="flex items-center justify-between gap-3 border-border border-b px-4 py-2">
-        <p className="text-muted-foreground text-xs">
-          Timeline of every change. View snapshots or revert to an earlier
-          revision.
-        </p>
+        <div className="min-w-0 space-y-1">
+          <p className="text-muted-foreground text-xs">
+            Timeline of every change. View snapshots or revert to an earlier
+            revision.
+          </p>
+          <p className="text-muted-foreground text-xs">
+            {truncated
+              ? `Keeping the newest ${maxEntries} revisions. Older snapshots were removed.`
+              : `Keeps up to ${maxEntries} revisions.`}
+          </p>
+        </div>
         <Button
           disabled={!canUndo || undoMutation.isPending}
           onClick={() => void handleUndo()}

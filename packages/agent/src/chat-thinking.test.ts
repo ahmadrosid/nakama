@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type {
   ChatCompletionResult,
   GenerateChatInput,
@@ -44,6 +44,86 @@ const textReply = (content: string): ChatCompletionResult => ({
 });
 
 describe("thinking provider options", () => {
+  test.each(["tool", "arguments", "completion"])(
+    "records thinking that ends with %s instead of an answer",
+    async (ending) => {
+      let now = 1000;
+      const clock = spyOn(Date, "now").mockImplementation(() => now);
+      try {
+        const provider = createCapturingProvider(textReply(""));
+        provider.streamChat = (_input, handlers) => {
+          handlers.onThinking?.("Reasoning");
+          now = 5000;
+          handlers.onThinking?.(" continues");
+          handlers.onChunk("");
+          now = 9000;
+          if (ending === "tool") {
+            handlers.onToolStart?.({
+              input: {},
+              tool: "search",
+              toolCallId: "t1",
+            });
+            now = 30_000;
+          } else if (ending === "arguments") {
+            handlers.onToolInputDelta?.({
+              delta: "{}",
+              tool: "search",
+              toolCallId: "t1",
+            });
+            now = 30_000;
+          }
+          return Promise.resolve(textReply(""));
+        };
+        const session = createAgentChatSession(
+          { provider },
+          { enableToolLoop: false }
+        );
+        await session.sendStream("hello", { onChunk() {} });
+        expect(session.getHistory().at(-1)).toMatchObject({
+          thinkingDurationMs: 8000,
+        });
+      } finally {
+        clock.mockRestore();
+      }
+    }
+  );
+
+  test("retains reasoning duration in history without counting answer generation", async () => {
+    let now = 1000;
+    const clock = spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const provider = createCapturingProvider(textReply("Answer"));
+      provider.streamChat = (_input, handlers) => {
+        now = 3000;
+        handlers.onThinking?.("Let me think");
+        now = 11_000;
+        handlers.onChunk("Answer");
+        now = 31_000;
+        return Promise.resolve({
+          ...textReply("Answer"),
+          assistantMessage: {
+            content: "Answer",
+            role: "assistant",
+            thinking: "Let me think",
+          },
+        });
+      };
+      const session = createAgentChatSession(
+        { provider },
+        { enableToolLoop: false }
+      );
+      await session.sendStream("hello", { onChunk() {} });
+      expect(
+        JSON.parse(JSON.stringify(session.getHistory())).at(-1)
+      ).toMatchObject({
+        thinking: "Let me think",
+        thinkingDurationMs: 8000,
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test("merges thinking with web search options", async () => {
     const provider = createCapturingProvider(textReply("Answer"), {
       thinking: "trace ",

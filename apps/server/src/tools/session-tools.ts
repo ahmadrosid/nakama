@@ -63,6 +63,32 @@ function readBoundedInteger(
   return Math.min(Math.max(Math.trunc(value), 0), max);
 }
 
+// A bare artifacts/ path resolves against the chat profile, so a path read out of
+// another profile's transcript has to carry its owner or the link opens the wrong
+// workspace (#1011). Absolute paths already contain /profiles/<id>/ and are left alone.
+const BARE_ARTIFACT_PATH = /(^|[^\w/.-])artifacts\//g;
+
+function qualifyArtifactPaths<T>(value: T, ownerProfileId: string): T {
+  if (typeof value === "string") {
+    return value.replace(
+      BARE_ARTIFACT_PATH,
+      `$1profiles/${ownerProfileId}/artifacts/`
+    ) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => qualifyArtifactPaths(item, ownerProfileId)) as T;
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        qualifyArtifactPaths(item, ownerProfileId),
+      ])
+    ) as T;
+  }
+  return value;
+}
+
 export function createSessionTools(agent: AgentService): ToolDefinition[] {
   return [
     {
@@ -95,12 +121,15 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
           throw new Error("profileId is required.");
         }
 
-        return await agent.listSessions(orgId, profileId, readChannel(input));
+        return await agent.listSessions(orgId, profileId, readChannel(input), {
+          isPlatformAdmin: context.isPlatformAdmin,
+          orgRole: context.orgRole,
+        });
       },
     },
     {
       description:
-        "Read the stored transcript of a session belonging to another agent profile in this organization. Returns messages as they were persisted, so a session with a turn still running is returned as of its last completed turn. Sessions outside this organization are not readable.",
+        "Read the stored transcript of a session belonging to another agent profile in this organization. Returns messages as they were persisted, so a session with a turn still running is returned as of its last completed turn. Sessions outside this organization are not readable. Artifact paths from another profile come back as profiles/<profileId>/artifacts/...; keep that prefix when you mention one so the user can open it.",
       name: "read_profile_session",
       parallelSafe: true,
       parameters: {
@@ -151,7 +180,13 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
           0,
           Number.MAX_SAFE_INTEGER
         );
-        const messages = result.messages.slice(offset, offset + limit);
+        const page = result.messages.slice(offset, offset + limit);
+        const messages =
+          result.profileId === context.profileId?.trim()
+            ? page
+            : page.map((message) =>
+                qualifyArtifactPaths(message, result.profileId)
+              );
 
         return {
           channel: result.channel,

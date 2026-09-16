@@ -49,7 +49,7 @@ function formatSourceLabel(source: ProfileChangeEvent["source"]): string {
     case "super_bot":
       return "Super Bot";
     case "skill_manage":
-      return "skill_manage";
+      return "Skill manager";
     case "pack_import":
       return "Pack import";
     default:
@@ -57,8 +57,71 @@ function formatSourceLabel(source: ProfileChangeEvent["source"]): string {
   }
 }
 
-function formatActorLabel(actorUserId: string): string {
-  return actorUserId.length > 16 ? `${actorUserId.slice(0, 12)}…` : actorUserId;
+function formatActorLabel(event: ProfileChangeEvent): string | null {
+  return event.actorName || (event.actorUserId ? "Unknown user" : null);
+}
+
+function buildChangeRows(event: ProfileChangeEvent) {
+  const rows = buildFileDiffRows(event.beforeValue, event.afterValue, {
+    formatJson: ["tools", "skills", "mcp", "pack_import"].includes(event.field),
+  });
+  if (!event.assignmentNames) {
+    return rows;
+  }
+  const names = new Map(Object.entries(event.assignmentNames));
+  const unavailable =
+    event.field === "skills" ? "Unavailable skill" : "Unavailable tool";
+  return rows.map((row) => ({
+    ...row,
+    text: row.text.replace(/"(?:[^"\\]|\\.)*"/g, (value) =>
+      JSON.stringify(names.get(JSON.parse(value)) || unavailable)
+    ),
+  }));
+}
+
+function AssignmentChangeSummary({ event }: { event: ProfileChangeEvent }) {
+  const changes = event.assignmentChanges;
+  if (!changes) {
+    return null;
+  }
+  return (
+    <div className="space-y-3 px-4 py-2 sm:px-5">
+      {(["added", "removed"] as const).map((kind) =>
+        changes[kind].length ? (
+          <section className="space-y-1" key={kind}>
+            <h3 className="font-medium text-sm">
+              {kind === "added" ? "Added" : "Removed"}
+            </h3>
+            <ul className="space-y-1">
+              {changes[kind].map((item) => (
+                <li className="flex items-start gap-2 text-sm" key={item.id}>
+                  <span
+                    aria-hidden
+                    className={
+                      kind === "added"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400"
+                    }
+                  >
+                    {kind === "added" ? "+" : "−"}
+                  </span>
+                  <span className="min-w-0 break-words">
+                    {item.name ||
+                      (event.field === "skills"
+                        ? "Unavailable skill"
+                        : "Unavailable tool")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      )}
+      {changes.added.length === 0 && changes.removed.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No assignments changed.</p>
+      ) : null}
+    </div>
+  );
 }
 
 function HistoryChangeDialog({
@@ -75,25 +138,30 @@ function HistoryChangeDialog({
   }
 
   const file = formatFieldLabel(event.field);
-  const actor = event.actorUserId ? formatActorLabel(event.actorUserId) : null;
-  const rows = buildFileDiffRows(event.beforeValue, event.afterValue);
+  const actor = formatActorLabel(event);
+  const rows = buildChangeRows(event);
   const added = rows.filter((row) => row.type === "add").length;
   const removed = rows.filter((row) => row.type === "del").length;
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="gap-2 p-4 pr-12 sm:p-5 sm:pr-12">
+        <DialogHeader className="shrink-0 gap-2 pt-4 pr-12 pb-2 pl-4 sm:pt-5 sm:pl-5">
           <div className="flex items-baseline justify-between gap-3">
-            <DialogTitle className="text-balance">{file}</DialogTitle>
-            <p className="shrink-0 font-mono text-xs tabular-nums">
-              <span className="text-emerald-600 dark:text-emerald-400">
-                +{added}
-              </span>
-              <span className="ml-2 text-red-600 dark:text-red-400">
-                -{removed}
-              </span>
-            </p>
+            <DialogTitle className="text-balance">
+              {file}
+              {event.assignmentChanges ? " updated" : ""}
+            </DialogTitle>
+            {!event.assignmentChanges && (
+              <p className="shrink-0 font-mono text-xs tabular-nums">
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  +{added}
+                </span>
+                <span className="ml-2 text-red-600 dark:text-red-400">
+                  -{removed}
+                </span>
+              </p>
+            )}
           </div>
           <DialogDescription className="text-pretty">
             <time
@@ -107,10 +175,18 @@ function HistoryChangeDialog({
             {actor ? <> · {actor}</> : null}
           </DialogDescription>
         </DialogHeader>
-        <FileDiff
-          className="min-h-0 flex-1 border-border border-t"
-          rows={rows}
-        />
+        {event.assignmentChanges ? (
+          <div className="min-h-0 overflow-y-auto border-border border-t">
+            <AssignmentChangeSummary event={event} />
+            <FileDiff className="border-border border-t" rows={rows} wrap />
+          </div>
+        ) : (
+          <FileDiff
+            className="min-h-0 flex-1 border-border border-t"
+            rows={rows}
+            wrap
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -161,15 +237,19 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="type-section-title text-balance">History</h3>
-      <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+      <ul
+        aria-label="Profile change history"
+        className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+      >
         {events.map((event) => {
-          const actor = event.actorUserId
-            ? formatActorLabel(event.actorUserId)
-            : null;
-          const rows = buildFileDiffRows(event.beforeValue, event.afterValue);
-          const added = rows.filter((row) => row.type === "add").length;
-          const removed = rows.filter((row) => row.type === "del").length;
+          const actor = formatActorLabel(event);
+          const rows = event.assignmentChanges ? [] : buildChangeRows(event);
+          const added =
+            event.assignmentChanges?.added.length ??
+            rows.filter((row) => row.type === "add").length;
+          const removed =
+            event.assignmentChanges?.removed.length ??
+            rows.filter((row) => row.type === "del").length;
 
           return (
             <li key={event.id}>
@@ -182,6 +262,7 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-sm">
                     {formatFieldLabel(event.field)}
+                    {event.assignmentChanges ? " updated" : ""}
                   </p>
                   <p className="mt-0.5 text-pretty text-muted-foreground text-xs">
                     {formatSourceLabel(event.source)}
@@ -198,10 +279,12 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
                 </div>
                 <p className="shrink-0 font-mono text-xs tabular-nums">
                   <span className="text-emerald-600 dark:text-emerald-400">
-                    +{added}
+                    {event.assignmentChanges ? `${added} added` : `+${added}`}
                   </span>
                   <span className="ml-1.5 text-red-600 dark:text-red-400">
-                    -{removed}
+                    {event.assignmentChanges
+                      ? `${removed} removed`
+                      : `-${removed}`}
                   </span>
                 </p>
               </button>

@@ -47,6 +47,7 @@ Nakama **caches** the tool list at connect time — it is not re-fetched on ever
 |-------|---------|
 | `connected` | Active connection and cached tools |
 | `disconnected` | No connection; tools stale or empty |
+| `needs_auth` | Waiting for a browser sign-in, shown as **Sign-in required** with a **Sign in** button |
 | `error` | Last connect/sync failed — see `lastError` |
 
 - **Connect** — opens the client, fetches and caches tools
@@ -60,7 +61,9 @@ Platform admins manage servers at **Agent → System → MCP** and assign them o
 ### Add a server
 
 1. Open **Agent → System → MCP** → **Add server**
-2. Choose **HTTP** or **Command**, enter name and config
+2. Pick the server type: **HTTP** (a URL, with an API key header if it needs one),
+   **Sign-in** (a URL that authenticates through your browser) or **Command** (a local
+   process), then enter the name and config
 3. **Test connection**, then save — enabled servers connect immediately
 
 ### Assign to a profile
@@ -119,6 +122,41 @@ That header is shared by every profile assigned to this server. After sync, keye
 }
 ```
 
+### Servers that sign in with a browser
+
+Hosted MCP servers such as Notion, Linear or Sentry do not take an API key header. They
+use OAuth, the same as any other app you sign in to, so Nakama needs one trip through your
+browser before it can connect.
+
+1. Pick the **Sign-in** type and enter the name and URL. There is no header field: the
+   provider issues the credential. **Test connection** is optional here and reports the
+   sign-in requirement as the expected answer, in green
+2. **Add and sign in** opens a dialog with the provider's sign-in page. Click it, and the
+   page opens in a new tab
+3. Approve the access the provider asks for
+4. The provider sends you back to Nakama, which finishes the connection and caches the
+   tools. The dialog closes itself and the row flips to **connected**
+
+Close the dialog with **Finish later** and nothing is lost: the row stays as **Sign-in
+required** with a **Sign in** button that starts the same flow again.
+
+The refresh token is stored with the server, so Nakama keeps the connection alive across
+restarts without asking again. **Connect** starts a fresh sign-in whenever the grant is
+revoked or expires.
+
+Two things this needs:
+
+- **A reachable public URL.** The provider redirects your browser back to
+  `{your Nakama URL}/v1/mcp/oauth/callback/{serverId}`, so set the public URL under
+  **Settings** (or `NAKAMA_WEB_PUBLIC_URL`) for anything other than a local install
+- **Dynamic client registration**, which Nakama uses to register itself with the provider.
+  Servers that instead hand you a `client_id` and `client_secret` to paste in are not
+  supported yet
+
+Like a header, the grant belongs to the server record, so every profile assigned to that
+server acts as the account that signed in. Editing the URL drops the grant, because it
+belongs to that one endpoint.
+
 ### Import from an existing config
 
 Use **Import JSON** or paste a Cursor-style `mcpServers` block onto the form. A bare server object (top-level `command` or `url`) also works — the first entry fills the form for review.
@@ -161,6 +199,7 @@ MCP management is platform-admin only (same as profiles, builtins, and skills).
 ## Troubleshooting
 
 - **`error` status** — check `lastError`: wrong URL, missing `command`, unreachable host, or expired credentials
+- **`needs_auth` status / "Sign-in required"** - the OAuth sign-in never finished. Click **Sign in** on the row for a fresh link, and check the public URL matches the origin you open the dashboard on
 - **No tools discovered** — server connected but returned zero tools; fix server-side config, then **Sync tools**
 - **"not connected" on tool call** — connection dropped; reconnect. For stdio, confirm the command is on PATH
 - **Exa rate limit** — add an `x-api-key` header with your [Exa API key](https://dashboard.exa.ai/api-keys), then reconnect

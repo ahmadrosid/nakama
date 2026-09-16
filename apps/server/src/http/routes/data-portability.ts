@@ -11,6 +11,7 @@ import {
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
+import { runWithPluginExportBarrier } from "../../services/plugin-service";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
@@ -185,19 +186,21 @@ export function registerDataPortabilityRoutes(
 
     let restore;
     try {
-      restore = await restoreNakamaDataImport(archive, {
-        confirm: body.confirm,
+      restore = await runWithPluginExportBarrier(async () => {
+        const result = await restoreNakamaDataImport(archive, {
+          confirm: body.confirm,
+        });
+        // Drop registrations before reloading restored data; restored plugins stay disabled.
+        await options.workerManager.clearPluginWorkers?.();
+        try {
+          await options.onDataRestored?.();
+        } catch {
+          // Restore committed; workers remain unregistered until the host reloads.
+        }
+        return result;
       });
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
-    }
-
-    if (options.onDataRestored) {
-      try {
-        await options.onDataRestored();
-      } catch {
-        // Disk restore already committed; caller must restart to finish reload.
-      }
     }
 
     return json<RestoreDataImportResponse>(restore);

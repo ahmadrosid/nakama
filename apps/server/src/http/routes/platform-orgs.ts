@@ -265,6 +265,52 @@ export function registerPlatformOrgRoutes(
 
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "delete",
+      operationId: "permanentlyDeletePlatformOrganization",
+      path: "/v1/platform/orgs/{orgId}/permanent",
+      request: {
+        params: z.object({
+          orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+        }),
+      },
+      responses: {
+        204: { description: "Organization permanently deleted" },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Permanently delete an archived organization",
+      tags: ["Platform"],
+    })
+  );
+
+  app.delete("/v1/platform/orgs/:orgId/permanent", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    await orgService.permanentlyDeleteOrganization(orgId);
+    return new Response(null, { status: 204 });
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "post",
       operationId: "createPlatformOrganizationInvite",
       path: "/v1/platform/orgs/{orgId}/invites",

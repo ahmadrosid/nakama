@@ -5,6 +5,7 @@ import {
   isOpenRouterModelSlug,
   modelSupportsVision,
   resolveModel,
+  resolveModelLimits,
 } from "./models";
 
 describe("isOpenRouterModelSlug", () => {
@@ -496,6 +497,37 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("sonar-pro", "perplexity")).toBe(true);
     expect(modelSupportsVision("sonar-deep-research", "perplexity")).toBe(
       false
+    );
+  });
+});
+
+describe("resolveModelLimits", () => {
+  test("uses the instance entry for a model the catalog does not know", () => {
+    expect(
+      resolveModelLimits("my-org/llama-4-1m", [
+        { contextWindow: 1_000_000, id: "my-org/llama-4-1m" },
+      ])
+    ).toEqual({ contextWindow: 1_000_000, maxOutputTokens: 8192 });
+  });
+
+  test("falls back to 128k when nothing declares a window", () => {
+    expect(resolveModelLimits("my-org/llama-4-1m").contextWindow).toBe(128_000);
+    expect(
+      resolveModelLimits("my-org/llama-4-1m", [{ id: "my-org/llama-4-1m" }])
+        .contextWindow
+    ).toBe(128_000);
+  });
+
+  test("prefers the instance entry over the catalog", () => {
+    const catalogModel = getModelById("gpt-5.4");
+
+    expect(catalogModel?.contextWindow).toBeGreaterThan(0);
+    expect(
+      resolveModelLimits("gpt-5.4", [{ contextWindow: 32_000, id: "gpt-5.4" }])
+        .contextWindow
+    ).toBe(32_000);
+    expect(resolveModelLimits("gpt-5.4").contextWindow).toBe(
+      catalogModel?.contextWindow
     );
   });
 });

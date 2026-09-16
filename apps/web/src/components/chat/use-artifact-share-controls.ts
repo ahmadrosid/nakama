@@ -251,21 +251,17 @@ export function useArtifactShareControls({
       return;
     }
 
-    try {
-      const { revoked } = await revokeMutation.mutateAsync({
-        path: artifactPath,
-        profileId,
-        shareId,
-      });
-      clearStoredArtifactShare({ artifactPath, orgId, profileId });
-      setStoredUrl(null);
-      storedShareIdRef.current = null;
-      toast(
-        revoked ? "Share link revoked" : "This share link was already revoked."
-      );
-    } catch (error) {
-      toast(formatError(error));
-    }
+    const { revoked } = await revokeMutation.mutateAsync({
+      path: artifactPath,
+      profileId,
+      shareId,
+    });
+    clearStoredArtifactShare({ artifactPath, orgId, profileId });
+    setStoredUrl(null);
+    storedShareIdRef.current = null;
+    toast(
+      revoked ? "Share link revoked" : "This share link was already revoked."
+    );
   }
 
   return {

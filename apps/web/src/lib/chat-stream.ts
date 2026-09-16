@@ -422,6 +422,7 @@ export function finalizeStreamingMessages(
         ...message,
         artifactStreaming: false,
         content: `${message.tool} stopped`,
+        toolCompletedAt: Date.now(),
         toolStatus: "done" as const,
       };
     }
@@ -625,6 +626,7 @@ export function buildStreamHandlers(
                 artifactStreaming: false,
                 content: `${event.tool} completed`,
                 subAgentActivity: undefined,
+                toolCompletedAt: Date.now(),
                 toolResult: event.result,
                 toolStatus: "done",
               }
@@ -661,6 +663,7 @@ export function buildStreamHandlers(
           tool: event.tool,
           toolCallId: event.toolCallId,
           toolInput: event.input,
+          toolStartedAt: Date.now(),
           toolStatus: "running",
         };
 

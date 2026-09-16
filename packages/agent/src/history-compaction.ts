@@ -126,6 +126,7 @@ function estimateMessageTokens(
     }
 
     total += estimateTokens(message.content);
+    total += estimateUserContentTokens(message.attachments ?? []);
   }
 
   return total;
@@ -305,7 +306,9 @@ export function pruneToolOutputs(
       break;
     }
 
-    const estimate = estimateTokens(message.content);
+    const estimate =
+      estimateTokens(message.content) +
+      estimateUserContentTokens(message.attachments ?? []);
     total += estimate;
 
     if (total <= protect) {
@@ -326,7 +329,11 @@ export function pruneToolOutputs(
     if (!message || message.role !== "tool") {
       continue;
     }
-    messages[index] = { ...message, content: PRUNE_TRUNCATION };
+    messages[index] = {
+      ...message,
+      attachments: undefined,
+      content: PRUNE_TRUNCATION,
+    };
   }
 
   return { prunedTokens: pruned };

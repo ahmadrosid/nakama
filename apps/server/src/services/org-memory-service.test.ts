@@ -207,6 +207,7 @@ describe("OrgMemoryService", () => {
       reviewedAt: null,
       reviewerUserId: null,
       sessionId: null,
+      sourceDocumentIds: [],
       status: "pending",
     });
 
@@ -250,6 +251,42 @@ describe("OrgMemoryService", () => {
     ).toEqual(["always pin this"]);
   });
 
+  test("keeps source document ids through approval", async () => {
+    const service = await setup();
+    const proposed = await service.propose("org_a", {
+      bullet: "onboarding checklist lives in the handbook",
+      profileId: "profile_kb",
+      sourceDocumentIds: ["kb_handbook", "kb_handbook", "  ", "kb_faq"],
+    });
+    expect(proposed.outcome).toBe("created");
+    const pending = await service.getProposal("org_a", proposed.proposalId!);
+    expect(pending.sourceDocumentIds).toEqual(["kb_handbook", "kb_faq"]);
+
+    const approved = await service.approveProposal(
+      "org_a",
+      proposed.proposalId!,
+      "admin_user"
+    );
+    expect(approved.sourceDocumentIds).toEqual(["kb_handbook", "kb_faq"]);
+    expect(
+      (await service.getProposal("org_a", proposed.proposalId!))
+        .sourceDocumentIds
+    ).toEqual(["kb_handbook", "kb_faq"]);
+  });
+
+  test("caps source document ids at twenty unique values", async () => {
+    const service = await setup();
+    const many = Array.from({ length: 25 }, (_, index) => `kb_doc_${index}`);
+    const proposed = await service.propose("org_a", {
+      bullet: "sourced from a large handbook set",
+      sourceDocumentIds: many,
+    });
+    const proposal = await service.getProposal("org_a", proposed.proposalId!);
+    expect(proposal.sourceDocumentIds).toHaveLength(20);
+    expect(proposal.sourceDocumentIds[0]).toBe("kb_doc_0");
+    expect(proposal.sourceDocumentIds.at(-1)).toBe("kb_doc_19");
+  });
+
   test("search tags pinned and recent-log tiers", async () => {
     const service = await setup();
     await service.addFact("org_a", "pinned fact", { pin: true });
@@ -284,16 +321,16 @@ describe("OrgMemoryService", () => {
       }
     );
 
-    const history = await service.listHistory("org_a");
+    const history = (await service.listHistory("org_a")).changes;
     expect(history).toHaveLength(2);
     expect(history[0]?.label).toBe("Second edit");
 
     const restored = await service.undoLastChange("org_a", "admin_user");
     expect(restored).toContain("- first fact");
     expect(await service.getMemory("org_a")).toContain("- first fact");
-    expect(await service.listHistory("org_a")).toHaveLength(3);
+    expect((await service.listHistory("org_a")).changes).toHaveLength(3);
 
-    const latest = (await service.listHistory("org_a"))[0]!;
+    const latest = (await service.listHistory("org_a")).changes[0]!;
     const revision = await service.getHistoryRevision("org_a", latest.id);
     expect(revision.content).toContain("- first fact");
     expect(revision.change.id).toBe(latest.id);
@@ -303,7 +340,7 @@ describe("OrgMemoryService", () => {
     const service = await setup();
     await service.setMemory("org_a", "first");
     await service.setMemory("org_a", "second");
-    const latest = (await service.listHistory("org_a"))[0]!;
+    const latest = (await service.listHistory("org_a")).changes[0]!;
     await writeFile(
       path.join(getOrgMemoryHistoryDir("org_a", tempDir), `${latest.id}.json`),
       "{"

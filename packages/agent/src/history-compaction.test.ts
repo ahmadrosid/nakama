@@ -21,6 +21,47 @@ const compaction: CompactionConfig = {
   maxOutputTokens: 8192,
 };
 
+test("tool attachments count as images rather than base64 text", () => {
+  const message: ChatMessage = {
+    content: "image",
+    name: "read_file",
+    role: "tool",
+    toolCallId: "image",
+  };
+  const withImage: ChatMessage = {
+    ...message,
+    attachments: [
+      { data: "x".repeat(100_000), mediaType: "image/png", type: "image" },
+    ],
+  };
+  expect(
+    estimateHistoryTokens([withImage], "") -
+      estimateHistoryTokens([message], "")
+  ).toBe(1500);
+});
+
+test("pruning releases tool attachments without changing the original message", () => {
+  const message: ChatMessage = {
+    attachments: [{ data: "abc", mediaType: "image/png", type: "image" }],
+    content: "image",
+    name: "read_file",
+    role: "tool",
+    toolCallId: "image",
+  };
+  const history: ChatMessage[] = [
+    { content: "old", role: "user" },
+    message,
+    { content: "recent", role: "user" },
+    { content: "current", role: "user" },
+  ];
+  expect(
+    pruneToolOutputs(history, { contextWindow: 1000, maxOutputTokens: 0 })
+      .prunedTokens
+  ).toBeGreaterThan(0);
+  expect(history[1]).toMatchObject({ attachments: undefined });
+  expect(message.attachments).toHaveLength(1);
+});
+
 const largeWindow: CompactionConfig = {
   contextWindow: 1_000_000,
   maxOutputTokens: 8192,

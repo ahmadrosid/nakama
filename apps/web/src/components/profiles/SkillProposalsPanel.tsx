@@ -47,7 +47,17 @@ function resolveProposer(
 
 function proposalPreview(proposal: SkillProposal): string {
   if (proposal.action === "create" && proposal.content) {
-    return proposal.content;
+    const files = (proposal.supportingFiles ?? []).map((file) => {
+      const bytes = Uint8Array.from(atob(file.contentBase64), (char) =>
+        char.charCodeAt(0)
+      );
+      try {
+        return `\n\n--- ${file.path} ---\n${new TextDecoder("utf-8", { fatal: true }).decode(bytes)}`;
+      } catch {
+        return `\n\n--- ${file.path} (binary, ${bytes.length} bytes) ---`;
+      }
+    });
+    return proposal.content + files.join("");
   }
   if (proposal.action === "edit" && proposal.content) {
     return proposal.content;

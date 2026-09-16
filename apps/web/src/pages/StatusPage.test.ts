@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SystemStatusResponse } from "@nakama/core/contract";
-import { buildServiceColumns, deriveSummary } from "./status-page.shared";
+import { buildServiceColumns } from "./status-page.shared";
 
 const healthyStatus: SystemStatusResponse = {
   automationWorker: {
@@ -61,24 +61,6 @@ const healthyStatus: SystemStatusResponse = {
 };
 
 describe("StatusPage helpers", () => {
-  test("points provider warnings at Settings", () => {
-    const status = {
-      ...healthyStatus,
-      server: {
-        ...healthyStatus.server,
-        providerConfigured: false,
-      },
-    };
-
-    expect(deriveSummary(status)).toEqual({
-      action: { label: "Open Settings", to: "/settings" },
-      description:
-        "Configure an LLM provider before chat or automation runs can succeed.",
-      title: "Running with warnings",
-      tone: "warn",
-    });
-  });
-
   test("marks automation as PM2 unavailable when no managed process is present", () => {
     const columns = buildServiceColumns({
       ...healthyStatus,

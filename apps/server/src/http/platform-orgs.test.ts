@@ -173,7 +173,7 @@ describe("platform org routes", () => {
     });
   });
 
-  test("platform admin can archive an organization", async () => {
+  test("platform admin can archive and permanently delete an organization", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
     const session = await loginPlatformAdminSession(
       app,
@@ -218,6 +218,20 @@ describe("platform org routes", () => {
     };
     expect(payload.organization.id).toBe(created.organization.id);
     expect(payload.organization.archivedAt).toBeTruthy();
+
+    const deleted = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${created.organization.id}/permanent`,
+        {
+          headers,
+          method: "DELETE",
+        }
+      )
+    );
+    expect(deleted.status).toBe(204);
+    expect(
+      await databaseAdapter.getOrganizationById(created.organization.id)
+    ).toBeNull();
   });
 
   test("org admin cannot archive via platform delete", async () => {
@@ -280,6 +294,19 @@ describe("platform org routes", () => {
     );
 
     expect(response.status).toBe(403);
+
+    const permanentResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${created.organization.id}/permanent`,
+        {
+          headers: orgAdminSession.headers({
+            "X-CSRF-Token": orgAdminSession.csrfToken,
+          }),
+          method: "DELETE",
+        }
+      )
+    );
+    expect(permanentResponse.status).toBe(403);
   });
 
   test("refuses to archive the last active organization", async () => {

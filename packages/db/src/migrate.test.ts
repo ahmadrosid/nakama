@@ -597,6 +597,39 @@ describe("browser session schema", () => {
   });
 });
 
+describe("password reset schema", () => {
+  test("creates single-use password reset token storage", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      const columns = db
+        .prepare("PRAGMA table_info(password_reset_tokens)")
+        .all() as Array<{ name: string }>;
+      const indexes = db
+        .prepare("PRAGMA index_list(password_reset_tokens)")
+        .all() as Array<{ name: string }>;
+
+      expect(columns.map((column) => column.name)).toEqual([
+        "id",
+        "user_id",
+        "token_hash",
+        "expires_at",
+        "consumed_at",
+        "created_at",
+      ]);
+      expect(
+        indexes.some(
+          (index) => index.name === "password_reset_tokens_token_hash_unique"
+        )
+      ).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("organization schema migration", () => {
   test("creates org tables and allows org with admin member", () => {
     const db = new Database(":memory:");
@@ -1007,4 +1040,26 @@ describe("migration SQL hardening", () => {
       db.close();
     }
   });
+});
+
+test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec("ALTER TABLE skill_proposals DROP COLUMN supporting_files");
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec(`INSERT INTO skill_proposals (id, org_id, profile_id, action, skill_name, content, status, created_at)
+      VALUES ('pending', 'org', 'profile', 'create', 'demo', 'original content', 'pending', '2026-01-01')`);
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(
+      db
+        .query(
+          "SELECT content, supporting_files FROM skill_proposals WHERE id = 'pending'"
+        )
+        .get()
+    ).toEqual({ content: "original content", supporting_files: null });
+  } finally {
+    db.close();
+  }
 });

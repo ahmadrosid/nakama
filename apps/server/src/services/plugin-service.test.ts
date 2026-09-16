@@ -90,7 +90,8 @@ describe("PluginService", () => {
   test("previews and installs a npm package without running top-level side-effect code", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
-    const archive = validBundle();
+    const icon = "https://example.com/notes.svg";
+    const archive = validBundle({ icon });
 
     const preview = await service.previewPluginPackage(archive);
     expect(preview.digest).toBe(approvedPluginPackage(archive).expectedDigest);
@@ -118,6 +119,10 @@ describe("PluginService", () => {
 
     const stored = await db.getPluginRelease("notes", "1.0.0");
     expect(stored?.digest).toBe(preview.digest);
+    expect(stored?.manifest.icon).toBe(icon);
+    expect((await service.getOrgPluginDetail("org-a", "notes"))?.icon).toBe(
+      icon
+    );
   });
 
   test("rejects traversal, encoded paths, symlinks, duplicates, and oversized expansion before writing outside staging", async () => {

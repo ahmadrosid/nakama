@@ -3,6 +3,7 @@ import type {
   NotificationDestinationWithSecret,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
@@ -190,6 +191,8 @@ export function NotificationDestinationsCard() {
   const rotateMutation = useRegenerateNotificationDestinationKey();
   const deleteMutation = useDeleteNotificationDestination();
   const updateMutation = useUpdateNotificationDestination();
+  const [deleteTarget, setDeleteTarget] =
+    useState<NotificationDestinationSummary | null>(null);
 
   const [name, setName] = useState("");
   const [topicLink, setTopicLink] = useState("");
@@ -268,17 +271,10 @@ export function NotificationDestinationsCard() {
 
   async function handleDelete(destinationId: string) {
     setFormError(null);
-
-    deleteMutation.mutate(destinationId, {
-      onError: (mutationError) => {
-        setFormError(formatError(mutationError));
-      },
-      onSuccess: () => {
-        if (latestSecret?.destination.id === destinationId) {
-          setLatestSecret(null);
-        }
-      },
-    });
+    await deleteMutation.mutateAsync(destinationId);
+    if (latestSecret?.destination.id === destinationId) {
+      setLatestSecret(null);
+    }
   }
 
   function startEditing(destination: (typeof destinations)[number]) {
@@ -331,48 +327,44 @@ export function NotificationDestinationsCard() {
   }
 
   return (
-    <div className="space-y-4 py-4">
-      <div className="space-y-1">
-        <p className="font-medium text-foreground text-sm [text-wrap:balance]">
-          Notification Destinations
+    <div className="space-y-8">
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <p className="px-4 py-3 font-medium text-foreground text-sm">
+          Notification destinations
         </p>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-muted-foreground text-xs">Name</span>
+        <label className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+          <span className="shrink-0 text-foreground text-sm sm:w-36">Name</span>
           <Input
+            className="min-w-0 flex-1"
             onChange={(event) => setName(event.target.value)}
             value={name}
           />
         </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-muted-foreground text-xs">
+        <label className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start">
+          <span className="shrink-0 text-foreground text-sm sm:w-36 sm:pt-2">
             Telegram topic link
           </span>
-          <Input
-            onChange={(event) => setTopicLink(event.target.value)}
-            placeholder="https://t.me/c/3734526664/167"
-            value={topicLink}
-          />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Input
+              onChange={(event) => setTopicLink(event.target.value)}
+              placeholder="https://t.me/c/3734526664/167"
+              value={topicLink}
+            />
+            <p className="text-muted-foreground text-xs">
+              Paste the topic link from Telegram.
+            </p>
+          </div>
         </label>
-      </div>
-
-      <div className="rounded-lg border border-border border-dashed bg-muted/20 p-3 text-muted-foreground text-xs">
-        Open the Telegram topic, copy its link, and paste it here. Nakama will
-        extract the Chat ID and Topic ID for you automatically.
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          className="min-w-[10.5rem] justify-center"
-          disabled={createMutation.isPending}
-          onClick={handleCreate}
-        >
-          {createMutation.isPending ? <Spinner className="size-4" /> : null}
-          Create destination
-        </Button>
-        <span className="text-muted-foreground text-xs">Channel: Telegram</span>
+        <div className="flex justify-end px-4 py-3">
+          <Button
+            disabled={createMutation.isPending}
+            onClick={handleCreate}
+            size="sm"
+          >
+            {createMutation.isPending ? <Spinner className="size-4" /> : null}
+            Create destination
+          </Button>
+        </div>
       </div>
 
       {formError ? (
@@ -388,7 +380,7 @@ export function NotificationDestinationsCard() {
             <Spinner className="size-5" />
           </div>
         ) : destinations.length === 0 ? (
-          <div className="rounded-lg border border-border border-dashed p-4 text-muted-foreground text-sm">
+          <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-muted-foreground text-sm">
             No notification destinations yet.
           </div>
         ) : (
@@ -401,7 +393,7 @@ export function NotificationDestinationsCard() {
               editingTopicId={editingTopicId}
               key={destination.id}
               latestSecret={latestSecret}
-              onDelete={() => handleDelete(destination.id)}
+              onDelete={() => setDeleteTarget(destination)}
               onEditingTopicIdChange={setEditingTopicId}
               onRotate={() => handleRotate(destination.id)}
               onSaveTopic={() => handleUpdateTopic(destination)}
@@ -413,6 +405,14 @@ export function NotificationDestinationsCard() {
           ))
         )}
       </div>
+      {deleteTarget ? (
+        <ConfirmDialog
+          description={`Delete "${deleteTarget.name}"? Its webhook will stop accepting notifications.`}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => handleDelete(deleteTarget.id)}
+          title="Delete notification destination?"
+        />
+      ) : null}
     </div>
   );
 }
@@ -451,7 +451,7 @@ function NotificationDestinationItem({
   const isEditing = editingId === destination.id;
 
   return (
-    <div className="space-y-3 rounded-3xl border border-border p-4">
+    <div className="space-y-3 rounded-xl border border-border bg-card p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="font-medium text-foreground text-sm">

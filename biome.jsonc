@@ -9,7 +9,8 @@
   "files": {
     "includes": [
       "!packages/plugins/*/actions",
-      "!packages/plugins/workflows/ui/app.js"
+      "!packages/plugins/*/ui/app.js",
+      "!packages/plugins/*/workers"
     ]
   },
   "css": {

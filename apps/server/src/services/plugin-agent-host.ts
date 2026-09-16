@@ -82,9 +82,10 @@ export function createPluginAgentHost(
         signal
       );
     }
+    // Assigned plugin tools are valid workflow steps; workflow tools would recurse.
     const tools = (
       await agent.resolvePluginExecutionTools(orgId, profileId)
-    ).filter((tool) => !tool.name.startsWith("plugin_"));
+    ).filter((tool) => !tool.name.startsWith("plugin_workflows__"));
     if (request.op === "tools") {
       return tools.map(({ name, description, parameters }) => ({
         description,

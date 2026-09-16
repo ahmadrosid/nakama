@@ -6,6 +6,7 @@ import { cn } from "@nakama/ui/utils";
 import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { CodingAgentLogo } from "@/components/coding-agent-logos";
+import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
 function CopyCommandButton({ command }: { command: string }) {
@@ -81,9 +82,9 @@ function AgentRow({
   method: "command" | "host" | "nakama";
 }) {
   return (
-    <li className="flex items-center gap-3 px-3.5 py-2.5 transition-[background-color] duration-150 ease-out hover:bg-muted/40">
+    <li className="flex items-center gap-3 px-4 py-3.5">
       <CodingAgentLogo command={command} name={name} />
-      <span className="min-w-0 truncate font-medium text-foreground text-sm sm:shrink-0">
+      <span className="min-w-0 truncate text-foreground text-sm sm:shrink-0">
         {name}
       </span>
       {method === "command" ? (
@@ -103,6 +104,8 @@ function AgentRow({
 }
 
 export function CodingAgentsSettingsCard() {
+  const { user } = useAuth();
+  const canManageSettings = user?.isPlatformAdmin === true;
   const [settings, setSettings] =
     useState<CodingHarnessSettingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,12 +160,10 @@ export function CodingAgentsSettingsCard() {
   const loginCommands = settings?.loginCommands ?? [];
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-balance font-semibold text-foreground text-xl leading-tight">
-        Coding agents
-      </h2>
+    <div className="space-y-5">
+      <h2 className="text-muted-foreground text-sm">Coding agents</h2>
 
-      <div className="flex items-center justify-between gap-4 rounded-md border border-primary/40 px-3.5 py-3">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
         <div className="min-w-0 space-y-0.5">
           <p className="font-medium text-foreground text-sm">Use Nakama keys</p>
           <p className="text-pretty text-muted-foreground text-xs leading-relaxed">
@@ -174,18 +175,19 @@ export function CodingAgentsSettingsCard() {
           aria-label="Use Nakama keys"
           checked={passthrough}
           className="relative after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2"
-          disabled={saving || !settings}
+          disabled={!canManageSettings || saving || !settings}
           onCheckedChange={toggle}
+          size="sm"
         />
       </div>
 
       {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
-      <section className="space-y-2">
-        <h3 className="px-0.5 font-medium text-2xs text-muted-foreground uppercase tracking-[0.12em]">
+      <section className="space-y-3">
+        <h3 className="text-muted-foreground text-sm">
           {passthrough ? "What each agent uses" : "Log in on this host"}
         </h3>
-        <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card text-card-foreground">
           {loginCommands.map((item) => (
             <AgentRow
               command={item.command}

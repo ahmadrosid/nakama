@@ -11,12 +11,14 @@ export { buildFileDiffRows } from "./file-diff.shared";
 export function FileDiff({
   className,
   rows,
+  wrap = false,
 }: {
   className?: string;
   rows: FileDiffRow[];
+  wrap?: boolean;
 }) {
   return (
-    <div className={cn(styles.diff, className)}>
+    <div className={cn(styles.diff, wrap && styles.wrap, className)}>
       {rows.length === 0 ? (
         <p className={styles.diffEmpty}>No line changes.</p>
       ) : (

@@ -96,6 +96,7 @@ export function SkillsWriteApprovalOrgCard() {
                 checked={enabled}
                 disabled={busy}
                 onCheckedChange={(checked) => void handleToggle(checked)}
+                size="sm"
               />
             </div>
           ) : null}

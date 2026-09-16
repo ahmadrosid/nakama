@@ -8,6 +8,7 @@ import {
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
+import { readEnvValue } from "./config";
 import { getUserConfigDir } from "./user-config";
 
 export {
@@ -364,7 +365,7 @@ export function resolveDiscordConfigFromSources(options: {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
   const botToken =
-    env.DISCORD_BOT_TOKEN?.trim() || file?.botToken?.trim() || "";
+    readEnvValue(env, "DISCORD_BOT_TOKEN") || file?.botToken?.trim() || "";
 
   if (!botToken) {
     return null;

@@ -1,0 +1,71 @@
+---
+title: "Coolify"
+description: "Deploy Nakama on Coolify using Docker Compose — one-click self-hosting with automatic reverse proxy and volume management."
+---
+
+[Coolify](https://coolify.io) is a self-hosted PaaS that manages Docker deployments, reverse proxy, and SSL for you. Nakama runs on it via the **Docker Compose** resource type — no upstream template approval needed.
+
+## Deploy
+
+1. In your Coolify project, create a new resource → **Docker Compose Empty**.
+2. Paste the compose file below (or point Coolify at the repository's `docker-compose.yaml` directly).
+3. Click **Deploy**.
+
+```yaml
+services:
+  nakama:
+    image: ghcr.io/ahmadrosid/nakama:latest
+    ports:
+      - "4310:4310"
+    environment:
+      - NAKAMA_CONFIG_DIR=/nakama/data
+      # Optional: skip the browser setup wizard on first boot.
+      # All three must be set together or none at all.
+      # - NAKAMA_SEED_ADMIN_EMAIL=admin@example.com
+      # - NAKAMA_SEED_ADMIN_NAME=Admin
+      # - NAKAMA_SEED_ADMIN_PASSWORD=changeme123
+      # Optional: public URL for OAuth callbacks and shared links.
+      # - NAKAMA_WEB_PUBLIC_URL=https://nakama.example.com
+    volumes:
+      - nakama-data:/nakama/data
+    restart: unless-stopped
+
+volumes:
+  nakama-data:
+```
+
+On first run, open the assigned domain and complete the setup wizard. To skip the wizard, uncomment the `NAKAMA_SEED_*` variables — all three are required together.
+
+## Environment variables
+
+Set these in the Coolify UI under **Environment Variables**:
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `NAKAMA_SEED_ADMIN_EMAIL` | Together with the other two | Admin email — skips setup wizard |
+| `NAKAMA_SEED_ADMIN_NAME` | Together with the other two | Admin display name |
+| `NAKAMA_SEED_ADMIN_PASSWORD` | Together with the other two | Admin password (min 8 chars) |
+| `NAKAMA_WEB_PUBLIC_URL` | Recommended | Public URL Coolify assigns, e.g. `https://nakama.example.com` |
+
+Set `NAKAMA_WEB_PUBLIC_URL` to the domain Coolify routes to your service. Nakama uses it for OAuth callbacks and shared links.
+
+## SSE and reverse proxy
+
+Nakama uses Server-Sent Events for streaming responses. Coolify's default Traefik proxy handles SSE correctly with no extra config.
+
+If you use a custom Nginx proxy in front of Coolify, disable buffering for the Nakama location:
+
+```nginx
+proxy_buffering off;
+proxy_set_header X-Accel-Buffering no;
+```
+
+## Healthcheck
+
+The container ships a built-in healthcheck on `GET /health`. Coolify picks this up automatically — no extra configuration needed.
+
+## Next steps
+
+- [Backup and restore](/backup-restore) — back up your data volume before upgrades
+- [Providers](/providers) — add your LLM API keys
+- [Docker](/docker) — plain Docker and `docker-compose` reference

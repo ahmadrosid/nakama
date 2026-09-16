@@ -18,7 +18,8 @@ export function SetupGuard() {
     return <Outlet />;
   }
 
-  if (health?.userConfigured !== true || health?.providerConfigured !== true) {
+  // Removing the last provider must not lock existing users out of Settings.
+  if (health?.userConfigured !== true) {
     return <Navigate replace to={SETUP_PATH} />;
   }
 

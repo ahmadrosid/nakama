@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   getNakamaVersion,
@@ -15,6 +16,16 @@ import { requireOrgAdminFromContext } from "../org-guards";
 import { errorResponse, getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
+export const DOCS_SCRIPT_URL =
+  "https://cdn.jsdelivr.net/npm/@scalar/api-reference";
+const DOCS_BOOTSTRAP = `
+      Scalar.createApiReference("#app", {
+        url: "/openapi.json",
+        theme: "default",
+      });
+    `;
+export const DOCS_SCRIPT_HASH = `sha256-${createHash("sha256").update(DOCS_BOOTSTRAP).digest("base64")}`;
+
 const DOCS_HTML = `<!doctype html>
 <html lang="en">
   <head>
@@ -24,13 +35,8 @@ const DOCS_HTML = `<!doctype html>
   </head>
   <body>
     <div id="app"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
-    <script>
-      Scalar.createApiReference("#app", {
-        url: "/openapi.json",
-        theme: "default",
-      });
-    </script>
+    <script src="${DOCS_SCRIPT_URL}"></script>
+    <script>${DOCS_BOOTSTRAP}</script>
   </body>
 </html>
 `;

@@ -207,9 +207,9 @@ import {
   fetchFireworksGatewayModels,
   fetchOllamaModels,
   fetchRemoteOpenAIModels,
-  getModelById,
   getModelsForProviderInstance,
   isCostEstimated,
+  resolveModelLimits,
 } from "../providers";
 import {
   fetchChatgptCodexModels,
@@ -289,6 +289,7 @@ import type { LlmUsageTracker } from "./llm-usage-tracker";
 import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
+import { MemoryBackendService } from "./memory-backend-service";
 import { OrgMemoryService } from "./org-memory-service";
 import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import type { PluginService } from "./plugin-service";
@@ -347,6 +348,11 @@ export interface CreateSessionOptions {
   orgRole?: OrgRole | null;
 }
 
+type ChatProfileAccess = Pick<
+  CreateSessionOptions,
+  "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
+>;
+
 export class AgentService {
   private harness: AgentDependencies;
   private userConfig: UserConfig | null;
@@ -371,6 +377,7 @@ export class AgentService {
   private skillProposalService: SkillProposalService | null = null;
   private skillSuggestionService: SkillSuggestionService | null = null;
   private orgMemoryService: OrgMemoryService | null = null;
+  private readonly memoryBackend: MemoryBackendService;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
@@ -389,6 +396,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
+    this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
     this.sessionTitleService = new SessionTitleService(
@@ -1396,6 +1404,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         automationId,
+        ...this.memoryBackend.toolContext(orgId, profileId),
         automationRunId,
         orgId,
         orgRole: "member",
@@ -1433,6 +1442,7 @@ export class AgentService {
     }
   ): ToolContext {
     return buildToolExecutionContext({
+      ...this.memoryBackend.toolContext(orgId, context.profileId),
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       orgId,
       orgRole: "member",
@@ -1545,6 +1555,7 @@ export class AgentService {
       systemPrompt: childSystemPrompt,
       toolContext: buildToolExecutionContext({
         agentDepth: input.agentDepth,
+        ...this.memoryBackend.toolContext(input.orgId, input.profileId),
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
@@ -1651,20 +1662,7 @@ export class AgentService {
       profileId
     );
     const profile = await this.requireProfile(orgId, resolvedProfileId);
-
-    if (
-      profile.isSuper &&
-      (options?.excludeSuperBot ||
-        !canAccessSuperBotProfile({
-          isPlatformAdmin: options?.isPlatformAdmin,
-          orgRole: options?.orgRole,
-        }))
-    ) {
-      throw new NakamaApiError(
-        "Super Bot is only available to org admins.",
-        403
-      );
-    }
+    this.assertChatProfileAccess(profile, options ?? {});
 
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
@@ -1700,6 +1698,36 @@ export class AgentService {
     });
 
     return sessionId;
+  }
+
+  async assertSessionProfileAccess(
+    sessionId: string,
+    orgId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    // A missing session is left to the route, which still answers 404.
+    if (record) {
+      this.assertChatProfileAccess(
+        await this.requireProfile(orgId, record.profileId),
+        access
+      );
+    }
+  }
+
+  private assertChatProfileAccess(
+    profile: StoredProfileRecord,
+    access: ChatProfileAccess
+  ): void {
+    if (
+      profile.isSuper &&
+      (access.excludeSuperBot || !canAccessSuperBotProfile(access))
+    ) {
+      throw new NakamaApiError(
+        "Super Bot is only available to org admins.",
+        403
+      );
+    }
   }
 
   async getSessionTodos(
@@ -1884,9 +1912,13 @@ export class AgentService {
   async listSessions(
     orgId: string,
     profileId: string,
-    channel: AgentChannel
+    channel: AgentChannel,
+    access: ChatProfileAccess
   ): Promise<ListSessionsResponse> {
-    await this.requireProfile(orgId, profileId);
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
 
     const sessions = await this.db.listSessionSummaries(profileId, channel);
 
@@ -2809,6 +2841,7 @@ export class AgentService {
     }
 
     const toolContext = buildToolExecutionContext({
+      ...this.memoryBackend.toolContext(context.orgId, profileId),
       orgId: context.orgId,
       profileId,
       userId: context.userId,
@@ -2917,12 +2950,20 @@ export class AgentService {
     );
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
-    return this.requireSkillsService().listSkills();
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
+    return this.requireSkillsService().listSkills(orgId);
   }
 
-  async getSkill(skillId: string): Promise<SkillResponse> {
-    return this.requireSkillsService().getSkill(skillId);
+  async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
+    return this.requireSkillsService().getSkill(skillId, orgId);
+  }
+
+  async listSkillFiles(orgId: string, skillId: string) {
+    return this.requireSkillsService().listSkillFiles(orgId, skillId);
+  }
+
+  async readSkillFile(orgId: string, skillId: string, filePath: string) {
+    return this.requireSkillsService().readSkillFile(orgId, skillId, filePath);
   }
 
   async cloneProfile(
@@ -3069,7 +3110,11 @@ export class AgentService {
       return { ...status, profileId };
     }
 
-    const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
+    const stack = await loadSoulStack(
+      getProfileSoulDir(orgId, profileId),
+      (content) =>
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
+    );
     return { ...status, contents: stack.files, profileId };
   }
 
@@ -3099,7 +3144,11 @@ export class AgentService {
     profileId: string
   ): Promise<SoulStackResponse> {
     await this.requireProfile(orgId, profileId);
-    const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
+    const stack = await loadSoulStack(
+      getProfileSoulDir(orgId, profileId),
+      (content) =>
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
+    );
     return { ...stack, profileId };
   }
 
@@ -3121,6 +3170,14 @@ export class AgentService {
     const before =
       (await readTextIfExists(join(soulDir, WRITABLE_SOUL_FILES[key]))) ?? null;
 
+    if (key === "memory") {
+      await this.memoryBackend.readMemory(
+        orgId,
+        profileId,
+        "MEMORY.md",
+        request.content
+      );
+    }
     await writeSoulFile(soulDir, key, request.content);
 
     if (meta && field && before !== request.content) {
@@ -3753,6 +3810,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
+        ...this.memoryBackend.toolContext(orgId, profileId),
         forbidProfileSkillMarkdownWrites: hasSkillManage,
         isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
@@ -3902,7 +3960,12 @@ export class AgentService {
     orgRole?: OrgRole | null,
     usageContext?: import("./skills-service").SkillUsageRecordingContext
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
-    const stack = await resolveSoulStackForProfile(orgId, profileId);
+    const stack = await resolveSoulStackForProfile(
+      orgId,
+      profileId,
+      (content) =>
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
+    );
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })
       : profilePrompt;
@@ -4075,12 +4138,7 @@ export class AgentService {
       return;
     }
 
-    const model = getModelById(resolved.model);
-
-    return {
-      contextWindow: model?.contextWindow ?? 128_000,
-      maxOutputTokens: model?.maxOutputTokens ?? 8192,
-    };
+    return resolveModelLimits(resolved.model, resolved.instance.customModels);
   }
 
   private resolveWorkspaceThinkingDefaults(): ThinkingSettings {

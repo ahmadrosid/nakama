@@ -95,6 +95,46 @@ describe("skills are scoped per org", () => {
     );
   }
 
+  test("catalog includes shared skills and only the requested org's profile skills", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+    await service.createAndAssignRawSkillToProfile(
+      "org_b",
+      "profile_b",
+      ORG_B_SKILL
+    );
+
+    for (const [orgId, description] of [
+      ["org_a", "Deploy notes for org A. Use when deploying."],
+      ["org_b", "Deploy notes for org B. Use when deploying."],
+    ]) {
+      const { skills } = await service.listSkills(orgId);
+      expect(
+        skills
+          .filter((skill) => skill.name === "deploy-notes")
+          .map((skill) => skill.description)
+      ).toEqual([description]);
+      expect(
+        skills.some((skill) => skill.name === "archive-profile-memory")
+      ).toBe(true);
+      expect(
+        skills.every((skill) => skill.orgId === null || skill.orgId === orgId)
+      ).toBe(true);
+      const own = skills.find((skill) => skill.name === "deploy-notes")!;
+      expect(own.orgId).toBe(orgId);
+      expect((await service.getSkill(own.id, orgId)).skill.id).toBe(own.id);
+      await expect(
+        service.getSkill(own.id, orgId === "org_a" ? "org_b" : "org_a")
+      ).rejects.toThrow();
+    }
+  });
+
   test("two orgs can each create a skill with the same name", async () => {
     const db = await openDb();
     const service = new SkillsService(db);

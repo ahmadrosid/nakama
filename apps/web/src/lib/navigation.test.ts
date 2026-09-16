@@ -7,8 +7,9 @@ import {
   orgSkillProposalsPath,
   pageIdFromPath,
   pluginIdFromPath,
+  pluginManagementPath,
   pluginPagePath,
-  pluginsSystemPath,
+  skillDetailBackTarget,
   visibleNavGroups,
 } from "./navigation";
 
@@ -19,45 +20,68 @@ const pageIdsFor = (isPlatformAdmin: boolean, orgRole: string | undefined) =>
     .sort();
 
 describe("visibleNavGroups", () => {
+  test("skills navigation returns to the organization catalog", () => {
+    expect(pageIdFromPath("/customize/skills")).toBe("skills");
+    expect(skillDetailBackTarget(new URLSearchParams("from=skills"))).toEqual({
+      href: "/customize/skills",
+      label: "Skills",
+    });
+    expect(pageIdsFor(false, "admin")).not.toContain("skills");
+  });
   test("a platform admin sees every destination", () => {
     expect(pageIdsFor(true, "admin")).toEqual([
       "automations",
       "chat",
+      "customize",
       "files",
-      "history",
       "integrations",
+      "mcp",
       "organization",
+      "plugin-management",
       "profiles",
+      "providers",
       "settings",
-      "soul",
+      "skills",
+      "tools",
+      "usage",
       "workers",
     ]);
   });
 
-  test("an org admin gets System, Organization, and Profiles but not platform-admin pages", () => {
-    // `soul` is in PLATFORM_ADMIN_PAGE_IDS yet reachable by an org admin: the
-    // canAccessSystemPage branch runs before the platform-admin check.
+  test("an org admin can reach Knowledge through Your files", () => {
     const ids = pageIdsFor(false, "admin");
-    expect(ids).toContain("soul");
+    expect(ids).toContain("tools");
+    expect(ids).not.toContain("mcp");
+    expect(ids).not.toContain("providers");
     expect(ids).toContain("organization");
     expect(ids).toContain("profiles");
     expect(ids).toContain("integrations");
     expect(ids).toContain("workers");
-    expect(ids).not.toContain("files");
+    expect(ids).toContain("files");
+    expect(ids).toContain("plugin-management");
+    expect(ids).toContain("usage");
   });
 
   test("a member loses System and Organization, a viewer also loses Integrations", () => {
     const member = pageIdsFor(false, "member");
     expect(member).toContain("integrations");
-    expect(member).not.toContain("soul");
+    expect(member).not.toContain("tools");
+    expect(member).not.toContain("mcp");
     expect(member).not.toContain("organization");
     expect(member).not.toContain("workers");
+    expect(member).not.toContain("files");
+    expect(member).not.toContain("plugin-management");
+    expect(member).not.toContain("usage");
 
     const viewer = pageIdsFor(false, "viewer");
     expect(viewer).not.toContain("integrations");
-    expect(viewer).not.toContain("soul");
+    expect(viewer).not.toContain("tools");
+    expect(viewer).not.toContain("mcp");
     expect(viewer).not.toContain("organization");
     expect(viewer).not.toContain("workers");
+    expect(viewer).not.toContain("files");
+    expect(viewer).not.toContain("plugin-management");
+    expect(viewer).not.toContain("usage");
   });
 
   test("groups left with no reachable item are dropped", () => {
@@ -82,13 +106,24 @@ describe("workers navigation", () => {
   });
 });
 
+test("Customize is reachable for every organization role", () => {
+  expect(pageIdFromPath("/customize")).toBe("customize");
+  for (const role of ["admin", "member", "viewer"]) {
+    expect(pageIdsFor(false, role)).toContain("customize");
+  }
+});
+
 describe("plugin navigation", () => {
-  test("maps plugin page paths and the System plugins tab", () => {
+  test("maps plugin pages and management under Customize", () => {
     expect(pluginPagePath("notes")).toBe("/plugins/notes");
     expect(pluginIdFromPath("/plugins/notes")).toBe("notes");
     expect(pluginIdFromPath("/plugins")).toBeNull();
     expect(pageIdFromPath("/plugins/notes")).toBe("plugins");
-    expect(pluginsSystemPath()).toBe("/system?tab=plugins");
+    expect(pluginManagementPath()).toBe("/customize/plugins");
+    expect(pageIdFromPath("/customize/plugins")).toBe("plugin-management");
+    expect(pageIdFromPath("/customize/plugins/notes")).toBe(
+      "plugin-management"
+    );
   });
 
   test("lists enabled pages only, sorted by label then plugin id", () => {
@@ -141,4 +176,12 @@ describe("organization navigation", () => {
       "/organization?skillProposals=proposals&profileId=p1"
     );
   });
+});
+
+test("the removed History page has no navigation destination", () => {
+  expect(pageIdFromPath("/history")).toBeNull();
+});
+
+test("Usage lives under Customize", () => {
+  expect(pageIdFromPath("/customize/usage")).toBe("usage");
 });

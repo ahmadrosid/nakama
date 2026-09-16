@@ -45,13 +45,27 @@ async function loadExamples(directory: string): Promise<string | undefined> {
 }
 
 export async function loadSoulStack(
-  directory: string
+  directory: string,
+  readMemory?: (content: string) => Promise<string>
 ): Promise<LoadedSoulStack> {
   const files: LoadedSoulStack["files"] = {};
   const loaded: string[] = [];
 
   for (const [key, filename] of Object.entries(SOUL_FILES)) {
-    const content = await readTextIfExists(join(directory, filename));
+    let content: string | undefined;
+    if (key === "memory" && readMemory) {
+      let raw = "";
+      try {
+        raw = await readText(join(directory, filename));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+      content = (await readMemory(raw)).trim() || undefined;
+    } else {
+      content = await readTextIfExists(join(directory, filename));
+    }
 
     if (content) {
       files[key as keyof typeof SOUL_FILES] = content;

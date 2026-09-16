@@ -2,11 +2,13 @@ import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
-import type { ToolContext, ToolDefinition } from "../contract";
+import type { ImageAttachment, ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
+import { MAX_IMAGE_BYTES } from "../message-content";
 import { isOmniEnabled, omniRetrieveTool } from "../omni";
+import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
@@ -106,6 +108,7 @@ export interface ReadFileOutput {
   bytesRead: number;
   content: string;
   endLine: number;
+  images?: ImageAttachment[];
   path: string;
   startLine: number;
   totalLines: number;
@@ -345,6 +348,7 @@ export async function runWriteFile(
   }
 
   await mkdir(path.dirname(filePath), { recursive: true });
+  await context.memoryFiles?.write(filePath, parsed.content);
   await writeFile(filePath, parsed.content, "utf8");
 
   return { bytesWritten: contentBytes, path: filePath };
@@ -419,6 +423,7 @@ export async function runDeleteFile(
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseSkillLocalToolFileWrite(guarded.resolved);
+  await context.memoryFiles?.remove(guarded.resolved);
   await unlink(guarded.resolved);
 
   return { deleted: true, path: guarded.resolved };
@@ -480,7 +485,12 @@ export async function runEditFile(
     );
   }
 
-  const rawBuffer = await readFile(filePath);
+  let rawBuffer = await readFile(filePath);
+  if (context.memoryFiles) {
+    rawBuffer = Buffer.from(
+      await context.memoryFiles.read(filePath, rawBuffer.toString("utf8"))
+    );
+  }
   const hasBom =
     rawBuffer.length >= 3 &&
     rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
@@ -527,6 +537,7 @@ export async function runEditFile(
     bytesWritten,
     guardOptions
   );
+  await context.memoryFiles?.write(filePath, outputContent);
   await writeFile(filePath, outputContent, "utf8");
 
   return {
@@ -681,21 +692,40 @@ function applyEditPlans(content: string, plans: PlannedEdit[]): string {
  * mojibake. Convert `.docx` to Markdown instead, which keeps headings and tables
  * legible to the model while still being plain text to every caller downstream.
  */
-async function readFileAsText(filePath: string): Promise<string> {
+async function readFileAsText(
+  filePath: string,
+  bytes: Buffer
+): Promise<string> {
   const filename = path.basename(filePath);
 
   // Word-named files are judged by their bytes: a real .docx archive, a legacy OLE
   // .doc, or (commonly) HTML that an agent saved under a Word extension.
   if (isDocxFile(filename) || isLegacyDocFile(filename)) {
-    return convertDocxToMarkdown(await readFile(filePath));
+    return convertDocxToMarkdown(bytes);
   }
 
-  return readFile(filePath, "utf8");
+  return bytes.toString("utf8");
+}
+
+function detectImageMediaType(bytes: Buffer): string | undefined {
+  if (bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return "image/png";
+  }
+  if (bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return "image/jpeg";
+  }
+  const header = bytes.toString("latin1", 0, 12);
+  if (header.startsWith("GIF87a") || header.startsWith("GIF89a")) {
+    return "image/gif";
+  }
+  if (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP") {
+    return "image/webp";
+  }
 }
 
 export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
   description:
-    "Read text from a file in the active profile workspace. Word .docx files are converted to Markdown. Use offset/limit for large files.",
+    "Read a file in the active profile workspace. PNG, JPEG, GIF, and WebP images are returned as image attachments (up to 5 MB). Word .docx files are converted to Markdown. Use offset/limit for text files; images are read in full.",
   name: "read_file",
   parallelSafe: true,
   parameters: jsonSchemaFromZod(readFileInputSchema),
@@ -711,6 +741,7 @@ export async function runReadFile(
 ): Promise<ReadFileOutput> {
   const parsed = parseToolInput(readFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
+  guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
   const guarded = await guardFilePath(
@@ -746,7 +777,30 @@ export async function runReadFile(
     );
   }
 
-  const rawContent = await readFileAsText(filePath);
+  const bytes = await readFile(filePath);
+  const mediaType = detectImageMediaType(bytes);
+  if (mediaType) {
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new PathGuardError(
+        `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
+        "TOO_LARGE"
+      );
+    }
+    return {
+      bytesRead: bytes.length,
+      content: `Read image file [${mediaType}]`,
+      endLine: 0,
+      images: [{ data: bytes.toString("base64"), mediaType }],
+      path: filePath,
+      startLine: 0,
+      totalLines: 0,
+      truncated: false,
+    };
+  }
+  const localContent = await readFileAsText(filePath, bytes);
+  const rawContent = context.memoryFiles
+    ? await context.memoryFiles.read(filePath, localContent)
+    : localContent;
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;
   const startLine = Math.min(

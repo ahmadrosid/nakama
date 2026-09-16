@@ -2,13 +2,16 @@ import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon, Rotate02Icon, Wrench01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Message,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import type { AssistantTurnSegment } from "@/components/chat/assistant-tool-group.shared";
+import {
+  type AssistantTurnSegment,
+  toolGroupElapsedSeconds,
+} from "@/components/chat/assistant-tool-group.shared";
 import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
 import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
@@ -321,7 +324,7 @@ function ToolOnlyWorkGroup({
   const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
   const isWorkActive = hasRunningTools;
   const [open, setOpen] = useState(isWorkActive);
-  const elapsedSeconds = useWorkDuration(isWorkActive, tools[0]?.createdAt);
+  const elapsedSeconds = useWorkDuration(isWorkActive, tools);
 
   useEffect(() => {
     if (isWorkActive) {
@@ -360,12 +363,17 @@ function ToolOnlyWorkGroup({
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>Used</span> {toolLabel} ·{" "}
-            {formatElapsedSeconds(elapsedSeconds)}
+            <span className={thinkingStyles.verb}>Used</span> {toolLabel}
+            {elapsedSeconds === null
+              ? null
+              : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         ) : (
           <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>
-            Working… · {formatElapsedSeconds(elapsedSeconds)}
+            Working…
+            {elapsedSeconds === null
+              ? null
+              : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         )}
         {done ? (
@@ -432,46 +440,25 @@ function ThinkingBlock({ message }: { message: ChatListItem }) {
       isWorkActive={isWorkActive}
       startedAt={message.createdAt}
       text={message.thinking ?? ""}
+      thinkingDurationMs={message.thinkingDurationMs}
     />
   );
 }
 
-function useWorkDuration(active: boolean, startedAt?: string): number {
-  const anchorRef = useRef<number | null>(null);
-  const frozenRef = useRef<number | null>(null);
-  const [elapsed, setElapsed] = useState(1);
-
+function useWorkDuration(
+  active: boolean,
+  tools: ChatListItem[]
+): number | null {
+  const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (anchorRef.current === null) {
-      const parsed = startedAt ? new Date(startedAt).getTime() : Number.NaN;
-      anchorRef.current = Number.isNaN(parsed) ? Date.now() : parsed;
-    }
-
     if (!active) {
-      if (frozenRef.current === null) {
-        frozenRef.current = Math.max(
-          1,
-          Math.floor((Date.now() - anchorRef.current) / 1000)
-        );
-      }
-      setElapsed(frozenRef.current);
       return;
     }
-
-    frozenRef.current = null;
-
-    const update = () => {
-      setElapsed(
-        Math.max(1, Math.floor((Date.now() - anchorRef.current!) / 1000))
-      );
-    };
-
-    update();
-    const intervalId = window.setInterval(update, 1000);
+    setNow(Date.now());
+    const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
-  }, [active, startedAt]);
-
-  return elapsed;
+  }, [active]);
+  return toolGroupElapsedSeconds(tools, now);
 }
 
 function isDedicatedTool(tool: ChatListItem): boolean {

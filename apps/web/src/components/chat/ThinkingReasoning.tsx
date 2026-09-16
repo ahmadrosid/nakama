@@ -17,14 +17,23 @@ export interface ThinkingReasoningProps {
   isWorkActive: boolean;
   startedAt?: string;
   text: string;
+  thinkingDurationMs?: number;
 }
 
-function useThinkingElapsed(isWorkActive: boolean, startedAt?: string): number {
+function useThinkingElapsed(
+  isWorkActive: boolean,
+  startedAt?: string
+): number | null {
   const anchorRef = useRef<number | null>(null);
-  const [elapsed, setElapsed] = useState(1);
+  const [elapsed, setElapsed] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isWorkActive) {
+      if (anchorRef.current !== null) {
+        setElapsed(
+          Math.max(1, Math.floor((Date.now() - anchorRef.current) / 1000))
+        );
+      }
       return;
     }
 
@@ -204,7 +213,7 @@ function ThinkingReasoningHeader({
 }: {
   done: boolean;
   expanded: boolean;
-  elapsedSeconds: number;
+  elapsedSeconds: number | null;
   hasChildren: boolean;
   isThinkingStreaming: boolean;
   onToggle: () => void;
@@ -223,11 +232,18 @@ function ThinkingReasoningHeader({
     >
       {done ? (
         <span className={styles.label}>
-          <span className={styles.verb}>Thought</span> for {elapsedSeconds}s
+          <span className={styles.verb}>Thought</span>
+          {elapsedSeconds === null
+            ? null
+            : ` for ${formatElapsedSeconds(elapsedSeconds)}`}
         </span>
       ) : (
         <span className={cn(styles.label, styles.shimmer)}>
-          {thinkingLiveLabel(elapsedSeconds, hasChildren, isThinkingStreaming)}
+          {thinkingLiveLabel(
+            elapsedSeconds ?? 1,
+            hasChildren,
+            isThinkingStreaming
+          )}
         </span>
       )}
       {done ? (
@@ -303,6 +319,7 @@ export function ThinkingReasoning({
   isThinkingStreaming,
   isWorkActive,
   startedAt,
+  thinkingDurationMs,
   className,
   children,
 }: ThinkingReasoningProps) {
@@ -328,7 +345,13 @@ export function ThinkingReasoning({
     <div className={cn(styles.root, className)}>
       <ThinkingReasoningHeader
         done={done}
-        elapsedSeconds={elapsedSeconds}
+        elapsedSeconds={
+          thinkingDurationMs !== undefined &&
+          Number.isFinite(thinkingDurationMs) &&
+          thinkingDurationMs >= 0
+            ? Math.max(1, Math.floor(thinkingDurationMs / 1000))
+            : elapsedSeconds
+        }
         expanded={expanded}
         hasChildren={Boolean(children)}
         isThinkingStreaming={isThinkingStreaming}

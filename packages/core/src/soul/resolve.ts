@@ -119,8 +119,12 @@ export function getOrgMemoryArchiveFilePath(
 
 export async function resolveSoulStackForProfile(
   orgId: string,
-  profileId: string
+  profileId: string,
+  readMemory?: (content: string) => Promise<string>
 ): Promise<LoadedSoulStack | null> {
-  const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
+  const stack = await loadSoulStack(
+    getProfileSoulDir(orgId, profileId),
+    readMemory
+  );
   return stack.loaded.length > 0 ? stack : null;
 }

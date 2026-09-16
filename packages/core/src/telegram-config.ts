@@ -9,6 +9,7 @@ import {
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
+import { readEnvValue } from "./config";
 import { ensureDir, pathExists, readDirectoryOrEmpty } from "./fs";
 import { getOrgConfigDir, getUserConfigDir } from "./user-config";
 
@@ -326,7 +327,7 @@ export function resolveTelegramConfigFromSources(options: {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
   const botToken =
-    env.TELEGRAM_BOT_TOKEN?.trim() || file?.botToken?.trim() || "";
+    readEnvValue(env, "TELEGRAM_BOT_TOKEN") || file?.botToken?.trim() || "";
 
   if (!botToken) {
     return null;

@@ -1,5 +1,32 @@
 import type { ChatListItem } from "@/lib/chat-history";
 
+export function toolGroupElapsedSeconds(
+  tools: ChatListItem[],
+  now: number
+): number | null {
+  if (tools.length === 0) {
+    return null;
+  }
+  let startedAt = Number.POSITIVE_INFINITY;
+  let completedAt = Number.NEGATIVE_INFINITY;
+  for (const tool of tools) {
+    const start = tool.toolStartedAt;
+    const end = tool.toolStatus === "running" ? now : tool.toolCompletedAt;
+    if (
+      start === undefined ||
+      end === undefined ||
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end < start
+    ) {
+      return null;
+    }
+    startedAt = Math.min(startedAt, start);
+    completedAt = Math.max(completedAt, end);
+  }
+  return Math.max(1, Math.floor((completedAt - startedAt) / 1000));
+}
+
 export type AssistantTurnSegment =
   | { kind: "work"; thinking?: ChatListItem; tools: ChatListItem[] }
   | { kind: "text"; message: ChatListItem; thinking?: ChatListItem };

@@ -43,6 +43,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
   atomic(migrateBrowserSessionsTable);
+  atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateWorkspaceSettingsTable);
@@ -497,6 +498,7 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
       session_id TEXT,
       proposed_by_user_id TEXT,
       bullet TEXT NOT NULL,
+      source_document_ids TEXT,
       status TEXT NOT NULL,
       pinned INTEGER NOT NULL DEFAULT 0,
       reviewer_user_id TEXT,
@@ -506,6 +508,16 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(org_memory_proposals)")
+    .all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("source_document_ids")) {
+    db.exec(
+      "ALTER TABLE org_memory_proposals ADD COLUMN source_document_ids TEXT;"
+    );
+  }
 }
 
 function migrateSkillProposalsTable(db: Database): void {
@@ -538,6 +550,9 @@ function migrateSkillProposalsTable(db: Database): void {
   const names = new Set(columns.map((column) => column.name));
   if (!names.has("relative_path")) {
     db.exec("ALTER TABLE skill_proposals ADD COLUMN relative_path TEXT;");
+  }
+  if (!names.has("supporting_files")) {
+    db.exec("ALTER TABLE skill_proposals ADD COLUMN supporting_files TEXT;");
   }
   if (!names.has("consolidate_loser_skill_names")) {
     db.exec(
@@ -1012,6 +1027,22 @@ function migrateBrowserSessionsTable(db: Database): void {
   if (!columnNames.has("active_org_id")) {
     db.exec("ALTER TABLE browser_sessions ADD COLUMN active_org_id TEXT;");
   }
+}
+
+function migratePasswordResetTokensTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_unique
+      ON password_reset_tokens (token_hash);
+  `);
 }
 
 const LEGACY_PROFILE_ID_MAP = [

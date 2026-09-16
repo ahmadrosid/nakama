@@ -5,14 +5,14 @@ import type {
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
 import { Button } from "@nakama/ui/button";
+import { CodeBlock } from "@nakama/ui/code-block";
 import { Spinner } from "@nakama/ui/spinner";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
 import { Link } from "react-router-dom";
-import { CodeBlock } from "@/components/ai-elements/code-block";
 import { isPluginOwned } from "@/hooks/use-plugins";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
-import { pluginsSystemPath } from "@/lib/navigation";
+import { pluginManagementPath } from "@/lib/navigation";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
@@ -100,6 +100,7 @@ const skillBodyScrollClass = "max-h-[min(calc(100dvh-13rem),48rem)]";
 
 export function SkillDetailContent({
   skill,
+  showTitle = true,
   usageSummary,
   createdBy,
   editing = false,
@@ -112,6 +113,7 @@ export function SkillDetailContent({
   saveError = null,
 }: {
   skill: SkillDetail;
+  showTitle?: boolean;
   usageSummary?: SkillUsageSummary | null;
   createdBy?: SkillCreatedBy | null;
   editing?: boolean;
@@ -130,9 +132,11 @@ export function SkillDetailContent({
   return (
     <div className="space-y-3 sm:space-y-4">
       <header className="space-y-1 sm:space-y-1.5">
-        <h1 className="font-semibold text-base text-foreground">
-          {skill.name}
-        </h1>
+        {showTitle && (
+          <h1 className="font-semibold text-base text-foreground">
+            {skill.name}
+          </h1>
+        )}
         {skill.description ? (
           <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
             {skill.description}
@@ -144,7 +148,7 @@ export function SkillDetailContent({
         {skill.pluginId ? (
           <Link
             className="inline-block text-xs underline underline-offset-2"
-            to={pluginsSystemPath()}
+            to={pluginManagementPath()}
           >
             Edit in {skill.pluginId}
           </Link>

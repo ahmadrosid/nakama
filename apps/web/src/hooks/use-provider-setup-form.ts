@@ -282,13 +282,9 @@ export function useProviderSetupForm(
   );
 
   const selectOpenRouterModel = useCallback(
-    (
-      modelId: string,
-      modelName: string,
-      pricing?: { inputPerMillionUsd?: number; outputPerMillionUsd?: number }
-    ) => {
+    (modelId: string, modelName: string, extra?: Partial<CustomModelEntry>) => {
       setOpenRouterModels((current) =>
-        appendOpenRouterModelRow(current, modelId, modelName, pricing)
+        appendOpenRouterModelRow(current, modelId, modelName, extra)
       );
       setSelectedModel(modelId);
       setOpenRouterModelsError(null);
@@ -306,13 +302,18 @@ export function useProviderSetupForm(
         return;
       }
 
+      const browsedContext =
+        row.context > 0 ? { contextWindow: row.context } : {};
+
       handleProviderSelect(provider);
       if (provider === "openrouter") {
-        selectOpenRouterModel(modelId, row.modelName);
+        selectOpenRouterModel(modelId, row.modelName, browsedContext);
       } else if (provider === "openai_compatible") {
         setDisplayName(row.providerName);
         setBaseUrl(row.apiUrl.replace(/\/$/, ""));
-        setCustomModels([{ id: modelId, name: row.modelName }]);
+        setCustomModels([
+          { id: modelId, name: row.modelName, ...browsedContext },
+        ]);
         setSelectedModel(modelId);
         if (row.isZen && row.isFree && !row.deprecated) {
           setApiKey("public");

@@ -51,6 +51,7 @@ export interface StoredAutomation extends AutomationDefinition {
   createdAt: string;
   enabled: boolean;
   lastRunAt?: string | null;
+  lastRunStatus?: AutomationRunStatus | null;
   nextRunAt?: string | null;
   orgId?: string | null;
   profileId: string;
@@ -176,6 +177,13 @@ export interface WhatsAppWorkerStatus {
   process?: WorkerProcessInfo;
   qrCode: string | null;
   running: boolean;
+}
+
+export interface PluginWorkerStatus {
+  label: string;
+  name: string;
+  pluginId: string;
+  process: WorkerProcessInfo;
 }
 
 export interface WorkerLogsResponse {
@@ -602,8 +610,9 @@ export interface OrganizationResponse {
 }
 
 export interface OrgInviteCreatedResponse {
+  delivered: boolean;
   invite: OrgInviteSummary;
-  token: string;
+  token: string | null;
 }
 
 export interface AddOrgMemberResponse {
@@ -727,6 +736,10 @@ export interface OrgMemoryChangeLogEntry {
 
 export interface ListOrgMemoryHistoryResponse {
   changes: OrgMemoryChangeLogEntry[];
+  /** Soft cap kept on disk; older revisions are pruned. */
+  maxEntries: number;
+  /** True once pruning has discarded at least one older revision. */
+  truncated: boolean;
 }
 
 export interface RestoreOrgMemoryHistoryResponse {
@@ -751,6 +764,8 @@ export interface OrgMemoryProposal {
   reviewedAt: string | null;
   reviewerUserId: string | null;
   sessionId: string | null;
+  /** Knowledge-base document ids cited when the bullet was proposed. */
+  sourceDocumentIds: string[];
   status: OrgMemoryProposalStatus;
 }
 
@@ -794,6 +809,7 @@ export interface SkillProposal {
   sessionId: string | null;
   skillName: string;
   status: SkillProposalStatus;
+  supportingFiles?: { path: string; contentBase64: string }[] | null;
   warnings?: string[];
 }
 
@@ -870,6 +886,20 @@ export interface AcceptOrgInviteResponse {
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface RequestPasswordResetResponse {
+  delivered: boolean;
+  token: string | null;
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string;
+  token: string;
 }
 
 export interface ChannelOrgMappingSummary {
@@ -1650,9 +1680,13 @@ export interface ApiErrorResponse {
 }
 
 export interface CustomModelEntry {
+  /** Total context the model accepts. Blank falls back to the catalog entry,
+   * then to a conservative default, so existing entries keep their behaviour. */
+  contextWindow?: number;
   default?: boolean;
   id: string;
   inputPerMillionUsd?: number;
+  maxOutputTokens?: number;
   name?: string;
   outputPerMillionUsd?: number;
   supportsThinking?: boolean;
@@ -1814,6 +1848,8 @@ export interface SkillSummary {
   hasTool: boolean;
   id: string;
   name: string;
+  /** null means shared across organizations. */
+  orgId?: string | null;
   pluginId?: string | null;
   pluginKey?: string | null;
   sourcePath: string;
@@ -1831,6 +1867,18 @@ export interface ListSkillsResponse {
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface SkillFilesResponse {
+  files: { path: string; type: "file" | "directory" }[];
+  truncated: boolean;
+}
+
+export interface SkillFileResponse {
+  content: string | null;
+  image?: { mediaType: string; dataBase64: string };
+  path: string;
+  unavailableReason?: string;
 }
 
 export interface AssignSkillRequest {
@@ -1873,7 +1921,12 @@ export interface SyncSkillsResponse {
   updated: number;
 }
 
-export type McpServerStatus = "connected" | "disconnected" | "error";
+export type McpServerStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  /** Waiting for someone to approve the server's OAuth sign-in in a browser. */
+  | "needs_auth";
 export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
@@ -1911,6 +1964,8 @@ export interface McpServerSummary {
 export interface McpServerDetail extends McpServerSummary {
   cachedTools: CachedMcpToolSummary[];
   config: McpServerConfig;
+  /** Authenticated by a browser sign-in rather than by headers. */
+  usesOAuth: boolean;
 }
 
 export interface ListMcpServersResponse {
@@ -1918,6 +1973,11 @@ export interface ListMcpServersResponse {
 }
 
 export interface McpServerResponse {
+  /**
+   * Present when the server needs a browser sign-in before it can connect.
+   * Open it, approve, and the OAuth callback finishes the connection.
+   */
+  authorizationUrl?: string;
   server: McpServerDetail;
 }
 
@@ -1945,6 +2005,8 @@ export interface AssignMcpServerRequest {
 export interface TestMcpServerResponse {
   error?: string;
   ok: boolean;
+  /** The server answers 401 and advertises OAuth: sign-in, not a broken config. */
+  requiresAuthorization?: boolean;
   toolCount: number;
   tools: CachedMcpToolSummary[];
 }
@@ -2031,8 +2093,14 @@ export type ProfileChangeField =
   | "pack_import";
 
 export interface ProfileChangeEvent {
+  actorName?: string | null;
   actorUserId: string | null;
   afterValue: string | null;
+  assignmentChanges?: {
+    added: Array<{ id: string; name: string | null }>;
+    removed: Array<{ id: string; name: string | null }>;
+  };
+  assignmentNames?: Record<string, string | null>;
   beforeValue: string | null;
   createdAt: string;
   field: ProfileChangeField;
@@ -2117,6 +2185,7 @@ export interface ArtifactFile {
 }
 
 export interface ListArtifactsOptions {
+  folder?: string;
   limit?: number;
   offset?: number;
 }
@@ -2347,6 +2416,8 @@ export type ChatMessage =
       content: string;
       /** Model reasoning trace for display; not sent as plain assistant text to providers. */
       thinking?: string;
+      /** Observed reasoning stream time, excluding answer generation. */
+      thinkingDurationMs?: number;
       summary?: boolean;
       toolCalls?: ToolCall[];
       /** Provider-specific assistant payload for multi-turn replay (Anthropic blocks, OpenAI response items). */
@@ -2354,7 +2425,16 @@ export type ChatMessage =
       /** Tokens and estimated cost of the LLM call that produced this message. */
       usage?: ChatUsage;
     }
-  | { role: "tool"; toolCallId: string; name: string; content: string };
+  | {
+      role: "tool";
+      toolCallId: string;
+      name: string;
+      content: string;
+      /** Visual tool output, kept separate from the JSON/text result. */
+      attachments?: MessageContentPart[];
+      toolStartedAt?: number;
+      toolCompletedAt?: number;
+    };
 
 export interface ChatUsage {
   /** Absent when the model has no known pricing. */
@@ -2457,6 +2537,12 @@ export interface ToolContext {
   isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
+  /** Host-owned memory storage; file guards run before these callbacks. */
+  memoryFiles?: {
+    read(path: string, content: string): Promise<string>;
+    write(path: string, content: string): Promise<void>;
+    remove(path: string): Promise<void>;
+  };
   /** Invalidates the cached skills catalog after a live skill mutation. */
   onSkillCatalogChange?: () => void;
   orgId?: string;
@@ -2486,6 +2572,15 @@ export interface ToolContext {
     optimized: boolean;
     outputTokens: number;
   }) => void;
+  searchKnowledge?: (input: {
+    query: string;
+    filename?: string;
+    maxResults: number;
+    regex: boolean;
+  }) => Promise<{
+    matches: { file: string; line: number; text: string }[];
+    truncated: boolean;
+  } | null>;
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
@@ -2650,6 +2745,7 @@ export interface OrgPluginDetail extends OrgPluginSummary {
   actions: PluginActionDescription[];
   availableVersions: string[];
   description: string;
+  icon?: string;
   installed: boolean;
   name: string;
   ui: PluginUiSummary | null;
@@ -2671,6 +2767,7 @@ export interface PluginPackageRequest {
 export interface PluginPackagePreviewResponse {
   contributions: {
     actionKeys: string[];
+    workerKeys?: string[];
     hasDatabase: boolean;
     hasUi: boolean;
     skillKeys: string[];

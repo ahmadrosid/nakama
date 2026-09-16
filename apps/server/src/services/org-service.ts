@@ -1,8 +1,13 @@
+import { rm } from "node:fs/promises";
 import {
+  createEmailOutboundAdapter,
+  type EmailOutboundAdapter,
   generateTemporaryPassword,
+  getOrgConfigDir,
   getProfileSoulDir,
   initSoulDirectory,
   NakamaApiError,
+  resolveWebPublicUrl,
 } from "@nakama/core";
 import type {
   AcceptOrgInviteRequest,
@@ -18,6 +23,8 @@ import type {
   OrgMemberResponse,
   OrgMemberSummary,
   OrgRole,
+  RequestPasswordResetResponse,
+  ResetPasswordRequest,
   UpdateOrganizationRequest,
   UpdateOrgMemberRequest,
   UserOrgSummary,
@@ -27,6 +34,7 @@ import type {
   DatabaseAdapter,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
+  StoredPasswordResetTokenRecord,
   StoredUserRecord,
 } from "@nakama/db";
 import {
@@ -46,6 +54,7 @@ const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
 const MAX_MEMBER_NAME_LENGTH = 120;
+const PASSWORD_RESET_EXPIRY_MINUTES = 60;
 const MEMBER_NAME_CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
 /** Path `userId` for org member routes — matches minted ids (`user_` + hex) and seeded ones. */
 const ORG_MEMBER_USER_ID_PATTERN = /^user_[A-Za-z0-9_]{1,64}$/;
@@ -59,7 +68,11 @@ function assertOrgMemberUserIdShape(userId: string): void {
 export class OrgService {
   constructor(
     private readonly databaseAdapter: DatabaseAdapter,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly email: EmailOutboundAdapter = createEmailOutboundAdapter(),
+    private readonly getWebPublicUrl: () =>
+      | string
+      | undefined = resolveWebPublicUrl
   ) {}
 
   async listOrganizations(): Promise<OrganizationSummary[]> {
@@ -116,6 +129,26 @@ export class OrgService {
       archivedAt: now,
       updatedAt: now,
     });
+  }
+
+  async permanentlyDeleteOrganization(orgId: string): Promise<void> {
+    const organization = await this.databaseAdapter.getOrganizationById(orgId);
+    if (!organization) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    if (!organization.archivedAt) {
+      throw new NakamaApiError(
+        "Archive the organization before deleting it permanently.",
+        409
+      );
+    }
+
+    // Keep the database row available for a safe retry if disk cleanup fails.
+    await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
+    const deleted = await this.databaseAdapter.deleteOrganization(orgId);
+    if (!deleted) {
+      throw new NakamaApiError("Not found", 404);
+    }
   }
 
   async updateOrganization(
@@ -766,7 +799,7 @@ export class OrgService {
     role: OrgRole;
     invitedByUserId: string;
   }): Promise<OrgInviteCreatedResponse> {
-    await this.requireActiveOrganization(input.orgId);
+    const organization = await this.requireActiveOrganization(input.orgId);
 
     const email = normalizeEmail(input.email);
     if (!EMAIL_PATTERN.test(email)) {
@@ -821,9 +854,27 @@ export class OrgService {
 
     await this.databaseAdapter.createOrgInvite(record);
 
+    const webPublicUrl = this.getWebPublicUrl();
+    const acceptInstruction = webPublicUrl
+      ? `Accept your invitation: ${webPublicUrl}/accept-invite?token=${encodeURIComponent(token)}`
+      : `Invitation token: ${token}`;
+    const delivery = await this.email.send({
+      orgId: input.orgId,
+      subject: `You're invited to ${organization.name}`,
+      text: [
+        `You've been invited to join ${organization.name} as ${input.role}.`,
+        "",
+        acceptInstruction,
+        "",
+        `This invitation expires on ${record.expiresAt}.`,
+      ].join("\n"),
+      to: email,
+    });
+
     return {
+      delivered: delivery.ok,
       invite: toOrgInviteSummary(record),
-      token,
+      token: delivery.ok ? null : token,
     };
   }
 
@@ -904,6 +955,87 @@ export class OrgService {
       role: invite.role,
       user,
     };
+  }
+
+  async requestPasswordReset(
+    requestedEmail: string,
+    allowManualToken = false
+  ): Promise<RequestPasswordResetResponse> {
+    const email = normalizeEmail(requestedEmail);
+    if (!EMAIL_PATTERN.test(email)) {
+      throw new NakamaApiError("A valid email address is required.", 400);
+    }
+
+    const user = await this.databaseAdapter.getUserByEmail(email);
+    if (!user) {
+      // Match the successful-delivery shape so configured deployments do not
+      // disclose whether an address has an account.
+      return { delivered: true, token: null };
+    }
+
+    const now = new Date();
+    const token = generatePasswordResetToken();
+    const record: StoredPasswordResetTokenRecord = {
+      consumedAt: null,
+      createdAt: now.toISOString(),
+      expiresAt: new Date(
+        now.getTime() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000
+      ).toISOString(),
+      id: `password_reset_${crypto.randomUUID().replace(/-/g, "")}`,
+      tokenHash: this.authService.hashToken(token),
+      userId: user.id,
+    };
+    await this.databaseAdapter.createPasswordResetToken(record);
+
+    const webPublicUrl = this.getWebPublicUrl();
+    const resetInstruction = webPublicUrl
+      ? `Reset your password: ${webPublicUrl}/reset-password?token=${encodeURIComponent(token)}`
+      : `Password reset token: ${token}`;
+    const deliveryPromise = Promise.resolve().then(() =>
+      this.email.send({
+        subject: "Reset your Nakama password",
+        text: [
+          "A password reset was requested for your account.",
+          "",
+          resetInstruction,
+          "",
+          `This link expires on ${record.expiresAt}. If you did not request it, you can ignore this message.`,
+        ].join("\n"),
+        to: email,
+      })
+    );
+
+    if (!allowManualToken) {
+      // Public callers get a response independent of SMTP latency. The
+      // adapter contains delivery errors, while this catch also protects
+      // against an injected adapter rejecting unexpectedly.
+      void deliveryPromise.catch(() => undefined);
+      return { delivered: true, token: null };
+    }
+
+    const delivery = await deliveryPromise;
+    return { delivered: delivery.ok, token: delivery.ok ? null : token };
+  }
+
+  async resetPassword(request: ResetPasswordRequest): Promise<void> {
+    const token = request.token?.trim();
+    if (!token) {
+      throw new NakamaApiError("Password reset token is required.", 400);
+    }
+
+    const newPassword = request.newPassword?.trim() ?? "";
+    assertNewPassword(newPassword);
+    const consumed = await this.databaseAdapter.consumePasswordResetToken(
+      this.authService.hashToken(token),
+      await this.authService.hashPassword(newPassword),
+      new Date().toISOString()
+    );
+    if (!consumed) {
+      throw new NakamaApiError(
+        "Password reset token is invalid or has expired.",
+        400
+      );
+    }
   }
 
   async changePassword(input: {
@@ -1091,6 +1223,10 @@ function normalizeOptionalName(name: string | null): string | null {
 
 function generateInviteToken(): string {
   return `tc_invite_${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+function generatePasswordResetToken(): string {
+  return `tc_reset_${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
 function assertInviteUsable(invite: StoredOrgInviteRecord): void {

@@ -162,7 +162,7 @@ function ProfileCreateDialogContent({
   const profileIdHelpText =
     !profileIdHasValue || profileIdValid
       ? "From name. Letters, numbers, `_`, `-` only."
-      : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+      : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
   const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
   const selectableTools = availableTools;
@@ -222,7 +222,7 @@ function ProfileCreateDialogContent({
         type: "patch",
         values: {
           submitError: form.name.trim()
-            ? "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`."
+            ? "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`."
             : "Name is required.",
         },
       });
@@ -252,7 +252,7 @@ function ProfileCreateDialogContent({
             type: "patch",
             values: {
               submitError:
-                "Profile created, but the selected image could not be read.",
+                "Agent created, but the selected image could not be read.",
             },
           });
         }
@@ -275,15 +275,15 @@ function ProfileCreateDialogContent({
   }
 
   return (
-    <DialogContent className="flex max-h-[min(90dvh,42rem)] flex-col gap-6 overflow-hidden p-6 sm:max-w-4xl">
+    <DialogContent className="flex max-h-[min(90dvh,42rem)] flex-col gap-5 overflow-hidden p-5 sm:max-w-2xl">
       <form
-        className="flex min-h-0 flex-1 flex-col gap-6"
+        className="flex min-h-0 flex-1 flex-col gap-5"
         onSubmit={handleSubmit}
       >
         <DialogHeader className="gap-2">
-          <DialogTitle>Create profile</DialogTitle>
+          <DialogTitle>Create agent</DialogTitle>
           <DialogDescription>
-            Set name and profile id.
+            Set name and agent id.
             {onAskSuperBot ? (
               <>
                 {" "}
@@ -345,7 +345,7 @@ function ProfileCreateDialogContent({
           tools={tools}
         />
 
-        <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+        <DialogFooter className="mx-0 mb-0 gap-2 border-t-0 bg-transparent p-0 sm:justify-end">
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}

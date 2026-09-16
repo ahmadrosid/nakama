@@ -4,6 +4,8 @@ import {
   readApiErrorMessage,
 } from "@nakama/core/api-error";
 import type {
+  AcceptOrgInviteRequest,
+  AcceptOrgInviteResponse,
   AddOrgMemberRequest,
   AddOrgMemberResponse,
   AddOrgMemoryFactRequest,
@@ -127,6 +129,7 @@ import type {
   PluginPackagePreviewResponse,
   PluginPackageRequest,
   PluginRevisionRequest,
+  PluginWorkerStatus,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
   ProfilePackImportResponse,
@@ -135,6 +138,9 @@ import type {
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
   RegenerateNotificationDestinationKeyResponse,
+  RequestPasswordResetRequest,
+  RequestPasswordResetResponse,
+  ResetPasswordRequest,
   RestoreDataImportRequest,
   RestoreDataImportResponse,
   RestoreOrgMemoryHistoryResponse,
@@ -158,6 +164,8 @@ import type {
   SetupRestoreDataImportResponse,
   SkillCuratorLatestResponse,
   SkillCuratorRunResponse,
+  SkillFileResponse,
+  SkillFilesResponse,
   SkillProposalResponse,
   SkillResponse,
   SoulStackResponse,
@@ -271,6 +279,18 @@ export class NakamaClient {
 
   setOrgId(orgId: string | null): void {
     this.orgId = orgId?.trim() || null;
+  }
+
+  /** Independent request scope; changing its org never changes the parent client. */
+  forOrg(orgId: string | null): NakamaClient {
+    return new NakamaClient({
+      authToken: this.authToken ?? undefined,
+      baseUrl: this.baseUrl,
+      clientOrigin: this.clientOrigin ?? undefined,
+      credentials: this.credentials,
+      fetch: this.fetchImpl,
+      orgId,
+    });
   }
 
   private applyAuthUserResponse(response: AuthUserResponse): void {
@@ -479,6 +499,12 @@ export class NakamaClient {
     return this.request<ProfilePackImportResponse>("/v1/profiles/pack/import", {
       body: JSON.stringify(request),
       method: "POST",
+    });
+  }
+
+  async listPluginWorkers(orgId?: string): Promise<PluginWorkerStatus[]> {
+    return this.request<PluginWorkerStatus[]>("/v1/workers/plugins", {
+      ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
     });
   }
 
@@ -744,9 +770,13 @@ export class NakamaClient {
     );
   }
 
-  async getProfile(profileId: string): Promise<ProfileResponse> {
+  async getProfile(
+    profileId: string,
+    orgId?: string
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}`
+      `/v1/profiles/${encodeURIComponent(profileId)}`,
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
     );
   }
 
@@ -825,8 +855,11 @@ export class NakamaClient {
     });
   }
 
-  async listTools(): Promise<ListToolsResponse> {
-    return this.request<ListToolsResponse>("/v1/tools");
+  async listTools(orgId?: string): Promise<ListToolsResponse> {
+    return this.request<ListToolsResponse>(
+      "/v1/tools",
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
   }
 
   async getTool(toolId: string): Promise<ToolResponse> {
@@ -885,24 +918,28 @@ export class NakamaClient {
 
   async assignTool(
     profileId: string,
-    request: AssignToolRequest
+    request: AssignToolRequest,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/tools`,
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
   }
 
   async unassignTool(
     profileId: string,
-    toolId: string
+    toolId: string,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/tools/${encodeURIComponent(toolId)}`,
       {
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
         method: "DELETE",
       }
     );
@@ -992,8 +1029,32 @@ export class NakamaClient {
     );
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
-    return this.request<ListSkillsResponse>("/v1/skills");
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
+    return this.request<ListSkillsResponse>(
+      "/v1/skills",
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
+    );
+  }
+
+  async listSkillFiles(
+    skillId: string,
+    orgId: string
+  ): Promise<SkillFilesResponse> {
+    return this.request<SkillFilesResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/files`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async readSkillFile(
+    skillId: string,
+    filePath: string,
+    orgId: string
+  ): Promise<SkillFileResponse> {
+    return this.request<SkillFileResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/file?${new URLSearchParams({ path: filePath })}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
   }
 
   async cloneProfile(
@@ -1059,24 +1120,27 @@ export class NakamaClient {
 
   async assignSkill(
     profileId: string,
-    request: AssignSkillRequest
+    request: AssignSkillRequest,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/skills`,
       {
         body: JSON.stringify(request),
         method: "POST",
+        ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}),
       }
     );
   }
 
   async unassignSkill(
     profileId: string,
-    skillId: string
+    skillId: string,
+    orgId?: string
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/skills/${encodeURIComponent(skillId)}`,
-      { method: "DELETE" }
+      { ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}), method: "DELETE" }
     );
   }
 
@@ -1121,9 +1185,12 @@ export class NakamaClient {
 
   async listProfileArtifacts(
     profileId: string,
-    options: { limit?: number; offset?: number } = {}
+    options: { folder?: string; limit?: number; offset?: number } = {}
   ): Promise<ListArtifactsResponse> {
     const query = new URLSearchParams();
+    if (options.folder) {
+      query.set("folder", options.folder);
+    }
     if (options.limit !== undefined) {
       query.set("limit", String(options.limit));
     }
@@ -1606,6 +1673,7 @@ export class NakamaClient {
   }
   async listOfficialPlugins(): Promise<{
     plugins: Array<{
+      icon?: string;
       id: string;
       name: string;
       description: string;
@@ -2095,6 +2163,21 @@ export class NakamaClient {
     return response;
   }
 
+  async acceptOrgInvite(
+    request: AcceptOrgInviteRequest
+  ): Promise<AcceptOrgInviteResponse> {
+    const response = await this.request<AcceptOrgInviteResponse>(
+      "/v1/auth/accept-invite",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+
+    this.setOrgId(response.orgId);
+    return response;
+  }
+
   async getMe(): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/me");
     this.applyAuthUserResponse(response);
@@ -2114,6 +2197,25 @@ export class NakamaClient {
 
   async changePassword(request: ChangePasswordRequest): Promise<void> {
     await this.request("/v1/auth/change-password", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async requestPasswordReset(
+    request: RequestPasswordResetRequest
+  ): Promise<RequestPasswordResetResponse> {
+    return this.request<RequestPasswordResetResponse>(
+      "/v1/auth/password-reset/request",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
+  }
+
+  async resetPassword(request: ResetPasswordRequest): Promise<void> {
+    await this.request("/v1/auth/password-reset/complete", {
       body: JSON.stringify(request),
       method: "POST",
     });

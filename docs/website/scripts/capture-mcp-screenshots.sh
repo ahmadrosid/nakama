@@ -21,7 +21,7 @@ else
 fi
 
 cleanup() {
-  $AB --session "$SESSION" close --all 2>/dev/null || true
+  $AB --session "$SESSION" close 2>/dev/null || true
   if [[ -n "$SERVER_PID" ]]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
@@ -61,23 +61,24 @@ curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
   -d '{"type":"ollama","apiKey":"","hostMode":"local","model":"llama3.2"}' >/dev/null
 
-$AB --session "$SESSION" close --all 2>/dev/null || true
+$AB --session "$SESSION" close 2>/dev/null || true
 $AB --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
 $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
   --url "${BASE_URL}/" --sameSite Lax
-$AB --session "$SESSION" open "${BASE_URL}/system?tab=mcp"
+$AB --session "$SESSION" open "${BASE_URL}/customize/mcp"
 $AB --session "$SESSION" wait 3000
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT"
 $AB --session "$SESSION" set media light
 $AB --session "$SESSION" snapshot -i >/dev/null
-$AB --session "$SESSION" click @e24
+$AB --session "$SESSION" find role button click --name "Add server" --exact
 $AB --session "$SESSION" wait 1200
 $AB --session "$SESSION" snapshot -i >/dev/null
-$AB --session "$SESSION" fill @e5 "exa"
-$AB --session "$SESSION" fill @e11 "https://mcp.exa.ai/mcp"
-$AB --session "$SESSION" fill @e13 "x-api-key"
-$AB --session "$SESSION" fill @e14 "YOUR_EXA_API_KEY"
+$AB --session "$SESSION" find role tab click --name "HTTP" --exact
+$AB --session "$SESSION" find placeholder "server name" fill "exa"
+$AB --session "$SESSION" find placeholder "https://example.com/mcp" fill "https://mcp.exa.ai/mcp"
+$AB --session "$SESSION" fill '[aria-label="Header name 1"]' "x-api-key"
+$AB --session "$SESSION" fill '[aria-label="Value 1"]' "YOUR_EXA_API_KEY"
 $AB --session "$SESSION" wait 400
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/mcp-exa-api-key.png"
 

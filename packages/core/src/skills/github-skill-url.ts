@@ -70,14 +70,14 @@ function githubHtmlUrlToRaw(parsed: URL): string {
     );
   }
 
-  if (segments.length < 5) {
+  if (segments.length < 5 && kind !== "tree") {
     throw new Error(
       "GitHub URL must include a ref and path to SKILL.md or a skill folder."
     );
   }
 
   const ref = segments[3];
-  const rest = segments.slice(4).join("/");
+  const rest = segments.slice(4).join("/") || "SKILL.md";
   const mode = kind === "tree" ? "tree" : "file";
   const filePath = ensureSkillFilePath(rest, mode);
 

@@ -29,6 +29,8 @@ LLM_VCR_MODE=record bun test path/to/foo.llm.test.ts  # re-record (needs provide
 
 ## GitHub
 
+PRs: ready for review by default; drafts only on explicit user request. Overrides skills.
+
 Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always run outside the sandbox (`required_permissions: ["all"]`) — sandbox returns `Forbidden`.
 
 `gh issue` / `gh pr` / `--json` go through GraphQL and often time out here. Prefer REST: `gh api repos/{owner}/{repo}/issues` or `/pulls`, body in a JSON file, `POST --input`. On GraphQL timeout, retry REST once.

@@ -390,6 +390,7 @@ interface OrgMemoryProposalRow {
   reviewed_at: string | null;
   reviewer_user_id: string | null;
   session_id: string | null;
+  source_document_ids: string | null;
   status: string;
 }
 
@@ -422,6 +423,7 @@ interface SkillProposalRow {
   session_id: string | null;
   skill_name: string;
   status: string;
+  supporting_files: string | null;
 }
 
 interface SkillSuggestionRow {
@@ -1676,6 +1678,38 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
+  const createPasswordResetTokenStmt = db.prepare(`
+    INSERT INTO password_reset_tokens (
+      id, user_id, token_hash, expires_at, consumed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const getUsablePasswordResetTokenStmt = db.prepare(`
+    SELECT user_id
+    FROM password_reset_tokens
+    WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?
+    LIMIT 1
+  `);
+  const consumePasswordResetTokensForUserStmt = db.prepare(`
+    UPDATE password_reset_tokens
+    SET consumed_at = ?
+    WHERE user_id = ? AND consumed_at IS NULL
+  `);
+  const consumePasswordResetTokenTransaction = db.transaction(
+    (tokenHash: string, passwordHash: string, consumedAt: string) => {
+      const token = getUsablePasswordResetTokenStmt.get(
+        tokenHash,
+        consumedAt
+      ) as { user_id: string } | null;
+      if (!token) {
+        return false;
+      }
+
+      consumePasswordResetTokensForUserStmt.run(consumedAt, token.user_id);
+      updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
+      revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
+      return true;
+    }
+  );
   const tryMarkOrganizationArchivedStmt = db.prepare(`
     UPDATE organizations
     SET archived_at = ?, updated_at = ?
@@ -1683,6 +1717,37 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND archived_at IS NULL
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
   `);
+  const deleteOrganizationStmt = db.prepare(
+    "DELETE FROM organizations WHERE id = ?"
+  );
+  const organizationExistsStmt = db.prepare(
+    "SELECT 1 FROM organizations WHERE id = ?"
+  );
+  const deleteOrganizationTransaction = db.transaction((orgId: string) => {
+    if (!organizationExistsStmt.get(orgId)) {
+      return false;
+    }
+
+    db.query(
+      "UPDATE browser_sessions SET active_org_id = NULL WHERE active_org_id = ?"
+    ).run(orgId);
+
+    // These tables gained org_id through migrations rather than FK-backed
+    // schema definitions, so the organization cascade cannot remove them.
+    for (const table of [
+      "llm_turn_usage",
+      "llm_usage_stats",
+      "mcp_servers",
+      "skills",
+      "tool_output_savings",
+      "tools",
+      "workspace_settings",
+    ]) {
+      db.query(`DELETE FROM ${table} WHERE org_id = ?`).run(orgId);
+    }
+
+    return deleteOrganizationStmt.run(orgId).changes > 0;
+  });
   const upsertOrganizationStmt = db.prepare(`
     INSERT INTO organizations (id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1769,8 +1834,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const createOrgMemoryProposalStmt = db.prepare(`
     INSERT INTO org_memory_proposals (
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const createProfileChangeEventStmt = db.prepare(`
     INSERT INTO profile_change_events (
@@ -1790,7 +1855,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND status = ?
     ORDER BY created_at DESC
@@ -1798,7 +1863,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAllOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ?
     ORDER BY created_at DESC
@@ -1806,7 +1871,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getOrgMemoryProposalStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND id = ?
     LIMIT 1
@@ -1814,7 +1879,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getPendingOrgMemoryProposalByBulletStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND bullet = ? AND status = 'pending'
     LIMIT 1
@@ -1833,15 +1898,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     INSERT INTO skill_proposals (
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const listSkillProposalsByStatusStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND status = ?
@@ -1851,7 +1916,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND status = ? AND profile_id = ?
@@ -1861,7 +1926,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ?
@@ -1871,7 +1936,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ?
@@ -1881,7 +1946,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND id = ?
@@ -1891,7 +1956,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND action = 'create' AND status = 'pending'
@@ -1901,7 +1966,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND status = 'pending'
@@ -1911,7 +1976,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND action = 'patch'
@@ -2416,6 +2481,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return compareAndSetOrgPluginStateTx(input);
     },
 
+    async consumePasswordResetToken(tokenHash, passwordHash, consumedAt) {
+      return consumePasswordResetTokenTransaction.immediate(
+        tokenHash,
+        passwordHash,
+        consumedAt
+      );
+    },
+
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID) as {
         count: number;
@@ -2512,10 +2585,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.sessionId,
         record.proposedByUserId,
         record.bullet,
+        record.sourceDocumentIds.length > 0
+          ? JSON.stringify(record.sourceDocumentIds)
+          : null,
         record.status,
         record.pinned ? 1 : 0,
         record.reviewerUserId,
         record.reviewedAt,
+        record.createdAt
+      );
+    },
+
+    async createPasswordResetToken(record) {
+      createPasswordResetTokenStmt.run(
+        record.id,
+        record.userId,
+        record.tokenHash,
+        record.expiresAt,
+        record.consumedAt,
         record.createdAt
       );
     },
@@ -2550,6 +2637,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.consolidateLoserSkillNames
           ? JSON.stringify(record.consolidateLoserSkillNames)
           : null,
+        record.supportingFiles ? JSON.stringify(record.supportingFiles) : null,
         record.status,
         record.reviewerUserId,
         record.reviewedAt,
@@ -2618,6 +2706,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteNotificationDestination(id) {
       const result = deleteNotificationDestinationStmt.run(id);
       return result.changes > 0;
+    },
+
+    async deleteOrganization(id) {
+      const foreignKeys = db.query("PRAGMA foreign_keys").get() as {
+        foreign_keys: number;
+      };
+      const restoreForeignKeys = foreignKeys.foreign_keys === 0;
+      if (restoreForeignKeys) {
+        db.exec("PRAGMA foreign_keys = ON");
+      }
+
+      try {
+        return deleteOrganizationTransaction(id);
+      } finally {
+        if (restoreForeignKeys) {
+          db.exec("PRAGMA foreign_keys = OFF");
+        }
+      }
     },
 
     async deleteOrgMember(orgId, userId) {
@@ -4600,6 +4706,24 @@ function toOrgInviteRecord(row: OrgInviteRow): StoredOrgInviteRecord {
   };
 }
 
+function parseOrgMemorySourceDocumentIds(raw: string | null): string[] {
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((item) => typeof item === "string")
+    ) {
+      return parsed;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
 function toOrgMemoryProposalRecord(
   row: OrgMemoryProposalRow
 ): StoredOrgMemoryProposal {
@@ -4614,6 +4738,7 @@ function toOrgMemoryProposalRecord(
     reviewedAt: row.reviewed_at,
     reviewerUserId: row.reviewer_user_id,
     sessionId: row.session_id,
+    sourceDocumentIds: parseOrgMemorySourceDocumentIds(row.source_document_ids),
     status: row.status as OrgMemoryProposalStatus,
   };
 }
@@ -4667,6 +4792,9 @@ function toSkillProposalRecord(row: SkillProposalRow): StoredSkillProposal {
     sessionId: row.session_id,
     skillName: row.skill_name,
     status: row.status as StoredSkillProposal["status"],
+    supportingFiles: row.supporting_files
+      ? JSON.parse(row.supporting_files)
+      : null,
   };
 }
 

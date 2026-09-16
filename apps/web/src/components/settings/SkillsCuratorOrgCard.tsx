@@ -349,6 +349,7 @@ export function SkillsCuratorOrgCard() {
                   setBusy
                 )
               }
+              size="sm"
             />
           </div>
         </div>
@@ -372,6 +373,7 @@ export function SkillsCuratorOrgCard() {
                   setBusy
                 )
               }
+              size="sm"
             />
           </div>
         </div>

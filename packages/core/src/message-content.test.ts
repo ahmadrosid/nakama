@@ -202,6 +202,20 @@ describe("estimateUserContentTokens", () => {
 });
 
 describe("stripImagesForCompaction", () => {
+  test("omits tool images while preserving the tool result and original history", () => {
+    const message: ChatMessage = {
+      attachments: [
+        { data: tinyPngBase64, mediaType: "image/png", type: "image" },
+      ],
+      content: '{"path":"shot.png"}',
+      name: "read_file",
+      role: "tool",
+      toolCallId: "image",
+    };
+    const [stripped] = stripImagesForCompaction([message]);
+    expect(stripped).toEqual({ ...message, attachments: undefined });
+    expect(message.attachments).toHaveLength(1);
+  });
   test("replaces image parts with placeholder text", () => {
     const result = stripImagesForCompaction([
       {

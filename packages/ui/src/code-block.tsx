@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@nakama/ui/utils";
 import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import {
   type CSSProperties,
@@ -10,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { cn } from "./utils";
 
 function CodeBlockChevronIcon({ className }: { className?: string }) {
   return (

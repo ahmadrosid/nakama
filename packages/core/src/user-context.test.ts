@@ -32,6 +32,7 @@ test("USER_CONTEXT_TEMPLATE is the field labels as empty bullets", () => {
 
 - Name / nickname:
 - What you do:
+- Help with:
 - Current projects:
 - Tech stack:
 - How you like replies (concise, detailed, casual, formal):
@@ -146,4 +147,23 @@ test("parseUserContext keeps a repeated bullet instead of overwriting it", () =>
 test("parseUserContext tolerates missing content", () => {
   expect(parseUserContext(null)).toEqual({ answers: {}, extra: "" });
   expect(parseUserContext(undefined)).toEqual({ answers: {}, extra: "" });
+});
+
+test("saving optional help preserves existing preferences and an introduction", () => {
+  const original = renderUserContext(
+    { name: "Rosid", never: "Use emojis", role: "Software engineer" },
+    "I build my own product.\nI work with a small team."
+  );
+  const { answers, extra } = parseUserContext(original);
+  const saved = renderUserContext(
+    { ...answers, help: "Writing code, Product decisions" },
+    extra
+  );
+  expect(parseUserContext(saved)).toEqual({
+    answers: { ...answers, help: "Writing code, Product decisions" },
+    extra,
+  });
+  expect(
+    renderUserContext({ ...parseUserContext(saved).answers, help: "" }, extra)
+  ).toBe(original);
 });

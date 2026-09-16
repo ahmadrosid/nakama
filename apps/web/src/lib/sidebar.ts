@@ -1,6 +1,5 @@
 export const SIDEBAR_COLLAPSED_KEY = "nakama-sidebar-collapsed";
-export const SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY =
-  "nakama-sidebar-system-nav-collapsed";
+export const SIDEBAR_RECENTS_COLLAPSED_KEY = "nakama-sidebar-recents-collapsed";
 
 export function getInitialSidebarCollapsed(): boolean {
   try {
@@ -10,9 +9,9 @@ export function getInitialSidebarCollapsed(): boolean {
   }
 }
 
-export function getInitialSystemNavCollapsed(): boolean {
+export function getInitialRecentsCollapsed(): boolean {
   try {
-    return localStorage.getItem(SIDEBAR_SYSTEM_NAV_COLLAPSED_KEY) === "true";
+    return localStorage.getItem(SIDEBAR_RECENTS_COLLAPSED_KEY) === "true";
   } catch {
     return false;
   }

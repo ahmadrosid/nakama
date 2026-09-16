@@ -1,0 +1,37 @@
+appId: com.nakama.desktop
+productName: Nakama
+asar: true
+npmRebuild: false
+directories:
+  output: dist/electron
+files:
+  - main.mjs
+  - preload.cjs
+  - package.json
+publish:
+  provider: generic
+  url: https://github.com/ahmadrosid/nakama/releases/download/desktop-updates
+extraResources:
+  - from: dist/runtime
+    to: runtime
+    filter:
+      - '**/*'
+  # electron-builder skips node_modules at a resource root; copy its contents explicitly.
+  - from: dist/runtime/node_modules
+    to: runtime/node_modules
+    filter:
+      - '**/*'
+mac:
+  hardenedRuntime: true
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
+  binaries:
+    - Contents/Resources/runtime/bin/bun
+  icon: ../web/public/icons/icon-512.png
+  category: public.app-category.productivity
+  minimumSystemVersion: '15.0'
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]

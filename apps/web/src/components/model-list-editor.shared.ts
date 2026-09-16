@@ -38,6 +38,12 @@ export function normalizeModelListRows(
         ...(row.outputPerMillionUsd === undefined
           ? {}
           : { outputPerMillionUsd: row.outputPerMillionUsd }),
+        ...(row.contextWindow === undefined
+          ? {}
+          : { contextWindow: row.contextWindow }),
+        ...(row.maxOutputTokens === undefined
+          ? {}
+          : { maxOutputTokens: row.maxOutputTokens }),
       },
     ];
   });

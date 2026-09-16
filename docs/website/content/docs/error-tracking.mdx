@@ -36,11 +36,11 @@ Open your tracker and you should see one event within a few seconds, at info lev
 
 ## What gets sent
 
-Uncaught exceptions and unhandled rejections, from four processes: the server and the Telegram, WhatsApp, and Discord workers. Plus the test event, when you press the button.
+Uncaught exceptions and unhandled rejections, from four processes: the server and the Telegram, WhatsApp, and Discord workers. From the server also a request that ends in an unexpected 500, a failed agent turn, and a tool that still fails after its retries. Plus the test event, when you press the button.
 
 Each report carries the error name and message, the stack trace, which process it came from, and the Bun version, platform, and architecture.
 
-**Not sent:** HTTP 4xx or 5xx responses, tool failures, failed agent turns, and anything a user typed. A rejected request is not a defect, and reporting every bad password would bury the real crashes.
+**Not sent:** HTTP 4xx responses, a turn the user cancelled, and anything a user typed. A rejected request is not a defect, and reporting every bad password would bury the real crashes.
 
 ## What is stripped before it leaves
 

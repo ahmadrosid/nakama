@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { toolGroupElapsedSeconds } from "@/components/chat/assistant-tool-group.shared";
 import type { ChatListItem } from "./chat-history";
 import { groupMessagesIntoTurns, turnKey } from "./chat-message-turns";
 
@@ -12,6 +13,41 @@ function item(
 }
 
 describe("groupMessagesIntoTurns", () => {
+  test("tool duration survives reload and measures parallel tools as a span", () => {
+    const tools = [
+      item({
+        id: "t1",
+        role: "tool",
+        toolCompletedAt: 9000,
+        toolStartedAt: 1000,
+        toolStatus: "done",
+      }),
+      item({
+        id: "t2",
+        role: "tool",
+        toolCompletedAt: 6000,
+        toolStartedAt: 2000,
+        toolStatus: "done",
+      }),
+    ];
+    expect(toolGroupElapsedSeconds(tools, 100_000)).toBe(8);
+    expect(toolGroupElapsedSeconds(tools, 200_000)).toBe(8);
+    expect(
+      toolGroupElapsedSeconds([{ ...tools[0]!, toolStatus: "running" }], 12_000)
+    ).toBe(11);
+    expect(
+      toolGroupElapsedSeconds(
+        [
+          item({
+            createdAt: new Date().toISOString(),
+            id: "old",
+            role: "tool",
+          }),
+        ],
+        100_000
+      )
+    ).toBeNull();
+  });
   test("returns empty turns for empty messages", () => {
     expect(groupMessagesIntoTurns([])).toEqual([]);
   });

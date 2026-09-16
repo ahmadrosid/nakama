@@ -353,8 +353,12 @@ export function useToolsQuery() {
   return useQuery(toolsQueryOptions);
 }
 
-export function useMcpServersQuery() {
-  return useQuery(mcpServersQueryOptions);
+export function useMcpServersQuery({
+  refetchInterval,
+}: {
+  refetchInterval?: number;
+} = {}) {
+  return useQuery({ ...mcpServersQueryOptions, refetchInterval });
 }
 
 export function useSkillsQuery() {

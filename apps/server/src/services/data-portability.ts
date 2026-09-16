@@ -579,6 +579,14 @@ function skipRelativePathReason(
   ) {
     return "Internal data-portability temporary path.";
   }
+  if (
+    parts[0] === "orgs" &&
+    parts[2] === "plugins" &&
+    parts[4] === "workers" &&
+    parts[6] === "cache"
+  ) {
+    return "Re-downloadable plugin worker cache is excluded.";
+  }
   if (parts[0] === "plugins" && parts[1] === ".staging") {
     return "Transient plugin package staging is excluded.";
   }

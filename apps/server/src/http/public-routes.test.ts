@@ -15,6 +15,23 @@ describe("isPublicRouteRequest", () => {
     ).toBe(false);
   });
 
+  test("allows the MCP OAuth callback without auth, GET only", () => {
+    expect(isPublicRouteRequest("GET", "/v1/mcp/oauth/callback/mcp_123")).toBe(
+      true
+    );
+    expect(isPublicRouteRequest("POST", "/v1/mcp/oauth/callback/mcp_123")).toBe(
+      false
+    );
+  });
+
+  test("keeps the rest of the MCP API behind auth", () => {
+    expect(isPublicRouteRequest("GET", "/v1/mcp/servers")).toBe(false);
+    expect(isPublicRouteRequest("GET", "/v1/mcp/oauth/callback")).toBe(false);
+    expect(
+      isPublicRouteRequest("GET", "/v1/mcp/oauth/callback/mcp_123/tools")
+    ).toBe(false);
+  });
+
   test("allows public artifact share reads", () => {
     expect(
       isPublicRouteRequest("GET", "/v1/public/artifact-shares/tok123")
