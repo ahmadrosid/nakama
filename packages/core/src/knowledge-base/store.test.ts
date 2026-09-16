@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
@@ -73,21 +74,23 @@ describe("knowledge base store", () => {
     expect(listed[0]?.id).toBe(uploaded.document.id);
 
     const extracted = await readFile(
-      getKnowledgeBaseExtractedPath(ORG_ID, profileId, uploaded.document.id),
+      getKnowledgeBaseExtractedPath(
+        getKnowledgeBaseDir(ORG_ID, profileId),
+        uploaded.document.id
+      ),
       "utf8"
     );
     expect(extracted).toContain("# source: notes.txt");
     expect(extracted).toContain("needle in haystack");
 
     const manifest = await readFile(
-      getKnowledgeBaseManifestPath(ORG_ID, profileId),
+      getKnowledgeBaseManifestPath(getKnowledgeBaseDir(ORG_ID, profileId)),
       "utf8"
     );
     expect(manifest).toContain(uploaded.document.id);
 
     const storedPath = getKnowledgeBaseStoredDocumentPath(
-      ORG_ID,
-      profileId,
+      getKnowledgeBaseDir(ORG_ID, profileId),
       uploaded.document.id,
       uploaded.document.filename
     );
@@ -207,7 +210,9 @@ describe("knowledge base store", () => {
       mediaType: "text/plain",
     });
 
-    const manifestPath = getKnowledgeBaseManifestPath(ORG_ID, profileId);
+    const manifestPath = getKnowledgeBaseManifestPath(
+      getKnowledgeBaseDir(ORG_ID, profileId)
+    );
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
       documents: Array<Record<string, unknown>>;
     };

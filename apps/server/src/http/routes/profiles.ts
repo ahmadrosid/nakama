@@ -23,14 +23,11 @@ import type {
 } from "@nakama/core";
 import {
   attachSharedKnowledgeBaseDocument,
-  deleteOrganizationKnowledgeBaseDocument,
   detachSharedKnowledgeBaseDocument,
   getProfileSharedDocumentIds,
   KnowledgeBaseDocumentInUseError,
-  listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
   readOrganizationKnowledgeBaseDocumentContent,
-  uploadOrganizationKnowledgeBaseDocument,
 } from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import { ArtifactShareService } from "../../services/artifact-share-service";
@@ -975,13 +972,7 @@ export function registerProfileRoutes(
     if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
       throw new NakamaApiError("Not found", 404);
     }
-    const documents = await listOrganizationKnowledgeBaseDocuments(orgId);
-    return json({
-      documents: documents.map((document) => ({
-        ...document,
-        scope: "organization",
-      })),
-    });
+    return json(await agent.listOrganizationKnowledgeBase(orgId));
   });
 
   app.post("/v1/orgs/:orgId/knowledge-base", async (c) => {
@@ -991,15 +982,12 @@ export function registerProfileRoutes(
       throw new NakamaApiError("Not found", 404);
     }
     const body = await readJson<UploadKnowledgeBaseRequest>(c.req.raw);
-    const result = await uploadOrganizationKnowledgeBaseDocument(
+    const result = await agent.uploadOrganizationKnowledgeBaseDocument(
       orgId,
       body.document,
       body.onDuplicate
     );
-    return json(
-      { ...result, document: { ...result.document, scope: "organization" } },
-      result.outcome === "created" ? 201 : 200
-    );
+    return json(result, result.outcome === "created" ? 201 : 200);
   });
 
   app.delete("/v1/orgs/:orgId/knowledge-base/:documentId", async (c) => {
@@ -1010,14 +998,9 @@ export function registerProfileRoutes(
     }
     const documentId = decodeURIComponent(c.req.param("documentId"));
     try {
-      const deleted = await deleteOrganizationKnowledgeBaseDocument(
-        orgId,
-        documentId
+      return json(
+        await agent.deleteOrganizationKnowledgeBaseDocument(orgId, documentId)
       );
-      if (!deleted) {
-        throw new NakamaApiError("Knowledge base document not found.", 404);
-      }
-      return json({ deleted: true, documentId });
     } catch (error) {
       if (error instanceof KnowledgeBaseDocumentInUseError) {
         return json(
@@ -1039,7 +1022,7 @@ export function registerProfileRoutes(
     if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
       throw new NakamaApiError("Not found", 404);
     }
-    const document = await readOrganizationKnowledgeBaseDocumentContent(
+    const document = await agent.readOrganizationKnowledgeBaseDocument(
       orgId,
       decodeURIComponent(c.req.param("documentId")),
       { render: c.req.query("render") === "text" ? "text" : undefined }

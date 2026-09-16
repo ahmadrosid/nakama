@@ -2306,6 +2306,17 @@ export interface DeleteKnowledgeBaseResponse {
   profileId: string;
 }
 
+/** Organization documents are shared, so their responses carry no profile id. */
+export interface UploadOrganizationKnowledgeBaseResponse {
+  document: KnowledgeBaseDocument;
+  outcome: KnowledgeBaseUploadOutcome;
+}
+
+export interface DeleteOrganizationKnowledgeBaseResponse {
+  deleted: boolean;
+  documentId: string;
+}
+
 export interface UserContextStatusResponse {
   active: boolean;
   content?: string;

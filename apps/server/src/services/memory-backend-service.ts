@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
+  getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
   getOrgPluginDataDir,
   getProfileSoulDir,
@@ -209,7 +210,10 @@ export class MemoryBackendService {
       if (document.status !== "ready") {
         continue;
       }
-      const file = getKnowledgeBaseExtractedPath(orgId, profileId, document.id);
+      const file = getKnowledgeBaseExtractedPath(
+        getKnowledgeBaseDir(orgId, profileId),
+        document.id
+      );
       const content = await readFile(file, "utf8");
       // Preserve the full document so Supermemory chooses semantic boundaries.
       entries.push({

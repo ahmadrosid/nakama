@@ -11,46 +11,34 @@ export function getOrgKnowledgeBaseDir(orgId: string): string {
   return join(getOrgConfigDir(orgId), KNOWLEDGE_BASE_RELATIVE_DIR);
 }
 
-export function getKnowledgeBaseDir(
-  orgId: string,
-  profileId: string | undefined
-): string {
-  return profileId
-    ? join(getProfileSoulDir(orgId, profileId), KNOWLEDGE_BASE_RELATIVE_DIR)
-    : getOrgKnowledgeBaseDir(orgId);
+/** Root for a single profile's own documents. */
+export function getKnowledgeBaseDir(orgId: string, profileId: string): string {
+  return join(getProfileSoulDir(orgId, profileId), KNOWLEDGE_BASE_RELATIVE_DIR);
 }
 
-export function getKnowledgeBaseManifestPath(
-  orgId: string,
-  profileId: string | undefined
-): string {
-  return join(
-    getKnowledgeBaseDir(orgId, profileId),
-    KNOWLEDGE_BASE_MANIFEST_FILE
-  );
+export function getKnowledgeBaseManifestPath(dir: string): string {
+  return join(dir, KNOWLEDGE_BASE_MANIFEST_FILE);
 }
 
 export function getKnowledgeBaseStoredDocumentPath(
-  orgId: string,
-  profileId: string | undefined,
+  dir: string,
   documentId: string,
   filename: string
 ): string {
   const base = filename.split(/[/\\]/).pop()?.trim() ?? "document";
   const sanitized = base.replace(/[^\w.\-() ]+/g, "_") || "document";
   return join(
-    getKnowledgeBaseDir(orgId, profileId),
+    dir,
     `${assertConfigPathSegment(documentId, "documentId")}--${sanitized}`
   );
 }
 
 export function getKnowledgeBaseExtractedPath(
-  orgId: string,
-  profileId: string | undefined,
+  dir: string,
   documentId: string
 ): string {
   return join(
-    getKnowledgeBaseDir(orgId, profileId),
+    dir,
     `${assertConfigPathSegment(documentId, "documentId")}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
   );
 }
