@@ -527,7 +527,7 @@ export function ProfileCreatedCard({
   };
 }) {
   return (
-    <div className="flex w-full max-w-full items-center justify-between gap-3 rounded-xl bg-muted/40 p-3">
+    <div className="flex w-fit max-w-full items-center gap-3 rounded-xl bg-muted/40 p-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <ProfileAvatar profile={profile} size="sm" />
         <p className="truncate font-medium text-foreground text-sm">
