@@ -19,7 +19,6 @@ export { isOpenRouterModelSlug } from "@nakama/core";
 
 export type ProviderModelOption = ContractProviderModelOption & {
   contextWindow: number;
-  maxOutputTokens: number;
 };
 
 function withVisionDefaults(
@@ -38,50 +37,24 @@ function withVisionDefaults(
   }));
 }
 
-const CHATGPT_SHARED_MODEL_IDS = [
-  "gpt-5.4",
-  "gpt-5.5",
-  "gpt-5.6-luna",
-] as const;
-
-function deriveChatgptModels(
-  catalog: ProviderModelOption[]
-): ProviderModelOption[] {
-  const openaiById = new Map(
-    catalog
-      .filter((model) => model.provider === "openai")
-      .map((model) => [model.id, model])
-  );
-
-  const shared = CHATGPT_SHARED_MODEL_IDS.map((id) => {
-    const source = openaiById.get(id);
-
-    if (!source) {
-      throw new Error(`Missing OpenAI catalog model for ChatGPT: ${id}`);
-    }
-
-    return {
-      ...source,
-      default: id === "gpt-5.4",
-      inputPerMillionUsd: 0,
-      outputPerMillionUsd: 0,
-      provider: "chatgpt" as const,
-    };
-  });
-
-  return [
-    ...shared,
-    {
-      contextWindow: 128_000,
-      id: "gpt-5.4-mini",
-      inputPerMillionUsd: 0,
-      maxOutputTokens: 8192,
-      name: "GPT-5.4 mini",
-      outputPerMillionUsd: 0,
-      provider: "chatgpt" as const,
-    },
-  ];
-}
+// ChatGPT sign-in has its own catalog and default context window, not API limits.
+// https://github.com/openai/codex/blob/main/codex-rs/models-manager/models.json
+// Codex does not publish an output ceiling; compaction uses its local fallback.
+const CHATGPT_MODELS: ProviderModelOption[] = [
+  { default: true, id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
+  { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
+  { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
+  { id: "gpt-6-astra", name: "GPT-6 Astra" },
+  { id: "gpt-5.5", name: "GPT-5.5" },
+].map((model) => ({
+  ...model,
+  contextWindow: 272_000,
+  inputPerMillionUsd: 0,
+  outputPerMillionUsd: 0,
+  provider: "chatgpt",
+  supportsThinking: true,
+  supportsVision: true,
+}));
 
 const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
@@ -805,7 +778,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
 
 export const AVAILABLE_MODELS: ProviderModelOption[] = [
   ...BASE_MODELS,
-  ...deriveChatgptModels(BASE_MODELS),
+  ...CHATGPT_MODELS,
 ];
 
 export function validateOpenRouterCustomModels(
@@ -905,10 +878,13 @@ export function getModelById(modelId: string): ProviderModelOption | undefined {
  * Entries that leave the sizes blank keep the catalog value, then the fallback.
  */
 export function resolveModelLimits(
+  provider: ProviderName,
   modelId: string,
   customModels?: CustomModelEntry[]
 ): { contextWindow: number; maxOutputTokens: number } {
-  const catalog = getModelById(modelId);
+  const catalog = getModelsForProvider(provider).find(
+    (model) => model.id === modelId
+  );
   const custom = findCustomModel(customModels, modelId);
 
   return {
@@ -952,6 +928,7 @@ export function getDefaultModel(
 
   if (
     (provider === "openai" ||
+      provider === "chatgpt" ||
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
