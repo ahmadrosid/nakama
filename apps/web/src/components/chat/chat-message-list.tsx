@@ -34,7 +34,10 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
-import { AssistantTurnSegmentView } from "@/components/chat/assistant-tool-group";
+import {
+  AssistantTurnSegmentView,
+  ProfileCreatedCard,
+} from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
@@ -56,7 +59,11 @@ import {
   type MessageTurn,
   turnKey,
 } from "@/lib/chat-message-turns";
-import { awaitingModelLabel, isAwaitingModelResponse } from "@/lib/chat-stream";
+import {
+  awaitingModelLabel,
+  isAwaitingModelResponse,
+  parseProfileCreatedResult,
+} from "@/lib/chat-stream";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
@@ -377,6 +384,14 @@ function AssistantTurn({
   const turnMessages = messages.map(({ message }) => message);
   const segments = segmentAssistantTurn(turnMessages);
   const artifacts = extractTurnArtifacts(turnMessages);
+  const createdProfiles = turnMessages.flatMap((message) => {
+    if (message.tool !== "create_profile") {
+      return [];
+    }
+
+    const profile = parseProfileCreatedResult(message.toolResult);
+    return profile ? [profile] : [];
+  });
   const artifactTurnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
   const turnComplete = isAssistantTurnComplete(turnMessages);
@@ -423,6 +438,13 @@ function AssistantTurn({
               />
             );
           })}
+        </div>
+      ) : null}
+      {turnComplete && createdProfiles.length > 0 ? (
+        <div className="flex w-full flex-col gap-2">
+          {createdProfiles.map((profile) => (
+            <ProfileCreatedCard key={profile.id} profile={profile} />
+          ))}
         </div>
       ) : null}
       {showActions && anchorMessage ? (

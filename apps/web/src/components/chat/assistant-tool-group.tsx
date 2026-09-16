@@ -41,7 +41,6 @@ import {
   formatToolResult,
   isSubAgentTool,
   isToolResultError,
-  parseProfileCreatedResult,
   parseSubAgentResult,
 } from "@/lib/chat-stream";
 import {
@@ -224,7 +223,9 @@ function AssistantWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
+  const visibleTools = tools.filter(
+    (tool) => !isArtifactMetaSidecarTool(tool) && tool.tool !== "create_profile"
+  );
   const pluginTools = visibleTools.filter((tool) =>
     tool.tool?.startsWith("plugin_")
   );
@@ -471,7 +472,6 @@ function useWorkDuration(
 
 function isDedicatedTool(tool: ChatListItem): boolean {
   return (
-    tool.tool === "create_profile" ||
     isSubAgentTool(tool.tool) ||
     shouldRenderWebSearchToolRow(tool) ||
     shouldRenderWebFetchToolRow(tool) ||
@@ -488,10 +488,6 @@ function DedicatedToolRow({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  if (message.tool === "create_profile") {
-    return <ProfileCreatedToolRow message={message} />;
-  }
-
   if (isGenerateImageTool(message.tool)) {
     if (shouldRenderGenerateImageToolRow(message)) {
       return <ImageGenerationToolRow message={message} profileId={profileId} />;
@@ -519,13 +515,17 @@ function DedicatedToolRow({
   return <SubAgentToolRow message={message} modelLabel={modelLabel} />;
 }
 
-function ProfileCreatedToolRow({ message }: { message: ChatListItem }) {
-  const profile = parseProfileCreatedResult(message.toolResult);
-
-  if (!profile) {
-    return <ToolTimelineItem message={message} />;
-  }
-
+export function ProfileCreatedCard({
+  profile,
+}: {
+  profile: {
+    hasAvatar: boolean;
+    id: string;
+    isSuper: boolean;
+    name: string;
+    updatedAt: string;
+  };
+}) {
   return (
     <div className="flex w-full max-w-full items-center justify-between gap-3 rounded-xl bg-muted/40 p-3">
       <div className="flex min-w-0 items-center gap-2.5">
