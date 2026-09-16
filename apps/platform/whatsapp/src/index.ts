@@ -28,6 +28,7 @@ import {
   writeWhatsAppWorkerHeartbeat,
 } from "@nakama/core/whatsapp-worker";
 import { WhatsAppAuthStore } from "./auth-store";
+import { installBaileysConsoleRedaction } from "./baileys-logger";
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
 import { startWhatsAppOutboundServer } from "./outbound-server";
@@ -35,6 +36,7 @@ import { createWhatsAppSocket } from "./socket";
 
 installErrorHandlers("worker:whatsapp");
 void installErrorTrackingSink();
+const restoreBaileysConsole = installBaileysConsoleRedaction();
 
 let spawnedChild: Bun.Subprocess | null = null;
 let socketHandle: {
@@ -64,6 +66,7 @@ registerCleanupHandlers(async () => {
   }
   await clearWhatsAppWorkerHeartbeat();
   await clearWhatsAppQrCode();
+  restoreBaileysConsole();
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
