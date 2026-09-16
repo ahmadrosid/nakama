@@ -14,7 +14,6 @@ import {
 } from "../services/custom-tool-handlers";
 import type { ProfileService } from "../services/profile-service";
 import {
-  PROFILE_CREATE_CONFIRMATION_MESSAGE,
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
   type SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
@@ -146,10 +145,6 @@ export function createSuperBotTools(
           throw new Error("name is required.");
         }
 
-        if (!sessionState.canCreateProfile(context.sessionId)) {
-          throw new Error(PROFILE_CREATE_CONFIRMATION_MESSAGE);
-        }
-
         const result = await profileService.createProfile(
           requireOrgId(context),
           {
@@ -201,7 +196,7 @@ export function createSuperBotTools(
           throw new Error("Provide systemPrompt and/or soulFiles.");
         }
 
-        if (!sessionState.canCreateProfile(context.sessionId)) {
+        if (!sessionState.canUpdateProfile(context.sessionId)) {
           throw new Error(PROFILE_UPDATE_CONFIRMATION_MESSAGE);
         }
 

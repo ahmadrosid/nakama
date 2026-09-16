@@ -24,7 +24,7 @@ export class SuperBotSessionState {
     this.turnFor(sessionId).createdToolIds.add(toolId);
   }
 
-  canCreateProfile(sessionId: string | undefined): boolean {
+  canUpdateProfile(sessionId: string | undefined): boolean {
     if (!sessionId) {
       return true;
     }
@@ -76,9 +76,6 @@ export class SuperBotSessionState {
 
 export const TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE =
   "This tool was already assigned to a profile in this turn. Assign it to another profile on a later message or from the dashboard.";
-
-export const PROFILE_CREATE_CONFIRMATION_MESSAGE =
-  "Wait for the user to confirm the draft in a later message before calling create_profile.";
 
 export const PROFILE_UPDATE_CONFIRMATION_MESSAGE =
   "Wait for the user to confirm the draft in a later message before calling update_profile.";
