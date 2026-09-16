@@ -109,6 +109,40 @@ describe("AgentService sub-agent roles", () => {
 });
 
 describe("AgentService branching", () => {
+  test("reopens a saved session with a retired ChatGPT model", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const sessionId = await new AgentService(null, null, db).createSession(
+      ORG_ID,
+      "web",
+      "profile_default"
+    );
+    await db.updateSessionModel(sessionId, "chatgpt-1::gpt-5.4-mini");
+    const service = new AgentService(
+      {
+        defaultProviderId: "chatgpt-1",
+        providers: [
+          {
+            apiKey: "",
+            createdAt: "2026-09-16T00:00:00.000Z",
+            id: "chatgpt-1",
+            label: "ChatGPT",
+            type: "chatgpt",
+          },
+        ],
+      },
+      null,
+      db
+    );
+
+    expect((await service.getSessionMessages(sessionId, ORG_ID))?.model).toBe(
+      "chatgpt-1::gpt-5.4-mini"
+    );
+    expect((await db.getSession(sessionId))?.model).toBe(
+      "chatgpt-1::gpt-5.4-mini"
+    );
+  });
+
   test("keeps model selection scoped to the chat session", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile({

@@ -112,6 +112,14 @@ export function modelExistsOnInstance(
     return true;
   }
 
+  // Keep saved selections resolvable after retirement from the ChatGPT picker.
+  if (
+    instance.type === "chatgpt" &&
+    (trimmed === "gpt-5.4" || trimmed === "gpt-5.4-mini")
+  ) {
+    return true;
+  }
+
   if (instance.type === "openrouter" && isOpenRouterModelSlug(trimmed)) {
     return true;
   }
