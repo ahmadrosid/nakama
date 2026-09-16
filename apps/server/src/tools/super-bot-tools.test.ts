@@ -440,7 +440,10 @@ describe("super bot create_profile", () => {
         { name: "Gary" },
         { orgId: ORG_ID, sessionId: SESSION_ID }
       )
-    ).resolves.toMatchObject({ profile: { name: "Gary" } });
+    ).resolves.toMatchObject({
+      profile: { name: "Gary" },
+      type: "profile_created",
+    });
     expect(capturedRequests[0]?.name).toBe("Gary");
     expect(capturedRequests[0]?.id).toBeUndefined();
   });

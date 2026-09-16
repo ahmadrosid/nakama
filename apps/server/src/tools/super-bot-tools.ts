@@ -150,13 +150,21 @@ export function createSuperBotTools(
           throw new Error(PROFILE_CREATE_CONFIRMATION_MESSAGE);
         }
 
-        return profileService.createProfile(requireOrgId(context), {
-          isSuper: readBoolean(input, "isSuper") ?? false,
-          model: readOptionalString(input, "model"),
-          name,
-          soulFiles: readSoulFiles(input),
-          systemPrompt: readString(input, "systemPrompt") ?? undefined,
-        });
+        const result = await profileService.createProfile(
+          requireOrgId(context),
+          {
+            isSuper: readBoolean(input, "isSuper") ?? false,
+            model: readOptionalString(input, "model"),
+            name,
+            soulFiles: readSoulFiles(input),
+            systemPrompt: readString(input, "systemPrompt") ?? undefined,
+          }
+        );
+
+        return {
+          ...result,
+          type: "profile_created" as const,
+        };
       },
     },
     {

@@ -4,6 +4,7 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
+  ProfileSummary,
 } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import type { Dispatch, SetStateAction } from "react";
@@ -127,6 +128,47 @@ export function isToolResultError(
 
 export function isSubAgentTool(tool: string | undefined): boolean {
   return tool === "sub_agent";
+}
+
+type CreatedProfileSummary = Pick<
+  ProfileSummary,
+  "hasAvatar" | "id" | "isSuper" | "name" | "updatedAt"
+>;
+
+export function parseProfileCreatedResult(
+  result: unknown
+): CreatedProfileSummary | null {
+  if (typeof result !== "object" || result === null) {
+    return null;
+  }
+
+  const record = result as {
+    profile?: unknown;
+    type?: unknown;
+  };
+
+  // Accept the unmarked shape so older create_profile messages still get the
+  // richer card after reload. New results always include the discriminator.
+  if (record.type !== undefined && record.type !== "profile_created") {
+    return null;
+  }
+
+  if (typeof record.profile !== "object" || record.profile === null) {
+    return null;
+  }
+
+  const profile = record.profile as Partial<CreatedProfileSummary>;
+  if (
+    typeof profile.id !== "string" ||
+    typeof profile.name !== "string" ||
+    typeof profile.hasAvatar !== "boolean" ||
+    typeof profile.isSuper !== "boolean" ||
+    typeof profile.updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return profile as CreatedProfileSummary;
 }
 
 export type SubAgentToolStatus = "success" | "fail" | "timeout";
