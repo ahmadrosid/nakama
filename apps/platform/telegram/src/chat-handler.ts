@@ -512,7 +512,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await telegram.send(formatClientError(error));
       return;
     } finally {
-      clearActiveStream(conversationKey);
+      clearActiveStream(conversationKey, signal);
       typingLoop.stop();
     }
 

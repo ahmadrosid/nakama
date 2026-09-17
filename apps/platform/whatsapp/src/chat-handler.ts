@@ -517,7 +517,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await sendText(jid, formatClientError(error));
       return;
     } finally {
-      clearActiveStream(conversationKey);
+      clearActiveStream(conversationKey, signal);
       typingLoop.stop();
     }
 

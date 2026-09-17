@@ -861,7 +861,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(formatClientError(error));
       return;
     } finally {
-      clearActiveStream(conversationKey);
+      clearActiveStream(conversationKey, signal);
       typingLoop.stop();
     }
 
