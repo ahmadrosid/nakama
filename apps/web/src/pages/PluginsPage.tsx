@@ -465,41 +465,10 @@ function GoogleMeetInstallDialog({
             server. Downloads are saved for reuse.
           </DialogDescription>
         </DialogHeader>
-        {dependencies.isLoading ? (
-          <Spinner />
-        ) : (
-          <ol aria-live="polite" className="space-y-3 text-sm">
-            {status?.steps.map((step) => (
-              <li
-                className="flex items-start justify-between gap-4"
-                key={step.id}
-              >
-                <span>{step.label}</span>
-                <span className="flex shrink-0 items-center gap-2">
-                  {step.state === "installing" && <Spinner />}
-                  {
-                    {
-                      failed: "Failed",
-                      installing: "Installing…",
-                      pending: "To install",
-                      ready: "Ready",
-                    }[step.state]
-                  }
-                </span>
-              </li>
-            ))}
-            <li className="flex justify-between gap-4">
-              <span>Google Meet plugin</span>
-              <span>
-                {install.isSuccess
-                  ? "Installed"
-                  : busy && status?.state === "ready"
-                    ? "Installing…"
-                    : "Waiting"}
-              </span>
-            </li>
-          </ol>
-        )}
+        <GoogleMeetInstallProgress
+          dependencies={dependencies}
+          install={install}
+        />
         {(error || status?.error) && (
           <p className="text-destructive text-sm" role="alert">
             {error ? formatError(error) : status?.error}
@@ -510,37 +479,98 @@ function GoogleMeetInstallDialog({
             A platform administrator must install the shared dependencies first.
           </p>
         )}
-        <DialogFooter>
-          <Button disabled={busy} onClick={onClose} variant="outline">
-            {install.isSuccess ? "Close" : "Cancel"}
-          </Button>
-          {install.isSuccess ? (
-            <Button render={<Link to="/plugins/google-meet" />}>
-              Open Google Meet
-            </Button>
-          ) : (
-            <Button
-              disabled={
-                busy ||
-                dependencies.isLoading ||
-                !status ||
-                status.state === "unsupported" ||
-                needsAdmin
-              }
-              onClick={() => install.mutate()}
-            >
-              {busy
-                ? "Installing…"
-                : status?.state === "failed" || install.isError
-                  ? "Retry"
-                  : status?.state === "ready"
-                    ? "Install plugin"
-                    : "Install dependencies and plugin"}
-            </Button>
-          )}
-        </DialogFooter>
+        <GoogleMeetInstallFooter
+          dependencies={dependencies}
+          install={install}
+          needsAdmin={needsAdmin}
+          onClose={onClose}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+type GoogleMeetInstallState = ReturnType<typeof useInstallGoogleMeet>;
+
+function GoogleMeetInstallProgress({
+  dependencies,
+  install,
+}: GoogleMeetInstallState) {
+  const status = dependencies.data;
+  let pluginStatus = "Waiting";
+  if (install.isSuccess) {
+    pluginStatus = "Installed";
+  } else if (install.isPending && status?.state === "ready") {
+    pluginStatus = "Installing…";
+  }
+  return dependencies.isLoading ? (
+    <Spinner />
+  ) : (
+    <ol aria-live="polite" className="space-y-3 text-sm">
+      {status?.steps.map((step) => (
+        <li className="flex items-start justify-between gap-4" key={step.id}>
+          <span>{step.label}</span>
+          <span className="flex shrink-0 items-center gap-2">
+            {step.state === "installing" && <Spinner />}
+            {
+              {
+                failed: "Failed",
+                installing: "Installing…",
+                pending: "To install",
+                ready: "Ready",
+              }[step.state]
+            }
+          </span>
+        </li>
+      ))}
+      <li className="flex justify-between gap-4">
+        <span>Google Meet plugin</span>
+        <span>{pluginStatus}</span>
+      </li>
+    </ol>
+  );
+}
+
+function GoogleMeetInstallFooter({
+  dependencies,
+  install,
+  needsAdmin,
+  onClose,
+}: GoogleMeetInstallState & { needsAdmin: boolean; onClose(): void }) {
+  const status = dependencies.data;
+  const busy = install.isPending;
+  let label = "Install dependencies and plugin";
+  if (busy) {
+    label = "Installing…";
+  } else if (status?.state === "failed" || install.isError) {
+    label = "Retry";
+  } else if (status?.state === "ready") {
+    label = "Install plugin";
+  }
+  return (
+    <DialogFooter>
+      <Button disabled={busy} onClick={onClose} variant="outline">
+        {install.isSuccess ? "Close" : "Cancel"}
+      </Button>
+      {install.isSuccess ? (
+        <Button render={<Link to="/plugins/google-meet" />}>
+          Open Google Meet
+        </Button>
+      ) : (
+        <Button
+          disabled={
+            busy ||
+            dependencies.isLoading ||
+            !status ||
+            status.state === "unsupported" ||
+            needsAdmin
+          }
+          onClick={() => install.mutate()}
+        >
+          {label}
+        </Button>
+      )}
+    </DialogFooter>
   );
 }
 
