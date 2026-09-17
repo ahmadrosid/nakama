@@ -43,7 +43,7 @@ Use readiness checks to keep traffic away from an unavailable database, and requ
 
 ### First-boot seed (optional)
 
-To skip the setup wizard on a fresh data volume, set all three admin seed variables before the first boot. Nakama creates the admin account, a `Personal` org (override with `NAKAMA_SEED_ORG_NAME`), and an OpenCode Zen provider. Self-hosted installs without these variables behave as today.
+To skip the setup wizard on a fresh data volume, set all three admin seed variables before the first boot. Nakama creates the admin account and a `Personal` org (override with `NAKAMA_SEED_ORG_NAME`). No provider is created: after the first login, open `/setup` to add one. Self-hosted installs without these variables behave as today.
 
 | Variable | Required | Purpose |
 |---|---|---|

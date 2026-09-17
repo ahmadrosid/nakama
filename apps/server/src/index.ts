@@ -305,14 +305,11 @@ const skillSuggestionService = new SkillSuggestionService(
 );
 agent.setSkillSuggestionService(skillSuggestionService);
 
-const seedResult = await runFirstBootSeed({
+await runFirstBootSeed({
   authService,
   databaseAdapter: database.adapter,
   orgService,
 });
-if (seedResult.providerWritten) {
-  await agent.reloadAfterDataRestore();
-}
 
 const systemStatus = new SystemStatusService(
   agent,

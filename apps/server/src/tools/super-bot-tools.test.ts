@@ -11,7 +11,6 @@ import type {
 } from "@nakama/core";
 import type { ProfileService } from "../services/profile-service";
 import {
-  PROFILE_CREATE_CONFIRMATION_MESSAGE,
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
   SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
@@ -375,32 +374,50 @@ describe("super bot assign_tool_to_profile", () => {
 });
 
 describe("super bot create_profile", () => {
-  test("refuses create_profile on the first turn", async () => {
-    let createProfileCalled = false;
+  test("creates a profile on the first turn", async () => {
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
     const createProfile = getCreateProfileTool(
       {
-        async createProfile(): Promise<ProfileResponse> {
-          createProfileCalled = true;
-          throw new Error("should not be called");
+        async createProfile(
+          _orgId: string,
+          request: CreateProfileRequest
+        ): Promise<ProfileResponse> {
+          return {
+            profile: {
+              createdAt: "2026-01-01T00:00:00.000Z",
+              hasAvatar: false,
+              id: "gary",
+              isSuper: false,
+              mcpServerCount: 0,
+              mcpServers: [],
+              model: null,
+              name: request.name,
+              skills: [],
+              soulActive: true,
+              systemPrompt: "",
+              toolCount: 0,
+              tools: [],
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          };
         },
       },
       sessionState
     );
 
-    const error = await captureError(
+    await expect(
       createProfile.run(
         { name: "Gary" },
         { orgId: ORG_ID, sessionId: SESSION_ID }
       )
-    );
-
-    expect(error?.message).toBe(PROFILE_CREATE_CONFIRMATION_MESSAGE);
-    expect(createProfileCalled).toBe(false);
+    ).resolves.toMatchObject({
+      profile: { name: "Gary" },
+      type: "profile_created",
+    });
   });
 
-  test("creates after a later user turn confirms the draft", async () => {
+  test("creates after a later user turn", async () => {
     const capturedRequests: CreateProfileRequest[] = [];
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
@@ -440,7 +457,10 @@ describe("super bot create_profile", () => {
         { name: "Gary" },
         { orgId: ORG_ID, sessionId: SESSION_ID }
       )
-    ).resolves.toMatchObject({ profile: { name: "Gary" } });
+    ).resolves.toMatchObject({
+      profile: { name: "Gary" },
+      type: "profile_created",
+    });
     expect(capturedRequests[0]?.name).toBe("Gary");
     expect(capturedRequests[0]?.id).toBeUndefined();
   });

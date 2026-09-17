@@ -1,8 +1,14 @@
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
-import { ArrowDown01Icon, Rotate02Icon, Wrench01Icon } from "hugeicons-react";
+import {
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  Rotate02Icon,
+  Wrench01Icon,
+} from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Message,
   MessageContent,
@@ -19,12 +25,13 @@ import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
 import { PluginSurface } from "@/components/PluginSurface";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
-import type { ChatListItem } from "@/lib/chat-history";
+import { buildNewChatPath, type ChatListItem } from "@/lib/chat-history";
 import {
   formatSubAgentSubtitle,
   formatSubAgentTitle,
@@ -216,7 +223,9 @@ function AssistantWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
+  const visibleTools = tools.filter(
+    (tool) => !isArtifactMetaSidecarTool(tool) && tool.tool !== "create_profile"
+  );
   const pluginTools = visibleTools.filter((tool) =>
     tool.tool?.startsWith("plugin_")
   );
@@ -504,6 +513,39 @@ function DedicatedToolRow({
   }
 
   return <SubAgentToolRow message={message} modelLabel={modelLabel} />;
+}
+
+export function ProfileCreatedCard({
+  profile,
+}: {
+  profile: {
+    hasAvatar: boolean;
+    id: string;
+    isSuper: boolean;
+    name: string;
+    updatedAt: string;
+  };
+}) {
+  return (
+    <div className="flex w-fit max-w-full items-center gap-3 rounded-xl bg-muted/40 p-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <ProfileAvatar profile={profile} size="sm" />
+        <p className="truncate font-medium text-foreground text-sm">
+          {profile.name}
+        </p>
+      </div>
+      <Button
+        className="min-h-10 shrink-0 rounded-lg transition-transform active:scale-[0.96]"
+        render={<Link to={buildNewChatPath(profile.id)} />}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Start conversation
+        <ArrowRight01Icon aria-hidden className="size-4" />
+      </Button>
+    </div>
+  );
 }
 
 function subAgentStatusTone(status: string | undefined): string {

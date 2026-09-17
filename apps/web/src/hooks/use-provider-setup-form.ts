@@ -315,9 +315,6 @@ export function useProviderSetupForm(
           { id: modelId, name: row.modelName, ...browsedContext },
         ]);
         setSelectedModel(modelId);
-        if (row.isZen && row.isFree && !row.deprecated) {
-          setApiKey("public");
-        }
       } else if (provider === "opencode_go") {
         setExtraModels((current) => {
           if (

@@ -1,11 +1,4 @@
-import {
-  createProviderInstanceId,
-  loadUserConfig,
-  NakamaApiError,
-  type ProviderInstance,
-  saveUserConfig,
-  type UserConfig,
-} from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "./services/auth-service";
 import type { OrgService } from "./services/org-service";
@@ -21,8 +14,6 @@ const REQUIRED_SEED_ENV_KEYS = [
   SEED_ADMIN_PASSWORD,
 ] as const;
 
-const OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
-const OPENCODE_ZEN_LABEL = "OpenCode Zen";
 const MIN_PASSWORD_LENGTH = 8;
 
 export type FirstBootSeedDeps = {
@@ -33,7 +24,6 @@ export type FirstBootSeedDeps = {
 };
 
 export type FirstBootSeedResult = {
-  providerWritten: boolean;
   seeded: boolean;
 };
 
@@ -47,7 +37,7 @@ export async function runFirstBootSeed(
   });
 
   if (present.length === 0) {
-    return { providerWritten: false, seeded: false };
+    return { seeded: false };
   }
 
   if (present.length < REQUIRED_SEED_ENV_KEYS.length) {
@@ -58,7 +48,7 @@ export async function runFirstBootSeed(
   }
 
   if ((await deps.databaseAdapter.countHumanUsers()) > 0) {
-    return { providerWritten: false, seeded: false };
+    return { seeded: false };
   }
 
   const adminEmail = env[SEED_ADMIN_EMAIL]!.trim();
@@ -93,9 +83,9 @@ export async function runFirstBootSeed(
     throw error;
   }
 
-  await writeOpenCodeZenProvider();
-
-  return { providerWritten: true, seeded: true };
+  // No provider is seeded: OpenCode's free tier rejects the "public" key
+  // outside OpenCode, so the admin picks one at /setup after first login.
+  return { seeded: true };
 }
 
 function slugifyOrgName(name: string): string {
@@ -106,36 +96,4 @@ function slugifyOrgName(name: string): string {
     .replace(/^-+|-+$/g, "");
 
   return slug || "personal";
-}
-
-async function writeOpenCodeZenProvider(): Promise<void> {
-  const existing = await loadUserConfig();
-  const instance: ProviderInstance = {
-    apiKey: "public",
-    baseUrl: OPENCODE_ZEN_BASE_URL,
-    createdAt: new Date().toISOString(),
-    customModels: [
-      {
-        id: "big-pickle",
-        name: "Big Pickle",
-        supportsThinking: true,
-      },
-      {
-        id: "hy3-free",
-        name: "Hy3 Free",
-        supportsThinking: true,
-      },
-    ],
-    id: createProviderInstanceId(),
-    label: OPENCODE_ZEN_LABEL,
-    type: "openai_compatible",
-  };
-
-  const next: UserConfig = {
-    ...(existing ?? { defaultProviderId: null, providers: [] }),
-    defaultProviderId: instance.id,
-    providers: [...(existing?.providers ?? []), instance],
-  };
-
-  await saveUserConfig(next);
 }

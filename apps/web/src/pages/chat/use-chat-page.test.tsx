@@ -211,3 +211,176 @@ test("cognito sends the mode, stores no session id, and ends the old session", a
     });
   }
 });
+
+const navigationScenarios = [
+  "switch",
+  "current error",
+  "stale success",
+  "stale error",
+  "stale status",
+  "draft",
+];
+
+test.each(navigationScenarios)(
+  "session navigation keeps the requested chat: %s",
+  async (scenario) => {
+    const { act } = await import("react");
+    const { createRoot } = await import("react-dom/client");
+    const { Route, Routes, useLocation, useNavigate } = await import(
+      "react-router-dom"
+    );
+    const { AppContext } = await import("@/context/app-context-shared");
+    const { useActiveChatProfileStore } = await import(
+      "@/context/active-chat-profile-store"
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const previousStorage = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage"
+    );
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: window.localStorage,
+    });
+    const previousProfile = useActiveChatProfileStore.getState();
+    useActiveChatProfileStore.setState({ orgId: null, profileId: "default" });
+    const response = (id: string) => ({
+      channel: "web" as const,
+      messageMeta: [],
+      messages: [{ content: id, role: "user" as const }],
+      model: null,
+      questionnaire: null,
+      todos: [],
+    });
+    const pending = Promise.withResolvers<ReturnType<typeof response>>();
+    const latest = Promise.withResolvers<ReturnType<typeof response>>();
+    const mocks = [
+      spyOn(client, "getMe").mockRejectedValue(new Error("Unauthenticated")),
+      spyOn(client, "listUserOrgs").mockResolvedValue({ orgs: [] }),
+      spyOn(client, "listProfiles").mockResolvedValue({ profiles: [] }),
+      spyOn(client, "getThinkingSettings").mockResolvedValue({
+        effort: "medium",
+        enabled: false,
+      }),
+      spyOn(client, "getSessionStatus").mockImplementation(async (id) => {
+        if (id === "b" && scenario === "stale status") {
+          await pending.promise;
+          return { active: true };
+        }
+        return { active: false };
+      }),
+    ];
+    const getMessages = spyOn(client, "getSessionMessages").mockImplementation(
+      async (id) => {
+        if (
+          id === "b" &&
+          scenario !== "switch" &&
+          scenario !== "stale status"
+        ) {
+          return pending.promise;
+        }
+        if (id === "c") {
+          return latest.promise;
+        }
+        return response(id);
+      }
+    );
+    let page!: ChatPageState;
+    let navigate!: ReturnType<typeof useNavigate>;
+    let pathname = "";
+    function Probe() {
+      page = useChatPage();
+      navigate = useNavigate();
+      pathname = useLocation().pathname;
+      return null;
+    }
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={["/chat/default/a"]}>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <AppContext.Provider
+                  value={{
+                    configureProvider: async () => {
+                      throw new Error("Unexpected write");
+                    },
+                    createProvider: async () => {
+                      throw new Error("Unexpected write");
+                    },
+                    error: null,
+                    health: null,
+                    loading: false,
+                    models: null,
+                  }}
+                >
+                  <Routes>
+                    <Route
+                      element={<Probe />}
+                      path="/chat/:profileId?/:sessionId?"
+                    />
+                  </Routes>
+                </AppContext.Provider>
+              </AuthProvider>
+            </QueryClientProvider>
+          </MemoryRouter>
+        )
+      );
+      expect(page.session?.id).toBe("a");
+      getMessages.mockClear();
+      await act(async () => navigate("/chat/default/b"));
+      expect(pathname).toBe("/chat/default/b");
+      if (scenario === "switch") {
+        expect(page.session?.id).toBe("b");
+        expect(getMessages.mock.calls.map(([id]) => id)).toEqual(["b"]);
+      } else if (scenario === "current error") {
+        expect(page.busy).toBe(true);
+        await act(async () => pending.reject(new Error("Load failed")));
+        expect(page.busy).toBe(false);
+        expect(page.error).not.toBeNull();
+        expect(pathname).toBe("/chat/default/b");
+      } else if (scenario === "draft") {
+        await act(async () => navigate("/chat?new=1&profile=default"));
+        await act(async () => pending.resolve(response("b")));
+        expect(pathname).toBe("/chat");
+        expect(page.session).toBeNull();
+        expect(page.messages).toEqual([]);
+        expect(page.busy).toBe(false);
+      } else {
+        await act(async () => navigate("/chat/default/c"));
+        await act(async () => {
+          if (scenario === "stale error") {
+            pending.reject(new Error("Old load failed"));
+          } else {
+            pending.resolve(response("b"));
+          }
+        });
+        expect(pathname).toBe("/chat/default/c");
+        expect(page.busy).toBe(true);
+        expect(page.error).toBeNull();
+        await act(async () => latest.resolve(response("c")));
+        expect(page.session?.id).toBe("c");
+        expect(page.error).toBeNull();
+        expect(page.busy).toBe(false);
+        expect(getMessages.mock.calls.map(([id]) => id)).toEqual(["b", "c"]);
+      }
+    } finally {
+      await act(async () => root.unmount());
+      queryClient.clear();
+      getMessages.mockRestore();
+      for (const mock of mocks) {
+        mock.mockRestore();
+      }
+      useActiveChatProfileStore.setState(previousProfile);
+      if (previousStorage) {
+        Object.defineProperty(globalThis, "localStorage", previousStorage);
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    }
+  }
+);

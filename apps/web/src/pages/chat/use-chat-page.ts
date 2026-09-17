@@ -221,10 +221,20 @@ export function useChatPage() {
   const activeSessionIdRef = useRef<string | null>(session?.id ?? null);
   // Read inside sendMessage, which is memoised on other deps.
   const cognitoRef = useRef(cognito);
+  const sessionLoadRef = useRef(0);
 
   useEffect(() => {
     cognitoRef.current = cognito;
   }, [cognito]);
+
+  useEffect(
+    () => () => {
+      sessionLoadRef.current += 1;
+      loadedRouteRef.current = null;
+      streamAbortRef.current?.abort();
+    },
+    []
+  );
 
   useEffect(() => {
     profileIdRef.current = profileId;
@@ -397,8 +407,11 @@ export function useChatPage() {
 
   const enterDraftChat = useCallback(
     (nextProfileId: string) => {
+      sessionLoadRef.current += 1;
       streamAbortRef.current?.abort();
       streamAbortRef.current = null;
+      setBusy(false);
+      setTurnStartedAt(null);
       localStorage.removeItem(sessionStorageKey(nextProfileId));
       skipNextProfileSessionRef.current = true;
       loadedRouteRef.current = null;
@@ -542,6 +555,10 @@ export function useChatPage() {
 
   const resumeSession = useCallback(
     async (nextProfileId: string, sessionId: string) => {
+      const loadId = ++sessionLoadRef.current;
+      const isCurrentLoad = () => sessionLoadRef.current === loadId;
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
       activeSessionIdRef.current = sessionId;
       setBusy(true);
       setError(null);
@@ -557,6 +574,9 @@ export function useChatPage() {
           questionnaire,
           contextUsage: nextContextUsage,
         } = await client.getSessionMessages(sessionId);
+        if (!isCurrentLoad()) {
+          return;
+        }
         const nextSession = client.createChatSession(sessionId, channel);
         let listItems = chatMessagesToListItems(storedMessages, messageMeta);
         const storedFailedTurn =
@@ -579,6 +599,9 @@ export function useChatPage() {
 
         if (channel === "web") {
           const status = await client.getSessionStatus(sessionId);
+          if (!isCurrentLoad()) {
+            return;
+          }
 
           if (status.active) {
             setTurnStartedAt(status.startedAt ?? new Date().toISOString());
@@ -599,7 +622,13 @@ export function useChatPage() {
               signal: abortController.signal,
             });
 
+            if (!isCurrentLoad()) {
+              return;
+            }
             const refreshed = await client.getSessionMessages(sessionId);
+            if (!isCurrentLoad()) {
+              return;
+            }
             let refreshedItems = chatMessagesToListItems(
               refreshed.messages,
               refreshed.messageMeta
@@ -630,6 +659,9 @@ export function useChatPage() {
           }
         }
       } catch (err) {
+        if (!isCurrentLoad()) {
+          return;
+        }
         if (isAbortError(err)) {
           setMessages((current) => finalizeStreamingMessages(current));
           return;
@@ -637,9 +669,11 @@ export function useChatPage() {
 
         setError(formatError(err));
       } finally {
-        streamAbortRef.current = null;
-        setBusy(false);
-        setTurnStartedAt(null);
+        setBusy((current) => (isCurrentLoad() ? false : current));
+        if (isCurrentLoad()) {
+          streamAbortRef.current = null;
+          setTurnStartedAt(null);
+        }
       }
     },
     [profileId, setProfileId, syncChatUrl]
@@ -749,6 +783,11 @@ export function useChatPage() {
     }
     skipNextProfileSessionRef.current = true;
     loadedRouteRef.current = null;
+    sessionLoadRef.current += 1;
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setBusy(false);
+    setTurnStartedAt(null);
     messageQueueRef.current = [];
     isSendingRef.current = false;
     activeSessionIdRef.current = null;
@@ -813,18 +852,6 @@ export function useChatPage() {
     skipNextProfileSessionRef.current = true;
     void resumeSession(routeSession.profileId, routeSession.sessionId);
   }, [routeSession, resumeSession]);
-
-  useEffect(() => {
-    if (!(session && profileId)) {
-      return;
-    }
-    // Stale session state must never overwrite an intentional draft /chat URL.
-    // send/resume call syncChatUrl explicitly when a session should be reflected.
-    if (location.pathname === buildChatBasePath()) {
-      return;
-    }
-    syncChatUrl(profileId, session.id);
-  }, [session, profileId, syncChatUrl, location.pathname]);
 
   useEffect(() => {
     void loadProfiles();

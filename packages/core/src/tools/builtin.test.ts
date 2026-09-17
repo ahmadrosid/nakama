@@ -62,6 +62,28 @@ describe("file builtin tools", () => {
     expect(await readFile(targetPath, "utf8")).toBe("hello world");
   });
 
+  test("write_file preserves indentation and boundary whitespace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    const content = "    caf\u00e9\r\n    second line\r\n\r\n";
+    const result = await runWriteFile(
+      { content, path: "snippet.md" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(result.path, "utf8")).toBe(content);
+    expect(result.bytesWritten).toBe(Buffer.byteLength(content, "utf8"));
+  });
+
+  test("write_file still rejects whitespace-only content", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    await expect(
+      runWriteFile({ content: " \t\r\n", path: "notes.txt" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow();
+  });
+
   test("write_file resolves relative paths from profile workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     const result = await runWriteFile(
