@@ -67,6 +67,12 @@ const PLUGIN_DESCRIPTIONS: Record<string, string> = {
 type PluginDialog =
   | { type: "package-entry" }
   | {
+      type: "official-install";
+      pluginId: string;
+      name: string;
+      description: string;
+    }
+  | {
       source: PluginPackageRequest;
       preview: PluginPackagePreviewResponse;
       type: "package";
@@ -199,7 +205,9 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
 
     setActionError(null);
     try {
-      if (dialog.type === "package") {
+      if (dialog.type === "official-install") {
+        await installOfficial.mutateAsync(dialog.pluginId);
+      } else if (dialog.type === "package") {
         await installPackage.mutateAsync({
           expectedDigest: dialog.preview.digest,
           expectedIntegrity: dialog.preview.integrity,
@@ -265,7 +273,6 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     confirmDialog,
     dialog,
     handleUpdate,
-    installOfficial,
     meetInstall,
     previewNpmPackage,
     reinstallOfficial,
@@ -301,7 +308,6 @@ export function PluginsPage() {
     confirmDialog,
     dialog,
     handleUpdate,
-    installOfficial,
     meetInstall,
     previewNpmPackage,
     reinstallOfficial,
@@ -386,9 +392,12 @@ export function PluginsPage() {
                       setMeetInstall({ orgId });
                       return;
                     }
-                    void installOfficial
-                      .mutateAsync(pluginId)
-                      .catch((err) => setActionError(formatError(err)));
+                    setDialog({
+                      description: catalog.description,
+                      name: catalog.name,
+                      pluginId,
+                      type: "official-install",
+                    });
                     return;
                   }
                   if (!plugin) {
@@ -802,7 +811,7 @@ interface PluginRowProps {
     type:
       | Exclude<
           PluginDialog["type"],
-          "package" | "package-entry" | "remove-release"
+          "package" | "package-entry" | "remove-release" | "official-install"
         >
       | "reinstall"
       | "access",
@@ -1434,6 +1443,9 @@ function DialogBody({
   dialog: Exclude<PluginDialog, { type: "package-entry" }>;
   orgId: string;
 }) {
+  if (dialog.type === "official-install") {
+    return <p className="text-sm">{dialog.description}</p>;
+  }
   if (dialog.type === "package") {
     return (
       <ul className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]">
@@ -1494,6 +1506,9 @@ function dialogTitle(dialog: PluginDialog | null): string {
   if (dialog.type === "package-entry") {
     return "Install external plugin";
   }
+  if (dialog.type === "official-install") {
+    return `Install ${dialog.name}?`;
+  }
   if (dialog.type === "package") {
     return "Install this package?";
   }
@@ -1522,7 +1537,11 @@ function confirmLabel(dialog: PluginDialog | null): string {
   if (!dialog) {
     return "Confirm";
   }
-  if (dialog.type === "package" || dialog.type === "install") {
+  if (
+    dialog.type === "package" ||
+    dialog.type === "install" ||
+    dialog.type === "official-install"
+  ) {
     return "Install";
   }
   if (dialog.type === "enable") {
