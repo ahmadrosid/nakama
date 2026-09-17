@@ -92,6 +92,13 @@ export class AutomationScheduler {
   private dispatch(automation: AutomationSchedule): void {
     void this.delegate
       .runAutomation(automation.id, automation.orgId)
+      .then((result) => {
+        if (!result.ok) {
+          console.error(
+            `Automation ${automation.id} run not started: ${result.error ?? "unknown error"}`
+          );
+        }
+      })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Automation ${automation.id} run failed:`, message);
