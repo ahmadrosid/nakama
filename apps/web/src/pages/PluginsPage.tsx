@@ -325,7 +325,7 @@ export function PluginsPage() {
     : pluginIds;
 
   return (
-    <div className="min-w-0">
+    <div className="mx-auto min-w-0 max-w-3xl space-y-6">
       <PluginPageHeader
         busy={busy}
         canInstall={canInstallPackages}
@@ -348,7 +348,7 @@ export function PluginsPage() {
           className={
             selectedPluginId
               ? "min-w-0"
-              : "grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-x-8 gap-y-2 pt-3"
+              : "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
           }
         >
           {visiblePluginIds.map((pluginId) => {
@@ -644,19 +644,17 @@ function PluginPageHeader({
   onInstall(event: MouseEvent<HTMLButtonElement>): void;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-center justify-end gap-3 empty:hidden">
       {detail ? (
         <Link
-          className="text-muted-foreground text-sm hover:text-foreground"
+          className="mr-auto text-muted-foreground text-sm hover:text-foreground"
           to="/customize/plugins"
         >
           ← Back to plugins
         </Link>
-      ) : (
-        <h2 className="type-section-title">Plugins</h2>
-      )}
+      ) : null}
       {canInstall && !detail ? (
-        <Button disabled={busy} onClick={onInstall} size="sm">
+        <Button disabled={busy} onClick={onInstall} size="sm" variant="outline">
           Install external plugin
         </Button>
       ) : null}
@@ -833,7 +831,7 @@ function PluginRow({
   onRemove,
 }: PluginRowProps) {
   return (
-    <li className={detail ? "min-w-0" : "min-w-0 py-5"}>
+    <li className={detail ? "min-w-0" : "min-w-0 px-4 py-3"}>
       <div className="flex flex-wrap items-center gap-3">
         <PluginIdentity
           catalogDescription={catalogDescription}
@@ -898,9 +896,7 @@ function PluginIdentity({
 >) {
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
   return (
-    <div
-      className={`relative flex min-w-0 flex-1 items-center gap-3 ${detail ? "" : "p-3"}`}
-    >
+    <div className="relative flex min-w-0 flex-1 items-center gap-3">
       {detail ? null : (
         <Link
           aria-label={`${canOpen ? "Open" : "View details for"} ${name}`}
@@ -942,7 +938,7 @@ function PluginIdentity({
             ) : null}
           </div>
         ) : (
-          <p className="mt-1 line-clamp-2 text-muted-foreground text-sm">
+          <p className="mt-1 break-words text-muted-foreground text-sm">
             {PLUGIN_DESCRIPTIONS[pluginId] ||
               plugin?.description ||
               catalogDescription ||
