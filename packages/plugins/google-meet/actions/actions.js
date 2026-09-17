@@ -1,0 +1,212 @@
+// @bun
+// src/actions.ts
+import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { join as join2 } from "path";
+
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { randomUUID } from "crypto";
+import { chmodSync, mkdirSync } from "fs";
+import { join } from "path";
+
+class MeetingStore {
+  db;
+  constructor(directory, orgId) {
+    mkdirSync(directory, { mode: 448, recursive: true });
+    const path = join(directory, "meetings.sqlite");
+    this.db = new Database(path);
+    chmodSync(path, 384);
+    this.db.exec(`PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS tenant (id INTEGER PRIMARY KEY CHECK(id=1), orgId TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS meetings (
+        id TEXT PRIMARY KEY, actorId TEXT NOT NULL, profileId TEXT, url TEXT NOT NULL,
+        state TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
+        durationMinutes INTEGER NOT NULL, stopRequested INTEGER NOT NULL DEFAULT 0, error TEXT);
+      CREATE UNIQUE INDEX IF NOT EXISTS one_active_meeting ON meetings ((1))
+        WHERE state IN ('queued','joining','transcribing');
+      CREATE TABLE IF NOT EXISTS segments (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT, meetingId TEXT NOT NULL,
+        id TEXT NOT NULL, text TEXT NOT NULL, receivedAt INTEGER NOT NULL,
+        UNIQUE(meetingId,id));`);
+    this.db.query("INSERT OR IGNORE INTO tenant VALUES (1, ?)").run(orgId);
+    if (this.db.query("SELECT orgId FROM tenant WHERE id=1").get()?.orgId !== orgId) {
+      this.db.close();
+      throw new Error("Meeting data belongs to another organization");
+    }
+  }
+  create(url, actorId, profileId, durationMinutes) {
+    if (!/^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url)) {
+      throw new Error("Use a Google Meet link such as https://meet.google.com/abc-defg-hij");
+    }
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 55) {
+      throw new Error("Meeting duration must be between 1 and 55 minutes");
+    }
+    const id = randomUUID();
+    try {
+      this.db.query("INSERT INTO meetings (id,actorId,profileId,url,state,createdAt,updatedAt,durationMinutes) VALUES (?,?,?,?,'queued',?,?,?)").run(id, actorId, profileId ?? null, url, Date.now(), Date.now(), durationMinutes);
+    } catch {
+      throw new Error("An active meeting already exists in this organization");
+    }
+    return this.get(id);
+  }
+  get(id) {
+    return this.db.query("SELECT * FROM meetings WHERE id=?").get(id);
+  }
+  list(actorId = null, profileId = null) {
+    return this.db.query("SELECT * FROM meetings WHERE (? IS NULL OR actorId=?) AND (? IS NULL OR profileId=?) ORDER BY createdAt DESC LIMIT 100").all(actorId, actorId, profileId, profileId);
+  }
+  next() {
+    return this.db.query("SELECT * FROM meetings WHERE state='queued' LIMIT 1").get();
+  }
+  recover() {
+    this.db.query("UPDATE meetings SET state='failed', error='Meeting worker restarted; partial transcript saved',updatedAt=? WHERE state IN ('joining','transcribing')").run(Date.now());
+  }
+  update(id, state, error = null) {
+    this.db.query("UPDATE meetings SET state=?,error=?,updatedAt=? WHERE id=?").run(state, error, Date.now(), id);
+  }
+  stop(id) {
+    this.db.query("UPDATE meetings SET stopRequested=1 WHERE id=?").run(id);
+  }
+  addSegment(meetingId, segment) {
+    this.db.query("INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)").run(meetingId, segment.id, segment.text, segment.receivedAt);
+  }
+  transcript(id, after = 0) {
+    return this.db.query("SELECT sequence,id,text,receivedAt FROM segments WHERE meetingId=? AND sequence>? ORDER BY sequence LIMIT 2000").all(id, after);
+  }
+  close() {
+    this.db.close();
+  }
+}
+
+// src/transcription.ts
+function transcriptionConfig(value) {
+  const provider = value.provider ?? "openai";
+  const model = value.model ?? "gpt-transcribe";
+  if (provider !== "openai" || model !== "gpt-transcribe") {
+    throw new Error("Unsupported transcription provider or model");
+  }
+  if (typeof value.apiKey !== "string" || !value.apiKey.trim() || value.apiKey.length > 4096) {
+    throw new Error("An OpenAI API key is required for transcription");
+  }
+  return { apiKey: value.apiKey.trim(), model, provider };
+}
+
+// src/actions.ts
+function privateJson(path, data) {
+  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+  writeFileSync(temporary, JSON.stringify(data), { mode: 384 });
+  renameSync(temporary, path);
+}
+function readSettings(directory) {
+  return transcriptionConfig(JSON.parse(readFileSync(join2(directory, "settings.json"), "utf8")));
+}
+function googleCookies(value) {
+  if (!(Array.isArray(value) && value.length) || value.length > 200) {
+    throw new Error("Import the Google login JSON created by the auth command");
+  }
+  return value.map((cookie) => {
+    if (!cookie || typeof cookie !== "object" || typeof cookie.name !== "string" || typeof cookie.value !== "string" || typeof cookie.domain !== "string" || !/^(\.?google\.com|[a-z0-9.-]+\.google\.com)$/.test(cookie.domain)) {
+      throw new Error("Only Google login cookies are accepted");
+    }
+    if (cookie.value.length > 16384) {
+      throw new Error("Cookie exceeds size limit");
+    }
+    return {
+      domain: cookie.domain,
+      httpOnly: cookie.httpOnly === true,
+      name: cookie.name,
+      path: typeof cookie.path === "string" ? cookie.path : "/",
+      secure: true,
+      value: cookie.value,
+      ...typeof cookie.expires === "number" && Number.isFinite(cookie.expires) ? { expires: cookie.expires } : {}
+    };
+  });
+}
+async function run(input, context) {
+  if (context.actor.role === "viewer") {
+    throw new Error("Member access required");
+  }
+  const store = new MeetingStore(context.dataDir, context.orgId);
+  const canAccess = (meeting) => (context.actor.role === "admin" || meeting.actorId === context.actor.id) && (!context.profileId || meeting.profileId === context.profileId);
+  try {
+    const action = context.actionKey;
+    const settingsPath = join2(context.dataDir, "settings.json");
+    const authPath = join2(context.dataDir, "auth.json");
+    if (action === "configure") {
+      if (context.actor.role !== "admin") {
+        throw new Error("Admin access required");
+      }
+      const previous = existsSync(settingsPath) ? readSettings(context.dataDir) : {};
+      const config = transcriptionConfig({
+        ...previous,
+        ...input,
+        apiKey: input.apiKey || previous.apiKey
+      });
+      const cookies = input.googleCookies === undefined ? undefined : googleCookies(input.googleCookies);
+      privateJson(settingsPath, config);
+      if (cookies) {
+        privateJson(authPath, cookies);
+      }
+      return { authenticated: existsSync(authPath), configured: true };
+    }
+    let worker = {
+      state: "stopped"
+    };
+    try {
+      worker = JSON.parse(readFileSync(join2(context.dataDir, "workers", "meet", "status.json"), "utf8"));
+    } catch {}
+    if (!worker.updatedAt || Date.now() - worker.updatedAt > 15000) {
+      worker = { state: "stopped" };
+    }
+    if (action === "meetings") {
+      return {
+        authenticated: existsSync(authPath),
+        canConfigure: context.actor.role === "admin",
+        configured: existsSync(settingsPath),
+        meetings: store.list(context.actor.role === "admin" ? null : context.actor.id, context.profileId ?? null),
+        worker
+      };
+    }
+    if (action === "join") {
+      if (worker.state !== "ready") {
+        throw new Error(worker.message ?? "Start the Google Meet worker in Workers first");
+      }
+      readSettings(context.dataDir);
+      if (!existsSync(authPath)) {
+        throw new Error("Configure Google login before joining a meeting");
+      }
+      return store.create(String(input.url ?? "").trim(), context.actor.id, context.profileId, Number(input.durationMinutes ?? 30));
+    }
+    const meeting = store.get(String(input.meetingId ?? ""));
+    if (!(meeting && canAccess(meeting))) {
+      throw new Error("Meeting not found");
+    }
+    if (action === "status") {
+      return { meeting, worker };
+    }
+    if (action === "leave") {
+      store.stop(meeting.id);
+      return { ...meeting, stopRequested: 1 };
+    }
+    if (action === "transcript") {
+      const after = Number(input.after ?? 0);
+      if (!Number.isSafeInteger(after) || after < 0) {
+        throw new Error("Invalid transcript cursor");
+      }
+      const segments = store.transcript(meeting.id, after);
+      return {
+        meeting,
+        nextCursor: segments.at(-1)?.sequence ?? after,
+        segments
+      };
+    }
+    throw new Error("Unknown meeting action");
+  } finally {
+    store.close();
+  }
+}
+export {
+  privateJson,
+  readSettings,
+  run
+};

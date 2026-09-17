@@ -22,6 +22,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+# Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
+# runs as the existing non-root Nakama user.
+ARG INSTALL_MEET_DEPS=false
+RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 # Tool-output optimiser, on by default so the dashboard toggle works on a fresh
 # image without a rebuild. Just under 10 MB unpacked. Build with
 # --build-arg OMNI_VERSION= to leave it out; the server then fetches it on demand
