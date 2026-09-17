@@ -138,7 +138,7 @@ export const NAV_GROUPS: NavGroup[] = [
       navItem("mcp", "MCP", "Manage MCP servers", Plug01Icon),
       navItem(
         "providers",
-        "LLM providers",
+        "AI Providers",
         "Manage provider API keys and models",
         BrainIcon
       ),

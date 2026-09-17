@@ -281,7 +281,7 @@ function llmUsageCostNote(
     return "Browse or add models in Settings → Manage model to save pricing for cost estimates.";
   }
 
-  return "Add input/output $/1M per model in Customize → LLM providers → Manage models to estimate cost.";
+  return "Add input/output $/1M per model in Customize → AI Providers → Manage models to estimate cost.";
 }
 
 function LlmUsageHeader({ usage }: { usage: LlmUsageStatus }) {
