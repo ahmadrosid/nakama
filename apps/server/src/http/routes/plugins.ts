@@ -68,6 +68,34 @@ export function registerPluginRoutes(
       throwPluginHttpError(error);
     }
   });
+  app.get("/v1/plugins/official/:pluginId/dependencies", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    requireActiveOrgIdFromContext(c);
+    try {
+      return json(
+        await requirePluginService(options).getOfficialPluginDependencies(
+          c.req.param("pluginId")
+        )
+      );
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
+  app.post("/v1/plugins/official/:pluginId/dependencies", async (c) => {
+    // System packages are shared by every organization on this host.
+    requirePlatformAdminFromContext(c);
+    requireActiveOrgIdFromContext(c);
+    try {
+      return json(
+        await requirePluginService(options).installOfficialPluginDependencies(
+          c.req.param("pluginId")
+        ),
+        202
+      );
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -139,7 +167,7 @@ export function registerPluginRoutes(
     ok?: {
       content?: Record<string, { schema: z.ZodTypeAny }>;
       description: string;
-      status?: 200 | 204;
+      status?: 200 | 202 | 204;
     };
     operationId: string;
     path: string;
@@ -199,6 +227,47 @@ export function registerPluginRoutes(
   });
   const platform = ["Platform", "Plugins"] as string[];
   const plugins = ["Plugins"];
+
+  const dependencySchema = z
+    .object({
+      state: z.enum([
+        "pending",
+        "installing",
+        "ready",
+        "failed",
+        "unsupported",
+      ]),
+      error: z.string().optional(),
+      steps: z.array(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          state: z.enum(["pending", "installing", "ready", "failed"]),
+        })
+      ),
+    })
+    .openapi("PluginDependencyStatus");
+  for (const method of ["get", "post"] as const) {
+    pluginPath({
+      method,
+      path: "/v1/plugins/official/{pluginId}/dependencies",
+      operationId:
+        method === "get"
+          ? "getPluginDependencies"
+          : "installPluginDependencies",
+      summary:
+        method === "get"
+          ? "Check official plugin dependencies"
+          : "Install fixed Google Meet dependencies (platform admin)",
+      request: { params: pluginIdParam },
+      ok: {
+        ...jsonOk(dependencySchema, "Dependency setup status"),
+        status: method === "get" ? 200 : 202,
+      },
+      extra: { 403: errorResponse, 404: errorResponse },
+      tags: plugins,
+    });
+  }
 
   pluginPath({
     extra: { 400: errorResponse, 403: errorResponse, 409: errorResponse },

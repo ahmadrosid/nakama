@@ -233,6 +233,55 @@ export function useInstallOfficialPlugin() {
   );
 }
 
+export function useInstallGoogleMeet(orgId: string, expectedRevision?: number) {
+  const queryClient = useQueryClient();
+  const queryKey = ["plugin-dependencies", orgId, "google-meet"];
+  const install = useMutation({
+    mutationFn: async () => {
+      let status = await client.getPluginDependencies("google-meet", orgId);
+      if (status.state !== "ready") {
+        status = await client.installPluginDependencies("google-meet", orgId);
+      }
+      queryClient.setQueryData(queryKey, status);
+      const deadline = Date.now() + 45 * 60_000;
+      while (status.state === "installing" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        status = await client.getPluginDependencies("google-meet", orgId);
+        queryClient.setQueryData(queryKey, status);
+      }
+      if (status.state !== "ready") {
+        throw new Error(
+          status.error ??
+            "Dependency setup has not completed. Reopen this dialog to check progress."
+        );
+      }
+      return expectedRevision === undefined
+        ? client.installOfficialPlugin("google-meet", orgId)
+        : client.reinstallOfficialPlugin(
+            "google-meet",
+            expectedRevision,
+            orgId
+          );
+    },
+    onSettled: async () => {
+      await invalidateOrgPlugins(queryClient, orgId);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.plugins.releases,
+      });
+      await queryClient.invalidateQueries({ queryKey });
+    },
+  });
+  const dependencies = useQuery({
+    queryFn: () => client.getPluginDependencies("google-meet", orgId),
+    queryKey,
+    refetchInterval: (query) =>
+      !install.isPending && query.state.data?.state === "installing"
+        ? 1500
+        : false,
+  });
+  return { dependencies, install };
+}
+
 export function useReinstallOfficialPlugin() {
   const queryClient = useQueryClient();
   const { activeOrg } = useAuth();

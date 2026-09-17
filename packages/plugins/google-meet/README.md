@@ -6,7 +6,11 @@ Join Google Meet as a silent participant and save a live transcript using OpenAI
 
 ## Setup
 
-1. Run Nakama on Linux with Bun 1.4+, Chromium, Xvfb, FFmpeg, PulseAudio and `pactl`:
+1. Run the current Nakama Linux Docker image. In **Plugins → Google Meet → Install**, review the required dependencies and choose **Install dependencies and plugin**. A platform admin performs the shared runtime setup; org admins can install the plugin once dependencies are ready. The dialog shows Linux packages, SDKs, browser download and verification separately. A failed step offers **Retry** and does not enable the plugin.
+
+   The default image includes only a restricted installer, not the meeting runtime. It installs a fixed list of Debian packages through a root-owned, no-argument sudo helper. BetterWright and CloakBrowser download as the ordinary Nakama user, with npm install scripts disabled. SDKs and the browser cache live under `NAKAMA_CONFIG_DIR/runtimes/google-meet`; Google profiles and transcripts remain organization-specific. Linux packages live in the container filesystem: after replacing the container, use **Reinstall** to restore missing packages and reuse cached downloads. A read-only container or `no-new-privileges` blocks this installer.
+
+   For a manually managed Linux host, install the prerequisites separately:
    ```sh
    sudo apt-get install chromium xvfb ffmpeg pulseaudio pulseaudio-utils fonts-liberation
    mkdir -p /opt/nakama-meet
@@ -15,8 +19,8 @@ Join Google Meet as a silent participant and save a live transcript using OpenAI
    ```
    Set `NAKAMA_MEET_CHROME=/usr/bin/chromium` on the Nakama server. Alternatively install BetterWright's managed browser and set `BETTERWRIGHT_CHROMIUM_PATH` to its executable. `NAKAMA_MEET_BETTERWRIGHT_PATH` can point to another installed SDK's absolute `dist/src/index.js` path. The SDK must retain its dependencies and sibling files; it cannot be bundled into `meet.js` alone.
 
-   For Docker, build with `--build-arg INSTALL_MEET_DEPS=true`; this installs the complete runtime. The default image omits it. Run as a non-root user with Chromium sandbox support. Each browser gets its own virtual display and each meeting gets its own PulseAudio sink.
-2. Install and enable **Google Meet** in **Plugins**, then start its worker in **Workers**.
+   `--build-arg INSTALL_MEET_DEPS=true` still preinstalls the legacy Chromium/BetterWright runtime for operators who prefer it. The guided installer downloads CloakBrowser separately. Run as a non-root user with Chromium sandbox support. Each browser gets its own virtual display and each meeting gets its own PulseAudio sink.
+2. The plugin installs after dependency verification. Start its worker in **Workers** if it is stopped. If the page was closed during the download, reopen installation to check progress and finish installing the plugin.
 3. Open **Google Meet → Settings**, save your OpenAI API key, and select **Connect Google**. Open the sign-in browser, complete Google login and any MFA, then select **Finish sign-in**. The viewer closes and the browser profile persists in this organization's plugin data. Google may reject browser automation; BetterWright does not guarantee acceptance or bypass account policies. Existing cookie JSON imports must reconnect once.
 4. Paste a Meet URL and choose the maximum duration, or ask an agent with the plugin tools assigned to join. Tell participants before transcribing. The host may need to admit the bot.
 

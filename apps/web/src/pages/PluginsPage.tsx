@@ -35,6 +35,7 @@ import {
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
+  useInstallGoogleMeet,
   useInstallOfficialPlugin,
   useInstallOrgPlugin,
   useInstallPluginPackage,
@@ -142,6 +143,10 @@ export function PluginsPage() {
   const reinstallOfficial = useReinstallOfficialPlugin();
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
+  const [meetInstall, setMeetInstall] = useState<{
+    orgId: string;
+    expectedRevision?: number;
+  } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [accessDialog, setAccessDialog] = useState<{
     orgId: string;
@@ -337,6 +342,10 @@ export function PluginsPage() {
                   rememberFocus(target);
                   setActionError(null);
                   if (type === "install" && catalog) {
+                    if (pluginId === "google-meet") {
+                      setMeetInstall({ orgId });
+                      return;
+                    }
                     void installOfficial
                       .mutateAsync(pluginId)
                       .catch((err) => setActionError(formatError(err)));
@@ -350,6 +359,13 @@ export function PluginsPage() {
                     return;
                   }
                   if (type === "reinstall") {
+                    if (pluginId === "google-meet") {
+                      setMeetInstall({
+                        expectedRevision: plugin.revision,
+                        orgId,
+                      });
+                      return;
+                    }
                     void reinstallOfficial
                       .mutateAsync({
                         expectedRevision: plugin.revision,
@@ -400,7 +416,131 @@ export function PluginsPage() {
         onPreview={(source) => void previewNpmPackage(source)}
         orgId={orgId}
       />
+      {meetInstall?.orgId === orgId && (
+        <GoogleMeetInstallDialog
+          expectedRevision={meetInstall.expectedRevision}
+          isPlatformAdmin={isPlatformAdmin}
+          key={orgId}
+          onClose={() => setMeetInstall(null)}
+          orgId={orgId}
+        />
+      )}
     </div>
+  );
+}
+
+function GoogleMeetInstallDialog({
+  orgId,
+  isPlatformAdmin,
+  onClose,
+  expectedRevision,
+}: {
+  orgId: string;
+  isPlatformAdmin: boolean;
+  onClose(): void;
+  expectedRevision?: number;
+}) {
+  const { dependencies, install } = useInstallGoogleMeet(
+    orgId,
+    expectedRevision
+  );
+  const status = dependencies.data;
+  const error = install.error ?? dependencies.error;
+  const needsAdmin = !isPlatformAdmin && status?.state !== "ready";
+  const busy = install.isPending;
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!(open || busy)) {
+          onClose();
+        }
+      }}
+      open
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Install Google Meet</DialogTitle>
+          <DialogDescription>
+            These dependencies are shared by organizations on this Nakama
+            server. Downloads are saved for reuse.
+          </DialogDescription>
+        </DialogHeader>
+        {dependencies.isLoading ? (
+          <Spinner />
+        ) : (
+          <ol aria-live="polite" className="space-y-3 text-sm">
+            {status?.steps.map((step) => (
+              <li
+                className="flex items-start justify-between gap-4"
+                key={step.id}
+              >
+                <span>{step.label}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {step.state === "installing" && <Spinner />}
+                  {
+                    {
+                      failed: "Failed",
+                      installing: "Installing…",
+                      pending: "To install",
+                      ready: "Ready",
+                    }[step.state]
+                  }
+                </span>
+              </li>
+            ))}
+            <li className="flex justify-between gap-4">
+              <span>Google Meet plugin</span>
+              <span>
+                {install.isSuccess
+                  ? "Installed"
+                  : busy && status?.state === "ready"
+                    ? "Installing…"
+                    : "Waiting"}
+              </span>
+            </li>
+          </ol>
+        )}
+        {(error || status?.error) && (
+          <p className="text-destructive text-sm" role="alert">
+            {error ? formatError(error) : status?.error}
+          </p>
+        )}
+        {needsAdmin && (
+          <p className="text-sm">
+            A platform administrator must install the shared dependencies first.
+          </p>
+        )}
+        <DialogFooter>
+          <Button disabled={busy} onClick={onClose} variant="outline">
+            {install.isSuccess ? "Close" : "Cancel"}
+          </Button>
+          {install.isSuccess ? (
+            <Button render={<Link to="/plugins/google-meet" />}>
+              Open Google Meet
+            </Button>
+          ) : (
+            <Button
+              disabled={
+                busy ||
+                dependencies.isLoading ||
+                !status ||
+                status.state === "unsupported" ||
+                needsAdmin
+              }
+              onClick={() => install.mutate()}
+            >
+              {busy
+                ? "Installing…"
+                : status?.state === "failed" || install.isError
+                  ? "Retry"
+                  : status?.state === "ready"
+                    ? "Install plugin"
+                    : "Install dependencies and plugin"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

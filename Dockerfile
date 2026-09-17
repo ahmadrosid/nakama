@@ -19,8 +19,14 @@ RUN bun install --frozen-lockfile --ignore-scripts \
 FROM oven/bun:1.4-slim AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo \
   && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=root:root scripts/install-meet-deps.sh /usr/local/sbin/nakama-install-meet-deps
+RUN chmod 0755 /usr/local/sbin/nakama-install-meet-deps \
+  && printf '%s\n' 'nakama ALL=(root) NOPASSWD: /usr/local/sbin/nakama-install-meet-deps ""' > /etc/sudoers.d/nakama-meet \
+  && chmod 0440 /etc/sudoers.d/nakama-meet \
+  && visudo -cf /etc/sudoers.d/nakama-meet
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
 # runs as the existing non-root Nakama user.
@@ -96,8 +102,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
      else useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama; fi \
   && chown -R nakama:nakama /app /nakama
 
-ENV NAKAMA_MEET_CHROME=/usr/bin/chromium \
-    NODE_ENV=production \
+ENV NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
     NAKAMA_PORT=4310 \
     NAKAMA_CONFIG_DIR=/nakama/data \

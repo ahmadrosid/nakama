@@ -1,9 +1,27 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { BetterWright, BetterWrightOptions } from "betterwright";
 
 export class BrowserSetupError extends Error {}
+
+function installedRuntime() {
+  const configDir = process.env.NAKAMA_PLUGIN_WORKER_ROOT;
+  return configDir ? join(configDir, "runtimes", "google-meet") : undefined;
+}
+
+function installedBrowser() {
+  const root = installedRuntime();
+  if (!root) {
+    return;
+  }
+  try {
+    const saved = JSON.parse(readFileSync(join(root, "browser.json"), "utf8"));
+    return typeof saved.path === "string" && existsSync(saved.path)
+      ? (saved.path as string)
+      : undefined;
+  } catch {}
+}
 
 function browserOptions(directory: string): BetterWrightOptions {
   const managedBrowser =
@@ -11,6 +29,7 @@ function browserOptions(directory: string): BetterWrightOptions {
     process.env.BETTERWRIGHT_CHROMIUM_ROOT;
   const executablePath =
     process.env.NAKAMA_MEET_CHROME ||
+    installedBrowser() ||
     (managedBrowser
       ? undefined
       : [
@@ -141,8 +160,19 @@ export async function openBrowser(directory: string) {
     const runtime = process.env.NAKAMA_MEET_BETTERWRIGHT_PATH;
     const defaultRuntime =
       "/opt/nakama-meet/node_modules/betterwright/dist/src/index.js";
+    const root = installedRuntime();
+    const downloadedRuntime = root
+      ? join(
+          root,
+          "sdk-2.8.1-0.5.10/node_modules/betterwright/dist/src/index.js"
+        )
+      : undefined;
     const modulePath =
-      runtime || (existsSync(defaultRuntime) ? defaultRuntime : undefined);
+      runtime ||
+      (downloadedRuntime && existsSync(downloadedRuntime)
+        ? downloadedRuntime
+        : undefined) ||
+      (existsSync(defaultRuntime) ? defaultRuntime : undefined);
     // Keep the SDK external: it spawns sibling worker.js and reads package assets.
     const sdk = await import(
       modulePath ? pathToFileURL(modulePath).href : "betterwright"

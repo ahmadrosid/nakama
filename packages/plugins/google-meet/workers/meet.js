@@ -335,15 +335,29 @@ function readSettings(directory) {
 }
 
 // src/browser.ts
-import { existsSync as existsSync3, mkdirSync as mkdirSync2, rmSync as rmSync2 } from "fs";
+import { existsSync as existsSync3, mkdirSync as mkdirSync2, readFileSync as readFileSync2, rmSync as rmSync2 } from "fs";
 import { join as join3 } from "path";
 import { pathToFileURL } from "url";
 
 class BrowserSetupError extends Error {
 }
+function installedRuntime() {
+  const configDir = process.env.NAKAMA_PLUGIN_WORKER_ROOT;
+  return configDir ? join3(configDir, "runtimes", "google-meet") : undefined;
+}
+function installedBrowser() {
+  const root = installedRuntime();
+  if (!root) {
+    return;
+  }
+  try {
+    const saved = JSON.parse(readFileSync2(join3(root, "browser.json"), "utf8"));
+    return typeof saved.path === "string" && existsSync3(saved.path) ? saved.path : undefined;
+  } catch {}
+}
 function browserOptions(directory) {
   const managedBrowser = process.env.BETTERWRIGHT_CHROMIUM_PATH || process.env.BETTERWRIGHT_CHROMIUM_ROOT;
-  const executablePath = process.env.NAKAMA_MEET_CHROME || (managedBrowser ? undefined : [
+  const executablePath = process.env.NAKAMA_MEET_CHROME || installedBrowser() || (managedBrowser ? undefined : [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/usr/bin/chromium",
     "/usr/bin/google-chrome"
@@ -447,7 +461,9 @@ async function openBrowser(directory) {
     }
     const runtime = process.env.NAKAMA_MEET_BETTERWRIGHT_PATH;
     const defaultRuntime = "/opt/nakama-meet/node_modules/betterwright/dist/src/index.js";
-    const modulePath = runtime || (existsSync3(defaultRuntime) ? defaultRuntime : undefined);
+    const root = installedRuntime();
+    const downloadedRuntime = root ? join3(root, "sdk-2.8.1-0.5.10/node_modules/betterwright/dist/src/index.js") : undefined;
+    const modulePath = runtime || (downloadedRuntime && existsSync3(downloadedRuntime) ? downloadedRuntime : undefined) || (existsSync3(defaultRuntime) ? defaultRuntime : undefined);
     const sdk = await (modulePath ? import(pathToFileURL(modulePath).href) : import("betterwright"));
     browser = new sdk.BetterWright(options);
     return { browser, close };
