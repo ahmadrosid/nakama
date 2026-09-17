@@ -90,23 +90,29 @@ export async function runKnowledgeBaseSearch(
     profileId,
     parsed.filename ?? null
   );
-  const organizationResult = await runSearchTarget(
-    organizationTarget,
-    parsed,
-    workspaceRoot
-  );
+  // Organization hits are relative to the organization root, not to the
+  // profile workspace they used to be resolved against.
+  const organizationRoot = await resolveWorkspaceRoot(organizationTarget.root);
 
   if (backend) {
     // The memory backend indexes profile documents only, so attached
     // organization documents always come from the ripgrep pass and are merged
     // in whenever the backend answers.
-    const matches = [
-      ...backend.matches.map((match) => ({
-        ...match,
-        scope: "profile" as const,
-      })),
-      ...organizationResult.matches,
-    ].slice(0, parsed.maxResults);
+    const profileMatches = backend.matches.map((match) => ({
+      ...match,
+      scope: "profile" as const,
+    }));
+    const organizationResult = await runSearchTarget(
+      organizationTarget,
+      parsed,
+      organizationRoot,
+      organizationBudget(organizationTarget, parsed, profileMatches.length)
+    );
+    const matches = mergeScopedMatches(
+      profileMatches,
+      organizationResult.matches,
+      parsed.maxResults
+    );
     return {
       matchCount: matches.length,
       matches,
@@ -125,10 +131,17 @@ export async function runKnowledgeBaseSearch(
     parsed,
     workspaceRoot
   );
-  const matches = [
-    ...profileResult.matches,
-    ...organizationResult.matches,
-  ].slice(0, parsed.maxResults);
+  const organizationResult = await runSearchTarget(
+    organizationTarget,
+    parsed,
+    organizationRoot,
+    organizationBudget(organizationTarget, parsed, profileResult.matches.length)
+  );
+  const matches = mergeScopedMatches(
+    profileResult.matches,
+    organizationResult.matches,
+    parsed.maxResults
+  );
   return {
     matchCount: matches.length,
     matches,
@@ -139,6 +152,32 @@ export async function runKnowledgeBaseSearch(
       organizationResult.truncated ||
       matches.length >= parsed.maxResults,
   };
+}
+
+/**
+ * Organization matches are appended after the profile ones, so a profile search
+ * that fills `maxResults` on its own would push every shared document out of
+ * the answer. Attached documents were attached on purpose, so they always keep
+ * a slot while the profile scope takes the rest.
+ */
+function organizationBudget(
+  target: SearchTarget,
+  parsed: KnowledgeBaseSearchInput,
+  profileMatchCount: number
+): number {
+  if (target.kind === "missing") {
+    return 0;
+  }
+  return Math.max(1, parsed.maxResults - profileMatchCount);
+}
+
+function mergeScopedMatches(
+  profileMatches: ScopedMatch[],
+  organizationMatches: ScopedMatch[],
+  maxResults: number
+): ScopedMatch[] {
+  const profileBudget = Math.max(0, maxResults - organizationMatches.length);
+  return [...profileMatches.slice(0, profileBudget), ...organizationMatches];
 }
 
 type SearchTarget =
@@ -223,23 +262,27 @@ function pickSearchTarget(
 async function runSearchTarget(
   target: SearchTarget,
   parsed: KnowledgeBaseSearchInput,
-  workspaceRoot: string
+  relativeTo: string,
+  maxResults = parsed.maxResults
 ): Promise<{ matches: ScopedMatch[]; truncated: boolean }> {
-  if (target.kind === "missing") {
+  if (target.kind === "missing" || maxResults <= 0) {
     return { matches: [], truncated: false };
   }
   const result = await runRipgrep(
     buildRipgrepArgs({
       glob: target.glob,
-      maxResults: parsed.maxResults,
+      maxResults,
       query: parsed.query,
       regex: parsed.regex,
       searchRoot: target.root,
     }),
     {
-      maxResults: parsed.maxResults,
+      maxResults,
       searchRoot: target.root,
-      workspaceRoot,
+      // Reported paths are relative to this target's own root: the profile
+      // workspace for profile documents, the organization knowledge base for
+      // shared ones.
+      workspaceRoot: relativeTo,
     }
   );
   return {

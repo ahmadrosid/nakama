@@ -294,4 +294,50 @@ describe("knowledge_base_search tool", () => {
     );
     expect(found.matchCount).toBe(1);
   });
+
+  test("reports organization hits relative to the organization root", async () => {
+    await setupTwoScopes();
+
+    const result = await runKnowledgeBaseSearch(
+      { query: "shared alpha" },
+      { orgId: ORG_ID, profileId: PROFILE_ID }
+    );
+
+    expect(result.matches[0]?.scope).toBe("organization");
+    expect(result.matches[0]?.file).toBe(`${SHARED_DOCUMENT_ID}.extracted.txt`);
+  });
+
+  test("keeps a slot for organization hits when the profile scope fills maxResults", async () => {
+    await setupKnowledgeBase({
+      attachments: [SHARED_DOCUMENT_ID],
+      organization: [
+        {
+          body: "shared budget marker\n",
+          filename: "shared.txt",
+          id: SHARED_DOCUMENT_ID,
+        },
+      ],
+      profile: {
+        body: "budget marker one\nbudget marker two\nbudget marker three\n",
+        filename: "private.txt",
+        id: PRIVATE_DOCUMENT_ID,
+      },
+    });
+
+    const result = await runKnowledgeBaseSearch(
+      { maxResults: 2, query: "budget marker" },
+      { orgId: ORG_ID, profileId: PROFILE_ID }
+    );
+
+    expect(result.matchCount).toBe(2);
+    expect(result.matches.map((match) => match.scope).sort()).toEqual([
+      "organization",
+      "profile",
+    ]);
+    expect(
+      result.matches.some((match) =>
+        match.text.includes("shared budget marker")
+      )
+    ).toBe(true);
+  });
 });
