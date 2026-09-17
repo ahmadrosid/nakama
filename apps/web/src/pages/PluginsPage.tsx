@@ -113,22 +113,7 @@ function usePluginCatalog(canInstallPackages: boolean) {
   };
 }
 
-export function PluginsPage() {
-  const { pluginId: selectedPluginId } = useParams<{ pluginId: string }>();
-  const { user, activeOrg } = useAuth();
-  const isPlatformAdmin = user?.isPlatformAdmin === true;
-  const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
-  const canInstallPackages = canManagePluginReleases(isPlatformAdmin);
-  const orgId = activeOrg?.id ?? "";
-  const {
-    plugins,
-    official,
-    releases,
-    pluginIds,
-    isLoading,
-    catalogLoading,
-    error: queryError,
-  } = usePluginCatalog(canInstallPackages);
+function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   const installOfficial = useInstallOfficialPlugin();
   const previewPackage = usePreviewPluginPackage();
   const installPackage = useInstallPluginPackage();
@@ -152,8 +137,6 @@ export function PluginsPage() {
     orgId: string;
     plugin: OrgPluginDetail;
   } | null>(null);
-  const agentAccess = usePluginAgentAccess();
-  const accessData = isPlatformAdmin ? agentAccess.data : undefined;
 
   const busy = [
     previewPackage,
@@ -273,6 +256,63 @@ export function PluginsPage() {
       setActionError(formatError(err));
     }
   }
+
+  return {
+    accessDialog,
+    actionError,
+    busy,
+    closeDialog,
+    confirmDialog,
+    dialog,
+    handleUpdate,
+    installOfficial,
+    meetInstall,
+    previewNpmPackage,
+    reinstallOfficial,
+    rememberFocus,
+    setAccessDialog,
+    setActionError,
+    setDialog,
+    setMeetInstall,
+  };
+}
+
+export function PluginsPage() {
+  const { pluginId: selectedPluginId } = useParams<{ pluginId: string }>();
+  const { user, activeOrg } = useAuth();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
+  const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
+  const canInstallPackages = canManagePluginReleases(isPlatformAdmin);
+  const orgId = activeOrg?.id ?? "";
+  const {
+    plugins,
+    official,
+    releases,
+    pluginIds,
+    isLoading,
+    catalogLoading,
+    error: queryError,
+  } = usePluginCatalog(canInstallPackages);
+  const {
+    accessDialog,
+    actionError,
+    busy,
+    closeDialog,
+    confirmDialog,
+    dialog,
+    handleUpdate,
+    installOfficial,
+    meetInstall,
+    previewNpmPackage,
+    reinstallOfficial,
+    rememberFocus,
+    setAccessDialog,
+    setActionError,
+    setDialog,
+    setMeetInstall,
+  } = usePluginManagement(canInstallPackages, orgId);
+  const agentAccess = usePluginAgentAccess();
+  const accessData = isPlatformAdmin ? agentAccess.data : undefined;
 
   if (isLoading && plugins.length === 0) {
     return <PluginEmptyState detail={Boolean(selectedPluginId)} loading />;
