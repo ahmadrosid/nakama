@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { privateJson, readSettings } from "./actions";
-import { captureMeeting, openBrowser, runBrowser, viewerUrl } from "./browser";
+import {
+  BrowserSetupError,
+  captureMeeting,
+  openBrowser,
+  runBrowser,
+  viewerUrl,
+} from "./browser";
 import { type Meeting, MeetingStore } from "./store";
 import {
   type TranscriptionSession,
@@ -161,16 +167,18 @@ export class GoogleConnection {
     this.error = undefined;
     this.state = action === "connect" ? "starting" : "saving";
     this.pending = this.perform(action)
-      .catch(async () => {
+      .catch(async (error: unknown) => {
         try {
           await this.close();
         } catch {
           /* Keep the instance for a later disconnect retry. */
         }
         this.error =
-          action === "finish-login"
-            ? "Google sign-in could not be verified. Connect again and complete sign-in."
-            : "Google browser setup failed. Check BetterWright, Xvfb and viewer configuration.";
+          error instanceof BrowserSetupError
+            ? error.message
+            : action === "finish-login"
+              ? "Google sign-in could not be verified. Connect again and complete sign-in."
+              : "Google browser setup failed. Check BetterWright, Xvfb and viewer configuration.";
         this.state = "error";
       })
       .finally(() => {

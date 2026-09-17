@@ -3,8 +3,21 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { BetterWright, BetterWrightOptions } from "betterwright";
 
+export class BrowserSetupError extends Error {}
+
 function browserOptions(directory: string): BetterWrightOptions {
-  const executablePath = process.env.NAKAMA_MEET_CHROME;
+  const managedBrowser =
+    process.env.BETTERWRIGHT_CHROMIUM_PATH ||
+    process.env.BETTERWRIGHT_CHROMIUM_ROOT;
+  const executablePath =
+    process.env.NAKAMA_MEET_CHROME ||
+    (managedBrowser
+      ? undefined
+      : [
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          "/usr/bin/chromium",
+          "/usr/bin/google-chrome",
+        ].find(existsSync));
   return {
     adBlock: false,
     chromiumArgs: [
@@ -39,7 +52,9 @@ export function viewerUrl(localUrl: string, origin?: string) {
     url.search ||
     url.hash
   ) {
-    throw new Error("Viewer origin must be an HTTPS origin without a path");
+    throw new BrowserSetupError(
+      "Viewer origin must be an HTTPS origin without a path"
+    );
   }
   url.search = new URL(localUrl).search;
   return url.href;
@@ -91,7 +106,9 @@ export async function openBrowser(directory: string) {
   try {
     if (process.platform === "linux") {
       if (!Bun.which("Xvfb")) {
-        throw new Error("Install Xvfb for the BetterWright browser");
+        throw new BrowserSetupError(
+          "Install Xvfb for the BetterWright browser on Linux"
+        );
       }
       display = Bun.spawn(
         [
@@ -149,6 +166,13 @@ export async function runBrowser<T>(
     timeout: 30,
   });
   if (!result.ok) {
+    if (
+      result.error?.includes("BetterChromium is required but not installed")
+    ) {
+      throw new BrowserSetupError(
+        "Install Chrome/Chromium, set NAKAMA_MEET_CHROME, or run betterwright setup to install BetterChromium."
+      );
+    }
     throw new Error("Google Meet browser operation failed");
   }
   return result.result as T;

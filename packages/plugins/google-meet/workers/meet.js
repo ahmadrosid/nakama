@@ -286,8 +286,16 @@ function readSettings(directory) {
 import { existsSync as existsSync2, mkdirSync as mkdirSync2, rmSync } from "fs";
 import { join as join3 } from "path";
 import { pathToFileURL } from "url";
+
+class BrowserSetupError extends Error {
+}
 function browserOptions(directory) {
-  const executablePath = process.env.NAKAMA_MEET_CHROME;
+  const managedBrowser = process.env.BETTERWRIGHT_CHROMIUM_PATH || process.env.BETTERWRIGHT_CHROMIUM_ROOT;
+  const executablePath = process.env.NAKAMA_MEET_CHROME || (managedBrowser ? undefined : [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/google-chrome"
+  ].find(existsSync2));
   return {
     adBlock: false,
     chromiumArgs: [
@@ -312,7 +320,7 @@ function viewerUrl(localUrl, origin) {
   }
   const url = new URL(origin);
   if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
-    throw new Error("Viewer origin must be an HTTPS origin without a path");
+    throw new BrowserSetupError("Viewer origin must be an HTTPS origin without a path");
   }
   url.search = new URL(localUrl).search;
   return url.href;
@@ -358,7 +366,7 @@ async function openBrowser(directory) {
   try {
     if (process.platform === "linux") {
       if (!Bun.which("Xvfb")) {
-        throw new Error("Install Xvfb for the BetterWright browser");
+        throw new BrowserSetupError("Install Xvfb for the BetterWright browser on Linux");
       }
       display = Bun.spawn([
         "Xvfb",
@@ -403,6 +411,9 @@ async function runBrowser(browser, code, signal) {
     timeout: 30
   });
   if (!result.ok) {
+    if (result.error?.includes("BetterChromium is required but not installed")) {
+      throw new BrowserSetupError("Install Chrome/Chromium, set NAKAMA_MEET_CHROME, or run betterwright setup to install BetterChromium.");
+    }
     throw new Error("Google Meet browser operation failed");
   }
   return result.result;
@@ -693,11 +704,11 @@ class GoogleConnection {
     }
     this.error = undefined;
     this.state = action === "connect" ? "starting" : "saving";
-    this.pending = this.perform(action).catch(async () => {
+    this.pending = this.perform(action).catch(async (error) => {
       try {
         await this.close();
       } catch {}
-      this.error = action === "finish-login" ? "Google sign-in could not be verified. Connect again and complete sign-in." : "Google browser setup failed. Check BetterWright, Xvfb and viewer configuration.";
+      this.error = error instanceof BrowserSetupError ? error.message : action === "finish-login" ? "Google sign-in could not be verified. Connect again and complete sign-in." : "Google browser setup failed. Check BetterWright, Xvfb and viewer configuration.";
       this.state = "error";
     }).finally(() => {
       this.pending = undefined;

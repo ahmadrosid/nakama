@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import type { PluginExecutionContext } from "@nakama/core";
 import type { BetterWright } from "betterwright";
 import { privateJson, run } from "./actions";
-import { viewerUrl } from "./browser";
+import { BrowserSetupError, openBrowser, viewerUrl } from "./browser";
 import { MeetingStore } from "./store";
 import { transcriptionProviders } from "./transcription";
 import { GoogleConnection, runMeeting } from "./worker";
@@ -286,5 +286,66 @@ test("worker control authenticates requests and never exposes viewer control in 
     await child.exited;
     expect(existsSync(join(workerDir, "control.json"))).toBe(false);
     rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("Mac sign-in uses installed Chrome without requiring BetterChromium", async () => {
+  if (
+    process.platform !== "darwin" ||
+    !existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+  ) {
+    return;
+  }
+  const directory = mkdtempSync(join(tmpdir(), "meet-chrome-"));
+  const browserEnvironment = [
+    "NAKAMA_MEET_CHROME",
+    "BETTERWRIGHT_CHROMIUM_PATH",
+    "BETTERWRIGHT_CHROMIUM_ROOT",
+  ];
+  const previous = browserEnvironment.map((key) => process.env[key]);
+  for (const key of browserEnvironment) {
+    delete process.env[key];
+  }
+  let instance: Awaited<ReturnType<typeof openBrowser>> | undefined;
+  try {
+    instance = await openBrowser(directory);
+    expect(instance.browser.provider).toMatchObject({
+      executablePath:
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    });
+  } finally {
+    await instance?.close();
+    for (const [index, key] of browserEnvironment.entries()) {
+      if (previous[index] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previous[index];
+      }
+    }
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("known browser setup failures are actionable without exposing upstream secrets", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "meet-setup-error-"));
+  try {
+    for (const error of [
+      new BrowserSetupError("Install Chrome/Chromium"),
+      new Error("cookie=secret; https://example.com/?t=secret"),
+    ]) {
+      const connection = new GoogleConnection(directory, async () => {
+        throw error;
+      });
+      await connection.command("connect");
+      await settle(connection);
+      expect(connection.status().state).toBe("error");
+      expect(connection.status().error).not.toContain("secret");
+      if (error instanceof BrowserSetupError) {
+        expect(connection.status().error).toBe(error.message);
+      }
+      await connection.shutdown();
+    }
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
   }
 });
