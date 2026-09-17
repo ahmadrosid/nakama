@@ -3032,7 +3032,14 @@ export class AgentService {
     skillId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.unassignSkill(orgId, profileId, skillId, meta);
+    const profile = await this.profileService.unassignSkill(
+      orgId,
+      profileId,
+      skillId,
+      meta
+    );
+    await this.skillsService?.materializeAssignedPluginSkills(orgId, profileId);
+    return profile;
   }
 
   async uploadProfileAvatar(

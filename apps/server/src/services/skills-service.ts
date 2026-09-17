@@ -92,11 +92,20 @@ function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
 
 export class SkillsService {
   private pluginService: PluginService | null = null;
+  private readonly profileSkillSyncs = new Map<string, Promise<unknown>>();
 
   constructor(private readonly db: DatabaseAdapter) {}
 
   setPluginService(service: PluginService | null): void {
+    this.pluginService?.setProfileSkillSync(null);
     this.pluginService = service;
+    service?.setProfileSkillSync(async (orgId) => {
+      for (const profile of await this.db.listProfiles()) {
+        if (profile.orgId === orgId) {
+          await this.materializeAssignedPluginSkills(orgId, profile.id);
+        }
+      }
+    });
   }
 
   async syncDiscoveredSkills(): Promise<SyncSkillsResponse> {
@@ -1160,6 +1169,29 @@ export class SkillsService {
   ): Promise<
     Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
   > {
+    // Serialize copies and removals so an in-flight prompt cannot restore a
+    // revoked skill after cleanup has completed.
+    const key = JSON.stringify([orgId, profileId]);
+    const previous = this.profileSkillSyncs.get(key) ?? Promise.resolve();
+    const pending = previous
+      .catch(() => undefined)
+      .then(() => this.syncAssignedDiscoveredSkills(orgId, profileId));
+    this.profileSkillSyncs.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.profileSkillSyncs.get(key) === pending) {
+        this.profileSkillSyncs.delete(key);
+      }
+    }
+  }
+
+  private async syncAssignedDiscoveredSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<
+    Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
+  > {
     const assigned = await this.db.listSkillsForProfile(profileId);
     const discovered = await discoverSkills({ orgId, profileId });
     const bySourcePath = new Map(
@@ -1203,7 +1235,41 @@ export class SkillsService {
       }
     }
 
+    await this.prunePluginSkillCopies(
+      orgId,
+      profileId,
+      new Set(
+        resolved
+          .filter((item) => isPluginOwnedSkill(item.record))
+          .map((item) => item.discovered.directory)
+      )
+    );
     return resolved;
+  }
+
+  private async prunePluginSkillCopies(
+    orgId: string,
+    profileId: string,
+    retained: Set<string>
+  ): Promise<void> {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId || !this.pluginService) {
+      return;
+    }
+    const workspace = getProfileSoulDir(orgId, profileId);
+    const parent = path.join(workspace, "skills", ".plugins");
+    if (!(await pathExists(parent))) {
+      return;
+    }
+    await guardFilePath(parent, null, undefined, { cwd: workspace });
+    for (const entry of await readdir(parent)) {
+      const directory = path.join(parent, entry);
+      // Only delete host-generated release copies, never unrelated files.
+      if (/^[a-f0-9]{64}$/.test(entry) && !retained.has(directory)) {
+        await guardFilePath(directory, null, undefined, { cwd: workspace });
+        await rm(directory, { force: true, recursive: true });
+      }
+    }
   }
 
   private async resolveSkillDirectory(

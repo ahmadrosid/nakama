@@ -335,6 +335,12 @@ export async function shutdownPluginRuntime(timeoutMs = 1500): Promise<void> {
 }
 
 export class PluginService {
+  private syncProfileSkills: ((orgId: string) => Promise<void>) | null = null;
+
+  setProfileSkillSync(sync: ((orgId: string) => Promise<void>) | null): void {
+    this.syncProfileSkills = sync;
+  }
+
   private readonly configDir: string;
   private readonly options: PluginServiceOptions;
 
@@ -1029,6 +1035,8 @@ export class PluginService {
         pluginId
       );
 
+      await this.syncProfileSkills?.(orgId);
+
       return this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision: disabling.revision,
@@ -1172,6 +1180,7 @@ export class PluginService {
       }
 
       await this.closePluginAdmission(orgId, pluginId);
+      await this.syncProfileSkills?.(orgId);
       return this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision,

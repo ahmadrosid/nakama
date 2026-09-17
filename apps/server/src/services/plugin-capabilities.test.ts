@@ -260,6 +260,34 @@ describe("plugin capabilities", () => {
         (item) => item.name === derivePluginToolName("notes", "write")
       )
     ).toBe(false);
+
+    await db.assignSkillToProfile(OTHER_PROFILE, skill!.id);
+    await skills.materializeAssignedPluginSkills(ORG_ID, OTHER_PROFILE);
+    const otherCopyRoot = join(
+      getProfileSoulDir(ORG_ID, OTHER_PROFILE),
+      "skills",
+      ".plugins"
+    );
+    await db.unassignSkillFromProfile(profile.id, skill!.id);
+    await skills.materializeAssignedPluginSkills(ORG_ID, profile.id);
+    expect(await readdir(copyRoot)).toEqual([]);
+    expect(await readdir(otherCopyRoot)).toEqual([copy!]);
+    await db.assignSkillToProfile(profile.id, skill!.id);
+    await skills.materializeAssignedPluginSkills(ORG_ID, profile.id);
+    const install = await db.getOrgPlugin(ORG_ID, "notes");
+    const disabled = await plugins.disableOrgPlugin(
+      ORG_ID,
+      "notes",
+      install!.revision
+    );
+    expect(await readdir(copyRoot)).toEqual([]);
+    expect(await readdir(otherCopyRoot)).toEqual([]);
+
+    // Uninstall also cleans copies left by older hosts that did not prune on disable.
+    await mkdir(join(copyRoot, copy!));
+    await writeFile(join(copyRoot, copy!, "SKILL.md"), SKILL_MD);
+    await plugins.uninstallOrgPlugin(ORG_ID, "notes", disabled.revision);
+    expect(await readdir(copyRoot)).toEqual([]);
   });
 
   test("plugin skill copies reject workspace symlink escapes", async () => {
@@ -282,6 +310,11 @@ describe("plugin capabilities", () => {
     await symlink(outside, join(workspace, "skills", ".plugins"));
     await expect(
       skills.composeCatalogForProfile(ORG_ID, profile.id)
+    ).rejects.toThrow("Path outside allowed directories");
+    expect(await readdir(outside)).toEqual([]);
+    await db.unassignSkillFromProfile(profile.id, skill.id);
+    await expect(
+      skills.materializeAssignedPluginSkills(ORG_ID, profile.id)
     ).rejects.toThrow("Path outside allowed directories");
     expect(await readdir(outside)).toEqual([]);
   });
@@ -522,6 +555,7 @@ describe("plugin capabilities", () => {
     const newCopy = (await readdir(copyRoot)).find(
       (entry) => entry !== oldCopy
     )!;
+    expect(existsSync(join(copyRoot, oldCopy!))).toBe(false);
     expect(existsSync(join(copyRoot, newCopy, "SKILL.md"))).toBe(true);
     expect(existsSync(join(copyRoot, newCopy, "references/usage.md"))).toBe(
       false
