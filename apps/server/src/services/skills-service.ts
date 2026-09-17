@@ -1,8 +1,15 @@
+import { createHash } from "node:crypto";
 import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
   open,
   readdir,
   readFile,
   realpath,
+  rename,
+  rm,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -38,6 +45,8 @@ import {
   extractExplicitSkillName,
   fetchGitHubSkillBundle,
   type GitHubSkillBundle,
+  getProfileSoulDir,
+  guardFilePath,
   isGlobalSkillSourcePath,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
@@ -56,6 +65,7 @@ import {
   writeRawProfileSkillMarkdown,
 } from "@nakama/core";
 import { inferArtifactMimeType } from "@nakama/core/artifact-mime";
+import { pathExists } from "@nakama/core/fs";
 import type {
   DatabaseAdapter,
   SkillCreatedBy,
@@ -1076,6 +1086,74 @@ export class SkillsService {
     }
   }
 
+  async materializeAssignedPluginSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<void> {
+    await this.getAssignedDiscoveredSkills(orgId, profileId);
+  }
+
+  private async copyPluginSkillToProfile(
+    orgId: string,
+    profileId: string,
+    record: StoredSkillRecord
+  ): Promise<string | null> {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId || record.orgId !== orgId) {
+      return null;
+    }
+    const source = await this.resolveSkillDirectory(record);
+    if (!source) {
+      return null;
+    }
+
+    // Releases are immutable. A new release gets a new copy, and concurrent
+    // readers only see complete bundles. Nesting prevents standalone discovery.
+    const version = createHash("sha256").update(source).digest("hex");
+    const workspace = getProfileSoulDir(orgId, profileId);
+    await mkdir(workspace, { mode: 0o700, recursive: true });
+    const parent = path.join(workspace, "skills", ".plugins");
+    const directory = path.join(parent, version);
+    await guardFilePath(directory, null, undefined, { cwd: workspace });
+    await guardFilePath(
+      path.join(directory, SKILL_FILE_NAME),
+      null,
+      undefined,
+      { cwd: workspace }
+    );
+    if (await pathExists(path.join(directory, SKILL_FILE_NAME))) {
+      return directory;
+    }
+
+    await mkdir(parent, { mode: 0o700, recursive: true });
+    const staging = await mkdtemp(path.join(parent, ".copy-"));
+    try {
+      await cp(source, staging, {
+        filter: async (file) => {
+          if ((await lstat(file)).isSymbolicLink()) {
+            throw new Error(
+              "Plugin skill bundles cannot contain symbolic links."
+            );
+          }
+          return true;
+        },
+        recursive: true,
+      });
+      try {
+        await rename(staging, directory);
+      } catch (error) {
+        // Another request may have published the same immutable release.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EEXIST" && code !== "ENOTEMPTY") {
+          throw error;
+        }
+      }
+      return directory;
+    } finally {
+      await rm(staging, { force: true, recursive: true });
+    }
+  }
+
   private async getAssignedDiscoveredSkills(
     orgId: string,
     profileId: string
@@ -1097,7 +1175,11 @@ export class SkillsService {
 
     for (const record of assigned) {
       if (isPluginOwnedSkill(record)) {
-        const directory = await this.resolveSkillDirectory(record);
+        const directory = await this.copyPluginSkillToProfile(
+          orgId,
+          profileId,
+          record
+        );
         if (!directory) {
           continue;
         }

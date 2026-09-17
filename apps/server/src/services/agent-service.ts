@@ -3016,7 +3016,14 @@ export class AgentService {
     request: AssignSkillRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.assignSkill(orgId, profileId, request, meta);
+    const profile = await this.profileService.assignSkill(
+      orgId,
+      profileId,
+      request,
+      meta
+    );
+    await this.skillsService?.materializeAssignedPluginSkills(orgId, profileId);
+    return profile;
   }
 
   async unassignSkill(
