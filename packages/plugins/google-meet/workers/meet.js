@@ -59,8 +59,8 @@ class MeetingStore {
     if (!/^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url)) {
       throw new Error("Use a Google Meet link such as https://meet.google.com/abc-defg-hij");
     }
-    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 55) {
-      throw new Error("Meeting duration must be between 1 and 55 minutes");
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 120) {
+      throw new Error("Meeting duration must be between 1 and 120 minutes");
     }
     const id = randomUUID();
     try {
@@ -682,7 +682,7 @@ async function runMeeting(meeting, store, directory, signal, capture = captureMe
       url: meeting.url
     });
     combined.throwIfAborted();
-    session = await transcriptionProviders[config.provider].connect({
+    const connect = () => transcriptionProviders[config.provider].connect({
       ...config,
       onError: (error) => {
         failure = error;
@@ -691,12 +691,23 @@ async function runMeeting(meeting, store, directory, signal, capture = captureMe
       onSegment: (segment) => store.addSegment(meeting.id, segment),
       signal: combined
     });
+    let renewAt = Date.now() + 55 * 60000;
+    session = await connect();
     combined.throwIfAborted();
     store.update(meeting.id, "transcribing");
     let pending = Buffer.alloc(0);
     for await (const chunk of audio.audio) {
       if (combined.aborted) {
         break;
+      }
+      if (Date.now() >= renewAt) {
+        await session.finish();
+        session.close();
+        session = undefined;
+        combined.throwIfAborted();
+        renewAt = Date.now() + 55 * 60000;
+        session = await connect();
+        combined.throwIfAborted();
       }
       pending = Buffer.concat([pending, chunk]);
       while (pending.length >= 4800) {

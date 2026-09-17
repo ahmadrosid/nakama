@@ -176,6 +176,22 @@ test("rejects arbitrary URLs and invalid durations before queuing a browser", ()
     expect(() =>
       store.create("https://meet.google.com/abc-defg-hij", "user", undefined, 0)
     ).toThrow();
+    expect(() =>
+      store.create(
+        "https://meet.google.com/abc-defg-hij",
+        "user",
+        undefined,
+        121
+      )
+    ).toThrow();
+    expect(
+      store.create(
+        "https://meet.google.com/abc-defg-hij",
+        "user",
+        undefined,
+        120
+      ).durationMinutes
+    ).toBe(120);
   } finally {
     store.close();
     rmSync(dir, { force: true, recursive: true });

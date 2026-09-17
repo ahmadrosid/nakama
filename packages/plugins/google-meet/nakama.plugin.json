@@ -25,7 +25,7 @@
           "durationMinutes": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 55
+            "maximum": 120
           }
         },
         "required": ["url"]

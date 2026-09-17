@@ -83,6 +83,97 @@ test("worker captures PCM, flushes final speech, releases capture and persists c
   }
 });
 
+test("two-hour meetings renew transcription sessions without rejoining or losing audio", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-renew-"));
+  const store = new MeetingStore(dir, "org");
+  const provider = transcriptionProviders.openai!;
+  const now = Date.now;
+  let elapsed = 0;
+  let sessions = 0;
+  let captures = 0;
+  let frames = 0;
+  const closed: number[] = [];
+  try {
+    Date.now = () => now() + elapsed;
+    privateJson(join(dir, "settings.json"), { apiKey: "test" });
+    const meeting = store.create(
+      "https://meet.google.com/abc-defg-hij",
+      "user",
+      undefined,
+      120
+    );
+    transcriptionProviders.openai = {
+      async connect({ onSegment }) {
+        const id = ++sessions;
+        return {
+          close() {
+            closed.push(id);
+          },
+          async finish() {
+            onSegment({
+              id: String(id),
+              receivedAt: Date.now(),
+              text: `Session ${id}`,
+            });
+          },
+          push(audio) {
+            expect(audio.length).toBe(4800);
+            frames++;
+            if (frames < 3) {
+              elapsed += 55 * 60_000;
+            }
+          },
+        };
+      },
+    };
+    await runMeeting(
+      meeting,
+      store,
+      dir,
+      new AbortController().signal,
+      async ({ signal }) => {
+        captures++;
+        return {
+          audio: new ReadableStream<Uint8Array<ArrayBuffer>>(
+            {
+              async pull(controller) {
+                if (frames < 3) {
+                  controller.enqueue(new Uint8Array(4800));
+                  return;
+                }
+                store.stop(meeting.id);
+                await new Promise<void>((resolve) =>
+                  signal.addEventListener("abort", () => resolve(), {
+                    once: true,
+                  })
+                );
+                controller.close();
+              },
+            },
+            { highWaterMark: 0 }
+          ),
+          async close() {},
+          async inCall() {
+            return true;
+          },
+        };
+      }
+    );
+    expect(captures).toBe(1);
+    expect(frames).toBe(3);
+    expect(closed).toEqual([1, 2, 3]);
+    expect(store.get(meeting.id)?.state).toBe("finished");
+    expect(store.transcript(meeting.id).map((segment) => segment.text)).toEqual(
+      ["Session 1", "Session 2", "Session 3"]
+    );
+  } finally {
+    Date.now = now;
+    transcriptionProviders.openai = provider;
+    store.close();
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
 test("capture failure is terminal and another meeting can be queued", async () => {
   const dir = mkdtempSync(join(tmpdir(), "meet-worker-"));
   const store = new MeetingStore(dir, "org");

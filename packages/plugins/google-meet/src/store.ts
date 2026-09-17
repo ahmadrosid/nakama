@@ -86,9 +86,9 @@ export class MeetingStore {
     if (
       !Number.isInteger(durationMinutes) ||
       durationMinutes < 1 ||
-      durationMinutes > 55
+      durationMinutes > 120
     ) {
-      throw new Error("Meeting duration must be between 1 and 55 minutes");
+      throw new Error("Meeting duration must be between 1 and 120 minutes");
     }
     const id = randomUUID();
     try {

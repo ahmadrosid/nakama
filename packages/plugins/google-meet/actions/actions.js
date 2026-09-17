@@ -53,8 +53,8 @@ class MeetingStore {
     if (!/^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url)) {
       throw new Error("Use a Google Meet link such as https://meet.google.com/abc-defg-hij");
     }
-    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 55) {
-      throw new Error("Meeting duration must be between 1 and 55 minutes");
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 120) {
+      throw new Error("Meeting duration must be between 1 and 120 minutes");
     }
     const id = randomUUID();
     try {
@@ -222,7 +222,7 @@ async function run(input, context) {
       if (!worker.authenticated || worker.loginBusy) {
         throw new Error("Configure Google login before joining a meeting");
       }
-      return store.create(String(input.url ?? "").trim(), context.actor.id, context.profileId, Number(input.durationMinutes ?? 30));
+      return store.create(String(input.url ?? "").trim(), context.actor.id, context.profileId, Number(input.durationMinutes ?? 120));
     }
     const meeting = store.get(String(input.meetingId ?? ""));
     if (!(meeting && canAccess(meeting))) {

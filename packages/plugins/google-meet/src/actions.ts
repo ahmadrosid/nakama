@@ -124,7 +124,7 @@ export async function run(
         String(input.url ?? "").trim(),
         context.actor.id,
         context.profileId,
-        Number(input.durationMinutes ?? 30)
+        Number(input.durationMinutes ?? 120)
       );
     }
     const meeting = store.get(String(input.meetingId ?? ""));

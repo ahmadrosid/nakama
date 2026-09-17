@@ -66,15 +66,18 @@ export async function runMeeting(
       url: meeting.url,
     });
     combined.throwIfAborted();
-    session = await transcriptionProviders[config.provider]!.connect({
-      ...config,
-      onError: (error) => {
-        failure = error;
-        abort.abort();
-      },
-      onSegment: (segment) => store.addSegment(meeting.id, segment),
-      signal: combined,
-    });
+    const connect = () =>
+      transcriptionProviders[config.provider]!.connect({
+        ...config,
+        onError: (error) => {
+          failure = error;
+          abort.abort();
+        },
+        onSegment: (segment) => store.addSegment(meeting.id, segment),
+        signal: combined,
+      });
+    let renewAt = Date.now() + 55 * 60_000;
+    session = await connect();
     combined.throwIfAborted();
     store.update(meeting.id, "transcribing");
     // FFmpeg pipe reads need not align to PCM samples. Send 100ms audio frames.
@@ -82,6 +85,16 @@ export async function runMeeting(
     for await (const chunk of audio.audio) {
       if (combined.aborted) {
         break;
+      }
+      // Renew before the provider's session limit; capture remains connected.
+      if (Date.now() >= renewAt) {
+        await session.finish();
+        session.close();
+        session = undefined;
+        combined.throwIfAborted();
+        renewAt = Date.now() + 55 * 60_000;
+        session = await connect();
+        combined.throwIfAborted();
       }
       pending = Buffer.concat([pending, chunk]);
       while (pending.length >= 4800) {

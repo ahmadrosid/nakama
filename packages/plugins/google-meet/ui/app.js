@@ -1,4 +1,4 @@
-// packages/plugins/google-meet/src/ui.tsx
+// src/ui.tsx
 var message = (error) => error instanceof Error ? error.message : "Request failed";
 var inject = ["slots", "host", "styles", "ui"];
 function apply(ctx) {
@@ -240,7 +240,7 @@ function apply(ctx) {
     const [overview, setOverview] = React.useState(null);
     const [error, setError] = React.useState("");
     const [url, setUrl] = React.useState("");
-    const [duration, setDuration] = React.useState(30);
+    const [duration, setDuration] = React.useState(120);
     const [busy, setBusy] = React.useState(false);
     const [settings, setSettings] = React.useState(false);
     const [selected, setSelected] = React.useState(null);
@@ -331,7 +331,7 @@ function apply(ctx) {
       value: url
     })), /* @__PURE__ */ React.createElement("label", null, "Minutes", /* @__PURE__ */ React.createElement(Input, {
       "aria-label": "Maximum meeting minutes",
-      max: 55,
+      max: 120,
       min: 1,
       onChange: (event) => setDuration(Number(event.target.value)),
       required: true,

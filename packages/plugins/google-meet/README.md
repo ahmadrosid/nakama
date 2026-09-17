@@ -54,7 +54,7 @@ The Nakama worker owns browser operations, so login and meeting capture cannot c
 
 The browser runs with background parking disabled so Meet keeps processing audio. A virtual display avoids Playwright's headless audio mute. BetterWright still enforces its network proxy policy; test Meet connectivity on your deployment, including environments that restrict WebRTC/TCP fallback.
 
-The worker supports one meeting per organization, up to 55 minutes. It leaves when stopped, timed out, or removed. An empty room can remain open until the duration expires. Controls expect English Meet UI. Restarts fail interrupted meetings instead of silently rejoining; partial transcripts remain available.
+The worker supports one meeting per organization, up to 120 minutes (the default). Transcription sessions renew every 55 minutes while the browser stays in the meeting. It leaves when stopped, timed out, or removed. An empty room can remain open until the duration expires. Controls expect English Meet UI. Restarts fail interrupted meetings instead of silently rejoining; partial transcripts remain available.
 
 Members see their own meetings; admins can manage org meetings. Agent tools additionally stay within the invoking profile. Transcripts can be downloaded as text. Segment times are receipt times, not word-level timestamps or speaker identification.
 

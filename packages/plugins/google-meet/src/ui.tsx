@@ -342,7 +342,7 @@ export function apply(ctx: Context) {
     const [overview, setOverview] = React.useState<Overview | null>(null);
     const [error, setError] = React.useState("");
     const [url, setUrl] = React.useState("");
-    const [duration, setDuration] = React.useState(30);
+    const [duration, setDuration] = React.useState(120);
     const [busy, setBusy] = React.useState(false);
     const [settings, setSettings] = React.useState(false);
     const [selected, setSelected] = React.useState<Meeting | null>(null);
@@ -454,7 +454,7 @@ export function apply(ctx: Context) {
               Minutes
               <Input
                 aria-label="Maximum meeting minutes"
-                max={55}
+                max={120}
                 min={1}
                 onChange={(event) => setDuration(Number(event.target.value))}
                 required
