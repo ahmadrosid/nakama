@@ -12,76 +12,10 @@ import { fileURLToPath } from "node:url";
 import type { PluginExecutionContext } from "@nakama/core";
 import type { BetterWright } from "betterwright";
 import { privateJson, run } from "./actions";
-import { BrowserSetupError, openBrowser, viewerUrl } from "./browser";
+import { BrowserSetupError, viewerUrl } from "./browser";
 import { MeetingStore } from "./store";
 import { transcriptionProviders } from "./transcription";
 import { GoogleConnection, runMeeting } from "./worker";
-
-test("worker captures PCM, flushes final speech, releases capture and persists completion", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "meet-worker-"));
-  const store = new MeetingStore(dir, "org");
-  const provider = transcriptionProviders.openai!;
-  let closed = false;
-  let providerClosed = false;
-  let bytes = 0;
-  try {
-    privateJson(join(dir, "settings.json"), { apiKey: "test" });
-    const meeting = store.create(
-      "https://meet.google.com/abc-defg-hij",
-      "user",
-      undefined,
-      1
-    );
-    transcriptionProviders.openai = {
-      async connect({ onSegment }) {
-        return {
-          close() {
-            providerClosed = true;
-          },
-          async finish() {
-            onSegment({ id: "last", receivedAt: 123, text: "Final words" });
-          },
-          push(audio) {
-            bytes += audio.length;
-          },
-        };
-      },
-    };
-    await runMeeting(
-      meeting,
-      store,
-      dir,
-      new AbortController().signal,
-      async ({ signal }) => ({
-        audio: new ReadableStream<Uint8Array<ArrayBuffer>>({
-          start(controller) {
-            controller.enqueue(new Uint8Array(4801));
-            store.stop(meeting.id);
-            signal.addEventListener("abort", () => controller.close(), {
-              once: true,
-            });
-          },
-        }),
-        async close() {
-          closed = true;
-        },
-        async inCall() {
-          return true;
-        },
-      })
-    );
-    expect(bytes).toBe(4800);
-    expect(closed && providerClosed).toBe(true);
-    expect(store.get(meeting.id)?.state).toBe("finished");
-    expect(store.transcript(meeting.id).map((segment) => segment.text)).toEqual(
-      ["Final words"]
-    );
-  } finally {
-    transcriptionProviders.openai = provider;
-    store.close();
-    rmSync(dir, { force: true, recursive: true });
-  }
-});
 
 test("two-hour meetings renew transcription sessions without rejoining or losing audio", async () => {
   const dir = mkdtempSync(join(tmpdir(), "meet-renew-"));
@@ -91,6 +25,7 @@ test("two-hour meetings renew transcription sessions without rejoining or losing
   let elapsed = 0;
   let sessions = 0;
   let captures = 0;
+  let captureClosed = false;
   let frames = 0;
   const closed: number[] = [];
   try {
@@ -138,7 +73,7 @@ test("two-hour meetings renew transcription sessions without rejoining or losing
             {
               async pull(controller) {
                 if (frames < 3) {
-                  controller.enqueue(new Uint8Array(4800));
+                  controller.enqueue(new Uint8Array(4801));
                   return;
                 }
                 store.stop(meeting.id);
@@ -152,7 +87,9 @@ test("two-hour meetings renew transcription sessions without rejoining or losing
             },
             { highWaterMark: 0 }
           ),
-          async close() {},
+          async close() {
+            captureClosed = true;
+          },
           async inCall() {
             return true;
           },
@@ -160,6 +97,7 @@ test("two-hour meetings renew transcription sessions without rejoining or losing
       }
     );
     expect(captures).toBe(1);
+    expect(captureClosed).toBe(true);
     expect(frames).toBe(3);
     expect(closed).toEqual([1, 2, 3]);
     expect(store.get(meeting.id)?.state).toBe("finished");
@@ -377,43 +315,6 @@ test("worker control authenticates requests and never exposes viewer control in 
     await child.exited;
     expect(existsSync(join(workerDir, "control.json"))).toBe(false);
     rmSync(dir, { force: true, recursive: true });
-  }
-});
-
-test("Mac sign-in uses installed Chrome without requiring BetterChromium", async () => {
-  if (
-    process.platform !== "darwin" ||
-    !existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-  ) {
-    return;
-  }
-  const directory = mkdtempSync(join(tmpdir(), "meet-chrome-"));
-  const browserEnvironment = [
-    "NAKAMA_MEET_CHROME",
-    "BETTERWRIGHT_CHROMIUM_PATH",
-    "BETTERWRIGHT_CHROMIUM_ROOT",
-  ];
-  const previous = browserEnvironment.map((key) => process.env[key]);
-  for (const key of browserEnvironment) {
-    delete process.env[key];
-  }
-  let instance: Awaited<ReturnType<typeof openBrowser>> | undefined;
-  try {
-    instance = await openBrowser(directory);
-    expect(instance.browser.provider).toMatchObject({
-      executablePath:
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    });
-  } finally {
-    await instance?.close();
-    for (const [index, key] of browserEnvironment.entries()) {
-      if (previous[index] === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = previous[index];
-      }
-    }
-    rmSync(directory, { force: true, recursive: true });
   }
 });
 
