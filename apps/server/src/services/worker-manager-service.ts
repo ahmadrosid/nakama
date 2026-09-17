@@ -311,6 +311,23 @@ export class WorkerManagerService {
         NAKAMA_PLUGIN_WORKER_ROOT: worker.registration.configDir ?? "",
         NAKAMA_WORKER_DATA_DIR: worker.directory,
       };
+      if (worker.registration.pluginId === "google-meet") {
+        for (const key of [
+          "NAKAMA_MEET_CHROME",
+          "NAKAMA_MEET_BETTERWRIGHT_PATH",
+          "NAKAMA_MEET_VIEWER_ORIGIN",
+          "NAKAMA_MEET_VIEWER_PORT",
+          "BETTERWRIGHT_CHROMIUM_PATH",
+          "BETTERWRIGHT_CHROMIUM_ROOT",
+          "PULSE_SERVER",
+          "XDG_RUNTIME_DIR",
+        ]) {
+          const value = process.env[key];
+          if (value) {
+            (env as Record<string, string>)[key] = value;
+          }
+        }
+      }
       if (
         worker.registration.pluginId === "supermemory" &&
         worker.contribution.key === "server"

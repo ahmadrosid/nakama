@@ -7,7 +7,46 @@ function apply(ctx) {
   ctx.styles(".meet-page{display:grid;gap:16px;max-width:960px;width:100%;min-width:0}.meet-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.meet-form{display:grid;gap:12px}.meet-form label{display:grid;gap:6px}.meet-list{list-style:none;padding:0;margin:0}.meet-list li{padding:16px 0;border-bottom:1px solid var(--border)}.meet-transcript{white-space:pre-wrap;overflow-wrap:anywhere;max-height:60vh;overflow:auto}.meet-url{flex:1;min-width:180px}.meet-status{font-size:13px;color:var(--muted-foreground)}");
   function Settings({ close }) {
     const [apiKey, setApiKey] = React.useState("");
-    const [file, setFile] = React.useState(null);
+    const [connection, setConnection] = React.useState(null);
+    React.useEffect(() => {
+      let alive = true;
+      let running = false;
+      const refresh = async () => {
+        if (!alive || running || ctx.signal.aborted) {
+          return;
+        }
+        running = true;
+        try {
+          const value = await ctx.host.call("connection");
+          if (alive) {
+            setConnection(value);
+          }
+        } catch (reason) {
+          if (alive) {
+            setError(message(reason));
+          }
+        } finally {
+          running = false;
+        }
+      };
+      refresh();
+      const timer = setInterval(() => void refresh(), 2000);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, []);
+    async function login(action) {
+      setBusy(true);
+      setError("");
+      try {
+        setConnection(await ctx.host.call(action));
+      } catch (reason) {
+        setError(message(reason));
+      } finally {
+        setBusy(false);
+      }
+    }
     const [error, setError] = React.useState("");
     const [busy, setBusy] = React.useState(false);
     async function save(event) {
@@ -15,12 +54,8 @@ function apply(ctx) {
       setBusy(true);
       setError("");
       try {
-        if (file && file.size > 262144) {
-          throw new Error("Google login file exceeds 256 KiB");
-        }
         await ctx.host.call("configure", {
-          apiKey: apiKey || undefined,
-          ...file ? { googleCookies: JSON.parse(await file.text()) } : {}
+          apiKey: apiKey || undefined
         });
         setApiKey("");
         close();
@@ -48,17 +83,31 @@ function apply(ctx) {
       value: apiKey
     })), /* @__PURE__ */ React.createElement("p", {
       className: "meet-status"
-    }, "gpt-transcribe uses separate API billing. Your ChatGPT subscription does not cover transcription."), /* @__PURE__ */ React.createElement("label", null, "Google login JSON", /* @__PURE__ */ React.createElement(Input, {
-      accept: "application/json,.json",
-      onChange: (event) => setFile(event.target.files?.[0] ?? null),
-      type: "file"
-    })), /* @__PURE__ */ React.createElement("p", {
-      className: "meet-status"
-    }, "Import the file created by the plugin’s desktop auth command. See the", " ", /* @__PURE__ */ React.createElement("a", {
-      href: "https://github.com/ahmadrosid/nakama/blob/main/packages/plugins/google-meet/README.md",
-      rel: "noreferrer",
+    }, "gpt-transcribe uses separate API billing. Your ChatGPT subscription does not cover transcription."), /* @__PURE__ */ React.createElement("div", {
+      className: "meet-row"
+    }, /* @__PURE__ */ React.createElement(Button, {
+      disabled: busy || connection?.state === "starting" || connection?.state === "saving",
+      onClick: () => void login("connect"),
+      type: "button",
+      variant: "outline"
+    }, connection?.authenticated ? "Reconnect Google" : "Connect Google"), connection?.url && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("a", {
+      href: connection.url,
+      rel: "noreferrer noopener",
       target: "_blank"
-    }, "plugin setup guide"), "."), error && /* @__PURE__ */ React.createElement("p", {
+    }, "Open sign-in browser"), /* @__PURE__ */ React.createElement(Button, {
+      disabled: busy || connection.state === "saving",
+      onClick: () => void login("finish-login"),
+      type: "button"
+    }, "Finish sign-in")), (connection?.authenticated || connection?.url) && /* @__PURE__ */ React.createElement(Button, {
+      disabled: busy || connection.state === "saving",
+      onClick: () => void login("disconnect"),
+      type: "button",
+      variant: "outline"
+    }, "Disconnect Google")), /* @__PURE__ */ React.createElement("p", {
+      className: "meet-status"
+    }, connection?.state === "starting" ? "Starting browser…" : connection?.state === "saving" ? "Updating Google connection…" : connection?.url ? "Complete Google sign-in in the browser, then select Finish sign-in." : connection?.authenticated ? "Google connected" : "Google disconnected"), connection?.error && /* @__PURE__ */ React.createElement("p", {
+      role: "alert"
+    }, connection.error), error && /* @__PURE__ */ React.createElement("p", {
       role: "alert"
     }, error), /* @__PURE__ */ React.createElement(Button, {
       disabled: busy,
@@ -187,7 +236,7 @@ function apply(ctx) {
       role: "alert"
     }, error), overview && /* @__PURE__ */ React.createElement("p", {
       className: "meet-status"
-    }, overview.configured ? overview.authenticated ? overview.worker.state === "ready" ? "Ready" : "Start Google Meet in Workers." : "Import Google login in Settings." : "Set a transcription API key in Settings."), /* @__PURE__ */ React.createElement("form", {
+    }, overview.configured ? overview.authenticated ? overview.worker.state === "ready" ? "Ready" : "Start Google Meet in Workers." : "Connect Google in Settings." : "Set a transcription API key in Settings."), /* @__PURE__ */ React.createElement("form", {
       className: "meet-row",
       onSubmit: (event) => {
         event.preventDefault();

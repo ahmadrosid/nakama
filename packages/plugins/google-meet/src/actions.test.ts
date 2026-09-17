@@ -20,9 +20,6 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
   };
   const input = {
     apiKey: "secret-api-key",
-    googleCookies: [
-      { domain: ".google.com", name: "SID", value: "secret-cookie" },
-    ],
   };
   try {
     await expect(
@@ -32,9 +29,20 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
     expect(JSON.stringify(result)).not.toContain("secret");
     mkdirSync(join(dir, "workers", "meet"), { recursive: true });
     privateJson(join(dir, "workers", "meet", "status.json"), {
+      authenticated: true,
       state: "ready",
       updatedAt: Date.now(),
     });
+    for (const actionKey of [
+      "connect",
+      "connection",
+      "finish-login",
+      "disconnect",
+    ]) {
+      await expect(
+        run({}, { ...context, actionKey, actor: { id: "a", role: "member" } })
+      ).rejects.toThrow("Admin access required");
+    }
     const meeting = (await run(
       { url: "https://meet.google.com/abc-defg-hij" },
       { ...context, actionKey: "join" }

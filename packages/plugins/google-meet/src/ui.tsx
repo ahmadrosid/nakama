@@ -35,7 +35,51 @@ export function apply(ctx: Context) {
 
   function Settings({ close }: { close(): void }) {
     const [apiKey, setApiKey] = React.useState("");
-    const [file, setFile] = React.useState<File | null>(null);
+    const [connection, setConnection] = React.useState<{
+      state: string;
+      authenticated: boolean;
+      url?: string;
+      error?: string;
+    } | null>(null);
+    React.useEffect(() => {
+      let alive = true;
+      let running = false;
+      const refresh = async () => {
+        if (!alive || running || ctx.signal.aborted) {
+          return;
+        }
+        running = true;
+        try {
+          const value = await ctx.host.call("connection");
+          if (alive) {
+            setConnection(value as typeof connection);
+          }
+        } catch (reason) {
+          if (alive) {
+            setError(message(reason));
+          }
+        } finally {
+          running = false;
+        }
+      };
+      void refresh();
+      const timer = setInterval(() => void refresh(), 2000);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, []);
+    async function login(action: string) {
+      setBusy(true);
+      setError("");
+      try {
+        setConnection((await ctx.host.call(action)) as typeof connection);
+      } catch (reason) {
+        setError(message(reason));
+      } finally {
+        setBusy(false);
+      }
+    }
     const [error, setError] = React.useState("");
     const [busy, setBusy] = React.useState(false);
     async function save(event: ReactType.FormEvent) {
@@ -43,12 +87,8 @@ export function apply(ctx: Context) {
       setBusy(true);
       setError("");
       try {
-        if (file && file.size > 262_144) {
-          throw new Error("Google login file exceeds 256 KiB");
-        }
         await ctx.host.call("configure", {
           apiKey: apiKey || undefined,
-          ...(file ? { googleCookies: JSON.parse(await file.text()) } : {}),
         });
         setApiKey("");
         close();
@@ -86,26 +126,62 @@ export function apply(ctx: Context) {
               gpt-transcribe uses separate API billing. Your ChatGPT
               subscription does not cover transcription.
             </p>
-            <label>
-              Google login JSON
-              <Input
-                accept="application/json,.json"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                type="file"
-              />
-            </label>
-            <p className="meet-status">
-              Import the file created by the plugin’s desktop auth command. See
-              the{" "}
-              <a
-                href="https://github.com/ahmadrosid/nakama/blob/main/packages/plugins/google-meet/README.md"
-                rel="noreferrer"
-                target="_blank"
+            <div className="meet-row">
+              <Button
+                disabled={
+                  busy ||
+                  connection?.state === "starting" ||
+                  connection?.state === "saving"
+                }
+                onClick={() => void login("connect")}
+                type="button"
+                variant="outline"
               >
-                plugin setup guide
-              </a>
-              .
+                {connection?.authenticated
+                  ? "Reconnect Google"
+                  : "Connect Google"}
+              </Button>
+              {connection?.url && (
+                <>
+                  <a
+                    href={connection.url}
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    Open sign-in browser
+                  </a>
+                  <Button
+                    disabled={busy || connection.state === "saving"}
+                    onClick={() => void login("finish-login")}
+                    type="button"
+                  >
+                    Finish sign-in
+                  </Button>
+                </>
+              )}
+              {(connection?.authenticated || connection?.url) && (
+                <Button
+                  disabled={busy || connection.state === "saving"}
+                  onClick={() => void login("disconnect")}
+                  type="button"
+                  variant="outline"
+                >
+                  Disconnect Google
+                </Button>
+              )}
+            </div>
+            <p className="meet-status">
+              {connection?.state === "starting"
+                ? "Starting browser…"
+                : connection?.state === "saving"
+                  ? "Updating Google connection…"
+                  : connection?.url
+                    ? "Complete Google sign-in in the browser, then select Finish sign-in."
+                    : connection?.authenticated
+                      ? "Google connected"
+                      : "Google disconnected"}
             </p>
+            {connection?.error && <p role="alert">{connection.error}</p>}
             {error && <p role="alert">{error}</p>}
             <Button disabled={busy} type="submit">
               {busy ? "Saving…" : "Save"}
@@ -262,7 +338,7 @@ export function apply(ctx: Context) {
                 ? overview.worker.state === "ready"
                   ? "Ready"
                   : "Start Google Meet in Workers."
-                : "Import Google login in Settings."
+                : "Connect Google in Settings."
               : "Set a transcription API key in Settings."}
           </p>
         )}

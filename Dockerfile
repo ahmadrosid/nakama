@@ -4,7 +4,7 @@
 ARG BUILDPLATFORM
 
 # --- Build web dashboard (devDependencies stay in this stage only) ---
-FROM --platform=${BUILDPLATFORM} oven/bun:1.3-slim AS web-builder
+FROM --platform=${BUILDPLATFORM} oven/bun:1.4-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -16,7 +16,7 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @nakama/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.3-slim AS runtime
+FROM oven/bun:1.4-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
@@ -27,8 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 ARG INSTALL_MEET_DEPS=false
 RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       apt-get update && apt-get install -y --no-install-recommends \
-        chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation \
-      && rm -rf /var/lib/apt/lists/*; \
+        chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation xvfb \
+      && rm -rf /var/lib/apt/lists/* \
+      && mkdir -p /opt/nakama-meet \
+      && cd /opt/nakama-meet \
+      && bun add --exact --production --ignore-scripts betterwright@2.8.1; \
     fi
 
 # Tool-output optimiser, on by default so the dashboard toggle works on a fresh
@@ -93,7 +96,8 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
      else useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama; fi \
   && chown -R nakama:nakama /app /nakama
 
-ENV NODE_ENV=production \
+ENV NAKAMA_MEET_CHROME=/usr/bin/chromium \
+    NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
     NAKAMA_PORT=4310 \
     NAKAMA_CONFIG_DIR=/nakama/data \

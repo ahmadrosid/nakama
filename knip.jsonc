@@ -3,8 +3,6 @@
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
     "packages/plugins/google-meet": {
-      // Bundled Puppeteer includes optional platform tools; source is checked below.
-      "ignore": ["workers/meet.js"],
       "entry": [
         "src/actions.ts",
         "src/worker.ts",

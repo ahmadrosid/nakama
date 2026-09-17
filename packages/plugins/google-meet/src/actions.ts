@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PluginExecutionContext } from "@nakama/core";
-import type { CookieData } from "puppeteer-core";
 import { type Meeting, MeetingStore } from "./store";
 import { transcriptionConfig } from "./transcription";
 
@@ -17,36 +16,27 @@ export function readSettings(directory: string) {
   );
 }
 
-function googleCookies(value: unknown): CookieData[] {
-  if (!(Array.isArray(value) && value.length) || value.length > 200) {
-    throw new Error("Import the Google login JSON created by the auth command");
+async function connectionCommand(directory: string, action: string) {
+  const endpoint = JSON.parse(
+    readFileSync(join(directory, "workers", "meet", "control.json"), "utf8")
+  ) as { port: number; token: string };
+  if (
+    !Number.isInteger(endpoint.port) ||
+    endpoint.port < 1 ||
+    endpoint.port > 65_535
+  ) {
+    throw new Error("Invalid worker endpoint");
   }
-  return value.map((cookie) => {
-    if (
-      !cookie ||
-      typeof cookie !== "object" ||
-      typeof cookie.name !== "string" ||
-      typeof cookie.value !== "string" ||
-      typeof cookie.domain !== "string" ||
-      !/^(\.?google\.com|[a-z0-9.-]+\.google\.com)$/.test(cookie.domain)
-    ) {
-      throw new Error("Only Google login cookies are accepted");
-    }
-    if (cookie.value.length > 16_384) {
-      throw new Error("Cookie exceeds size limit");
-    }
-    return {
-      domain: cookie.domain,
-      httpOnly: cookie.httpOnly === true,
-      name: cookie.name,
-      path: typeof cookie.path === "string" ? cookie.path : "/",
-      secure: true,
-      value: cookie.value,
-      ...(typeof cookie.expires === "number" && Number.isFinite(cookie.expires)
-        ? { expires: cookie.expires }
-        : {}),
-    };
+  const response = await fetch(`http://127.0.0.1:${endpoint.port}/${action}`, {
+    headers: { Authorization: `Bearer ${endpoint.token}` },
+    method: "POST",
+    signal: AbortSignal.timeout(5000),
   });
+  const result = (await response.json()) as { error?: string };
+  if (!response.ok) {
+    throw new Error(result.error ?? "Google connection request failed");
+  }
+  return result;
 }
 
 export async function run(
@@ -61,9 +51,16 @@ export async function run(
     (context.actor.role === "admin" || meeting.actorId === context.actor.id) &&
     (!context.profileId || meeting.profileId === context.profileId);
   try {
-    const action = context.actionKey;
+    const action = context.actionKey ?? "";
     const settingsPath = join(context.dataDir, "settings.json");
-    const authPath = join(context.dataDir, "auth.json");
+    if (
+      ["connect", "connection", "finish-login", "disconnect"].includes(action)
+    ) {
+      if (context.actor.role !== "admin") {
+        throw new Error("Admin access required");
+      }
+      return connectionCommand(context.dataDir, action);
+    }
     if (action === "configure") {
       if (context.actor.role !== "admin") {
         throw new Error("Admin access required");
@@ -76,17 +73,16 @@ export async function run(
         ...input,
         apiKey: input.apiKey || (previous as { apiKey?: string }).apiKey,
       });
-      const cookies =
-        input.googleCookies === undefined
-          ? undefined
-          : googleCookies(input.googleCookies);
       privateJson(settingsPath, config);
-      if (cookies) {
-        privateJson(authPath, cookies);
-      }
-      return { authenticated: existsSync(authPath), configured: true };
+      return { configured: true };
     }
-    let worker: { state: string; updatedAt?: number; message?: string } = {
+    let worker: {
+      state: string;
+      updatedAt?: number;
+      message?: string;
+      authenticated?: boolean;
+      loginBusy?: boolean;
+    } = {
       state: "stopped",
     };
     try {
@@ -104,7 +100,7 @@ export async function run(
     }
     if (action === "meetings") {
       return {
-        authenticated: existsSync(authPath),
+        authenticated: worker.authenticated === true,
         canConfigure: context.actor.role === "admin",
         configured: existsSync(settingsPath),
         meetings: store.list(
@@ -121,7 +117,7 @@ export async function run(
         );
       }
       readSettings(context.dataDir);
-      if (!existsSync(authPath)) {
+      if (!worker.authenticated || worker.loginBusy) {
         throw new Error("Configure Google login before joining a meeting");
       }
       return store.create(

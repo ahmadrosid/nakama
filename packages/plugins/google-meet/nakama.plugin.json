@@ -109,7 +109,7 @@
       "effect": "write",
       "entry": "actions/actions.js",
       "exposeAsTool": false,
-      "description": "Save the transcription API key and Google login. Never return credentials.",
+      "description": "Save the transcription API key. Never return credentials.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -124,15 +124,64 @@
           "model": {
             "type": "string",
             "enum": ["gpt-transcribe"]
-          },
-          "googleCookies": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": true
-            }
           }
         },
+        "required": []
+      }
+    },
+    {
+      "key": "connect",
+      "access": "admin",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Start a temporary Google sign-in browser.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "connection",
+      "access": "admin",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Read Google sign-in state. Viewer links are admin-only and expire.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "finish-login",
+      "access": "admin",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Verify Google sign-in and close the viewer.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "disconnect",
+      "access": "admin",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Close the browser and delete this organization\u2019s Google browser profile.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
         "required": []
       }
     }
