@@ -731,6 +731,34 @@ export class OrgService {
     await this.databaseAdapter.enableUser(userId);
   }
 
+  /**
+   * Remove login, membership and per-user integration data while retaining an
+   * anonymous user anchor. Chat messages and shared artifacts are org records,
+   * so they stay intact without retaining the erased person's identity.
+   */
+  async eraseUser(userId: string, actorUserId: string): Promise<void> {
+    assertOrgMemberUserIdShape(userId);
+    if (userId === actorUserId) {
+      throw new NakamaApiError("You cannot erase your own account.", 409);
+    }
+
+    const user = await this.databaseAdapter.getUserById(userId);
+    if (!user) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    const updatedAt = new Date().toISOString();
+    const erased = await this.databaseAdapter.eraseUser({
+      email: `erased-${crypto.randomUUID()}@deleted.invalid`,
+      id: userId,
+      passwordHash: await this.authService.hashPassword(crypto.randomUUID()),
+      updatedAt,
+    });
+    if (!erased) {
+      throw new NakamaApiError("Not found", 404);
+    }
+  }
+
   async updateMember(
     orgId: string,
     userId: string,

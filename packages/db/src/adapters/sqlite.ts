@@ -1622,6 +1622,90 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET disabled_at = NULL, updated_at = ?
     WHERE id = ?
   `);
+  const clearErasedUserSessionsStmt = db.prepare(
+    "UPDATE sessions SET user_id = NULL WHERE user_id = ?"
+  );
+  const clearErasedUserOrgMemoryProposalsStmt = db.prepare(`
+    UPDATE org_memory_proposals
+    SET proposed_by_user_id = CASE WHEN proposed_by_user_id = ? THEN NULL ELSE proposed_by_user_id END,
+        reviewer_user_id = CASE WHEN reviewer_user_id = ? THEN NULL ELSE reviewer_user_id END
+    WHERE proposed_by_user_id = ? OR reviewer_user_id = ?
+  `);
+  const clearErasedUserSkillProposalsStmt = db.prepare(`
+    UPDATE skill_proposals
+    SET proposed_by_user_id = CASE WHEN proposed_by_user_id = ? THEN NULL ELSE proposed_by_user_id END,
+        reviewer_user_id = CASE WHEN reviewer_user_id = ? THEN NULL ELSE reviewer_user_id END
+    WHERE proposed_by_user_id = ? OR reviewer_user_id = ?
+  `);
+  const clearErasedUserSkillSuggestionsStmt = db.prepare(`
+    UPDATE skill_suggestions SET proposed_by_user_id = NULL
+    WHERE proposed_by_user_id = ?
+  `);
+  const clearErasedUserProfileEventsStmt = db.prepare(`
+    UPDATE profile_change_events SET actor_user_id = NULL
+    WHERE actor_user_id = ?
+  `);
+  const deleteErasedUserAutomationReadsStmt = db.prepare(
+    "DELETE FROM automation_run_read_state WHERE user_id = ?"
+  );
+  const deleteErasedUserMembershipsStmt = db.prepare(
+    "DELETE FROM org_members WHERE user_id = ?"
+  );
+  const deleteErasedUserChannelMappingsStmt = db.prepare(
+    "DELETE FROM channel_org_mappings WHERE user_id = ?"
+  );
+  const deleteErasedUserBrowserSessionsStmt = db.prepare(
+    "DELETE FROM browser_sessions WHERE user_id = ?"
+  );
+  const deleteErasedUserPasswordResetsStmt = db.prepare(
+    "DELETE FROM password_reset_tokens WHERE user_id = ?"
+  );
+  const deleteErasedUserComposioConnectionsStmt = db.prepare(
+    "DELETE FROM composio_user_connections WHERE user_id = ?"
+  );
+  const anonymizeErasedUserStmt = db.prepare(`
+    UPDATE users
+    SET email = ?, password_hash = ?, name = NULL, phone = NULL,
+        is_platform_admin = 0, disabled_at = ?, user_context = NULL, updated_at = ?
+    WHERE id = ?
+  `);
+  const eraseUserTransaction = db.transaction(
+    (input: {
+      id: string;
+      email: string;
+      passwordHash: string;
+      updatedAt: string;
+    }) => {
+      clearErasedUserSessionsStmt.run(input.id);
+      clearErasedUserOrgMemoryProposalsStmt.run(
+        input.id,
+        input.id,
+        input.id,
+        input.id
+      );
+      clearErasedUserSkillProposalsStmt.run(
+        input.id,
+        input.id,
+        input.id,
+        input.id
+      );
+      clearErasedUserSkillSuggestionsStmt.run(input.id);
+      clearErasedUserProfileEventsStmt.run(input.id);
+      deleteErasedUserAutomationReadsStmt.run(input.id);
+      deleteErasedUserMembershipsStmt.run(input.id);
+      deleteErasedUserChannelMappingsStmt.run(input.id);
+      deleteErasedUserBrowserSessionsStmt.run(input.id);
+      deleteErasedUserPasswordResetsStmt.run(input.id);
+      deleteErasedUserComposioConnectionsStmt.run(input.id);
+      return anonymizeErasedUserStmt.run(
+        input.email,
+        input.passwordHash,
+        input.updatedAt,
+        input.updatedAt,
+        input.id
+      ).changes;
+    }
+  );
   // Per-org context lives on org_members only. users.user_context is a legacy
   // column left in place for existing installs; migrateLegacyUserContextToOrgMembers
   // copies any remaining values once, and this read path must not use it (#550).
@@ -2782,6 +2866,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async enableUser(id) {
       enableUserStmt.run(new Date().toISOString(), id);
+    },
+
+    async eraseUser(input) {
+      return eraseUserTransaction.immediate(input) > 0;
     },
 
     async failInterruptedRuns() {

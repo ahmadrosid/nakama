@@ -731,6 +731,12 @@ export interface DatabaseAdapter {
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
   disableUser(id: string, disabledAt: string): Promise<void>;
   enableUser(id: string): Promise<void>;
+  eraseUser(input: {
+    id: string;
+    email: string;
+    passwordHash: string;
+    updatedAt: string;
+  }): Promise<boolean>;
   /**
    * Settles runs left `running` by a process that exited mid-run. Only a
    * `finally` in the owning process completes a run, so a kill leaves the row

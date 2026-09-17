@@ -475,4 +475,49 @@ export function registerPlatformOrgRoutes(
     await orgService.enableMember(orgId, userId);
     return new Response(null, { status: 204 });
   });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "erasePlatformUser",
+      path: "/v1/platform/users/{userId}",
+      request: {
+        params: z.object({
+          userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
+        }),
+      },
+      responses: {
+        204: { description: "User erased" },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Permanently erase a user account",
+      tags: ["Platform"],
+    })
+  );
+
+  app.delete("/v1/platform/users/:userId", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    const userId = decodeURIComponent(c.req.param("userId"));
+    await orgService.eraseUser(userId, auth.user.id);
+    return new Response(null, { status: 204 });
+  });
 }
