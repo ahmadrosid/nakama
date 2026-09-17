@@ -14,7 +14,7 @@
       "effect": "write",
       "entry": "actions/actions.js",
       "exposeAsTool": true,
-      "description": "Join a user-supplied Google Meet URL and transcribe audio. Requires configured Google login and a separate transcription API key. Returns immediately; poll status. One meeting per organization. Tell participants that audio is transcribed. Do not retry a successful join.",
+      "description": "Join and transcribe a user-supplied Google Meet URL as one action. Joining automatically starts transcription after admission; there is no join-only or transcription-only mode. Ask for the URL if missing, not a mode. Defaults to 120 minutes. Requires configured Google login and a separate transcription API key. Returns immediately; check status. One meeting per organization. Tell participants that audio is transcribed. Do not retry a successful join.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
