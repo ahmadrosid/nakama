@@ -225,6 +225,16 @@ function apply(ctx) {
       }
     }
     const active = overview?.meetings.some((meeting) => ["queued", "joining", "transcribing"].includes(meeting.state));
+    const groups = [
+      {
+        meetings: overview?.meetings.filter((meeting) => !meeting.transcriptFile) ?? [],
+        title: "Meetings"
+      },
+      {
+        meetings: overview?.meetings.filter((meeting) => meeting.transcriptFile) ?? [],
+        title: "Saved transcripts"
+      }
+    ];
     return /* @__PURE__ */ React.createElement("section", {
       className: "meet-page"
     }, /* @__PURE__ */ React.createElement("div", {
@@ -261,11 +271,20 @@ function apply(ctx) {
     })), /* @__PURE__ */ React.createElement(Button, {
       disabled: busy || active || !overview?.configured || !overview.authenticated || overview.worker.state !== "ready",
       type: "submit"
-    }, "Join and transcribe")), overview ? overview.meetings.length ? /* @__PURE__ */ React.createElement("ul", {
+    }, "Join and transcribe")), overview ? groups.map((group) => /* @__PURE__ */ React.createElement("section", {
+      key: group.title
+    }, /* @__PURE__ */ React.createElement("h2", null, group.title), group.meetings.length ? /* @__PURE__ */ React.createElement("ul", {
       className: "meet-list"
-    }, overview.meetings.map((meeting) => /* @__PURE__ */ React.createElement("li", {
+    }, group.meetings.map((meeting) => /* @__PURE__ */ React.createElement("li", {
       key: meeting.id
-    }, /* @__PURE__ */ React.createElement("div", {
+    }, meeting.transcriptFile && /* @__PURE__ */ React.createElement("div", {
+      className: "meet-row"
+    }, /* @__PURE__ */ React.createElement("strong", {
+      style: { overflowWrap: "anywhere" }
+    }, meeting.transcriptFile), /* @__PURE__ */ React.createElement("time", {
+      className: "meet-status",
+      dateTime: new Date(meeting.createdAt).toISOString()
+    }, new Date(meeting.createdAt).toLocaleString())), /* @__PURE__ */ React.createElement("div", {
       className: "meet-row"
     }, /* @__PURE__ */ React.createElement("a", {
       href: meeting.url,
@@ -276,13 +295,13 @@ function apply(ctx) {
     }, meeting.state, meeting.stopRequested && ["queued", "joining", "transcribing"].includes(meeting.state) ? " · stopping" : ""), /* @__PURE__ */ React.createElement(Button, {
       onClick: () => setSelected(meeting),
       variant: "outline"
-    }, "Transcript"), ["queued", "joining", "transcribing"].includes(meeting.state) && /* @__PURE__ */ React.createElement(Button, {
+    }, meeting.transcriptFile ? "Open transcript" : "Transcript"), ["queued", "joining", "transcribing"].includes(meeting.state) && /* @__PURE__ */ React.createElement(Button, {
       disabled: busy || !!meeting.stopRequested,
       onClick: () => void action("leave", { meetingId: meeting.id }),
       variant: "outline"
     }, "Leave")), meeting.error && /* @__PURE__ */ React.createElement("p", {
       role: "alert"
-    }, meeting.error)))) : /* @__PURE__ */ React.createElement("p", null, "No meetings yet.") : /* @__PURE__ */ React.createElement("p", null, "Loading…"), settings && /* @__PURE__ */ React.createElement(Settings, {
+    }, meeting.error)))) : /* @__PURE__ */ React.createElement("p", null, group.title === "Meetings" ? "No meetings yet." : "No saved transcripts yet."))) : /* @__PURE__ */ React.createElement("p", null, "Loading…"), settings && /* @__PURE__ */ React.createElement(Settings, {
       close: () => setSettings(false)
     }), selected && /* @__PURE__ */ React.createElement(Transcript, {
       close: () => setSelected(null),

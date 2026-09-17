@@ -1,6 +1,13 @@
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { TranscriptSegment } from "./transcription";
 
@@ -19,13 +26,17 @@ export interface Meeting {
   profileId: string | null;
   state: MeetingState;
   stopRequested: number;
+  transcriptFile?: string;
   updatedAt: number;
   url: string;
 }
 
 export class MeetingStore {
   private readonly db: Database;
-  constructor(directory: string, orgId: string) {
+  constructor(
+    private readonly directory: string,
+    orgId: string
+  ) {
     mkdirSync(directory, { mode: 0o700, recursive: true });
     const path = join(directory, "meetings.sqlite");
     this.db = new Database(path);
@@ -50,6 +61,12 @@ export class MeetingStore {
     ) {
       this.db.close();
       throw new Error("Meeting data belongs to another organization");
+    }
+    try {
+      this.restoreTranscripts(false);
+    } catch (error) {
+      this.db.close();
+      throw error;
     }
   }
 
@@ -107,7 +124,13 @@ export class MeetingStore {
       >(
         "SELECT * FROM meetings WHERE (? IS NULL OR actorId=?) AND (? IS NULL OR profileId=?) ORDER BY createdAt DESC LIMIT 100"
       )
-      .all(actorId, actorId, profileId, profileId);
+      .all(actorId, actorId, profileId, profileId)
+      .map((meeting) => ({
+        ...meeting,
+        transcriptFile: existsSync(this.transcriptPath(meeting.id))
+          ? `meeting-${meeting.id}.txt`
+          : undefined,
+      }));
   }
   next() {
     return this.db
@@ -120,6 +143,7 @@ export class MeetingStore {
         "UPDATE meetings SET state='failed', error='Meeting worker restarted; partial transcript saved',updatedAt=? WHERE state IN ('joining','transcribing')"
       )
       .run(Date.now());
+    this.restoreTranscripts(true);
   }
   update(id: string, state: MeetingState, error: string | null = null) {
     this.db
@@ -130,11 +154,59 @@ export class MeetingStore {
     this.db.query("UPDATE meetings SET stopRequested=1 WHERE id=?").run(id);
   }
   addSegment(meetingId: string, segment: TranscriptSegment) {
+    if (!this.get(meetingId)) {
+      throw new Error("Meeting not found");
+    }
     this.db
       .query(
         "INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)"
       )
       .run(meetingId, segment.id, segment.text, segment.receivedAt);
+    this.saveTranscript(meetingId);
+  }
+  private transcriptPath(id: string) {
+    return join(this.directory, "transcripts", `meeting-${id}.txt`);
+  }
+  private restoreTranscripts(overwrite: boolean) {
+    const meetings = this.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM meetings WHERE EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id)"
+      )
+      .all();
+    for (const meeting of meetings) {
+      if (overwrite || !existsSync(this.transcriptPath(meeting.id))) {
+        this.saveTranscript(meeting.id);
+      }
+    }
+  }
+  private saveTranscript(id: string) {
+    // Serialize exports with segment writes so a concurrent reader cannot
+    // replace a newer file with an older database snapshot.
+    this.db
+      .transaction(() => {
+        const rows = this.db
+          .query<{ text: string }, [string]>(
+            "SELECT text FROM segments WHERE meetingId=? ORDER BY sequence"
+          )
+          .all(id);
+        mkdirSync(join(this.directory, "transcripts"), {
+          mode: 0o700,
+          recursive: true,
+        });
+        const path = this.transcriptPath(id);
+        const temporary = `${path}.${randomUUID()}.tmp`;
+        try {
+          writeFileSync(
+            temporary,
+            rows.map((row) => `${row.text}\n`).join(""),
+            { mode: 0o600 }
+          );
+          renameSync(temporary, path);
+        } finally {
+          rmSync(temporary, { force: true });
+        }
+      })
+      .immediate();
   }
   transcript(id: string, after = 0) {
     return this.db

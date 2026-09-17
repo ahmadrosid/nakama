@@ -2,22 +2,31 @@
 var __require = import.meta.require;
 
 // src/worker.ts
-import { existsSync as existsSync3, mkdirSync as mkdirSync3, rmSync as rmSync2 } from "fs";
+import { existsSync as existsSync4, mkdirSync as mkdirSync3, rmSync as rmSync3 } from "fs";
 import { join as join4 } from "path";
 
 // src/actions.ts
-import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { existsSync as existsSync2, readFileSync, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "fs";
 import { join as join2 } from "path";
 
 // src/store.ts
 import { Database } from "bun:sqlite";
 import { randomUUID } from "crypto";
-import { chmodSync, mkdirSync } from "fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from "fs";
 import { join } from "path";
 
 class MeetingStore {
+  directory;
   db;
   constructor(directory, orgId) {
+    this.directory = directory;
     mkdirSync(directory, { mode: 448, recursive: true });
     const path = join(directory, "meetings.sqlite");
     this.db = new Database(path);
@@ -39,6 +48,12 @@ class MeetingStore {
       this.db.close();
       throw new Error("Meeting data belongs to another organization");
     }
+    try {
+      this.restoreTranscripts(false);
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
   create(url, actorId, profileId, durationMinutes) {
     if (!/^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url)) {
@@ -59,13 +74,17 @@ class MeetingStore {
     return this.db.query("SELECT * FROM meetings WHERE id=?").get(id);
   }
   list(actorId = null, profileId = null) {
-    return this.db.query("SELECT * FROM meetings WHERE (? IS NULL OR actorId=?) AND (? IS NULL OR profileId=?) ORDER BY createdAt DESC LIMIT 100").all(actorId, actorId, profileId, profileId);
+    return this.db.query("SELECT * FROM meetings WHERE (? IS NULL OR actorId=?) AND (? IS NULL OR profileId=?) ORDER BY createdAt DESC LIMIT 100").all(actorId, actorId, profileId, profileId).map((meeting) => ({
+      ...meeting,
+      transcriptFile: existsSync(this.transcriptPath(meeting.id)) ? `meeting-${meeting.id}.txt` : undefined
+    }));
   }
   next() {
     return this.db.query("SELECT * FROM meetings WHERE state='queued' LIMIT 1").get();
   }
   recover() {
     this.db.query("UPDATE meetings SET state='failed', error='Meeting worker restarted; partial transcript saved',updatedAt=? WHERE state IN ('joining','transcribing')").run(Date.now());
+    this.restoreTranscripts(true);
   }
   update(id, state, error = null) {
     this.db.query("UPDATE meetings SET state=?,error=?,updatedAt=? WHERE id=?").run(state, error, Date.now(), id);
@@ -74,7 +93,40 @@ class MeetingStore {
     this.db.query("UPDATE meetings SET stopRequested=1 WHERE id=?").run(id);
   }
   addSegment(meetingId, segment) {
+    if (!this.get(meetingId)) {
+      throw new Error("Meeting not found");
+    }
     this.db.query("INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)").run(meetingId, segment.id, segment.text, segment.receivedAt);
+    this.saveTranscript(meetingId);
+  }
+  transcriptPath(id) {
+    return join(this.directory, "transcripts", `meeting-${id}.txt`);
+  }
+  restoreTranscripts(overwrite) {
+    const meetings = this.db.query("SELECT id FROM meetings WHERE EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id)").all();
+    for (const meeting of meetings) {
+      if (overwrite || !existsSync(this.transcriptPath(meeting.id))) {
+        this.saveTranscript(meeting.id);
+      }
+    }
+  }
+  saveTranscript(id) {
+    this.db.transaction(() => {
+      const rows = this.db.query("SELECT text FROM segments WHERE meetingId=? ORDER BY sequence").all(id);
+      mkdirSync(join(this.directory, "transcripts"), {
+        mode: 448,
+        recursive: true
+      });
+      const path = this.transcriptPath(id);
+      const temporary = `${path}.${randomUUID()}.tmp`;
+      try {
+        writeFileSync(temporary, rows.map((row) => `${row.text}
+`).join(""), { mode: 384 });
+        renameSync(temporary, path);
+      } finally {
+        rmSync(temporary, { force: true });
+      }
+    }).immediate();
   }
   transcript(id, after = 0) {
     return this.db.query("SELECT sequence,id,text,receivedAt FROM segments WHERE meetingId=? AND sequence>? ORDER BY sequence LIMIT 2000").all(id, after);
@@ -275,15 +327,15 @@ var transcriptionProviders = {
 // src/actions.ts
 function privateJson(path, data) {
   const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-  writeFileSync(temporary, JSON.stringify(data), { mode: 384 });
-  renameSync(temporary, path);
+  writeFileSync2(temporary, JSON.stringify(data), { mode: 384 });
+  renameSync2(temporary, path);
 }
 function readSettings(directory) {
   return transcriptionConfig(JSON.parse(readFileSync(join2(directory, "settings.json"), "utf8")));
 }
 
 // src/browser.ts
-import { existsSync as existsSync2, mkdirSync as mkdirSync2, rmSync } from "fs";
+import { existsSync as existsSync3, mkdirSync as mkdirSync2, rmSync as rmSync2 } from "fs";
 import { join as join3 } from "path";
 import { pathToFileURL } from "url";
 
@@ -295,7 +347,7 @@ function browserOptions(directory) {
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/usr/bin/chromium",
     "/usr/bin/google-chrome"
-  ].find(existsSync2));
+  ].find(existsSync3));
   return {
     adBlock: false,
     chromiumArgs: [
@@ -395,7 +447,7 @@ async function openBrowser(directory) {
     }
     const runtime = process.env.NAKAMA_MEET_BETTERWRIGHT_PATH;
     const defaultRuntime = "/opt/nakama-meet/node_modules/betterwright/dist/src/index.js";
-    const modulePath = runtime || (existsSync2(defaultRuntime) ? defaultRuntime : undefined);
+    const modulePath = runtime || (existsSync3(defaultRuntime) ? defaultRuntime : undefined);
     const sdk = await (modulePath ? import(pathToFileURL(modulePath).href) : import("betterwright"));
     browser = new sdk.BetterWright(options);
     return { browser, close };
@@ -518,7 +570,7 @@ async function captureMeeting(options) {
       options.signal.throwIfAborted();
       const state = await runBrowser(browser, `return await page.evaluate(${meetState.toString()}, ${!clicked});`, options.signal);
       if (state === "auth") {
-        rmSync(join3(options.directory, "connected.json"), { force: true });
+        rmSync2(join3(options.directory, "connected.json"), { force: true });
         throw new Error("Google login expired; reconnect in Google Meet settings");
       }
       if (state === "denied") {
@@ -675,7 +727,7 @@ class GoogleConnection {
     this.open = open;
   }
   get authenticated() {
-    return existsSync3(join4(this.directory, "connected.json"));
+    return existsSync4(join4(this.directory, "connected.json"));
   }
   get busy() {
     return !!this.pending || !!this.instance;
@@ -717,7 +769,7 @@ class GoogleConnection {
   }
   async perform(action) {
     if (action === "connect") {
-      rmSync2(join4(this.directory, "connected.json"), { force: true });
+      rmSync3(join4(this.directory, "connected.json"), { force: true });
       const origin = process.env.NAKAMA_MEET_VIEWER_ORIGIN;
       if (origin) {
         viewerUrl("http://127.0.0.1/?t=test", origin);
@@ -750,10 +802,10 @@ class GoogleConnection {
         connectedAt: Date.now()
       });
     } else if (action === "disconnect") {
-      rmSync2(join4(this.directory, "connected.json"), { force: true });
+      rmSync3(join4(this.directory, "connected.json"), { force: true });
       await this.close();
-      rmSync2(join4(this.directory, "browser"), { force: true, recursive: true });
-      rmSync2(join4(this.directory, "auth.json"), { force: true });
+      rmSync3(join4(this.directory, "browser"), { force: true, recursive: true });
+      rmSync3(join4(this.directory, "auth.json"), { force: true });
     }
     this.state = "idle";
   }
@@ -845,7 +897,7 @@ async function runWorker(directory, dataDir, orgId) {
   } finally {
     clearInterval(heartbeat);
     control.stop(true);
-    rmSync2(join4(directory, "control.json"), { force: true });
+    rmSync3(join4(directory, "control.json"), { force: true });
     await connection.shutdown();
     status();
     store.close();

@@ -320,6 +320,18 @@ export function apply(ctx: Context) {
     const active = overview?.meetings.some((meeting) =>
       ["queued", "joining", "transcribing"].includes(meeting.state)
     );
+    const groups = [
+      {
+        meetings:
+          overview?.meetings.filter((meeting) => !meeting.transcriptFile) ?? [],
+        title: "Meetings",
+      },
+      {
+        meetings:
+          overview?.meetings.filter((meeting) => meeting.transcriptFile) ?? [],
+        title: "Saved transcripts",
+      },
+    ];
     return (
       <section className="meet-page">
         <div className="meet-row">
@@ -384,50 +396,74 @@ export function apply(ctx: Context) {
           </Button>
         </form>
         {overview ? (
-          overview.meetings.length ? (
-            <ul className="meet-list">
-              {overview.meetings.map((meeting) => (
-                <li key={meeting.id}>
-                  <div className="meet-row">
-                    <a href={meeting.url} rel="noreferrer" target="_blank">
-                      {meeting.url}
-                    </a>
-                    <span className="meet-status">
-                      {meeting.state}
-                      {meeting.stopRequested &&
-                      ["queued", "joining", "transcribing"].includes(
-                        meeting.state
-                      )
-                        ? " · stopping"
-                        : ""}
-                    </span>
-                    <Button
-                      onClick={() => setSelected(meeting)}
-                      variant="outline"
-                    >
-                      Transcript
-                    </Button>
-                    {["queued", "joining", "transcribing"].includes(
-                      meeting.state
-                    ) && (
-                      <Button
-                        disabled={busy || !!meeting.stopRequested}
-                        onClick={() =>
-                          void action("leave", { meetingId: meeting.id })
-                        }
-                        variant="outline"
-                      >
-                        Leave
-                      </Button>
-                    )}
-                  </div>
-                  {meeting.error && <p role="alert">{meeting.error}</p>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No meetings yet.</p>
-          )
+          groups.map((group) => (
+            <section key={group.title}>
+              <h2>{group.title}</h2>
+              {group.meetings.length ? (
+                <ul className="meet-list">
+                  {group.meetings.map((meeting) => (
+                    <li key={meeting.id}>
+                      {meeting.transcriptFile && (
+                        <div className="meet-row">
+                          <strong style={{ overflowWrap: "anywhere" }}>
+                            {meeting.transcriptFile}
+                          </strong>
+                          <time
+                            className="meet-status"
+                            dateTime={new Date(meeting.createdAt).toISOString()}
+                          >
+                            {new Date(meeting.createdAt).toLocaleString()}
+                          </time>
+                        </div>
+                      )}
+                      <div className="meet-row">
+                        <a href={meeting.url} rel="noreferrer" target="_blank">
+                          {meeting.url}
+                        </a>
+                        <span className="meet-status">
+                          {meeting.state}
+                          {meeting.stopRequested &&
+                          ["queued", "joining", "transcribing"].includes(
+                            meeting.state
+                          )
+                            ? " · stopping"
+                            : ""}
+                        </span>
+                        <Button
+                          onClick={() => setSelected(meeting)}
+                          variant="outline"
+                        >
+                          {meeting.transcriptFile
+                            ? "Open transcript"
+                            : "Transcript"}
+                        </Button>
+                        {["queued", "joining", "transcribing"].includes(
+                          meeting.state
+                        ) && (
+                          <Button
+                            disabled={busy || !!meeting.stopRequested}
+                            onClick={() =>
+                              void action("leave", { meetingId: meeting.id })
+                            }
+                            variant="outline"
+                          >
+                            Leave
+                          </Button>
+                        )}
+                      </div>
+                      {meeting.error && <p role="alert">{meeting.error}</p>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>
+                  {group.title === "Meetings"
+                    ? "No meetings yet."
+                    : "No saved transcripts yet."}
+                </p>
+              )}
+            </section>
+          ))
         ) : (
           <p>Loading…</p>
         )}

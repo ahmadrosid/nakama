@@ -1,5 +1,7 @@
 # Google Meet transcription
 
+Transcripts save automatically as text files in the organization's plugin data folder under `transcripts/`. Open **Saved transcripts** to view them; downloading a copy to your computer is optional. Existing meeting transcripts are exported automatically when the updated plugin runs.
+
 Join Google Meet as a silent participant and save a live transcript using OpenAI `gpt-transcribe`. BetterWright handles the browser and persistent Google sign-in. The chat provider is independent; transcription needs a separately billed OpenAI API key. Raw audio is not retained.
 
 ## Setup

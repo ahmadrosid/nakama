@@ -1,5 +1,12 @@
+import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MeetingStore } from "./store";
@@ -33,6 +40,12 @@ test("one active meeting per org, transcripts survive closing and cannot cross t
       text: "Hello",
     });
     expect(store.transcript(meeting.id)).toHaveLength(1);
+    const file = join(dir, "transcripts", `meeting-${meeting.id}.txt`);
+    expect(readFileSync(file, "utf8")).toBe("Hello\n");
+    expect(statSync(file).mode % 0o1000).toBe(0o600);
+    expect(store.list("user-a", "profile-a")[0]?.transcriptFile).toBe(
+      `meeting-${meeting.id}.txt`
+    );
     expect(() => new MeetingStore(dir, "org-b")).toThrow();
     store.update(meeting.id, "finished");
     expect(
@@ -43,6 +56,106 @@ test("one active meeting per org, transcripts survive closing and cannot cross t
         30
       ).id
     ).not.toBe(meeting.id);
+  } finally {
+    store.close();
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("legacy export includes every segment beyond the transcript page limit", () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-export-pages-"));
+  let store = new MeetingStore(dir, "org");
+  try {
+    const meeting = store.create(
+      "https://meet.google.com/abc-defg-hij",
+      "me",
+      undefined,
+      1
+    );
+    store.close();
+    const db = new Database(join(dir, "meetings.sqlite"));
+    try {
+      db.transaction(() => {
+        const insert = db.query(
+          "INSERT INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)"
+        );
+        for (let i = 0; i < 2001; i++) {
+          insert.run(meeting.id, String(i), `Line ${i}`, i);
+        }
+      })();
+    } finally {
+      db.close();
+    }
+    store = new MeetingStore(dir, "org");
+    const text = readFileSync(
+      join(dir, "transcripts", `meeting-${meeting.id}.txt`),
+      "utf8"
+    );
+    expect(text.split("\n")).toHaveLength(2002);
+    expect(text.endsWith("Line 2000\n")).toBe(true);
+  } finally {
+    store.close();
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("existing transcripts are exported on reopen and recovery repairs partial files", () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-export-"));
+  let store = new MeetingStore(dir, "org");
+  try {
+    const meeting = store.create(
+      "https://meet.google.com/abc-defg-hij",
+      "me",
+      undefined,
+      1
+    );
+    store.addSegment(meeting.id, { id: "one", receivedAt: 1, text: "First" });
+    store.addSegment(meeting.id, { id: "two", receivedAt: 2, text: "Second" });
+    const file = join(dir, "transcripts", `meeting-${meeting.id}.txt`);
+    expect(readFileSync(file, "utf8")).toBe("First\nSecond\n");
+    store.update(meeting.id, "transcribing");
+    store.close();
+    rmSync(file);
+    store = new MeetingStore(dir, "org");
+    expect(readFileSync(file, "utf8")).toBe("First\nSecond\n");
+    writeFileSync(file, "First\n");
+    store.recover();
+    expect(store.get(meeting.id)?.state).toBe("failed");
+    expect(readFileSync(file, "utf8")).toBe("First\nSecond\n");
+    expect(store.list("someone-else")).toEqual([]);
+  } finally {
+    store.close();
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("a failed file export preserves database speech for recovery", () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-export-failure-"));
+  const store = new MeetingStore(dir, "org");
+  try {
+    const meeting = store.create(
+      "https://meet.google.com/abc-defg-hij",
+      "me",
+      undefined,
+      1
+    );
+    writeFileSync(join(dir, "transcripts"), "blocked directory");
+    expect(() =>
+      store.addSegment(meeting.id, {
+        id: "one",
+        receivedAt: 1,
+        text: "Keep this",
+      })
+    ).toThrow();
+    expect(store.transcript(meeting.id)[0]?.text).toBe("Keep this");
+    rmSync(join(dir, "transcripts"));
+    store.recover();
+    expect(
+      readFileSync(
+        join(dir, "transcripts", `meeting-${meeting.id}.txt`),
+        "utf8"
+      )
+    ).toBe("Keep this\n");
   } finally {
     store.close();
     rmSync(dir, { force: true, recursive: true });
