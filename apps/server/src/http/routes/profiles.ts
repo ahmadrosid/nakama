@@ -80,6 +80,14 @@ export function registerProfileRoutes(
       .openapi({ param: { in: "path", name: "documentId" } }),
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
   });
+  const orgIdParam = z.object({
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+  });
+  const orgDocumentIdParam = orgIdParam.extend({
+    documentId: z
+      .string()
+      .openapi({ param: { in: "path", name: "documentId" } }),
+  });
   const soulFileParam = z.object({
     fileKey: z
       .enum(["soul", "style", "instructions", "memory"])
@@ -151,6 +159,20 @@ export function registerProfileRoutes(
     .object({})
     .passthrough()
     .openapi("DeleteKnowledgeBaseResponse");
+  const sharedKnowledgeBaseDocumentSchema = z
+    .object({
+      documentId: z.string(),
+      profileId: z.string(),
+    })
+    .passthrough()
+    .openapi("SharedKnowledgeBaseDocumentResponse");
+  const knowledgeBaseDocumentInUseSchema = z
+    .object({
+      documentId: z.string(),
+      error: z.string(),
+      profileIds: z.array(z.string()),
+    })
+    .openapi("KnowledgeBaseDocumentInUseResponse");
   const imageAttachmentSchema = z
     .object({})
     .passthrough()
@@ -631,6 +653,198 @@ export function registerProfileRoutes(
       },
       summary:
         "Read knowledge base document bytes (render=text returns extracted text for preview)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listOrganizationKnowledgeBase",
+      path: "/v1/orgs/{orgId}/knowledge-base",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: listKnowledgeBaseSchema } },
+          description: "Shared organization knowledge base documents",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "List shared organization knowledge base documents (platform admins)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "uploadOrganizationKnowledgeBaseDocument",
+      path: "/v1/orgs/{orgId}/knowledge-base",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: uploadKnowledgeBaseSchema },
+          },
+          required: true,
+        },
+        params: orgIdParam,
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: uploadKnowledgeBaseResponseSchema },
+          },
+          description: "Shared organization knowledge base document kept",
+        },
+        201: {
+          content: {
+            "application/json": { schema: uploadKnowledgeBaseResponseSchema },
+          },
+          description: "Shared organization knowledge base document created",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Upload a shared organization knowledge base document (platform admins)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "deleteOrganizationKnowledgeBaseDocument",
+      path: "/v1/orgs/{orgId}/knowledge-base/{documentId}",
+      request: { params: orgDocumentIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: deleteKnowledgeBaseSchema },
+          },
+          description: "Deleted shared organization knowledge base document",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: {
+            "application/json": { schema: knowledgeBaseDocumentInUseSchema },
+          },
+          description: "Document is still attached to one or more profiles",
+        },
+      },
+      summary:
+        "Delete a shared organization knowledge base document (platform admins)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getOrganizationKnowledgeBaseDocumentContent",
+      path: "/v1/orgs/{orgId}/knowledge-base/{documentId}/content",
+      request: {
+        params: orgDocumentIdParam,
+        query: z.object({
+          inline: z.enum(["0", "1"]).optional(),
+          render: z.enum(["text"]).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "*/*": { schema: z.string() } },
+          description: "Shared organization document bytes",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Read shared organization document bytes (render=text returns extracted text for preview)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "attachSharedKnowledgeBaseDocument",
+      path: "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
+      request: { params: documentIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: sharedKnowledgeBaseDocumentSchema },
+          },
+          description: "Shared document attached to the profile",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Attach a shared organization document to a profile (platform admins)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "detachSharedKnowledgeBaseDocument",
+      path: "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
+      request: { params: documentIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: sharedKnowledgeBaseDocumentSchema },
+          },
+          description: "Shared document detached from the profile",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Detach a shared organization document from a profile (platform admins)",
       tags: ["Profiles"],
     })
   );

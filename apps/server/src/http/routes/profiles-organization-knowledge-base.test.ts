@@ -4,7 +4,10 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { setupFreshInstallSession } from "../test-session-helpers";
+import {
+  createOrgAdminSession,
+  setupFreshInstallSession,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-org-knowledge-base-routes-");
 
@@ -216,5 +219,72 @@ describe("organization knowledge base routes", () => {
       )
     );
     expect(response.status).toBe(404);
+  }, 20_000);
+
+  test("shared organization knowledge base management stays platform-admin only", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const { adminSession, orgId } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "acme-org-kb-guard",
+      "org-admin-kb@acme.com"
+    );
+    const headers = adminSession.headers(
+      {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": adminSession.csrfToken,
+      },
+      orgId
+    );
+
+    const requests: Array<[string, string]> = [
+      [`/v1/orgs/${orgId}/knowledge-base`, "GET"],
+      [`/v1/orgs/${orgId}/knowledge-base`, "POST"],
+      [`/v1/orgs/${orgId}/knowledge-base/kb_1`, "DELETE"],
+      [`/v1/orgs/${orgId}/knowledge-base/kb_1/content`, "GET"],
+      ["/v1/profiles/profile_1/knowledge-base/shared/kb_1", "PUT"],
+      ["/v1/profiles/profile_1/knowledge-base/shared/kb_1", "DELETE"],
+    ];
+
+    for (const [path, method] of requests) {
+      const response = await app.fetch(
+        new Request(`${BASE}${path}`, {
+          body: method === "POST" ? "{}" : undefined,
+          headers,
+          method,
+        })
+      );
+      expect([method, path, response.status]).toEqual([method, path, 403]);
+    }
+  }, 30_000);
+
+  test("openapi documents the organization knowledge base routes", async () => {
+    const { app } = createApp();
+    const response = await app.fetch(new Request(`${BASE}/openapi.json`));
+    expect(response.status).toBe(200);
+
+    const spec = (await response.json()) as {
+      paths: Record<string, Record<string, unknown>>;
+    };
+    const expected: Array<[string, string[]]> = [
+      ["/v1/orgs/{orgId}/knowledge-base", ["get", "post"]],
+      ["/v1/orgs/{orgId}/knowledge-base/{documentId}", ["delete"]],
+      ["/v1/orgs/{orgId}/knowledge-base/{documentId}/content", ["get"]],
+      [
+        "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
+        ["put", "delete"],
+      ],
+    ];
+
+    for (const [path, methods] of expected) {
+      for (const method of methods) {
+        expect([method, path, Boolean(spec.paths[path]?.[method])]).toEqual([
+          method,
+          path,
+          true,
+        ]);
+      }
+    }
   }, 20_000);
 });
