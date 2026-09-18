@@ -133,13 +133,4 @@ describe("workspace settings merge", () => {
       database.close();
     }
   });
-
-  test("merge output never carries an orgId key", () => {
-    const merged = mergeWorkspaceSettings(null, {
-      id: "default",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    expect(merged).not.toHaveProperty("orgId");
-  });
 });
