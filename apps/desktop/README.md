@@ -23,7 +23,7 @@ The build includes Bun, the production server and worker dependencies, and the b
 
 Complete the normal setup wizard on first launch. Configure your model provider as on the web; cloud models still require internet access and provider credentials.
 
-Desktop stores its browser session in `~/Library/Application Support/Nakama Desktop Electron` on macOS, or Electron's app-data directory under `Nakama Desktop Electron` on Windows. Store installs may virtualize the Windows app-data location. Server data is under `server/` within that directory. Existing web-server data is not imported. Updates preserve this directory. Server diagnostics are in `server/server.log`.
+Desktop stores its browser session in `~/Library/Application Support/Nakama Desktop Electron` on macOS, or Electron's app-data directory under `Nakama Desktop Electron` on Windows. Store installs may virtualize the Windows app-data location. On macOS, server data is stored in `~/.nakama-desktop` so agent tools do not scan through the protected `~/Library` tree; existing server data is migrated there on first launch. Existing web-server data is not imported. Updates preserve these directories. Server diagnostics are in `server.log`.
 
 The server binds only to `127.0.0.1`, on an available port. Desktop waits for it to start before loading the UI. Closing the app stops its server; automations and channel workers run while the app is open.
 

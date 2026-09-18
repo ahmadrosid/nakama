@@ -1,13 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdir, open } from "node:fs/promises";
+import { access, mkdir, open, rename } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from "electron";
-
-if (process.platform === "darwin") {
-  // Nakama does not use macOS media controls; avoid Chromium initializing the
-  // media session that can trigger an unrelated Apple Music permission prompt.
-  app.commandLine?.appendSwitch("disable-features", "MediaSessionService");
-}
 
 export function configureUpdates(
   updater,
@@ -346,11 +340,24 @@ if (!process.argv.includes("--smoke-test")) {
         if (process.env.NAKAMA_DESKTOP_URL) {
           return createWindow(serverUrl(process.env.NAKAMA_DESKTOP_URL));
         }
+        const dataDir = join(app.getPath("home"), ".nakama-desktop");
+        const legacyDataDir = join(app.getPath("userData"), "server");
+        try {
+          await access(dataDir);
+        } catch {
+          try {
+            await rename(legacyDataDir, dataDir);
+          } catch (error) {
+            if (error?.code !== "ENOENT") {
+              throw error;
+            }
+          }
+        }
         localServer = await startLocalServer(
           app.isPackaged
             ? join(process.resourcesPath, "runtime")
             : join(app.getAppPath(), "dist/runtime"),
-          join(app.getPath("userData"), "server")
+          dataDir
         );
         if (quitting) {
           await localServer.stop();
