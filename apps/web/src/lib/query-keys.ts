@@ -31,6 +31,8 @@ export const queryKeys = {
   health: ["health"] as const,
   imageGenerationSettings: ["imageGeneration", "settings"] as const,
   knowledgeBase: {
+    organization: (orgId: string) =>
+      ["knowledgeBase", "organization", orgId] as const,
     profile: (profileId: string) => ["knowledgeBase", profileId] as const,
   },
   mcp: {

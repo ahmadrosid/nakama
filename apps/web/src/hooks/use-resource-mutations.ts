@@ -119,6 +119,16 @@ export function useUpdateSessionMutation() {
     },
   });
 }
+export function useDeleteSessionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (sessionId: string) => client.deleteSession(sessionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+}
 
 export function useCloneProfileMutation() {
   const queryClient = useQueryClient();
@@ -507,7 +517,11 @@ export function useHistorySessionsQuery(profileId: string) {
 
   const sessions = results
     .flatMap((result) => result.data ?? [])
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    .sort(
+      (left, right) =>
+        Number(right.pinned) - Number(left.pinned) ||
+        right.updatedAt.localeCompare(left.updatedAt)
+    );
 
   return {
     data: sessions,
@@ -523,6 +537,14 @@ export function useSoulStatusQuery(profileId: string | null) {
     enabled: Boolean(profileId),
     queryFn: () => client.getProfileSoulStatus(profileId!),
     queryKey: queryKeys.soul.profile(profileId ?? ""),
+  });
+}
+
+export function useOrganizationKnowledgeBaseQuery(orgId: string | null) {
+  return useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.listOrganizationKnowledgeBase(orgId!),
+    queryKey: queryKeys.knowledgeBase.organization(orgId ?? ""),
   });
 }
 
@@ -772,6 +794,44 @@ export function useUploadKnowledgeBaseDocumentMutation() {
       document: DocumentAttachment;
       onDuplicate?: KnowledgeBaseDuplicateAction;
     }) => client.uploadKnowledgeBaseDocument(profileId, document, onDuplicate),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
+export function useAttachSharedKnowledgeBaseDocumentMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      documentId,
+    }: {
+      profileId: string;
+      documentId: string;
+    }) => client.attachSharedKnowledgeBaseDocument(profileId, documentId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
+export function useDetachSharedKnowledgeBaseDocumentMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      documentId,
+    }: {
+      profileId: string;
+      documentId: string;
+    }) => client.detachSharedKnowledgeBaseDocument(profileId, documentId),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.knowledgeBase.profile(variables.profileId),

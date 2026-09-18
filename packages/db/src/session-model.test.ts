@@ -57,6 +57,19 @@ describe("SQLite session model persistence", () => {
       expect(
         (await database.adapter.getSession("session_test"))?.model
       ).toBeNull();
+      expect(
+        await database.adapter.renameSessionTitle(
+          "session_test",
+          "Renamed chat"
+        )
+      ).toBe(true);
+      expect(
+        await database.adapter.updateSessionPinned("session_test", true)
+      ).toBe(true);
+      expect(await database.adapter.getSession("session_test")).toMatchObject({
+        pinned: true,
+        title: "Renamed chat",
+      });
     } finally {
       database.close();
     }

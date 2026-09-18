@@ -1,20 +1,38 @@
 import { Button } from "@nakama/ui/button";
+import {
+  ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  Delete02Icon,
   PencilEdit02Icon,
+  PinIcon,
+  PinOffIcon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData, useProfilesQuery } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
-import { useHistorySessionsQuery } from "@/hooks/use-resource-mutations";
+import {
+  useDeleteSessionMutation,
+  useHistorySessionsQuery,
+  useUpdateSessionMutation,
+} from "@/hooks/use-resource-mutations";
 import {
   useLocalStorageFlag,
   useSidebarCollapsed,
@@ -124,13 +142,93 @@ function RecentChats() {
     isLoading,
     error,
   } = useHistorySessionsQuery(profileId);
+  const updateSession = useUpdateSessionMutation();
+  const deleteSession = useDeleteSessionMutation();
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const { collapsed, toggle } = useLocalStorageFlag(
     SIDEBAR_RECENTS_COLLAPSED_KEY,
     getInitialRecentsCollapsed
   );
+  const pinnedSessions = sessions.filter((session) => session.pinned);
+  const recentSessions = sessions.filter((session) => !session.pinned);
+  const renderSession = (session: (typeof sessions)[number]) => {
+    const href = buildChatPath(profileId, session.id);
+    const title = session.title?.trim() || "Untitled chat";
+    return (
+      <div
+        className="group relative flex min-w-0 items-center"
+        key={session.id}
+      >
+        <Link
+          aria-current={location.pathname === href ? "page" : undefined}
+          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 transition-[padding] group-focus-within:pr-24 group-hover:pr-24"
+          data-active={location.pathname === href || undefined}
+          title={title}
+          to={href}
+        >
+          <span className="truncate">{title}</span>
+        </Link>
+        <div className="absolute right-1 flex translate-x-2 items-center opacity-0 transition-[opacity,transform] group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:opacity-100">
+          <Button
+            aria-label={`Rename ${title}`}
+            className="size-7 text-muted-foreground"
+            onClick={() => setRenameTarget({ id: session.id, title })}
+            size="icon-sm"
+            title="Rename"
+            variant="ghost"
+          >
+            <PencilEdit02Icon aria-hidden="true" className="size-4" />
+          </Button>
+          <Button
+            aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
+            className="size-7 text-muted-foreground"
+            onClick={() =>
+              void updateSession.mutateAsync({
+                input: { pinned: !session.pinned },
+                profileId,
+                sessionId: session.id,
+              })
+            }
+            size="icon-sm"
+            title={session.pinned ? "Unpin" : "Pin"}
+            variant="ghost"
+          >
+            {session.pinned ? (
+              <PinOffIcon aria-hidden="true" className="size-4" />
+            ) : (
+              <PinIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button>
+          <Button
+            aria-label={`Delete ${title}`}
+            className="size-7 text-destructive"
+            onClick={() => setDeleteTarget({ id: session.id, title })}
+            size="icon-sm"
+            title="Delete"
+            variant="ghost"
+          >
+            <Delete02Icon aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
+      {pinnedSessions.length > 0 ? (
+        <div className="mb-3">
+          <p className="sidebar-nav-group-label px-2 text-sm">Pinned</p>
+          {pinnedSessions.map(renderSession)}
+        </div>
+      ) : null}
       <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
         <button
           aria-expanded={!collapsed}
@@ -186,24 +284,79 @@ function RecentChats() {
               No recent chats
             </p>
           )}
-          {sessions.slice(0, 15).map((session) => {
-            const href = buildChatPath(profileId, session.id);
-            const title = session.title?.trim() || "Untitled chat";
-            return (
-              <Link
-                aria-current={location.pathname === href ? "page" : undefined}
-                className="sidebar-nav-link px-2 py-1.5"
-                data-active={location.pathname === href || undefined}
-                key={session.id}
-                title={title}
-                to={href}
-              >
-                <span className="truncate">{title}</span>
-              </Link>
-            );
-          })}
+          {recentSessions.map(renderSession)}
         </div>
       )}
+      {renameTarget ? (
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              setRenameTarget(null);
+            }
+          }}
+          open
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename chat</DialogTitle>
+              <DialogDescription>
+                Choose a name that helps you find this chat later.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const title = renameTarget.title.trim();
+                if (!title) {
+                  return;
+                }
+                await updateSession.mutateAsync({
+                  input: { title },
+                  profileId,
+                  sessionId: renameTarget.id,
+                });
+                setRenameTarget(null);
+              }}
+            >
+              <Input
+                autoFocus
+                onChange={(event) =>
+                  setRenameTarget((current) =>
+                    current
+                      ? { ...current, title: event.target.value }
+                      : current
+                  )
+                }
+                value={renameTarget.title}
+              />
+              <DialogFooter className="mt-4">
+                <Button
+                  onClick={() => setRenameTarget(null)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button disabled={!renameTarget.title.trim()} type="submit">
+                  Save
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmDialog
+          confirmLabel="Delete"
+          description={`Delete "${deleteTarget.title}" permanently? This cannot be undone.`}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            await deleteSession.mutateAsync(deleteTarget.id);
+            setDeleteTarget(null);
+          }}
+          title="Delete chat?"
+        />
+      ) : null}
     </div>
   );
 }

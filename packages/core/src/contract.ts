@@ -938,7 +938,9 @@ export interface CreateSessionResponse {
 }
 
 export interface UpdateSessionRequest {
-  model: string | null;
+  model?: string | null;
+  pinned?: boolean;
+  title?: string;
 }
 
 export interface BranchSessionRequest {
@@ -1043,6 +1045,7 @@ export interface SessionSummary {
   createdAt: string;
   id: string;
   messageCount: number;
+  pinned: boolean;
   preview: string | null;
   profileId: string;
   title: string | null;
@@ -2272,6 +2275,8 @@ export interface KnowledgeBaseDocument {
   filename: string;
   id: string;
   mediaType: string;
+  /** Absent in legacy profile responses; new responses may identify ownership. */
+  scope?: "organization" | "profile";
   sizeBytes: number;
   status: KnowledgeBaseDocumentStatus;
   uploadedAt: string;
@@ -2309,6 +2314,17 @@ export interface DeleteKnowledgeBaseResponse {
   deleted: boolean;
   documentId: string;
   profileId: string;
+}
+
+/** Organization documents are shared, so their responses carry no profile id. */
+export interface UploadOrganizationKnowledgeBaseResponse {
+  document: KnowledgeBaseDocument;
+  outcome: KnowledgeBaseUploadOutcome;
+}
+
+export interface DeleteOrganizationKnowledgeBaseResponse {
+  deleted: boolean;
+  documentId: string;
 }
 
 export interface UserContextStatusResponse {

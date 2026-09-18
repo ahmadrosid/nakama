@@ -1310,6 +1310,46 @@ describe("AgentService WhatsApp allowed phones", () => {
   });
 });
 
+describe("AgentService organization knowledge base", () => {
+  setupTestConfigDir("nakama-org-knowledge-base-");
+
+  test("serves organization documents through the profile service", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(null, null, db);
+
+    const uploaded = await service.uploadOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      {
+        data: Buffer.from("shared organization fact", "utf8").toString(
+          "base64"
+        ),
+        filename: "shared.txt",
+        mediaType: "text/plain",
+      }
+    );
+    expect(uploaded.outcome).toBe("created");
+    expect(uploaded.document.scope).toBe("organization");
+
+    const listed = await service.listOrganizationKnowledgeBase(ORG_ID);
+    expect(listed.documents.map((document) => document.id)).toEqual([
+      uploaded.document.id,
+    ]);
+
+    const read = await service.readOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      uploaded.document.id
+    );
+    expect(read.filename).toBe("shared.txt");
+
+    const deleted = await service.deleteOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      uploaded.document.id
+    );
+    expect(deleted.deleted).toBe(true);
+    expect(deleted.documentId).toBe(uploaded.document.id);
+  });
+});
+
 async function captureError(
   run: () => Promise<unknown>
 ): Promise<Error | null> {

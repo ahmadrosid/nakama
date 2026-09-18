@@ -3,7 +3,11 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@nakama/core";
-import { uploadKnowledgeBaseDocument } from "@nakama/core";
+import {
+  attachSharedKnowledgeBaseDocument,
+  uploadKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { OrgMemoryService } from "../services/org-memory-service";
 import { createOrgMemoryTools } from "./org-memory-tools";
@@ -147,6 +151,39 @@ describe("org memory tools", () => {
       expect(result.outcome).toBe("created");
       const proposal = await service.getProposal(orgId, result.proposalId!);
       expect(proposal.sourceDocumentIds).toEqual([documentId]);
+    });
+
+    test("keeps attached organization documents when the agent cites them", async () => {
+      await setupKb();
+      const shared = await uploadOrganizationKnowledgeBaseDocument(orgId, {
+        data: Buffer.from("Shared handbook body.", "utf8").toString("base64"),
+        filename: "shared-handbook.txt",
+        mediaType: "text/plain",
+      });
+      await attachSharedKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        shared.document.id
+      );
+
+      const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
+      const proposeTool = createOrgMemoryTools(service)[2];
+      const result = await proposeTool.run(
+        {
+          bullet: "the shared handbook is cited by name",
+          sourceDocumentIds: ["shared-handbook.txt", shared.document.id],
+        },
+        {
+          ...context(orgId, "member"),
+          profileId,
+          sessionId: "session_shared",
+          userId: "user_shared",
+        }
+      );
+
+      expect(result.outcome).toBe("created");
+      const proposal = await service.getProposal(orgId, result.proposalId!);
+      expect(proposal.sourceDocumentIds).toEqual([shared.document.id]);
     });
 
     test("stores resolved document ids when the agent passes the id", async () => {

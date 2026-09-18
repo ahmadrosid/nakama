@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   title TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
   model TEXT,
   agent_todos TEXT DEFAULT '[]' NOT NULL,
   agent_questionnaire TEXT,

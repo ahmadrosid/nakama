@@ -1,6 +1,9 @@
 import {
   emptyObjectSchema,
+  getProfileSharedDocumentIds,
+  type KnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   type OrgRole,
   type ToolContext,
   type ToolDefinition,
@@ -48,7 +51,9 @@ function readString(input: unknown, key: string): string | null {
 
 /**
  * Agents usually see filenames in the KB catalog / search hits, not raw ids.
- * Accept either and store only ids that resolve to a real document.
+ * Accept either and store only ids that resolve to a real document. Attached
+ * organization documents resolve too: the catalog lists them as searchable, so
+ * a citation that names one must not be dropped here.
  */
 async function resolveSourceDocumentIds(
   orgId: string,
@@ -65,11 +70,28 @@ async function resolveSourceDocumentIds(
     return raw.filter((entry): entry is string => typeof entry === "string");
   }
 
-  const documents = await listKnowledgeBaseDocuments(orgId, profileId);
-  const byId = new Map(documents.map((document) => [document.id, document]));
-  const byFilename = new Map(
-    documents.map((document) => [document.filename.toLowerCase(), document])
-  );
+  const [profileDocuments, sharedDocumentIds, organizationDocuments] =
+    await Promise.all([
+      listKnowledgeBaseDocuments(orgId, profileId),
+      getProfileSharedDocumentIds(orgId, profileId),
+      listOrganizationKnowledgeBaseDocuments(orgId),
+    ]);
+  const documents: KnowledgeBaseDocument[] = [
+    ...profileDocuments,
+    ...organizationDocuments.filter((document) =>
+      sharedDocumentIds.includes(document.id)
+    ),
+  ];
+  const byId = new Map<string, KnowledgeBaseDocument>();
+  const byFilename = new Map<string, KnowledgeBaseDocument>();
+  for (const document of documents) {
+    byId.set(document.id, document);
+    // Profile scope is listed first, so it wins a filename collision.
+    const filename = document.filename.toLowerCase();
+    if (!byFilename.has(filename)) {
+      byFilename.set(filename, document);
+    }
+  }
 
   const resolved: string[] = [];
   const seen = new Set<string>();

@@ -76,6 +76,7 @@ export function registerSessionRoutes(
       createdAt: z.string().optional(),
       id: z.string(),
       messageCount: z.number().optional(),
+      pinned: z.boolean().optional(),
       preview: z.string().nullable().optional(),
       profileId: z.string(),
       title: z.string().nullable().optional(),
@@ -152,7 +153,18 @@ export function registerSessionRoutes(
     .object({ sessionId: z.string() })
     .openapi("BranchSessionResponse");
   const updateSessionRequestSchema = z
-    .object({ model: z.string().trim().min(1).nullable() })
+    .object({
+      model: z.string().trim().min(1).nullable().optional(),
+      pinned: z.boolean().optional(),
+      title: z.string().trim().min(1).max(200).optional(),
+    })
+    .refine(
+      (body) =>
+        body.model !== undefined ||
+        body.pinned !== undefined ||
+        body.title !== undefined,
+      "At least one session field is required."
+    )
     .openapi("UpdateSessionRequest");
   const sendMessageRequestSchema = z
     .object({
@@ -537,17 +549,34 @@ export function registerSessionRoutes(
       await readJson<unknown>(c.req.raw)
     );
     if (!parsedBody.success) {
-      return errorResponse("Invalid session model.", 400);
+      return errorResponse("Invalid session update.", 400);
     }
     const body: UpdateSessionRequest = parsedBody.data;
-    const updated = await agent.updateSessionModel(
-      sessionId,
-      orgId,
-      body.model
-    );
-
-    if (!updated) {
-      return errorResponse("Session not found", 404);
+    if (body.model !== undefined) {
+      const updated = await agent.updateSessionModel(
+        sessionId,
+        orgId,
+        body.model
+      );
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
+    }
+    if (body.title !== undefined) {
+      const updated = await agent.renameSession(sessionId, orgId, body.title);
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
+    }
+    if (body.pinned !== undefined) {
+      const updated = await agent.updateSessionPinned(
+        sessionId,
+        orgId,
+        body.pinned
+      );
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
     }
 
     return new Response(null, { status: 204 });

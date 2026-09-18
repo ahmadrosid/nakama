@@ -608,7 +608,14 @@ export class PluginService {
       }
       return hash.digest("hex");
     };
-    if (developmentSnapshot) {
+    const existing = await this.db.getPluginRelease(
+      pluginId,
+      validated.manifest.version
+    );
+    if (
+      developmentSnapshot ||
+      (existing?.digest && existing.digest !== digestFiles())
+    ) {
       // New bytes get their own release; other organizations keep their selected copy.
       const version = `${validated.manifest.version.split("+")[0]}+dev.${digestFiles().slice(0, 12)}`;
       validated.manifest.version = version;

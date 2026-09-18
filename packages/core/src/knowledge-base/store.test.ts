@@ -3,16 +3,23 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
 } from "./paths";
 import {
+  attachSharedKnowledgeBaseDocument,
   deleteKnowledgeBaseDocument,
+  deleteOrganizationKnowledgeBaseDocument,
+  detachSharedKnowledgeBaseDocument,
+  type KnowledgeBaseDocumentInUseError,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   readKnowledgeBaseDocumentContent,
   uploadKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument,
 } from "./store";
 
 const ORG_ID = "org_test";
@@ -67,21 +74,23 @@ describe("knowledge base store", () => {
     expect(listed[0]?.id).toBe(uploaded.document.id);
 
     const extracted = await readFile(
-      getKnowledgeBaseExtractedPath(ORG_ID, profileId, uploaded.document.id),
+      getKnowledgeBaseExtractedPath(
+        getKnowledgeBaseDir(ORG_ID, profileId),
+        uploaded.document.id
+      ),
       "utf8"
     );
     expect(extracted).toContain("# source: notes.txt");
     expect(extracted).toContain("needle in haystack");
 
     const manifest = await readFile(
-      getKnowledgeBaseManifestPath(ORG_ID, profileId),
+      getKnowledgeBaseManifestPath(getKnowledgeBaseDir(ORG_ID, profileId)),
       "utf8"
     );
     expect(manifest).toContain(uploaded.document.id);
 
     const storedPath = getKnowledgeBaseStoredDocumentPath(
-      ORG_ID,
-      profileId,
+      getKnowledgeBaseDir(ORG_ID, profileId),
       uploaded.document.id,
       uploaded.document.filename
     );
@@ -95,6 +104,46 @@ describe("knowledge base store", () => {
     );
     expect(deleted).toBe(true);
     expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(0);
+  });
+
+  test("stores shared documents separately and protects attached documents", async () => {
+    const profileId = "profile_kb_shared";
+    await setupProfile(profileId);
+    const uploaded = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
+      data: Buffer.from("shared needle", "utf8").toString("base64"),
+      filename: "shared.txt",
+      mediaType: "text/plain",
+    });
+
+    expect(await listOrganizationKnowledgeBaseDocuments(ORG_ID)).toHaveLength(
+      1
+    );
+    expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(0);
+    await attachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      uploaded.document.id
+    );
+    await expect(
+      deleteOrganizationKnowledgeBaseDocument(ORG_ID, uploaded.document.id)
+    ).rejects.toMatchObject({
+      documentId: uploaded.document.id,
+      profileIds: [profileId],
+    } satisfies Partial<KnowledgeBaseDocumentInUseError>);
+
+    expect(
+      await detachSharedKnowledgeBaseDocument(
+        ORG_ID,
+        profileId,
+        uploaded.document.id
+      )
+    ).toBe(true);
+    expect(
+      await deleteOrganizationKnowledgeBaseDocument(
+        ORG_ID,
+        uploaded.document.id
+      )
+    ).toBe(true);
   });
 
   test("rejects duplicate uploads by default and supports skip/replace", async () => {
@@ -161,7 +210,9 @@ describe("knowledge base store", () => {
       mediaType: "text/plain",
     });
 
-    const manifestPath = getKnowledgeBaseManifestPath(ORG_ID, profileId);
+    const manifestPath = getKnowledgeBaseManifestPath(
+      getKnowledgeBaseDir(ORG_ID, profileId)
+    );
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
       documents: Array<Record<string, unknown>>;
     };

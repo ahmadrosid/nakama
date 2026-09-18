@@ -29,6 +29,7 @@ export function buildHttpOpenApiSpec(app: HonoApp, serverUrl?: string) {
       { name: "Tools" },
       { name: "Automations" },
       { name: "Tasks" },
+      { name: "Organizations" },
     ],
   });
 }

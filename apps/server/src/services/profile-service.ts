@@ -9,9 +9,11 @@ import type {
   CreateProfileRequest,
   CreateToolRequest,
   DeleteKnowledgeBaseResponse,
+  DeleteOrganizationKnowledgeBaseResponse,
   DocumentAttachment,
   ImageAttachment,
   JsonSchema,
+  KnowledgeBaseDocument,
   KnowledgeBaseDuplicateAction,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
@@ -26,23 +28,30 @@ import type {
   ToolSummary,
   UpdateProfileRequest,
   UploadKnowledgeBaseResponse,
+  UploadOrganizationKnowledgeBaseResponse,
 } from "@nakama/core";
 import {
   createId,
   DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
   getKnowledgeBaseDir,
+  getProfileSharedDocumentIds,
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
+  KnowledgeBaseDocumentInUseError,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument as persistOrganizationKnowledgeBaseDocument,
   readKnowledgeBaseDocumentContent,
+  readOrganizationKnowledgeBaseDocumentContent,
   readProfileAvatar,
   deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
+  deleteOrganizationKnowledgeBaseDocument as removeOrganizationKnowledgeBaseDocument,
   resolveSoulStackForProfile,
   saveProfileAvatar,
   writeSoulFile,
@@ -834,9 +843,27 @@ export class ProfileService {
     profileId: string
   ): Promise<ListKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
-    const documents = await listKnowledgeBaseDocuments(orgId, profileId);
+    const [documents, sharedDocumentIds, organizationDocuments] =
+      await Promise.all([
+        listKnowledgeBaseDocuments(orgId, profileId),
+        getProfileSharedDocumentIds(orgId, profileId),
+        listOrganizationKnowledgeBaseDocuments(orgId),
+      ]);
+    const shared = organizationDocuments
+      .filter((document) => sharedDocumentIds.includes(document.id))
+      .map((document) => ({ ...document, scope: "organization" as const }));
     const sources = DEFAULT_KNOWLEDGE_SOURCES;
-    return { documents, profileId, sources };
+    return {
+      documents: [
+        ...documents.map((document) => ({
+          ...document,
+          scope: "profile" as const,
+        })),
+        ...shared,
+      ],
+      profileId,
+      sources,
+    };
   }
 
   async uploadKnowledgeBaseDocument(
@@ -893,6 +920,92 @@ export class ProfileService {
     }
 
     return { deleted: true, documentId, profileId };
+  }
+
+  async listOrganizationKnowledgeBase(
+    orgId: string
+  ): Promise<{ documents: KnowledgeBaseDocument[] }> {
+    const documents = await listOrganizationKnowledgeBaseDocuments(orgId);
+    return {
+      documents: documents.map((document) => ({
+        ...document,
+        scope: "organization" as const,
+      })),
+    };
+  }
+
+  async uploadOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
+  ): Promise<UploadOrganizationKnowledgeBaseResponse> {
+    try {
+      const uploaded = await persistOrganizationKnowledgeBaseDocument(
+        orgId,
+        document,
+        onDuplicate
+      );
+      return {
+        document: { ...uploaded.document, scope: "organization" },
+        outcome: uploaded.outcome,
+      };
+    } catch (error) {
+      if (error instanceof KnowledgeBaseDuplicateError) {
+        throw new NakamaApiError(error.message, 409);
+      }
+
+      // Replacing a shared document that a profile still references is a
+      // conflict, not a bad request.
+      if (error instanceof KnowledgeBaseDocumentInUseError) {
+        throw new NakamaApiError(error.message, 409);
+      }
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to upload knowledge base document.";
+      throw new NakamaApiError(message, 400);
+    }
+  }
+
+  /**
+   * Organization documents are shared, so removal keeps the `profileIds` that
+   * still reference them in the 409 response body for the caller to resolve.
+   */
+  async deleteOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string
+  ): Promise<DeleteOrganizationKnowledgeBaseResponse> {
+    const deleted = await removeOrganizationKnowledgeBaseDocument(
+      orgId,
+      documentId
+    );
+
+    if (!deleted) {
+      throw new NakamaApiError("Knowledge base document not found.", 404);
+    }
+
+    return { deleted: true, documentId };
+  }
+
+  async readOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    try {
+      return await readOrganizationKnowledgeBaseDocumentContent(
+        orgId,
+        documentId,
+        options
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Knowledge base document not found.";
+      throw new NakamaApiError(message, 404);
+    }
   }
 
   async readKnowledgeBaseDocument(

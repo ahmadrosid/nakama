@@ -1292,6 +1292,11 @@ function migrateSessionsTable(db: Database): void {
       WHERE updated_at IS NULL;
     `);
   }
+  if (!columnNames.has("pinned")) {
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
 }
 
 function migrateWorkspaceSettingsTable(db: Database): void {

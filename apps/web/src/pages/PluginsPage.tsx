@@ -486,6 +486,7 @@ function GoogleMeetInstallDialog({
   onClose(): void;
   expectedRevision?: number;
 }) {
+  const navigate = useNavigate();
   const { dependencies, install } = useInstallGoogleMeet(
     orgId,
     expectedRevision
@@ -519,7 +520,16 @@ function GoogleMeetInstallDialog({
             {formatError(error)}
           </p>
         )}
-        <GoogleMeetInstallFooter install={install} onClose={onClose} />
+        <GoogleMeetInstallFooter
+          install={install}
+          onClose={onClose}
+          onInstalled={() => {
+            if (expectedRevision === undefined) {
+              onClose();
+              navigate("/plugins/google-meet");
+            }
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -569,8 +579,11 @@ function GoogleMeetInstallProgress({
 function GoogleMeetInstallFooter({
   install,
   onClose,
-}: Pick<GoogleMeetInstallState, "install"> & { onClose(): void }) {
-  const navigate = useNavigate();
+  onInstalled,
+}: Pick<GoogleMeetInstallState, "install"> & {
+  onClose(): void;
+  onInstalled(): void;
+}) {
   const busy = install.isPending;
   let label = "Install plugin";
   if (busy) {
@@ -581,21 +594,20 @@ function GoogleMeetInstallFooter({
   return (
     <DialogFooter>
       <Button disabled={busy} onClick={onClose} variant="outline">
-        Cancel
+        {install.isSuccess ? "Close" : "Cancel"}
       </Button>
-      <Button
-        disabled={busy}
-        onClick={() =>
-          install.mutate(undefined, {
-            onSuccess: () => {
-              onClose();
-              navigate("/plugins/google-meet");
-            },
-          })
-        }
-      >
-        {label}
-      </Button>
+      {install.isSuccess ? (
+        <Button render={<Link to="/plugins/google-meet" />}>
+          Open Google Meet
+        </Button>
+      ) : (
+        <Button
+          disabled={busy}
+          onClick={() => install.mutate(undefined, { onSuccess: onInstalled })}
+        >
+          {label}
+        </Button>
+      )}
     </DialogFooter>
   );
 }

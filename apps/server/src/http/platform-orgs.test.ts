@@ -748,4 +748,183 @@ describe("platform org routes", () => {
     );
     expect(disableResponse.status).toBe(409);
   });
+
+  test("platform admin erases user access but preserves anonymized chat history across organizations", async () => {
+    const { app, authService, databaseAdapter, orgService } =
+      createPlatformApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const created = await orgService.createOrganization({
+      name: "Erasure Test",
+      slug: "erasure-test",
+    });
+    const orgId = created.organization.id;
+    const profile = (await databaseAdapter.listProfilesForOrg(orgId))[0];
+    expect(profile).toBeDefined();
+    const secondCreated = await orgService.createOrganization({
+      name: "Second Erasure Test",
+      slug: "second-erasure-test",
+    });
+    const secondOrgId = secondCreated.organization.id;
+    const secondProfile = (
+      await databaseAdapter.listProfilesForOrg(secondOrgId)
+    )[0];
+    expect(secondProfile).toBeDefined();
+
+    const now = new Date().toISOString();
+    const userId = "user_erase_target";
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "erase-me@example.com",
+      id: userId,
+      name: "Erase Me",
+      passwordHash: await authService.hashPassword("password123"),
+      phone: "+628123456789",
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "member",
+      userId,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: secondOrgId,
+      role: "member",
+      userId,
+    });
+    await databaseAdapter.createBrowserSession({
+      activeOrgId: orgId,
+      createdAt: now,
+      csrfTokenHash: "erase_csrf",
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      id: "erase_browser_session",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "erase_session_hash",
+      userId,
+    });
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_erased_user",
+      model: null,
+      orgId,
+      profileId: profile!.id,
+      title: "Keep this chat",
+      userId,
+    });
+    await databaseAdapter.appendMessagesForSession("session_erased_user", [
+      {
+        createdAt: now,
+        id: "message_erased_user",
+        payload: { content: "retained", role: "user" },
+        seq: 0,
+        sessionId: "session_erased_user",
+      },
+    ]);
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_erased_user_second_org",
+      model: null,
+      orgId: secondOrgId,
+      profileId: secondProfile!.id,
+      title: "Keep this second chat",
+      userId,
+    });
+    await databaseAdapter.appendMessagesForSession(
+      "session_erased_user_second_org",
+      [
+        {
+          createdAt: now,
+          id: "message_erased_user_second_org",
+          payload: { content: "also retained", role: "user" },
+          seq: 0,
+          sessionId: "session_erased_user_second_org",
+        },
+      ]
+    );
+
+    const response = await app.fetch(
+      new Request(`http://localhost:4310/v1/platform/users/${userId}`, {
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "DELETE",
+      })
+    );
+
+    expect(response.status).toBe(204);
+    expect(
+      await databaseAdapter.getUserByEmail("erase-me@example.com")
+    ).toBeNull();
+    expect(await databaseAdapter.getUserById(userId)).toMatchObject({
+      disabledAt: expect.any(String),
+      email: expect.stringMatching(/^erased-[0-9a-f-]+@deleted\.invalid$/),
+      isPlatformAdmin: false,
+      name: null,
+      phone: null,
+    });
+    expect(await databaseAdapter.listUserOrganizations(userId)).toEqual([]);
+    expect(
+      await databaseAdapter.getBrowserSessionBySessionTokenHash(
+        "erase_session_hash"
+      )
+    ).toBeNull();
+    expect(
+      await databaseAdapter.getSession("session_erased_user")
+    ).toMatchObject({
+      userId: null,
+    });
+    expect(
+      await databaseAdapter.listMessagesForSession("session_erased_user")
+    ).toHaveLength(1);
+    expect(
+      await databaseAdapter.getSession("session_erased_user_second_org")
+    ).toMatchObject({
+      userId: null,
+    });
+    expect(
+      await databaseAdapter.listMessagesForSession(
+        "session_erased_user_second_org"
+      )
+    ).toHaveLength(1);
+  });
+
+  test("platform admin cannot erase their current account", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const platformAdmin = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+    expect(platformAdmin).toBeDefined();
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/users/${platformAdmin!.id}`,
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "DELETE",
+        }
+      )
+    );
+
+    expect(response.status).toBe(409);
+    expect(await databaseAdapter.getUserById(platformAdmin!.id)).not.toBeNull();
+  });
 });

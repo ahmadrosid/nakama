@@ -337,6 +337,50 @@ describe("session routes are scoped to the caller's active org", () => {
       (await databaseAdapter.getSession(victimSessionId))?.model
     ).toBeNull();
   });
+  test("renames, pins, lists, and deletes a chat session", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+    const victim = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const headers = victim.headers({ "X-CSRF-Token": victim.csrfToken });
+
+    const updated = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${victimSessionId}`, {
+        body: JSON.stringify({ pinned: true, title: "Pinned chat" }),
+        headers,
+        method: "PATCH",
+      })
+    );
+    expect(updated.status).toBe(204);
+
+    const listed = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/sessions?profileId=profile_victim&channel=web",
+        { headers: victim.headers() }
+      )
+    );
+    expect(listed.status).toBe(200);
+    expect((await listed.json()).sessions[0]).toMatchObject({
+      id: victimSessionId,
+      pinned: true,
+      title: "Pinned chat",
+    });
+
+    const deleted = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/sessions/${victimSessionId}?purge=true`,
+        {
+          headers,
+          method: "DELETE",
+        }
+      )
+    );
+    expect(deleted.status).toBe(204);
+    expect(await databaseAdapter.getSession(victimSessionId)).toBeNull();
+  });
 });
 
 describe("Super Bot sessions stay admin-only after they are created", () => {
