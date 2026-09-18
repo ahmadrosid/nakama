@@ -529,6 +529,11 @@ describe("remote chat images", () => {
       "https://[64:ff9b:1::a00:1]/",
       "https://[2002:7f00:1::]/",
       "https://[ff02::1]/",
+      "https://198.51.100.1/",
+      "https://[100::1]/",
+      "https://[100:0:0:1::1]/",
+      "https://[3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff]/",
+      "https://[5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/",
       "file:///image.png",
     ];
     for (const target of blocked) {

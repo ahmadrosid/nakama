@@ -68,9 +68,13 @@ for (const [network, prefix] of [
   ["::ffff:0:0", 96], // IPv4-mapped.
   ["64:ff9b::", 96], // Well-known NAT64 prefix.
   ["64:ff9b:1::", 48], // Local-use NAT64.
+  ["100::", 64], // Discard-only.
+  ["100:0:0:1::", 64], // Dummy IPv6 prefix.
   ["2001::", 23], // IETF special-purpose assignments.
   ["2001:db8::", 32], // Documentation range.
   ["2002::", 16], // 6to4 can embed private IPv4 destinations.
+  ["3fff::", 20], // Documentation range.
+  ["5f00::", 16], // Segment Routing SIDs, not globally reachable.
   ["fc00::", 7], // Unique-local.
   ["fe80::", 10], // Link-local.
   ["fec0::", 10], // Deprecated site-local.
@@ -136,6 +140,10 @@ function isPrivateIpv4(ip: string): boolean {
   }
   // 198.18.0.0/15 — benchmarking
   if (a === 198 && (b === 18 || b === 19)) {
+    return true;
+  }
+  // 198.51.100.0/24 — TEST-NET-2
+  if (a === 198 && b === 51 && c === 100) {
     return true;
   }
   // 203.0.113.0/24 — TEST-NET-3
