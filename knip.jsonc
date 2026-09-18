@@ -13,6 +13,7 @@
         "extension/background.js",
         "extension/content.js",
         "extension/offscreen.js",
+        "extension/microphone.js",
         "extension/popup.js"
       ]
     },
