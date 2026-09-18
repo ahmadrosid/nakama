@@ -43,7 +43,6 @@ import type {
 import * as pacote from "pacote";
 import { Parser } from "tar";
 import { spawnJsonTool } from "./custom-tool-subprocess";
-import { MeetDependencies } from "./meet-dependencies";
 import type { WorkerManagerService } from "./worker-manager-service";
 
 const MAX_COMPRESSED_BYTES = 20 * 1024 * 1024;
@@ -99,7 +98,6 @@ interface InspectedPackage {
 }
 
 const installLocks = new Map<string, Promise<unknown>>();
-const meetDependencies = new Map<string, MeetDependencies>();
 const officialInstallLocks = new Map<string, Promise<unknown>>();
 // Shipped composition, rather than package author/id claims, grants official status.
 const OFFICIAL_PLUGINS = new Map<
@@ -381,33 +379,6 @@ export class PluginService {
     );
   }
 
-  private meetDependencySetup(pluginId: string) {
-    if (pluginId !== "google-meet") {
-      throw new PluginHostError("not_found");
-    }
-    let setup = meetDependencies.get(this.configDir);
-    if (!setup) {
-      setup = new MeetDependencies(this.configDir);
-      meetDependencies.set(this.configDir, setup);
-    }
-    return setup;
-  }
-
-  getOfficialPluginDependencies(pluginId: string) {
-    return this.meetDependencySetup(pluginId).status();
-  }
-
-  async installOfficialPluginDependencies(pluginId: string) {
-    const setup = this.meetDependencySetup(pluginId);
-    if ((await setup.status()).state === "unsupported") {
-      throw new PluginHostError(
-        "invalid_state",
-        "Automatic Google Meet setup requires the current Nakama Linux Docker image."
-      );
-    }
-    return setup.start();
-  }
-
   async installOfficialPlugin(
     orgId: string,
     pluginId: string,
@@ -420,15 +391,6 @@ export class PluginService {
     const official = OFFICIAL_PLUGINS.get(pluginId);
     if (!official) {
       throw new PluginHostError("not_found");
-    }
-    if (pluginId === "google-meet") {
-      const dependencies = await this.getOfficialPluginDependencies(pluginId);
-      if (dependencies.state !== "ready") {
-        throw new PluginHostError(
-          "invalid_state",
-          "Install Google Meet dependencies before installing the plugin."
-        );
-      }
     }
     if (official.requiresHost && !this.options.onHostRequest) {
       throw new PluginHostError(

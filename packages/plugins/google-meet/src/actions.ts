@@ -16,29 +16,6 @@ export function readSettings(directory: string) {
   );
 }
 
-async function connectionCommand(directory: string, action: string) {
-  const endpoint = JSON.parse(
-    readFileSync(join(directory, "workers", "meet", "control.json"), "utf8")
-  ) as { port: number; token: string };
-  if (
-    !Number.isInteger(endpoint.port) ||
-    endpoint.port < 1 ||
-    endpoint.port > 65_535
-  ) {
-    throw new Error("Invalid worker endpoint");
-  }
-  const response = await fetch(`http://127.0.0.1:${endpoint.port}/${action}`, {
-    headers: { Authorization: `Bearer ${endpoint.token}` },
-    method: "POST",
-    signal: AbortSignal.timeout(5000),
-  });
-  const result = (await response.json()) as { error?: string };
-  if (!response.ok) {
-    throw new Error(result.error ?? "Google connection request failed");
-  }
-  return result;
-}
-
 export async function run(
   input: Record<string, unknown>,
   context: PluginExecutionContext
@@ -53,14 +30,6 @@ export async function run(
   try {
     const action = context.actionKey ?? "";
     const settingsPath = join(context.dataDir, "settings.json");
-    if (
-      ["connect", "connection", "finish-login", "disconnect"].includes(action)
-    ) {
-      if (context.actor.role !== "admin") {
-        throw new Error("Admin access required");
-      }
-      return connectionCommand(context.dataDir, action);
-    }
     if (action === "configure") {
       if (context.actor.role !== "admin") {
         throw new Error("Admin access required");
@@ -80,8 +49,7 @@ export async function run(
       state: string;
       updatedAt?: number;
       message?: string;
-      authenticated?: boolean;
-      loginBusy?: boolean;
+      captureUrl?: string;
     } = {
       state: "stopped",
     };
@@ -100,7 +68,7 @@ export async function run(
     }
     if (action === "meetings") {
       return {
-        authenticated: worker.authenticated === true,
+        authenticated: worker.state === "ready",
         canConfigure: context.actor.role === "admin",
         configured: existsSync(settingsPath),
         meetings: store.list(
@@ -117,15 +85,29 @@ export async function run(
         );
       }
       readSettings(context.dataDir);
-      if (!worker.authenticated || worker.loginBusy) {
-        throw new Error("Configure Google login before joining a meeting");
-      }
-      return store.create(
+      const meeting = store.create(
         String(input.url ?? "").trim(),
         context.actor.id,
         context.profileId,
         Number(input.durationMinutes ?? 120)
       );
+      const token = crypto.randomUUID();
+      privateJson(join(context.dataDir, "capture.json"), {
+        actorId: meeting.actorId,
+        expiresAt: Date.now() + meeting.durationMinutes * 60_000,
+        meetingId: meeting.id,
+        profileId: meeting.profileId,
+        token,
+      });
+      return {
+        ...meeting,
+        capture: worker.captureUrl
+          ? {
+              token,
+              url: `${worker.captureUrl}?meetingId=${meeting.id}&token=${token}`,
+            }
+          : undefined,
+      };
     }
     const meeting = store.get(String(input.meetingId ?? ""));
     if (!(meeting && canAccess(meeting))) {

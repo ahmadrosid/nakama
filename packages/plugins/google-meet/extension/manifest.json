@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Nakama Google Meet Transcriber",
+  "version": "0.1.0",
+  "description": "Capture Google Meet audio for a Nakama live transcript.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "alarms", "offscreen", "storage", "tabCapture"],
+  "host_permissions": ["https://meet.google.com/*", "<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Nakama Meet transcription"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

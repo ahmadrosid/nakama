@@ -9,7 +9,11 @@
         "src/ui.tsx",
         "actions/actions.js",
         "workers/meet.js",
-        "ui/app.js"
+        "ui/app.js",
+        "extension/background.js",
+        "extension/content.js",
+        "extension/offscreen.js",
+        "extension/popup.js"
       ]
     },
     "apps/desktop": {

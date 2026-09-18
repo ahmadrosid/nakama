@@ -43,8 +43,6 @@ const installPackage = spyOn(client, "installPluginPackage");
 const reinstallOfficial = spyOn(client, "reinstallOfficialPlugin");
 const meetApi = {
   install: spyOn(client, "installOfficialPlugin"),
-  setup: spyOn(client, "installPluginDependencies"),
-  status: spyOn(client, "getPluginDependencies"),
 };
 const accessApi = {
   assignSkill: spyOn(client, "assignSkill"),
@@ -110,47 +108,24 @@ function plugin(overrides: Partial<OrgPluginDetail> = {}): OrgPluginDetail {
   };
 }
 
-test.each(["ready", "failed", "installing"] as const)(
-  "Google Meet installation waits for dependencies: %s",
-  async (state) => {
-    const calls: string[] = [];
-    meetApi.status.mockImplementation(async () => {
-      calls.push("status");
-      return { state: calls.includes("setup") ? "ready" : state, steps: [] };
-    });
-    meetApi.setup.mockImplementation(async () => {
-      calls.push("setup");
-      return { state, steps: [] };
-    });
-    meetApi.install.mockImplementation(async (_id, orgId) => {
-      expect(orgId).toBe("org-a");
-      calls.push("plugin");
-      return {};
-    });
-    let run!: ReturnType<typeof useInstallGoogleMeet>["install"]["mutateAsync"];
-    function Probe() {
-      run = useInstallGoogleMeet("org-a").install.mutateAsync;
-      return null;
-    }
-    renderToString(
-      <QueryClientProvider client={queryClient}>
-        <Probe />
-      </QueryClientProvider>
-    );
-    if (state === "failed") {
-      await expect(run()).rejects.toThrow();
-      expect(meetApi.install).not.toHaveBeenCalled();
-    } else {
-      await run();
-      expect(calls.at(-1)).toBe("plugin");
-      if (state === "ready") {
-        expect(meetApi.setup).not.toHaveBeenCalled();
-      } else {
-        expect(calls).toEqual(["status", "setup", "status", "plugin"]);
-      }
-    }
+test("Google Meet installation installs the extension-based plugin directly", async () => {
+  meetApi.install.mockImplementation(async (_id, orgId) => {
+    expect(orgId).toBe("org-a");
+    return {};
+  });
+  let run!: ReturnType<typeof useInstallGoogleMeet>["install"]["mutateAsync"];
+  function Probe() {
+    run = useInstallGoogleMeet("org-a").install.mutateAsync;
+    return null;
   }
-);
+  renderToString(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
+  await run();
+  expect(meetApi.install).toHaveBeenCalled();
+});
 
 const authValue = {
   activeOrg: { id: "org-a", name: "A", role: "admin", slug: "a" },

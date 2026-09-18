@@ -1,4 +1,4 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { resolve } from "node:path";
 import type { OrgRole } from "@nakama/core";
 import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
@@ -178,62 +178,6 @@ async function installRelease(
 }
 
 describe("plugin HTTP API", () => {
-  test("only the fixed Google Meet dependency job can be started by a platform admin", async () => {
-    const { app, authService, databaseAdapter, pluginService } = createApp();
-    const installer = await setupFreshInstallSession(app, databaseAdapter);
-    const platform = await loginPlatformAdminSession(
-      app,
-      authService,
-      databaseAdapter
-    );
-    const start = spyOn(
-      pluginService,
-      "installOfficialPluginDependencies"
-    ).mockResolvedValue({ state: "installing", steps: [] });
-    const user = await databaseAdapter.getUserByEmail("platform@example.com");
-    await databaseAdapter.upsertOrgMember({
-      orgId: installer.orgId!,
-      userId: user!.id,
-      role: "admin",
-      createdAt: new Date().toISOString(),
-    });
-    try {
-      const csrfDenied = await app.fetch(
-        new Request(
-          "http://localhost:4310/v1/plugins/official/google-meet/dependencies",
-          { method: "POST", headers: platform.headers({}, installer.orgId!) }
-        )
-      );
-      expect(csrfDenied.status).toBe(403);
-      expect(start).not.toHaveBeenCalled();
-      const response = await jsonRequest(
-        app,
-        "/v1/plugins/official/google-meet/dependencies",
-        platform,
-        {
-          method: "POST",
-          body: JSON.stringify({ command: "ignored", packages: ["ignored"] }),
-        },
-        installer.orgId!
-      );
-      expect(response.status).toBe(202);
-      expect(start).toHaveBeenCalledWith("google-meet");
-      expect(await response.json()).toMatchObject({ state: "installing" });
-    } finally {
-      start.mockRestore();
-    }
-    expect(
-      (
-        await jsonRequest(
-          app,
-          "/v1/plugins/official/arbitrary/dependencies",
-          platform,
-          { method: "POST" },
-          installer.orgId!
-        )
-      ).status
-    ).toBe(404);
-  });
   test("AE6 authority matrix for platform, org roles, nonmember, and archived org", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const installer = await setupFreshInstallSession(app, databaseAdapter);
@@ -300,20 +244,6 @@ describe("plugin HTTP API", () => {
       PASSWORD,
       orgId
     );
-    const dependencyUrl = "/v1/plugins/official/google-meet/dependencies";
-    expect(
-      (await jsonRequest(app, dependencyUrl, admin, {}, orgId)).status
-    ).toBe(200);
-    expect(
-      (await jsonRequest(app, dependencyUrl, member, {}, orgId)).status
-    ).toBe(403);
-    expect(
-      (await jsonRequest(app, dependencyUrl, viewer, {}, orgId)).status
-    ).toBe(403);
-    expect(
-      (await jsonRequest(app, dependencyUrl, admin, { method: "POST" }, orgId))
-        .status
-    ).toBe(403);
     const outsider = await loginUserSession(
       app,
       "outsider@example.com",

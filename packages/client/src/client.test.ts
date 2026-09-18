@@ -31,31 +31,6 @@ test("scoped clients keep session requests in their original organization", asyn
   ).toBe(true);
 });
 
-test("dependency requests stay in the selected organization", async () => {
-  const requests: Request[] = [];
-  const client = new NakamaClient({
-    baseUrl: "http://localhost:4310",
-    fetch: async (input, init) => {
-      requests.push(new Request(input, init));
-      return Response.json({ state: "pending", steps: [] });
-    },
-    orgId: "other",
-  });
-  await client.getPluginDependencies("google-meet", "org-a");
-  await client.installPluginDependencies("google-meet", "org-a");
-  expect(requests.map((request) => request.method)).toEqual(["GET", "POST"]);
-  expect(
-    requests.every((request) => request.headers.get("X-Org-Id") === "org-a")
-  ).toBe(true);
-  expect(
-    requests.every(
-      (request) =>
-        new URL(request.url).pathname ===
-        "/v1/plugins/official/google-meet/dependencies"
-    )
-  ).toBe(true);
-});
-
 test("plugin access requests retain their explicit organization", async () => {
   const requests: Request[] = [];
   const client = new NakamaClient({

@@ -6,7 +6,7 @@
   "minNakamaVersion": "0.4.10",
   "author": "Nakama",
   "license": "MIT",
-  "description": "Join Google Meet and transcribe meeting audio with your transcription provider.",
+  "description": "Capture Google Meet audio from Chrome and transcribe it with OpenAI.",
   "actions": [
     {
       "key": "join",
@@ -14,7 +14,7 @@
       "effect": "write",
       "entry": "actions/actions.js",
       "exposeAsTool": true,
-      "description": "Join and transcribe a user-supplied Google Meet URL as one action. Joining automatically starts transcription after admission; there is no join-only or transcription-only mode. Ask for the URL if missing, not a mode. Defaults to 120 minutes. Requires configured Google login and a separate transcription API key. Returns immediately; check status. One meeting per organization. Tell participants that audio is transcribed. Do not retry a successful join.",
+      "description": "Create a meeting capture session for a user-supplied Google Meet URL. Install the Nakama Chrome extension, paste the returned capture URL, and start capture. Defaults to 120 minutes. Requires a separate OpenAI API key. Returns immediately; check status. One meeting per organization. Tell participants that audio is transcribed. Do not retry a successful join.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -126,62 +126,6 @@
             "enum": ["gpt-transcribe"]
           }
         },
-        "required": []
-      }
-    },
-    {
-      "key": "connect",
-      "access": "admin",
-      "effect": "write",
-      "entry": "actions/actions.js",
-      "exposeAsTool": false,
-      "description": "Start a temporary Google sign-in browser.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "key": "connection",
-      "access": "admin",
-      "effect": "read",
-      "entry": "actions/actions.js",
-      "exposeAsTool": false,
-      "description": "Read Google sign-in state. Viewer links are admin-only and expire.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "key": "finish-login",
-      "access": "admin",
-      "effect": "write",
-      "entry": "actions/actions.js",
-      "exposeAsTool": false,
-      "description": "Verify Google sign-in and close the viewer.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "key": "disconnect",
-      "access": "admin",
-      "effect": "write",
-      "entry": "actions/actions.js",
-      "exposeAsTool": false,
-      "description": "Close the browser and delete this organization\u2019s Google browser profile.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {},
         "required": []
       }
     }

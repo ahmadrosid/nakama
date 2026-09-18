@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Nakama Meet</title>
+<style>
+body {
+  width: 280px;
+  padding: 12px;
+  font: 14px system-ui;
+}
+textarea,
+button {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 8px;
+}
+textarea {
+  height: 80px;
+}
+#status {
+  margin-top: 8px;
+  color: #555;
+}
+</style>
+<textarea id="url" placeholder="Paste the capture URL from Nakama"></textarea>
+<button id="start" type="button">Start capture</button>
+<button id="stop" type="button">Stop capture</button>
+<div id="status"></div>
+<script defer src="popup.js"></script>

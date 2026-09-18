@@ -320,14 +320,9 @@ export class WorkerManagerService {
       };
       if (worker.registration.pluginId === "google-meet") {
         for (const key of [
-          "NAKAMA_MEET_CHROME",
-          "NAKAMA_MEET_BETTERWRIGHT_PATH",
-          "NAKAMA_MEET_VIEWER_ORIGIN",
-          "NAKAMA_MEET_VIEWER_PORT",
-          "BETTERWRIGHT_CHROMIUM_PATH",
-          "BETTERWRIGHT_CHROMIUM_ROOT",
-          "PULSE_SERVER",
-          "XDG_RUNTIME_DIR",
+          "NAKAMA_MEET_CAPTURE_HOST",
+          "NAKAMA_MEET_CAPTURE_PORT",
+          "NAKAMA_MEET_CAPTURE_ORIGIN",
         ]) {
           const value = process.env[key];
           if (value) {

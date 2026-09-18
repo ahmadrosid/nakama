@@ -17,9 +17,8 @@ type Context = {
 type Overview = {
   meetings: Meeting[];
   configured: boolean;
-  authenticated: boolean;
   canConfigure: boolean;
-  worker: { state: string; message?: string };
+  worker: { state: string; message?: string; captureUrl?: string };
 };
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Request failed";
@@ -68,51 +67,6 @@ export function apply(ctx: Context) {
 
   function Settings({ close }: { close(): void }) {
     const [apiKey, setApiKey] = React.useState("");
-    const [connection, setConnection] = React.useState<{
-      state: string;
-      authenticated: boolean;
-      url?: string;
-      error?: string;
-    } | null>(null);
-    React.useEffect(() => {
-      let alive = true;
-      let running = false;
-      const refresh = async () => {
-        if (!alive || running || ctx.signal.aborted) {
-          return;
-        }
-        running = true;
-        try {
-          const value = await ctx.host.call("connection");
-          if (alive) {
-            setConnection(value as typeof connection);
-          }
-        } catch (reason) {
-          if (alive) {
-            setError(message(reason));
-          }
-        } finally {
-          running = false;
-        }
-      };
-      void refresh();
-      const timer = setInterval(() => void refresh(), 2000);
-      return () => {
-        alive = false;
-        clearInterval(timer);
-      };
-    }, []);
-    async function login(action: string) {
-      setBusy(true);
-      setError("");
-      try {
-        setConnection((await ctx.host.call(action)) as typeof connection);
-      } catch (reason) {
-        setError(message(reason));
-      } finally {
-        setBusy(false);
-      }
-    }
     const [error, setError] = React.useState("");
     const [busy, setBusy] = React.useState(false);
     async function save(event: ReactType.FormEvent) {
@@ -159,62 +113,10 @@ export function apply(ctx: Context) {
               gpt-transcribe uses separate API billing. Your ChatGPT
               subscription does not cover transcription.
             </p>
-            <div className="meet-row">
-              <Button
-                disabled={
-                  busy ||
-                  connection?.state === "starting" ||
-                  connection?.state === "saving"
-                }
-                onClick={() => void login("connect")}
-                type="button"
-                variant="outline"
-              >
-                {connection?.authenticated
-                  ? "Reconnect Google"
-                  : "Connect Google"}
-              </Button>
-              {connection?.url && (
-                <>
-                  <a
-                    href={connection.url}
-                    rel="noreferrer noopener"
-                    target="_blank"
-                  >
-                    Open sign-in browser
-                  </a>
-                  <Button
-                    disabled={busy || connection.state === "saving"}
-                    onClick={() => void login("finish-login")}
-                    type="button"
-                  >
-                    Finish sign-in
-                  </Button>
-                </>
-              )}
-              {(connection?.authenticated || connection?.url) && (
-                <Button
-                  disabled={busy || connection.state === "saving"}
-                  onClick={() => void login("disconnect")}
-                  type="button"
-                  variant="outline"
-                >
-                  Disconnect Google
-                </Button>
-              )}
-            </div>
             <p className="meet-status">
-              {connection?.state === "starting"
-                ? "Starting browser…"
-                : connection?.state === "saving"
-                  ? "Updating Google connection…"
-                  : connection?.url
-                    ? "Complete Google sign-in in the browser, then select Finish sign-in."
-                    : connection?.authenticated
-                      ? "Google connected"
-                      : "Google disconnected"}
+              Install the Nakama Chrome extension. After joining, paste the
+              capture URL into its popup and start capture.
             </p>
-            {connection?.error && <p role="alert">{connection.error}</p>}
             {error && <p role="alert">{error}</p>}
             <Button disabled={busy} type="submit">
               {busy ? "Saving…" : "Save"}
@@ -343,6 +245,7 @@ export function apply(ctx: Context) {
     const [error, setError] = React.useState("");
     const [url, setUrl] = React.useState("");
     const [duration, setDuration] = React.useState(120);
+    const [captureUrl, setCaptureUrl] = React.useState("");
     const [busy, setBusy] = React.useState(false);
     const [settings, setSettings] = React.useState(false);
     const [selected, setSelected] = React.useState<Meeting | null>(null);
@@ -378,7 +281,12 @@ export function apply(ctx: Context) {
       setBusy(true);
       setError("");
       try {
-        await ctx.host.call(name, input);
+        const result = await ctx.host.call(name, input);
+        if (name === "join") {
+          setCaptureUrl(
+            (result as { capture?: { url?: string } }).capture?.url ?? ""
+          );
+        }
         setOverview((await ctx.host.call("meetings")) as Overview);
       } catch (reason) {
         setError(message(reason));
@@ -468,7 +376,6 @@ export function apply(ctx: Context) {
                   busy ||
                   active ||
                   !overview?.configured ||
-                  !overview.authenticated ||
                   overview.worker.state !== "ready"
                 }
                 type="submit"
@@ -484,16 +391,24 @@ export function apply(ctx: Context) {
             <span className="meet-status" role="status">
               {overview
                 ? overview.configured
-                  ? overview.authenticated
-                    ? overview.worker.state === "ready"
-                      ? "Ready to transcribe"
-                      : "Start Google Meet in Workers."
-                    : "Connect Google in Settings."
+                  ? overview.worker.state === "ready"
+                    ? "Ready. Join, then start the Chrome extension."
+                    : "Start Google Meet in Workers."
                   : "Set a transcription API key in Settings."
                 : "Checking connection…"}
             </span>
           </div>
         </Card>
+        {captureUrl && (
+          <Card className="meet-card">
+            <div className="meet-card-heading">
+              <h2>Chrome extension capture URL</h2>
+            </div>
+            <div style={{ padding: 16 }}>
+              <CodeBlock className="meet-code">{captureUrl}</CodeBlock>
+            </div>
+          </Card>
+        )}
         {overview ? (
           groups.map((group) => (
             <section key={group.title}>

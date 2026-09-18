@@ -126,7 +126,6 @@ import type {
   PatchSkillRequest,
   PinOrgMemoryRequest,
   PluginContributionChangePreview,
-  PluginDependencyStatus,
   PluginPackagePreviewResponse,
   PluginPackageRequest,
   PluginRevisionRequest,
@@ -1691,28 +1690,6 @@ export class NakamaClient {
     return this.request(
       `/v1/plugins/official/${encodeURIComponent(pluginId)}/install`,
       { method: "POST", ...(orgId ? { headers: { "X-Org-Id": orgId } } : {}) }
-    );
-  }
-
-  async getPluginDependencies(
-    pluginId: string,
-    orgId: string
-  ): Promise<PluginDependencyStatus> {
-    return this.request(
-      `/v1/plugins/official/${encodeURIComponent(pluginId)}/dependencies`,
-      {
-        headers: { "X-Org-Id": orgId },
-      }
-    );
-  }
-
-  async installPluginDependencies(
-    pluginId: string,
-    orgId: string
-  ): Promise<PluginDependencyStatus> {
-    return this.request(
-      `/v1/plugins/official/${encodeURIComponent(pluginId)}/dependencies`,
-      { headers: { "X-Org-Id": orgId }, method: "POST" }
     );
   }
 

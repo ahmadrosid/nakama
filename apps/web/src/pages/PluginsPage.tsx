@@ -468,7 +468,6 @@ export function PluginsPage() {
       {meetInstall?.orgId === orgId && (
         <GoogleMeetInstallDialog
           expectedRevision={meetInstall.expectedRevision}
-          isPlatformAdmin={isPlatformAdmin}
           key={orgId}
           onClose={() => setMeetInstall(null)}
           orgId={orgId}
@@ -480,12 +479,10 @@ export function PluginsPage() {
 
 function GoogleMeetInstallDialog({
   orgId,
-  isPlatformAdmin,
   onClose,
   expectedRevision,
 }: {
   orgId: string;
-  isPlatformAdmin: boolean;
   onClose(): void;
   expectedRevision?: number;
 }) {
@@ -494,8 +491,7 @@ function GoogleMeetInstallDialog({
     expectedRevision
   );
   const status = dependencies.data;
-  const error = install.error ?? dependencies.error;
-  const needsAdmin = !isPlatformAdmin && status?.state !== "ready";
+  const error = install.error;
   const busy = install.isPending;
   return (
     <Dialog
@@ -510,28 +506,23 @@ function GoogleMeetInstallDialog({
         <DialogHeader>
           <DialogTitle>Install Google Meet</DialogTitle>
           <DialogDescription>
-            These dependencies are shared by organizations on this Nakama
-            server. Downloads are saved for reuse.
+            Install the Chrome extension after the plugin is enabled. It
+            captures audio locally and sends it to Nakama over a scoped
+            WebSocket.
           </DialogDescription>
         </DialogHeader>
         <GoogleMeetInstallProgress
           dependencies={dependencies}
           install={install}
         />
-        {(error || status?.error) && (
+        {error && (
           <p className="text-destructive text-sm" role="alert">
-            {error ? formatError(error) : status?.error}
-          </p>
-        )}
-        {needsAdmin && (
-          <p className="text-sm">
-            A platform administrator must install the shared dependencies first.
+            {formatError(error)}
           </p>
         )}
         <GoogleMeetInstallFooter
           dependencies={dependencies}
           install={install}
-          needsAdmin={needsAdmin}
           onClose={onClose}
         />
       </DialogContent>
@@ -583,18 +574,15 @@ function GoogleMeetInstallProgress({
 function GoogleMeetInstallFooter({
   dependencies,
   install,
-  needsAdmin,
   onClose,
-}: GoogleMeetInstallState & { needsAdmin: boolean; onClose(): void }) {
+}: GoogleMeetInstallState & { onClose(): void }) {
   const status = dependencies.data;
   const busy = install.isPending;
-  let label = "Install dependencies and plugin";
+  let label = "Install plugin";
   if (busy) {
     label = "Installing…";
   } else if (status?.state === "failed" || install.isError) {
     label = "Retry";
-  } else if (status?.state === "ready") {
-    label = "Install plugin";
   }
   return (
     <DialogFooter>
@@ -606,16 +594,7 @@ function GoogleMeetInstallFooter({
           Open Google Meet
         </Button>
       ) : (
-        <Button
-          disabled={
-            busy ||
-            dependencies.isLoading ||
-            !status ||
-            status.state === "unsupported" ||
-            needsAdmin
-          }
-          onClick={() => install.mutate()}
-        >
+        <Button disabled={busy} onClick={() => install.mutate()}>
           {label}
         </Button>
       )}

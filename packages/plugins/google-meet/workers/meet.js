@@ -1,9 +1,7 @@
 // @bun
-var __require = import.meta.require;
-
 // src/worker.ts
-import { existsSync as existsSync4, mkdirSync as mkdirSync3, rmSync as rmSync3 } from "fs";
-import { join as join4 } from "path";
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, rmSync as rmSync2 } from "fs";
+import { join as join3 } from "path";
 
 // src/actions.ts
 import { existsSync as existsSync2, readFileSync, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "fs";
@@ -334,356 +332,17 @@ function readSettings(directory) {
   return transcriptionConfig(JSON.parse(readFileSync(join2(directory, "settings.json"), "utf8")));
 }
 
-// src/browser.ts
-import { existsSync as existsSync3, mkdirSync as mkdirSync2, readFileSync as readFileSync2, rmSync as rmSync2 } from "fs";
-import { join as join3 } from "path";
-import { pathToFileURL } from "url";
-
-class BrowserSetupError extends Error {
-}
-function installedRuntime() {
-  const configDir = process.env.NAKAMA_PLUGIN_WORKER_ROOT;
-  return configDir ? join3(configDir, "runtimes", "google-meet") : undefined;
-}
-function installedBrowser() {
-  const root = installedRuntime();
-  if (!root) {
-    return;
-  }
-  try {
-    const saved = JSON.parse(readFileSync2(join3(root, "browser.json"), "utf8"));
-    return typeof saved.path === "string" && existsSync3(saved.path) ? saved.path : undefined;
-  } catch {}
-}
-function browserOptions(directory) {
-  const managedBrowser = process.env.BETTERWRIGHT_CHROMIUM_PATH || process.env.BETTERWRIGHT_CHROMIUM_ROOT;
-  const executablePath = process.env.NAKAMA_MEET_CHROME || installedBrowser() || (managedBrowser ? undefined : [
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/google-chrome"
-  ].find(existsSync3));
-  return {
-    adBlock: false,
-    chromiumArgs: [
-      "--autoplay-policy=no-user-gesture-required",
-      "--use-fake-device-for-media-stream",
-      "--use-fake-ui-for-media-stream",
-      "--disable-dev-shm-usage",
-      ...process.platform === "linux" ? ["--no-sandbox"] : []
-    ],
-    credentialCapture: false,
-    downloadPolicy: "deny",
-    headless: false,
-    home: join3(directory, "browser"),
-    locale: "en-US",
-    parkBackgroundPages: false,
-    ...executablePath ? { provider: { executablePath } } : {},
-    vault: false
-  };
-}
-function viewerUrl(localUrl, origin) {
-  if (!origin) {
-    return localUrl;
-  }
-  const url = new URL(origin);
-  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
-    throw new BrowserSetupError("Viewer origin must be an HTTPS origin without a path");
-  }
-  url.search = new URL(localUrl).search;
-  return url.href;
-}
-async function command(args) {
-  const child = Bun.spawn(args, {
-    stderr: "ignore",
-    stdin: "ignore",
-    stdout: "pipe"
-  });
-  const timer = setTimeout(() => child.kill("SIGKILL"), 1e4);
-  try {
-    const output = await new Response(child.stdout).text();
-    if (await child.exited !== 0) {
-      throw new Error(`${args[0]} failed; check the Google Meet worker prerequisites`);
-    }
-    return output.trim();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function openBrowser(directory) {
-  const options = browserOptions(directory);
-  mkdirSync2(options.home, { mode: 448, recursive: true });
-  let display;
-  const previousDisplay = process.env.DISPLAY;
-  let browser;
-  const close = async () => {
-    try {
-      await browser?.close();
-    } finally {
-      display?.kill("SIGTERM");
-      if (display) {
-        await display.exited;
-      }
-      if (previousDisplay === undefined) {
-        delete process.env.DISPLAY;
-      } else {
-        process.env.DISPLAY = previousDisplay;
-      }
-    }
-  };
-  try {
-    if (process.platform === "linux") {
-      if (!Bun.which("Xvfb")) {
-        throw new BrowserSetupError("Install Xvfb for the BetterWright browser on Linux");
-      }
-      display = Bun.spawn([
-        "Xvfb",
-        "-displayfd",
-        "1",
-        "-terminate",
-        "-screen",
-        "0",
-        "1280x900x24",
-        "-nolisten",
-        "tcp"
-      ], { stderr: "ignore", stdin: "ignore", stdout: "pipe" });
-      const timer = setTimeout(() => display?.kill("SIGKILL"), 5000);
-      try {
-        const reader = display.stdout.getReader();
-        const first = await reader.read();
-        reader.releaseLock();
-        const number = new TextDecoder().decode(first.value).trim();
-        if (!/^\d+$/.test(number)) {
-          throw new Error("Xvfb failed to create a browser display");
-        }
-        process.env.DISPLAY = `:${number}`;
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-    const runtime = process.env.NAKAMA_MEET_BETTERWRIGHT_PATH;
-    const defaultRuntime = "/opt/nakama-meet/node_modules/betterwright/dist/src/index.js";
-    const root = installedRuntime();
-    const downloadedRuntime = root ? join3(root, "sdk-2.8.1-0.5.10/node_modules/betterwright/dist/src/index.js") : undefined;
-    const modulePath = runtime || (downloadedRuntime && existsSync3(downloadedRuntime) ? downloadedRuntime : undefined) || (existsSync3(defaultRuntime) ? defaultRuntime : undefined);
-    const sdk = await (modulePath ? import(pathToFileURL(modulePath).href) : import("betterwright"));
-    browser = new sdk.BetterWright(options);
-    return { browser, close };
-  } catch (error) {
-    await close();
-    throw error;
-  }
-}
-async function runBrowser(browser, code, signal) {
-  const result = await browser.run(code, {
-    automaticUI: false,
-    signal,
-    timeout: 30
-  });
-  if (!result.ok) {
-    if (result.error?.includes("BetterChromium is required but not installed")) {
-      throw new BrowserSetupError("Install Chrome/Chromium, set NAKAMA_MEET_CHROME, or run betterwright setup to install BetterChromium.");
-    }
-    throw new Error("Google Meet browser operation failed");
-  }
-  return result.result;
-}
-function meetState(shouldJoin) {
-  const text = document.body.innerText;
-  if (location.hostname === "accounts.google.com") {
-    return "auth";
-  }
-  if (/You can't join|You were removed|No one responded|You couldn't join/i.test(text)) {
-    return "denied";
-  }
-  const buttons = [...document.querySelectorAll("button")];
-  if (buttons.some((button) => /leave call/i.test(button.getAttribute("aria-label") ?? ""))) {
-    return "admitted";
-  }
-  if (shouldJoin) {
-    let mutedControls = false;
-    for (const button of buttons) {
-      if (/turn off (microphone|camera)/i.test(button.getAttribute("aria-label") ?? "")) {
-        button.click();
-        mutedControls = true;
-      }
-    }
-    if (mutedControls) {
-      return "waiting";
-    }
-    if (!["microphone", "camera"].every((device) => buttons.some((button) => (button.getAttribute("aria-label") ?? "").toLowerCase().includes(`turn on ${device}`)))) {
-      return "waiting";
-    }
-    const join4 = buttons.find((button) => /^(Join now|Ask to join)$/.test(button.innerText.trim()));
-    if (join4) {
-      join4.click();
-      return "clicked";
-    }
-  }
-  return "waiting";
-}
-async function captureMeeting(options) {
-  if (process.platform !== "linux") {
-    throw new Error("Meeting audio capture currently requires Linux");
-  }
-  if (!(Bun.which("ffmpeg") && Bun.which("pactl"))) {
-    throw new Error("Install ffmpeg, pulseaudio, and pulseaudio-utils first");
-  }
-  try {
-    await command(["pactl", "info"]);
-  } catch {
-    await command(["pulseaudio", "--start", "--exit-idle-time=-1"]);
-  }
-  const sink = `nakama_meet_${options.id.replaceAll("-", "")}`;
-  const moduleId = await command([
-    "pactl",
-    "load-module",
-    "module-null-sink",
-    `sink_name=${sink}`,
-    "rate=48000",
-    "channels=2"
-  ]);
-  const previousSink = process.env.PULSE_SINK;
-  process.env.PULSE_SINK = sink;
-  let instance;
-  let recording;
-  let closing;
-  const close = () => {
-    closing ??= (async () => {
-      recording?.kill("SIGTERM");
-      const kill = setTimeout(() => recording?.kill("SIGKILL"), 2000);
-      try {
-        await instance?.close();
-        await recording?.exited;
-      } finally {
-        clearTimeout(kill);
-        if (previousSink === undefined) {
-          delete process.env.PULSE_SINK;
-        } else {
-          process.env.PULSE_SINK = previousSink;
-        }
-        await command(["pactl", "unload-module", moduleId]).catch(() => {
-          return;
-        });
-      }
-    })();
-    return closing;
-  };
-  const abort = () => {
-    close().catch(() => {
-      return;
-    });
-  };
-  try {
-    options.signal.throwIfAborted();
-    instance = await openBrowser(options.directory);
-    options.signal.throwIfAborted();
-    options.signal.addEventListener("abort", abort, { once: true });
-    const browser = instance.browser;
-    await runBrowser(browser, `await page.goto(${JSON.stringify(options.url)}, { waitUntil: "domcontentloaded" });`, options.signal);
-    const deadline = Date.now() + 300000;
-    let admitted = false;
-    let clicked = false;
-    while (Date.now() < deadline) {
-      options.signal.throwIfAborted();
-      const state = await runBrowser(browser, `return await page.evaluate(${meetState.toString()}, ${!clicked});`, options.signal);
-      if (state === "auth") {
-        rmSync2(join3(options.directory, "connected.json"), { force: true });
-        throw new Error("Google login expired; reconnect in Google Meet settings");
-      }
-      if (state === "denied") {
-        throw new Error("Google Meet denied admission or removed the bot");
-      }
-      if (state === "clicked") {
-        clicked = true;
-      }
-      if (state === "admitted") {
-        admitted = true;
-        break;
-      }
-      await Bun.sleep(500);
-    }
-    if (!admitted) {
-      throw new Error("The bot was not admitted within five minutes");
-    }
-    recording = Bun.spawn([
-      "ffmpeg",
-      "-nostdin",
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-f",
-      "pulse",
-      "-i",
-      `${sink}.monitor`,
-      "-ac",
-      "1",
-      "-ar",
-      "24000",
-      "-f",
-      "s16le",
-      "pipe:1"
-    ], { stderr: "ignore", stdin: "ignore", stdout: "pipe" });
-    return {
-      audio: recording.stdout,
-      async close() {
-        options.signal.removeEventListener("abort", abort);
-        await close();
-      },
-      async inCall() {
-        return await runBrowser(browser, `return await page.evaluate(${meetState.toString()}, false);`, options.signal) === "admitted";
-      }
-    };
-  } catch (error) {
-    options.signal.removeEventListener("abort", abort);
-    await close();
-    throw error;
-  }
-}
-
 // src/worker.ts
-async function runMeeting(meeting, store, directory, signal, capture = captureMeeting) {
+function createStreamMeeting(meeting, store, directory, signal) {
+  let transcription;
+  let failure;
+  let queue = Promise.resolve();
+  let closing;
   const abort = new AbortController;
   const combined = AbortSignal.any([signal, abort.signal]);
-  let audio;
-  let session;
-  let failure;
-  let ended = false;
-  let checking = false;
-  const deadline = Date.now() + meeting.durationMinutes * 60000;
-  const timer = setInterval(async () => {
-    if (checking || combined.aborted) {
-      return;
-    }
-    checking = true;
-    try {
-      if (store.get(meeting.id)?.stopRequested || Date.now() >= deadline || audio && !await audio.inCall()) {
-        ended = true;
-        abort.abort();
-      }
-    } catch {
-      if (!combined.aborted) {
-        failure = new Error("Lost the Google Meet connection");
-        abort.abort();
-      }
-    } finally {
-      checking = false;
-    }
-  }, 500);
-  store.update(meeting.id, "joining");
-  try {
-    if (meeting.stopRequested) {
-      ended = true;
-      return;
-    }
+  const started = (async () => {
     const config = readSettings(directory);
-    audio = await capture({
-      directory,
-      id: meeting.id,
-      signal: combined,
-      url: meeting.url
-    });
-    combined.throwIfAborted();
-    const connect = () => transcriptionProviders[config.provider].connect({
+    transcription = await transcriptionProviders[config.provider].connect({
       ...config,
       onError: (error) => {
         failure = error;
@@ -692,212 +351,118 @@ async function runMeeting(meeting, store, directory, signal, capture = captureMe
       onSegment: (segment) => store.addSegment(meeting.id, segment),
       signal: combined
     });
-    let renewAt = Date.now() + 55 * 60000;
-    session = await connect();
-    combined.throwIfAborted();
     store.update(meeting.id, "transcribing");
-    let pending = Buffer.alloc(0);
-    for await (const chunk of audio.audio) {
-      if (combined.aborted) {
-        break;
+  })().catch((error) => {
+    failure = error instanceof Error ? error : new Error("Meeting capture failed");
+    throw failure;
+  });
+  return {
+    close(requestedStop = false) {
+      closing ??= (async () => {
+        await queue.catch((error) => {
+          failure ??= error instanceof Error ? error : new Error("Meeting capture failed");
+        });
+        await started.catch(() => {
+          return;
+        });
+        if (transcription) {
+          try {
+            await transcription.finish();
+          } catch (error) {
+            failure ??= error instanceof Error ? error : new Error("Final transcript incomplete");
+          }
+          transcription.close();
+        }
+        abort.abort();
+        store.update(meeting.id, failure || signal.aborted ? "failed" : "finished", failure?.message ?? (requestedStop ? null : "Capture ended; partial transcript saved"));
+      })();
+      return closing;
+    },
+    push(frame) {
+      if (frame.byteLength > 48000) {
+        throw new Error("Audio frame is too large");
       }
-      if (Date.now() >= renewAt) {
-        await session.finish();
-        session.close();
-        session = undefined;
-        combined.throwIfAborted();
-        renewAt = Date.now() + 55 * 60000;
-        session = await connect();
-        combined.throwIfAborted();
-      }
-      pending = Buffer.concat([pending, chunk]);
-      while (pending.length >= 4800) {
-        session.push(pending.subarray(0, 4800));
-        pending = pending.subarray(4800);
-      }
-    }
-    if (!combined.aborted) {
-      throw new Error("Meeting audio capture stopped unexpectedly");
-    }
-    if (pending.length >= 2) {
-      session.push(pending.subarray(0, pending.length - pending.length % 2));
-    }
-  } catch (error) {
-    if (!(ended || signal.aborted)) {
-      failure ??= error instanceof Error ? error : new Error("Meeting transcription failed");
-    }
-  } finally {
-    clearInterval(timer);
-    await audio?.close();
-    if (session) {
-      try {
-        await session.finish();
-      } catch (error) {
-        failure ??= error instanceof Error ? error : new Error("Final transcript incomplete");
-      }
-      session.close();
-    }
-    store.update(meeting.id, failure || signal.aborted ? "failed" : "finished", failure?.message ?? (signal.aborted ? "Worker stopped; partial transcript saved" : null));
-  }
+      queue = queue.then(async () => {
+        await started;
+        if (!combined.aborted) {
+          transcription?.push(frame);
+        }
+      });
+      return queue;
+    },
+    ready: started
+  };
 }
-
-class GoogleConnection {
-  directory;
-  open;
-  instance;
-  pending;
-  expiresAt = 0;
-  url;
-  error;
-  state = "idle";
-  constructor(directory, open = openBrowser) {
-    this.directory = directory;
-    this.open = open;
-  }
-  get authenticated() {
-    return existsSync4(join4(this.directory, "connected.json"));
-  }
-  get busy() {
-    return !!this.pending || !!this.instance;
-  }
-  status() {
-    return {
-      authenticated: this.authenticated,
-      error: this.error,
-      expiresAt: this.expiresAt,
-      state: this.state,
-      url: this.url
-    };
-  }
-  async command(action) {
-    if (action === "connection") {
-      return this.status();
-    }
-    if (this.pending) {
-      throw new Error("Google login operation is already running");
-    }
-    if (action === "connect" && this.instance) {
-      return this.status();
-    }
-    if (action === "finish-login" && !this.instance) {
-      throw new Error("Start Google login first");
-    }
-    this.error = undefined;
-    this.state = action === "connect" ? "starting" : "saving";
-    this.pending = this.perform(action).catch(async (error) => {
-      try {
-        await this.close();
-      } catch {}
-      this.error = error instanceof BrowserSetupError ? error.message : action === "finish-login" ? "Google sign-in could not be verified. Connect again and complete sign-in." : "Google browser setup failed. Check BetterWright, Xvfb and viewer configuration.";
-      this.state = "error";
-    }).finally(() => {
-      this.pending = undefined;
-    });
-    return this.status();
-  }
-  async perform(action) {
-    if (action === "connect") {
-      rmSync3(join4(this.directory, "connected.json"), { force: true });
-      const origin = process.env.NAKAMA_MEET_VIEWER_ORIGIN;
-      if (origin) {
-        viewerUrl("http://127.0.0.1/?t=test", origin);
-      }
-      this.instance = await this.open(this.directory);
-      await runBrowser(this.instance.browser, 'await page.goto("https://accounts.google.com/", { waitUntil: "domcontentloaded" });');
-      const view = await this.instance.browser.startLiveView({
-        host: "127.0.0.1",
-        interactive: true,
-        port: Number(process.env.NAKAMA_MEET_VIEWER_PORT ?? 0)
-      });
-      if (!(view.ok && view.url)) {
-        throw new Error("Viewer unavailable");
-      }
-      this.url = viewerUrl(view.url, origin);
-      this.expiresAt = Date.now() + 10 * 60000;
-      this.state = "signing-in";
-      return;
-    }
-    if (action === "finish-login") {
-      const authenticated = await runBrowser(this.instance.browser, `
-        await page.goto("https://myaccount.google.com/?hl=en", { waitUntil: "domcontentloaded" });
-        return await page.evaluate(() => location.hostname === "myaccount.google.com" && !!document.querySelector('a[href*="SignOutOptions"], [aria-label^="Google Account:"]'));
-      `);
-      if (authenticated !== true) {
-        throw new Error("Not signed in");
-      }
-      await this.close();
-      privateJson(join4(this.directory, "connected.json"), {
-        connectedAt: Date.now()
-      });
-    } else if (action === "disconnect") {
-      rmSync3(join4(this.directory, "connected.json"), { force: true });
-      await this.close();
-      rmSync3(join4(this.directory, "browser"), { force: true, recursive: true });
-      rmSync3(join4(this.directory, "auth.json"), { force: true });
-    }
-    this.state = "idle";
-  }
-  async expire() {
-    if (!this.pending && this.expiresAt && Date.now() >= this.expiresAt) {
-      this.pending = this.close().finally(() => {
-        this.pending = undefined;
-        this.state = "idle";
-      });
-      await this.pending;
-    }
-  }
-  async close() {
-    const instance = this.instance;
-    this.url = undefined;
-    this.expiresAt = 0;
-    await instance?.close();
-    this.instance = undefined;
-  }
-  async shutdown() {
-    await this.pending;
-    await this.close();
-  }
+function captureSession(directory) {
+  try {
+    return JSON.parse(readFileSync2(join3(directory, "capture.json"), "utf8"));
+  } catch {}
 }
 async function runWorker(directory, dataDir, orgId) {
-  mkdirSync3(directory, { mode: 448, recursive: true });
+  mkdirSync2(directory, { mode: 448, recursive: true });
   const store = new MeetingStore(dataDir, orgId);
   store.recover();
-  const connection = new GoogleConnection(dataDir);
   const abort = new AbortController;
   const stop = () => abort.abort();
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
-  let meetingActive = false;
-  const token = crypto.randomUUID();
-  const control = Bun.serve({
-    async fetch(request) {
-      if (request.method !== "POST" || request.headers.get("authorization") !== `Bearer ${token}`) {
+  let consumedToken;
+  const captureHost = process.env.NAKAMA_MEET_CAPTURE_HOST ?? "127.0.0.1";
+  const capture = Bun.serve({
+    async fetch(request, server) {
+      const url = new URL(request.url);
+      if (request.method !== "GET" || url.pathname !== "/capture") {
         return new Response(null, { status: 404 });
       }
-      const action = new URL(request.url).pathname.slice(1);
-      if (!["connect", "connection", "finish-login", "disconnect"].includes(action)) {
-        return new Response(null, { status: 404 });
+      const meetingId = url.searchParams.get("meetingId");
+      const supplied = url.searchParams.get("token");
+      const session = captureSession(dataDir);
+      const meeting = meetingId ? store.get(meetingId) : undefined;
+      if (!(meeting && session) || session.meetingId !== meeting.id || session.token !== supplied || session.token === consumedToken || session.expiresAt < Date.now() || !["queued", "joining", "transcribing"].includes(meeting.state)) {
+        return new Response(null, { status: 401 });
       }
-      try {
-        if (abort.signal.aborted || action !== "connection" && meetingActive || action === "connect" && !connection.busy && store.next()) {
-          throw new Error("Leave the active meeting before changing Google login");
-        }
-        return Response.json(await connection.command(action), {
-          headers: { "Cache-Control": "no-store" }
-        });
-      } catch (error) {
-        return Response.json({
-          error: error instanceof Error ? error.message : "Login request failed"
-        }, { status: 409 });
+      if (server.upgrade(request, { data: { meetingId: meeting.id } })) {
+        consumedToken = session.token;
+        rmSync2(join3(dataDir, "capture.json"), { force: true });
+        return;
       }
+      return new Response(null, { status: 426 });
     },
-    hostname: "127.0.0.1",
-    port: 0
+    hostname: captureHost,
+    port: Number(process.env.NAKAMA_MEET_CAPTURE_PORT ?? 0),
+    websocket: {
+      close(ws) {
+        ws.data.stream?.close(false);
+      },
+      message(ws, message) {
+        if (typeof message === "string") {
+          try {
+            const event = JSON.parse(message);
+            if (event.type === "stop") {
+              ws.data.stream?.close(true);
+              ws.close();
+            }
+          } catch {
+            ws.close(1003, "Invalid message");
+          }
+          return;
+        }
+        ws.data.stream?.push(new Uint8Array(message instanceof ArrayBuffer ? message : message.buffer)).catch(() => ws.close(1011, "Audio stream failed"));
+      },
+      open(ws) {
+        const meeting = store.get(ws.data.meetingId);
+        if (!meeting) {
+          ws.close(1008, "Meeting not found");
+          return;
+        }
+        const stream = createStreamMeeting(meeting, store, dataDir, abort.signal);
+        ws.data.stream = stream;
+        stream.ready.then(() => ws.send(JSON.stringify({ type: "ready" }))).catch(() => ws.close(1011, "Transcription unavailable"));
+      }
+    }
   });
-  privateJson(join4(directory, "control.json"), { port: control.port, token });
-  const status = () => privateJson(join4(directory, "status.json"), {
-    authenticated: connection.authenticated,
-    loginBusy: connection.busy,
+  const status = () => privateJson(join3(directory, "status.json"), {
+    captureUrl: process.env.NAKAMA_MEET_CAPTURE_ORIGIN ?? `ws://${captureHost}:${capture.port}/capture`,
     state: abort.signal.aborted ? "stopped" : "ready",
     updatedAt: Date.now()
   });
@@ -905,29 +470,12 @@ async function runWorker(directory, dataDir, orgId) {
   const heartbeat = setInterval(status, 3000);
   try {
     while (!abort.signal.aborted) {
-      await connection.expire();
-      const next = connection.busy ? undefined : store.next();
-      if (next) {
-        if (!connection.authenticated) {
-          store.update(next.id, "failed", "Connect Google in Settings before joining");
-          continue;
-        }
-        meetingActive = true;
-        try {
-          await runMeeting(next, store, dataDir, abort.signal);
-        } finally {
-          meetingActive = false;
-        }
-      } else {
-        await Bun.sleep(500);
-      }
+      await Bun.sleep(500);
     }
   } finally {
     clearInterval(heartbeat);
-    control.stop(true);
-    rmSync3(join4(directory, "control.json"), { force: true });
-    await connection.shutdown();
-    status();
+    capture.stop(true);
+    rmSync2(join3(directory, "status.json"), { force: true });
     store.close();
     process.off("SIGTERM", stop);
     process.off("SIGINT", stop);
@@ -943,6 +491,6 @@ if (import.meta.main) {
   await runWorker(directory, dataDir, orgId);
 }
 export {
-  GoogleConnection,
-  runMeeting
+  captureSession,
+  createStreamMeeting
 };

@@ -2728,16 +2728,6 @@ export interface ComposioToolErrorResult {
   toolkitSlug?: string;
 }
 
-export interface PluginDependencyStatus {
-  error?: string;
-  state: "pending" | "installing" | "ready" | "failed" | "unsupported";
-  steps: Array<{
-    id: string;
-    label: string;
-    state: "pending" | "installing" | "ready" | "failed";
-  }>;
-}
-
 export interface PluginReleaseSummary {
   createdAt: string;
   digest: string;

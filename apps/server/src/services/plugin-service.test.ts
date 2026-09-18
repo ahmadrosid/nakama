@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -103,14 +103,6 @@ describe("PluginService", () => {
       },
     });
     const actor = { id: "admin", role: "admin" as const };
-    const dependencyStatus = spyOn(service, "getOfficialPluginDependencies");
-    dependencyStatus.mockResolvedValue({ state: "failed", steps: [] });
-    await expect(
-      service.installOfficialPlugin("org-meet", "google-meet", actor)
-    ).rejects.toMatchObject({ code: "invalid_state" });
-    expect(workers).toHaveLength(0);
-    expect(await db.getOrgPlugin("org-meet", "google-meet")).toBeNull();
-    dependencyStatus.mockResolvedValue({ state: "ready", steps: [] });
     const installed = await service.installOfficialPlugin(
       "org-meet",
       "google-meet",
@@ -118,7 +110,6 @@ describe("PluginService", () => {
     );
     expect(installed.lifecycleState).toBe("enabled");
     expect(workers).toContain("meet");
-    dependencyStatus.mockRestore();
     const result = await service.invokePluginAction({
       access: "ui",
       actionKey: "meetings",

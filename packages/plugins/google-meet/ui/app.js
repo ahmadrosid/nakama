@@ -41,46 +41,6 @@ function apply(ctx) {
     `);
   function Settings({ close }) {
     const [apiKey, setApiKey] = React.useState("");
-    const [connection, setConnection] = React.useState(null);
-    React.useEffect(() => {
-      let alive = true;
-      let running = false;
-      const refresh = async () => {
-        if (!alive || running || ctx.signal.aborted) {
-          return;
-        }
-        running = true;
-        try {
-          const value = await ctx.host.call("connection");
-          if (alive) {
-            setConnection(value);
-          }
-        } catch (reason) {
-          if (alive) {
-            setError(message(reason));
-          }
-        } finally {
-          running = false;
-        }
-      };
-      refresh();
-      const timer = setInterval(() => void refresh(), 2000);
-      return () => {
-        alive = false;
-        clearInterval(timer);
-      };
-    }, []);
-    async function login(action) {
-      setBusy(true);
-      setError("");
-      try {
-        setConnection(await ctx.host.call(action));
-      } catch (reason) {
-        setError(message(reason));
-      } finally {
-        setBusy(false);
-      }
-    }
     const [error, setError] = React.useState("");
     const [busy, setBusy] = React.useState(false);
     async function save(event) {
@@ -117,31 +77,9 @@ function apply(ctx) {
       value: apiKey
     })), /* @__PURE__ */ React.createElement("p", {
       className: "meet-status"
-    }, "gpt-transcribe uses separate API billing. Your ChatGPT subscription does not cover transcription."), /* @__PURE__ */ React.createElement("div", {
-      className: "meet-row"
-    }, /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy || connection?.state === "starting" || connection?.state === "saving",
-      onClick: () => void login("connect"),
-      type: "button",
-      variant: "outline"
-    }, connection?.authenticated ? "Reconnect Google" : "Connect Google"), connection?.url && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("a", {
-      href: connection.url,
-      rel: "noreferrer noopener",
-      target: "_blank"
-    }, "Open sign-in browser"), /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy || connection.state === "saving",
-      onClick: () => void login("finish-login"),
-      type: "button"
-    }, "Finish sign-in")), (connection?.authenticated || connection?.url) && /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy || connection.state === "saving",
-      onClick: () => void login("disconnect"),
-      type: "button",
-      variant: "outline"
-    }, "Disconnect Google")), /* @__PURE__ */ React.createElement("p", {
+    }, "gpt-transcribe uses separate API billing. Your ChatGPT subscription does not cover transcription."), /* @__PURE__ */ React.createElement("p", {
       className: "meet-status"
-    }, connection?.state === "starting" ? "Starting browser…" : connection?.state === "saving" ? "Updating Google connection…" : connection?.url ? "Complete Google sign-in in the browser, then select Finish sign-in." : connection?.authenticated ? "Google connected" : "Google disconnected"), connection?.error && /* @__PURE__ */ React.createElement("p", {
-      role: "alert"
-    }, connection.error), error && /* @__PURE__ */ React.createElement("p", {
+    }, "Install the Nakama Chrome extension. After joining, paste the capture URL into its popup and start capture."), error && /* @__PURE__ */ React.createElement("p", {
       role: "alert"
     }, error), /* @__PURE__ */ React.createElement(Button, {
       disabled: busy,
@@ -241,6 +179,7 @@ function apply(ctx) {
     const [error, setError] = React.useState("");
     const [url, setUrl] = React.useState("");
     const [duration, setDuration] = React.useState(120);
+    const [captureUrl, setCaptureUrl] = React.useState("");
     const [busy, setBusy] = React.useState(false);
     const [settings, setSettings] = React.useState(false);
     const [selected, setSelected] = React.useState(null);
@@ -276,7 +215,10 @@ function apply(ctx) {
       setBusy(true);
       setError("");
       try {
-        await ctx.host.call(name, input);
+        const result = await ctx.host.call(name, input);
+        if (name === "join") {
+          setCaptureUrl(result.capture?.url ?? "");
+        }
         setOverview(await ctx.host.call("meetings"));
       } catch (reason) {
         setError(message(reason));
@@ -340,7 +282,7 @@ function apply(ctx) {
     })), /* @__PURE__ */ React.createElement("div", {
       className: "meet-join-footer"
     }, /* @__PURE__ */ React.createElement(Button, {
-      disabled: busy || active || !overview?.configured || !overview.authenticated || overview.worker.state !== "ready",
+      disabled: busy || active || !overview?.configured || overview.worker.state !== "ready",
       type: "submit"
     }, "Join and transcribe"))), /* @__PURE__ */ React.createElement("div", {
       className: "meet-card-heading",
@@ -348,7 +290,15 @@ function apply(ctx) {
     }, /* @__PURE__ */ React.createElement("span", {
       className: "meet-status",
       role: "status"
-    }, overview ? overview.configured ? overview.authenticated ? overview.worker.state === "ready" ? "Ready to transcribe" : "Start Google Meet in Workers." : "Connect Google in Settings." : "Set a transcription API key in Settings." : "Checking connection…"))), overview ? groups.map((group) => /* @__PURE__ */ React.createElement("section", {
+    }, overview ? overview.configured ? overview.worker.state === "ready" ? "Ready. Join, then start the Chrome extension." : "Start Google Meet in Workers." : "Set a transcription API key in Settings." : "Checking connection…"))), captureUrl && /* @__PURE__ */ React.createElement(Card, {
+      className: "meet-card"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "meet-card-heading"
+    }, /* @__PURE__ */ React.createElement("h2", null, "Chrome extension capture URL")), /* @__PURE__ */ React.createElement("div", {
+      style: { padding: 16 }
+    }, /* @__PURE__ */ React.createElement(CodeBlock, {
+      className: "meet-code"
+    }, captureUrl))), overview ? groups.map((group) => /* @__PURE__ */ React.createElement("section", {
       key: group.title
     }, /* @__PURE__ */ React.createElement(Card, {
       className: "meet-card"

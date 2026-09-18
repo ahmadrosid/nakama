@@ -7,16 +7,16 @@
     "actions",
     "workers",
     "ui",
-    "skills"
+    "skills",
+    "extension"
   ],
   "scripts": {
-    "build": "bun build src/actions.ts --outfile actions/actions.js --target bun && bun build src/worker.ts --external betterwright --outfile workers/meet.js --target bun && bun build src/ui.tsx --outfile ui/app.js --target browser",
+    "build": "bun build src/actions.ts --outfile actions/actions.js --target bun && bun build src/worker.ts --outfile workers/meet.js --target bun && bun build src/ui.tsx --outfile ui/app.js --target browser",
     "test": "bun test src"
   },
   "devDependencies": {
     "@nakama/core": "workspace:*",
     "@nakama/ui": "workspace:*",
-    "@types/react": "^19.1.6",
-    "betterwright": "2.8.1"
+    "@types/react": "^19.1.6"
   }
 }
