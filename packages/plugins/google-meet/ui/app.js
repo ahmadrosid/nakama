@@ -217,7 +217,15 @@ function apply(ctx) {
       try {
         const result = await ctx.host.call(name, input);
         if (name === "start-capture") {
-          setCaptureUrl(result.capture?.url ?? "");
+          const capture = result.capture;
+          setCaptureUrl(capture?.url ?? "");
+          if (capture?.url) {
+            window.postMessage({
+              captureUrl: capture.url,
+              meetingUrl: input.url,
+              type: "START_CAPTURE"
+            }, window.location.origin);
+          }
         }
         setOverview(await ctx.host.call("meetings"));
       } catch (reason) {
@@ -294,9 +302,11 @@ function apply(ctx) {
       className: "meet-card"
     }, /* @__PURE__ */ React.createElement("div", {
       className: "meet-card-heading"
-    }, /* @__PURE__ */ React.createElement("h2", null, "Chrome extension capture URL")), /* @__PURE__ */ React.createElement("div", {
+    }, /* @__PURE__ */ React.createElement("h2", null, "Capture session")), /* @__PURE__ */ React.createElement("div", {
       style: { padding: 16 }
-    }, /* @__PURE__ */ React.createElement(CodeBlock, {
+    }, /* @__PURE__ */ React.createElement("p", {
+      className: "meet-status"
+    }, "The extension was notified. Keep the Google Meet tab open while capture runs. If it did not start, paste this URL into the extension popup."), /* @__PURE__ */ React.createElement(CodeBlock, {
       className: "meet-code"
     }, captureUrl))), overview ? groups.map((group) => /* @__PURE__ */ React.createElement("section", {
       key: group.title

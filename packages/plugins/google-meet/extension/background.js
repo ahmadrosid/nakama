@@ -28,6 +28,12 @@ async function ensureOffscreen() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "START_FROM_NAKAMA") {
+    start(message.captureUrl, message.meetingUrl)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
   if (message.type === "START") {
     start(message.captureUrl)
       .then(sendResponse)
@@ -44,11 +50,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function start(captureUrl) {
+async function start(captureUrl, meetingUrl) {
   if (!(captureUrl && captureUrl.startsWith("ws"))) {
     throw new Error("Paste the capture URL from Nakama first");
   }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabs = await chrome.tabs.query({ url: "https://meet.google.com/*" });
+  const tab = meetingUrl
+    ? tabs.find((candidate) => candidate.url === meetingUrl)
+    : tabs.find((candidate) => candidate.active);
   if (!(tab?.id && tab.url?.startsWith("https://meet.google.com/"))) {
     throw new Error("Open a Google Meet tab first");
   }

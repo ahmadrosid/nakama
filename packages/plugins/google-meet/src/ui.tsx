@@ -283,9 +283,18 @@ export function apply(ctx: Context) {
       try {
         const result = await ctx.host.call(name, input);
         if (name === "start-capture") {
-          setCaptureUrl(
-            (result as { capture?: { url?: string } }).capture?.url ?? ""
-          );
+          const capture = (result as { capture?: { url?: string } }).capture;
+          setCaptureUrl(capture?.url ?? "");
+          if (capture?.url) {
+            window.postMessage(
+              {
+                captureUrl: capture.url,
+                meetingUrl: (input as { url?: string }).url,
+                type: "START_CAPTURE",
+              },
+              window.location.origin
+            );
+          }
         }
         setOverview((await ctx.host.call("meetings")) as Overview);
       } catch (reason) {
@@ -402,9 +411,14 @@ export function apply(ctx: Context) {
         {captureUrl && (
           <Card className="meet-card">
             <div className="meet-card-heading">
-              <h2>Chrome extension capture URL</h2>
+              <h2>Capture session</h2>
             </div>
             <div style={{ padding: 16 }}>
+              <p className="meet-status">
+                The extension was notified. Keep the Google Meet tab open while
+                capture runs. If it did not start, paste this URL into the
+                extension popup.
+              </p>
               <CodeBlock className="meet-code">{captureUrl}</CodeBlock>
             </div>
           </Card>

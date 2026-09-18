@@ -6,9 +6,9 @@ The plugin creates a short-lived capture session. The Nakama Chrome extension ca
 
 1. Install the plugin and start the Google Meet worker in **Workers**.
 2. Open **Google Meet → Settings** and save an OpenAI API key. Transcription is billed separately from ChatGPT.
-3. Join a Meet URL in the plugin UI.
-4. Install the unpacked extension from the `extension/` directory in Chrome at `chrome://extensions`, enable Developer mode, and choose **Load unpacked**.
-5. Paste the capture URL shown by Nakama into the extension popup, open the Meet tab, and choose **Start capture**.
+3. Install the unpacked extension from the `extension/` directory in Chrome at `chrome://extensions`, enable Developer mode, and choose **Load unpacked**.
+4. Open the Meet tab and the Nakama Google Meet page. Enter the Meet URL in Nakama and choose **Start capture session**. Nakama automatically tells the extension to start capture.
+5. If the extension is not connected to the Nakama page, paste the fallback capture URL into the extension popup.
 
 Tell participants before transcribing. Leave the meeting from Nakama or stop capture from the extension. Restarts fail interrupted meetings instead of silently rejoining; partial transcripts remain available.
 
