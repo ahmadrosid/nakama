@@ -749,7 +749,7 @@ describe("platform org routes", () => {
     expect(disableResponse.status).toBe(409);
   });
 
-  test("platform admin erases user access but preserves anonymized chat history", async () => {
+  test("platform admin erases user access but preserves anonymized chat history across organizations", async () => {
     const { app, authService, databaseAdapter, orgService } =
       createPlatformApp();
     const platformSession = await loginPlatformAdminSession(
@@ -764,6 +764,15 @@ describe("platform org routes", () => {
     const orgId = created.organization.id;
     const profile = (await databaseAdapter.listProfilesForOrg(orgId))[0];
     expect(profile).toBeDefined();
+    const secondCreated = await orgService.createOrganization({
+      name: "Second Erasure Test",
+      slug: "second-erasure-test",
+    });
+    const secondOrgId = secondCreated.organization.id;
+    const secondProfile = (
+      await databaseAdapter.listProfilesForOrg(secondOrgId)
+    )[0];
+    expect(secondProfile).toBeDefined();
 
     const now = new Date().toISOString();
     const userId = "user_erase_target";
@@ -779,6 +788,12 @@ describe("platform org routes", () => {
     await databaseAdapter.upsertOrgMember({
       createdAt: now,
       orgId,
+      role: "member",
+      userId,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: secondOrgId,
       role: "member",
       userId,
     });
@@ -814,6 +829,30 @@ describe("platform org routes", () => {
         sessionId: "session_erased_user",
       },
     ]);
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_erased_user_second_org",
+      model: null,
+      orgId: secondOrgId,
+      profileId: secondProfile!.id,
+      title: "Keep this second chat",
+      userId,
+    });
+    await databaseAdapter.appendMessagesForSession(
+      "session_erased_user_second_org",
+      [
+        {
+          createdAt: now,
+          id: "message_erased_user_second_org",
+          payload: { content: "also retained", role: "user" },
+          seq: 0,
+          sessionId: "session_erased_user_second_org",
+        },
+      ]
+    );
 
     const response = await app.fetch(
       new Request(`http://localhost:4310/v1/platform/users/${userId}`, {
@@ -848,6 +887,16 @@ describe("platform org routes", () => {
     });
     expect(
       await databaseAdapter.listMessagesForSession("session_erased_user")
+    ).toHaveLength(1);
+    expect(
+      await databaseAdapter.getSession("session_erased_user_second_org")
+    ).toMatchObject({
+      userId: null,
+    });
+    expect(
+      await databaseAdapter.listMessagesForSession(
+        "session_erased_user_second_org"
+      )
     ).toHaveLength(1);
   });
 
