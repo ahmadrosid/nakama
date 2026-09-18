@@ -48,6 +48,23 @@ export function registerPluginRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  app.get("/v1/plugins/official/google-meet/extension.zip", async (c) => {
+    requireNotViewerFromContext(c);
+    try {
+      const archive =
+        await requirePluginService(options).downloadGoogleMeetExtension();
+      return new Response(archive, {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition":
+            'attachment; filename="nakama-google-meet-extension.zip"',
+          "Cache-Control": "no-store",
+        },
+      });
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
   app.get("/v1/plugins/official", async (c) => {
     requireNotViewerFromContext(c);
     return json({

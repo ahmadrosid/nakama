@@ -116,9 +116,16 @@ export async function run(
     if (action === "status") {
       return { meeting, worker };
     }
+    if (action === "delete") {
+      store.delete(meeting.id);
+      return { deleted: true };
+    }
     if (action === "leave") {
       store.stop(meeting.id);
-      return { ...meeting, stopRequested: 1 };
+      if (meeting.state === "queued") {
+        store.update(meeting.id, "finished");
+      }
+      return store.get(meeting.id);
     }
     if (action === "transcript") {
       const after = Number(input.after ?? 0);

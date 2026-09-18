@@ -1,3 +1,4 @@
+export { Delete02Icon } from "hugeicons-react";
 export * from "./button";
 export * from "./card";
 export * from "./code-block";

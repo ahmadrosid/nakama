@@ -90,6 +90,24 @@
       }
     },
     {
+      "key": "delete",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Permanently delete a finished or failed meeting and its transcript.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "meetingId": {
+            "type": "string"
+          }
+        },
+        "required": ["meetingId"]
+      }
+    },
+    {
       "key": "meetings",
       "access": "member",
       "effect": "read",

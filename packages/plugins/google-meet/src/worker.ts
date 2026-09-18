@@ -19,6 +19,7 @@ export function createStreamMeeting(
   let closing: Promise<void> | undefined;
   const abort = new AbortController();
   const combined = AbortSignal.any([signal, abort.signal]);
+  store.update(meeting.id, "joining");
   const started = (async () => {
     const config = readSettings(directory);
     transcription = await transcriptionProviders[config.provider]!.connect({
@@ -143,6 +144,16 @@ async function runWorker(directory: string, dataDir: string, orgId: string) {
         void ws.data.stream?.close(false);
       },
       message(ws, message) {
+        const meeting = store.get(ws.data.meetingId);
+        if (
+          !meeting ||
+          meeting.stopRequested ||
+          Date.now() >= meeting.createdAt + meeting.durationMinutes * 60_000
+        ) {
+          void ws.data.stream?.close(true);
+          ws.close(1000, "Transcription stopped");
+          return;
+        }
         if (typeof message === "string") {
           try {
             const event = JSON.parse(message) as { type?: string };

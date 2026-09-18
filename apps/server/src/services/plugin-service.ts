@@ -27,6 +27,7 @@ import {
   type PluginUiContribution,
   pathExists,
   resolvePluginReleaseEntry,
+  type UserConfig,
   validatePluginJsonInstance,
   validatePluginManifest,
 } from "@nakama/core";
@@ -40,6 +41,7 @@ import type {
   StoredSkillRecord,
   StoredToolRecord,
 } from "@nakama/db";
+import { zipSync } from "fflate";
 import * as pacote from "pacote";
 import { Parser } from "tar";
 import { spawnJsonTool } from "./custom-tool-subprocess";
@@ -136,6 +138,7 @@ const SPOOFABLE_INPUT_KEYS = new Set([
 
 export interface PluginServiceOptions {
   drainTimeoutMs?: number;
+  getUserConfig?: () => UserConfig | null;
   officialPackagesDir?: string;
   onHostRequest?: (
     request: unknown,
@@ -379,6 +382,35 @@ export class PluginService {
     );
   }
 
+  async downloadGoogleMeetExtension(): Promise<Buffer> {
+    if (!this.options.officialPackagesDir) {
+      throw new PluginHostError("package_unavailable");
+    }
+    const directory = join(
+      this.options.officialPackagesDir,
+      "google-meet",
+      "extension"
+    );
+    const files = [
+      "audio-worklet.js",
+      "manifest.json",
+      "microphone.html",
+      "microphone.js",
+      "background.js",
+      "content.js",
+      "offscreen.html",
+      "offscreen.js",
+      "popup.html",
+      "popup.js",
+    ];
+    const entries = await Promise.all(
+      files.map(
+        async (file) => [file, await readFile(join(directory, file))] as const
+      )
+    );
+    return Buffer.from(zipSync(Object.fromEntries(entries)));
+  }
+
   async installOfficialPlugin(
     orgId: string,
     pluginId: string,
@@ -468,6 +500,44 @@ export class PluginService {
         }
         if (install.lifecycleState !== "enabled") {
           throw new PluginHostError("invalid_state");
+        }
+        // Only share credentials with the bundled release approved above.
+        if (
+          pluginId === "google-meet" &&
+          install.selectedVersion === inspected.manifest.version
+        ) {
+          const config = this.options.getUserConfig?.();
+          const providers = config?.providers.filter(
+            (provider) =>
+              provider.type === "openai" &&
+              provider.apiKey.trim() &&
+              (!provider.baseUrl ||
+                provider.baseUrl.replace(/\/+$/, "") ===
+                  "https://api.openai.com/v1")
+          );
+          const provider =
+            providers?.find((item) => item.id === config?.defaultProviderId) ??
+            providers?.[0];
+          if (provider) {
+            const overview = await this.invokePluginAction({
+              access: "ui",
+              actionKey: "meetings",
+              actor,
+              input: {},
+              orgId,
+              pluginId,
+            });
+            if (!(overview.result as { configured: boolean }).configured) {
+              await this.invokePluginAction({
+                access: "ui",
+                actionKey: "configure",
+                actor,
+                input: { apiKey: provider.apiKey },
+                orgId,
+                pluginId,
+              });
+            }
+          }
         }
         if (official.setupAction) {
           try {

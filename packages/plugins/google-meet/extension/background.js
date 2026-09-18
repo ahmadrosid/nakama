@@ -2,6 +2,7 @@
 
 const chrome = globalThis.chrome;
 const SESSION_KEY = "captureSession";
+let starting = false;
 
 async function getSession() {
   return (await chrome.storage.session.get(SESSION_KEY))[SESSION_KEY] || null;
@@ -27,90 +28,228 @@ async function ensureOffscreen() {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "START_FROM_NAKAMA") {
-    start(message.captureUrl, message.meetingUrl)
-      .then(sendResponse)
-      .catch((error) => sendResponse({ error: error.message }));
-    return true;
+async function callNakama(connection, action, input = {}) {
+  if (!connection) {
+    throw new Error(
+      "Open Google Meet in Nakama and connect this extension first."
+    );
   }
-  if (message.type === "START") {
-    start(message.captureUrl)
-      .then(sendResponse)
-      .catch((error) => sendResponse({ error: error.message }));
-    return true;
+  const tab = await chrome.tabs.get(connection.tabId).catch(() => null);
+  if (tab?.url !== connection.url) {
+    throw new Error("Keep the connected Nakama Google Meet tab open.");
   }
-  if (message.type === "STOP") {
-    chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
-    sendResponse({ ok: true });
+  const response = await chrome.tabs.sendMessage(connection.tabId, {
+    action,
+    input,
+    type: "NAKAMA_MEET_ACTION",
+  });
+  if (!response || response.error) {
+    throw new Error(
+      response?.error || "Nakama did not respond. Refresh its Google Meet page."
+    );
   }
-  if (message.type === "STATE") {
-    getSession().then((session) => sendResponse({ session }));
-    return true;
-  }
-});
+  return response.result;
+}
 
-async function start(captureUrl, meetingUrl) {
-  if (!(captureUrl && captureUrl.startsWith("ws"))) {
-    throw new Error("Paste the capture URL from Nakama first");
+async function connect() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = new URL(tab?.url || "about:blank");
+  if (
+    !(tab?.id && ["http:", "https:"].includes(url.protocol)) ||
+    url.pathname !== "/plugins/google-meet"
+  ) {
+    throw new Error("Open the Google Meet page in Nakama, then click Connect.");
   }
-  const tabs = await chrome.tabs.query({ url: "https://meet.google.com/*" });
-  const tab = meetingUrl
-    ? tabs.find((candidate) => candidate.url === meetingUrl)
-    : tabs.find((candidate) => candidate.active);
-  if (!(tab?.id && tab.url?.startsWith("https://meet.google.com/"))) {
-    throw new Error("Open a Google Meet tab first");
-  }
-  const streamId = await chrome.tabCapture.getMediaStreamId({
-    targetTabId: tab.id,
-  });
-  await ensureOffscreen();
-  await chrome.storage.session.set({
-    [SESSION_KEY]: {
-      captureUrl,
-      startedAt: Date.now(),
-      status: "starting",
-      tabId: tab.id,
-      tabUrl: tab.url,
-    },
-  });
-  await setBadge("REC", "#dc2626");
-  chrome.runtime.sendMessage({ streamId, type: "START_CAPTURE" });
+  const connection = { tabId: tab.id, url: tab.url };
+  await callNakama(connection, "meetings");
+  await chrome.storage.session.set({ connection });
   return { ok: true };
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === "CAPTURE_STARTED") {
-    getSession().then(async (session) => {
-      if (!session) {
-        return;
-      }
-      await chrome.storage.session.set({
-        [SESSION_KEY]: { ...session, status: "recording" },
-      });
-      await setBadge("REC", "#dc2626");
-      void chrome.tabs.sendMessage(session.tabId, { type: "CAPTURE_STARTED" });
-    });
+async function start() {
+  if (starting) {
+    throw new Error("Transcription is already starting.");
   }
-  if (message.type === "CAPTURE_STOPPED" || message.type === "CAPTURE_ERROR") {
-    getSession().then(async (session) => {
-      if (session) {
-        await chrome.storage.session.set({
-          [SESSION_KEY]: {
-            ...session,
-            error: message.error,
-            status: message.type === "CAPTURE_ERROR" ? "error" : "stopped",
-          },
+  starting = true;
+  let meeting;
+  let connection;
+  try {
+    const session = await getSession();
+    if (["starting", "recording"].includes(session?.status)) {
+      throw new Error("Stop the current transcription first.");
+    }
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const url = new URL(tab?.url || "about:blank");
+    if (
+      !tab?.id ||
+      url.origin !== "https://meet.google.com" ||
+      !/^\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url.pathname)
+    ) {
+      throw new Error("Join a Google Meet meeting in this tab first.");
+    }
+    ({ connection } = await chrome.storage.session.get("connection"));
+    // Obtain tab access while handling the user's extension click.
+    const streamId = await chrome.tabCapture.getMediaStreamId({
+      targetTabId: tab.id,
+    });
+    await ensureOffscreen();
+    meeting = await callNakama(connection, "start-capture", {
+      url: url.origin + url.pathname,
+    });
+    if (!meeting?.capture?.url) {
+      throw new Error("The transcription service is not ready.");
+    }
+    const captureUrl = new URL(meeting.capture.url);
+    if (!["ws:", "wss:"].includes(captureUrl.protocol)) {
+      throw new Error("Invalid capture connection.");
+    }
+    await chrome.storage.session.set({
+      [SESSION_KEY]: {
+        captureUrl: captureUrl.href,
+        connection,
+        meetingId: meeting.id,
+        startedAt: Date.now(),
+        status: "starting",
+        tabId: tab.id,
+        tabUrl: tab.url,
+      },
+    });
+    const result = await chrome.runtime.sendMessage({
+      captureUrl: captureUrl.href,
+      streamId,
+      type: "START_CAPTURE",
+    });
+    if (!result?.ok) {
+      if (result?.needsMicrophone) {
+        await chrome.tabs.create({
+          url: chrome.runtime.getURL("microphone.html"),
         });
       }
-      await setBadge(message.type === "CAPTURE_ERROR" ? "!" : "", "#dc2626");
-    });
+      throw new Error(result?.error || "Could not capture meeting audio.");
+    }
+    return { ok: true };
+  } catch (error) {
+    if (meeting?.id) {
+      await callNakama(connection, "leave", { meetingId: meeting.id }).catch(
+        () => undefined
+      );
+      await chrome.storage.session.set({
+        [SESSION_KEY]: {
+          ...(await getSession()),
+          error: error.message,
+          status: "error",
+        },
+      });
+      await setBadge("!", "#dc2626");
+    }
+    throw error;
+  } finally {
+    starting = false;
   }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) {
+    return;
+  }
+  if (message.type === "BRIDGE_STATE" && sender.tab) {
+    chrome.storage.session.get("connection").then(({ connection }) => {
+      sendResponse({
+        connected:
+          connection?.tabId === sender.tab.id && connection?.url === sender.url,
+      });
+    });
+    return true;
+  }
+  if (sender.url !== chrome.runtime.getURL("popup.html") || sender.tab) {
+    return;
+  }
+  let work;
+  if (message.type === "CONNECT") {
+    work = connect();
+  } else if (message.type === "START") {
+    work = start();
+  } else if (message.type === "STOP") {
+    work = chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
+  } else if (message.type === "STATE") {
+    work = chrome.storage.session
+      .get(["connection", SESSION_KEY])
+      .then(async (state) => {
+        const session = state[SESSION_KEY];
+        await setBadge(
+          session?.error ? "!" : session?.status === "recording" ? "REC" : "",
+          "#dc2626"
+        );
+        return state;
+      });
+  } else {
+    return;
+  }
+  work
+    .then(sendResponse)
+    .catch((error) => sendResponse({ error: error.message }));
+  return true;
 });
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (
+    sender.id !== chrome.runtime.id ||
+    sender.url !== chrome.runtime.getURL("offscreen.html")
+  ) {
+    return;
+  }
+  if (
+    !["CAPTURE_STARTED", "CAPTURE_STOPPED", "CAPTURE_ERROR"].includes(
+      message.type
+    )
+  ) {
+    return;
+  }
+  void updateCaptureState(message);
+});
+
+async function updateCaptureState(message) {
+  const session = await getSession();
+  if (!session) {
+    return;
+  }
+  const recording = message.type === "CAPTURE_STARTED";
+  await chrome.storage.session.set({
+    [SESSION_KEY]: {
+      ...session,
+      error: message.error,
+      status: recording
+        ? "recording"
+        : message.type === "CAPTURE_ERROR"
+          ? "error"
+          : "stopped",
+    },
+  });
+  await setBadge(
+    recording ? "REC" : message.type === "CAPTURE_ERROR" ? "!" : "",
+    "#dc2626"
+  );
+  await chrome.tabs
+    .sendMessage(session.tabId, {
+      type: recording ? "CAPTURE_STARTED" : "CAPTURE_STOPPED",
+    })
+    .catch(() => undefined);
+  if (!recording) {
+    await callNakama(session.connection, "leave", {
+      meetingId: session.meetingId,
+    }).catch(() => undefined);
+  }
+}
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const session = await getSession();
-  if (session?.tabId === tabId) {
-    chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
+  if (
+    session?.tabId === tabId &&
+    ["starting", "recording"].includes(session.status)
+  ) {
+    await chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
   }
 });

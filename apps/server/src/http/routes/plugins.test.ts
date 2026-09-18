@@ -6,6 +6,7 @@ import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
 } from "@nakama/db";
+import { unzipSync } from "fflate";
 import type { AuthService } from "../../services/auth-service";
 import { PluginService } from "../../services/plugin-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -178,6 +179,43 @@ async function installRelease(
 }
 
 describe("plugin HTTP API", () => {
+  test("downloads a loadable Chrome extension ZIP only for signed-in users", async () => {
+    const { app, databaseAdapter } = createApp({
+      officialPackagesDir: resolve(
+        import.meta.dir,
+        "../../../../../packages/plugins"
+      ),
+    });
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const path = "/v1/plugins/official/google-meet/extension.zip";
+    expect((await jsonRequest(app, path, null)).status).toBe(401);
+    const response = await jsonRequest(app, path, session);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/zip");
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "attachment;"
+    );
+    const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(Object.keys(files).sort()).toEqual([
+      "audio-worklet.js",
+      "background.js",
+      "content.js",
+      "manifest.json",
+      "microphone.html",
+      "microphone.js",
+      "offscreen.html",
+      "offscreen.js",
+      "popup.html",
+      "popup.js",
+    ]);
+    const manifest = JSON.parse(
+      new TextDecoder().decode(files["manifest.json"])
+    );
+    expect(manifest.manifest_version).toBe(3);
+    expect(files[manifest.background.service_worker]).toBeDefined();
+    expect(files[manifest.action.default_popup]).toBeDefined();
+  });
+
   test("AE6 authority matrix for platform, org roles, nonmember, and archived org", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const installer = await setupFreshInstallSession(app, databaseAdapter);

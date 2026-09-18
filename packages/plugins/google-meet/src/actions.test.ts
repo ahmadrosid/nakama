@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginExecutionContext } from "@nakama/core";
@@ -55,7 +55,7 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
       { ...context, actionKey: "meetings", actor: { id: "b", role: "member" } }
     )) as { meetings: unknown[] };
     expect(other.meetings).toEqual([]);
-    for (const actionKey of ["status", "transcript", "leave"]) {
+    for (const actionKey of ["status", "transcript", "leave", "delete"]) {
       await expect(
         run(
           { meetingId: meeting.id },
@@ -80,7 +80,79 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
       { ...context, actionKey: "status" }
     )) as { meeting: { state: string } };
     expect(status.meeting.state).toBe("queued");
+    await expect(
+      run({ meetingId: meeting.id }, { ...context, actionKey: "delete" })
+    ).rejects.toThrow();
+    const stopped = await run(
+      { meetingId: meeting.id },
+      { ...context, actionKey: "leave" }
+    );
+    expect(stopped).toMatchObject({ state: "finished", stopRequested: 1 });
+    expect(
+      await run(
+        { meetingId: meeting.id },
+        {
+          ...context,
+          actionKey: "delete",
+          actor: { id: "a", role: "member" },
+        }
+      )
+    ).toEqual({ deleted: true });
+    const deleted = new MeetingStore(dir, "org");
+    expect(deleted.get(meeting.id)).toBeNull();
+    expect(deleted.transcript(meeting.id)).toEqual([]);
+    expect(deleted.list()).toEqual([]);
+    deleted.close();
+    expect(
+      existsSync(join(dir, "transcripts", `meeting-${meeting.id}.txt`))
+    ).toBe(false);
+    const next = await run(
+      { url: "https://meet.google.com/abc-defg-hij" },
+      { ...context, actionKey: "start-capture" }
+    );
+    expect(next).toMatchObject({ state: "queued" });
   } finally {
     rmSync(dir, { force: true, recursive: true });
   }
+});
+
+test("meeting history keeps active meetings first and groups local calendar days", async () => {
+  const { meetingGroups } = await import("./ui");
+  const now = new Date(2026, 0, 1, 0, 5);
+  const base = {
+    actorId: "a",
+    durationMinutes: 120,
+    error: null,
+    profileId: null,
+    stopRequested: 0,
+    updatedAt: 0,
+    url: "https://meet.google.com/abc-defg-hij",
+  };
+  const groups = meetingGroups(
+    [
+      { ...base, createdAt: now.getTime(), id: "today", state: "finished" },
+      {
+        ...base,
+        createdAt: new Date(2025, 11, 31, 23, 55).getTime(),
+        id: "yesterday",
+        state: "failed",
+      },
+      {
+        ...base,
+        createdAt: new Date(2025, 11, 31, 23, 50).getTime(),
+        id: "active",
+        state: "transcribing",
+      },
+    ],
+    now
+  );
+  expect(groups.map((group) => group.title)).toEqual([
+    "In progress",
+    "Today",
+    "Yesterday",
+  ]);
+  expect(
+    groups.flatMap((group) => group.meetings.map((meeting) => meeting.id))
+  ).toEqual(["active", "today", "yesterday"]);
+  expect(meetingGroups([], now)).toEqual([]);
 });

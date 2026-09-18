@@ -24,7 +24,7 @@ import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { Add01Icon, MoreHorizontalIcon } from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import {
   formatPluginTrustLines,
@@ -570,6 +570,7 @@ function GoogleMeetInstallFooter({
   install,
   onClose,
 }: Pick<GoogleMeetInstallState, "install"> & { onClose(): void }) {
+  const navigate = useNavigate();
   const busy = install.isPending;
   let label = "Install plugin";
   if (busy) {
@@ -580,17 +581,21 @@ function GoogleMeetInstallFooter({
   return (
     <DialogFooter>
       <Button disabled={busy} onClick={onClose} variant="outline">
-        {install.isSuccess ? "Close" : "Cancel"}
+        Cancel
       </Button>
-      {install.isSuccess ? (
-        <Button render={<Link to="/plugins/google-meet" />}>
-          Open Google Meet
-        </Button>
-      ) : (
-        <Button disabled={busy} onClick={() => install.mutate()}>
-          {label}
-        </Button>
-      )}
+      <Button
+        disabled={busy}
+        onClick={() =>
+          install.mutate(undefined, {
+            onSuccess: () => {
+              onClose();
+              navigate("/plugins/google-meet");
+            },
+          })
+        }
+      >
+        {label}
+      </Button>
     </DialogFooter>
   );
 }

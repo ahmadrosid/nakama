@@ -153,6 +153,19 @@ export class MeetingStore {
   stop(id: string) {
     this.db.query("UPDATE meetings SET stopRequested=1 WHERE id=?").run(id);
   }
+  delete(id: string) {
+    this.db
+      .transaction(() => {
+        const meeting = this.get(id);
+        if (!(meeting && ["finished", "failed"].includes(meeting.state))) {
+          throw new Error("Stop transcription before deleting this meeting");
+        }
+        rmSync(this.transcriptPath(id), { force: true });
+        this.db.query("DELETE FROM segments WHERE meetingId=?").run(id);
+        this.db.query("DELETE FROM meetings WHERE id=?").run(id);
+      })
+      .immediate();
+  }
   addSegment(meetingId: string, segment: TranscriptSegment) {
     if (!this.get(meetingId)) {
       throw new Error("Meeting not found");

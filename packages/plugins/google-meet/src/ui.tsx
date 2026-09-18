@@ -24,18 +24,36 @@ const message = (error: unknown) =>
   error instanceof Error ? error.message : "Request failed";
 export const inject = ["slots", "host", "styles", "ui"];
 
+export function meetingGroups(meetings: Meeting[], now = new Date()) {
+  const today = now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const groups = new Map<string, Meeting[]>([["In progress", []]]);
+  for (const meeting of meetings) {
+    const date = new Date(meeting.createdAt);
+    const title = ["queued", "joining", "transcribing"].includes(meeting.state)
+      ? "In progress"
+      : date.toDateString() === today
+        ? "Today"
+        : date.toDateString() === yesterday.toDateString()
+          ? "Yesterday"
+          : date.toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            });
+    const group = groups.get(title) ?? [];
+    group.push(meeting);
+    groups.set(title, group);
+  }
+  return [...groups]
+    .filter(([, items]) => items.length)
+    .map(([title, items]) => ({ meetings: items, title }));
+}
+
 export function apply(ctx: Context) {
   const React = ctx.React;
-  const {
-    Button,
-    Card,
-    CodeBlock,
-    Input,
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-  } = ctx.ui;
+  const { Button, Card, CodeBlock, ConfirmDialog, Delete02Icon } = ctx.ui;
   ctx.styles(
     `
     .meet-page{display:grid;gap:32px;max-width:768px;width:100%;min-width:0;margin:0 auto;font-size:14px}
@@ -43,10 +61,6 @@ export function apply(ctx: Context) {
     .meet-card{box-shadow:none;overflow:hidden}
     .meet-card-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
     .meet-page h2,.meet-page h3{font-size:14px;font-weight:500;margin:0}
-    .meet-form{display:grid;gap:12px}
-    .meet-form label{display:grid;gap:6px;font-size:14px;font-weight:500;min-width:0}
-    .meet-join{padding:16px;grid-template-columns:minmax(0,1fr) 100px;align-items:end}
-    .meet-join-footer{grid-column:1/-1;display:flex;justify-content:flex-end;padding-top:4px}
     .meet-list{list-style:none;padding:0;margin:0}
     .meet-list li{padding:16px;display:grid;gap:10px}
     .meet-list li+li{border-top:1px solid var(--border)}
@@ -61,71 +75,8 @@ export function apply(ctx: Context) {
     .meet-detail{display:grid;gap:16px;min-width:0}
     .meet-detail-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
     .meet-code{border:1px solid var(--border);border-radius:8px;min-width:0}
-    @media(max-width:480px){.meet-join{grid-template-columns:minmax(0,1fr)}.meet-join-footer>button{width:100%}}
     `
   );
-
-  function Settings({ close }: { close(): void }) {
-    const [apiKey, setApiKey] = React.useState("");
-    const [error, setError] = React.useState("");
-    const [busy, setBusy] = React.useState(false);
-    async function save(event: ReactType.FormEvent) {
-      event.preventDefault();
-      setBusy(true);
-      setError("");
-      try {
-        await ctx.host.call("configure", {
-          apiKey: apiKey || undefined,
-        });
-        setApiKey("");
-        close();
-      } catch (reason) {
-        setError(message(reason));
-      } finally {
-        setBusy(false);
-      }
-    }
-    return (
-      <Dialog
-        onOpenChange={(open) => {
-          if (!open) {
-            close();
-          }
-        }}
-        open
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Google Meet settings</DialogTitle>
-          </DialogHeader>
-          <form className="meet-form" onSubmit={save}>
-            <label>
-              OpenAI API key
-              <Input
-                autoComplete="off"
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="Keep saved key"
-                type="password"
-                value={apiKey}
-              />
-            </label>
-            <p className="meet-status">
-              gpt-transcribe uses separate API billing. Your ChatGPT
-              subscription does not cover transcription.
-            </p>
-            <p className="meet-status">
-              Install the Nakama Chrome extension. After joining, paste the
-              capture URL into its popup and start capture.
-            </p>
-            {error && <p role="alert">{error}</p>}
-            <Button disabled={busy} type="submit">
-              {busy ? "Saving…" : "Save"}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   function Transcript({ meeting, close }: { meeting: Meeting; close(): void }) {
     const [text, setText] = React.useState("");
@@ -243,12 +194,63 @@ export function apply(ctx: Context) {
   function Page() {
     const [overview, setOverview] = React.useState<Overview | null>(null);
     const [error, setError] = React.useState("");
-    const [url, setUrl] = React.useState("");
-    const [duration, setDuration] = React.useState(120);
-    const [captureUrl, setCaptureUrl] = React.useState("");
+    const [extensionConnected, setExtensionConnected] = React.useState<
+      boolean | null
+    >(null);
     const [busy, setBusy] = React.useState(false);
-    const [settings, setSettings] = React.useState(false);
+    const [deleting, setDeleting] = React.useState<Meeting | null>(null);
     const [selected, setSelected] = React.useState<Meeting | null>(null);
+    React.useEffect(() => {
+      async function receive(event: MessageEvent) {
+        if (
+          event.source !== window ||
+          event.origin !== window.location.origin
+        ) {
+          return;
+        }
+        const data = event.data;
+        if (data?.type === "NAKAMA_MEET_EXTENSION") {
+          setExtensionConnected(data.connected === true);
+          return;
+        }
+        if (
+          data?.type !== "NAKAMA_MEET_ACTION" ||
+          typeof data.id !== "string" ||
+          !["meetings", "start-capture", "leave"].includes(data.action)
+        ) {
+          return;
+        }
+        try {
+          const result = await ctx.host.call(data.action, data.input);
+          window.postMessage(
+            { id: data.id, result, type: "NAKAMA_MEET_RESULT" },
+            window.location.origin
+          );
+        } catch (reason) {
+          window.postMessage(
+            { error: message(reason), id: data.id, type: "NAKAMA_MEET_RESULT" },
+            window.location.origin
+          );
+        }
+      }
+      window.addEventListener("message", receive);
+      const ping = () =>
+        window.postMessage(
+          { type: "NAKAMA_MEET_PING" },
+          window.location.origin
+        );
+      ping();
+      const detectionTimeout = setTimeout(
+        () => setExtensionConnected((connected) => connected ?? false),
+        1500
+      );
+      const timer = setInterval(ping, 3000);
+      return () => {
+        window.removeEventListener("message", receive);
+        clearInterval(timer);
+        clearTimeout(detectionTimeout);
+      };
+    }, []);
     React.useEffect(() => {
       let alive = true;
       let running = false;
@@ -281,21 +283,7 @@ export function apply(ctx: Context) {
       setBusy(true);
       setError("");
       try {
-        const result = await ctx.host.call(name, input);
-        if (name === "start-capture") {
-          const capture = (result as { capture?: { url?: string } }).capture;
-          setCaptureUrl(capture?.url ?? "");
-          if (capture?.url) {
-            window.postMessage(
-              {
-                captureUrl: capture.url,
-                meetingUrl: (input as { url?: string }).url,
-                type: "START_CAPTURE",
-              },
-              window.location.origin
-            );
-          }
-        }
+        await ctx.host.call(name, input);
         setOverview((await ctx.host.call("meetings")) as Overview);
       } catch (reason) {
         setError(message(reason));
@@ -303,21 +291,7 @@ export function apply(ctx: Context) {
         setBusy(false);
       }
     }
-    const active = overview?.meetings.some((meeting) =>
-      ["queued", "joining", "transcribing"].includes(meeting.state)
-    );
-    const groups = [
-      {
-        meetings:
-          overview?.meetings.filter((meeting) => !meeting.transcriptFile) ?? [],
-        title: "Meetings",
-      },
-      {
-        meetings:
-          overview?.meetings.filter((meeting) => meeting.transcriptFile) ?? [],
-        title: "Saved transcripts",
-      },
-    ];
+    const groups = meetingGroups(overview?.meetings ?? []);
     if (selected) {
       return (
         <section className="meet-page">
@@ -335,64 +309,42 @@ export function apply(ctx: Context) {
     }
     return (
       <section className="meet-page">
+        {deleting && (
+          <ConfirmDialog
+            description="This meeting and its transcript will be deleted. You can’t get them back."
+            onClose={() => setDeleting(null)}
+            onConfirm={async () => {
+              await ctx.host.call("delete", { meetingId: deleting.id });
+              setOverview((previous) =>
+                previous
+                  ? {
+                      ...previous,
+                      meetings: previous.meetings.filter(
+                        (meeting) => meeting.id !== deleting.id
+                      ),
+                    }
+                  : previous
+              );
+            }}
+            title="Delete meeting?"
+          />
+        )}
         {error && <p role="alert">{error}</p>}
         <Card className="meet-card">
           <div className="meet-card-heading">
-            <h2>Join a meeting</h2>
+            <h2>Transcription</h2>
             {overview?.canConfigure && (
               <Button
-                onClick={() => setSettings(true)}
+                render={<a href="/customize/providers" />}
                 size="sm"
                 variant="outline"
               >
-                Settings
+                {overview.configured
+                  ? "Manage OpenAI connection"
+                  : "Set up OpenAI"}
               </Button>
             )}
           </div>
-          <form
-            className="meet-form meet-join"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void action("start-capture", { durationMinutes: duration, url });
-            }}
-          >
-            <label>
-              Meeting link
-              <Input
-                aria-label="Google Meet URL"
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://meet.google.com/abc-defg-hij"
-                required
-                type="url"
-                value={url}
-              />
-            </label>
-            <label>
-              Minutes
-              <Input
-                aria-label="Maximum meeting minutes"
-                max={120}
-                min={1}
-                onChange={(event) => setDuration(Number(event.target.value))}
-                required
-                type="number"
-                value={duration}
-              />
-            </label>
-            <div className="meet-join-footer">
-              <Button
-                disabled={
-                  busy ||
-                  active ||
-                  !overview?.configured ||
-                  overview.worker.state !== "ready"
-                }
-                type="submit"
-              >
-                Start capture session
-              </Button>
-            </div>
-          </form>
           <div
             className="meet-card-heading"
             style={{ borderBottom: 0, borderTop: "1px solid var(--border)" }}
@@ -401,114 +353,151 @@ export function apply(ctx: Context) {
               {overview
                 ? overview.configured
                   ? overview.worker.state === "ready"
-                    ? "Ready. Join, then start the Chrome extension."
+                    ? extensionConnected === null
+                      ? "Checking extension connection…"
+                      : extensionConnected
+                        ? "Connected. Start transcription from your Google Meet tab."
+                        : "Open the Chrome extension on this page and choose Connect."
                     : "Start Google Meet in Workers."
-                  : "Set a transcription API key in Settings."
+                  : "Connect OpenAI in AI Providers, then reinstall Google Meet to use the saved connection."
                 : "Checking connection…"}
             </span>
           </div>
         </Card>
-        {captureUrl && (
-          <Card className="meet-card">
-            <div className="meet-card-heading">
-              <h2>Capture session</h2>
-            </div>
-            <div style={{ padding: 16 }}>
-              <p className="meet-status">
-                The extension was notified. Keep the Google Meet tab open while
-                capture runs. If it did not start, paste this URL into the
-                extension popup.
-              </p>
-              <CodeBlock className="meet-code">{captureUrl}</CodeBlock>
-            </div>
+        {extensionConnected === false && (
+          <Card className="meet-card" style={{ padding: 16 }}>
+            <Button
+              render={
+                <a
+                  download="nakama-google-meet-extension.zip"
+                  href="/v1/plugins/official/google-meet/extension.zip"
+                />
+              }
+              variant="outline"
+            >
+              Download Chrome extension
+            </Button>
+            <ol
+              style={{
+                listStyleType: "decimal",
+                marginTop: 12,
+                paddingLeft: 20,
+              }}
+            >
+              <li>Unzip the download.</li>
+              <li>
+                Open <code>chrome://extensions</code> and enable Developer mode.
+              </li>
+              <li>
+                Choose <strong>Load unpacked</strong> and select the unzipped
+                folder.
+              </li>
+              <li>
+                Refresh this page, open the extension, and choose{" "}
+                <strong>Connect this Nakama tab</strong>.
+              </li>
+            </ol>
           </Card>
         )}
         {overview ? (
-          groups.map((group) => (
-            <section key={group.title}>
-              <Card className="meet-card">
-                <div className="meet-card-heading">
-                  <h2>{group.title}</h2>
-                  <span className="meet-status">{group.meetings.length}</span>
-                </div>
-                {group.meetings.length ? (
-                  <ul className="meet-list">
-                    {group.meetings.map((meeting) => (
-                      <li key={meeting.id}>
-                        <div className="meet-meeting">
-                          <div className="meet-meta">
-                            <a
-                              className="meet-link"
-                              href={meeting.url}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              {meeting.url.replace("https://", "")}
-                            </a>
-                            <time
-                              className="meet-status"
-                              dateTime={new Date(
-                                meeting.createdAt
-                              ).toISOString()}
-                            >
-                              {new Date(meeting.createdAt).toLocaleString()}
-                            </time>
-                          </div>
-                          <div className="meet-row">
-                            <span className="meet-badge">
-                              {meeting.state}
-                              {meeting.stopRequested &&
-                              ["queued", "joining", "transcribing"].includes(
-                                meeting.state
-                              )
-                                ? " · stopping"
-                                : ""}
-                            </span>
-                            <Button
-                              onClick={() => setSelected(meeting)}
-                              size="sm"
-                              variant="outline"
-                            >
-                              {meeting.transcriptFile
-                                ? "Open transcript"
-                                : "Transcript"}
-                            </Button>
-                            {["queued", "joining", "transcribing"].includes(
-                              meeting.state
-                            ) && (
-                              <Button
-                                disabled={busy || !!meeting.stopRequested}
-                                onClick={() =>
-                                  void action("leave", {
-                                    meetingId: meeting.id,
-                                  })
-                                }
-                                size="sm"
-                                variant="outline"
-                              >
-                                Leave
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {meeting.error && <p role="alert">{meeting.error}</p>}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="meet-empty">
-                    {group.title === "Meetings"
-                      ? "No meetings yet."
-                      : "No saved transcripts yet."}
-                  </p>
-                )}
-              </Card>
-            </section>
-          ))
+          <Card className="meet-card">
+            <div className="meet-card-heading">
+              <h2>Meeting history</h2>
+              <span className="meet-status">{overview.meetings.length}</span>
+            </div>
+            {!groups.length && (
+              <p className="meet-empty">
+                Your meetings will appear here when you start transcribing.
+              </p>
+            )}
+            <ul className="meet-list">
+              {groups
+                .flatMap((group) => group.meetings)
+                .map((meeting) => (
+                  <li key={meeting.id}>
+                    <div className="meet-meeting">
+                      <div className="meet-meta">
+                        <strong>
+                          Meeting ·{" "}
+                          {new Date(meeting.createdAt).toLocaleTimeString(
+                            undefined,
+                            { hour: "numeric", minute: "2-digit" }
+                          )}
+                        </strong>
+                        <a
+                          className="meet-link meet-status"
+                          href={meeting.url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {meeting.url.replace("https://", "")}
+                        </a>
+                      </div>
+                      <div className="meet-row">
+                        <span className="meet-badge">
+                          {["queued", "joining", "transcribing"].includes(
+                            meeting.state
+                          )
+                            ? meeting.stopRequested
+                              ? "Stopping…"
+                              : meeting.state === "transcribing"
+                                ? "Transcribing…"
+                                : "Connecting…"
+                            : meeting.state === "failed"
+                              ? meeting.transcriptFile
+                                ? "Partial transcript"
+                                : "Transcription failed"
+                              : meeting.transcriptFile
+                                ? "Transcript ready"
+                                : "No audio captured"}
+                        </span>
+                        {meeting.transcriptFile && (
+                          <Button
+                            onClick={() => setSelected(meeting)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            View transcript
+                          </Button>
+                        )}
+                        {["queued", "joining", "transcribing"].includes(
+                          meeting.state
+                        ) && (
+                          <Button
+                            disabled={busy || !!meeting.stopRequested}
+                            onClick={() =>
+                              void action("leave", {
+                                meetingId: meeting.id,
+                              })
+                            }
+                            size="sm"
+                            variant="outline"
+                          >
+                            Stop transcription
+                          </Button>
+                        )}
+                        {["finished", "failed"].includes(meeting.state) && (
+                          <Button
+                            aria-label="Delete meeting"
+                            disabled={busy}
+                            onClick={() => setDeleting(meeting)}
+                            size="icon-sm"
+                            title="Delete meeting"
+                            variant="outline"
+                          >
+                            <Delete02Icon aria-hidden size={16} />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {meeting.error && <p role="alert">{meeting.error}</p>}
+                  </li>
+                ))}
+            </ul>
+          </Card>
         ) : (
           <p>Loading…</p>
         )}
-        {settings && <Settings close={() => setSettings(false)} />}
       </section>
     );
   }

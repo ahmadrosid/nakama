@@ -90,6 +90,17 @@ class MeetingStore {
   stop(id) {
     this.db.query("UPDATE meetings SET stopRequested=1 WHERE id=?").run(id);
   }
+  delete(id) {
+    this.db.transaction(() => {
+      const meeting = this.get(id);
+      if (!(meeting && ["finished", "failed"].includes(meeting.state))) {
+        throw new Error("Stop transcription before deleting this meeting");
+      }
+      rmSync(this.transcriptPath(id), { force: true });
+      this.db.query("DELETE FROM segments WHERE meetingId=?").run(id);
+      this.db.query("DELETE FROM meetings WHERE id=?").run(id);
+    }).immediate();
+  }
   addSegment(meetingId, segment) {
     if (!this.get(meetingId)) {
       throw new Error("Meeting not found");
@@ -340,6 +351,7 @@ function createStreamMeeting(meeting, store, directory, signal) {
   let closing;
   const abort = new AbortController;
   const combined = AbortSignal.any([signal, abort.signal]);
+  store.update(meeting.id, "joining");
   const started = (async () => {
     const config = readSettings(directory);
     transcription = await transcriptionProviders[config.provider].connect({
@@ -435,6 +447,12 @@ async function runWorker(directory, dataDir, orgId) {
         ws.data.stream?.close(false);
       },
       message(ws, message) {
+        const meeting = store.get(ws.data.meetingId);
+        if (!meeting || meeting.stopRequested || Date.now() >= meeting.createdAt + meeting.durationMinutes * 60000) {
+          ws.data.stream?.close(true);
+          ws.close(1000, "Transcription stopped");
+          return;
+        }
         if (typeof message === "string") {
           try {
             const event = JSON.parse(message);

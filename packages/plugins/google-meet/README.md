@@ -4,13 +4,13 @@ The plugin creates a short-lived capture session. The Nakama Chrome extension ca
 
 ## Setup
 
-1. Install the plugin and start the Google Meet worker in **Workers**.
-2. Open **Google Meet → Settings** and save an OpenAI API key. Transcription is billed separately from ChatGPT.
-3. Install the unpacked extension from the `extension/` directory in Chrome at `chrome://extensions`, enable Developer mode, and choose **Load unpacked**.
-4. Open the Meet tab and the Nakama Google Meet page. Enter the Meet URL in Nakama and choose **Start capture session**. Nakama automatically tells the extension to start capture.
-5. If the extension is not connected to the Nakama page, paste the fallback capture URL into the extension popup.
+1. Install the plugin. Its worker starts automatically. A saved OpenAI provider key is reused; otherwise add a key in **Google Meet → Settings**. Transcription uses OpenAI API billing.
+2. On the Google Meet page, choose **Download Chrome extension** and unzip it. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select the unzipped folder. Refresh the Nakama page afterward. Reload an existing extension after updating its files.
+3. Open **Google Meet** in Nakama. Open the extension popup and choose **Connect this Nakama tab**. Keep this Nakama tab open and signed in, with the organization you want to use selected.
+4. Join a meeting in Chrome. Open the extension from that Meet tab and choose **Start transcription**. The extension uses the current meeting URL automatically; no URLs or tokens need copying.
+5. Read live text and saved transcripts in Nakama. Choose **Stop transcription** in Nakama or the extension to finish. Sessions have a maximum duration of two hours.
 
-Tell participants before transcribing. Leave the meeting from Nakama or stop capture from the extension. Restarts fail interrupted meetings instead of silently rejoining; partial transcripts remain available.
+Tell participants before transcribing. Closing the Meet tab stops capture. Browser restarts require reconnecting the extension; interrupted meetings retain partial transcripts.
 
 ## Remote workers
 

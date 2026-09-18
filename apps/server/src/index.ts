@@ -248,6 +248,7 @@ await workerManager.migrateLegacyWhatsApp(organizations);
 
 const orgService = new OrgService(database.adapter, authService);
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
+  getUserConfig: () => agent.getUserConfig(),
   officialPackagesDir: join(projectRoot, "packages/plugins"),
   onHostRequest: createPluginAgentHost(database.adapter, agent),
   workerManager,

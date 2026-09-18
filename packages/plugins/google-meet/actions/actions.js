@@ -86,6 +86,17 @@ class MeetingStore {
   stop(id) {
     this.db.query("UPDATE meetings SET stopRequested=1 WHERE id=?").run(id);
   }
+  delete(id) {
+    this.db.transaction(() => {
+      const meeting = this.get(id);
+      if (!(meeting && ["finished", "failed"].includes(meeting.state))) {
+        throw new Error("Stop transcription before deleting this meeting");
+      }
+      rmSync(this.transcriptPath(id), { force: true });
+      this.db.query("DELETE FROM segments WHERE meetingId=?").run(id);
+      this.db.query("DELETE FROM meetings WHERE id=?").run(id);
+    }).immediate();
+  }
   addSegment(meetingId, segment) {
     if (!this.get(meetingId)) {
       throw new Error("Meeting not found");
@@ -221,9 +232,16 @@ async function run(input, context) {
     if (action === "status") {
       return { meeting, worker };
     }
+    if (action === "delete") {
+      store.delete(meeting.id);
+      return { deleted: true };
+    }
     if (action === "leave") {
       store.stop(meeting.id);
-      return { ...meeting, stopRequested: 1 };
+      if (meeting.state === "queued") {
+        store.update(meeting.id, "finished");
+      }
+      return store.get(meeting.id);
     }
     if (action === "transcript") {
       const after = Number(input.after ?? 0);
