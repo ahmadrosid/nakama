@@ -35,7 +35,7 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
     });
     const meeting = (await run(
       { url: "https://meet.google.com/abc-defg-hij" },
-      { ...context, actionKey: "join" }
+      { ...context, actionKey: "start-capture" }
     )) as { id: string };
     const store = new MeetingStore(dir, "org");
     store.addSegment(meeting.id, {

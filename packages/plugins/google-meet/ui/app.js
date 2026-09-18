@@ -216,7 +216,7 @@ function apply(ctx) {
       setError("");
       try {
         const result = await ctx.host.call(name, input);
-        if (name === "join") {
+        if (name === "start-capture") {
           setCaptureUrl(result.capture?.url ?? "");
         }
         setOverview(await ctx.host.call("meetings"));
@@ -262,7 +262,7 @@ function apply(ctx) {
       className: "meet-form meet-join",
       onSubmit: (event) => {
         event.preventDefault();
-        action("join", { durationMinutes: duration, url });
+        action("start-capture", { durationMinutes: duration, url });
       }
     }, /* @__PURE__ */ React.createElement("label", null, "Meeting link", /* @__PURE__ */ React.createElement(Input, {
       "aria-label": "Google Meet URL",
@@ -284,7 +284,7 @@ function apply(ctx) {
     }, /* @__PURE__ */ React.createElement(Button, {
       disabled: busy || active || !overview?.configured || overview.worker.state !== "ready",
       type: "submit"
-    }, "Join and transcribe"))), /* @__PURE__ */ React.createElement("div", {
+    }, "Start capture session"))), /* @__PURE__ */ React.createElement("div", {
       className: "meet-card-heading",
       style: { borderBottom: 0, borderTop: "1px solid var(--border)" }
     }, /* @__PURE__ */ React.createElement("span", {

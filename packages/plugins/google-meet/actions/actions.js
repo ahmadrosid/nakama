@@ -192,7 +192,7 @@ async function run(input, context) {
         worker
       };
     }
-    if (action === "join") {
+    if (action === "start-capture") {
       if (worker.state !== "ready") {
         throw new Error(worker.message ?? "Start the Google Meet worker in Workers first");
       }

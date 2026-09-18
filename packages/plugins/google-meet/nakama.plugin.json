@@ -9,12 +9,12 @@
   "description": "Capture Google Meet audio from Chrome and transcribe it with OpenAI.",
   "actions": [
     {
-      "key": "join",
+      "key": "start-capture",
       "access": "member",
       "effect": "write",
       "entry": "actions/actions.js",
-      "exposeAsTool": true,
-      "description": "Create a meeting capture session for a user-supplied Google Meet URL. Install the Nakama Chrome extension, paste the returned capture URL, and start capture. Defaults to 120 minutes. Requires a separate OpenAI API key. Returns immediately; check status. One meeting per organization. Tell participants that audio is transcribed. Do not retry a successful join.",
+      "exposeAsTool": false,
+      "description": "Create a meeting capture session for the Google Meet Chrome extension. Defaults to 120 minutes. Requires a separate OpenAI API key. One meeting per organization.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

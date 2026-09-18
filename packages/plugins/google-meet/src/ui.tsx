@@ -282,7 +282,7 @@ export function apply(ctx: Context) {
       setError("");
       try {
         const result = await ctx.host.call(name, input);
-        if (name === "join") {
+        if (name === "start-capture") {
           setCaptureUrl(
             (result as { capture?: { url?: string } }).capture?.url ?? ""
           );
@@ -344,7 +344,7 @@ export function apply(ctx: Context) {
             className="meet-form meet-join"
             onSubmit={(event) => {
               event.preventDefault();
-              void action("join", { durationMinutes: duration, url });
+              void action("start-capture", { durationMinutes: duration, url });
             }}
           >
             <label>
@@ -380,7 +380,7 @@ export function apply(ctx: Context) {
                 }
                 type="submit"
               >
-                Join and transcribe
+                Start capture session
               </Button>
             </div>
           </form>

@@ -1,11 +1,11 @@
 ---
 name: google-meet
-description: Join and transcribe a Google Meet meeting as one action, then check progress, read the transcript, or stop early.
+description: Read and manage Google Meet capture sessions started from the Chrome extension.
 ---
 
 Use the Google Meet plugin tools only for meetings the user asks you to attend.
-The plugin has one meeting mode: join and transcribe. Joining automatically starts audio transcription after admission. There is no join-only or transcription-only mode; do not ask the user to choose between them.
-When the user asks you to join Google Meet, ask for the meeting URL if it is missing, then join and transcribe. Use the default duration unless the user specifies another duration.
+The Chrome extension starts capture. The agent can check progress, read the transcript, or stop an active capture.
+When the user asks about a Google Meet transcript, use the meeting and transcript actions. Do not claim that the agent can join or start Chrome capture.
 Tell the user to notify participants that meeting audio will be sent to the configured transcription provider.
 
 1. Call `plugin_google_meet__join` with the exact meeting URL and maximum duration (1–120 minutes, default 120 minutes / 2 hours).
