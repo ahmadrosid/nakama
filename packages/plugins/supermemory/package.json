@@ -17,9 +17,9 @@
   "devDependencies": {
     "@nakama/core": "workspace:*",
     "@nakama/ui": "workspace:*",
-    "@types/react": "^19.1.6",
+    "@types/react": "^19.3.0",
     "@types/react-test-renderer": "^19.3.0",
-    "react": "^19.2.8",
+    "react": "^19.3.0",
     "react-test-renderer": "19.2.8"
   }
 }
