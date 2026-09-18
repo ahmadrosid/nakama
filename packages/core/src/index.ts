@@ -22,6 +22,7 @@ export * from "./compatible-provider-config";
 export * from "./composio";
 export * from "./composio-config";
 export * from "./config";
+export * from "./connections-config";
 export * from "./contract";
 export {
   DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES,
