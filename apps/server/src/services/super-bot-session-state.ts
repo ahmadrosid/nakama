@@ -1,6 +1,7 @@
 interface TurnState {
   assignedToolIds: Set<string>;
   createdToolIds: Set<string>;
+  toolBuildApproved: boolean;
   turnIndex: number;
 }
 
@@ -12,6 +13,7 @@ export class SuperBotSessionState {
     this.turns.set(sessionId, {
       assignedToolIds: new Set(),
       createdToolIds: new Set(),
+      toolBuildApproved: false,
       turnIndex: (previous?.turnIndex ?? 0) + 1,
     });
   }
@@ -30,6 +32,29 @@ export class SuperBotSessionState {
     }
 
     return (this.turns.get(sessionId)?.turnIndex ?? 0) >= 2;
+  }
+
+  canCreateTool(sessionId: string | undefined): boolean {
+    if (!sessionId) {
+      return true;
+    }
+
+    const turn = this.turns.get(sessionId);
+    return (turn?.turnIndex ?? 0) >= 2 && turn?.toolBuildApproved === true;
+  }
+
+  approveToolBuild(sessionId: string | undefined): boolean {
+    if (!sessionId) {
+      return false;
+    }
+
+    const turn = this.turns.get(sessionId);
+    if (!turn || turn.turnIndex < 2) {
+      return false;
+    }
+
+    turn.toolBuildApproved = true;
+    return true;
   }
 
   canAssignTool(sessionId: string | undefined, toolId: string): boolean {
@@ -65,6 +90,7 @@ export class SuperBotSessionState {
       turn = {
         assignedToolIds: new Set(),
         createdToolIds: new Set(),
+        toolBuildApproved: false,
         turnIndex: 1,
       };
       this.turns.set(sessionId, turn);
@@ -79,3 +105,6 @@ export const TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE =
 
 export const PROFILE_UPDATE_CONFIRMATION_MESSAGE =
   "Wait for the user to confirm the draft in a later message before calling update_profile.";
+
+export const TOOL_CREATION_CONFIRMATION_MESSAGE =
+  "Wait for the user to confirm the build, call approve_tool_build, then call create_tool.";

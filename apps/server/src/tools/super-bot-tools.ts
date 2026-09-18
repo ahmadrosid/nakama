@@ -17,6 +17,7 @@ import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
   type SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
+  TOOL_CREATION_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
 
 const SUPPORTED_SOUL_FILE_NAMES = [
@@ -273,7 +274,20 @@ export function createSuperBotTools(
     },
     {
       description:
-        "Register a custom tool (javascript or python). Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js|.py) → create_tool. Do not call list_profiles as part of this workflow.",
+        "Record the user's approval to build a researched tool. Call only after the user explicitly approves the build plan, and before create_tool.",
+      name: "approve_tool_build",
+      parameters: emptyObjectSchema(),
+      async run(_input, context: ToolContext) {
+        if (!sessionState.approveToolBuild(context.sessionId)) {
+          throw new Error(TOOL_CREATION_CONFIRMATION_MESSAGE);
+        }
+
+        return { approved: true };
+      },
+    },
+    {
+      description:
+        "Register a custom tool (javascript or python) after the user approves the build. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js|.py) → create_tool. Do not call list_profiles as part of this workflow.",
       name: "create_tool",
       parameters: {
         additionalProperties: false,
@@ -300,6 +314,10 @@ export function createSuperBotTools(
 
         if (!(name && description)) {
           throw new Error("name and description are required.");
+        }
+
+        if (!sessionState.canCreateTool(context.sessionId)) {
+          throw new Error(TOOL_CREATION_CONFIRMATION_MESSAGE);
         }
 
         const requestedHandlerType = readString(input, "handlerType");

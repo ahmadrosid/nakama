@@ -14,6 +14,7 @@ import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
   SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
+  TOOL_CREATION_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
 import { createSuperBotTools } from "./super-bot-tools";
 
@@ -35,6 +36,62 @@ describe("super bot create_tool", () => {
       await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
     }
+  });
+
+  test("waits for confirmation after a research turn", async () => {
+    const sessionState = new SuperBotSessionState();
+    sessionState.beginTurn(SESSION_ID);
+    let createToolCalled = false;
+    const createTool = getCreateToolTool(
+      {
+        async createTool(): Promise<ToolDetail> {
+          createToolCalled = true;
+          throw new Error("should not be called");
+        },
+      },
+      sessionState
+    );
+
+    const error = await captureError(
+      createTool.run(
+        {
+          description: "Generate media",
+          handlerConfig: { modulePath: "media.js" },
+          name: "media_generation",
+        },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error?.message).toBe(TOOL_CREATION_CONFIRMATION_MESSAGE);
+    expect(createToolCalled).toBe(false);
+  });
+
+  test("does not unlock creation for an unrelated later turn", async () => {
+    const sessionState = new SuperBotSessionState();
+    sessionState.beginTurn(SESSION_ID);
+    sessionState.beginTurn(SESSION_ID);
+    const createTool = getCreateToolTool(
+      {
+        async createTool(): Promise<ToolDetail> {
+          throw new Error("should not be called");
+        },
+      },
+      sessionState
+    );
+
+    const error = await captureError(
+      createTool.run(
+        {
+          description: "Generate media",
+          handlerConfig: { modulePath: "media.js" },
+          name: "media_generation",
+        },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error?.message).toBe(TOOL_CREATION_CONFIRMATION_MESSAGE);
   });
 
   test("defaults agent-authored tools to javascript when handlerType is omitted", async () => {
@@ -815,13 +872,20 @@ function createTestTools(
 ) {
   const sessionState = new SuperBotSessionState();
   sessionState.beginTurn(SESSION_ID);
+  sessionState.beginTurn(SESSION_ID);
+  sessionState.approveToolBuild(SESSION_ID);
   return createSuperBotTools(profileService as ProfileService, sessionState);
 }
 
-function getCreateToolTool(profileService: Pick<ProfileService, "createTool">) {
-  const tool = createTestTools(profileService).find(
-    (candidate) => candidate.name === "create_tool"
-  );
+function getCreateToolTool(
+  profileService: Pick<ProfileService, "createTool">,
+  sessionState?: SuperBotSessionState
+) {
+  const tool = (
+    sessionState
+      ? createSuperBotTools(profileService as ProfileService, sessionState)
+      : createTestTools(profileService)
+  ).find((candidate) => candidate.name === "create_tool");
 
   if (!tool) {
     throw new Error("create_tool was not registered");
