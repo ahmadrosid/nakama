@@ -3,18 +3,18 @@ title: "Google Meet"
 description: "Capture Google Meet audio in Chrome and read the live transcript in Nakama."
 ---
 
-Nakama can capture a Google Meet call from Chrome and turn the conversation into a live transcript for your team and agent.
+Nakama can listen to a Google Meet call through Chrome and turn the conversation into text you and your agent can use.
 
 ## Why use Google Meet capture
 
-The Chrome extension captures the Meet tab and your microphone locally. Nakama receives the audio, sends it to OpenAI for transcription, and keeps the transcript with the meeting record.
+The Chrome extension picks up sound from the Meet tab and your microphone on your computer. Nakama sends that sound to OpenAI, which turns it into text and saves it with the meeting.
 
 There is no bot participant joining the call.
 
 ## What you need
 
 - An organization admin who can install and enable the Google Meet plugin
-- An OpenAI API key for transcription
+- An OpenAI key for transcription. This is a secret key from OpenAI that pays for turning speech into text.
 - Google Chrome with the Nakama extension installed
 - A Google Meet call that you are allowed to record and transcribe
 
@@ -28,11 +28,11 @@ Open **System → Plugins** and install the official **Google Meet** plugin. An 
 
 ### 2. Add the OpenAI key
 
-Open **Google Meet → Settings**, enter the OpenAI API key, and save it. This key is used only for meeting transcription and is billed separately from a ChatGPT subscription.
+Open **Google Meet → Settings**, enter the OpenAI key, and save it. This key is used only for meeting transcription and is billed separately from a ChatGPT subscription.
 
 ### 3. Install the Chrome extension
 
-Ask your Nakama administrator for the Google Meet extension package. In Chrome:
+Ask your Nakama administrator for the Google Meet extension folder. This is a one-time setup in Chrome:
 
 1. Open `chrome://extensions`
 2. Turn on **Developer mode**
@@ -41,16 +41,16 @@ Ask your Nakama administrator for the Google Meet extension package. In Chrome:
 
 Keep the extension enabled while you use Google Meet.
 
-## Start a transcript
+## Start a transcription
 
 1. Open the Google Meet call in Chrome.
 2. Open **Google Meet** in Nakama.
 3. Enter the Meet link and choose the maximum meeting time.
 4. Choose **Start capture session**.
 
-Nakama sends the secure capture session to the installed extension. The extension finds the matching Meet tab and starts sending audio. If the extension is not connected to the Nakama page, copy the fallback URL shown on the page into the extension popup.
+Nakama sends a one-time private connection link to the extension. The extension finds the matching Meet tab and starts sending audio. If it does not start, copy the backup link shown on the page into the extension popup.
 
-The meeting moves through **Queued**, **Transcribing**, and **Finished**. Open the meeting in Nakama to see new transcript text while the call is running.
+The meeting moves through **Waiting**, **Transcribing**, and **Finished**. Open the meeting in Nakama to see new text while the call is running.
 
 ## Read the transcript with your agent
 
@@ -67,19 +67,19 @@ Ask questions such as:
 
 > Summarize the action items from meeting ABC.
 
-The agent only sees meetings allowed for the current user, organization, and profile.
+The agent only sees meetings that the current user is allowed to see.
 
 ## Stop and save
 
 Choose **Leave** in Nakama or stop capture from the Chrome extension. Nakama finishes the current transcript and keeps the saved meeting available under **Saved transcripts**.
 
-If Chrome closes or the connection is interrupted, Nakama keeps the transcript collected so far and marks the meeting as incomplete. It does not silently reconnect to the call.
+If Chrome closes or the connection breaks, Nakama keeps the text collected so far and marks the meeting as incomplete. It does not silently reconnect to the call.
 
 ## Remote Nakama servers
 
-If Chrome and Nakama run on different machines, ask your administrator to expose the capture connection through an authenticated HTTPS proxy that supports WebSocket connections. The capture address should use `wss://`.
+If Chrome and Nakama run on different computers, ask your administrator to connect them through a secure web address that supports a live connection. The address should start with `wss://`.
 
-Do not share capture URLs or include them in proxy logs. They contain a temporary private token for one organization and one meeting.
+Do not share the connection links. They contain a temporary private passcode for one organization and one meeting.
 
 ## Troubleshooting
 
@@ -88,15 +88,15 @@ Do not share capture URLs or include them in proxy logs. They contain a temporar
 - Make sure the Meet tab is open in Chrome.
 - Make sure the extension is enabled.
 - Refresh both the Nakama Google Meet page and the Meet tab.
-- Use the fallback capture URL in the extension popup.
+- Use the backup link in the extension popup.
 
 ### The meeting is ready but no transcript appears
 
-- Check that the OpenAI API key is saved in **Google Meet → Settings**.
-- Check that the worker is running in **System → Workers**.
+- Check that the OpenAI key is saved in **Google Meet → Settings**.
+- Check that the background service is running in **System → Workers**.
 - Confirm that Chrome allowed microphone access.
 - Confirm that participants are speaking in the Meet tab being captured.
 
 ### The extension cannot reach Nakama
 
-The Chrome extension and Nakama must be able to reach the same capture address. For remote servers, check the HTTPS proxy, WebSocket upgrades, and firewall rules with your administrator.
+The Chrome extension and Nakama must be able to reach the same connection address. For remote servers, ask your administrator to check the secure connection and firewall.
