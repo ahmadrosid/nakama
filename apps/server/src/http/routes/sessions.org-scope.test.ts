@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { deleteAttachmentBytes } from "@nakama/core/attachments/store";
 import {
   createInMemoryDatabaseAdapter,
@@ -104,6 +104,59 @@ const CROSS_ORG_ROUTES: Array<{
 ];
 
 describe("session routes are scoped to the caller's active org", () => {
+  test("remote images require browser auth and org membership, returning only image bytes", async () => {
+    const { app } = await createScenario();
+    const user = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=",
+      "base64"
+    );
+    const url =
+      "http://localhost:4310/v1/chat/images/proxy?url=https%3A%2F%2F8.8.8.8%2Fimage.png";
+    const upstream = spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(png, {
+          headers: {
+            "content-type": "image/png",
+            "set-cookie": "upstream=secret",
+          },
+        })
+    );
+    try {
+      expect((await app.fetch(new Request(url))).status).toBe(401);
+      expect(
+        (
+          await app.fetch(
+            new Request(url, {
+              headers: user.headers({}, ATTACKER_ORG),
+            })
+          )
+        ).status
+      ).toBe(404);
+      expect(upstream).not.toHaveBeenCalled();
+      const response = await app.fetch(
+        new Request(url, { headers: { Cookie: user.cookieHeader } })
+      );
+      expect(response.status).toBe(200);
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
+      expect(response.headers.get("Content-Type")).toBe("image/png");
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(response.headers.has("set-cookie")).toBe(false);
+      expect(response.headers.get("Content-Security-Policy")).toContain(
+        "img-src 'self' data: blob:"
+      );
+      expect(upstream).toHaveBeenCalledTimes(1);
+    } finally {
+      upstream.mockRestore();
+    }
+  });
+
   test("image content uses browser auth, stays org-scoped, and handles missing bytes", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
     const saved = await createAttachmentSaver(databaseAdapter, {

@@ -16,6 +16,7 @@ import type {
 } from "@nakama/core";
 import {
   AGENT_CHANNELS,
+  fetchRemoteImage,
   formatServerError,
   NakamaApiError,
   reportError,
@@ -175,6 +176,29 @@ export function registerSessionRoutes(
   const streamQuerySchema = z.object({
     stream: z.enum(["true", "false"]).optional(),
   });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getRemoteChatImage",
+      path: "/v1/chat/images/proxy",
+      request: { query: z.object({ url: z.string().url().max(8192) }) },
+      responses: {
+        200: {
+          description: "Public raster image bytes (maximum 5 MiB)",
+          content: {
+            "image/*": { schema: z.string().openapi({ format: "binary" }) },
+          },
+        },
+        400: { description: "Missing organization context or invalid URL" },
+        401: { description: "Authentication required" },
+        404: { description: "Organization not found or inaccessible" },
+        502: { description: "Image unavailable or blocked" },
+      },
+      summary: "Proxy a public HTTPS image for chat",
+      tags: ["Chat"],
+    })
+  );
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -408,6 +432,28 @@ export function registerSessionRoutes(
       tags: ["Chat"],
     })
   );
+
+  app.get("/v1/chat/images/proxy", async (c) => {
+    requireActiveOrgIdFromContext(c);
+    const url = c.req.query("url");
+    c.header("Cache-Control", "private, no-store");
+    if (!url || url.length > 8192) {
+      return c.json({ error: "Invalid image URL." }, 400);
+    }
+    try {
+      const image = await fetchRemoteImage(
+        url,
+        AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(10_000)])
+      );
+      return c.body(image.bytes, 200, {
+        "Content-Disposition": "attachment",
+        "Content-Type": image.contentType,
+        "X-Content-Type-Options": "nosniff",
+      });
+    } catch {
+      return c.json({ error: "Image unavailable." }, 502);
+    }
+  });
 
   app.get("/v1/attachments/:attachmentId/content", async (c) => {
     const attachment = await agent.readChatImageAttachment(
