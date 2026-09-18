@@ -3,6 +3,12 @@ import { mkdir, open } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from "electron";
 
+if (process.platform === "darwin") {
+  // Nakama does not use macOS media controls; avoid Chromium initializing the
+  // media session that can trigger an unrelated Apple Music permission prompt.
+  app.commandLine?.appendSwitch("disable-features", "MediaSessionService");
+}
+
 export function configureUpdates(
   updater,
   stopServer,
