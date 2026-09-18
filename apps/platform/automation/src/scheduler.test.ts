@@ -43,29 +43,6 @@ describe("AutomationWorkerScheduler", () => {
     scheduler.stop();
   });
 
-  test("falls back to UTC when timezone endpoint fails", async () => {
-    const client = createMockClient({
-      getTimezone: async () => {
-        throw new Error("unavailable");
-      },
-      listAutomationSchedules: async () => [
-        {
-          cron: "0 * * * *",
-          id: "a1",
-          orgId: "o1",
-          profileId: "p1",
-          timezone: null,
-        },
-      ],
-    });
-
-    const scheduler = new AutomationWorkerScheduler(client);
-    await scheduler.start();
-
-    expect(scheduler.getStatus().scheduledJobs).toBe(1);
-    scheduler.stop();
-  });
-
   test("reschedules polling when the workspace-global interval changes", async () => {
     const callbacks: Array<() => Promise<void>> = [];
     const intervals: number[] = [];

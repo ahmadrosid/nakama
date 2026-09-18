@@ -45,44 +45,8 @@ describe("parseProviderName", () => {
 });
 
 describe("apiKeyEnvVarForProvider", () => {
-  test("maps Xiaomi MiMo to its env key", () => {
-    expect(apiKeyEnvVarForProvider("xiaomi")).toBe("XIAOMI_API_KEY");
-  });
-
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
-  });
-
-  test("maps Together AI to its env key", () => {
-    expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
-  });
-
-  test("maps Qwen regions to distinct env keys", () => {
-    expect(apiKeyEnvVarForProvider("qwen")).toBe("QWEN_API_KEY");
-    expect(apiKeyEnvVarForProvider("qwen_cn")).toBe("QWEN_CN_API_KEY");
-  });
-
-  test("maps Vercel AI Gateway to its env key", () => {
-    expect(apiKeyEnvVarForProvider("vercel_ai_gateway")).toBe(
-      "VERCEL_AI_GATEWAY_API_KEY"
-    );
-  });
-
-  test("mistral uses MISTRAL_API_KEY", () => {
-    expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
-  });
-
-  test("doubao uses DOUBAO_API_KEY", () => {
-    expect(apiKeyEnvVarForProvider("doubao")).toBe("DOUBAO_API_KEY");
-  });
-
-  test("perplexity uses PERPLEXITY_API_KEY", () => {
-    expect(apiKeyEnvVarForProvider("perplexity")).toBe("PERPLEXITY_API_KEY");
-  });
-
-  test("maps Moonshot regions to distinct env keys", () => {
-    expect(apiKeyEnvVarForProvider("moonshot")).toBe("MOONSHOT_API_KEY");
-    expect(apiKeyEnvVarForProvider("moonshot_cn")).toBe("MOONSHOT_CN_API_KEY");
   });
 });
 

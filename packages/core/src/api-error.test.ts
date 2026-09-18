@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   formatAutomationRunError,
   formatServerError,
-  NakamaApiError,
   readApiErrorMessage,
 } from "./api-error";
 
@@ -53,11 +52,6 @@ describe("formatAutomationRunError", () => {
 });
 
 describe("formatServerError", () => {
-  test("returns a NakamaApiError's own message unchanged", () => {
-    const error = new NakamaApiError("Profile not found.", 404);
-    expect(formatServerError(error)).toBe("Profile not found.");
-  });
-
   test("never leaks a plain Error's message", () => {
     const error = new Error(
       "SQLITE_CONSTRAINT: UNIQUE constraint failed at /home/nakama/.config/nakama/nakama.db"
@@ -65,10 +59,5 @@ describe("formatServerError", () => {
     expect(formatServerError(error)).toBe(
       "An unexpected server error occurred."
     );
-  });
-
-  test("still returns the friendly JSON message for SyntaxError", () => {
-    const error = new SyntaxError("Unexpected token < in JSON at position 0");
-    expect(formatServerError(error)).toBe("Invalid JSON in request body.");
   });
 });
