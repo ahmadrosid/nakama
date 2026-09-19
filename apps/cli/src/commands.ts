@@ -149,10 +149,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { description: "show or change extended thinking", name: "/thinking" },
   { description: "toggle layout debug overlay", name: "/debug" },
   { description: "show or switch bot profile", name: "/profile" },
+  { description: "list or switch organizations", name: "/org" },
   { description: "quit", name: "/exit" },
 ];
 
 const COMMANDS_WITH_ARGS = new Set([
+  "/org",
   "/model",
   "/thinking",
   "/profile",

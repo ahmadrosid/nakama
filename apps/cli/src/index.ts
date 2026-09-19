@@ -41,6 +41,7 @@ Commands:
 
 Options:
   --server <url>          Connect to a server or prefill the login form
+  --org <id|slug>         Choose the starting organization
   --theme <dark|light>    Choose the terminal theme
   --helper, --help, -h    Show this help
 
@@ -51,6 +52,7 @@ Examples:
   nakama logout
 
 Without a command, start chat using the saved server.
+In chat, use /org to list organizations or /org <slug> to switch.
 Remote servers require HTTPS. Email and password are never saved.`);
   process.exit(0);
 }

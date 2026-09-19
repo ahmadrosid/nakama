@@ -26,6 +26,7 @@ import {
 import { formatCliDisplayPath } from "./display-path";
 import { mergeSendInput, parseImageLine } from "./image-input";
 import { createSerializedQueue, type PendingMessage } from "./message-queue";
+import { switchChatOrg } from "./org";
 import { PersistentPrompt } from "./persistent-prompt";
 import {
   type CliProfileOptions,
@@ -258,6 +259,8 @@ async function runStickyChat(
   let currentProfile = context.currentProfile;
 
   let isStreaming = false;
+  let activeCommands = 0;
+  let switchingOrg = false;
   let abortController: AbortController | null = null;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
@@ -504,6 +507,7 @@ async function runStickyChat(
   async function handleChatMessage(
     promptResult: PromptLineResult
   ): Promise<void> {
+    const messageClient = options.client;
     const line = promptResult.text.trim();
     const hasImages = Boolean(promptResult.images?.length);
 
@@ -524,6 +528,12 @@ async function runStickyChat(
       return;
     }
 
+    if (switchingOrg || messageClient !== options.client) {
+      writeOutput(
+        "Chat changed while preparing the message. Please send it again."
+      );
+      return;
+    }
     if (isStreaming && queue.length >= MAX_PENDING_MESSAGES) {
       writeOutput(
         "Pending queue is full. Wait for a response before sending again."
@@ -651,6 +661,46 @@ async function runStickyChat(
 
     if (line === "/profile" || line.startsWith("/profile ")) {
       return handleProfileCommand(line);
+    }
+
+    if (line === "/org" || line.startsWith("/org ")) {
+      if (isStreaming || queue.length > 0 || activeCommands > 1) {
+        writeOutput("Wait for the current response or command to finish.");
+        return "handled";
+      }
+      switchingOrg = true;
+      try {
+        const next = await switchChatOrg(
+          options.client,
+          line.slice("/org".length).trim(),
+          options.channel,
+          writeOutput,
+          options.codingWorkspaceRoot
+        );
+        if (next) {
+          options.client = next.client;
+          options.offline = next.offline;
+          currentProfile = next.profile;
+          currentProfileId = next.profile.id;
+          session = next.session;
+          context.onProfileChange(currentProfileId, currentProfile);
+          context.onSessionChange(session);
+          lastUserMessage = null;
+          modelsCache = null;
+          profilesCache = [];
+          renderer.clear();
+          await refreshProfilesCache();
+          await refreshModelsCache();
+          writeOutput(
+            `Organization switched. Chatting with ${currentProfile.name}.`
+          );
+        }
+      } catch (error) {
+        writeError(error);
+      } finally {
+        switchingOrg = false;
+      }
+      return "handled";
     }
 
     if (line.startsWith("/create")) {
@@ -997,6 +1047,10 @@ async function runStickyChat(
       renderer.scrollToLatest();
     },
     onSubmit: async (result) => {
+      if (switchingOrg) {
+        writeOutput("Wait for the organization switch to finish.");
+        return;
+      }
       const line = result.text.trim();
       const hasImages = Boolean(result.images?.length);
 
@@ -1005,7 +1059,13 @@ async function runStickyChat(
       }
 
       if (line.startsWith("/") || isExitCommand(line)) {
-        const outcome = await handleSlashCommand(line);
+        let outcome: "handled" | "exit" | "unhandled";
+        activeCommands += 1;
+        try {
+          outcome = await handleSlashCommand(line);
+        } finally {
+          activeCommands -= 1;
+        }
 
         if (outcome === "exit") {
           chatExit.requestExit();
@@ -1038,8 +1098,8 @@ async function runStickyChat(
 
 async function runBlockingChat(context: ChatContext): Promise<void> {
   const { options } = context;
-  const session = context.session;
-  const currentProfileId = context.currentProfileId;
+  let session = context.session;
+  let currentProfileId = context.currentProfileId;
   let processing = false;
   let busyDrops = 0;
   let modelsCache: ModelsResponse | null = null;
@@ -1185,6 +1245,33 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
           printError(error);
         }
 
+        continue;
+      }
+
+      if (line === "/org" || line.startsWith("/org ")) {
+        try {
+          const next = await switchChatOrg(
+            options.client,
+            line.slice("/org".length).trim(),
+            options.channel,
+            printLine,
+            options.codingWorkspaceRoot
+          );
+          if (next) {
+            options.client = next.client;
+            options.offline = next.offline;
+            currentProfileId = next.profile.id;
+            session = next.session;
+            context.onSessionChange(session);
+            await refreshProfilesCache();
+            await refreshModelsCache();
+            printLine(
+              `Organization switched. Chatting with ${next.profile.name}.`
+            );
+          }
+        } catch (error) {
+          printError(error);
+        }
         continue;
       }
 
