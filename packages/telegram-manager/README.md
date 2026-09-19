@@ -8,6 +8,13 @@ queries. It has no dependency on Nakama's server or cloud application.
 
 With pnpm 10, replace `<commit>` with the full commit SHA you reviewed:
 
+Allow this package's TypeScript build in your `pnpm-workspace.yaml` first:
+
+```yaml
+onlyBuiltDependencies:
+  - '@nakama/telegram-manager'
+```
+
 ```bash
 pnpm add '@nakama/telegram-manager@github:ahmadrosid/nakama#<commit>&path:/packages/telegram-manager'
 ```
