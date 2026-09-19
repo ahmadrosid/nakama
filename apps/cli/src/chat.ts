@@ -6,6 +6,7 @@ import type {
 import {
   type AgentChannel,
   formatClientError,
+  getNakamaVersion,
   type HealthResponse,
   type InitSoulResponse,
   type InitUserContextResponse,
@@ -166,6 +167,31 @@ export function formatBusyDropLine(dropCount: number): string {
   return "[busy]";
 }
 
+export function formatStartupBanner(columns: number, rows: number): string {
+  const title = `Nakama v${getNakamaVersion()}`;
+  if (columns < 30 || rows < 24) {
+    return ` ${title}\n`;
+  }
+
+  // Text rendering of apps/web/public/nakama-logo-dither.png.
+  return `
+              :
+             :+     .
+       .-:   *=   :=-
+        .*= :@= :**:
+  .:--:.  **.*=.#=.:--=--.
+    .:=+*=-=+===--+=-:.
+       .-++=-=--==--+=-:.
+  .:-=====-=+-:=-=+=..:--:.
+        .-+*:-=.#::**.
+      .-=-: .%- #-  :=-
+     ...    +-  =:    ..
+            :   :.
+
+${" ".repeat(Math.max(1, Math.floor((28 - title.length) / 2)))}${title}
+`;
+}
+
 export async function runChat(options: RunChatOptions): Promise<void> {
   const startup = await resolveStartupProfile(options.client, {
     profileId: options.profileId,
@@ -181,13 +207,15 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   const renderer = new TerminalRenderer(terminalInput);
   const useStickyInput = renderer.apply();
 
-  printLine(` Profile: ${currentProfile.name} (${currentProfile.id})`);
-  console.log("");
+  if (process.stdout.isTTY) {
+    console.log(
+      formatStartupBanner(getTerminalColumns(), process.stdout.rows ?? 24)
+    );
+  }
+  printLine(` Chatting with ${currentProfile.name}`);
 
   if (options.offline) {
-    console.log(
-      " Server has no provider configured. Chat runs in offline mode."
-    );
+    console.log(" AI is not connected yet. Chat is running offline.");
     console.log("");
   } else {
     try {
@@ -1237,12 +1265,11 @@ async function printCurrentModel(
   const active = effectiveModelState(profile, models);
 
   if (!(models.provider && active.modelId)) {
-    write("No model configured.");
+    write("No AI model selected yet.");
     return;
   }
 
-  write(`Provider: ${models.provider}`);
-  write(`Model: ${active.modelId}`);
+  write(`Powered by ${active.modelId}`);
 }
 
 export function formatStatusLines(

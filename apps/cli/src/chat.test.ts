@@ -13,6 +13,7 @@ import {
   formatBusyDropLine,
   formatErrorLines,
   formatSoulStatusLines,
+  formatStartupBanner,
   formatStatusLines,
   formatToolCall,
   isEscInterruptKey,
@@ -21,6 +22,15 @@ import {
   runCleanupThenExit,
   toolResultFailed,
 } from "./chat";
+
+test("startup logo fits its terminal and collapses on small screens", () => {
+  const lines = formatStartupBanner(30, 24).split("\n");
+  expect(lines.length).toBeGreaterThan(10);
+  expect(lines.every((line) => line.length <= 30)).toBe(true);
+  expect(lines.length).toBeLessThan(24 - 6);
+  expect(formatStartupBanner(29, 24).trim().split("\n")).toHaveLength(1);
+  expect(formatStartupBanner(80, 23).trim().split("\n")).toHaveLength(1);
+});
 
 describe("needsTrailingStreamNewline", () => {
   test("adds a newline when no chunk was rendered", () => {
