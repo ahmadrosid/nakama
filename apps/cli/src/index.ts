@@ -35,7 +35,7 @@ if (
   console.log(`Usage: nakama [command] [options]
 
 Commands:
-  login                   Enter server URL, email, and password
+  login                   Sign in and open chat
   logout                  Sign out of the selected server
   rotate-token            Rotate the local authentication token
 
@@ -150,10 +150,6 @@ try {
     }
     await saveCliServerUrl(serverUrl);
     setCliConfigScope(serverUrl, user.id);
-    if (connectionArgs.command === "login") {
-      console.log(`Connected to ${serverUrl}.`);
-      process.exit(0);
-    }
   } else {
     client = new NakamaClient({
       authToken: (await loadLocalAuthToken("cli@nakama.internal")) ?? undefined,
