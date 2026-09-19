@@ -2,6 +2,10 @@
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
+    "packages/telegram-manager": {
+      // Generated JavaScript is shipped for Git installs; analyze its TypeScript source.
+      "ignore": ["dist/**"]
+    },
     "packages/plugins/google-meet": {
       "entry": [
         "src/actions.ts",
