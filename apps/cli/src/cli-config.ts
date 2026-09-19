@@ -94,16 +94,11 @@ async function writeCliConfig(
 ): Promise<void> {
   const lines = ["# Nakama CLI"];
 
-  if (values.org_id?.trim()) {
-    lines.push(`org_id=${values.org_id.trim()}`);
-  }
-
-  if (values.profile_id?.trim()) {
-    lines.push(`profile_id=${values.profile_id.trim()}`);
-  }
-
-  if (values.server_url?.trim()) {
-    lines.push(`server_url=${values.server_url.trim()}`);
+  for (const key of CLI_CONFIG_KEYS) {
+    const value = values[key]?.trim();
+    if (value) {
+      lines.push(`${key}=${value}`);
+    }
   }
 
   lines.push("");

@@ -6,8 +6,10 @@ import {
   getCliConfigPath,
   loadSavedCliOrgId,
   loadSavedCliProfileId,
+  loadSavedCliServerUrl,
   saveCliOrgId,
   saveCliProfileId,
+  saveCliServerUrl,
   setCliConfigScope,
 } from "./cli-config";
 
@@ -81,6 +83,8 @@ describe("cli-config", () => {
       expect(await loadSavedCliOrgId()).toBe("org_123");
 
       await saveCliOrgId("org_123");
+      await saveCliServerUrl(" https://example.com ");
+      expect(await loadSavedCliServerUrl()).toBe("https://example.com");
       const raw = await readFile(path, "utf8");
       expect(raw).toContain("profile_id=super_bot");
       expect(raw).toContain("org_id=org_123");
