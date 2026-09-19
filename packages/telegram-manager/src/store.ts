@@ -30,7 +30,7 @@ export async function createTelegramPairing(
       return false;
     }
     await tx`INSERT INTO telegram_pairings (id, secret_hash, suggested_username, expires_at)
-      VALUES (${pairing.id}, ${pairing.secretHash}, ${pairing.suggestedUsername}, ${pairing.expiresAt})`;
+      VALUES (${pairing.id}, ${pairing.secretHash}, ${pairing.suggestedUsername}, ${pairing.expiresAt.toISOString()})`;
     return true;
   });
 }
