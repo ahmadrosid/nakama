@@ -49,12 +49,16 @@ export class LoginForm implements Component, Focusable {
   render(width: number): string[] {
     this.email.focused = this.focused && this.field === 0;
     const passwordMarker =
-      this.focused && this.field === 1 ? CURSOR_MARKER : "";
+      this.focused && this.field === 1
+        ? `${CURSOR_MARKER}\x1b[7m \x1b[27m`
+        : "";
     return [
       "Connect to Nakama",
       this.serverUrl,
       "",
-      ...this.email.render(Math.max(1, width)),
+      ...(this.email.focused
+        ? this.email.render(Math.max(1, width))
+        : [`Email: ${this.email.getValue()}`]),
       // Never render the password Input, even briefly or while handling paste.
       `Password: ${this.password.getValue() ? "[hidden]" : ""}${passwordMarker}`,
       "",
