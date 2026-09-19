@@ -21,6 +21,7 @@ import { printLine } from "./terminal-safe";
 
 export class LoginForm implements Component, Focusable {
   focused = true;
+  private server = new Input({ prompt: "Server URL: " });
   private email = new Input({ prompt: "Email: " });
   private password = new Input();
   private field = 0;
@@ -29,14 +30,18 @@ export class LoginForm implements Component, Focusable {
   private message = "";
 
   constructor(
-    private readonly serverUrl: string,
+    serverUrl: string,
     private readonly authenticate: (
+      serverUrl: string,
       email: string,
       password: string
     ) => Promise<unknown>,
     private readonly renderAgain: () => void,
     private readonly finish: (error?: Error) => void
-  ) {}
+  ) {
+    this.server.setValue(serverUrl);
+    this.server.handleInput("\x05");
+  }
 
   invalidate(): void {}
 
@@ -47,14 +52,17 @@ export class LoginForm implements Component, Focusable {
   }
 
   render(width: number): string[] {
-    this.email.focused = this.focused && this.field === 0;
+    this.server.focused = this.focused && this.field === 0;
+    this.email.focused = this.focused && this.field === 1;
     const passwordMarker =
-      this.focused && this.field === 1
+      this.focused && this.field === 2
         ? `${CURSOR_MARKER}\x1b[7m \x1b[27m`
         : "";
     return [
       "Connect to Nakama",
-      this.serverUrl,
+      ...(this.server.focused
+        ? this.server.render(Math.max(1, width))
+        : [`Server URL: ${this.server.getValue()}`]),
       "",
       ...(this.email.focused
         ? this.email.render(Math.max(1, width))
@@ -78,21 +86,32 @@ export class LoginForm implements Component, Focusable {
       this.finish(new Error("Login cancelled."));
     } else if (this.busy) {
       return;
-    } else if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
-      this.field = 1 - this.field;
+    } else if (matchesKey(data, "tab")) {
+      this.field = (this.field + 1) % 3;
+    } else if (matchesKey(data, "shift+tab")) {
+      this.field = (this.field + 2) % 3;
     } else if (matchesKey(data, "enter")) {
-      if (this.field === 0) {
-        this.field = 1;
+      if (this.field < 2) {
+        this.field += 1;
       } else {
         void this.submit();
       }
     } else {
-      (this.field === 0 ? this.email : this.password).handleInput(data);
+      [this.server, this.email, this.password][this.field].handleInput(data);
     }
     this.renderAgain();
   }
 
   private async submit(): Promise<void> {
+    let serverUrl: string;
+    try {
+      serverUrl = normalizeServerUrl(this.server.getValue().trim());
+    } catch {
+      this.message =
+        "Enter a valid HTTPS server URL (HTTP is allowed for localhost).";
+      this.field = 0;
+      return;
+    }
     if (!(this.email.getValue().trim() && this.password.getValue())) {
       this.message = "Enter your email and password.";
       return;
@@ -100,6 +119,7 @@ export class LoginForm implements Component, Focusable {
     this.busy = true;
     try {
       await this.authenticate(
+        serverUrl,
         this.email.getValue().trim(),
         this.password.getValue()
       );
@@ -124,6 +144,7 @@ export class LoginForm implements Component, Focusable {
 export async function promptRemoteLogin(
   serverUrl: string,
   authenticate: (
+    serverUrl: string,
     email: string,
     password: string,
     signal?: AbortSignal
@@ -152,8 +173,8 @@ export async function promptRemoteLogin(
   let pendingLogin: Promise<unknown> | undefined;
   const form = new LoginForm(
     serverUrl,
-    (email, password) => {
-      pendingLogin = authenticate(email, password, controller.signal);
+    (url, email, password) => {
+      pendingLogin = authenticate(url, email, password, controller.signal);
       return pendingLogin;
     },
     () => tui.requestRender(),
