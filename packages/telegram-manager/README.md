@@ -8,19 +8,13 @@ queries. It has no dependency on Nakama's server or cloud application.
 
 With pnpm 10, replace `<commit>` with the full commit SHA you reviewed:
 
-Allow this package's TypeScript build in your `pnpm-workspace.yaml` first:
-
-```yaml
-onlyBuiltDependencies:
-  - '@nakama/telegram-manager'
-```
-
 ```bash
 pnpm add '@nakama/telegram-manager@github:ahmadrosid/nakama#<commit>&path:/packages/telegram-manager'
 ```
 
-Import it as `@nakama/telegram-manager`. No registry account is needed. Git
-installation compiles JavaScript and declarations using Node 20+ and TypeScript.
+Import it as `@nakama/telegram-manager`. No registry account is needed. The Git
+package includes compiled JavaScript and declarations for Node 20+, so installing
+it does not run build scripts or require Bun, Yarn, or TypeScript on the host.
 npm CLI does not support this Git subfolder syntax; npm users can clone the repo
 and install this folder, or use a tarball created with `npm pack` inside it.
 
@@ -108,6 +102,7 @@ Use a disposable database; the tests clear its pairing table:
 psql "$TEST_TELEGRAM_DATABASE_URL" -f schema.sql
 TEST_TELEGRAM_DATABASE_URL=postgresql://... bun test
 npm run build
+git diff --exit-code -- dist
 npm pack --dry-run
 ```
 

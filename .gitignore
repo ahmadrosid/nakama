@@ -1,6 +1,8 @@
 node_modules
 **/node_modules
 **/dist
+# This package is installed directly from GitHub, without consumer build scripts.
+!packages/telegram-manager/dist/
 coverage
 .DS_Store
 .env
