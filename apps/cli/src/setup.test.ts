@@ -10,17 +10,24 @@ import {
   readPassword,
 } from "./setup";
 
-test("login form accepts Unicode/paste without rendering the password and clears credentials on success", async () => {
+test("login form edits the server, switches fields, and never renders the password", async () => {
   const done = Promise.withResolvers<void>();
+  let attempts = 0;
   const form = new LoginForm(
     "https://example.com",
-    async (email, password) => {
+    async (serverUrl, email, password) => {
+      attempts += 1;
+      expect(serverUrl).toBe("https://cloud.example.com");
       expect(email).toBe("person@example.com");
       expect(password).toBe("秘密🔑");
     },
     () => {},
     (error) => (error ? done.reject(error) : done.resolve())
   );
+  expect(form.render(80)[1]).toContain("https://example.com");
+  form.handleInput("\x15");
+  form.handleInput("http://cloud.example.com");
+  form.handleInput("\t");
   form.handleInput("person@example.com");
   expect(form.render(80)[3]).toContain("\x1b[7m");
   form.handleInput("\t");
@@ -34,7 +41,15 @@ test("login form accepts Unicode/paste without rendering the password and clears
   expect(form.render(80).join("\n")).not.toContain("秘密");
   expect(form.render(8).every((line) => !line.includes("秘密"))).toBe(true);
   form.handleInput("\r");
+  expect(attempts).toBe(0);
+  expect(form.render(80)[1]).toContain("\x1b[7m");
+  form.handleInput("\x15");
+  form.handleInput("https://cloud.example.com/");
+  form.handleInput("\x1b[Z");
+  expect(form.render(80)[4]).toContain("\x1b[7m");
+  form.handleInput("\r");
   await done.promise;
+  expect(attempts).toBe(1);
   expect(form.render(80).join("\n")).not.toContain("person@example.com");
 });
 

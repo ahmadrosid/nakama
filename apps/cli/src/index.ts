@@ -27,6 +27,34 @@ import {
 import { detectTheme, setTheme, type Theme } from "./styled-text";
 import { InvalidThemeArgError, parseThemeArg } from "./theme-arg";
 
+if (
+  process.argv
+    .slice(2)
+    .some((arg) => ["--helper", "--help", "-h"].includes(arg))
+) {
+  console.log(`Usage: nakama [command] [options]
+
+Commands:
+  login                   Enter server URL, email, and password
+  logout                  Sign out of the selected server
+  rotate-token            Rotate the local authentication token
+
+Options:
+  --server <url>          Connect to a server or prefill the login form
+  --theme <dark|light>    Choose the terminal theme
+  --helper, --help, -h    Show this help
+
+Examples:
+  nakama login
+  nakama login --server https://nakama.example.com
+  nakama
+  nakama logout
+
+Without a command, start chat using the saved server.
+Remote servers require HTTPS. Email and password are never saved.`);
+  process.exit(0);
+}
+
 if (isRotateTokenCommand()) {
   try {
     await runRotateToken();
@@ -77,7 +105,7 @@ try {
   ) {
     throw new Error("Login requires an interactive terminal.");
   }
-  const serverUrl = normalizeServerUrl(
+  let serverUrl = normalizeServerUrl(
     connectionArgs.serverUrl ??
       (process.env.NAKAMA_SERVER_URL?.trim() || undefined) ??
       (await loadSavedCliServerUrl()) ??
@@ -93,13 +121,22 @@ try {
       console.log("Logged out.");
       process.exit(0);
     }
-    if (connectionArgs.command === "login") {
-      await connection.logout();
-      await promptRemoteLogin(
+    const login = () =>
+      promptRemoteLogin(
         serverUrl,
-        connection.login,
+        async (url, email, password, signal) => {
+          const target = await createRemoteConnection(url);
+          signal?.throwIfAborted();
+          await target.logout();
+          signal?.throwIfAborted();
+          await target.login(email, password, signal);
+          serverUrl = url;
+          client = target.client;
+        },
         abortController.signal
       );
+    if (connectionArgs.command === "login") {
+      await login();
     }
     let user;
     try {
@@ -108,11 +145,7 @@ try {
       if (!(error instanceof NakamaApiError && error.status === 401)) {
         throw error;
       }
-      await promptRemoteLogin(
-        serverUrl,
-        connection.login,
-        abortController.signal
-      );
+      await login();
       user = await client.getMe();
     }
     await saveCliServerUrl(serverUrl);
