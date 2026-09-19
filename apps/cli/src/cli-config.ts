@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
   getUserConfigDir,
@@ -6,10 +7,33 @@ import {
   writeTextFile,
 } from "@nakama/core";
 
-const CLI_CONFIG_KEYS = new Set(["org_id", "profile_id"]);
+const CLI_CONFIG_KEYS = new Set(["org_id", "profile_id", "server_url"]);
+let configScope = "";
+
+export function setCliConfigScope(serverUrl?: string, userId?: string): void {
+  configScope =
+    serverUrl && userId
+      ? `-${createHash("sha256")
+          .update(JSON.stringify([serverUrl, userId]))
+          .digest("hex")}`
+      : "";
+}
 
 export function getCliConfigPath(): string {
-  return join(getUserConfigDir(), "cli.ini");
+  return join(getUserConfigDir(), `cli${configScope}.ini`);
+}
+
+export async function loadSavedCliServerUrl(): Promise<string | null> {
+  const values = await readCliConfigValues(join(getUserConfigDir(), "cli.ini"));
+  return values.server_url || null;
+}
+
+export async function saveCliServerUrl(serverUrl: string): Promise<void> {
+  await saveCliConfigValue(
+    "server_url",
+    serverUrl,
+    join(getUserConfigDir(), "cli.ini")
+  );
 }
 
 export async function loadSavedCliProfileId(): Promise<string | null> {
@@ -34,20 +58,26 @@ async function loadCliConfigValue(key: string): Promise<string | null> {
   return value || null;
 }
 
-async function saveCliConfigValue(key: string, value: string): Promise<void> {
+async function saveCliConfigValue(
+  key: string,
+  value: string,
+  path = getCliConfigPath()
+): Promise<void> {
   const trimmed = value.trim();
 
   if (!trimmed) {
     return;
   }
 
-  const values = await readCliConfigValues();
+  const values = await readCliConfigValues(path);
   values[key] = trimmed;
-  await writeCliConfig(values);
+  await writeCliConfig(values, path);
 }
 
-async function readCliConfigValues(): Promise<Record<string, string>> {
-  const raw = await readTextOrNull(getCliConfigPath());
+async function readCliConfigValues(
+  path = getCliConfigPath()
+): Promise<Record<string, string>> {
+  const raw = await readTextOrNull(path);
 
   if (raw === null) {
     return {};
@@ -58,7 +88,10 @@ async function readCliConfigValues(): Promise<Record<string, string>> {
   );
 }
 
-async function writeCliConfig(values: Record<string, string>): Promise<void> {
+async function writeCliConfig(
+  values: Record<string, string>,
+  path: string
+): Promise<void> {
   const lines = ["# Nakama CLI"];
 
   if (values.org_id?.trim()) {
@@ -69,9 +102,13 @@ async function writeCliConfig(values: Record<string, string>): Promise<void> {
     lines.push(`profile_id=${values.profile_id.trim()}`);
   }
 
+  if (values.server_url?.trim()) {
+    lines.push(`server_url=${values.server_url.trim()}`);
+  }
+
   lines.push("");
 
-  await writeTextFile(getCliConfigPath(), lines.join("\n"), {
+  await writeTextFile(path, lines.join("\n"), {
     ensureDir: getUserConfigDir(),
   });
 }

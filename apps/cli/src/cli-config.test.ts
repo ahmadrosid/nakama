@@ -8,6 +8,7 @@ import {
   loadSavedCliProfileId,
   saveCliOrgId,
   saveCliProfileId,
+  setCliConfigScope,
 } from "./cli-config";
 
 async function withCliConfigDir<T>(run: () => Promise<T>): Promise<T> {
@@ -27,6 +28,29 @@ async function withCliConfigDir<T>(run: () => Promise<T>): Promise<T> {
 }
 
 describe("cli-config", () => {
+  test("isolates remote preferences by server and user without storing identity", async () => {
+    await withCliConfigDir(async () => {
+      try {
+        await saveCliProfileId("local");
+        setCliConfigScope("https://one.example", "user1");
+        expect(await loadSavedCliProfileId()).toBeNull();
+        await saveCliProfileId("remote");
+        const path = getCliConfigPath();
+        expect(await readFile(path, "utf8")).toBe(
+          "# Nakama CLI\nprofile_id=remote\n"
+        );
+        setCliConfigScope("https://two.example", "user1");
+        expect(await loadSavedCliProfileId()).toBeNull();
+        setCliConfigScope("https://one.example", "user2");
+        expect(await loadSavedCliProfileId()).toBeNull();
+        setCliConfigScope("https://one.example", "user1");
+        expect(await loadSavedCliProfileId()).toBe("remote");
+      } finally {
+        setCliConfigScope();
+      }
+      expect(await loadSavedCliProfileId()).toBe("local");
+    });
+  });
   test("saves and loads profile_id", async () => {
     await withCliConfigDir(async () => {
       await saveCliProfileId("super_bot");

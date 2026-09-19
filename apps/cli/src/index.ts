@@ -1,7 +1,12 @@
-import { NakamaClient } from "@nakama/client";
+import { NakamaApiError, NakamaClient } from "@nakama/client";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { runChat, runCleanupThenExit } from "./chat";
+import {
+  loadSavedCliServerUrl,
+  saveCliServerUrl,
+  setCliConfigScope,
+} from "./cli-config";
 import { isCliVerbose } from "./display-path";
 import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { parseCliProfileArgs } from "./profile";
@@ -11,8 +16,13 @@ import {
   runRotateToken,
 } from "./rotate-token";
 import {
+  createRemoteConnection,
   ensureProviderConfiguredViaCli,
   ensureUserConfiguredViaCli,
+  isLocalServer,
+  normalizeServerUrl,
+  parseConnectionArgs,
+  promptRemoteLogin,
 } from "./setup";
 import { detectTheme, setTheme, type Theme } from "./styled-text";
 import { InvalidThemeArgError, parseThemeArg } from "./theme-arg";
@@ -60,30 +70,70 @@ const cliTheme = await resolveTheme();
 setTheme(cliTheme);
 
 try {
-  const serverUrl = resolveServerUrl();
-
-  const serverHost = new URL(serverUrl).hostname;
+  const connectionArgs = parseConnectionArgs();
   if (
-    !(
-      serverHost === "localhost" ||
-      serverHost === "127.0.0.1" ||
-      serverHost === "::1"
-    )
+    connectionArgs.command === "login" &&
+    !(process.stdin.isTTY && process.stdout.isTTY)
   ) {
-    throw new Error("Coding workspace support requires a local Nakama server.");
+    throw new Error("Login requires an interactive terminal.");
   }
-
-  const client = new NakamaClient({
-    authToken: await loadLocalAuthToken("cli@nakama.internal"),
-    baseUrl: serverUrl,
-  });
+  const serverUrl = normalizeServerUrl(
+    connectionArgs.serverUrl ??
+      (process.env.NAKAMA_SERVER_URL?.trim() || undefined) ??
+      (await loadSavedCliServerUrl()) ??
+      resolveServerUrl()
+  );
+  const remote = !isLocalServer(serverUrl) || Boolean(connectionArgs.command);
+  let client: NakamaClient;
+  if (remote) {
+    const connection = await createRemoteConnection(serverUrl);
+    client = connection.client;
+    if (connectionArgs.command === "logout") {
+      await connection.logout();
+      console.log("Logged out.");
+      process.exit(0);
+    }
+    if (connectionArgs.command === "login") {
+      await connection.logout();
+      await promptRemoteLogin(
+        serverUrl,
+        connection.login,
+        abortController.signal
+      );
+    }
+    let user;
+    try {
+      user = await client.getMe();
+    } catch (error) {
+      if (!(error instanceof NakamaApiError && error.status === 401)) {
+        throw error;
+      }
+      await promptRemoteLogin(
+        serverUrl,
+        connection.login,
+        abortController.signal
+      );
+      user = await client.getMe();
+    }
+    await saveCliServerUrl(serverUrl);
+    setCliConfigScope(serverUrl, user.id);
+    if (connectionArgs.command === "login") {
+      console.log(`Connected to ${serverUrl}.`);
+      process.exit(0);
+    }
+  } else {
+    client = new NakamaClient({
+      authToken: (await loadLocalAuthToken("cli@nakama.internal")) ?? undefined,
+      baseUrl: serverUrl,
+    });
+  }
 
   const cliOrg = parseCliOrgArgs();
   await resolveCliOrgId(client, cliOrg);
 
   let health = await client.health();
 
-  if (!health.userConfigured) {
+  if (!(remote || health.userConfigured)) {
     const created = await ensureUserConfiguredViaCli(client);
 
     if (created) {
@@ -91,7 +141,7 @@ try {
     }
   }
 
-  if (!health.providerConfigured) {
+  if (!(remote || health.providerConfigured)) {
     const configured = await ensureProviderConfiguredViaCli(client);
 
     if (configured) {
@@ -104,7 +154,7 @@ try {
   await runChat({
     channel: "cli",
     client,
-    codingWorkspaceRoot: process.cwd(),
+    codingWorkspaceRoot: remote ? undefined : process.cwd(),
     offline: !health.providerConfigured,
     profileId: cliProfile.profileId,
     signal: abortController.signal,
