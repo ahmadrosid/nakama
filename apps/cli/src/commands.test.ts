@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelsResponse, ProfileSummary } from "@nakama/core";
+import type {
+  ListUserOrgsResponse,
+  ModelsResponse,
+  ProfileSummary,
+} from "@nakama/core";
 import {
   effectiveModelState,
   formatSlashCommands,
@@ -171,4 +175,44 @@ describe("model command", () => {
     expect(closed[0]?.submitOnEnter).toBeUndefined();
     expect(open[0]?.submitOnEnter).toBe(true);
   });
+});
+
+test("org picker opens before selection and filters organizations", () => {
+  const orgs: ListUserOrgsResponse["orgs"] = [
+    {
+      createdAt: "",
+      id: "org_a",
+      name: "Acme Team",
+      role: "admin",
+      slug: "acme",
+      updatedAt: "",
+    },
+    {
+      createdAt: "",
+      id: "org_b",
+      name: "Personal",
+      role: "admin",
+      slug: "personal",
+      updatedAt: "",
+    },
+  ];
+  expect(
+    resolveSuggestions({ input: "/org", orgs })[0]?.submitOnEnter
+  ).toBeUndefined();
+  const choices = resolveSuggestions({
+    currentOrgId: "org_a",
+    input: "/org ",
+    orgs,
+  });
+  expect(choices).toHaveLength(2);
+  expect(choices[0]).toMatchObject({
+    insertValue: "/org org_a",
+    submitOnEnter: true,
+  });
+  expect(choices[0]?.description).toContain("current");
+  expect(
+    resolveSuggestions({ input: "/org TEAM", orgs }).map(
+      (choice) => choice.insertValue
+    )
+  ).toEqual(["/org org_a"]);
 });
