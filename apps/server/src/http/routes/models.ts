@@ -1917,11 +1917,11 @@ export function registerModelRoutes(
     }
   });
 
-  app.post("/v1/settings/telegram/pairing/:pairingId/cancel", (c) => {
+  app.post("/v1/settings/telegram/pairing/:pairingId/cancel", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       return json<TelegramPairingStatusResponse>(
-        agent.cancelTelegramPairing(
+        await agent.cancelTelegramPairing(
           requireActiveOrgIdFromContext(c),
           getRequestAuth(c).user.id,
           c.req.param("pairingId")

@@ -22,9 +22,35 @@ With Telegram enabled, users can:
 - send text, photos, voice notes, and supported documents
 - receive Markdown-style rich replies when Telegram accepts the formatting
 
-## Step 1: Create a bot with BotFather
+## Create a bot with a QR code
 
-Every Telegram setup starts with a bot token from `@BotFather`.
+QR setup connects your Telegram bot without copying a token from BotFather.
+An organization admin can open **Integrations → Telegram**, choose a profile,
+and select **Create with QR**.
+
+1. Scan the QR code or select **Open Telegram to Create Bot**.
+2. If Telegram prompts you, press **Start**, then create the bot with the supplied button.
+3. Keep the suggested username so Nakama can match your bot securely.
+4. Return to Nakama and select **Connect bot** once the bot is ready.
+
+The pairing expires after 10 minutes. If it expires or you change the suggested
+username, cancel and start again.
+
+### Who can access the bot?
+
+By default, QR setup uses the shared manager at **getnakama.cloud**. Its operator
+can retrieve your managed bot's token and control the bot. Nakama saves your bot
+token on your own server; normal chats go directly between that server and Telegram.
+Ending the setup session does not remove the manager's access to the bot.
+
+The manager's [source code is public](https://github.com/ahmadrosid/nakama/tree/main/packages/telegram-manager).
+Operators can inspect and host it themselves, or configure their own manager.
+Public code does not verify which version a hosted service runs. Use the manual
+BotFather setup below if you do not want to grant a shared manager access.
+
+## Step 1: Create a bot manually with BotFather
+
+For manual setup, create a bot token with `@BotFather`.
 
 1. Open Telegram and search for `@BotFather`
 2. Send `/newbot`

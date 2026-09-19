@@ -196,6 +196,18 @@
         "@types/react": "^19.3.0",
       },
     },
+    "packages/telegram-manager": {
+      "name": "@nakama/telegram-manager",
+      "version": "0.1.0",
+      "dependencies": {
+        "postgres": "^3.4.5",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@types/node": "26.3.0",
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/ui": {
       "name": "@nakama/ui",
       "dependencies": {
@@ -583,6 +595,8 @@
     "@nakama/server": ["@nakama/server@workspace:apps/server"],
 
     "@nakama/telegram": ["@nakama/telegram@workspace:apps/platform/telegram"],
+
+    "@nakama/telegram-manager": ["@nakama/telegram-manager@workspace:packages/telegram-manager"],
 
     "@nakama/ui": ["@nakama/ui@workspace:packages/ui"],
 
@@ -2223,6 +2237,8 @@
     "points-on-path": ["points-on-path@0.2.1", "", { "dependencies": { "path-data-parser": "0.1.0", "points-on-curve": "0.2.0" } }, "sha512-25ClnWWuw7JbWZcgqY/gJ4FQWadKxGWk+3kR/7kD0tCaDtPPMj7oHu2ToLaVhfpnHrZzYby2w6tUA0eOIuUg8g=="],
 
     "postcss": ["postcss@8.5.26", "", { "dependencies": { "nanoid": "^3.3.17", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ=="],
+
+    "postgres": ["postgres@3.4.9", "", {}, "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="],
 
     "postject": ["postject@1.0.0-alpha.6", "", { "dependencies": { "commander": "^9.4.0" }, "bin": { "postject": "dist/cli.js" } }, "sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A=="],
 

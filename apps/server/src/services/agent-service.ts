@@ -1210,7 +1210,7 @@ export class AgentService {
     orgId: string,
     userId: string,
     pairingId: string
-  ): TelegramPairingStatusResponse {
+  ): Promise<TelegramPairingStatusResponse> {
     return telegramManagedBotPairing.cancel(pairingId, orgId, userId);
   }
 

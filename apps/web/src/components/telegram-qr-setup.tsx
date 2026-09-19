@@ -85,7 +85,8 @@ export function TelegramQrSetup({
           <div>
             <p className="font-medium text-sm">Create with QR</p>
             <p className="text-muted-foreground text-xs">
-              Create a bot in Telegram.
+              The manager can access your bot token. By default, this is
+              getnakama.cloud. Use manual setup to avoid manager access.
             </p>
           </div>
           <Button
@@ -152,6 +153,10 @@ export function TelegramQrSetup({
           >
             Open Telegram to Create Bot
           </Button>
+          <p className="text-muted-foreground text-xs">
+            If prompted, press Start, then create your bot. Keep the suggested
+            username.
+          </p>
         </>
       ) : null}
       {ready ? (
