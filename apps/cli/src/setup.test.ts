@@ -22,6 +22,13 @@ test("login form accepts Unicode/paste without rendering the password and clears
     (error) => (error ? done.reject(error) : done.resolve())
   );
   form.handleInput("person@example.com");
+  expect(form.render(80)[3]).toContain("\x1b[7m");
+  form.handleInput("\t");
+  expect(form.render(80)[3]).not.toContain("\x1b[7m");
+  expect(form.render(80)[4]).toContain("\x1b[7m");
+  form.handleInput("\x1b[Z");
+  expect(form.render(80)[3]).toContain("\x1b[7m");
+  expect(form.render(80)[4]).not.toContain("\x1b[7m");
   form.handleInput("\t");
   form.handleInput("\x1b[200~秘密🔑\x1b[201~");
   expect(form.render(80).join("\n")).not.toContain("秘密");
