@@ -38,6 +38,7 @@ export async function switchChatOrg(
   return {
     client: nextClient,
     offline: !health.providerConfigured,
+    orgId,
     profile,
     session,
   };

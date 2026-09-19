@@ -1,5 +1,6 @@
 import uFuzzy from "@leeoniya/ufuzzy";
 import type {
+  ListUserOrgsResponse,
   ModelsResponse,
   ProfileSummary,
   ProviderModelOption,
@@ -171,10 +172,12 @@ const commandSearch = new uFuzzy({
 
 export interface ResolveSuggestionsOptions {
   currentModel?: string | null;
+  currentOrgId?: string | null;
   currentProfileId?: string | null;
   currentProviderId?: string | null;
   input: string;
   models?: ProviderModelOption[];
+  orgs?: ListUserOrgsResponse["orgs"];
   profiles?: ProfileSummary[];
 }
 
@@ -182,6 +185,8 @@ export function resolveSuggestions(
   options: ResolveSuggestionsOptions
 ): PromptSuggestion[] {
   const {
+    orgs = [],
+    currentOrgId = null,
     input,
     models = [],
     currentModel = null,
@@ -192,6 +197,23 @@ export function resolveSuggestions(
 
   if (!input.startsWith("/")) {
     return [];
+  }
+
+  const orgMatch = input.match(/^\/org(?:\s+(.*))?$/);
+  if (orgMatch) {
+    const query = (orgMatch[1] ?? "").trim().toLowerCase();
+    return orgs
+      .filter((org) =>
+        [org.id, org.slug, org.name].some((value) =>
+          value.toLowerCase().includes(query)
+        )
+      )
+      .map((org) => ({
+        description: `${org.slug}${org.id === currentOrgId ? " (current)" : ""}`,
+        insertValue: `/org ${org.id}`,
+        label: org.name,
+        submitOnEnter: orgMatch[1] === undefined ? undefined : true,
+      }));
   }
 
   const profileMatch = input.match(/^\/profile(?:\s+(.*))?$/);

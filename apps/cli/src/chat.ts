@@ -9,13 +9,14 @@ import {
   type HealthResponse,
   type InitSoulResponse,
   type InitUserContextResponse,
+  type ListUserOrgsResponse,
   type ModelsResponse,
   type ProfileSummary,
   type SendMessageInput,
   type SoulStatusResponse,
   type UserContextStatusResponse,
 } from "@nakama/core";
-import { saveCliProfileId } from "./cli-config";
+import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
   formatSlashCommands,
@@ -261,6 +262,13 @@ async function runStickyChat(
   let isStreaming = false;
   let activeCommands = 0;
   let switchingOrg = false;
+  let orgsCache: ListUserOrgsResponse["orgs"] = [];
+  let currentOrgId = await loadSavedCliOrgId();
+  try {
+    orgsCache = (await options.client.listUserOrgs()).orgs;
+  } catch {
+    // Keep chat available if the organization list cannot be loaded.
+  }
   let abortController: AbortController | null = null;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
@@ -678,6 +686,7 @@ async function runStickyChat(
           options.codingWorkspaceRoot
         );
         if (next) {
+          currentOrgId = next.orgId;
           options.client = next.client;
           options.offline = next.offline;
           currentProfile = next.profile;
@@ -998,10 +1007,12 @@ async function runStickyChat(
 
       return resolveSuggestions({
         currentModel: active.modelId,
+        currentOrgId,
         currentProfileId,
         currentProviderId: active.providerId,
         input,
         models: modelsCache?.models,
+        orgs: orgsCache,
         profiles: profilesCache,
       });
     },
