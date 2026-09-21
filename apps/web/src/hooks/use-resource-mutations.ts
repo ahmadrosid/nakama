@@ -5,6 +5,7 @@ import type {
   DocumentAttachment,
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
+  SessionSummary,
   SoulStackFiles,
   UpdateProfileRequest,
   UpdateSessionRequest,
@@ -18,10 +19,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useRunningTurnsStore } from "@/context/running-turns-store";
 import { useAuth } from "@/context/use-auth";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+import { sessionListPollInterval } from "@/lib/session-list";
 
 const EMPTY_USER_CONTEXT: UserContextStatusResponse = {
   active: false,
@@ -508,17 +511,36 @@ export function useUnassignSkillMutation() {
 }
 
 export function useHistorySessionsQuery(profileId: string) {
+  const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
+  // Turns are only ever started from the web chat page, so the other channels
+  // have no reason to poll along with it.
+  const localTurn = runningSessionIds.length > 0;
+
   const results = useQueries({
     queries: HISTORY_SESSION_CHANNELS.map((channel) => ({
       enabled: Boolean(profileId),
       queryFn: async () =>
         (await client.listSessions(profileId, channel)).sessions,
       queryKey: queryKeys.sessions(profileId, channel),
+      // A title is written after the turn returns and a turn ends without
+      // telling anyone, so the list has to look again. Gated per channel, so a
+      // quiet list makes no requests at all.
+      refetchInterval: (query: { state: { data?: SessionSummary[] } }) =>
+        sessionListPollInterval(query.state.data, {
+          localTurn: channel === "web" && localTurn,
+        }),
     })),
   });
 
   const sessions = results
     .flatMap((result) => result.data ?? [])
+    // The server answers from its own registry, which this tab can be ahead of
+    // for the moment between starting a turn and the list catching up.
+    .map((session) =>
+      session.active || !runningSessionIds.includes(session.id)
+        ? session
+        : { ...session, active: true }
+    )
     .sort(
       (left, right) =>
         Number(right.pinned) - Number(left.pinned) ||
