@@ -72,7 +72,10 @@ bun run dev:server
 
 ### Docker
 
-You can also run Nakama with Docker.
+You can also run Nakama with Docker. It runs as one container and needs about
+200 MB idle, so 1 vCPU and 1 GB is enough for the server on its own. See
+[Requirements](https://ahmadrosid.github.io/nakama/docker#requirements) before
+enabling channel workers.
 
 **Prebuilt image (fastest):**
 

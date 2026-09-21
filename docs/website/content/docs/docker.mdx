@@ -3,6 +3,34 @@ title: "Docker"
 description: "Run Nakama in a single Docker container with persistent data volumes."
 ---
 
+## Requirements
+
+One container, one process tree. Measured on `ghcr.io/ahmadrosid/nakama:latest`
+(v0.4.20) with no LLM provider and no channel workers:
+
+| | |
+| --- | --- |
+| Image on disk | 734 MB |
+| Memory, idle | ~200 MB |
+| Memory, serving chat | ~240 MB |
+| Memory, automation worker also running | ~247 MB |
+| Boot to `/health` | 3 to 5 seconds |
+| Data directory on first boot | 1.2 MB |
+
+It starts and serves on **1 vCPU and 1 GB**. It also starts under a 512 MB cap,
+using 221 MB, but that leaves nothing for the rest of the box.
+
+Three things raise the figure and are not in the table:
+
+- **Channel workers.** Telegram, WhatsApp, and Discord each run as their own
+  process next to the server. WhatsApp carries Baileys and libsignal and is the
+  heaviest of the three. Size for them separately if you enable them.
+- **A configured provider.** The numbers above come from offline mode, so no
+  model traffic passed through the container.
+- **The MicroSandbox bash backend**, which needs a working hypervisor at
+  `/dev/kvm`. Most small VPS plans do not expose it. See
+  [MicroSandbox bash backend](#optional-microsandbox-bash-backend).
+
 ## Quick run
 
 Pull the prebuilt image and start Nakama:
