@@ -172,10 +172,12 @@ function RecentChats() {
           aria-current={location.pathname === href ? "page" : undefined}
           className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 transition-[padding] group-focus-within:pr-24 group-hover:pr-24"
           data-active={location.pathname === href || undefined}
-          title={title}
+          title={session.active ? `${title} (still responding)` : title}
           to={href}
         >
-          <span className="truncate">{title}</span>
+          <span className={cn("truncate", session.active && "ai-rainbow-text")}>
+            {title}
+          </span>
         </Link>
         <div className="absolute right-1 flex translate-x-2 items-center opacity-0 transition-[opacity,transform] group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:opacity-100">
           <Button
