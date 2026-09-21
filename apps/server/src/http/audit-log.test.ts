@@ -17,6 +17,8 @@ describe("audit event coverage", () => {
     ["POST", "/v1/auth/logout", "auth.logout"],
     ["POST", "/v1/auth/change-password", "auth.password_change"],
     ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
+    ["POST", "/v1/auth/active-org", "auth.active_org"],
+    ["POST", "/v1/auth/setup/import/restore", "data.import"],
     ["POST", "/v1/orgs/org_1/invites", "invite.create"],
     ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
     ["PUT", "/v1/settings/email", "settings.update"],
@@ -24,9 +26,82 @@ describe("audit event coverage", () => {
     ["DELETE", "/v1/profiles/profile_1", "profile.delete"],
     ["GET", "/v1/profiles/profile_1/pack/export", "profile.export"],
     ["POST", "/v1/platform/data/import/restore", "data.import"],
+    ["POST", "/v1/platform/plugins/releases", "plugin.release_install"],
+    ["POST", "/v1/profiles/profile_1/tools", "profile.tools.create"],
+    ["DELETE", "/v1/profiles/profile_1/tools/tool_1", "profile.tools.delete"],
+    ["POST", "/v1/profiles/profile_1/mcp-servers", "profile.mcp_server.create"],
+    [
+      "DELETE",
+      "/v1/profiles/profile_1/mcp-servers/mcp_1",
+      "profile.mcp_server.delete",
+    ],
+    ["POST", "/v1/profiles/profile_1/skills", "profile.skills.create"],
+    [
+      "DELETE",
+      "/v1/profiles/profile_1/skills/skill_1",
+      "profile.skills.delete",
+    ],
+    ["PUT", "/v1/profiles/profile_1/soul/files/USER.md", "profile.soul_update"],
     ["DELETE", "/v1/sessions/session_1", "session.revoke"],
   ])("classifies %s %s", (method, path, action) => {
     expect(describeAuditEvent(method, path)?.action).toBe(action);
+  });
+
+  test("covers security mutations registered in the real route table", () => {
+    const { app } = createMinimalHonoApp();
+    const routes = app.routes.map((route) => ({
+      method: route.method,
+      path: route.path,
+    }));
+    const expected = [
+      [
+        "POST",
+        "/v1/auth/setup/import/restore",
+        "/v1/auth/setup/import/restore",
+      ],
+      ["POST", "/v1/auth/active-org", "/v1/auth/active-org"],
+      [
+        "POST",
+        "/v1/platform/plugins/releases",
+        "/v1/platform/plugins/releases",
+      ],
+      ["POST", "/v1/profiles/:profileId/tools", "/v1/profiles/profile_1/tools"],
+      [
+        "DELETE",
+        "/v1/profiles/:profileId/tools/:toolId",
+        "/v1/profiles/profile_1/tools/tool_1",
+      ],
+      [
+        "POST",
+        "/v1/profiles/:profileId/mcp-servers",
+        "/v1/profiles/profile_1/mcp-servers",
+      ],
+      [
+        "DELETE",
+        "/v1/profiles/:profileId/mcp-servers/:serverId",
+        "/v1/profiles/profile_1/mcp-servers/server_1",
+      ],
+      [
+        "POST",
+        "/v1/profiles/:profileId/skills",
+        "/v1/profiles/profile_1/skills",
+      ],
+      [
+        "DELETE",
+        "/v1/profiles/:profileId/skills/:skillId",
+        "/v1/profiles/profile_1/skills/skill_1",
+      ],
+      [
+        "PUT",
+        "/v1/profiles/:profileId/soul/files/:fileKey",
+        "/v1/profiles/profile_1/soul/files/USER.md",
+      ],
+    ] as const;
+
+    for (const [method, routePath, samplePath] of expected) {
+      expect(routes).toContainEqual({ method, path: routePath });
+      expect(describeAuditEvent(method, samplePath)).not.toBeNull();
+    }
   });
 });
 
@@ -54,6 +129,26 @@ describe("audit event API", () => {
     const created = (await createResponse.json()) as {
       organization: { id: string };
     };
+
+    const failedActiveOrg = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({}),
+        headers: {
+          ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    expect(failedActiveOrg.status).toBe(400);
+    expect(
+      await databaseAdapter.listAuditEvents({ action: "auth.active_org" })
+    ).toEqual([
+      expect.objectContaining({
+        action: "auth.active_org",
+        metadata: { outcome: "failure", status: 400 },
+      }),
+    ]);
 
     const failedLogin = await app.fetch(
       new Request("http://localhost:4310/v1/auth/login", {

@@ -16,11 +16,17 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
   ["POST /v1/auth/login", event("auth.login", "user")],
   ["POST /v1/auth/logout", event("auth.logout", "session")],
   ["POST /v1/auth/orgs", event("organization.create", "organization")],
+  ["POST /v1/auth/active-org", event("auth.active_org", "organization")],
   ["POST /v1/auth/setup", event("auth.setup", "user")],
+  ["POST /v1/auth/setup/import/restore", event("data.import", "installation")],
   ["GET /v1/platform/data/export", event("data.export", "installation")],
   [
     "POST /v1/platform/data/import/restore",
     event("data.import", "installation"),
+  ],
+  [
+    "POST /v1/platform/plugins/releases",
+    event("plugin.release_install", "plugin"),
   ],
   ["POST /v1/profiles/pack/import", event("profile.import", "profile")],
 ]);
@@ -139,6 +145,23 @@ export function describeAuditEvent(
     return event("profile.create", "profile");
   }
 
+  match = pathname.match(
+    /^\/v1\/profiles\/([^/]+)\/(tools|mcp-servers|skills)(?:\/([^/]+))?$/
+  );
+  if (match && (method === "POST" || method === "DELETE")) {
+    const resource = match[2] === "mcp-servers" ? "mcp_server" : match[2];
+    return event(
+      `profile.${resource}.${method === "POST" ? "create" : "delete"}`,
+      resource,
+      match[3] ?? match[1]
+    );
+  }
+
+  match = pathname.match(/^\/v1\/profiles\/([^/]+)\/soul\/files\/([^/]+)$/);
+  if (match && method === "PUT") {
+    return event("profile.soul_update", "profile", match[1]);
+  }
+
   match = pathname.match(/^\/v1\/profiles\/([^/]+)\/pack\/export$/);
   if (match && method === "GET") {
     return event("profile.export", "profile", match[1]);
@@ -170,10 +193,6 @@ export function createAuditLogMiddleware(
     await next();
 
     const status = c.res.status;
-    if (status >= 400 && descriptor.action !== "auth.login") {
-      return;
-    }
-
     const auth = c.get("auth");
     const responseIdentity = await resolveResponseIdentity(c.res);
     const responseUserId = responseIdentity.email
