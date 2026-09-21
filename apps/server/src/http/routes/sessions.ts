@@ -73,6 +73,7 @@ export function registerSessionRoutes(
     .openapi("CreateSessionResponse");
   const sessionSummarySchema = z
     .object({
+      active: z.boolean().optional(),
       channel: agentChannelSchema,
       createdAt: z.string().optional(),
       id: z.string(),
