@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { readEnvValue } from "./config";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
 import { maskTrailingSecret } from "./secret-mask";
 import { getUserConfigDir } from "./user-config";
@@ -33,19 +34,23 @@ export function composioUserId(userId: string): string {
 }
 
 export function resolveComposioApiKey(
-  file: ComposioConfigFile | null | undefined
+  file: ComposioConfigFile | null | undefined,
+  env: Record<string, string | undefined> = process.env
 ): string {
-  return file?.apiKey?.trim() || "";
+  return readEnvValue(env, "COMPOSIO_API_KEY") || file?.apiKey?.trim() || "";
 }
 
 export function isComposioConfigured(
-  file?: ComposioConfigFile | null
+  file?: ComposioConfigFile | null,
+  env: Record<string, string | undefined> = process.env
 ): boolean {
-  return Boolean(resolveComposioApiKey(file));
+  return Boolean(resolveComposioApiKey(file, env));
 }
 
-export async function isComposioConfiguredAsync(): Promise<boolean> {
-  return isComposioConfigured(await loadComposioConfigFile());
+export async function isComposioConfiguredAsync(
+  env: Record<string, string | undefined> = process.env
+): Promise<boolean> {
+  return isComposioConfigured(await loadComposioConfigFile(), env);
 }
 
 export async function loadComposioConfigFile(): Promise<ComposioConfigFile | null> {
@@ -66,9 +71,12 @@ export async function loadComposioConfigFile(): Promise<ComposioConfigFile | nul
 }
 
 export function toComposioSettingsPublic(
-  file: ComposioConfigFile | null
+  file: ComposioConfigFile | null,
+  env: Record<string, string | undefined> = process.env
 ): ComposioSettingsPublic {
-  if (!file) {
+  const apiKey = resolveComposioApiKey(file, env);
+
+  if (!apiKey) {
     return {
       apiKeyMasked: null,
       configured: false,
@@ -76,13 +84,15 @@ export function toComposioSettingsPublic(
   }
 
   return {
-    apiKeyMasked: maskTrailingSecret(file.apiKey),
-    configured: Boolean(file.apiKey.trim()),
+    apiKeyMasked: maskTrailingSecret(apiKey),
+    configured: true,
   };
 }
 
-export async function loadComposioSettingsPublic(): Promise<ComposioSettingsPublic> {
-  return toComposioSettingsPublic(await loadComposioConfigFile());
+export async function loadComposioSettingsPublic(
+  env: Record<string, string | undefined> = process.env
+): Promise<ComposioSettingsPublic> {
+  return toComposioSettingsPublic(await loadComposioConfigFile(), env);
 }
 
 async function writeComposioConfigFile(

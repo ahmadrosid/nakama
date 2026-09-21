@@ -32,6 +32,14 @@ Take the **project API key**. Composio also has an *MCP consumer key* that start
 
 Nakama checks the key against Composio right then. A wrong key fails on the spot with the reason, so you never have to wonder whether it took. A good one turns the badge in the corner to connected.
 
+For a container or secrets manager, keep the key outside Nakama's data directory. Mount it as a readable file and set:
+
+```sh
+COMPOSIO_API_KEY_FILE=/run/secrets/composio_api_key
+```
+
+You can also set `COMPOSIO_API_KEY` directly. The direct value takes priority over the mounted file, and either one takes priority over a key saved through **Integrations**.
+
 **3. Enable the app you want.** As an org admin, find the app and press **Enable**. This decides what your organisation is allowed to use. It does not touch anyone's account yet.
 
 The list opens on the apps teams ask for most. If yours is not there, search for it, or press **Show all 200 apps**.
@@ -77,7 +85,7 @@ Disabling an app for the organisation stops it for everybody at once. Disconnect
 For anyone who wants the mechanics rather than the steps.
 
 - Nakama talks to Composio through the `@composio/core` SDK, and the agent reaches the tools over an MCP session that Composio hosts.
-- The API key is stored as `api_key` in `~/.nakama/composio/config.ini` on the server.
+- An API key saved through **Integrations** is stored as `api_key` in `~/.nakama/composio/config.ini` on the server. `COMPOSIO_API_KEY` and `COMPOSIO_API_KEY_FILE` keep it outside that file.
 - Nakama creates the Composio auth config for a toolkit the first time somebody connects it, which is why the Google Cloud project and consent screen walkthrough in Composio's own documentation does not apply here.
 - An agent never sees hundreds of tools at once. It gets two, `composio__search_actions` to find an action and `composio__invoke_action` to run it, so the prompt stays the same size no matter how large the toolkit is. When an account is not connected it also gets `composio__connect_account`, which produces a sign-in link the agent can paste into the reply.
 - Each member's connection lives in `composio_user_connections`, and the Composio user id is `nakama:user:{userId}`. Web chat resolves tools against the connection of the person talking. On Telegram, WhatsApp, Discord, and CLI, it uses the connection of the earliest org admin.
