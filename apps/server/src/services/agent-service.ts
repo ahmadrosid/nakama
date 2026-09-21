@@ -2239,6 +2239,7 @@ export class AgentService {
 
     return {
       sessions: sessions.map((session) => ({
+        active: sessionTurnRegistry.isActive(session.id),
         channel: parseAgentChannel(session.channel) ?? channel,
         createdAt: session.createdAt,
         id: session.id,

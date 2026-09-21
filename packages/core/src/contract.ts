@@ -1042,6 +1042,8 @@ export interface SessionStatusResponse {
 }
 
 export interface SessionSummary {
+  /** True while a turn is streaming for this session on the serving process. */
+  active: boolean;
   channel: AgentChannel;
   createdAt: string;
   id: string;
