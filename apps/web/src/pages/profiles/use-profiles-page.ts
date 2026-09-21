@@ -886,7 +886,6 @@ export function useProfilesPage() {
       return;
     }
 
-    // Confirmation lives in SkillAssignPicker — window.confirm cannot run while that Dialog is open.
     setError(null);
 
     try {
@@ -1048,11 +1047,7 @@ export function useProfilesPage() {
 
     setError(null);
 
-    try {
-      await deleteAvatarMutation.mutateAsync(selectedId);
-    } catch (err) {
-      setError(formatError(err));
-    }
+    await deleteAvatarMutation.mutateAsync(selectedId);
   }
 
   function handleCreateOpenChange(open: boolean) {

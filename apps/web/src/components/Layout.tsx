@@ -1,7 +1,9 @@
+import { Button } from "@nakama/ui/button";
 import { TooltipProvider } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
+import { ArrowLeft02Icon } from "hugeicons-react";
 import { useMemo } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
@@ -9,6 +11,7 @@ import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { useAppContext } from "@/context/use-app-context";
 import { useOrgPlugins } from "@/hooks/use-plugins";
+import { useHistorySessionsQuery } from "@/hooks/use-resource-mutations";
 import {
   enabledPluginNavEntries,
   findNavItem,
@@ -16,6 +19,7 @@ import {
   type PageId,
   pageIdFromPath,
   pluginIdFromPath,
+  SIDEBAR_PAGE_IDS,
 } from "@/lib/navigation";
 
 export function Layout() {
@@ -34,7 +38,14 @@ export function Layout() {
           className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
           data-app-shell-content=""
         >
-          <AppShellHeader label={shell.headerLabel} page={shell.page} />
+          <AppShellHeader
+            hideDesktop={
+              shell.pathname === PAGE_PATHS.profiles ||
+              shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`)
+            }
+            label={shell.headerLabel}
+            page={shell.page}
+          />
           <AppShellError error={shell.error} />
           <main className={appShellMainClassName(shell.page, shell.pathname)}>
             <RouteBoundary resetKey={shell.pathname}>
@@ -52,6 +63,13 @@ function useAppShell() {
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const { error } = useAppContext();
+  const chatRoute = useMatch("/chat/:profileId/:sessionId");
+  const { data: sessions } = useHistorySessionsQuery(
+    chatRoute?.params.profileId ?? ""
+  );
+  const chatTitle = sessions
+    .find((session) => session.id === chatRoute?.params.sessionId)
+    ?.title?.trim();
 
   const { data: orgPlugins = [] } = useOrgPlugins();
   const pluginNav = useMemo(
@@ -66,10 +84,11 @@ function useAppShell() {
   return {
     error,
     headerLabel:
-      activePlugin?.label ??
-      findNavItem(page)?.label ??
-      activePluginId ??
-      undefined,
+      (page === "chat" ? chatTitle : undefined) ||
+      (activePlugin?.label ??
+        findNavItem(page)?.label ??
+        activePluginId ??
+        undefined),
     page,
     pathname: location.pathname,
   };
@@ -81,6 +100,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
     page === "automations" ||
     page === "files" ||
     page === "plugins" ||
+    pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) ||
     pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
   );
 }
@@ -98,13 +118,21 @@ function appShellMainClassName(page: PageId, pathname: string): string {
 }
 
 function AppShellHeader({
+  hideDesktop,
   label,
   page,
 }: {
+  hideDesktop: boolean;
   label: string | undefined;
   page: PageId;
 }) {
-  const hideTitle = page === "soul" || page === "profiles";
+  const hideTitle = page === "soul";
+  const showCustomizeBack =
+    page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
+  const backLabel =
+    page === "customize" ? "Back to Chat" : "Back to Control center";
+  const backPath =
+    page === "customize" ? PAGE_PATHS.chat : PAGE_PATHS.customize;
 
   return (
     <header
@@ -113,14 +141,33 @@ function AppShellHeader({
         // Standalone on iOS the shell owns the status bar, so the bar grows by
         // the top inset and paints its own background under the notch.
         "h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
-        // Chat gives its whole column to the conversation on desktop; on a
-        // phone the bar is the only way to reach navigation.
-        page === "chat" && "sm:hidden"
+        // Chat uses the full desktop column; phones still need the header
+        // to reach navigation.
+        (page === "chat" || hideDesktop) && "sm:hidden"
       )}
     >
       <MobileNavDrawer className="sm:hidden" />
+      {(showCustomizeBack || page === "customize") && (
+        <Button
+          aria-label={backLabel}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          nativeButton={false}
+          render={<Link to={backPath} />}
+          size="icon-sm"
+          title={backLabel}
+          variant="ghost"
+        >
+          <ArrowLeft02Icon
+            aria-hidden="true"
+            className="size-4"
+            strokeWidth={1.75}
+          />
+        </Button>
+      )}
       {hideTitle ? null : (
-        <h1 className="type-brand min-w-0 truncate">{label}</h1>
+        <h1 className="min-w-0 truncate font-normal text-base text-foreground tracking-tight">
+          {label}
+        </h1>
       )}
       <div
         className={cn(

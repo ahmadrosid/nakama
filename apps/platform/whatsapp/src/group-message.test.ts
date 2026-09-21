@@ -96,13 +96,13 @@ describe("group-message helpers", () => {
     ).toEqual({ reason: "missing-bot-info", shouldHandle: false });
   });
 
-  test("extraJidsFromGroupParticipants maps a group LID to the phone JID", () => {
+  test.each(["jid", "phoneNumber"])("maps a group LID using %s", (field) => {
     expect(
       extraJidsFromGroupParticipants(
         [
           {
             id: "104784384290844@lid",
-            jid: "6281352311912@s.whatsapp.net",
+            [field]: "6281352311912@s.whatsapp.net",
           },
         ],
         ["104784384290844@lid"]

@@ -227,7 +227,7 @@ export function buildLlmsTxt(pages: string[]) {
     {
       page: "cli.md",
       topics:
-        "CLI, terminal, dev:cli, slash commands, bun run dev:cli, launch codex claude opencode",
+        "CLI, terminal, cli, slash commands, bun run cli, launch codex claude opencode",
     },
     {
       page: "docs/index.md",
@@ -301,7 +301,7 @@ export function buildLlmsTxt(pages: string[]) {
     },
     {
       page: "coding-agent.md",
-      topics: "coding agent, Codex, Claude Code, OpenCode, dev:cli launch",
+      topics: "coding agent, Codex, Claude Code, OpenCode, cli launch",
     },
     {
       page: "agent-browser.md",

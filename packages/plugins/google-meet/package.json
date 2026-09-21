@@ -1,0 +1,23 @@
+{
+  "name": "@nakama/plugin-google-meet",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "nakama.plugin.json",
+    "actions",
+    "workers",
+    "ui",
+    "skills",
+    "extension"
+  ],
+  "scripts": {
+    "build": "bun build src/actions.ts --outfile actions/actions.js --target bun && bun build src/worker.ts --outfile workers/meet.js --target bun && bun build src/ui.tsx --outfile ui/app.js --target browser",
+    "test": "bun test src"
+  },
+  "devDependencies": {
+    "@hugeicons/core-free-icons": "3.3.0",
+    "@nakama/core": "workspace:*",
+    "@nakama/ui": "workspace:*",
+    "@types/react": "^19.3.0"
+  }
+}

@@ -1,46 +1,28 @@
-import {
-  Coins01Icon,
-  CubeIcon,
-  LayoutGridIcon,
-  Plug01Icon,
-} from "hugeicons-react";
+import { PAGE_PATHS } from "@/lib/navigation";
 
-export const SYSTEM_TABS = [
-  { icon: LayoutGridIcon, id: "tools" as const, label: "Tools" },
-  { icon: CubeIcon, id: "plugins" as const, label: "Plugins" },
-  { icon: Coins01Icon, id: "usage" as const, label: "Usage" },
-  { icon: Plug01Icon, id: "mcp" as const, label: "MCP" },
-] as const;
-
-export type SystemTabId = (typeof SYSTEM_TABS)[number]["id"];
-
-export function resolveSystemTab(
-  value: string | null,
+export function legacySystemDestination(
+  searchParams: URLSearchParams,
   isPlatformAdmin: boolean
-): SystemTabId {
-  if (value === "usage") {
-    return "usage";
+): string {
+  const next = new URLSearchParams(searchParams);
+  const tab = next.get("tab");
+  next.delete("tab");
+  let path: string = PAGE_PATHS.tools;
+  if (tab === "mcp" && isPlatformAdmin) {
+    path = PAGE_PATHS.mcp;
   }
-
-  if (value === "plugins") {
-    return "plugins";
+  if (tab === "usage") {
+    path = PAGE_PATHS.usage;
   }
-
-  if (!isPlatformAdmin) {
-    return "tools";
+  if (tab === "plugins") {
+    path = PAGE_PATHS["plugin-management"];
   }
-
-  if (value === "mcp") {
-    return value;
+  if (tab === "status") {
+    path = PAGE_PATHS.workers;
   }
-
-  return "tools";
-}
-
-export function visibleSystemTabs(isPlatformAdmin: boolean) {
-  if (isPlatformAdmin) {
-    return SYSTEM_TABS;
+  if (tab === "organization") {
+    path = PAGE_PATHS.organization;
   }
-
-  return SYSTEM_TABS.filter((item) => item.id !== "mcp");
+  const query = next.toString();
+  return query ? `${path}?${query}` : path;
 }

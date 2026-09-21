@@ -1,5 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ToolContext } from "@nakama/core";
+import {
+  attachSharedKnowledgeBaseDocument,
+  uploadKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { OrgMemoryService } from "../services/org-memory-service";
 import { createOrgMemoryTools } from "./org-memory-tools";
@@ -85,6 +93,119 @@ describe("org memory tools", () => {
     await expect(
       proposeTool.run({ bullet: "fact" }, context("org_a", "viewer"))
     ).rejects.toThrow("Viewers cannot access org memory.");
+  });
+
+  describe("propose_org_memory source documents", () => {
+    const orgId = "org_a";
+    const profileId = "profile_kb";
+    let tempConfigDir = "";
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
+    afterEach(async () => {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+      if (tempConfigDir) {
+        await rm(tempConfigDir, { force: true, recursive: true });
+        tempConfigDir = "";
+      }
+    });
+
+    async function setupKb(): Promise<string> {
+      tempConfigDir = await mkdtemp(join(tmpdir(), "nakama-org-memory-kb-"));
+      process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+      await mkdir(join(tempConfigDir, "orgs", orgId, "profiles", profileId), {
+        recursive: true,
+      });
+      const uploaded = await uploadKnowledgeBaseDocument(orgId, profileId, {
+        data: Buffer.from("Refunds within 30 days.", "utf8").toString("base64"),
+        filename: "refund-policy.txt",
+        mediaType: "text/plain",
+      });
+      return uploaded.document.id;
+    }
+
+    test("resolves filenames to document ids and drops invented values", async () => {
+      const documentId = await setupKb();
+      const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
+      const proposeTool = createOrgMemoryTools(service)[2];
+      const result = await proposeTool.run(
+        {
+          bullet: "refunds are accepted within 30 days",
+          sourceDocumentIds: [
+            "refund-policy.txt",
+            documentId,
+            "missing.txt",
+            "  ",
+          ],
+        },
+        {
+          ...context(orgId, "member"),
+          profileId,
+          sessionId: "session_1",
+          userId: "user_1",
+        }
+      );
+      expect(result.outcome).toBe("created");
+      const proposal = await service.getProposal(orgId, result.proposalId!);
+      expect(proposal.sourceDocumentIds).toEqual([documentId]);
+    });
+
+    test("keeps attached organization documents when the agent cites them", async () => {
+      await setupKb();
+      const shared = await uploadOrganizationKnowledgeBaseDocument(orgId, {
+        data: Buffer.from("Shared handbook body.", "utf8").toString("base64"),
+        filename: "shared-handbook.txt",
+        mediaType: "text/plain",
+      });
+      await attachSharedKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        shared.document.id
+      );
+
+      const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
+      const proposeTool = createOrgMemoryTools(service)[2];
+      const result = await proposeTool.run(
+        {
+          bullet: "the shared handbook is cited by name",
+          sourceDocumentIds: ["shared-handbook.txt", shared.document.id],
+        },
+        {
+          ...context(orgId, "member"),
+          profileId,
+          sessionId: "session_shared",
+          userId: "user_shared",
+        }
+      );
+
+      expect(result.outcome).toBe("created");
+      const proposal = await service.getProposal(orgId, result.proposalId!);
+      expect(proposal.sourceDocumentIds).toEqual([shared.document.id]);
+    });
+
+    test("stores resolved document ids when the agent passes the id", async () => {
+      const documentId = await setupKb();
+      const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
+      const proposeTool = createOrgMemoryTools(service)[2];
+      const result = await proposeTool.run(
+        {
+          bullet: "policy comes from the handbook PDF",
+          sourceDocumentIds: [documentId],
+        },
+        {
+          ...context(orgId, "member"),
+          profileId,
+          sessionId: "session_1",
+          userId: "user_1",
+        }
+      );
+      expect(result.outcome).toBe("created");
+      const proposal = await service.getProposal(orgId, result.proposalId!);
+      expect(proposal.sourceDocumentIds).toEqual([documentId]);
+    });
   });
 });
 

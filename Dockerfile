@@ -4,10 +4,11 @@
 ARG BUILDPLATFORM
 
 # --- Build web dashboard (devDependencies stay in this stage only) ---
-FROM --platform=${BUILDPLATFORM} oven/bun:1.3-slim AS web-builder
+FROM --platform=${BUILDPLATFORM} oven/bun:1.4-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
 COPY apps apps
 COPY packages packages
 
@@ -15,8 +16,23 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @nakama/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.3-slim AS runtime
+FROM oven/bun:1.4-slim AS runtime
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo \
+  && rm -rf /var/lib/apt/lists/*
+
+# Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
+# runs as the existing non-root Nakama user.
+ARG INSTALL_MEET_DEPS=false
+RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation xvfb \
+      && rm -rf /var/lib/apt/lists/* \
+      && mkdir -p /opt/nakama-meet \
+      && cd /opt/nakama-meet \
+      && bun add --exact --production --ignore-scripts betterwright@2.8.1; \
+    fi
 
 # Tool-output optimiser, on by default so the dashboard toggle works on a fresh
 # image without a rebuild. Just under 10 MB unpacked. Build with
@@ -32,7 +48,7 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
         amd64) target=x86_64-unknown-linux-musl ;; \
         arm64) target=aarch64-unknown-linux-musl ;; \
         *) echo "no omni build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
-      esac; \ 
+      esac; \
       base="https://github.com/fajarhide/omni/releases/download/v${OMNI_VERSION}"; \
       archive="omni-v${OMNI_VERSION}-${target}.tar.gz"; \
       curl -fsSL -o "/tmp/${archive}" "${base}/${archive}"; \
@@ -44,15 +60,17 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
     fi
 
 COPY package.json bun.lock ./
+COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
 COPY apps/platform/telegram apps/platform/telegram
 COPY apps/platform/whatsapp apps/platform/whatsapp
 COPY apps/platform/discord apps/platform/discord
 COPY packages packages
-# Workspace stubs keep the lockfile valid without pulling web/cli sources.
+# Workspace stubs keep the lockfile valid without pulling web/cli/desktop sources.
 COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
+COPY apps/desktop/package.json apps/desktop/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
 RUN bun install --frozen-lockfile --production --ignore-scripts \
@@ -64,6 +82,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
   && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
   && test -f apps/server/src/services/javascript-tool-runner.js \
   && test -f apps/server/src/services/plugin-runner.js \
+  && rm -rf patches \
   && mkdir -p /nakama/data \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \

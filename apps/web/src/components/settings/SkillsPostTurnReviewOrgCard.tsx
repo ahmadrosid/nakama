@@ -47,6 +47,7 @@ export function SkillsPostTurnReviewOrgCard() {
               checked={enabled}
               disabled={busy}
               onCheckedChange={(checked) => void handleToggle(checked)}
+              size="sm"
             />
           </div>
         </div>

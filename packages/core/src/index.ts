@@ -6,6 +6,7 @@ export * from "./artifact-shares";
 export * from "./artifacts";
 export * from "./attachments/content";
 export * from "./attachments/store";
+export * from "./audio-transcription";
 export * from "./automation-delivery";
 export * from "./automation-run-read";
 export * from "./automation-scheduler";

@@ -4,6 +4,7 @@ import {
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
 import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,12 +28,12 @@ import { useDeleteToolMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import {
   canUseToolPlayground,
-  pluginsSystemPath,
+  pluginIcon,
+  pluginManagementPath,
   toolPlaygroundPath,
 } from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
 
-const sectionClass = "rounded-md border border-border bg-card";
 const toolSearchThreshold = 4;
 
 function isDeletableTool(tool: ToolDetail): boolean {
@@ -46,7 +47,7 @@ function isListedCustomTool(tool: ToolDetail): boolean {
 export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   const { navigateToNewChat } = useAppNavigation();
   const { user, activeOrg } = useAuth();
-  const isOrgAdmin = activeOrg?.role === "admin";
+  const canConfigureEmail = user?.isPlatformAdmin === true;
   const canUsePlayground = canUseToolPlayground(
     user?.isPlatformAdmin === true,
     activeOrg?.role
@@ -105,10 +106,10 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   const content = (
-    <div className="min-w-0 p-4 sm:p-5">
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className={cn("min-w-0 space-y-8", embedded && "p-4 sm:p-5")}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="type-section-title text-balance">All tools</h2>
+          <h2 className="font-normal text-sm">All tools</h2>
           <p className="type-body mt-1 text-pretty text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"
@@ -135,11 +136,11 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
           </Button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           <ToolListSection
             busy={busy}
+            canConfigureEmail={canConfigureEmail}
             canUsePlayground={canUsePlayground}
-            isOrgAdmin={isOrgAdmin}
             onConfigureEmail={() => setEmailConfigOpen(true)}
             onCreateTool={goToCreateTool}
             onDelete={requestDeleteTool}
@@ -149,8 +150,8 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
           <ToolListSection
             busy={busy}
+            canConfigureEmail={canConfigureEmail}
             canUsePlayground={canUsePlayground}
-            isOrgAdmin={isOrgAdmin}
             onConfigureEmail={() => setEmailConfigOpen(true)}
             onDelete={requestDeleteTool}
             title="Built-in tools"
@@ -163,23 +164,19 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div
+        className={cn("min-w-0 space-y-4", !embedded && "mx-auto max-w-3xl")}
+      >
         {errorMessage ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
             {errorMessage}
           </p>
         ) : null}
 
-        {embedded ? (
-          content
-        ) : (
-          <section className={cn(sectionClass, "overflow-hidden")}>
-            {content}
-          </section>
-        )}
+        {content}
       </div>
 
-      {isOrgAdmin ? (
+      {canConfigureEmail ? (
         <EmailSettingsDialog
           onOpenChange={setEmailConfigOpen}
           open={emailConfigOpen}
@@ -233,7 +230,7 @@ function ToolListSection({
   tools,
   busy,
   canUsePlayground,
-  isOrgAdmin,
+  canConfigureEmail,
   onCreateTool,
   onDelete,
   onConfigureEmail,
@@ -242,7 +239,7 @@ function ToolListSection({
   tools: ToolDetail[];
   busy: boolean;
   canUsePlayground: boolean;
-  isOrgAdmin: boolean;
+  canConfigureEmail: boolean;
   onCreateTool?: () => void;
   onDelete: (toolId: string, toolName: string) => void;
   onConfigureEmail: () => void;
@@ -264,10 +261,24 @@ function ToolListSection({
     });
   }, [tools, trimmedQuery]);
 
+  const pluginGroups = new Map<string, ToolDetail[]>();
+  const standaloneTools: ToolDetail[] = [];
+  for (const tool of filteredTools) {
+    if (tool.pluginId) {
+      const group = pluginGroups.get(tool.pluginId) ?? [];
+      group.push(tool);
+      pluginGroups.set(tool.pluginId, group);
+    } else {
+      standaloneTools.push(tool);
+    }
+  }
+
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
-        <h3 className="type-section-title text-balance">{title}</h3>
+        <h3 className="font-normal text-muted-foreground/55 text-sm">
+          {title}
+        </h3>
         {tools.length > 0 ? (
           <span className="text-muted-foreground text-xs tabular-nums">
             {trimmedQuery
@@ -321,30 +332,78 @@ function ToolListSection({
               No tools match &ldquo;{trimmedQuery}&rdquo;.
             </p>
           ) : (
-            <ul className="divide-y divide-border rounded-md border border-border">
-              {filteredTools.map((tool) => (
-                <ToolListItem
-                  busy={busy}
-                  key={tool.id}
-                  onConfigure={
-                    isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
-                      ? onConfigureEmail
-                      : undefined
-                  }
-                  onDelete={() => onDelete(tool.id, tool.name)}
-                  playgroundHref={
-                    canUsePlayground && isDeletableTool(tool)
-                      ? toolPlaygroundPath(tool.id)
-                      : undefined
-                  }
-                  tool={tool}
-                />
-              ))}
-            </ul>
+            <Card className="w-full overflow-hidden shadow-none">
+              <CardContent className="p-0">
+                <ul className="divide-y divide-border">
+                  {standaloneTools.map((tool) => (
+                    <ToolListItem
+                      busy={busy}
+                      key={tool.id}
+                      onConfigure={
+                        canConfigureEmail && tool.id === BUILTIN_TOOL_IDS.email
+                          ? onConfigureEmail
+                          : undefined
+                      }
+                      onDelete={() => onDelete(tool.id, tool.name)}
+                      playgroundHref={
+                        canUsePlayground && isDeletableTool(tool)
+                          ? toolPlaygroundPath(tool.id)
+                          : undefined
+                      }
+                      tool={tool}
+                    />
+                  ))}
+                  {[...pluginGroups].map(([pluginId, group]) => (
+                    <PluginToolGroup
+                      busy={busy}
+                      key={`${pluginId}:${Boolean(trimmedQuery)}`}
+                      pluginId={pluginId}
+                      searching={Boolean(trimmedQuery)}
+                      tools={group}
+                    />
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
     </section>
+  );
+}
+
+function PluginToolGroup({
+  pluginId,
+  tools,
+  busy,
+  searching,
+}: {
+  pluginId: string;
+  tools: ToolDetail[];
+  busy: boolean;
+  searching: boolean;
+}) {
+  const Icon = pluginIcon(pluginId);
+  const label = pluginId === "supermemory" ? "Supermemory" : pluginId;
+  return (
+    <li>
+      <details open={searching}>
+        <summary className="cursor-pointer rounded-md px-4 py-3 text-sm marker:text-muted-foreground hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
+          <span className="ml-2 inline-flex items-center gap-2 align-middle">
+            <Icon aria-hidden className="size-4" />
+            <span>{label}</span>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {tools.length} {tools.length === 1 ? "tool" : "tools"}
+            </span>
+          </span>
+        </summary>
+        <ul className="divide-y divide-border border-border border-t">
+          {tools.map((tool) => (
+            <ToolListItem busy={busy} key={tool.id} tool={tool} />
+          ))}
+        </ul>
+      </details>
+    </li>
   );
 }
 
@@ -358,14 +417,14 @@ function ToolListItem({
   tool: ToolDetail;
   busy: boolean;
   playgroundHref?: string;
-  onDelete: () => void;
+  onDelete?: () => void;
   onConfigure?: () => void;
 }) {
   const deletable = isDeletableTool(tool);
 
   const summary = (
     <div className="min-w-0">
-      <p className="font-medium text-foreground text-sm">{tool.name}</p>
+      <p className="font-normal text-foreground text-sm">{tool.name}</p>
       <p className="mt-0.5 line-clamp-2 text-pretty text-muted-foreground text-xs leading-relaxed">
         {tool.description}
       </p>
@@ -401,7 +460,7 @@ function ToolListItem({
         )}
         {tool.pluginId ? (
           <Button
-            render={<Link to={pluginsSystemPath()} />}
+            render={<Link to={pluginManagementPath()} />}
             size="sm"
             variant="outline"
           >
@@ -430,7 +489,7 @@ function ToolListItem({
             disabled={busy}
             onClick={(event) => {
               event.stopPropagation();
-              onDelete();
+              onDelete?.();
             }}
             size="sm"
             type="button"
@@ -459,7 +518,7 @@ function PageState({
   return (
     <div
       className={cn(
-        !embedded && sectionClass,
+        !embedded && "mx-auto max-w-3xl",
         "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-muted-foreground text-sm"
       )}
     >

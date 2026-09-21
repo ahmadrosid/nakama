@@ -15,6 +15,36 @@ import {
   syncWhatsAppOwnerPairing,
 } from "./whatsapp-config";
 
+describe("organization isolation", () => {
+  test("isolates settings and reconnects between organizations", async () => {
+    await withTempHomedir("nakama-wa-orgs-", async () => {
+      await saveWhatsAppConfig({ profileId: "well-test" }, "org_a");
+      await saveWhatsAppConfig({ profileId: "finance" }, "org_b");
+      await syncWhatsAppOwnerPairing(
+        { ownerJid: "628111111111@s.whatsapp.net" },
+        "org_a"
+      );
+      await syncWhatsAppOwnerPairing(
+        { ownerJid: "628222222222@s.whatsapp.net" },
+        "org_b"
+      );
+      expect((await loadWhatsAppConfigFile("org_a"))?.profileId).toBe(
+        "well-test"
+      );
+      expect((await loadWhatsAppConfigFile("org_b"))?.profileId).toBe(
+        "finance"
+      );
+      expect(await loadWhatsAppConfigFile()).toBeNull();
+      expect(await loadWhatsAppConfigFile("org_c")).toBeNull();
+      await resetWhatsAppSessionForReconnect("org_a");
+      expect((await loadWhatsAppConfigFile("org_a"))?.pairedJid).toBeNull();
+      expect((await loadWhatsAppConfigFile("org_b"))?.pairedJid).toBe(
+        "628222222222@s.whatsapp.net"
+      );
+    });
+  });
+});
+
 describe("maskPhoneNumber", () => {
   test("masks long phone numbers with plus prefix", () => {
     expect(maskPhoneNumber("+1234567890")).toBe(
@@ -263,8 +293,8 @@ describe("resetWhatsAppSessionForReconnect", () => {
 
   test("throws when WhatsApp is not configured", async () => {
     await withTempHomedir("nakama-core-wa-reset-", async () => {
-      expect(resetWhatsAppSessionForReconnect()).rejects.toThrow(
-        "Enable WhatsApp in Integrations before reconnecting."
+      await expect(resetWhatsAppSessionForReconnect()).rejects.toThrow(
+        "Enable WhatsApp in this agent’s Connections before reconnecting."
       );
     });
   });

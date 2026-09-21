@@ -1,3 +1,4 @@
+import { Card, CardContent } from "@nakama/ui/card";
 import { ExpandableTextarea } from "@nakama/ui/expandable-textarea";
 import { Input } from "@nakama/ui/input";
 import {
@@ -78,7 +79,7 @@ export function ProfileConfigIdentitySection({
   const identityDisabled = busy || !canManageProfile;
 
   return (
-    <div className="mb-3 rounded-2xl border border-border p-3 sm:p-4">
+    <Card className="w-full overflow-hidden shadow-none">
       <input
         accept="image/jpeg,image/png,image/gif,image/webp"
         className="hidden"
@@ -88,8 +89,8 @@ export function ProfileConfigIdentitySection({
         type="file"
       />
 
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 flex-wrap items-end gap-3 sm:flex-nowrap">
+      <CardContent className="min-w-0 divide-y divide-border p-0">
+        <div className="flex min-w-0 flex-wrap items-end gap-3 px-4 py-3 sm:flex-nowrap">
           <EditableProfileAvatar
             disabled={
               identityDisabled ||
@@ -97,7 +98,7 @@ export function ProfileConfigIdentitySection({
               deleteAvatarMutation.isPending
             }
             onPick={() => avatarInputRef.current?.click()}
-            onRemove={() => void handleAvatarRemove()}
+            onRemove={handleAvatarRemove}
             profile={detail}
             size="ml"
             uploading={
@@ -107,7 +108,7 @@ export function ProfileConfigIdentitySection({
 
           <Field className="min-w-0 flex-1" htmlFor="profile-name" label="Name">
             <Input
-              className="h-8 min-w-0 font-semibold"
+              className="h-8 min-w-0 font-normal"
               disabled={identityDisabled}
               id="profile-name"
               onBlur={() => void flushSave()}
@@ -170,7 +171,7 @@ export function ProfileConfigIdentitySection({
         {(detail.isSuper ||
           saveStatus !== "idle" ||
           (isDirty && !editName.trim())) && (
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground text-xs">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 py-3 text-muted-foreground text-xs">
             {detail.isSuper ? (
               <span className="scope-badge bg-muted text-muted-foreground">
                 super
@@ -185,16 +186,18 @@ export function ProfileConfigIdentitySection({
           </div>
         )}
 
-        <ExpandableTextarea
-          dialogDescription="Instructions sent to the model at the start of each chat."
-          disabled={identityDisabled}
-          htmlFor="profile-prompt"
-          label="System prompt"
-          onChange={(event) => handleEditPromptChange(event.target.value)}
-          onSave={flushSave}
-          value={editPrompt}
-        />
-      </div>
-    </div>
+        <div className="px-4 py-3">
+          <ExpandableTextarea
+            dialogDescription="Instructions sent to the model at the start of each chat."
+            disabled={identityDisabled}
+            htmlFor="profile-prompt"
+            label="System prompt"
+            onChange={(event) => handleEditPromptChange(event.target.value)}
+            onSave={flushSave}
+            value={editPrompt}
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

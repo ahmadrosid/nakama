@@ -9,7 +9,7 @@ import {
 setupTestConfigDir("nakama-org-invites-test-");
 
 describe("direct org member provisioning", () => {
-  test("platform admin cannot access org data before the provisioned admin signs in", async () => {
+  test("platform admin can manage an org without becoming a member", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
@@ -41,7 +41,18 @@ describe("direct org member provisioning", () => {
       adminMember: { temporaryPassword: string };
     };
 
-    const denied = await app.fetch(
+    const platformUser = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+    expect(platformUser).toBeDefined();
+    expect(
+      await databaseAdapter.getOrgMember(
+        created.organization.id,
+        platformUser!.id
+      )
+    ).toBeNull();
+
+    const platformAccess = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
         headers: platformSession.headers({
           "X-Org-Id": created.organization.id,
@@ -49,7 +60,24 @@ describe("direct org member provisioning", () => {
       })
     );
 
-    expect(denied.status).toBe(404);
+    expect(platformAccess.status).toBe(200);
+
+    const memberOnlyAccess = await app.fetch(
+      new Request("http://localhost:4310/v1/sessions", {
+        body: JSON.stringify({
+          channel: "web",
+          profileId: "default",
+        }),
+        headers: platformSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": platformSession.csrfToken,
+          "X-Org-Id": created.organization.id,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(memberOnlyAccess.status).toBe(403);
 
     const loginResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/login", {
@@ -193,6 +221,111 @@ describe("direct org member provisioning", () => {
       })
     );
 
+    expect(relogin.status).toBe(200);
+  });
+
+  test("requests and completes a single-use password reset", async () => {
+    const { app, authService, orgService } = createMinimalHonoApp();
+    await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-password-reset" },
+    });
+
+    const loginResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: "admin@acme.com",
+          password: "password123",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    const session = browserSessionFromResponse(loginResponse);
+
+    const publicRequestResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: "admin@acme.com" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(publicRequestResponse.status).toBe(200);
+    expect(await publicRequestResponse.json()).toEqual({
+      delivered: true,
+      token: null,
+    });
+
+    const missingCsrfResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: "admin@acme.com" }),
+        headers: session.headers(),
+        method: "POST",
+      })
+    );
+    expect(missingCsrfResponse.status).toBe(403);
+
+    const requestResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: "admin@acme.com" }),
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+    expect(requestResponse.status).toBe(200);
+    const requested = (await requestResponse.json()) as {
+      delivered: boolean;
+      token: string | null;
+    };
+    expect(requested.delivered).toBe(false);
+    expect(requested.token).toStartWith("tc_reset_");
+
+    const completeResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/complete", {
+        body: JSON.stringify({
+          newPassword: "new-password-123",
+          token: requested.token,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(completeResponse.status).toBe(200);
+
+    const staleMe = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        headers: session.headers(),
+      })
+    );
+    expect(staleMe.status).toBe(401);
+
+    const reuseResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/complete", {
+        body: JSON.stringify({
+          newPassword: "another-password-123",
+          token: requested.token,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(reuseResponse.status).toBe(400);
+
+    const relogin = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: "admin@acme.com",
+          password: "new-password-123",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
     expect(relogin.status).toBe(200);
   });
 });

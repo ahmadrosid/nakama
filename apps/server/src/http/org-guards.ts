@@ -10,7 +10,7 @@ export function requireOrgAdmin(auth: RequestAuthContext): void {
 }
 
 export function requireNotViewer(auth: RequestAuthContext): void {
-  if (auth.orgRole === "viewer") {
+  if (!auth.orgRole || auth.orgRole === "viewer") {
     throw new NakamaApiError("Forbidden", 403);
   }
 }

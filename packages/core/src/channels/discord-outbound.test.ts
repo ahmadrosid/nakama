@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { getDiscordConfigDir, getDiscordConfigPath } from "../discord-config";
 import { createDiscordOutboundAdapter } from "./discord-outbound";
 
+const owner = { orgId: "org_test", profileId: "agent_test" };
+
 describe("createDiscordOutboundAdapter", () => {
   const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -22,8 +24,8 @@ describe("createDiscordOutboundAdapter", () => {
   ): Promise<void> {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-outbound-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    await mkdir(getDiscordConfigDir(), { recursive: true });
-    await writeFile(getDiscordConfigPath(), ini, "utf8");
+    await mkdir(getDiscordConfigDir(owner), { recursive: true });
+    await writeFile(getDiscordConfigPath(owner), ini, "utf8");
 
     try {
       await run();
@@ -52,6 +54,7 @@ describe("createDiscordOutboundAdapter", () => {
 
       await expect(
         adapter.send({
+          ...owner,
           channelId: "123456789012345678",
           text: "hello",
         })
@@ -95,7 +98,9 @@ describe("createDiscordOutboundAdapter", () => {
           },
         });
 
-        await expect(adapter.send({ text: "hello" })).resolves.toEqual({
+        await expect(
+          adapter.send({ ...owner, text: "hello" })
+        ).resolves.toEqual({
           ok: true,
         });
 
@@ -124,6 +129,7 @@ describe("createDiscordOutboundAdapter", () => {
 
       await expect(
         adapter.send({
+          ...owner,
           channelId: "123456789012345678",
           text: "a".repeat(2500),
         })
@@ -144,7 +150,7 @@ describe("createDiscordOutboundAdapter", () => {
         },
       });
 
-      await expect(adapter.send({ text: "hello" })).resolves.toEqual({
+      await expect(adapter.send({ ...owner, text: "hello" })).resolves.toEqual({
         error: "Discord bot token is not configured.",
         ok: false,
       });
@@ -162,7 +168,7 @@ describe("createDiscordOutboundAdapter", () => {
         },
       });
 
-      await expect(adapter.send({ text: "hello" })).resolves.toEqual({
+      await expect(adapter.send({ ...owner, text: "hello" })).resolves.toEqual({
         error: "No Discord user is paired.",
         ok: false,
       });
@@ -187,7 +193,7 @@ describe("createDiscordOutboundAdapter", () => {
           },
         });
 
-        const result = await adapter.send({ text: "hello" });
+        const result = await adapter.send({ ...owner, text: "hello" });
         expect(result.ok).toBe(false);
         expect(result.error).toContain("403");
         expect(urls.filter((url) => url.includes("/messages"))).toHaveLength(1);
@@ -206,7 +212,7 @@ describe("createDiscordOutboundAdapter", () => {
           fetchImpl: async () => new Response("{}", { status: 200 }),
         });
 
-        await expect(adapter.send({ text: "   " })).resolves.toEqual({
+        await expect(adapter.send({ ...owner, text: "   " })).resolves.toEqual({
           error: "Message text is empty.",
           ok: false,
         });

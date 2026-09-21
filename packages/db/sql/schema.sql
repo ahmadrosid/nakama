@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   title TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
   model TEXT,
   agent_todos TEXT DEFAULT '[]' NOT NULL,
   agent_questionnaire TEXT,
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   size_bytes INTEGER NOT NULL,
   storage_path TEXT NOT NULL,
   created_at TEXT NOT NULL,
+  ephemeral INTEGER DEFAULT 0 NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
   FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
   FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL
@@ -326,6 +328,7 @@ CREATE TABLE IF NOT EXISTS org_memory_proposals (
   session_id TEXT,
   proposed_by_user_id TEXT,
   bullet TEXT NOT NULL,
+  source_document_ids TEXT,
   status TEXT NOT NULL,
   pinned INTEGER NOT NULL DEFAULT 0,
   reviewer_user_id TEXT,
@@ -337,6 +340,7 @@ CREATE TABLE IF NOT EXISTS org_memory_proposals (
 CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
 
 CREATE TABLE IF NOT EXISTS skill_proposals (
+  supporting_files TEXT,
   id TEXT PRIMARY KEY NOT NULL,
   org_id TEXT NOT NULL,
   profile_id TEXT NOT NULL,
@@ -427,6 +431,19 @@ CREATE TABLE IF NOT EXISTS browser_sessions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS browser_sessions_token_hash_unique
   ON browser_sessions (session_token_hash);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_unique
+  ON password_reset_tokens (token_hash);
 
 CREATE TABLE IF NOT EXISTS workspace_settings (
   id TEXT PRIMARY KEY NOT NULL,
@@ -589,4 +606,12 @@ CREATE TABLE IF NOT EXISTS org_plugins (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (org_id, plugin_id),
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS file_pins (
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  PRIMARY KEY (org_id, user_id, profile_id, path)
 );

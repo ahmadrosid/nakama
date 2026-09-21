@@ -1,6 +1,7 @@
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
 import { WhatsAppAllowedPhonesDialog } from "@/components/WhatsAppAllowedPhonesDialog";
 import { WhatsAppSettingsCardContent } from "@/components/whatsapp-settings-card-content";
+import { useAuth } from "@/context/use-auth";
 import { useWhatsAppSettingsCard } from "@/hooks/use-whatsapp-settings-card";
 
 interface WhatsAppSettingsCardProps {
@@ -9,7 +10,12 @@ interface WhatsAppSettingsCardProps {
   submitLabel?: string;
 }
 
-export function WhatsAppSettingsCard({
+export function WhatsAppSettingsCard(props: WhatsAppSettingsCardProps) {
+  const { activeOrg } = useAuth();
+  return <WhatsAppSettingsCardForOrg key={activeOrg?.id} {...props} />;
+}
+
+function WhatsAppSettingsCardForOrg({
   embedded = false,
   submitLabel,
   onSaveSuccess,
@@ -53,15 +59,12 @@ export function WhatsAppSettingsCard({
       loadError={card.loadError}
       onCopyPairingCode={card.onCopyPairingCode}
       onManageAllowedPhones={card.onManageAllowedPhones}
-      onProfileChange={card.onProfileChange}
       onReconnect={card.onReconnect}
       onRegeneratePairingCode={card.onRegeneratePairingCode}
       onRequireGroupMentionChange={card.onRequireGroupMentionChange}
       onSave={card.onSave}
       paired={card.paired}
       pairingCode={card.pairingCode}
-      profileId={card.profileId}
-      profiles={card.profiles}
       qrCode={card.qrCode}
       reconnectPending={card.reconnectPending}
       regeneratePending={card.regeneratePending}
@@ -79,10 +82,7 @@ export function WhatsAppSettingsCard({
   if (embedded) {
     return (
       <>
-        <div className="space-y-2">
-          <p className="text-muted-foreground text-xs">{card.headerSubtitle}</p>
-          {content}
-        </div>
+        {content}
         {allowedPhonesDialog}
       </>
     );

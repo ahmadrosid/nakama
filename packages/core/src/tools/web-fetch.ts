@@ -1,9 +1,11 @@
 import { lookup as dnsLookup } from "node:dns/promises";
+import { addAbortListener } from "node:events";
 import { BlockList, isIP } from "node:net";
 import { NodeHtmlMarkdown } from "node-html-markdown";
 import { z } from "zod";
 import type { JsonSchema, ToolDefinition } from "../contract";
 import { type BunFetchInit, withDisabledFetchIdle } from "../fetch-idle";
+import { MAX_IMAGE_BYTES } from "../message-content";
 
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
@@ -65,11 +67,18 @@ for (const [network, prefix] of [
   ["::", 96], // Unspecified, loopback, and deprecated IPv4-compatible.
   ["::ffff:0:0", 96], // IPv4-mapped.
   ["64:ff9b::", 96], // Well-known NAT64 prefix.
+  ["64:ff9b:1::", 48], // Local-use NAT64.
+  ["100::", 64], // Discard-only.
+  ["100:0:0:1::", 64], // Dummy IPv6 prefix.
   ["2001::", 23], // IETF special-purpose assignments.
   ["2001:db8::", 32], // Documentation range.
+  ["2002::", 16], // 6to4 can embed private IPv4 destinations.
+  ["3fff::", 20], // Documentation range.
+  ["5f00::", 16], // Segment Routing SIDs, not globally reachable.
   ["fc00::", 7], // Unique-local.
   ["fe80::", 10], // Link-local.
   ["fec0::", 10], // Deprecated site-local.
+  ["ff00::", 8], // Multicast.
 ] as const) {
   NON_PUBLIC_IPV6_RANGES.addSubnet(network, prefix, "ipv6");
 }
@@ -133,6 +142,10 @@ function isPrivateIpv4(ip: string): boolean {
   if (a === 198 && (b === 18 || b === 19)) {
     return true;
   }
+  // 198.51.100.0/24 — TEST-NET-2
+  if (a === 198 && b === 51 && c === 100) {
+    return true;
+  }
   // 203.0.113.0/24 — TEST-NET-3
   if (a === 203 && b === 0 && c === 113) {
     return true;
@@ -173,7 +186,11 @@ function isPrivateIp(ip: string): boolean {
  * first, so pinning only the first would break every fetch from an IPv4-only
  * host.
  */
-async function resolvePublicAddresses(hostname: string): Promise<string[]> {
+async function resolvePublicAddresses(
+  hostname: string,
+  signal?: AbortSignal
+): Promise<string[]> {
+  signal?.throwIfAborted();
   const bare = hostname.replace(/^\[|\]$/g, "");
 
   if (isIP(bare)) {
@@ -187,7 +204,12 @@ async function resolvePublicAddresses(hostname: string): Promise<string[]> {
 
   let records: { address: string }[];
   try {
-    records = await dnsLookup(bare, { all: true });
+    const lookup = Promise.withResolvers<{ address: string }[]>();
+    using _listener = signal
+      ? addAbortListener(signal, () => lookup.reject(signal.reason))
+      : undefined;
+    dnsLookup(bare, { all: true }).then(lookup.resolve, lookup.reject);
+    records = await lookup.promise;
   } catch (err) {
     throw new Error(
       `web_fetch failed to resolve hostname ${bare}: ${(err as Error).message}`
@@ -311,7 +333,8 @@ async function fetchFirstReachable(
 async function fetchWithRedirects(
   url: URL,
   addresses: string[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  validateUrl?: (url: URL) => void
 ): Promise<{ response: Response; finalUrl: string }> {
   let current = url;
   let currentAddresses = addresses;
@@ -323,6 +346,7 @@ async function fetchWithRedirects(
     );
 
     if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
       const location = response.headers.get("location");
       if (!location) {
         throw new Error(
@@ -335,7 +359,8 @@ async function fetchWithRedirects(
           `web_fetch: redirect to unsupported protocol ${nextUrl.protocol}.`
         );
       }
-      currentAddresses = await resolvePublicAddresses(nextUrl.hostname);
+      validateUrl?.(nextUrl);
+      currentAddresses = await resolvePublicAddresses(nextUrl.hostname, signal);
       current = nextUrl;
       continue;
     }
@@ -349,12 +374,13 @@ async function fetchWithRedirects(
 async function readBoundedBody(
   response: Response,
   maxBytes: number
-): Promise<{ body: string; truncated: boolean }> {
+): Promise<Buffer<ArrayBuffer>> {
   // If length is known and oversized, reject up-front.
   const contentLength = response.headers.get("content-length");
   if (contentLength) {
     const declared = Number(contentLength);
     if (Number.isFinite(declared) && declared > maxBytes) {
+      await response.body?.cancel();
       throw new Error(
         `web_fetch: response body exceeds ${maxBytes} bytes (Content-Length: ${declared}).`
       );
@@ -363,42 +389,74 @@ async function readBoundedBody(
 
   const reader = response.body?.getReader();
   if (!reader) {
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > maxBytes) {
-      throw new Error(`web_fetch: response body exceeds ${maxBytes} bytes.`);
-    }
-    return { body: text, truncated: false };
+    return Buffer.alloc(0);
   }
 
-  const decoder = new TextDecoder("utf-8");
+  const chunks: Uint8Array[] = [];
   let received = 0;
-  let text = "";
-  let truncated = false;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        return Buffer.concat(chunks, received);
+      }
+      received += value.byteLength;
+      if (received > maxBytes) {
+        throw new Error(`web_fetch: response body exceeds ${maxBytes} bytes.`);
+      }
+      chunks.push(value);
     }
-
-    received += value.byteLength;
-    if (received > maxBytes) {
-      truncated = true;
-      text += decoder.decode(
-        value.subarray(0, value.byteLength - (received - maxBytes))
-      );
-      break;
-    }
-
-    text += decoder.decode(value, { stream: true });
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
   }
-  text += decoder.decode();
+}
 
-  if (truncated) {
-    throw new Error(`web_fetch: response body exceeds ${maxBytes} bytes.`);
+function validateImageUrl(url: URL): void {
+  if (url.protocol !== "https:" || url.username || url.password || url.port) {
+    throw new Error("Images require HTTPS on port 443 without credentials.");
   }
+}
 
-  return { body: text, truncated: false };
+/** Public raster images only; shares web_fetch's DNS pinning and redirect checks. */
+export async function fetchRemoteImage(rawUrl: string, signal: AbortSignal) {
+  const url = parseUrl(rawUrl);
+  validateImageUrl(url);
+  const addresses = await resolvePublicAddresses(url.hostname, signal);
+  const { response } = await fetchWithRedirects(
+    url,
+    addresses,
+    signal,
+    validateImageUrl
+  );
+  const contentType =
+    response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ??
+    "";
+  if (
+    !(
+      response.ok &&
+      ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(
+        contentType
+      )
+    )
+  ) {
+    await response.body?.cancel();
+    throw new Error("Upstream did not return a supported image.");
+  }
+  const bytes = await readBoundedBody(response, MAX_IMAGE_BYTES);
+  const signature = bytes.subarray(0, 12).toString("hex");
+  const valid =
+    (contentType === "image/png" && signature.startsWith("89504e470d0a1a0a")) ||
+    (contentType === "image/jpeg" && signature.startsWith("ffd8ff")) ||
+    (contentType === "image/gif" &&
+      /^(474946383761|474946383961)/.test(signature)) ||
+    (contentType === "image/webp" &&
+      signature.startsWith("52494646") &&
+      signature.slice(16) === "57454250");
+  if (!valid) {
+    throw new Error("Image bytes do not match the declared type.");
+  }
+  return { bytes, contentType };
 }
 
 export async function convertHtmlToMarkdown(html: string): Promise<string> {
@@ -462,7 +520,9 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
       }
 
       const contentType = response.headers.get("content-type") ?? "";
-      const { body } = await readBoundedBody(response, MAX_BODY_BYTES);
+      const body = new TextDecoder().decode(
+        await readBoundedBody(response, MAX_BODY_BYTES)
+      );
       const bytes = Buffer.byteLength(body, "utf8");
 
       let content = body;

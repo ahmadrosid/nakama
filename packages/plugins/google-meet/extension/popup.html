@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="dark" name="color-scheme">
+    <title>Nakama Meet</title>
+    <style>
+    /* Match Nakama's dark theme in apps/web/src/index.css. */
+    :root {
+      --background: #0a0a0b;
+      --foreground: #fafafa;
+      --card: #18181b;
+      --primary: #f59e0b;
+      --muted: #a1a1aa;
+      --border: #27272a;
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      width: 320px;
+      padding: 16px;
+      margin: 0;
+      font:
+        14px / 1.5 Inter,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: var(--foreground);
+      background: var(--background);
+    }
+    header {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    header svg {
+      flex-shrink: 0;
+      color: var(--primary);
+    }
+    h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+    main {
+      overflow: hidden;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .actions {
+      display: grid;
+      gap: 8px;
+      padding: 16px;
+    }
+    .summary {
+      padding: 16px 16px 0;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    #connection {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    #connection[data-connected="true"] {
+      color: #4ade80;
+    }
+    ol {
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+    li {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .step {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+    .step[data-done="true"] {
+      color: #4ade80;
+      background: #14532d33;
+      border-color: #166534;
+    }
+    button {
+      width: 100%;
+      min-height: 40px;
+      padding: 9px 12px;
+      font: inherit;
+      font-weight: 500;
+      color: var(--foreground);
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition:
+        background-color 120ms ease,
+        opacity 120ms ease;
+    }
+    button[hidden] {
+      display: none;
+    }
+    button:hover:not(:disabled) {
+      background: var(--border);
+    }
+    button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+    #start {
+      color: var(--background);
+      background: var(--primary);
+      border-color: transparent;
+    }
+    #start:hover:not(:disabled) {
+      background: #fbbf24;
+    }
+    #status {
+      min-height: 66px;
+      padding: 12px 16px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+      text-wrap: pretty;
+      overflow-wrap: anywhere;
+      border-top: 1px solid var(--border);
+    }
+    #transcript {
+      max-height: 300px;
+      padding: 0 16px;
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    #transcript p {
+      margin: 12px 0;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button {
+        transition: none;
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <header>
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="20"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.5"
+        viewBox="0 0 24 24"
+        width="20"
+      >
+        <rect height="12" rx="3" width="12" x="3" y="6" />
+        <path d="m15 10 5-3v10l-5-3" />
+      </svg>
+      <h1>Nakama Meet</h1>
+      <span id="connection">Checking…</span>
+    </header>
+    <main>
+      <div class="summary">
+        <h2 id="meeting">Getting ready</h2>
+        <ol aria-label="Transcription setup">
+          <li>
+            <span aria-hidden="true" class="step" id="connect-step">1</span
+            ><span id="connect-label">Connect Nakama</span>
+          </li>
+          <li>
+            <span aria-hidden="true" class="step" id="meet-step">2</span
+            ><span id="meet-label">Open Google Meet</span>
+          </li>
+        </ol>
+      </div>
+      <div class="actions">
+        <button hidden id="connect" type="button">
+          Connect this Nakama tab
+        </button>
+        <button hidden id="start" type="button">Start transcription</button>
+        <button hidden id="stop" type="button">Stop transcription</button>
+      </div>
+      <button hidden id="full-transcript" type="button">
+        Open full transcript
+      </button>
+      <section aria-label="Live transcript" id="transcript"></section>
+      <div aria-live="polite" id="status" role="status">
+        Checking connection…
+      </div>
+    </main>
+    <script defer src="popup.js"></script>
+  </body>
+</html>

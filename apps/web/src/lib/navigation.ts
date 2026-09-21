@@ -1,32 +1,44 @@
 import {
-  Brain03Icon,
+  BrainIcon,
+  Bug01Icon,
   Building03Icon,
-  Chat01Icon,
+  CodeIcon,
+  Coins01Icon,
+  CpuChargeIcon,
   DashboardSquare01Icon,
   Folder01Icon,
+  LayoutGridIcon,
   Notification01Icon,
+  PackageIcon,
+  Plug01Icon,
   PlusSignSquareIcon,
   Settings01Icon,
   SharedWifiIcon,
+  SlidersHorizontalIcon,
   UserSquareIcon,
-  WebhookIcon,
+  WorkflowSquare01Icon,
 } from "hugeicons-react";
 
 type NavIcon = typeof SharedWifiIcon;
 
 export type PageId =
   | "chat"
-  | "history"
+  | "customize"
+  | "usage"
   | "files"
   | "profiles"
   | "soul"
+  | "tools"
+  | "skills"
+  | "mcp"
   | "automations"
-  | "integrations"
   | "organization"
   | "settings"
+  | "providers"
   | "notifications"
   | "workers"
-  | "plugins";
+  | "plugins"
+  | "plugin-management";
 
 export interface NavItem {
   description: string;
@@ -65,8 +77,18 @@ export const NAV_GROUPS: NavGroup[] = [
         "Start a new conversation",
         PlusSignSquareIcon
       ),
-      navItem("history", "Chats", "Browse and reopen saved chats", Chat01Icon),
-      navItem("files", "Files", "Manage profile artifacts", Folder01Icon),
+      navItem(
+        "profiles",
+        "Agent",
+        "Manage bot configs and tool allowlists",
+        UserSquareIcon
+      ),
+      navItem(
+        "files",
+        "Browse Files",
+        "Manage profile artifacts",
+        Folder01Icon
+      ),
     ],
     label: "Chat",
   },
@@ -74,16 +96,16 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "agent",
     items: [
       navItem(
-        "profiles",
-        "Profiles",
-        "Manage bot configs and tool allowlists",
-        UserSquareIcon
-      ),
-      navItem(
         "automations",
         "Automations",
         "Manage scheduled automations",
         SharedWifiIcon
+      ),
+      navItem(
+        "customize",
+        "Control center",
+        "Manage Nakama settings, tools, and integrations",
+        SlidersHorizontalIcon
       ),
     ],
     label: "Agent",
@@ -104,28 +126,27 @@ export const NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     id: "system",
     items: [
+      navItem("usage", "Usage", "View token usage and costs", Coins01Icon),
+      navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
       navItem(
         "workers",
         "Workers",
         "Automation and channel workers",
         DashboardSquare01Icon
       ),
+      navItem("tools", "Tools", "Manage agent tools", LayoutGridIcon),
+      navItem("skills", "Skills", "Browse organization skills", BrainIcon),
+      navItem("mcp", "MCP", "Manage MCP servers", Plug01Icon),
       navItem(
-        "integrations",
-        "Integrations",
-        "Bridges and Composio",
-        WebhookIcon
-      ),
-      navItem(
-        "soul",
-        "System",
-        "Identity stack files and registered agent tools",
-        Brain03Icon
+        "providers",
+        "AI Providers",
+        "Manage provider API keys and models",
+        BrainIcon
       ),
       navItem(
         "settings",
         "Settings",
-        "Provider API key and model",
+        "Appearance and preferences",
         Settings01Icon
       ),
     ],
@@ -134,6 +155,14 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+
+export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
+  "chat",
+  "profiles",
+  "files",
+  "automations",
+  "customize",
+];
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
   notifications: navItem(
@@ -149,6 +178,9 @@ export const SETUP_PATH = "/setup";
 export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
   "soul",
+  "mcp",
+  "providers",
+  "skills",
 ]);
 
 export function canAccessSystemPage(
@@ -184,16 +216,16 @@ export function visibleNavGroups(access: {
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
       if (
+        item.id === "usage" ||
+        item.id === "plugin-management" ||
+        item.id === "files" ||
+        item.id === "tools" ||
         item.id === "soul" ||
         item.id === "profiles" ||
         item.id === "organization" ||
         item.id === "workers"
       ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
-      }
-
-      if (item.id === "integrations") {
-        return canAccessIntegrationsPage(access.orgRole);
       }
 
       return !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || access.isPlatformAdmin;
@@ -210,11 +242,10 @@ export function visibleNavGroups(access: {
 const queryPath = (path: string, params: Record<string, string>): string =>
   `${path}?${new URLSearchParams(params)}`;
 
-export const toolsTabPath = (): string =>
-  queryPath(PAGE_PATHS.soul, { tab: "tools" });
+export const toolsTabPath = (): string => PAGE_PATHS.tools;
 
-export const pluginsSystemPath = (): string =>
-  queryPath(PAGE_PATHS.soul, { tab: "plugins" });
+export const pluginManagementPath = (): string =>
+  PAGE_PATHS["plugin-management"];
 
 export const PLUGIN_PAGE_PREFIX = "/plugins";
 
@@ -243,6 +274,17 @@ export function pluginIdFromPath(pathname: string): string | null {
     return decodeURIComponent(rest);
   } catch {
     return rest;
+  }
+}
+
+export function pluginIcon(pluginId: string): NavIcon {
+  switch (pluginId) {
+    case "workflows":
+      return WorkflowSquare01Icon;
+    case "supermemory":
+      return BrainIcon;
+    default:
+      return PackageIcon;
   }
 }
 
@@ -306,8 +348,11 @@ export const skillDetailBackTarget = (
   label: string;
 } =>
   backTarget(searchParams.get("profile"), {
-    href: PAGE_PATHS.profiles,
-    label: "Profiles",
+    href:
+      searchParams.get("from") === "skills"
+        ? PAGE_PATHS.skills
+        : PAGE_PATHS.profiles,
+    label: searchParams.get("from") === "skills" ? "Skills" : "Profiles",
   });
 
 export function toolPlaygroundPath(
@@ -347,19 +392,26 @@ export function orgSkillProposalsPath(profileId?: string): string {
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
+  customize: "/customize",
   files: "/files",
-  history: "/history",
-  integrations: "/integrations",
+  mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
+  "plugin-management": "/customize/plugins",
   plugins: PLUGIN_PAGE_PREFIX,
   profiles: "/profiles",
+  providers: "/customize/providers",
   settings: "/settings",
+  skills: "/customize/skills",
   soul: "/system",
+  tools: "/customize/tools",
+  usage: "/customize/usage",
   workers: "/workers",
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
+  ["/customize/connections", "customize"],
+  [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
   [PAGE_PATHS.soul, "soul"],
   [PAGE_PATHS.profiles, "profiles"],
@@ -409,4 +461,49 @@ export function pageIdFromPath(pathname: string): PageId | null {
       ([, path]) => pathname === path
     )?.[0] ?? null
   );
+}
+
+const INTEGRATION_SECTIONS = [
+  {
+    icon: Notification01Icon,
+    id: "notifications",
+    label: "Notifications",
+  },
+  {
+    icon: Plug01Icon,
+    id: "composio",
+    label: "Composio",
+  },
+  {
+    icon: CodeIcon,
+    id: "coding-agents",
+    label: "Coding agents",
+  },
+  {
+    icon: CpuChargeIcon,
+    id: "optimization",
+    label: "Context savings",
+  },
+  {
+    icon: Bug01Icon,
+    id: "error-tracking",
+    label: "Error tracking",
+  },
+] as const;
+
+export type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
+
+export function visibleIntegrationSections(
+  isPlatformAdmin: boolean,
+  orgRole: string | undefined
+) {
+  return INTEGRATION_SECTIONS.filter((item) => {
+    if (item.id === "composio") {
+      return isPlatformAdmin || orgRole === "admin" || orgRole === "member";
+    }
+    if (item.id === "error-tracking") {
+      return isPlatformAdmin;
+    }
+    return isPlatformAdmin || orgRole === "admin";
+  });
 }

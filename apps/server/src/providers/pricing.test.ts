@@ -263,3 +263,58 @@ describe("getExplicitModelPricing", () => {
     ).toEqual({ inputPerMillionUsd: 2, outputPerMillionUsd: 4 });
   });
 });
+
+describe("estimateUsageCostUsd with a cached prompt slice", () => {
+  const instanceWith = (model: Record<string, unknown>) => ({
+    providerInstance: {
+      apiKey: "k",
+      baseUrl: "http://localhost:1/v1",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [model],
+      id: "cmp-cached",
+      label: "Cached",
+      type: "openai_compatible" as const,
+    },
+  });
+
+  test("bills the cached slice at its own rate, or the input rate when unset", () => {
+    const priced = estimateUsageCostUsd(
+      "m",
+      1_000_000,
+      0,
+      instanceWith({
+        cachedInputPerMillionUsd: 1,
+        id: "m",
+        inputPerMillionUsd: 10,
+        outputPerMillionUsd: 30,
+      }),
+      400_000
+    );
+    // 600k fresh at $10/1M plus 400k cached at $1/1M.
+    expect(priced).toBeCloseTo(6.4, 6);
+
+    // No cached rate published, so an existing install's numbers cannot move.
+    const noCachedRate = instanceWith({
+      id: "m",
+      inputPerMillionUsd: 10,
+      outputPerMillionUsd: 30,
+    });
+    expect(estimateUsageCostUsd("m", 1_000_000, 0, noCachedRate, 400_000)).toBe(
+      estimateUsageCostUsd("m", 1_000_000, 0, noCachedRate)
+    );
+  });
+
+  test("clamps a cached count larger than the input it belongs to", () => {
+    const ctx = instanceWith({
+      cachedInputPerMillionUsd: 1,
+      id: "m",
+      inputPerMillionUsd: 10,
+      outputPerMillionUsd: 30,
+    });
+    // Unclamped this prices 999k tokens of "fresh" input negatively.
+    expect(estimateUsageCostUsd("m", 1000, 0, ctx, 999_999)).toBeCloseTo(
+      0.001,
+      6
+    );
+  });
+});

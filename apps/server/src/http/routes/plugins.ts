@@ -139,7 +139,7 @@ export function registerPluginRoutes(
     ok?: {
       content?: Record<string, { schema: z.ZodTypeAny }>;
       description: string;
-      status?: 200 | 204;
+      status?: 200 | 202 | 204;
     };
     operationId: string;
     path: string;

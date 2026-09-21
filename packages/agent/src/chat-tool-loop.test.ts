@@ -1,10 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type {
   ChatCompletionResult,
   ChatMessage,
   GenerateChatInput,
   ProviderClient,
   ToolDefinition,
+} from "@nakama/core";
+import {
+  runReadFile,
+  toAnthropicUserContent,
+  toOpenAIChatUserContent,
 } from "@nakama/core";
 import { createAgentChatSession } from "./index";
 
@@ -113,6 +121,158 @@ function delayedTool(
 }
 
 describe("agent chat tool loop", () => {
+  test.each([false, true])(
+    "delivers read_file images after all tool results (stream: %s)",
+    async (stream) => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-image-"));
+      const data =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      try {
+        await writeFile(
+          path.join(dir, "shot.png"),
+          Buffer.from(data, "base64")
+        );
+        const calls: GenerateChatInput[] = [];
+        const toolCalls = ["image1", "image2"].map((id) => ({
+          arguments: { path: "shot.png" },
+          id,
+          name: "read_file",
+        }));
+        const provider: ProviderClient = {
+          async generateChat(input) {
+            calls.push(structuredClone(input));
+            return calls.length === 1
+              ? toolTurn(toolCalls)
+              : textReply("I can see it.");
+          },
+          async generateText() {
+            return { content: "unused" };
+          },
+          name: "openai",
+          async streamChat(input, handlers) {
+            const result = await this.generateChat(input);
+            handlers.onChunk(result.content);
+            return result;
+          },
+        };
+        const session = createAgentChatSession({
+          provider,
+          tools: [
+            {
+              description: "Read",
+              name: "read_file",
+              parallelSafe: stream,
+              run: (input) =>
+                runReadFile(
+                  input,
+                  { orgId: "org_test", profileId: "profile_test" },
+                  { workspaceRoot: dir }
+                ),
+            },
+          ],
+        });
+        if (stream) {
+          await session.sendStream("Read the screenshot", { onChunk() {} });
+        } else {
+          await session.send("Read the screenshot");
+        }
+        const messages = calls[1]!.messages;
+        expect(messages.map((m) => m.role)).toEqual([
+          "user",
+          "assistant",
+          "tool",
+          "tool",
+          "user",
+        ]);
+        const imageContent = messages.at(-1)!.content;
+        expect(imageContent).toEqual(
+          expect.arrayContaining([
+            { data, mediaType: "image/png", type: "image" },
+          ])
+        );
+        expect(await toOpenAIChatUserContent(imageContent)).toEqual(
+          expect.arrayContaining([
+            {
+              image_url: { url: `data:image/png;base64,${data}` },
+              type: "image_url",
+            },
+          ])
+        );
+        expect(await toAnthropicUserContent(imageContent)).toEqual(
+          expect.arrayContaining([
+            {
+              source: { data, media_type: "image/png", type: "base64" },
+              type: "image",
+            },
+          ])
+        );
+        expect(messages[2]!.content).not.toContain(data);
+        expect(
+          session.getHistory().filter((m) => m.role === "user")
+        ).toHaveLength(1);
+        await session.send("Look again");
+        expect(JSON.stringify(calls[2]!.messages)).toContain(data);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  );
+
+  test.each([false, true])(
+    "persists tool execution times (parallel: %s)",
+    async (parallelSafe) => {
+      let now = 1000;
+      const clock = spyOn(Date, "now").mockImplementation(() => now);
+      try {
+        const calls = ["t1", "t2"].map((id) => ({
+          arguments: {},
+          id,
+          name: "sample",
+        }));
+        const provider = createMockProvider([
+          {
+            assistantMessage: {
+              content: "",
+              role: "assistant",
+              toolCalls: calls,
+            },
+            content: "",
+            toolCalls: calls,
+          },
+          {
+            assistantMessage: { content: "Done", role: "assistant" },
+            content: "Done",
+            toolCalls: [],
+          },
+        ]);
+        const session = createAgentChatSession({
+          provider,
+          tools: [
+            {
+              ...sampleTool,
+              parallelSafe,
+              run() {
+                now += 4000;
+                return Promise.resolve({ ok: true });
+              },
+            },
+          ],
+        });
+        await session.sendStream("hello", { onChunk() {} });
+        const tools = session
+          .getHistory()
+          .filter((message) => message.role === "tool");
+        expect(tools).toHaveLength(2);
+        expect(tools[0]?.toolStartedAt).toBe(1000);
+        expect(tools[1]?.toolCompletedAt).toBe(9000);
+        expect(
+          tools.every((tool) => tool.toolCompletedAt! > tool.toolStartedAt!)
+        ).toBe(true);
+      } finally {
+        clock.mockRestore();
+      }
+    }
+  );
   test("stream stops accumulating large tool results before another provider call and resets the budget next turn", async () => {
     let providerCalls = 0;
     let toolRuns = 0;
@@ -405,7 +565,7 @@ describe("agent chat tool loop", () => {
     await expect(session.send("say hi")).rejects.toThrow(
       "Unexpected provider call 2"
     );
-    expect(session.getHistory()).toEqual([]);
+    expect(session.getHistory()).toEqual([{ content: "say hi", role: "user" }]);
   });
 
   test("appends resolvePromptContext to the system prompt each turn", async () => {

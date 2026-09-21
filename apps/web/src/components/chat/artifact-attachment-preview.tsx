@@ -31,7 +31,8 @@ export function ArtifactAttachmentPreview({
     useArtifactAttachmentPreviewPanel({
       artifact,
       id,
-      profileId,
+      // Preview, download, share and save all go through this id.
+      profileId: artifact.ownerProfileId ?? profileId,
     });
 
   return (

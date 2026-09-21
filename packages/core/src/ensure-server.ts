@@ -11,11 +11,19 @@ export interface EnsureServerResult {
   spawnedChild: Bun.Subprocess | null;
 }
 
-export async function ensureServerRunning(): Promise<EnsureServerResult> {
+export async function ensureServerRunning(
+  options: { spawn?: boolean } = {}
+): Promise<EnsureServerResult> {
   const serverUrl = resolveServerUrl();
 
   if (await isServerHealthy(serverUrl)) {
     return { serverUrl, spawnedChild: null };
+  }
+
+  if (options.spawn === false) {
+    throw new Error(
+      "Start the Nakama API server before starting an agent worker."
+    );
   }
 
   const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");

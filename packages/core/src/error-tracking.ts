@@ -16,7 +16,7 @@ import { scrubText } from "./error-tracking-scrub";
  * "tool" is a custom tool that failed every attempt in its retry budget. The process
  * survives it, so it is tagged apart from a crash and the operator can filter on it.
  */
-export type ErrorReportKind = "crash" | "test" | "tool";
+export type ErrorReportKind = "crash" | "http" | "test" | "tool" | "turn";
 
 export interface ErrorReport {
   at: string;

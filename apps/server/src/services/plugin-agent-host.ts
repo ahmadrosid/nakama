@@ -22,6 +22,35 @@ export function createPluginAgentHost(
     }
     const request = value as Record<string, unknown>;
     const { orgId } = context;
+    if (request.op === "transcribe_audio") {
+      const { data, filename } = request;
+      if (
+        typeof data !== "string" ||
+        !data.length ||
+        data.length > 9_786_712 ||
+        typeof filename !== "string" ||
+        filename.length > 255 ||
+        /[\\/\x00-\x1f]/.test(filename) ||
+        !/\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(filename)
+      ) {
+        throw new Error("Invalid audio upload");
+      }
+      const bytes = Buffer.from(data, "base64");
+      if (
+        !bytes.length ||
+        bytes.length > 7 * 1024 * 1024 ||
+        bytes.toString("base64") !== data
+      ) {
+        throw new Error("Invalid audio upload");
+      }
+      return agent.transcribeAudio(
+        { data, filename, mediaType: "application/octet-stream" },
+        AbortSignal.any([
+          ...(signal ? [signal] : []),
+          AbortSignal.timeout(120_000),
+        ])
+      );
+    }
     if (request.op === "workflow_database") {
       if (context.pluginId !== "workflows") {
         throw new Error("Forbidden");
@@ -82,9 +111,10 @@ export function createPluginAgentHost(
         signal
       );
     }
+    // Assigned plugin tools are valid workflow steps; workflow tools would recurse.
     const tools = (
       await agent.resolvePluginExecutionTools(orgId, profileId)
-    ).filter((tool) => !tool.name.startsWith("plugin_"));
+    ).filter((tool) => !tool.name.startsWith("plugin_workflows__"));
     if (request.op === "tools") {
       return tools.map(({ name, description, parameters }) => ({
         description,

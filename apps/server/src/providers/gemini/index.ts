@@ -76,6 +76,9 @@ function parseGenerateContentResponse(
 
   return buildChatCompletionResult({
     content,
+    providerContent: parts?.some((part) => part.thoughtSignature)
+      ? parts
+      : undefined,
     thinking,
     toolCalls,
     usage: extractGeminiTokenUsage(response.usageMetadata),
@@ -174,12 +177,14 @@ async function readGeminiStream(
   handlers: StreamChatHandlers
 ): Promise<ChatCompletionResult> {
   const state = { content: "", thinking: "" };
+  const providerContent: Part[] = [];
   const pending = new Map<string, PendingFunctionCall>();
   let usage: ChatCompletionResult["usage"];
 
   for await (const chunk of stream) {
     usage = extractGeminiTokenUsage(chunk.usageMetadata) ?? usage;
     const parts = chunk.candidates?.[0]?.content?.parts;
+    providerContent.push(...(parts ?? []));
     accumulateStreamParts(parts, state, handlers);
 
     for (const call of chunk.functionCalls ?? []) {
@@ -196,6 +201,9 @@ async function readGeminiStream(
 
   return buildChatCompletionResult({
     content: state.content,
+    providerContent: providerContent.some((part) => part.thoughtSignature)
+      ? providerContent
+      : undefined,
     thinking,
     toolCalls,
     usage,

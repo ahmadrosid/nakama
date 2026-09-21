@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, mock, test } from "bun:test";
 import { appendFile, cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +11,46 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { PluginService } from "./plugin-service";
 
 const directories: string[] = [];
+test("plugin transcription validates uploads and uses Nakama's configured service", async () => {
+  const { createPluginAgentHost } = await import("./plugin-agent-host");
+  const transcribeAudio = mock(async () => ({ text: "Transcript" }));
+  const host = createPluginAgentHost(createInMemoryDatabaseAdapter(), {
+    transcribeAudio,
+  } as never);
+  const context = {
+    actor: { id: "member", role: "member" as const },
+    apiVersion: 1 as const,
+    dataDir: "/tmp",
+    invocationId: "invocation",
+    orgId: "org_a",
+    pluginId: "google-meet",
+    pluginVersion: "0.1.0",
+  };
+  const request = {
+    data: Buffer.from("audio").toString("base64"),
+    filename: "meeting.wav",
+    op: "transcribe_audio",
+  };
+  expect(await host(request, context)).toEqual({ text: "Transcript" });
+  expect(transcribeAudio).toHaveBeenCalledWith(
+    {
+      data: request.data,
+      filename: "meeting.wav",
+      mediaType: "application/octet-stream",
+    },
+    expect.any(AbortSignal)
+  );
+  await expect(
+    host(request, { ...context, actor: { id: "viewer", role: "viewer" } })
+  ).rejects.toThrow();
+  await expect(
+    host({ ...request, data: "invalid" }, context)
+  ).rejects.toThrow();
+  await expect(
+    host({ ...request, filename: "../meeting.wav" }, context)
+  ).rejects.toThrow();
+  expect(transcribeAudio).toHaveBeenCalledTimes(1);
+});
 afterEach(async () => {
   for (const dir of directories.splice(0)) {
     await rm(dir, { force: true, recursive: true });
@@ -21,11 +61,13 @@ test("official workflow install imports once, executes through IPC, isolates org
   const dir = await mkdtemp(join(tmpdir(), "official-workflows-"));
   directories.push(dir);
   const officialPackagesDir = join(dir, "official");
-  await cp(
-    resolve(import.meta.dir, "../../../../packages/plugins/workflows"),
-    join(officialPackagesDir, "workflows"),
-    { recursive: true }
-  );
+  for (const pluginId of ["workflows", "supermemory", "google-meet"]) {
+    await cp(
+      resolve(import.meta.dir, "../../../../packages/plugins", pluginId),
+      join(officialPackagesDir, pluginId),
+      { recursive: true }
+    );
+  }
   const db = createInMemoryDatabaseAdapter();
   const legacy: StoredWorkflow = {
     description: "",
@@ -64,7 +106,9 @@ test("official workflow install imports once, executes through IPC, isolates org
     },
   });
   const actor = { id: "admin", role: "admin" as const };
-  expect((await service.listOfficialPlugins())[0]?.id).toBe("workflows");
+  expect(
+    (await service.listOfficialPlugins()).map((plugin) => plugin.id)
+  ).toEqual(expect.arrayContaining(["workflows", "supermemory"]));
   await service.installOfficialPlugin("org_a", "workflows", actor);
   const invoke = async (key: string, input = {}, orgId = "org_a") =>
     (
@@ -264,6 +308,12 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
         run: async () => ({ ok: true }),
       },
       {
+        description: "Save a memory",
+        name: "plugin_supermemory__save_memory",
+        parameters: { type: "object" },
+        run: async (input: unknown) => ({ saved: input }),
+      },
+      {
         name: "plugin_workflows__run_workflow",
         run: async () => {
           throw new Error("Recursion");
@@ -290,6 +340,11 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
   await expect(host({ op: "legacy_workflows" }, context)).rejects.toThrow();
   expect(await host({ agentId: "normal", op: "tools" }, context)).toEqual([
     { description: "allowed", name: "allowed", parameters: { type: "object" } },
+    {
+      description: "Save a memory",
+      name: "plugin_supermemory__save_memory",
+      parameters: { type: "object" },
+    },
   ]);
   expect(
     await host(
@@ -302,6 +357,28 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
     context
   );
   expect(denied).toHaveProperty("error");
+  expect(
+    await host(
+      {
+        agentId: "normal",
+        input: { text: "Meeting summary" },
+        name: "plugin_supermemory__save_memory",
+        op: "execute_tool",
+      },
+      context
+    )
+  ).toEqual({ saved: { text: "Meeting summary" } });
+  for (const name of [
+    "plugin_workflows__run_workflow",
+    "plugin_supermemory__unassigned",
+  ]) {
+    expect(
+      await host(
+        { agentId: "normal", input: {}, name, op: "execute_tool" },
+        context
+      )
+    ).toHaveProperty("error");
+  }
 });
 
 test("official dependencies are checked before publishing or changing org state", async () => {

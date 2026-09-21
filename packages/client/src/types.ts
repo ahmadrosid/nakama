@@ -32,18 +32,21 @@ export interface StreamHandlers {
   onThinking?: StreamHandler;
   onTodosUpdated?: (todos: AgentTodo[]) => void;
   onToolEnd?: (event: {
+    toolGroupId?: string;
     toolCallId: string;
     tool: string;
     result: unknown;
   }) => void;
   onToolInputDelta?: (event: {
     toolCallId: string;
+    toolGroupId?: string;
     tool: string;
     delta: string;
     accumulatedArguments?: string;
   }) => void;
   onToolStart?: (event: {
     toolCallId: string;
+    toolGroupId?: string;
     tool: string;
     input: Record<string, unknown>;
   }) => void;

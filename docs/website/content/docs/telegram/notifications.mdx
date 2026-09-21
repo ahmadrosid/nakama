@@ -18,13 +18,13 @@ This is useful for things like:
 
 1. Open **Integrations**
 2. In **Notification destinations**, create a new destination
-3. Choose a name
+3. Choose the agent whose Telegram connection should send the notification, then enter a name
 4. Paste the Telegram topic link, such as `https://t.me/c/3734526664/147`
 5. Save and copy the generated webhook URL and API key
 
 ![Create a Telegram notification destination from Integrations → Notifications](/screenshots/telegram-notifications.png)
 
-Each destination belongs to one org and points to one Telegram target.
+Each destination belongs to one organization and uses one agent’s Telegram connection. If that connection is unavailable, delivery fails instead of using another bot. Older destinations with unclear ownership require you to select an agent before delivery resumes.
 Nakama extracts the Telegram Chat ID and Topic ID from the link and sends the message directly into that topic thread.
 
 ## Webhook payload

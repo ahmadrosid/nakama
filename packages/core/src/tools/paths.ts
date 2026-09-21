@@ -37,7 +37,7 @@ export class PathGuardError extends Error {
 }
 
 const WORKSPACE_TRAVERSAL_MESSAGE =
-  "Path outside allowed directories. Use a relative path under the active profile workspace (e.g. SOUL.md or skills/<name>/SKILL.md). Bundled skills are listed in the system prompt and are not readable as arbitrary files.";
+  "Path outside allowed directories. Use a relative path under the active profile workspace (e.g. SOUL.md or skills/<name>/SKILL.md).";
 
 const WORKSPACE_REQUIRED_MESSAGE =
   "workspaceRoot is required; file tools cannot fall back to process.cwd().";
@@ -150,7 +150,7 @@ async function resolveDirectoryPath(dir: string): Promise<string> {
   try {
     return await realpath(dir);
   } catch {
-    return path.resolve(dir);
+    return resolveWithRealpath(dir);
   }
 }
 
@@ -188,6 +188,12 @@ function resolveSafeCwd(
     return defaultCwd;
   }
   const expanded = expandHome(rawCwd.trim());
-  const absolute = path.resolve(expanded);
-  return isWithinDirs(absolute, allowedDirs) ? absolute : defaultCwd;
+  const absolute = resolveWithRealpath(path.resolve(defaultCwd, expanded));
+  if (!isWithinDirs(absolute, allowedDirs)) {
+    throw new PathGuardError(
+      "Working directory is outside allowed directories. Omit cwd to use the active profile workspace. To read a skill, pass its full instruction path as path and omit cwd.",
+      "TRAVERSAL"
+    );
+  }
+  return absolute;
 }

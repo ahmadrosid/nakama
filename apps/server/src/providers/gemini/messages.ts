@@ -86,6 +86,15 @@ async function toGeminiUserParts(
 function toGeminiAssistantParts(
   message: Extract<ChatMessage, { role: "assistant" }>
 ): Part[] {
+  if (
+    message.providerContent?.some(
+      (part) => typeof readRecord(part).thoughtSignature === "string"
+    )
+  ) {
+    // Signatures belong to their original parts; do not merge or reconstruct them.
+    return message.providerContent as Part[];
+  }
+
   const parts: Part[] = [];
   const text = message.content.trim();
 

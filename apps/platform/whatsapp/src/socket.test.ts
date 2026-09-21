@@ -12,7 +12,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as baileys from "@whiskeysockets/baileys";
+import processMessage from "@whiskeysockets/baileys/lib/Utils/process-message.js";
 import { usePrivateMultiFileAuthState } from "./auth-state";
+import { createBaileysLogger } from "./baileys-logger";
 
 const sockets: Array<{
   end: ReturnType<typeof mock>;
@@ -43,7 +45,7 @@ const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
       });
       return endPromise;
     }),
-    ev,
+    ev: Object.assign(ev, { destroy: () => ev.removeAllListeners() }),
   };
   sockets.push(socket);
   return socket;
@@ -59,6 +61,85 @@ mock.module("@whiskeysockets/baileys", () => ({
 
 const { createWhatsAppSocket, summarizeMissingTextPayload } = await import(
   "./socket"
+);
+
+test.each([null, undefined, "request-123"])(
+  "peer response delivers the recovered message with stanza ID: %s",
+  async (stanzaId) => {
+    const del = mock((key: string) => {
+      key.toString();
+    });
+    const creds = baileys.initAuthCreds();
+    creds.me = { id: "123@s.whatsapp.net", name: "Test" };
+    const logger = createBaileysLogger();
+    const ev = baileys.makeEventBuffer(logger);
+    const onMessage = mock();
+    ev.on("messages.upsert", onMessage);
+    const keyStore: baileys.SignalKeyStoreWithTransaction = {
+      get: () => ({}),
+      isInTransaction: () => false,
+      set: () => {},
+      transaction: (exec) => exec(),
+    };
+    const signalRepository =
+      baileys.DEFAULT_CONNECTION_CONFIG.makeSignalRepository(
+        { creds, keys: keyStore },
+        logger
+      );
+    const recoveredMessage = {
+      key: { id: "message-123", remoteJid: creds.me.id },
+      message: { conversation: "recovered message" },
+    };
+
+    await processMessage(
+      {
+        key: { fromMe: true, remoteJid: creds.me.id },
+        message: {
+          protocolMessage: {
+            peerDataOperationRequestResponseMessage: {
+              peerDataOperationResult: [
+                {
+                  placeholderMessageResendResponse: {
+                    webMessageInfoBytes:
+                      baileys.proto.WebMessageInfo.encode(
+                        recoveredMessage
+                      ).finish(),
+                  },
+                },
+              ],
+              stanzaId,
+            },
+            type: baileys.proto.Message.ProtocolMessage.Type
+              .PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE,
+          },
+        },
+      },
+      {
+        creds,
+        ev,
+        getMessage: async () => undefined,
+        keyStore,
+        options: {},
+        placeholderResendCache: {
+          del,
+          flushAll: () => {},
+          get: () => undefined,
+          set: () => {},
+        },
+        shouldProcessHistoryMsg: false,
+        signalRepository,
+      }
+    );
+
+    signalRepository.close?.();
+    ev.destroy();
+    expect(del.mock.calls).toEqual([["message-123"]]);
+    expect(onMessage).toHaveBeenCalledWith({
+      messages: [expect.objectContaining(recoveredMessage)],
+      requestId: stanzaId,
+      type: "notify",
+    });
+  }
 );
 
 const TIMEOUT_CLOSE = {
@@ -184,10 +265,18 @@ describe("WhatsApp socket reconnect", () => {
       const { state: sender } = await usePrivateMultiFileAuthState(
         join(tempConfigDir, "sender")
       );
+      const logger = createBaileysLogger();
+      for (const state of [sender, receiver]) {
+        state.keys = baileys.addTransactionCapability(
+          state.keys,
+          logger,
+          baileys.DEFAULT_CONNECTION_CONFIG.transactionOpts
+        );
+      }
       const makeRepository =
         baileys.DEFAULT_CONNECTION_CONFIG.makeSignalRepository;
-      const sending = makeRepository(sender);
-      const receiving = config.makeSignalRepository!(receiver);
+      const sending = makeRepository(sender, logger);
+      const receiving = config.makeSignalRepository!(receiver, logger);
       const destination = "123:9@s.whatsapp.net";
       const { creds } = receiver;
       const preKey = baileys.Curve.generateKeyPair();
@@ -277,6 +366,8 @@ describe("WhatsApp socket reconnect", () => {
         ).rejects.toThrow();
       } finally {
         errorSpy.mockRestore();
+        sending.close?.();
+        receiving.close?.();
       }
     }
   );

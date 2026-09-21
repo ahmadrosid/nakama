@@ -7,7 +7,7 @@ description: "Debug the Nakama Telegram bridge worker and fix common configurati
 
 When the bot is silent or behaving wrong, the fastest clue is the bridge worker's own log output.
 
-1. Open **Integrations → Telegram**
+1. Open **Agents → your agent → Connections → Telegram**
 2. In the **Bridge worker** row, click **View logs**
 3. Switch to the **Stderr** tab
 
@@ -28,7 +28,7 @@ Use **Refresh** to pull the latest lines, **Copy** to grab the output for a bug 
 Check these first:
 
 1. The bot token is saved correctly
-2. `bun run dev:telegram` is running
+2. The owning agent’s Telegram worker is running
 3. The Nakama server is running
 4. The Telegram user is paired or allowlisted
 
@@ -47,7 +47,7 @@ Check these:
 
 1. Disable **Group Privacy** in `@BotFather`
 2. Remove the bot from the group and add it again
-3. Make sure only one Telegram bridge worker is running
+3. Make sure only one worker is running for this bot
 
 ## Telegram says the chat is not linked
 
@@ -57,7 +57,7 @@ This usually means:
 - the pairing code expired or was replaced
 - the message was sent in a group instead of a private chat
 
-Generate a new pairing code from **Integrations → Telegram** and send it to the bot in a private chat.
+Generate a new pairing code from **Agents → your agent → Connections → Telegram** and send it to the bot in a private chat.
 
 ## Next steps
 

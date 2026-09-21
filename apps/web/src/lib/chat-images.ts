@@ -102,12 +102,16 @@ export function userContentToDisplayImages(
 
   return content
     .filter(
-      (part): part is Extract<typeof part, { type: "image" }> =>
-        part.type === "image" && !part.description?.trim()
+      (part): part is Extract<typeof part, { type: "image" | "image_ref" }> =>
+        part.type === "image_ref" ||
+        (part.type === "image" && !part.description?.trim())
     )
     .map((part) => ({
       mediaType: part.mediaType,
-      url: `data:${part.mediaType};base64,${part.data}`,
+      url:
+        part.type === "image_ref"
+          ? `/v1/attachments/${encodeURIComponent(part.attachmentId)}/content`
+          : `data:${part.mediaType};base64,${part.data}`,
     }));
 }
 

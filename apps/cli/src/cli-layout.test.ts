@@ -6,6 +6,8 @@ import {
 } from "./message-queue";
 import { plainLine, styledLine, styledLineText } from "./styled-text";
 import { TerminalLayout } from "./terminal-layout";
+import { buildComposerLines, TerminalRenderer } from "./terminal-renderer";
+import { visibleLength } from "./text-measure";
 import { VirtualMessageList } from "./virtual-message-list";
 
 describe("formatPendingSummary", () => {
@@ -72,6 +74,21 @@ describe("formatPendingDisplayLines", () => {
 
     expect(lines[0]).toContain("⏳ pending:");
     expect(lines[0]).toContain("follow up");
+  });
+
+  test("keeps pending lines within the terminal width", () => {
+    const width = 56;
+    const lines = formatPendingDisplayLines(
+      [
+        {
+          line: "Profile: Default Bot (VdfJp6PY7m5hVM2dWX5xp) Provider: openai_compatible",
+          sendInput: { message: "pending" },
+        },
+      ],
+      width
+    );
+
+    expect(lines.every((line) => visibleLength(line) <= width)).toBe(true);
   });
 });
 
@@ -202,7 +219,7 @@ describe("TerminalLayout frame pipeline", () => {
     });
   }
 
-  test("diff-renders only changed lines", async () => {
+  test("uses pi-tui synchronized paints without clearing scrollback", () => {
     captureStdout();
     setTerminalSize(80, 10);
     const layout = new TerminalLayout(null);
@@ -222,8 +239,44 @@ describe("TerminalLayout frame pipeline", () => {
     const secondOutput = writes.join("");
 
     expect(firstOutput).toContain("\x1b[");
+    expect(firstOutput).toContain("\x1b[?2026h");
+    expect(firstOutput).not.toContain("\x1b[3J");
     expect(secondOutput).toContain("\x1b[");
-    expect(secondOutput.length).toBeLessThan(firstOutput.length * 2);
+    expect(secondOutput).not.toContain("\x1b[3J");
+    expect(secondOutput).not.toContain("\x1b[1;1H");
+  });
+
+  test("keeps the native cursor beside the drawn prompt cursor", () => {
+    captureStdout();
+    setTerminalSize(80, 10);
+    const layout = new TerminalLayout(null);
+
+    Object.assign(layout as Record<string, unknown>, {
+      anchored: true,
+      enabled: true,
+    });
+
+    layout.setReservedRows(
+      3,
+      buildComposerLines(
+        {
+          composer: {
+            cursorVisible: true,
+            prefix: "> ",
+            selectedIndex: 0,
+            suggestions: [],
+            value: "",
+          },
+          pendingMessages: [],
+        },
+        80
+      )
+    );
+
+    // pi-tui positions the hardware cursor with a relative row move and an
+    // absolute column move; the column must remain beside the drawn cursor.
+    expect(writes.join("")).toContain("\x1b[4G");
+    expect(writes.join("")).not.toContain("\x1b[80G");
   });
 
   test("serializes styled status line through frame serializer", () => {
@@ -286,6 +339,38 @@ describe("TerminalLayout frame pipeline", () => {
 
     const output = writes.join("");
     expect(output).toContain(" line-05 ");
+  });
+
+  test("clears the transcript and redraws the composer from the top", () => {
+    captureStdout();
+    setTerminalSize(80, 12);
+    const layout = new TerminalLayout(null);
+    Object.assign(layout, {
+      anchored: true,
+      anchorRow: 8,
+      enabled: true,
+    });
+    const renderer = new TerminalRenderer(null, layout);
+    renderer.setComposerState(renderer.getState().composer);
+    renderer.appendOutputLine("old message");
+    renderer.setStatusLine(plainLine("old status"));
+    renderer.scrollPage(1);
+
+    writes = [];
+    renderer.clear();
+
+    expect(writes.join("")).toContain("\x1b[2J\x1b[3J\x1b[H");
+    expect(layout.previousFrame?.topRow).toBe(1);
+    expect(layout.getLastOutputLine()).toBe(0);
+    expect(renderer.getState().statusLine).toBeNull();
+    expect(layout.previousFrame?.lines.map(styledLineText).slice(0, 4)).toEqual(
+      ["", " ".repeat(80), "> ▌" + " ".repeat(77), " ".repeat(80)]
+    );
+    renderer.scrollPage(1);
+    expect(writes.join("")).not.toContain("old message");
+    renderer.appendOutputLine("new message");
+    expect(writes.join("")).toContain("new message");
+    expect(layout.isEnabled()).toBe(true);
   });
 
   test("scrolls within retained history and returns to live output after eviction", () => {
@@ -453,6 +538,73 @@ describe("TerminalLayout frame pipeline", () => {
     }
   });
 
+  test("preserves markdown after streaming across user and tool messages", () => {
+    captureStdout();
+    setTerminalSize(80, 30);
+    const layout = new TerminalLayout(null);
+    Object.assign(layout, {
+      anchored: true,
+      anchorRow: 1,
+      enabled: true,
+      viewportTopRow: 1,
+    });
+    const renderer = new TerminalRenderer(null, layout);
+    renderer.beginStream();
+    renderer.appendUserMessage("question");
+    renderer.appendStreamChunk("**Before**");
+    renderer.appendToolLine("tool result");
+    renderer.appendStreamChunk("**After**");
+    renderer.endStream();
+
+    const messages = (layout as unknown as { messages: VirtualMessageList })
+      .messages;
+    const lines = messages.getLines(0, messages.totalLines(80), 80);
+    expect(lines.map(styledLineText).filter((line) => line.trim())).toEqual([
+      "> question".padEnd(80),
+      " Before ",
+      " tool result ",
+      " After ",
+    ]);
+    for (const text of ["Before", "After"]) {
+      expect(
+        lines.some((line) =>
+          line.segments.some(
+            (segment) => segment.text === text && segment.style?.bold
+          )
+        )
+      ).toBe(true);
+    }
+  });
+
+  test("renders markdown while the assistant stream is still open", () => {
+    captureStdout();
+    setTerminalSize(40, 12);
+    const layout = new TerminalLayout(null);
+
+    Object.assign(layout as Record<string, unknown>, {
+      anchored: true,
+      anchorRow: 8,
+      enabled: true,
+      viewportTopRow: 8,
+    });
+
+    layout.setReservedRows(1, [plainLine("> ")]);
+    layout.beginMessage("assistant");
+    layout.writeScroll("This is **bold**.");
+
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{
+        segments: Array<{ text: string; style?: { bold?: boolean } }>;
+      }>;
+    } | null;
+
+    expect(
+      frame?.lines.some((line) =>
+        line.segments.some((segment) => segment.style?.bold === true)
+      )
+    ).toBe(true);
+  });
+
   test("adds a blank row between submitted input and active stream", () => {
     captureStdout();
     setTerminalSize(20, 12);
@@ -559,9 +711,9 @@ describe("TerminalLayout frame pipeline", () => {
       "> hello             ",
       "                    ",
       "",
-      "  ",
+      "",
       " Morning! What's on ",
-      "  your mind today? ",
+      " your mind today? ",
       "",
       "> ",
     ]);

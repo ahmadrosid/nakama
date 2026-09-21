@@ -20,7 +20,7 @@ export class AutomationWorkerScheduler {
     this.scheduler = new AutomationScheduler({
       getDefaultTimezone: () => this.fetchDefaultTimezone(),
       listScheduledAutomations: () => this.fetchSchedules(),
-      runAutomation: (id) => this.runAutomation(id),
+      runAutomation: (id, orgId) => this.runAutomation(id, orgId),
     });
   }
 

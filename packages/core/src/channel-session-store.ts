@@ -7,6 +7,8 @@ export interface ChatSessionRecord {
   deliverableArtifacts?: DeliverableChannelArtifact[];
   profileId: string;
   sessionId: string;
+  /** Sessions this chat has been bound to. The API lists every session on the channel, so pickers filter to these. */
+  sessionIds?: string[];
   updatedAt: string;
 }
 

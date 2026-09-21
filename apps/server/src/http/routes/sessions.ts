@@ -16,8 +16,10 @@ import type {
 } from "@nakama/core";
 import {
   AGENT_CHANNELS,
+  fetchRemoteImage,
   formatServerError,
   NakamaApiError,
+  reportError,
 } from "@nakama/core";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
@@ -28,6 +30,7 @@ import {
 } from "../org-guards";
 import {
   errorResponse,
+  getRequestAuth,
   json,
   parseChannel,
   readJson,
@@ -42,6 +45,16 @@ export function registerSessionRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+  // createSession refuses Super Bot to non-admins. Every route that names an
+  // existing session repeats the check, or holding the ID would be enough.
+  const requireSessionAccess = async (
+    c: Parameters<typeof requireActiveOrgIdFromContext>[0]
+  ) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const sessionId = decodeURIComponent(c.req.param("sessionId") ?? "");
+    await agent.assertSessionProfileAccess(sessionId, orgId, getRequestAuth(c));
+    return { orgId, sessionId };
+  };
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -49,6 +62,8 @@ export function registerSessionRoutes(
   const createSessionRequestSchema = z
     .object({
       channel: agentChannelSchema,
+      cognito: z.boolean().optional(),
+      codingWorkspaceRoot: z.string().optional(),
       model: z.string().trim().min(1).optional(),
       profileId: z.string().optional(),
     })
@@ -62,6 +77,7 @@ export function registerSessionRoutes(
       createdAt: z.string().optional(),
       id: z.string(),
       messageCount: z.number().optional(),
+      pinned: z.boolean().optional(),
       preview: z.string().nullable().optional(),
       profileId: z.string(),
       title: z.string().nullable().optional(),
@@ -138,7 +154,18 @@ export function registerSessionRoutes(
     .object({ sessionId: z.string() })
     .openapi("BranchSessionResponse");
   const updateSessionRequestSchema = z
-    .object({ model: z.string().trim().min(1).nullable() })
+    .object({
+      model: z.string().trim().min(1).nullable().optional(),
+      pinned: z.boolean().optional(),
+      title: z.string().trim().min(1).max(200).optional(),
+    })
+    .refine(
+      (body) =>
+        body.model !== undefined ||
+        body.pinned !== undefined ||
+        body.title !== undefined,
+      "At least one session field is required."
+    )
     .openapi("UpdateSessionRequest");
   const sendMessageRequestSchema = z
     .object({
@@ -162,6 +189,51 @@ export function registerSessionRoutes(
   const streamQuerySchema = z.object({
     stream: z.enum(["true", "false"]).optional(),
   });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getRemoteChatImage",
+      path: "/v1/chat/images/proxy",
+      request: { query: z.object({ url: z.string().url().max(8192) }) },
+      responses: {
+        200: {
+          description: "Public raster image bytes (maximum 5 MiB)",
+          content: {
+            "image/*": { schema: z.string().openapi({ format: "binary" }) },
+          },
+        },
+        400: { description: "Missing organization context or invalid URL" },
+        401: { description: "Authentication required" },
+        404: { description: "Organization not found or inaccessible" },
+        502: { description: "Image unavailable or blocked" },
+      },
+      summary: "Proxy a public HTTPS image for chat",
+      tags: ["Chat"],
+    })
+  );
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getChatImageAttachment",
+      path: "/v1/attachments/{attachmentId}/content",
+      request: { params: z.object({ attachmentId: z.string() }) },
+      responses: {
+        200: {
+          description: "Image bytes",
+          content: {
+            "image/*": { schema: z.string().openapi({ format: "binary" }) },
+          },
+        },
+        401: { description: "Authentication required" },
+        403: { description: "Profile access denied" },
+        404: { description: "Image not found" },
+      },
+      summary: "Read an image attached to chat",
+      tags: ["Chat"],
+    })
+  );
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -374,6 +446,47 @@ export function registerSessionRoutes(
     })
   );
 
+  app.get("/v1/chat/images/proxy", async (c) => {
+    requireActiveOrgIdFromContext(c);
+    const url = c.req.query("url");
+    c.header("Cache-Control", "private, no-store");
+    if (!url || url.length > 8192) {
+      return c.json({ error: "Invalid image URL." }, 400);
+    }
+    try {
+      const image = await fetchRemoteImage(
+        url,
+        AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(10_000)])
+      );
+      return c.body(image.bytes, 200, {
+        "Content-Disposition": "attachment",
+        "Content-Type": image.contentType,
+        "X-Content-Type-Options": "nosniff",
+      });
+    } catch {
+      return c.json({ error: "Image unavailable." }, 502);
+    }
+  });
+
+  app.get("/v1/attachments/:attachmentId/content", async (c) => {
+    const attachment = await agent.readChatImageAttachment(
+      requireActiveOrgIdFromContext(c),
+      c.req.param("attachmentId"),
+      getRequestAuth(c)
+    );
+    if (!attachment) {
+      return errorResponse("Image not found", 404);
+    }
+    return new Response(attachment.bytes, {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": "attachment",
+        "Content-Type": attachment.mediaType,
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  });
+
   app.post("/v1/sessions", async (c) => {
     const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
@@ -385,12 +498,23 @@ export function registerSessionRoutes(
     }
     const body: CreateSessionRequest = parsedBody.data;
     const channel = parseChannel(body.channel);
+    if (
+      body.codingWorkspaceRoot !== undefined &&
+      (channel !== "cli" || auth.mode !== "local-token")
+    ) {
+      return errorResponse(
+        "Coding workspace is only available to the local CLI.",
+        400
+      );
+    }
     const sessionId = await agent.createSession(
       orgId,
       channel,
       body.profileId,
       auth.user.id,
       {
+        cognito: body.cognito,
+        codingWorkspaceRoot: body.codingWorkspaceRoot,
         excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
         isPlatformAdmin: auth.isPlatformAdmin,
         model: body.model,
@@ -410,14 +534,13 @@ export function registerSessionRoutes(
     }
 
     return json<ListSessionsResponse>(
-      await agent.listSessions(orgId, profileId, channel)
+      await agent.listSessions(orgId, profileId, channel, getRequestAuth(c))
     );
   });
 
   app.delete("/v1/sessions/:sessionId", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const purge = c.req.query("purge") === "true";
     const cleared = purge
       ? await agent.purgeSession(sessionId, orgId)
@@ -432,23 +555,39 @@ export function registerSessionRoutes(
 
   app.patch("/v1/sessions/:sessionId", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const parsedBody = updateSessionRequestSchema.safeParse(
       await readJson<unknown>(c.req.raw)
     );
     if (!parsedBody.success) {
-      return errorResponse("Invalid session model.", 400);
+      return errorResponse("Invalid session update.", 400);
     }
     const body: UpdateSessionRequest = parsedBody.data;
-    const updated = await agent.updateSessionModel(
-      sessionId,
-      orgId,
-      body.model
-    );
-
-    if (!updated) {
-      return errorResponse("Session not found", 404);
+    if (body.model !== undefined) {
+      const updated = await agent.updateSessionModel(
+        sessionId,
+        orgId,
+        body.model
+      );
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
+    }
+    if (body.title !== undefined) {
+      const updated = await agent.renameSession(sessionId, orgId, body.title);
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
+    }
+    if (body.pinned !== undefined) {
+      const updated = await agent.updateSessionPinned(
+        sessionId,
+        orgId,
+        body.pinned
+      );
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
     }
 
     return new Response(null, { status: 204 });
@@ -456,8 +595,7 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/compact", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const body = await readOptionalJson<CompactSessionRequest>(c.req.raw, {});
     const result = await agent.compactSession(
       sessionId,
@@ -475,8 +613,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/sessions/:sessionId/messages", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 
     if (!result) {
@@ -498,8 +635,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/sessions/:sessionId/status", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 
     if (!result) {
@@ -514,8 +650,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/sessions/:sessionId/stream", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 
     if (!result) {
@@ -533,8 +668,7 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
     const body = await readJson<BranchSessionRequest>(c.req.raw);
     const result = await agent.branchSession(
       sessionId,
@@ -551,8 +685,7 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
     requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const { orgId, sessionId } = await requireSessionAccess(c);
 
     const turnStarted = await agent.beginSessionTurn(sessionId, orgId);
     if (turnStarted === null) {
@@ -625,6 +758,9 @@ export function registerSessionRoutes(
         ...(contextUsage ? { contextUsage } : {}),
       });
     } catch (error) {
+      if (!(error instanceof NakamaApiError && error.status < 500)) {
+        void reportError(error, { kind: "turn", source: "server" });
+      }
       const message = formatServerError(error);
       sessionTurnRegistry.endTurn(sessionId, { error: message, type: "error" });
       return errorResponse(

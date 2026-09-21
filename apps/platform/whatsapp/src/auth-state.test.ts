@@ -50,6 +50,33 @@ async function expectPrivate(
 }
 
 describe("private WhatsApp auth state", () => {
+  test("persists Baileys 7 identity mappings, devices, and tokens across reloads", async () => {
+    const authDirectory = await createAuthDirectory();
+    const { saveCreds, state } =
+      await usePrivateMultiFileAuthState(authDirectory);
+    const token = { timestamp: "123", token: Buffer.from([1, 2, 3]) };
+    await saveCreds();
+    await state.keys.set({
+      "device-list": { "123": ["0", "2"] },
+      "lid-mapping": { "123": "456" },
+      tctoken: { "456@lid": token },
+    });
+
+    const reloaded = await usePrivateMultiFileAuthState(authDirectory);
+    expect(reloaded.state.creds.registrationId).toBe(
+      state.creds.registrationId
+    );
+    expect(await reloaded.state.keys.get("lid-mapping", ["123"])).toEqual({
+      "123": "456",
+    });
+    expect(await reloaded.state.keys.get("device-list", ["123"])).toEqual({
+      "123": ["0", "2"],
+    });
+    expect(await reloaded.state.keys.get("tctoken", ["456@lid"])).toEqual({
+      "456@lid": token,
+    });
+  });
+
   test.skipIf(!POSIX)(
     "creates fresh credentials and Signal keys privately",
     async () => {

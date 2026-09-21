@@ -6,6 +6,16 @@ const useCases = [
   },
   {
     details:
+      "Coordinate multiple agents, assign tasks, and bring their work together in one workflow.",
+    title: "Orchestrate your agents",
+  },
+  {
+    details:
+      "Connect agents to your CRM to update customer records and help your team manage follow-ups.",
+    title: "Manage your CRM",
+  },
+  {
+    details:
       "Use agents to find ideas and prepare posts for your team's review.",
     title: "Manage social media",
   },

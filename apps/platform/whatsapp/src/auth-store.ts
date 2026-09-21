@@ -1,3 +1,4 @@
+import type { ChannelConfigScope } from "@nakama/core/channel-config-shared";
 import type { WhatsAppConfigFile } from "@nakama/core/whatsapp-config";
 import {
   isWhatsAppUserAuthorized,
@@ -9,8 +10,10 @@ import {
 export class WhatsAppAuthStore {
   private config: WhatsAppConfigFile | null = null;
 
+  constructor(private readonly orgId: ChannelConfigScope = null) {}
+
   async reload(): Promise<WhatsAppConfigFile | null> {
-    this.config = await loadWhatsAppConfigFile();
+    this.config = await loadWhatsAppConfigFile(this.orgId);
     return this.config;
   }
 
@@ -27,7 +30,7 @@ export class WhatsAppAuthStore {
   }
 
   async rememberIdentities(jids: readonly string[]): Promise<void> {
-    await rememberWhatsAppPairedIdentities(jids);
+    await rememberWhatsAppPairedIdentities(jids, this.orgId);
     await this.reload();
   }
 
@@ -35,7 +38,11 @@ export class WhatsAppAuthStore {
     pairingCodeInput: string,
     jid: string
   ): Promise<{ ok: boolean; message: string }> {
-    const result = await verifyAndPairWhatsAppUser(pairingCodeInput, jid);
+    const result = await verifyAndPairWhatsAppUser(
+      pairingCodeInput,
+      jid,
+      this.orgId
+    );
     await this.reload();
     return result;
   }

@@ -2,8 +2,8 @@ import {
   areJidsSameUser,
   extractMessageContent,
   isJidGroup,
-  isJidUser,
   isLidUser,
+  isPnUser,
   type proto,
 } from "@whiskeysockets/baileys";
 import {
@@ -90,7 +90,7 @@ function pruneWhatsAppOutbound(now: number): void {
 }
 
 export function isPrivateWhatsAppChat(jid: string): boolean {
-  return isJidUser(jid) || isLidUser(jid);
+  return Boolean(isPnUser(jid) || isLidUser(jid));
 }
 
 export function isSelfWhatsAppChat(

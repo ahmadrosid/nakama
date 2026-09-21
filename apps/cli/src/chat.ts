@@ -9,13 +9,14 @@ import {
   type HealthResponse,
   type InitSoulResponse,
   type InitUserContextResponse,
+  type ListUserOrgsResponse,
   type ModelsResponse,
   type ProfileSummary,
   type SendMessageInput,
   type SoulStatusResponse,
   type UserContextStatusResponse,
 } from "@nakama/core";
-import { saveCliProfileId } from "./cli-config";
+import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
   formatSlashCommands,
@@ -26,6 +27,7 @@ import {
 import { formatCliDisplayPath } from "./display-path";
 import { mergeSendInput, parseImageLine } from "./image-input";
 import { createSerializedQueue, type PendingMessage } from "./message-queue";
+import { switchChatOrg } from "./org";
 import { PersistentPrompt } from "./persistent-prompt";
 import {
   type CliProfileOptions,
@@ -40,8 +42,10 @@ import {
 import { sendStreamCancellable } from "./stream-abort";
 import { styledLine } from "./styled-text";
 import { TerminalInput } from "./terminal-input";
+import { getTerminalColumns } from "./terminal-layout";
 import { TerminalRenderer } from "./terminal-renderer";
 import { printLine } from "./terminal-safe";
+import { stripAnsi, truncateText } from "./text-measure";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
@@ -49,10 +53,62 @@ const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   a
 /** Debounce bare ESC so alt-prefix / slow paste chunks do not abort. */
 const ESC_ABORT_DEBOUNCE_MS = 50;
 const MAX_PENDING_MESSAGES = 20;
+// ponytail: fixed preview cap; add interactive expansion if full tool history is needed.
+const MAX_TOOL_PREVIEW_LENGTH = 160;
+
+export function previewToolValue(value: unknown): string {
+  let text: string;
+
+  if (typeof value === "string") {
+    text = value.replace(/\s+/g, " ");
+  } else {
+    try {
+      text = JSON.stringify(value) ?? String(value);
+    } catch {
+      text = String(value);
+    }
+  }
+
+  return text.length > MAX_TOOL_PREVIEW_LENGTH
+    ? `${text.slice(0, MAX_TOOL_PREVIEW_LENGTH - 1)}…`
+    : text;
+}
+
+export function toolResultFailed(result: unknown): boolean {
+  if (!result || typeof result !== "object") {
+    return false;
+  }
+
+  const value = result as Record<string, unknown>;
+  return value.isError === true || value.error != null;
+}
+
+export function formatToolCall(
+  tool: string,
+  input: Record<string, unknown>,
+  status: "running" | "done" | "error",
+  elapsedMs?: number,
+  width = getTerminalColumns()
+): string {
+  const detail = input.path ?? input.file_path ?? input.command ?? input.query;
+  const summary =
+    typeof detail === "string" ? formatCliDisplayPath(detail) : "";
+  const marker = status === "running" ? "⠋" : status === "error" ? "✗" : "✓";
+  const duration =
+    elapsedMs === undefined ? "" : `  ${(elapsedMs / 1000).toFixed(1)}s`;
+  const text = stripAnsi(`${marker} ${tool}${summary ? `  ${summary}` : ""}`)
+    .replace(/\s+/g, " ")
+    .trim();
+  return truncateText(
+    `${truncateText(text, Math.max(1, width - duration.length - 2))}${duration}`,
+    Math.max(1, width - 2)
+  );
+}
 
 interface RunChatOptions {
   channel: AgentChannel;
   client: NakamaClient;
+  codingWorkspaceRoot?: string;
   offline?: boolean;
   profileId?: CliProfileOptions["profileId"];
   signal?: AbortSignal;
@@ -119,6 +175,7 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   let currentProfileId = startup.profileId;
   let currentProfile = startup.profile;
   let session = await options.client.createSession(options.channel, {
+    codingWorkspaceRoot: options.codingWorkspaceRoot,
     profileId: currentProfileId,
   });
 
@@ -126,17 +183,21 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   const renderer = new TerminalRenderer(terminalInput);
   const useStickyInput = renderer.apply();
 
-  printLine(`Profile: ${currentProfile.name} (${currentProfile.id})`);
+  printLine(` Profile: ${currentProfile.name} (${currentProfile.id})`);
   console.log("");
 
   if (options.offline) {
     console.log(
-      "Server has no provider configured. Chat runs in offline mode."
+      " Server has no provider configured. Chat runs in offline mode."
     );
     console.log("");
   } else {
     try {
-      await printCurrentModel(options.client);
+      await printCurrentModel(
+        options.client,
+        (line) => printLine(` ${line}`),
+        currentProfile
+      );
     } catch (error) {
       printError(error);
       console.log(
@@ -199,6 +260,15 @@ async function runStickyChat(
   let currentProfile = context.currentProfile;
 
   let isStreaming = false;
+  let activeCommands = 0;
+  let switchingOrg = false;
+  let orgsCache: ListUserOrgsResponse["orgs"] = [];
+  let currentOrgId = await loadSavedCliOrgId();
+  try {
+    orgsCache = (await options.client.listUserOrgs()).orgs;
+  } catch {
+    // Keep chat available if the organization list cannot be loaded.
+  }
   let abortController: AbortController | null = null;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
@@ -247,25 +317,110 @@ async function runStickyChat(
     renderer.setPendingMessages([...queue]);
   }
 
-  function createStreamHandlers(): StreamHandlers {
+  function createStreamHandlers(): StreamHandlers & { finishTools(): void } {
+    const activeTools = new Map<
+      string,
+      { tool: string; input: Record<string, unknown>; startedAt: number }
+    >();
+    let completed = 0;
+    let failedCount = 0;
+    let startedAt: number | undefined;
+    let endedAt = 0;
+    const toolSummary = () =>
+      `${completed} ${completed === 1 ? "tool" : "tools"} completed${failedCount ? ` · ${failedCount} failed` : ""}`;
+    const showRunningTool = () => {
+      const active = activeTools.values().next().value;
+      renderer.setStatusLine(
+        active
+          ? styledLine(
+              formatToolCall(
+                active.tool,
+                active.input,
+                "running",
+                undefined,
+                Math.max(
+                  1,
+                  getTerminalColumns() - ` · ${completed} done`.length
+                )
+              ) + ` · ${completed} done`,
+              {
+                dim: true,
+              }
+            )
+          : styledLine(toolSummary(), { dim: true })
+      );
+    };
+    const finishTools = () => {
+      if (startedAt === undefined) {
+        return;
+      }
+      const interrupted = activeTools.size;
+      const elapsed =
+        ((interrupted ? performance.now() : endedAt) - startedAt) / 1000;
+      renderer.setStatusLine(null);
+      renderer.appendToolLine(
+        styledLine(
+          `${failedCount || interrupted ? "✗" : "✓"} ${toolSummary()}${interrupted ? ` · ${interrupted} interrupted` : ""} · ${elapsed.toFixed(1)}s`,
+          { dim: true }
+        )
+      );
+      completed = 0;
+      failedCount = 0;
+      startedAt = undefined;
+    };
     return {
+      finishTools,
       onChunk: (delta) => {
         thinkingIndicator.stop();
+        if (activeTools.size === 0) {
+          finishTools();
+        }
         renderer.appendStreamChunk(delta);
       },
       onThinking: () => {
+        if (activeTools.size > 0) {
+          return;
+        }
+        finishTools();
         thinkingIndicator.start();
       },
       onToolEnd: (event) => {
-        renderer.appendToolLine(
-          styledLine(` [tool: ${event.tool} done] `, { dim: true })
-        );
+        const active = activeTools.get(event.toolCallId);
+        activeTools.delete(event.toolCallId);
+        const failed = toolResultFailed(event.result);
+        completed += 1;
+        failedCount += Number(failed);
+        endedAt = performance.now();
+        showRunningTool();
+        if (failed) {
+          renderer.appendToolLine(
+            styledLine(
+              formatToolCall(
+                event.tool,
+                active?.input ?? {},
+                "error",
+                active ? performance.now() - active.startedAt : undefined
+              ),
+              {
+                color: "red",
+                dim: true,
+              }
+            )
+          );
+          renderer.appendToolLine(
+            styledLine(`  ${previewToolValue(event.result)}`, { color: "red" })
+          );
+        }
       },
       onToolStart: (event) => {
         thinkingIndicator.stop();
-        renderer.appendToolLine(
-          styledLine(` [tool: ${event.tool}] `, { dim: true })
-        );
+        startedAt ??= performance.now();
+        activeTools.set(event.toolCallId, {
+          input: event.input,
+          startedAt: performance.now(),
+          tool: event.tool,
+        });
+        showRunningTool();
       },
     };
   }
@@ -277,18 +432,16 @@ async function runStickyChat(
       thinkingIndicator.start();
     }
 
+    const handlers = createStreamHandlers();
     try {
-      return await sendStreamCancellable(
-        session,
-        input,
-        createStreamHandlers(),
-        {
-          signal: abortController?.signal,
-        }
-      );
+      return await sendStreamCancellable(session, input, handlers, {
+        signal: abortController?.signal,
+      });
     } catch (error) {
       thinkingIndicator.stop();
       throw error;
+    } finally {
+      handlers.finishTools();
     }
   }
 
@@ -362,6 +515,7 @@ async function runStickyChat(
   async function handleChatMessage(
     promptResult: PromptLineResult
   ): Promise<void> {
+    const messageClient = options.client;
     const line = promptResult.text.trim();
     const hasImages = Boolean(promptResult.images?.length);
 
@@ -382,6 +536,12 @@ async function runStickyChat(
       return;
     }
 
+    if (switchingOrg || messageClient !== options.client) {
+      writeOutput(
+        "Chat changed while preparing the message. Please send it again."
+      );
+      return;
+    }
     if (isStreaming && queue.length >= MAX_PENDING_MESSAGES) {
       writeOutput(
         "Pending queue is full. Wait for a response before sending again."
@@ -415,9 +575,13 @@ async function runStickyChat(
     }
 
     if (line === "/clear") {
+      if (isStreaming) {
+        writeOutput("Wait for the current response to finish.");
+        return "handled";
+      }
       await session.clear();
       lastUserMessage = null;
-      writeOutput("History cleared.");
+      renderer.clear();
       return "handled";
     }
 
@@ -491,23 +655,6 @@ async function runStickyChat(
       return "handled";
     }
 
-    if (line === "/models") {
-      if (isStreaming) {
-        writeOutput("Wait for the current response to finish.");
-        return "handled";
-      }
-
-      await refreshModelsCache();
-
-      if (!modelsCache?.models.length) {
-        writeOutput("No models available.");
-        return "handled";
-      }
-
-      prompt?.prefill("/model ");
-      return "handled";
-    }
-
     if (line === "/thinking" || line.startsWith("/thinking ")) {
       return handleThinkingCommand(line);
     }
@@ -522,6 +669,47 @@ async function runStickyChat(
 
     if (line === "/profile" || line.startsWith("/profile ")) {
       return handleProfileCommand(line);
+    }
+
+    if (line === "/org" || line.startsWith("/org ")) {
+      if (isStreaming || queue.length > 0 || activeCommands > 1) {
+        writeOutput("Wait for the current response or command to finish.");
+        return "handled";
+      }
+      switchingOrg = true;
+      try {
+        const next = await switchChatOrg(
+          options.client,
+          line.slice("/org".length).trim(),
+          options.channel,
+          writeOutput,
+          options.codingWorkspaceRoot
+        );
+        if (next) {
+          currentOrgId = next.orgId;
+          options.client = next.client;
+          options.offline = next.offline;
+          currentProfile = next.profile;
+          currentProfileId = next.profile.id;
+          session = next.session;
+          context.onProfileChange(currentProfileId, currentProfile);
+          context.onSessionChange(session);
+          lastUserMessage = null;
+          modelsCache = null;
+          profilesCache = [];
+          renderer.clear();
+          await refreshProfilesCache();
+          await refreshModelsCache();
+          writeOutput(
+            `Organization switched. Chatting with ${currentProfile.name}.`
+          );
+        }
+      } catch (error) {
+        writeError(error);
+      } finally {
+        switchingOrg = false;
+      }
+      return "handled";
     }
 
     if (line.startsWith("/create")) {
@@ -588,6 +776,7 @@ async function runStickyChat(
         enabled,
       });
       session = await options.client.createSession(options.channel, {
+        codingWorkspaceRoot: options.codingWorkspaceRoot,
         profileId: currentProfileId,
       });
       context.onSessionChange(session);
@@ -626,18 +815,20 @@ async function runStickyChat(
   async function handleModelCommand(line: string): Promise<"handled"> {
     const modelArg = line.slice("/model".length).trim();
 
-    if (!modelArg) {
-      await printCurrentModel(
-        options.client,
-        writeOutput,
-        currentProfile,
-        modelsCache
-      );
+    if (isStreaming) {
+      writeOutput("Wait for the current response to finish.");
       return "handled";
     }
 
-    if (isStreaming) {
-      writeOutput("Wait for the current response to finish.");
+    if (!modelArg) {
+      await refreshModelsCache();
+
+      if (!modelsCache?.models.length) {
+        writeOutput("No models available.");
+        return "handled";
+      }
+
+      prompt?.prefill("/model ");
       return "handled";
     }
 
@@ -652,24 +843,20 @@ async function runStickyChat(
 
       if (target === "ambiguous") {
         writeOutput(
-          `Ambiguous model: ${modelArg}. Use /model <provider-id>::<model-id> (see /models).`
+          `Ambiguous model: ${modelArg}. Choose a provider-specific model from /model.`
         );
         return "handled";
       }
 
-      const profileResponse = await options.client.updateProfile(
-        currentProfileId,
-        {
-          model: `${target.providerId}::${target.modelId}`,
-        }
-      );
-      currentProfile = profileResponse.profile;
+      const model = `${target.providerId}::${target.modelId}`;
       session = await options.client.createSession(options.channel, {
+        codingWorkspaceRoot: options.codingWorkspaceRoot,
+        model,
         profileId: currentProfileId,
       });
+      currentProfile = { ...currentProfile, model };
       context.onSessionChange(session);
       lastUserMessage = null;
-      await refreshModelsCache();
       writeOutput(`Model switched to ${target.modelId}. Chat history reset.`);
     } catch (error) {
       writeError(error);
@@ -717,6 +904,7 @@ async function runStickyChat(
       context.onProfileChange(currentProfileId, currentProfile);
       await saveCliProfileId(currentProfileId);
       session = await options.client.createSession(options.channel, {
+        codingWorkspaceRoot: options.codingWorkspaceRoot,
         profileId: currentProfileId,
       });
       context.onSessionChange(session);
@@ -819,10 +1007,12 @@ async function runStickyChat(
 
       return resolveSuggestions({
         currentModel: active.modelId,
+        currentOrgId,
         currentProfileId,
         currentProviderId: active.providerId,
         input,
         models: modelsCache?.models,
+        orgs: orgsCache,
         profiles: profilesCache,
       });
     },
@@ -868,6 +1058,10 @@ async function runStickyChat(
       renderer.scrollToLatest();
     },
     onSubmit: async (result) => {
+      if (switchingOrg) {
+        writeOutput("Wait for the organization switch to finish.");
+        return;
+      }
       const line = result.text.trim();
       const hasImages = Boolean(result.images?.length);
 
@@ -876,7 +1070,13 @@ async function runStickyChat(
       }
 
       if (line.startsWith("/") || isExitCommand(line)) {
-        const outcome = await handleSlashCommand(line);
+        let outcome: "handled" | "exit" | "unhandled";
+        activeCommands += 1;
+        try {
+          outcome = await handleSlashCommand(line);
+        } finally {
+          activeCommands -= 1;
+        }
 
         if (outcome === "exit") {
           chatExit.requestExit();
@@ -909,8 +1109,8 @@ async function runStickyChat(
 
 async function runBlockingChat(context: ChatContext): Promise<void> {
   const { options } = context;
-  const session = context.session;
-  const currentProfileId = context.currentProfileId;
+  let session = context.session;
+  let currentProfileId = context.currentProfileId;
   let processing = false;
   let busyDrops = 0;
   let modelsCache: ModelsResponse | null = null;
@@ -1059,6 +1259,33 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         continue;
       }
 
+      if (line === "/org" || line.startsWith("/org ")) {
+        try {
+          const next = await switchChatOrg(
+            options.client,
+            line.slice("/org".length).trim(),
+            options.channel,
+            printLine,
+            options.codingWorkspaceRoot
+          );
+          if (next) {
+            options.client = next.client;
+            options.offline = next.offline;
+            currentProfileId = next.profile.id;
+            session = next.session;
+            context.onSessionChange(session);
+            await refreshProfilesCache();
+            await refreshModelsCache();
+            printLine(
+              `Organization switched. Chatting with ${next.profile.name}.`
+            );
+          }
+        } catch (error) {
+          printError(error);
+        }
+        continue;
+      }
+
       processing = true;
 
       let sendInput: SendMessageInput;
@@ -1101,13 +1328,11 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
 async function printCurrentModel(
   client: NakamaClient,
   write: (text: string) => void = printLine,
-  profile: ProfileSummary | null = null,
+  profile: ProfileSummary,
   cachedModels: ModelsResponse | null = null
 ): Promise<void> {
   const models = cachedModels ?? (await client.getModels());
-  const active = profile
-    ? effectiveModelState(profile, models)
-    : { modelId: null, providerId: models.currentProviderId };
+  const active = effectiveModelState(profile, models);
 
   if (!(models.provider && active.modelId)) {
     write("No model configured.");
@@ -1325,12 +1550,10 @@ function formatProfilesLines(
       .filter(Boolean)
       .join(", ");
 
-    lines.push(
-      `  ${profile.id} — ${profile.name}${markers ? ` (${markers})` : ""}`
-    );
+    lines.push(`  ${profile.name}${markers ? ` (${markers})` : ""}`);
   }
 
-  lines.push("Use /profile <id> to switch.");
+  lines.push("Use /profile <name> to switch.");
   return lines;
 }
 

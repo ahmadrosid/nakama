@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { routeErrorStateFromResetKey } from "@/components/route-error-state";
+import {
+  routeErrorStateFromResetKey,
+  shouldReloadAfterRouteError,
+} from "@/components/route-error-state";
 
 describe("routeErrorStateFromResetKey", () => {
   test("clears a failed load when the route key changes", () => {
@@ -18,5 +21,37 @@ describe("routeErrorStateFromResetKey", () => {
         resetKey: "/chat",
       })
     ).toBeNull();
+  });
+});
+
+describe("shouldReloadAfterRouteError", () => {
+  test("reloads once for a stale lazy chunk error", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    expect(
+      shouldReloadAfterRouteError(
+        "Failed to fetch dynamically imported module",
+        storage,
+        1000
+      )
+    ).toBe(true);
+    expect(
+      shouldReloadAfterRouteError(
+        "Failed to fetch dynamically imported module",
+        storage,
+        2000
+      )
+    ).toBe(false);
+  });
+
+  test("does not reload for ordinary route errors", () => {
+    const storage = { getItem: () => null, setItem: () => {} };
+    expect(shouldReloadAfterRouteError("Request failed", storage, 1000)).toBe(
+      false
+    );
   });
 });

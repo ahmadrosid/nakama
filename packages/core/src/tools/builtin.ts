@@ -2,11 +2,13 @@ import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
-import type { ToolContext, ToolDefinition } from "../contract";
+import type { ImageAttachment, ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
+import { MAX_IMAGE_BYTES } from "../message-content";
 import { isOmniEnabled, omniRetrieveTool } from "../omni";
+import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
@@ -16,6 +18,7 @@ import {
   guardFilePath,
   PathGuardError,
   type PathGuardOptions,
+  resolveWithRealpath,
 } from "./paths";
 import {
   jsonSchemaFromZod,
@@ -32,7 +35,9 @@ import { webSearchTool } from "./web-search";
 
 export const writeFileInputSchema = z
   .object({
-    content: requiredTrimmedString("content"),
+    content: z
+      .string({ error: "content is required." })
+      .regex(/\S/, "content is required."),
     cwd: trimmedOptionalString,
     path: requiredTrimmedString("path"),
   })
@@ -106,6 +111,7 @@ export interface ReadFileOutput {
   bytesRead: number;
   content: string;
   endLine: number;
+  images?: ImageAttachment[];
   path: string;
   startLine: number;
   totalLines: number;
@@ -211,6 +217,43 @@ export function refuseProfileSkillMarkdownWrite(
   );
 }
 
+/** Mirrors the archive names MemoryBackendService treats as memory. */
+const MEMORY_ARCHIVE_NAME = /^memory-archive\/[0-9]{4}-[0-9]{2}\.md$/;
+
+/**
+ * A cognito session promises the chat is never written back to memory, and
+ * memory is plain Markdown in the profile workspace rather than a dedicated
+ * tool, so the file tools are the path that has to refuse it.
+ *
+ * Matches exactly what `MemoryBackendService.toolContext` counts as memory:
+ * `MEMORY.md` at the workspace root and `memory-archive/YYYY-MM.md`. A
+ * same-named file deeper in the tree is an ordinary artifact and stays
+ * writable.
+ *
+ * Call after the path guard succeeds, so `resolvedPath` is already realpath'd.
+ */
+export function refuseMemoryFileWrite(
+  context: ToolContext,
+  resolvedPath: string,
+  workspaceRoot: string
+): void {
+  if (!context.forbidMemoryWrites) {
+    return;
+  }
+
+  const name = path
+    .relative(resolveWithRealpath(workspaceRoot), resolvedPath)
+    .replace(/\\/g, "/");
+
+  if (name !== "MEMORY.md" && !MEMORY_ARCHIVE_NAME.test(name)) {
+    return;
+  }
+
+  throw new Error(
+    `This is a cognito chat, so ${name} cannot be written or deleted. Nothing from this conversation is saved to memory. Answer from the conversation instead, and tell the user if they need it remembered.`
+  );
+}
+
 /**
  * Always refuse agent writes of skill-local executables under skills/<name>/.
  * Those modules are loaded via dynamic import and must stay admin-authored in Phase 1.
@@ -238,14 +281,28 @@ export function refuseSkillLocalToolFileWrite(resolvedPath: string): void {
   );
 }
 
-function buildFileGuardOptions(
+/**
+ * Named apart from the `resolveWorkspaceRoot` in `paths.ts` and the one in
+ * `bash.ts`, which have different signatures and are easy to reach for by
+ * mistake.
+ */
+function fileToolWorkspaceRoot(
   context: ToolContext,
   options: FileToolRunOptions = {}
-): PathGuardOptions {
+): string {
   const { orgId, profileId } = requireProfileScope(context);
   const workspaceRoot =
     options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
   assertAbsoluteWorkspaceRoot(workspaceRoot);
+
+  return workspaceRoot;
+}
+
+function buildFileGuardOptions(
+  context: ToolContext,
+  options: FileToolRunOptions = {}
+): PathGuardOptions {
+  const workspaceRoot = fileToolWorkspaceRoot(context, options);
 
   return {
     ...defaultGuardOptions,
@@ -310,6 +367,11 @@ export async function runWriteFile(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const { orgId, profileId } = requireProfileScope(context);
   const workspaceRoot =
@@ -345,6 +407,7 @@ export async function runWriteFile(
   }
 
   await mkdir(path.dirname(filePath), { recursive: true });
+  await context.memoryFiles?.write(filePath, parsed.content);
   await writeFile(filePath, parsed.content, "utf8");
 
   return { bytesWritten: contentBytes, path: filePath };
@@ -380,6 +443,11 @@ export async function runWriteDocx(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   // Same rule as write_file: never silently overwrite an existing artifact.
   const filePath = isArtifactPath(parsed.path)
@@ -418,7 +486,13 @@ export async function runDeleteFile(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
+  await context.memoryFiles?.remove(guarded.resolved);
   await unlink(guarded.resolved);
 
   return { deleted: true, path: guarded.resolved };
@@ -452,6 +526,11 @@ export async function runEditFile(
     guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
+  refuseMemoryFileWrite(
+    context,
+    guarded.resolved,
+    fileToolWorkspaceRoot(context, options)
+  );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const filePath = guarded.resolved;
 
@@ -480,7 +559,12 @@ export async function runEditFile(
     );
   }
 
-  const rawBuffer = await readFile(filePath);
+  let rawBuffer = await readFile(filePath);
+  if (context.memoryFiles) {
+    rawBuffer = Buffer.from(
+      await context.memoryFiles.read(filePath, rawBuffer.toString("utf8"))
+    );
+  }
   const hasBom =
     rawBuffer.length >= 3 &&
     rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
@@ -527,6 +611,7 @@ export async function runEditFile(
     bytesWritten,
     guardOptions
   );
+  await context.memoryFiles?.write(filePath, outputContent);
   await writeFile(filePath, outputContent, "utf8");
 
   return {
@@ -681,21 +766,40 @@ function applyEditPlans(content: string, plans: PlannedEdit[]): string {
  * mojibake. Convert `.docx` to Markdown instead, which keeps headings and tables
  * legible to the model while still being plain text to every caller downstream.
  */
-async function readFileAsText(filePath: string): Promise<string> {
+async function readFileAsText(
+  filePath: string,
+  bytes: Buffer
+): Promise<string> {
   const filename = path.basename(filePath);
 
   // Word-named files are judged by their bytes: a real .docx archive, a legacy OLE
   // .doc, or (commonly) HTML that an agent saved under a Word extension.
   if (isDocxFile(filename) || isLegacyDocFile(filename)) {
-    return convertDocxToMarkdown(await readFile(filePath));
+    return convertDocxToMarkdown(bytes);
   }
 
-  return readFile(filePath, "utf8");
+  return bytes.toString("utf8");
+}
+
+function detectImageMediaType(bytes: Buffer): string | undefined {
+  if (bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return "image/png";
+  }
+  if (bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return "image/jpeg";
+  }
+  const header = bytes.toString("latin1", 0, 12);
+  if (header.startsWith("GIF87a") || header.startsWith("GIF89a")) {
+    return "image/gif";
+  }
+  if (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP") {
+    return "image/webp";
+  }
 }
 
 export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
   description:
-    "Read text from a file in the active profile workspace. Word .docx files are converted to Markdown. Use offset/limit for large files.",
+    "Read a file in the active profile workspace. PNG, JPEG, GIF, and WebP images are returned as image attachments (up to 5 MB). Word .docx files are converted to Markdown. Use offset/limit for text files; images are read in full.",
   name: "read_file",
   parallelSafe: true,
   parameters: jsonSchemaFromZod(readFileInputSchema),
@@ -711,6 +815,7 @@ export async function runReadFile(
 ): Promise<ReadFileOutput> {
   const parsed = parseToolInput(readFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
+  guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
   const guarded = await guardFilePath(
@@ -746,7 +851,30 @@ export async function runReadFile(
     );
   }
 
-  const rawContent = await readFileAsText(filePath);
+  const bytes = await readFile(filePath);
+  const mediaType = detectImageMediaType(bytes);
+  if (mediaType) {
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new PathGuardError(
+        `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
+        "TOO_LARGE"
+      );
+    }
+    return {
+      bytesRead: bytes.length,
+      content: `Read image file [${mediaType}]`,
+      endLine: 0,
+      images: [{ data: bytes.toString("base64"), mediaType }],
+      path: filePath,
+      startLine: 0,
+      totalLines: 0,
+      truncated: false,
+    };
+  }
+  const localContent = await readFileAsText(filePath, bytes);
+  const rawContent = context.memoryFiles
+    ? await context.memoryFiles.read(filePath, localContent)
+    : localContent;
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;
   const startLine = Math.min(

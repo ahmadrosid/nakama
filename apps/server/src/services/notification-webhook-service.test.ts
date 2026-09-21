@@ -22,9 +22,19 @@ describe("NotificationWebhookService", () => {
       slug: "acme",
       updatedAt: "2026-07-04T10:00:00.000Z",
     });
+    await databaseAdapter.upsertProfile({
+      createdAt: "2026-07-04T10:00:00.000Z",
+      id: "agent_1",
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Agent",
+      orgId: "org_1",
+      systemPrompt: "",
+      updatedAt: "2026-07-04T10:00:00.000Z",
+    });
     await databaseAdapter.upsertNotificationDestination({
       channel: "telegram",
-      config: { chatId: 1001, topicId: 22 },
+      config: { chatId: 1001, profileId: "agent_1", topicId: 22 },
       createdAt: "2026-07-04T10:00:00.000Z",
       id: "dest_1",
       name: "Payments",
@@ -55,7 +65,9 @@ describe("NotificationWebhookService", () => {
     expect(calls).toEqual([
       {
         chatIds: [1001],
+        orgId: "org_1",
         parseMode: "HTML",
+        profileId: "agent_1",
         text: "✅ **New payment received**\n\nCustomer: Ahmad",
         topicId: 22,
       },

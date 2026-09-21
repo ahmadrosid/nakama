@@ -2,6 +2,43 @@
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
+    "packages/telegram-manager": {
+      // Generated JavaScript is shipped for Git installs; analyze its TypeScript source.
+      "ignore": ["dist/**"]
+    },
+    "packages/plugins/google-meet": {
+      "entry": [
+        "src/actions.ts",
+        "src/worker.ts",
+        "src/ui.tsx",
+        "actions/actions.js",
+        "workers/meet.js",
+        "ui/app.js",
+        "extension/background.js",
+        "extension/content.js",
+        "extension/microphone.js",
+        "extension/offscreen.js",
+        "extension/popup.js"
+      ]
+    },
+    "apps/desktop": {
+      "entry": ["preload.cjs", "tests/smoke.mjs"],
+      // The packaged runtime copies workspace sources and generated declarations.
+      "ignore": ["dist/**"],
+      // PowerShell 7 is supplied by the Windows build host.
+      "ignoreBinaries": ["pwsh"],
+      "project": ["*.mjs", "*.cjs", "tests/*.mjs", "scripts/*.mjs"]
+    },
+    "packages/plugins/supermemory": {
+      "entry": [
+        "src/worker.ts",
+        "workers/server.js",
+        "src/actions.ts",
+        "src/ui.tsx",
+        "actions/actions.js",
+        "ui/app.js"
+      ]
+    },
     "packages/plugins/workflows": {
       "entry": [
         "src/actions.ts",

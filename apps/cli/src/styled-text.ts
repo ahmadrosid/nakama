@@ -15,6 +15,9 @@ export interface TextStyle {
   bold?: boolean;
   color?: NamedColor;
   dim?: boolean;
+  italic?: boolean;
+  strikethrough?: boolean;
+  underline?: boolean;
 }
 
 export interface StyledSegment {
@@ -48,9 +51,11 @@ const COLOR_CODES: Record<NamedColor, string> = {
 
 const BACKGROUND_CODES: Record<Theme, Record<NamedBackgroundColor, string>> = {
   dark: {
-    surface: "48;5;236",
+    // Codex tints a dark terminal background toward white by ~12%.
+    surface: "48;5;235",
   },
   light: {
+    // Codex tints a light terminal background toward black by ~4%.
     surface: "48;5;254",
   },
 };
@@ -59,9 +64,22 @@ const DEFAULTS_TIMEOUT_MS = 500;
 
 let currentTheme: Theme = "dark";
 let sessionMacOsTheme: Theme | undefined;
+let terminalBackgroundRgb: readonly [number, number, number] | undefined;
 
 export function setTheme(theme: Theme): void {
   currentTheme = theme;
+}
+
+function surfaceBackgroundCode(): string {
+  if (!terminalBackgroundRgb) {
+    return `48;5;${currentTheme === "dark" ? "235" : "254"}`;
+  }
+
+  const [r, g, b] = terminalBackgroundRgb;
+  const tint = currentTheme === "light" ? 0.04 : 0.12;
+  const target = currentTheme === "light" ? 0 : 255;
+  const blend = (value: number) => Math.round(value + (target - value) * tint);
+  return `48;2;${blend(r)};${blend(g)};${blend(b)}`;
 }
 
 export function getCliStatePath(): string {
@@ -168,7 +186,9 @@ export async function detectMacOsTheme(
 export async function detectTheme(): Promise<Theme | null> {
   // macOS system appearance — most reliable for Apple terminals
   if (process.platform === "darwin") {
-    return detectMacOsTheme();
+    const theme = await detectMacOsTheme();
+    await probeTerminalBackground();
+    return theme;
   }
 
   // Many terminals set this: "0;15" = dark bg light fg, "15;0" = light bg dark fg
@@ -186,18 +206,42 @@ export async function detectTheme(): Promise<Theme | null> {
     return null;
   }
 
+  const background = await probeTerminalBackground();
+  if (background) {
+    const [r, g, b] = background;
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    return luminance > 128 ? "light" : "dark";
+  }
+
+  return null;
+}
+
+async function probeTerminalBackground(): Promise<
+  readonly [number, number, number] | null
+> {
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
+    return null;
+  }
+
   return new Promise((resolve) => {
     const { stdin, stdout } = process;
     const wasRaw = stdin.isRaw;
     let resolved = false;
 
-    const finish = (result: Theme | null) => {
+    if (!wasRaw) {
+      stdin.setRawMode?.(true);
+    }
+
+    const finish = (result: readonly [number, number, number] | null) => {
       if (resolved) {
         return;
       }
       resolved = true;
       clearTimeout(timer);
       stdin.off("data", onData);
+      if (!wasRaw) {
+        stdin.setRawMode?.(false);
+      }
       if (!wasRaw) {
         stdin.pause();
       }
@@ -220,13 +264,11 @@ export async function detectTheme(): Promise<Theme | null> {
       if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
         return;
       }
-      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-      finish(luminance > 128 ? "light" : "dark");
+      terminalBackgroundRgb = [r, g, b];
+      finish([r, g, b]);
     }
 
-    if (!wasRaw) {
-      stdin.resume();
-    }
+    stdin.resume();
     stdin.on("data", onData);
     stdout.write("\x1b]11;?\x1b\\");
   });
@@ -257,6 +299,79 @@ export function normalizeStyledLine(input: string | StyledLine): StyledLine {
   return cloneStyledLine(input);
 }
 
+export function styledLineFromAnsi(input: string): StyledLine {
+  const segments: StyledSegment[] = [];
+  const pattern = /\x1b\[([0-9;]*)m/g;
+  let style: TextStyle = {};
+  let start = 0;
+
+  const addSegment = (text: string) => {
+    if (text) {
+      segments.push({
+        style: Object.keys(style).length > 0 ? { ...style } : undefined,
+        text,
+      });
+    }
+  };
+
+  for (const match of input.matchAll(pattern)) {
+    addSegment(input.slice(start, match.index));
+    for (const code of (match[1] || "0").split(";").map(Number)) {
+      switch (code) {
+        case 0:
+          style = {};
+          break;
+        case 1:
+          style = { ...style, bold: true };
+          break;
+        case 2:
+          style = { ...style, dim: true };
+          break;
+        case 3:
+          style = { ...style, italic: true };
+          break;
+        case 4:
+          style = { ...style, underline: true };
+          break;
+        case 9:
+          style = { ...style, strikethrough: true };
+          break;
+        case 22:
+          style = { ...style, bold: false, dim: false };
+          break;
+        case 23:
+          style = { ...style, italic: false };
+          break;
+        case 24:
+          style = { ...style, underline: false };
+          break;
+        case 29:
+          style = { ...style, strikethrough: false };
+          break;
+        case 31:
+          style = { ...style, color: "red" };
+          break;
+        case 32:
+          style = { ...style, color: "green" };
+          break;
+        case 33:
+          style = { ...style, color: "yellow" };
+          break;
+        case 36:
+          style = { ...style, color: "cyan" };
+          break;
+        case 39:
+          style = { ...style, color: "default" };
+          break;
+      }
+    }
+    start = (match.index ?? 0) + match[0].length;
+  }
+
+  addSegment(input.slice(start));
+  return { segments: segments.length > 0 ? segments : [{ text: "" }] };
+}
+
 export function styledLineText(line: StyledLine): string {
   return line.segments.map((segment) => segment.text).join("");
 }
@@ -279,6 +394,15 @@ export function serializeStyledLine(line: StyledLine): string {
     if (style?.dim) {
       codes.push("2");
     }
+    if (style?.italic) {
+      codes.push("3");
+    }
+    if (style?.underline) {
+      codes.push("4");
+    }
+    if (style?.strikethrough) {
+      codes.push("9");
+    }
     if (style?.blink) {
       codes.push("5");
     }
@@ -286,7 +410,11 @@ export function serializeStyledLine(line: StyledLine): string {
       codes.push(COLOR_CODES[style.color]);
     }
     if (style?.background) {
-      codes.push(BACKGROUND_CODES[currentTheme][style.background]);
+      codes.push(
+        style.background === "surface"
+          ? surfaceBackgroundCode()
+          : BACKGROUND_CODES[currentTheme][style.background]
+      );
     }
 
     if (codes.length > 0) {

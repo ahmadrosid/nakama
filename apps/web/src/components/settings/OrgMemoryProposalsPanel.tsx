@@ -16,6 +16,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
 import { type ReactNode, useState } from "react";
+import { Link } from "react-router-dom";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import {
@@ -23,6 +24,7 @@ import {
   useOrgMemoryProposals,
   useRejectOrgMemoryProposal,
 } from "@/hooks/use-org-memory-proposals";
+import { useKnowledgeBaseQuery } from "@/hooks/use-resource-mutations";
 import {
   formatSessionRelativeTime,
   formatSessionTimestamp,
@@ -67,6 +69,72 @@ function resolveProposer(
     email: member.name?.trim() ? member.email : undefined,
     name,
   };
+}
+
+function ProposalSources({
+  proposal,
+  variant = "compact",
+}: {
+  proposal: OrgMemoryProposal;
+  variant?: "compact" | "detail";
+}) {
+  const sourceDocumentIds = proposal.sourceDocumentIds;
+  const { data, isPending } = useKnowledgeBaseQuery(proposal.profileId);
+  const documentsById = new Map(
+    (data?.documents ?? []).map((document) => [document.id, document])
+  );
+
+  if (sourceDocumentIds.length === 0) {
+    return <p className="text-muted-foreground text-xs">No source document</p>;
+  }
+
+  const knowledgeHref = proposal.profileId
+    ? `/profiles?profile=${encodeURIComponent(proposal.profileId)}&tab=knowledge`
+    : null;
+
+  return (
+    <div className={variant === "detail" ? "space-y-1" : undefined}>
+      {variant === "detail" ? (
+        <p className="text-black text-xs dark:text-white">Sources</p>
+      ) : null}
+      <ul className="space-y-0.5 text-xs">
+        {sourceDocumentIds.map((documentId) => {
+          const document = documentsById.get(documentId);
+          if (!document) {
+            // Wait for KB before calling a miss "Removed"; without a profile we
+            // cannot resolve filenames, so show a shortened id instead.
+            if (proposal.profileId && isPending) {
+              return null;
+            }
+            return (
+              <li className="text-muted-foreground" key={documentId}>
+                {proposal.profileId
+                  ? "Removed document"
+                  : shortenId(documentId)}
+              </li>
+            );
+          }
+          if (knowledgeHref) {
+            return (
+              <li key={documentId}>
+                <Link
+                  className="text-foreground underline-offset-2 hover:underline"
+                  to={knowledgeHref}
+                >
+                  {document.filename}
+                </Link>
+              </li>
+            );
+          }
+          return (
+            <li className="text-foreground" key={documentId}>
+              {document.filename}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 function ProposalMetadataTableRow({
@@ -226,6 +294,8 @@ function ProposalReviewDialog({
             />
           </div>
 
+          <ProposalSources proposal={proposal} variant="detail" />
+
           {warnings.length > 0 ? (
             <p className="text-amber-600 text-xs dark:text-amber-400">
               {warnings.join(" ")}
@@ -313,6 +383,7 @@ function ProposalRow({
             proposal={proposal}
             proposer={proposer}
           />
+          <ProposalSources proposal={proposal} />
         </div>
         <Button
           className="shrink-0"

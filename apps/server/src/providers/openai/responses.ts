@@ -15,6 +15,7 @@ import {
 } from "@nakama/core";
 import {
   buildTokenUsage,
+  formatHttpErrorBody,
   normalizeThinkingEffort,
   parseJsonRecord,
   readRecord,
@@ -69,7 +70,7 @@ export async function generateOpenAIResponsesChat(options: {
 
   if (!response.ok) {
     throw new Error(
-      `${label} request failed (${response.status}): ${await response.text()}`
+      formatHttpErrorBody(label, response.status, await response.text())
     );
   }
 
@@ -207,14 +208,15 @@ function toResponsesAssistantInput(
   message: Extract<ChatMessage, { role: "assistant" }>
 ): unknown[] {
   const input: unknown[] = [];
+  const providerContent = message.providerContent?.filter(
+    (part) => typeof readRecord(part).type === "string"
+  );
 
   if (message.toolCalls?.length) {
-    if (message.providerContent?.length) {
+    if (providerContent?.length) {
       // providerContent already carries the assistant message item; pushing
       // message.content as well would replay the same text twice.
-      input.push(
-        ...message.providerContent.filter(isNonFunctionCallProviderItem)
-      );
+      input.push(...providerContent.filter(isNonFunctionCallProviderItem));
     } else if (message.content.trim()) {
       input.push(toResponsesAssistantTextMessage(message.content));
     }
@@ -231,8 +233,8 @@ function toResponsesAssistantInput(
     return input;
   }
 
-  if (message.providerContent?.length) {
-    input.push(...message.providerContent);
+  if (providerContent?.length) {
+    input.push(...providerContent);
     return input;
   }
 

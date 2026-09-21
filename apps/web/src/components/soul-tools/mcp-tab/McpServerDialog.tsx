@@ -100,6 +100,7 @@ function McpServerDialogPanels({
   busy,
   availableServers,
   onAssign,
+  onTestConnection,
   onOpenChange,
   state,
 }: {
@@ -107,6 +108,7 @@ function McpServerDialogPanels({
   busy: boolean;
   availableServers: McpServerSummary[];
   onAssign: (serverId: string) => void;
+  onTestConnection?: (server: McpServerSummary) => void;
   onOpenChange: (open: boolean) => void;
   state: McpServerDialogState;
 }) {
@@ -125,6 +127,7 @@ function McpServerDialogPanels({
         <McpServerAssignList
           disabled={busy}
           onAssign={onAssign}
+          onTestConnection={onTestConnection}
           servers={availableServers}
         />
       </div>
@@ -176,6 +179,7 @@ function McpServerDialogCreateForm({
         headers={state.headers}
         idPrefix={state.idPrefix}
         isEdit={state.isEdit}
+        kind={state.kind}
         loadingForm={state.loadingForm}
         name={state.name}
         nameAutoFocus={nameAutoFocus}
@@ -186,7 +190,7 @@ function McpServerDialogCreateForm({
         onCommandChange={(value) => {
           state.setCommand(value);
           if (value.trim()) {
-            state.setTransport("stdio");
+            state.selectKind("stdio");
           }
           state.clearTestResult();
         }}
@@ -198,27 +202,20 @@ function McpServerDialogCreateForm({
           state.setHeaders(nextHeaders);
           state.clearTestResult();
         }}
+        onKindChange={state.selectKind}
         onNameChange={(value) => {
           state.setName(value);
           state.clearTestResult();
         }}
         onOpenImport={state.openImportDialog}
         onTestConnection={() => void state.handleTestConnection()}
-        onTransportChange={(nextTransport) => {
-          state.setTransport(nextTransport);
-          state.clearTestResult();
-        }}
         onUrlChange={(value) => {
           state.setUrl(value);
-          if (value.trim()) {
-            state.setTransport("http");
-          }
           state.clearTestResult();
         }}
         submitError={state.submitError}
         testing={state.testing}
         testResult={state.testResult}
-        transport={state.transport}
         url={state.url}
       />
 
@@ -232,7 +229,15 @@ function McpServerDialogCreateForm({
           Cancel
         </Button>
         <Button disabled={state.formDisabled || !state.canSubmit} type="submit">
-          {busy ? <Spinner className="size-4" /> : submitLabel}
+          {busy ? (
+            <Spinner className="size-4" />
+          ) : (state.kind === "signin" ||
+              state.testResult?.requiresAuthorization) &&
+            !state.isEdit ? (
+            "Add and sign in"
+          ) : (
+            submitLabel
+          )}
         </Button>
       </DialogFooter>
     </form>
@@ -294,6 +299,7 @@ function McpServerDialogBody({
   busy,
   canAssignExisting,
   onAssign,
+  onTestConnection,
   onOpenChange,
   state,
 }: {
@@ -302,6 +308,7 @@ function McpServerDialogBody({
   busy: boolean;
   canAssignExisting: boolean;
   onAssign?: (serverId: string) => void;
+  onTestConnection?: (server: McpServerSummary) => void;
   onOpenChange: (open: boolean) => void;
   state: McpServerDialogState;
 }) {
@@ -313,6 +320,7 @@ function McpServerDialogBody({
         busy={busy}
         onAssign={onAssign}
         onOpenChange={onOpenChange}
+        onTestConnection={onTestConnection}
         state={state}
       />
     );
@@ -337,6 +345,7 @@ export function McpServerDialog({
   onOpenChange,
   onSubmit,
   onAssign,
+  onTestConnection,
 }: {
   open: boolean;
   busy: boolean;
@@ -346,6 +355,7 @@ export function McpServerDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
   onAssign?: (serverId: string) => void;
+  onTestConnection?: (server: McpServerSummary) => void;
 }) {
   const state = useMcpServerDialogState({ busy, onSubmit, open, server });
   const canAssignExisting =
@@ -384,6 +394,7 @@ export function McpServerDialog({
             canAssignExisting={canAssignExisting}
             onAssign={onAssign}
             onOpenChange={onOpenChange}
+            onTestConnection={onTestConnection}
             state={state}
           />
         </DialogContent>

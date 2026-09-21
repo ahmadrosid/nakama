@@ -123,6 +123,9 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
       defaultCount += 1;
     }
 
+    const cachedInputPerMillionUsd = parseOptionalUsdRate(
+      record.cachedInputPerMillionUsd
+    );
     const inputPerMillionUsd = parseOptionalUsdRate(record.inputPerMillionUsd);
     const outputPerMillionUsd = parseOptionalUsdRate(
       record.outputPerMillionUsd
@@ -137,12 +140,28 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
       );
     }
 
+    const contextWindow = parseOptionalTokenCount(
+      record.contextWindow,
+      id,
+      "contextWindow"
+    );
+    const maxOutputTokens = parseOptionalTokenCount(
+      record.maxOutputTokens,
+      id,
+      "maxOutputTokens"
+    );
+
     result.push({
       id,
       ...(name ? { name } : {}),
+      ...(contextWindow === undefined ? {} : { contextWindow }),
+      ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
       ...(isDefault ? { default: true } : {}),
       ...(supportsThinking === undefined ? {} : { supportsThinking }),
       ...(supportsVision === undefined ? {} : { supportsVision }),
+      ...(cachedInputPerMillionUsd === undefined
+        ? {}
+        : { cachedInputPerMillionUsd }),
       ...(inputPerMillionUsd === undefined ? {} : { inputPerMillionUsd }),
       ...(outputPerMillionUsd === undefined ? {} : { outputPerMillionUsd }),
     });
@@ -153,6 +172,26 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
   }
 
   return result;
+}
+
+function parseOptionalTokenCount(
+  value: unknown,
+  modelId: string,
+  field: string
+): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  const numeric = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    throw new Error(
+      `Model "${modelId}" has invalid ${field}: expected a positive whole number of tokens.`
+    );
+  }
+
+  return numeric;
 }
 
 function parseOptionalUsdRate(value: unknown): number | undefined {

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   derivePluginToolName,
+  getProfileSoulDir,
   PLUGIN_MANIFEST_API_VERSION,
 } from "@nakama/core";
 import {
@@ -101,7 +102,29 @@ describe("AgentService plugin capabilities", () => {
       (row) => row.pluginId === "notes"
     );
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
-    await db.assignSkillToProfile(profile.id, skill!.id);
+    await agent.assignSkill(ORG_ID, profile.id, { skillId: skill!.id });
+    const copyRoot = join(
+      getProfileSoulDir(ORG_ID, profile.id),
+      "skills",
+      ".plugins"
+    );
+    const [copy] = await readdir(copyRoot);
+    expect(await readFile(join(copyRoot, copy!, "SKILL.md"), "utf8")).toContain(
+      "Plugin notes skill."
+    );
+    await writeFile(join(copyRoot, "keep.txt"), "User file");
+    await Promise.all([
+      skills.composeCatalogForProfile(ORG_ID, profile.id),
+      agent.unassignSkill(ORG_ID, profile.id, skill!.id),
+    ]);
+    expect(await readdir(copyRoot)).toEqual(["keep.txt"]);
+    expect(
+      await skills.composeCatalogForProfile(ORG_ID, profile.id)
+    ).not.toContain("**notes**");
+    await agent.assignSkill(ORG_ID, profile.id, { skillId: skill!.id });
+    expect(await readFile(join(copyRoot, copy!, "SKILL.md"), "utf8")).toContain(
+      "Plugin notes skill."
+    );
     await db.assignToolToProfile(profile.id, tool!.id);
 
     const sessionId = await agent.createSession(ORG_ID, "web", profile.id);
@@ -125,6 +148,7 @@ describe("AgentService plugin capabilities", () => {
     ).toBe(true);
 
     await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision);
+    expect(await readdir(copyRoot)).toEqual(["keep.txt"]);
     const started = await agent.beginSessionTurn(sessionId, ORG_ID);
     expect(started).toBe(true);
     const next = await agent.resolveSession(sessionId, ORG_ID);

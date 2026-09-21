@@ -143,11 +143,6 @@ export function ModelsBrowseList({
 }
 
 function compareModelRows(a: ModelsDevRow, b: ModelsDevRow): number {
-  const publicA = a.isZen && a.isFree && !a.deprecated;
-  const publicB = b.isZen && b.isFree && !b.deprecated;
-  if (publicA !== publicB) {
-    return publicA ? -1 : 1;
-  }
   if (a.isFree !== b.isFree) {
     return a.isFree ? -1 : 1;
   }
@@ -261,23 +256,12 @@ function modelRowTitle(
   return unsupportedReason;
 }
 
-function ModelRowBadges({
-  row,
-  isPublicKey,
-}: {
-  row: ModelsDevRow;
-  isPublicKey: boolean;
-}) {
+function ModelRowBadges({ row }: { row: ModelsDevRow }) {
   const contextLabel = formatContextLabel(row.context);
 
   return (
     <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-muted-foreground text-xs">
       <div className="flex items-center gap-1">
-        {isPublicKey ? (
-          <span className="inline-flex items-center rounded bg-sky-500/15 px-1.5 py-0.5 font-bold text-2xs text-sky-400 uppercase tracking-wide ring-1 ring-sky-500/30">
-            public
-          </span>
-        ) : null}
         {row.isFree ? (
           <span className="inline-flex items-center rounded bg-emerald-500/15 px-1.5 py-0.5 font-bold text-2xs text-emerald-400 uppercase tracking-wide ring-1 ring-emerald-500/30">
             FREE
@@ -326,7 +310,6 @@ function ModelRowButton({
   alreadyConfigured: boolean;
   style: React.CSSProperties;
 }) {
-  const isPublicKey = row.isZen && row.isFree && !row.deprecated;
   const selectable = row.supported && !alreadyConfigured;
 
   return (
@@ -355,7 +338,7 @@ function ModelRowButton({
           {row.modelId}
         </div>
       </div>
-      <ModelRowBadges isPublicKey={isPublicKey} row={row} />
+      <ModelRowBadges row={row} />
     </button>
   );
 }

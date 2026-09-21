@@ -53,12 +53,14 @@ export async function validateJavascriptToolModule(
 async function runJavascriptTool(
   modulePath: string,
   input: unknown,
-  context: ToolContext
+  context: ToolContext,
+  apiKey?: string
 ): Promise<unknown> {
   // No try/catch here on purpose: a failed spawn must reject so the retry
   // policy in withToolRetries can retry transient failures. executeToolCall
   // converts the throw into `{ error: message }`.
   return spawnJsonTool({
+    apiKey,
     args: [RUNNER_PATH, modulePath],
     bin: BUN_BIN,
     context,

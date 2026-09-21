@@ -89,6 +89,7 @@ export function useArtifactPreviewContent({
   isHtml,
   isImage,
   isVideo,
+  isPdf,
   isWordDocument,
   profileId,
   artifact,
@@ -98,6 +99,7 @@ export function useArtifactPreviewContent({
   isHtml: boolean;
   isImage: boolean;
   isVideo: boolean;
+  isPdf: boolean;
   isWordDocument: boolean;
   profileId: string;
   artifact: ChatArtifactRef;
@@ -107,7 +109,7 @@ export function useArtifactPreviewContent({
   const [content, setContent] = useState<string | null>(null);
   const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
   const mediaPreviewUrl = useBlobObjectUrl(mediaBlob);
-  const isBinaryMedia = isImage || isVideo;
+  const isBinaryMedia = isImage || isVideo || isPdf;
   // Load image bytes eagerly so chat chips can show a real thumbnail before the panel opens.
   const shouldLoad = open || isImage;
 
@@ -145,6 +147,18 @@ export function useArtifactPreviewContent({
         const servedAsHtml = isHtmlArtifactMimeType(contentType);
         const servedAsImage = isImageArtifactMimeType(contentType);
         const servedAsVideo = isVideoArtifactMimeType(contentType);
+
+        if (isPdf) {
+          if (contentType !== "application/pdf") {
+            setError(
+              "Preview is not available for this file type. Download instead."
+            );
+            return;
+          }
+
+          setMediaBlob(new Blob([result.data], { type: contentType }));
+          return;
+        }
 
         if (isImage) {
           if (!servedAsImage) {
@@ -215,6 +229,7 @@ export function useArtifactPreviewContent({
     isHtml,
     isImage,
     isVideo,
+    isPdf,
     isWordDocument,
     profileId,
     artifact.path,
@@ -226,6 +241,7 @@ export function useArtifactPreviewContent({
     error,
     imagePreviewUrl: isImage ? mediaPreviewUrl : null,
     loading,
+    pdfPreviewUrl: isPdf ? mediaPreviewUrl : null,
     setContent,
     videoPreviewUrl: isVideo ? mediaPreviewUrl : null,
   };

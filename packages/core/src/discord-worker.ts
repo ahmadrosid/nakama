@@ -1,3 +1,4 @@
+import type { ChannelConfigScope } from "./channel-config-shared";
 import type { DiscordWorkerStatus } from "./contract";
 import {
   type DiscordSettingsPublic,
@@ -17,13 +18,16 @@ export interface DiscordWorkerHeartbeat extends WorkerHeartbeatBase {
 
 export { isHeartbeatAlive, isProcessAlive };
 
-const store = createWorkerHeartbeatStore<DiscordWorkerHeartbeat>({
-  getDir: getDiscordConfigDir,
-  parse: (value, base) => ({
-    connected: value.connected === true,
-    ...base,
-  }),
-});
+export function createDiscordWorkerHeartbeat(scope: ChannelConfigScope = null) {
+  return createWorkerHeartbeatStore<DiscordWorkerHeartbeat>({
+    getDir: () => getDiscordConfigDir(scope),
+    parse: (value, base) => ({
+      connected: value.connected === true,
+      ...base,
+    }),
+  });
+}
+const store = createDiscordWorkerHeartbeat();
 
 export const getDiscordWorkerHeartbeatPath = store.getPath;
 export const parseDiscordWorkerHeartbeat = store.parse;
@@ -55,9 +59,11 @@ export async function writeDiscordWorkerHeartbeat(
   });
 }
 
-export async function getDiscordWorkerStatus(): Promise<DiscordWorkerStatus> {
-  const settings = await loadDiscordSettingsPublic();
-  const heartbeat = await readDiscordWorkerHeartbeat();
+export async function getDiscordWorkerStatus(
+  scope: ChannelConfigScope = null
+): Promise<DiscordWorkerStatus> {
+  const settings = await loadDiscordSettingsPublic(scope);
+  const heartbeat = await createDiscordWorkerHeartbeat(scope).read();
   const running = isHeartbeatAlive(heartbeat);
 
   return resolveDiscordWorkerStatus(

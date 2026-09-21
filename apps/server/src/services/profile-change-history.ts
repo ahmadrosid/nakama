@@ -1,3 +1,4 @@
+import type { ProfileChangeEvent } from "@nakama/core";
 import { createId, isWritableSoulFileKey } from "@nakama/core";
 import type {
   DatabaseAdapter,
@@ -10,6 +11,89 @@ export type ProfileChangeMeta = {
   actorUserId?: string | null;
   source: ProfileChangeSource;
 };
+
+function parseAssignmentIds(value: string | null): string[] | null {
+  try {
+    const parsed: unknown = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) &&
+      parsed.every((id): id is string => typeof id === "string")
+      ? [...new Set<string>(parsed)]
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function describeProfileChangeEvents(
+  db: DatabaseAdapter,
+  orgId: string,
+  events: StoredProfileChangeEvent[]
+): Promise<ProfileChangeEvent[]> {
+  const actors = new Map<string, Promise<string | null>>();
+  const names = new Map<string, Promise<string | null>>();
+
+  const itemName = (field: "skills" | "tools", id: string) => {
+    const key = `${field}:${id}`;
+    let name = names.get(key);
+    if (!name) {
+      name = (field === "skills" ? db.getSkill(id) : db.getTool(id)).then(
+        (item) =>
+          item && (!item.orgId || item.orgId === orgId) ? item.name : null
+      );
+      names.set(key, name);
+    }
+    return name;
+  };
+
+  return Promise.all(
+    events.map(async (event): Promise<ProfileChangeEvent> => {
+      let actorName: string | null = null;
+      if (event.actorUserId) {
+        let actor = actors.get(event.actorUserId);
+        if (!actor) {
+          actor = db
+            .getUserById(event.actorUserId)
+            .then((user) => user?.name?.trim() || null);
+          actors.set(event.actorUserId, actor);
+        }
+        actorName = await actor;
+      }
+      const result: ProfileChangeEvent = { ...event, actorName };
+      const field = event.field;
+      if (field !== "skills" && field !== "tools") {
+        return result;
+      }
+      const before = parseAssignmentIds(event.beforeValue);
+      const after = parseAssignmentIds(event.afterValue);
+      if (!(before && after)) {
+        return result;
+      }
+      const beforeIds = new Set(before);
+      const afterIds = new Set(after);
+      result.assignmentNames = Object.fromEntries(
+        await Promise.all(
+          [...new Set([...before, ...after])].map(async (id) => [
+            id,
+            await itemName(field, id),
+          ])
+        )
+      );
+      const describe = async (id: string) => ({
+        id,
+        name: await itemName(field, id),
+      });
+      result.assignmentChanges = {
+        added: await Promise.all(
+          after.filter((id) => !beforeIds.has(id)).map(describe)
+        ),
+        removed: await Promise.all(
+          before.filter((id) => !afterIds.has(id)).map(describe)
+        ),
+      };
+      return result;
+    })
+  );
+}
 
 export async function recordProfileChangeEvent(
   db: DatabaseAdapter,

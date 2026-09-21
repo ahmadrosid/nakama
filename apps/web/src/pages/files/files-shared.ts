@@ -1,4 +1,5 @@
 import type { ArtifactFile } from "@nakama/core/contract";
+import { createContext } from "react";
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
 
@@ -16,19 +17,6 @@ export function toChatArtifactRef(artifact: ArtifactFile): ChatArtifactRef {
   };
 }
 
-const artifactTimestampFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-export function formatTimestamp(value: string): string {
-  try {
-    return artifactTimestampFormatter.format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
 export function getArtifactDownloadUrl(
   profileId: string,
   filename: string
@@ -36,3 +24,13 @@ export function getArtifactDownloadUrl(
   const query = new URLSearchParams({ path: filename });
   return `${client.baseUrl}/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`;
 }
+
+export const FilePinsContext = createContext<{
+  paths: Set<string>;
+  pending: boolean;
+  toggle: (path: string, pinned: boolean) => void;
+} | null>(null);
+
+export const FileRenameContext = createContext<((path: string) => void) | null>(
+  null
+);

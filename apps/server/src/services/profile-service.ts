@@ -9,9 +9,11 @@ import type {
   CreateProfileRequest,
   CreateToolRequest,
   DeleteKnowledgeBaseResponse,
+  DeleteOrganizationKnowledgeBaseResponse,
   DocumentAttachment,
   ImageAttachment,
   JsonSchema,
+  KnowledgeBaseDocument,
   KnowledgeBaseDuplicateAction,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
@@ -26,27 +28,35 @@ import type {
   ToolSummary,
   UpdateProfileRequest,
   UploadKnowledgeBaseResponse,
+  UploadOrganizationKnowledgeBaseResponse,
 } from "@nakama/core";
 import {
   createId,
   DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
   getKnowledgeBaseDir,
+  getProfileSharedDocumentIds,
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
+  KnowledgeBaseDocumentInUseError,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument as persistOrganizationKnowledgeBaseDocument,
   readKnowledgeBaseDocumentContent,
+  readOrganizationKnowledgeBaseDocumentContent,
   readProfileAvatar,
   deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
+  deleteOrganizationKnowledgeBaseDocument as removeOrganizationKnowledgeBaseDocument,
   resolveSoulStackForProfile,
   saveProfileAvatar,
   writeSoulFile,
 } from "@nakama/core";
+import { listChannelOwners } from "@nakama/core/channel-config-shared";
 import { readTextIfExists } from "@nakama/core/fs";
 import {
   BUILTIN_TOOL_IDS,
@@ -69,7 +79,9 @@ import {
   isCustomToolType,
 } from "./custom-tool-handlers";
 import { toMcpServerSummaries } from "./mcp-service";
+import { MemoryBackendService } from "./memory-backend-service";
 import {
+  describeProfileChangeEvents,
   type ProfileChangeMeta,
   recordProfileChangeEvent,
   soulFieldFromFileName,
@@ -153,7 +165,14 @@ function slugifyProfileName(name: string): string {
 }
 
 export class ProfileService {
-  constructor(private readonly db: DatabaseAdapter) {}
+  beforeChannelOwnerDelete?: (
+    orgId: string,
+    profileId: string
+  ) => Promise<void>;
+  private readonly memoryBackend: MemoryBackendService;
+  constructor(private readonly db: DatabaseAdapter) {
+    this.memoryBackend = new MemoryBackendService(db);
+  }
 
   async listProfiles(orgId: string): Promise<ListProfilesResponse> {
     const profiles = await this.db.listProfilesForOrg(orgId);
@@ -431,6 +450,18 @@ export class ProfileService {
     request: MoveProfileRequest
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
+    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      if (
+        (await listChannelOwners(platform)).some(
+          (owner) => owner.orgId === orgId && owner.profileId === profileId
+        )
+      ) {
+        throw new NakamaApiError(
+          "Disconnect this agent's channels before moving it.",
+          409
+        );
+      }
+    }
     const destination = request?.organizationId;
     if (typeof destination !== "string" || !destination.trim()) {
       throw new NakamaApiError("Destination organization is required.", 400);
@@ -501,6 +532,7 @@ export class ProfileService {
         );
       }
 
+      await this.beforeChannelOwnerDelete?.(orgId, profileId);
       await this.db.upsertProfile({
         ...successor,
         isDefault: true,
@@ -508,6 +540,9 @@ export class ProfileService {
       });
     }
 
+    if (!profile.isDefault) {
+      await this.beforeChannelOwnerDelete?.(orgId, profileId);
+    }
     const deleted = await deleteProfileWithHistoryArchives(
       this.db,
       orgId,
@@ -771,7 +806,9 @@ export class ProfileService {
       profileId,
       options
     );
-    return { events };
+    return {
+      events: await describeProfileChangeEvents(this.db, orgId, events),
+    };
   }
 
   async uploadProfileAvatar(
@@ -827,9 +864,27 @@ export class ProfileService {
     profileId: string
   ): Promise<ListKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
-    const documents = await listKnowledgeBaseDocuments(orgId, profileId);
+    const [documents, sharedDocumentIds, organizationDocuments] =
+      await Promise.all([
+        listKnowledgeBaseDocuments(orgId, profileId),
+        getProfileSharedDocumentIds(orgId, profileId),
+        listOrganizationKnowledgeBaseDocuments(orgId),
+      ]);
+    const shared = organizationDocuments
+      .filter((document) => sharedDocumentIds.includes(document.id))
+      .map((document) => ({ ...document, scope: "organization" as const }));
     const sources = DEFAULT_KNOWLEDGE_SOURCES;
-    return { documents, profileId, sources };
+    return {
+      documents: [
+        ...documents.map((document) => ({
+          ...document,
+          scope: "profile" as const,
+        })),
+        ...shared,
+      ],
+      profileId,
+      sources,
+    };
   }
 
   async uploadKnowledgeBaseDocument(
@@ -847,6 +902,7 @@ export class ProfileService {
         document,
         onDuplicate
       );
+      await this.memoryBackend.syncKnowledge(orgId, profileId);
       return {
         document: uploaded.document,
         outcome: uploaded.outcome,
@@ -877,11 +933,111 @@ export class ProfileService {
       documentId
     );
 
+    // A retry must also finish a remote deletion after the local file is gone.
+    await this.memoryBackend.syncKnowledge(orgId, profileId);
+
     if (!deleted) {
       throw new NakamaApiError("Knowledge base document not found.", 404);
     }
 
     return { deleted: true, documentId, profileId };
+  }
+
+  /**
+   * Profile ids from the profile table, so the shared document guards ignore
+   * leftover directories whose profile row is already gone.
+   */
+  private async orgProfileIds(orgId: string): Promise<string[]> {
+    const profiles = await this.db.listProfilesForOrg(orgId);
+    return profiles.map((profile) => profile.id);
+  }
+
+  async listOrganizationKnowledgeBase(
+    orgId: string
+  ): Promise<{ documents: KnowledgeBaseDocument[] }> {
+    const documents = await listOrganizationKnowledgeBaseDocuments(orgId);
+    return {
+      documents: documents.map((document) => ({
+        ...document,
+        scope: "organization" as const,
+      })),
+    };
+  }
+
+  async uploadOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
+  ): Promise<UploadOrganizationKnowledgeBaseResponse> {
+    try {
+      const uploaded = await persistOrganizationKnowledgeBaseDocument(
+        orgId,
+        document,
+        onDuplicate,
+        await this.orgProfileIds(orgId)
+      );
+      return {
+        document: { ...uploaded.document, scope: "organization" },
+        outcome: uploaded.outcome,
+      };
+    } catch (error) {
+      if (error instanceof KnowledgeBaseDuplicateError) {
+        throw new NakamaApiError(error.message, 409);
+      }
+
+      // Replacing a shared document that a profile still references is a
+      // conflict, not a bad request.
+      if (error instanceof KnowledgeBaseDocumentInUseError) {
+        throw new NakamaApiError(error.message, 409);
+      }
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to upload knowledge base document.";
+      throw new NakamaApiError(message, 400);
+    }
+  }
+
+  /**
+   * Organization documents are shared, so removal keeps the `profileIds` that
+   * still reference them in the 409 response body for the caller to resolve.
+   */
+  async deleteOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string
+  ): Promise<DeleteOrganizationKnowledgeBaseResponse> {
+    const deleted = await removeOrganizationKnowledgeBaseDocument(
+      orgId,
+      documentId,
+      await this.orgProfileIds(orgId)
+    );
+
+    if (!deleted) {
+      throw new NakamaApiError("Knowledge base document not found.", 404);
+    }
+
+    return { deleted: true, documentId };
+  }
+
+  async readOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    try {
+      return await readOrganizationKnowledgeBaseDocumentContent(
+        orgId,
+        documentId,
+        options
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Knowledge base document not found.";
+      throw new NakamaApiError(message, 404);
+    }
   }
 
   async readKnowledgeBaseDocument(
@@ -1065,7 +1221,7 @@ function readToolHandlerType(handlerType: string | undefined): CustomToolType {
 function readCustomToolHandlerConfig(
   handlerType: CustomToolType,
   handlerConfig: unknown
-): { modulePath: string; parameters?: JsonSchema } {
+): { modulePath: string; parameters?: JsonSchema; requiresApiKey?: boolean } {
   const { extension } = CUSTOM_TOOL_HANDLERS[handlerType];
 
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
@@ -1087,6 +1243,12 @@ function readCustomToolHandlerConfig(
   }
 
   const parameters = config.parameters;
+  if (
+    config.requiresApiKey !== undefined &&
+    typeof config.requiresApiKey !== "boolean"
+  ) {
+    throw new Error("handlerConfig.requiresApiKey must be a boolean.");
+  }
 
   if (
     parameters !== undefined &&
@@ -1101,6 +1263,7 @@ function readCustomToolHandlerConfig(
 
   return {
     modulePath: modulePath.trim(),
+    ...(config.requiresApiKey === true ? { requiresApiKey: true } : {}),
     ...(parameters === undefined ? {} : { parameters }),
   };
 }

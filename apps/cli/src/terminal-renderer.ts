@@ -164,6 +164,11 @@ export class TerminalRenderer {
     return this.layout.isEnabled();
   }
 
+  clear(): void {
+    this.state.statusLine = null;
+    this.layout.clear();
+  }
+
   setComposerState(state: ComposerState): void {
     this.state.composer = cloneComposerState(state);
     this.renderComposer();

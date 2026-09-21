@@ -6,11 +6,13 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { convertDocxToMarkdown } from "../docx-text";
+import { getGlobalSkillsDir } from "../skills/paths";
 import {
   PathGuardError,
   runDeleteFile,
@@ -58,6 +60,28 @@ describe("file builtin tools", () => {
     expect(result.path).toBe(await realpath(targetPath));
     expect(result.bytesWritten).toBe(11);
     expect(await readFile(targetPath, "utf8")).toBe("hello world");
+  });
+
+  test("write_file preserves indentation and boundary whitespace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    const content = "    caf\u00e9\r\n    second line\r\n\r\n";
+    const result = await runWriteFile(
+      { content, path: "snippet.md" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(result.path, "utf8")).toBe(content);
+    expect(result.bytesWritten).toBe(Buffer.byteLength(content, "utf8"));
+  });
+
+  test("write_file still rejects whitespace-only content", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    await expect(
+      runWriteFile({ content: " \t\r\n", path: "notes.txt" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow();
   });
 
   test("write_file resolves relative paths from profile workspace", async () => {
@@ -473,6 +497,43 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("oldText not found");
   });
 
+  test.each([
+    ["image/png", "89504e470d0a1a0a0000000d49484452"],
+    ["image/jpeg", "ffd8ffe000104a4649460001"],
+    ["image/gif", "47494638396101000100"],
+    ["image/webp", "52494646100000005745425056503820"],
+  ])(
+    "read_file detects %s from bytes, independent of filename",
+    async (mediaType, hex) => {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-image-"));
+      const bytes = Buffer.from(hex, "hex");
+      await writeFile(path.join(tempDir, "image.bin"), bytes);
+      const result = await runReadFile(
+        { limit: 1, offset: 100, path: "image.bin" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      );
+      expect(result.images).toEqual([
+        { data: bytes.toString("base64"), mediaType },
+      ]);
+      expect(result.bytesRead).toBe(bytes.length);
+      expect(result.content).not.toContain(bytes.toString("base64"));
+      expect(result.totalLines).toBe(0);
+    }
+  );
+
+  test("read_file rejects images above the attachment size limit", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-image-"));
+    const bytes = Buffer.alloc(5 * 1024 * 1024 + 1);
+    Buffer.from("89504e470d0a1a0a", "hex").copy(bytes);
+    await writeFile(path.join(tempDir, "large.png"), bytes);
+    await expect(
+      runReadFile({ path: "large.png" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow();
+  });
+
   test("read_file reads an existing file", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "sample.txt");
@@ -589,6 +650,96 @@ describe("file builtin tools", () => {
         "utf8"
       )
     ).toBe("nested\n");
+  });
+
+  test("file tools refuse memory files when forbidMemoryWrites", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-mem-"));
+    await mkdir(path.join(tempDir, "memory-archive"), { recursive: true });
+    await writeFile(path.join(tempDir, "MEMORY.md"), "remembered\n", "utf8");
+    await writeFile(
+      path.join(tempDir, "memory-archive", "2026-09.md"),
+      "archived\n",
+      "utf8"
+    );
+    const context = { ...PROFILE_CONTEXT, forbidMemoryWrites: true };
+
+    await expect(
+      runWriteFile({ content: "learned", path: "MEMORY.md" }, context, {
+        workspaceRoot: tempDir,
+      })
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runEditFile(
+        {
+          edits: [{ newText: "changed", oldText: "remembered" }],
+          path: "MEMORY.md",
+        },
+        context,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runDeleteFile({ path: "MEMORY.md" }, context, { workspaceRoot: tempDir })
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runWriteFile(
+        { content: "learned", path: "memory-archive/2026-09.md" },
+        context,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toThrow(/cognito/i);
+
+    await expect(
+      runWriteDocx({ markdown: "# hi", path: "MEMORY.docx" }, context, {
+        workspaceRoot: tempDir,
+      })
+    ).resolves.toBeDefined();
+
+    expect(await readFile(path.join(tempDir, "MEMORY.md"), "utf8")).toBe(
+      "remembered\n"
+    );
+  });
+
+  test("forbidMemoryWrites leaves ordinary workspace files writable", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-ok-"));
+    await mkdir(path.join(tempDir, "memory-archive"), { recursive: true });
+    await mkdir(path.join(tempDir, "notes"), { recursive: true });
+    const context = { ...PROFILE_CONTEXT, forbidMemoryWrites: true };
+
+    // Only MEMORY.md at the workspace root and memory-archive/YYYY-MM.md are
+    // memory. A same-named file one directory down is an ordinary artifact.
+    await runWriteFile({ content: "mine", path: "notes/MEMORY.md" }, context, {
+      workspaceRoot: tempDir,
+    });
+    await runWriteFile(
+      { content: "index", path: "memory-archive/index.md" },
+      context,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(
+      await readFile(path.join(tempDir, "notes", "MEMORY.md"), "utf8")
+    ).toBe("mine");
+    expect(
+      await readFile(path.join(tempDir, "memory-archive", "index.md"), "utf8")
+    ).toBe("index");
+  });
+
+  test("memory files stay writable when forbidMemoryWrites is unset", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-off-"));
+
+    await runWriteFile(
+      { content: "learned", path: "MEMORY.md" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(path.join(tempDir, "MEMORY.md"), "utf8")).toBe(
+      "learned"
+    );
   });
 
   test("write_file, edit_file, and delete_file refuse skills/*/tool.js and tool.ts", async () => {
@@ -749,6 +900,60 @@ describe("file builtin tools", () => {
     expect(result.content).toContain("export async function run");
   });
 
+  test("system skills and references are readable but remain protected", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const skillDir = path.join(getGlobalSkillsDir(), "installer");
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    const skillPath = path.join(skillDir, "SKILL.md");
+    await writeFile(skillPath, "instructions");
+    await writeFile(path.join(skillDir, "references/guide.md"), "instructions");
+    const options = { workspaceRoot: tempDir };
+    const cwd = await realpath(skillDir);
+
+    await expect(
+      runReadFile(
+        {
+          cwd: path.dirname(getGlobalSkillsDir()),
+          path: "skills/installer/SKILL.md",
+        },
+        PROFILE_CONTEXT,
+        options
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
+
+    for (const input of [
+      { path: skillPath },
+      { cwd, path: "SKILL.md" },
+      { cwd, path: "references/guide.md" },
+    ]) {
+      const result = await runReadFile(input, PROFILE_CONTEXT, options);
+      expect(result.content).toBe("instructions");
+    }
+
+    await expect(
+      runWriteFile(
+        { content: "changed", path: skillPath },
+        PROFILE_CONTEXT,
+        options
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
+
+    const outsidePath = path.join(configDir, "private.txt");
+    await writeFile(outsidePath, "private");
+    await symlink(outsidePath, path.join(skillDir, "escape.md"));
+    for (const target of [
+      outsidePath,
+      path.join(skillDir, "escape.md"),
+      path.join(skillDir, "../../../private.txt"),
+    ]) {
+      await expect(
+        runReadFile({ path: target }, PROFILE_CONTEXT, options)
+      ).rejects.toBeInstanceOf(PathGuardError);
+    }
+  });
+
   test("read_file supports offset and limit", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "lines.txt");
@@ -782,16 +987,20 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
-  test("cwd injection falls back to profile workspace", async () => {
+  test("invalid cwd rejects writes without changing profile files", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
+    const targetPath = path.join(tempDir, "safe.txt");
+    await writeFile(targetPath, "original");
 
-    const result = await runWriteFile(
-      { content: "OK", cwd: "/etc", path: "safe.txt" },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir }
-    );
+    await expect(
+      runWriteFile(
+        { content: "OK", cwd: "/etc", path: "safe.txt" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
 
-    expect(result.path).toStartWith(await realpath(tempDir));
+    expect(await readFile(targetPath, "utf8")).toBe("original");
   });
 
   test("edit_file rejects oversized replacement result", async () => {

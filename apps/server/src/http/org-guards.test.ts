@@ -37,6 +37,11 @@ describe("org guards", () => {
     expect(() => requireNotViewer(auth("member"))).not.toThrow();
   });
 
+  test("requireNotViewer rejects viewers and users without membership", () => {
+    expect(() => requireNotViewer(auth("viewer"))).toThrow(NakamaApiError);
+    expect(() => requireNotViewer(auth(undefined))).toThrow(NakamaApiError);
+  });
+
   test("requirePlatformAdmin allows platform admins", () => {
     expect(() =>
       requirePlatformAdmin({

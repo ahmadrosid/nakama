@@ -31,6 +31,7 @@ function toSummary(
     name: record.name,
     telegram: {
       chatId: record.config.chatId,
+      profileId: record.config.profileId,
       topicId: record.config.topicId ?? null,
     },
     updatedAt: record.updatedAt,
@@ -44,6 +45,13 @@ export class NotificationDestinationService {
     private readonly authService: AuthService
   ) {}
 
+  private async requireChannelProfile(orgId: string, profileId?: string) {
+    const profiles = await this.databaseAdapter.listProfilesForOrg(orgId);
+    if (!(profileId && profiles.some((profile) => profile.id === profileId))) {
+      throw new NakamaApiError("Choose an agent in this organization.", 400);
+    }
+  }
+
   async list(orgId: string): Promise<ListNotificationDestinationsResponse> {
     const destinations =
       await this.databaseAdapter.listNotificationDestinationsForOrg(orgId);
@@ -55,12 +63,14 @@ export class NotificationDestinationService {
     input: unknown
   ): Promise<NotificationDestinationWithSecret> {
     const request = normalizeCreateNotificationDestinationRequest(input);
+    await this.requireChannelProfile(orgId, request.telegram.profileId);
     const apiKey = nanoid(32);
     const now = new Date().toISOString();
     const record: StoredNotificationDestinationRecord = {
       channel: request.channel,
       config: {
         chatId: request.telegram.chatId,
+        profileId: request.telegram.profileId,
         topicId: request.telegram.topicId ?? null,
       },
       createdAt: now,
@@ -86,10 +96,12 @@ export class NotificationDestinationService {
   ): Promise<NotificationDestinationSummary> {
     const existing = await this.getOwnedRecord(orgId, destinationId);
     const request = normalizeUpdateNotificationDestinationRequest(input);
+    await this.requireChannelProfile(orgId, request.telegram.profileId);
     const updated: StoredNotificationDestinationRecord = {
       ...existing,
       config: {
         chatId: request.telegram.chatId,
+        profileId: request.telegram.profileId,
         topicId: request.telegram.topicId ?? null,
       },
       name: request.name,

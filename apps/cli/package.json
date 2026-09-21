@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@crosscopy/clipboard": "^0.3.6",
+    "@earendil-works/pi-tui": "0.85.1",
+    "@leeoniya/ufuzzy": "^1.0.19",
     "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*"
   }

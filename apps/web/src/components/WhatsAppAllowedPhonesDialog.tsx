@@ -1,6 +1,7 @@
 import { parseAllowedWhatsAppPhones } from "@nakama/core/whatsapp-phones";
 import { Button } from "@nakama/ui/button";
 import {
+  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -44,6 +45,7 @@ export function WhatsAppAllowedPhonesDialog({
   const saveMutation = useSaveWhatsAppSettings();
   const [newPhoneInput, setNewPhoneInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
 
   function saveAllowedPhones(nextPhones: string[], afterSuccess?: () => void) {
     onAllowedPhonesChange(nextPhones);
@@ -152,11 +154,7 @@ export function WhatsAppAllowedPhonesDialog({
                   <Button
                     aria-label={`Remove ${formatAllowedPhone(phone)}`}
                     disabled={saveMutation.isPending}
-                    onClick={() =>
-                      saveAllowedPhones(
-                        allowedPhones.filter((entry) => entry !== phone)
-                      )
-                    }
+                    onClick={() => setRemoveTarget(phone)}
                     size="icon-sm"
                     type="button"
                     variant="ghost"
@@ -182,6 +180,25 @@ export function WhatsAppAllowedPhonesDialog({
             Close
           </Button>
         </DialogFooter>
+        {removeTarget === null ? null : (
+          <ConfirmDialog
+            confirmLabel="Remove"
+            description={`Remove ${formatAllowedPhone(removeTarget)} from allowed numbers?`}
+            onClose={() => setRemoveTarget(null)}
+            onConfirm={async () => {
+              const nextPhones = allowedPhones.filter(
+                (phone) => phone !== removeTarget
+              );
+              await saveMutation.mutateAsync({
+                allowedPhones: nextPhones.join(","),
+                profileId: profileId.trim() || "default",
+              });
+              onAllowedPhonesChange(nextPhones);
+              onSaved?.();
+            }}
+            title="Remove WhatsApp number?"
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

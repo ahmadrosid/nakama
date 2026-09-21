@@ -258,17 +258,6 @@ test("a corrupt queue file reads as empty rather than throwing", async () => {
   expect(readPendingErrorReports()).toHaveLength(0);
 });
 
-test("a sink that throws never surfaces to the caller", async () => {
-  setErrorSink(() => {
-    throw new Error("sink is down");
-  });
-
-  await expect(
-    reportError(new Error("boom"), { source: "server" })
-  ).resolves.toBeDefined();
-  await Bun.sleep(5);
-});
-
 test("the local log always runs, configured or not", async () => {
   await reportError(new Error("boom"), { source: "cli" });
 

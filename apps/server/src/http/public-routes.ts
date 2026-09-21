@@ -9,6 +9,8 @@ export const PUBLIC_ROUTES = new Set([
   "/v1/auth/login",
   "/v1/auth/me",
   "/v1/auth/accept-invite",
+  "/v1/auth/password-reset/request",
+  "/v1/auth/password-reset/complete",
   "/v1/composio/oauth/callback",
 ]);
 
@@ -23,6 +25,10 @@ export function isPublicRouteRequest(
   return (
     PUBLIC_ROUTES.has(pathname) ||
     /^\/v1\/notify\/[^/]+$/.test(pathname) ||
+    // OAuth provider redirect: it carries a single-use code and state, and the
+    // browser arriving here has no Nakama session.
+    (method === "GET" &&
+      /^\/v1\/mcp\/oauth\/callback\/[^/]+$/.test(pathname)) ||
     (method === "GET" &&
       /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname))
   );

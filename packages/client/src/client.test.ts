@@ -6,6 +6,63 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test("scoped clients keep session requests in their original organization", async () => {
+  const requests: Request[] = [];
+  const client = new NakamaClient({
+    authToken: "test-token",
+    baseUrl: "http://localhost:4310",
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({ messages: [] });
+    }) as typeof fetch,
+  });
+  const first = client.forOrg("org_a").createChatSession("first", "discord");
+  const second = client.forOrg("org_b").createChatSession("second", "discord");
+  client.setOrgId("org_c");
+  await Promise.all([first.getMessages(), second.getMessages()]);
+  expect(requests.map((request) => request.headers.get("X-Org-Id"))).toEqual([
+    "org_a",
+    "org_b",
+  ]);
+  expect(
+    requests.every(
+      (request) => request.headers.get("Authorization") === "Bearer test-token"
+    )
+  ).toBe(true);
+});
+
+test("plugin access requests retain their explicit organization", async () => {
+  const requests: Request[] = [];
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({});
+    },
+    orgId: "org-other",
+  });
+  await client.getProfile("agent-a", "org-a");
+  await client.listTools("org-a");
+  await client.listSkills("org-a");
+  await client.assignTool("agent-a", { toolId: "tool" }, "org-a");
+  await client.unassignTool("agent-a", "tool", "org-a");
+  await client.assignSkill("agent-a", { skillId: "skill" }, "org-a");
+  await client.unassignSkill("agent-a", "skill", "org-a");
+  expect(requests).toHaveLength(7);
+  expect(requests.map((request) => request.headers.get("X-Org-Id"))).toEqual(
+    Array(7).fill("org-a")
+  );
+  expect(requests.map((request) => request.method)).toEqual([
+    "GET",
+    "GET",
+    "GET",
+    "POST",
+    "DELETE",
+    "POST",
+    "DELETE",
+  ]);
+});
+
 test("official plugin reinstall sends revision and explicit organization", async () => {
   let request!: Request;
   const client = new NakamaClient({
@@ -176,6 +233,33 @@ test("data export downloads zip bytes with filename metadata", async () => {
   expect(headers.get("Content-Type")).toBeNull();
   expect(result.filename).toBe("nakama-export-test.zip");
   expect(Array.from(new Uint8Array(result.data))).toEqual([1, 2, 3]);
+});
+
+test("user data export scopes the download path to the requested user", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return new Response(new Uint8Array([4, 5, 6]), {
+        headers: {
+          "Content-Disposition":
+            'attachment; filename="nakama-user-export-test.zip"',
+          "Content-Type": "application/zip",
+        },
+      });
+    },
+  });
+
+  const result = await client.exportUserData("user/with space");
+
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://localhost:4310/v1/platform/users/user%2Fwith%20space/data/export"
+  );
+  expect(result.filename).toBe("nakama-user-export-test.zip");
+  expect(Array.from(new Uint8Array(result.data))).toEqual([4, 5, 6]);
 });
 
 test("profile pack helpers export zip and upload base64 preview/import bodies", async () => {

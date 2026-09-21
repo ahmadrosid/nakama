@@ -1,6 +1,28 @@
 import type { ChatListItem, FailedChatTurn } from "@/lib/chat-history";
 import { createClientId } from "@/lib/client-id";
 
+/**
+ * Keys the welcome copy so React remounts it when cognito is toggled, which is
+ * what replays the entrance animation. Without the remount the copy would swap
+ * in silence and the user would not notice the mode changed under them.
+ */
+export function welcomeAnimationKey(cognito: boolean): string {
+  return cognito ? "cognito" : "greeting";
+}
+
+/**
+ * The toggle only does anything before a conversation starts, because flipping
+ * it resets the chat. Once an ordinary chat is under way it is a control that
+ * cannot be used, so it goes away. An active cognito chat keeps it, otherwise
+ * there would be no way to see the mode or leave it.
+ */
+export function shouldShowCognitoControl(
+  cognito: boolean,
+  isEmptyState: boolean
+): boolean {
+  return cognito || isEmptyState;
+}
+
 export function findRetryPrompt(
   messages: ChatListItem[],
   assistantMessage: ChatListItem
@@ -147,6 +169,11 @@ export function appendFailedTurnIfNeeded(
     return messages;
   }
 
+  const last = messages.at(-1);
+  if (last?.role === "user" && last.content === failed.text) {
+    return [...messages, buildFailedAssistantMessage(failed.error)];
+  }
+
   return [
     ...messages,
     {
@@ -209,4 +236,29 @@ export function nextSuccessfulTurnAt(
   now = Date.now()
 ): number {
   return previous != null && now <= previous ? previous + 1 : now;
+}
+
+/**
+ * Give up the page's hold on a chat stream when the user opens another chat.
+ *
+ * A send stream is detached, never aborted: the POST behind it is what keeps
+ * the server turn alive, so aborting it on a chat switch cancels a turn the
+ * user still wants. A subscribe stream only mirrors a turn someone else owns,
+ * so it is safe to abort.
+ */
+export function releaseChatStream(stream: {
+  abort: AbortController | null;
+  detach: (() => void) | null;
+}): "detached" | "aborted" | "idle" {
+  if (stream.detach) {
+    stream.detach();
+    return "detached";
+  }
+
+  if (stream.abort) {
+    stream.abort.abort();
+    return "aborted";
+  }
+
+  return "idle";
 }

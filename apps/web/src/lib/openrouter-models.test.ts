@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   isOpenRouterModelDeprecated,
   isOpenRouterModelFree,
-  mergeOpenRouterModelOptions,
   normalizeOpenRouterModels,
   openRouterPricingPerMillion,
 } from "./openrouter-models";
@@ -142,42 +141,5 @@ describe("isOpenRouterModelDeprecated", () => {
 
   test("returns false for far-future sentinel dates", () => {
     expect(isOpenRouterModelDeprecated("2098-12-31")).toBe(false);
-  });
-});
-
-describe("mergeOpenRouterModelOptions", () => {
-  test("injects current model when missing from catalog", () => {
-    const catalog = [
-      {
-        id: "anthropic/claude-sonnet-4-6",
-        name: "Claude Sonnet",
-        provider: "openrouter" as const,
-      },
-    ];
-    const merged = mergeOpenRouterModelOptions(
-      catalog,
-      "google/gemini-2.5-pro-preview",
-      "Gemini 2.5 Pro"
-    );
-
-    expect(merged).toHaveLength(2);
-    expect(merged[0]?.id).toBe("google/gemini-2.5-pro-preview");
-    expect(merged[0]?.name).toBe("Gemini 2.5 Pro");
-  });
-
-  test("does not duplicate when model already in catalog", () => {
-    const catalog = [
-      {
-        id: "anthropic/claude-sonnet-4-6",
-        name: "Claude Sonnet",
-        provider: "openrouter" as const,
-      },
-    ];
-    const merged = mergeOpenRouterModelOptions(
-      catalog,
-      "anthropic/claude-sonnet-4-6"
-    );
-
-    expect(merged).toHaveLength(1);
   });
 });

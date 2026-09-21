@@ -28,6 +28,61 @@ const documentUserMessage: ChatMessage = {
   role: "user",
 };
 
+test("switching from Gemini rebuilds native assistant text and tool calls", async () => {
+  const messages: ChatMessage[] = [
+    {
+      content: "Hello",
+      providerContent: [{ text: "Hello", thoughtSignature: "text-signature" }],
+      role: "assistant",
+    },
+    {
+      content: "Checking",
+      providerContent: [
+        { text: "Checking" },
+        {
+          functionCall: { args: { code: 7 }, id: "call-1", name: "read_probe" },
+          thoughtSignature: "call-signature",
+        },
+      ],
+      role: "assistant",
+      toolCalls: [{ arguments: { code: 7 }, id: "call-1", name: "read_probe" }],
+    },
+  ];
+  expect(await toAnthropicMessages(messages)).toEqual([
+    { content: [{ text: "Hello", type: "text" }], role: "assistant" },
+    {
+      content: [
+        { text: "Checking", type: "text" },
+        {
+          id: "call-1",
+          input: { code: 7 },
+          name: "read_probe",
+          type: "tool_use",
+        },
+      ],
+      role: "assistant",
+    },
+  ]);
+  expect(await toResponsesInput(messages)).toEqual([
+    {
+      content: [{ text: "Hello", type: "output_text" }],
+      role: "assistant",
+      type: "message",
+    },
+    {
+      content: [{ text: "Checking", type: "output_text" }],
+      role: "assistant",
+      type: "message",
+    },
+    {
+      arguments: '{"code":7}',
+      call_id: "call-1",
+      name: "read_probe",
+      type: "function_call",
+    },
+  ]);
+});
+
 describe("provider user content mapping", () => {
   test("toAnthropicMessages maps image parts", async () => {
     const result = await toAnthropicMessages([multimodalUserMessage]);

@@ -35,9 +35,14 @@ function tabLogContent(
 
 function useWorkerLogDialog(
   workerName: string,
+  open: boolean,
   onOpenChange: (open: boolean) => void
 ) {
-  const { data, error, isLoading, refetch } = useWorkerLogs(workerName, 500);
+  const { data, error, isLoading, refetch } = useWorkerLogs(
+    workerName,
+    500,
+    open
+  );
   const clearLogs = useClearWorkerLogs(workerName);
   const [activeTab, setActiveTab] = useState<"stdout" | "stderr">("stdout");
   const [copied, setCopied] = useState(false);
@@ -96,7 +101,6 @@ function useWorkerLogDialog(
     if (nextOpen) {
       setCopied(false);
       setConfirmClear(false);
-      void refetch();
     }
     onOpenChange(nextOpen);
   }
@@ -270,7 +274,7 @@ function WorkerLogPane({
   }
 
   return (
-    <pre className="flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
+    <pre className="min-h-64 flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
       {content}
     </pre>
   );
@@ -281,7 +285,7 @@ export function WorkerLogDialog({
   open,
   onOpenChange,
 }: WorkerLogDialogProps) {
-  const log = useWorkerLogDialog(workerName, onOpenChange);
+  const log = useWorkerLogDialog(workerName, open, onOpenChange);
 
   return (
     <Dialog onOpenChange={log.handleOpenChange} open={open}>

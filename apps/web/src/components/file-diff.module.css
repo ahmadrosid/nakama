@@ -72,6 +72,19 @@
   white-space: pre;
 }
 
+.wrap .diffLines {
+  width: 100%;
+}
+
+.wrap .diffRow {
+  grid-template-columns: 32px 32px 18px minmax(0, 1fr);
+}
+
+.wrap .diffRow code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .diffRow.add::before,
 .diffRow.del::before {
   position: absolute;

@@ -8,6 +8,7 @@ import type {
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -979,6 +980,7 @@ function ComposioConnectionsReady({
   embedded: boolean;
   state: ReturnType<typeof useComposioConnectionsState>;
 }) {
+  const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
   const data = state.toolkitsQuery.data;
   const configured =
     state.settings?.configured === true || data?.configured === true;
@@ -1017,12 +1019,23 @@ function ComposioConnectionsReady({
         isOrgAdmin={state.isOrgAdmin}
         onConnect={(slug) => state.connectMutation.mutate(slug)}
         onDisable={(slug) => state.disableMutation.mutate(slug)}
-        onDisconnect={(slug) => state.disconnectMutation.mutate(slug)}
+        onDisconnect={setDisconnectTarget}
         onEnable={(slug) => state.enableMutation.mutate(slug)}
         onSync={(slug) => state.syncMutation.mutate(slug)}
         onToggleProfile={state.toggleProfileAssignment}
         profiles={state.profiles}
       />
+      {disconnectTarget ? (
+        <ConfirmDialog
+          confirmLabel="Disconnect"
+          description={`Disconnect ${disconnectTarget}? You will need to reconnect to use this account again.`}
+          onClose={() => setDisconnectTarget(null)}
+          onConfirm={() =>
+            state.disconnectMutation.mutateAsync(disconnectTarget)
+          }
+          title="Disconnect toolkit?"
+        />
+      ) : null}
     </IntegrationCardShell>
   );
 }

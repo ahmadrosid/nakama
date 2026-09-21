@@ -151,6 +151,22 @@ describe("composio-callback-url", () => {
     }
   });
 
+  test("a saved loopback URL accepts the loopback origin on a new port", () => {
+    process.env.NAKAMA_WEB_PUBLIC_URL = "http://127.0.0.1:4391";
+    const request = new Request(
+      "http://127.0.0.1:4392/v1/sessions/s1/messages",
+      { headers: { Origin: "http://127.0.0.1:4392" }, method: "POST" }
+    );
+
+    expect(resolveRequestClientOrigin(request)).toBe("http://127.0.0.1:4392");
+    expect(resolveComposioCallbackBaseUrl({ request })).toBe(
+      "http://127.0.0.1:4392"
+    );
+    expect(() =>
+      resolveRequestClientOrigin(request, "https://evil.example.com")
+    ).toThrow("Origin is not allowed.");
+  });
+
   test("an unparseable clientOrigin is refused, not silently dropped", () => {
     const configDir = join(tmpdir(), `nakama-callback-url-unset-${Date.now()}`);
     mkdirSync(configDir, { recursive: true });

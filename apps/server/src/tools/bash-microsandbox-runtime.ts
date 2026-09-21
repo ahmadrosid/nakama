@@ -8,11 +8,30 @@ import type {
 
 const MAX_OUTPUT_CHARS = 32_000;
 
-function truncateOutput(value: string): string {
-  if (value.length <= MAX_OUTPUT_CHARS) {
-    return value;
-  }
-  return value.slice(0, MAX_OUTPUT_CHARS) + "\n...[truncated]";
+/**
+ * Caps as it goes instead of truncating once at the end. The model saw the same
+ * ceiling either way; the server held everything the command wrote.
+ */
+export function createBoundedOutput(limit: number = MAX_OUTPUT_CHARS) {
+  let value = "";
+  let truncated = false;
+  return {
+    append(chunk: string): void {
+      if (truncated) {
+        return;
+      }
+      const next = value + chunk;
+      if (next.length > limit) {
+        value = next.slice(0, limit);
+        truncated = true;
+        return;
+      }
+      value = next;
+    },
+    read(): string {
+      return truncated ? `${value}\n...[truncated]` : value;
+    },
+  };
 }
 
 async function connectSandbox(name: string): Promise<Sandbox> {
@@ -93,8 +112,8 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     };
     args.signal?.addEventListener("abort", onAbort, { once: true });
 
-    let stdout = "";
-    let stderr = "";
+    const stdout = createBoundedOutput();
+    const stderr = createBoundedOutput();
     let exitCode: number | null = null;
 
     try {
@@ -102,25 +121,25 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
       // (same I/O contract as host bash).
       for await (const event of handle) {
         if (event.kind === "stdout") {
-          stdout += new TextDecoder().decode(event.data);
+          stdout.append(new TextDecoder().decode(event.data));
         } else if (event.kind === "stderr") {
-          stderr += new TextDecoder().decode(event.data);
+          stderr.append(new TextDecoder().decode(event.data));
         } else if (event.kind === "exited") {
           exitCode = event.code;
         }
       }
       return {
         exitCode,
-        stderr: truncateOutput(stderr),
-        stdout: truncateOutput(stdout),
+        stderr: stderr.read(),
+        stdout: stdout.read(),
         timedOut: false,
       };
     } catch (error) {
       if (error instanceof ExecTimeoutError) {
         return {
           exitCode: null,
-          stderr: truncateOutput(stderr),
-          stdout: truncateOutput(stdout),
+          stderr: stderr.read(),
+          stdout: stdout.read(),
           timedOut: true,
         };
       }

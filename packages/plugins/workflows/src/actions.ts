@@ -94,8 +94,12 @@ export async function run(input: Input, context: Context): Promise<unknown> {
         }
       }
       return context.actionKey === "create_workflow"
-        ? service.create(changes as CreateWorkflowRequest, agentId, allowed)
-        : service.update(input.workflowId!, changes, allowed);
+        ? await service.create(
+            changes as CreateWorkflowRequest,
+            agentId,
+            allowed
+          )
+        : await service.update(input.workflowId!, changes, allowed);
     }
     if (context.actionKey === "run_workflow") {
       const runner = new WorkflowRunner(service, {

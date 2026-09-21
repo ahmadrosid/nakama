@@ -10,6 +10,7 @@ export function ProfileSkillsPostTurnReviewField({
 }) {
   return (
     <ProfileOrgBooleanOverrideField
+      description="Review each reply for lessons that can improve skills."
       disabled={disabled}
       field="skillsPostTurnReview"
       id="profile-skills-post-turn-review"

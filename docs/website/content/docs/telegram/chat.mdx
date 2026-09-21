@@ -29,14 +29,9 @@ In a group, the bot responds only when the message is:
 
 This keeps group chats usable without making the bot noisy.
 
-### Group topics and profiles
+### Group topics
 
-In Telegram supergroup topics, each topic can use its own Nakama profile.
-
-- `/profile` inside a topic changes only that topic
-- new topics use the default Telegram profile until you switch them
-- `/profile` in the main group chat changes the group-level profile
-- `/org` stays group-level, so switch org first if a topic needs a profile from another org
+Each topic keeps a separate conversation with the same owning agent. `/profile` and `/org` report the connection’s fixed ownership; they cannot switch it.
 
 ## Telegram commands
 
@@ -50,8 +45,8 @@ These commands are available in Telegram:
 | `/clear` | Clear chat history |
 | `/compact` | Compact conversation history |
 | `/new` | Start a new conversation |
-| `/org` | Choose or switch organization, on the shared install-wide bot only |
-| `/profile` | Choose or switch profile |
+| `/org` | Report the fixed organization |
+| `/profile` | Report the fixed agent |
 | `/status` | Show server and model status |
 
 ## Supported message types

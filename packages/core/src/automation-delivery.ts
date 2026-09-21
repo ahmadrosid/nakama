@@ -5,10 +5,7 @@ import type {
 } from "./contract";
 import { isDiscordSnowflake, loadDiscordConfigFile } from "./discord-config";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
-import {
-  loadTelegramConfigFile,
-  resolveTelegramScopeForOrg,
-} from "./telegram-config";
+import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -144,6 +141,7 @@ export function shouldDeliverForRun(
 export interface ValidateAutomationDeliveryOptions {
   isEmailConfigured?: () => Promise<boolean> | boolean;
   orgId: string;
+  profileId?: string;
 }
 
 export async function validateAutomationDelivery(
@@ -154,10 +152,12 @@ export async function validateAutomationDelivery(
     return;
   }
 
+  if (delivery.channel !== "email" && !options.profileId) {
+    throw new Error("Choose an agent connection for delivery.");
+  }
+  const owner = { orgId: options.orgId, profileId: options.profileId! };
   if (delivery.channel === "telegram") {
-    const config = await loadTelegramConfigFile(
-      await resolveTelegramScopeForOrg(options.orgId)
-    );
+    const config = await loadTelegramConfigFile(owner);
 
     if (!config?.botToken.trim()) {
       throw new Error(
@@ -175,7 +175,7 @@ export async function validateAutomationDelivery(
   }
 
   if (delivery.channel === "whatsapp") {
-    const config = await loadWhatsAppConfigFile();
+    const config = await loadWhatsAppConfigFile(owner);
 
     if (!config?.phoneNumber.trim()) {
       throw new Error(
@@ -193,7 +193,7 @@ export async function validateAutomationDelivery(
   }
 
   if (delivery.channel === "discord") {
-    const config = await loadDiscordConfigFile();
+    const config = await loadDiscordConfigFile(owner);
 
     if (!config?.botToken.trim()) {
       throw new Error(

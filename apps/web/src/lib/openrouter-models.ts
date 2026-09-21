@@ -1,5 +1,3 @@
-import type { ProviderModelOption } from "@nakama/core/contract";
-
 export interface OpenRouterApiPricing {
   completion?: string;
   image?: string;
@@ -132,25 +130,6 @@ export function compareOpenRouterModelRows(
   }
 
   return a.name.localeCompare(b.name);
-}
-
-export function mergeOpenRouterModelOptions(
-  models: ProviderModelOption[],
-  currentModelId: string | undefined,
-  displayName?: string
-): ProviderModelOption[] {
-  if (!currentModelId || models.some((model) => model.id === currentModelId)) {
-    return models;
-  }
-
-  return [
-    {
-      id: currentModelId,
-      name: displayName ?? currentModelId,
-      provider: "openrouter",
-    },
-    ...models,
-  ];
 }
 
 function truncateDescription(text: string, maxLength = 120): string {

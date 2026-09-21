@@ -10,6 +10,7 @@ export function ProfileSkillsWriteApprovalField({
 }) {
   return (
     <ProfileOrgBooleanOverrideField
+      description="Require approval before this agent creates or edits skills."
       disabled={disabled}
       field="skillsWriteApproval"
       id="profile-skills-write-approval"

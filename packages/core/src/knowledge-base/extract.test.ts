@@ -72,3 +72,14 @@ describe("knowledge base extract", () => {
     expect(header).toContain("# uploadedAt: 2026-06-13T00:00:00.000Z");
   });
 });
+
+test("knowledge extraction accepts 20 MiB and rejects one byte more", async () => {
+  const limit = 20 * 1024 * 1024;
+  expect(
+    (await extractText("text/plain", "large.txt", Buffer.alloc(limit, "a")))
+      .length
+  ).toBe(limit);
+  await expect(
+    extractText("text/plain", "large.txt", Buffer.alloc(limit + 1))
+  ).rejects.toThrow();
+});

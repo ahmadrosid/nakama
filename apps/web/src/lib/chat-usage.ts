@@ -102,6 +102,12 @@ export function chatUsageTitle(usage: ChatUsage): string {
       : "estimated API cost",
   ];
 
+  if (usage.cachedInputTokens) {
+    parts.push(
+      `${usage.cachedInputTokens.toLocaleString()} input tokens served from cache`
+    );
+  }
+
   if (usage.estimated) {
     parts.push("token counts estimated from text length");
   }

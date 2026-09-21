@@ -13,12 +13,14 @@ import {
 } from "@/components/soul-tools/artifacts-tab-filters";
 
 export function FilesSearchRow({
+  searchLabel = "Search files",
   searchQuery,
   onSearchQueryChange,
   typeOptions,
   typeFilter,
   onTypeFilterChange,
 }: {
+  searchLabel?: string;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   typeOptions: ArtifactTypeFilter[];
@@ -33,7 +35,8 @@ export function FilesSearchRow({
           className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
         />
         <Input
-          className="h-8 border-border/60 bg-muted/20 pl-8 text-sm shadow-none focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10 dark:bg-muted/15 dark:focus-visible:bg-background/60"
+          aria-label={searchLabel}
+          className="h-9 border-border bg-card pl-8 text-sm shadow-none focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10 dark:bg-muted/15 dark:focus-visible:bg-background/60"
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder="Search files…"
           value={searchQuery}
@@ -49,7 +52,7 @@ export function FilesSearchRow({
       >
         <SelectTrigger
           aria-label="Filter by file type"
-          className="h-8 w-full shrink-0 border-border/60 bg-muted/20 shadow-none sm:w-40 dark:bg-muted/15"
+          className="h-9 w-full shrink-0 border-border bg-card shadow-none sm:w-40 dark:bg-muted/15"
         >
           <SelectValue>{ARTIFACT_TYPE_FILTER_LABELS[typeFilter]}</SelectValue>
         </SelectTrigger>

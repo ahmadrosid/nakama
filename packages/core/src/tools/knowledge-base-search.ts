@@ -3,11 +3,14 @@ import type { ToolContext, ToolDefinition } from "../contract";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
+  getOrgKnowledgeBaseDir,
   KNOWLEDGE_BASE_EXTRACTED_SUFFIX,
 } from "../knowledge-base/paths";
 import {
   ensureKnowledgeBaseDirs,
+  getProfileSharedDocumentIds,
   listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
 } from "../knowledge-base/store";
 import { getProfileSoulDir } from "../soul/resolve";
 import { resolveWorkspaceRoot } from "./paths";
@@ -34,9 +37,12 @@ export type KnowledgeBaseSearchInput = z.infer<
   typeof knowledgeBaseSearchInputSchema
 >;
 
+type KnowledgeBaseScope = "organization" | "profile";
+type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
+
 export interface KnowledgeBaseSearchOutput {
   matchCount: number;
-  matches: RipgrepMatch[];
+  matches: ScopedMatch[];
   query: string;
   root: string;
   truncated: boolean;
@@ -51,7 +57,7 @@ export const knowledgeBaseSearchTool: ToolDefinition<
   KnowledgeBaseSearchOutput
 > = {
   description:
-    "Search uploaded knowledge base documents for relevant facts. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs.",
+    "Search uploaded knowledge base documents for relevant facts. Includes profile documents and organization documents attached to this profile. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs.",
   name: "knowledge_base_search",
   parallelSafe: true,
   parameters: jsonSchemaFromZod(knowledgeBaseSearchInputSchema),
@@ -72,86 +78,213 @@ export async function runKnowledgeBaseSearch(
   }
 
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
+  // The backend call, the profile root and the organization target are
+  // independent reads, so they share one round of I/O.
+  const [backend, workspaceRoot, organizationTarget] = await Promise.all([
+    context.searchKnowledge?.({
+      ...parsed,
+      regex: (input as { regex?: unknown }).regex === true,
+    }),
+    resolveWorkspaceRoot(
+      options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
+    ),
+    resolveOrganizationSearchTarget(orgId, profileId, parsed.filename ?? null),
+  ]);
+  // Organization hits are relative to the organization root, not to the
+  // profile workspace they used to be resolved against.
+  const organizationRoot = await resolveWorkspaceRoot(organizationTarget.root);
 
-  await ensureKnowledgeBaseDirs(orgId, profileId);
-
-  const workspaceRoot = await resolveWorkspaceRoot(
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
-  );
-  const searchTarget = await resolveSearchTarget(
-    orgId,
-    profileId,
-    parsed.filename ?? null
-  );
-
-  if (searchTarget.kind === "missing") {
+  if (backend) {
+    // The memory backend indexes profile documents only, so attached
+    // organization documents always come from the ripgrep pass and are merged
+    // in whenever the backend answers.
+    const profileMatches = backend.matches.map((match) => ({
+      ...match,
+      scope: "profile" as const,
+    }));
+    const organizationResult = await runSearchTarget(
+      organizationTarget,
+      parsed,
+      organizationRoot
+    );
+    const merged = mergeScopedMatches(
+      profileMatches,
+      organizationResult.matches,
+      parsed.maxResults
+    );
     return {
-      matchCount: 0,
-      matches: [],
+      matchCount: merged.matches.length,
+      matches: merged.matches,
       query: parsed.query,
-      root: searchTarget.root,
-      truncated: false,
+      root: getKnowledgeBaseDir(orgId, profileId),
+      truncated:
+        backend.truncated || organizationResult.truncated || merged.dropped,
     };
   }
 
-  const args = buildRipgrepArgs({
-    glob: searchTarget.glob,
-    maxResults: parsed.maxResults,
+  await ensureKnowledgeBaseDirs(orgId, profileId);
+  const [profileResult, organizationResult] = await Promise.all([
+    runSearchTarget(
+      await resolveProfileSearchTarget(
+        orgId,
+        profileId,
+        parsed.filename ?? null
+      ),
+      parsed,
+      workspaceRoot
+    ),
+    runSearchTarget(organizationTarget, parsed, organizationRoot),
+  ]);
+  const merged = mergeScopedMatches(
+    profileResult.matches,
+    organizationResult.matches,
+    parsed.maxResults
+  );
+  return {
+    matchCount: merged.matches.length,
+    matches: merged.matches,
     query: parsed.query,
-    regex: parsed.regex,
-    searchRoot: searchTarget.root,
-  });
+    root: getKnowledgeBaseDir(orgId, profileId),
+    truncated:
+      profileResult.truncated || organizationResult.truncated || merged.dropped,
+  };
+}
 
-  const searchResult = await runRipgrep(args, {
-    maxResults: parsed.maxResults,
-    searchRoot: searchTarget.root,
-    workspaceRoot,
-  });
+/**
+ * Organization matches take their slots first: shared documents were attached on
+ * purpose, so a profile search that fills `maxResults` on its own must not push
+ * them out. Whatever the organization scope leaves goes to the profile scope.
+ */
+function mergeScopedMatches(
+  profileMatches: ScopedMatch[],
+  organizationMatches: ScopedMatch[],
+  maxResults: number
+): { dropped: boolean; matches: ScopedMatch[] } {
+  const organizationKept = organizationMatches.slice(0, maxResults);
+  const profileBudget = Math.max(0, maxResults - organizationKept.length);
+  const profileKept = profileMatches.slice(0, profileBudget);
 
   return {
-    matchCount: searchResult.matches.length,
-    matches: searchResult.matches,
-    query: parsed.query,
-    root: searchTarget.root,
-    truncated: searchResult.truncated,
+    dropped:
+      profileKept.length < profileMatches.length ||
+      organizationKept.length < organizationMatches.length,
+    matches: [...profileKept, ...organizationKept],
   };
 }
 
 type SearchTarget =
-  | { kind: "dir"; root: string; glob: string }
-  | { kind: "file"; root: string; glob: null }
-  | { kind: "missing"; root: string };
+  | { kind: "dir"; root: string; glob: string; scope: KnowledgeBaseScope }
+  | { kind: "file"; root: string; glob: null; scope: KnowledgeBaseScope }
+  | { kind: "missing"; root: string; scope: KnowledgeBaseScope };
 
-async function resolveSearchTarget(
+async function resolveProfileSearchTarget(
   orgId: string,
   profileId: string,
   filename: string | null
 ): Promise<SearchTarget> {
-  const knowledgeBaseDir = getKnowledgeBaseDir(orgId, profileId);
+  return pickSearchTarget(
+    getKnowledgeBaseDir(orgId, profileId),
+    "profile",
+    await listKnowledgeBaseDocuments(orgId, profileId),
+    filename
+  );
+}
 
+async function resolveOrganizationSearchTarget(
+  orgId: string,
+  profileId: string,
+  filename: string | null
+): Promise<SearchTarget> {
+  const root = getOrgKnowledgeBaseDir(orgId);
+  const [sharedDocumentIds, organizationDocuments] = await Promise.all([
+    getProfileSharedDocumentIds(orgId, profileId),
+    listOrganizationKnowledgeBaseDocuments(orgId),
+  ]);
+  // Guard against stale profile references: never search the organization root
+  // when no currently listed organization document is attached to this profile.
+  const attached = organizationDocuments.filter((document) =>
+    sharedDocumentIds.includes(document.id)
+  );
+  if (attached.length === 0) {
+    return { kind: "missing", root, scope: "organization" };
+  }
+  return pickSearchTarget(root, "organization", attached, filename);
+}
+
+function pickSearchTarget(
+  root: string,
+  scope: KnowledgeBaseScope,
+  documents: { filename: string; id: string; status: string }[],
+  filename: string | null
+): SearchTarget {
   if (!filename) {
+    const ids = documents
+      .filter((document) => document.status === "ready")
+      .map((document) => document.id);
+    if (ids.length === 0) {
+      return { kind: "missing", root, scope };
+    }
     return {
-      glob: `*${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`,
+      glob:
+        ids.length === 1
+          ? `${ids[0]}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
+          : `{${ids.map((id) => `${id}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`).join(",")}}`,
       kind: "dir",
-      root: knowledgeBaseDir,
+      root,
+      scope,
     };
   }
-
-  const documents = await listKnowledgeBaseDocuments(orgId, profileId);
   const normalized = filename.trim().toLowerCase();
   const document = documents.find(
     (entry) =>
       entry.filename.trim().toLowerCase() === normalized &&
       entry.status === "ready"
   );
-
   if (!document) {
-    return { kind: "missing", root: knowledgeBaseDir };
+    return { kind: "missing", root, scope };
   }
-
   return {
     glob: null,
     kind: "file",
-    root: getKnowledgeBaseExtractedPath(orgId, profileId, document.id),
+    root: getKnowledgeBaseExtractedPath(root, document.id),
+    scope,
+  };
+}
+
+async function runSearchTarget(
+  target: SearchTarget,
+  parsed: KnowledgeBaseSearchInput,
+  relativeTo: string,
+  maxResults = parsed.maxResults
+): Promise<{ matches: ScopedMatch[]; truncated: boolean }> {
+  if (target.kind === "missing" || maxResults <= 0) {
+    return { matches: [], truncated: false };
+  }
+  // Ask for one match more than the budget so "exactly `maxResults` matches" is
+  // only reported as truncated when a further match really exists.
+  const probeLimit = maxResults + 1;
+  const result = await runRipgrep(
+    buildRipgrepArgs({
+      glob: target.glob,
+      maxResults: probeLimit,
+      query: parsed.query,
+      regex: parsed.regex,
+      searchRoot: target.root,
+    }),
+    {
+      maxResults: probeLimit,
+      searchRoot: target.root,
+      // Reported paths are relative to this target's own root: the profile
+      // workspace for profile documents, the organization knowledge base for
+      // shared ones.
+      workspaceRoot: relativeTo,
+    }
+  );
+  return {
+    matches: result.matches.slice(0, maxResults).map((match) => ({
+      ...match,
+      scope: target.scope,
+    })),
+    truncated: result.truncated || result.matches.length > maxResults,
   };
 }

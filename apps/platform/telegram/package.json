@@ -11,6 +11,6 @@
   "dependencies": {
     "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*",
-    "grammy": "^1.35.0"
+    "grammy": "^1.46.0"
   }
 }

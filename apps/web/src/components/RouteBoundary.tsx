@@ -5,6 +5,7 @@ import { Component, type ReactNode, Suspense } from "react";
 import {
   type RouteErrorState,
   routeErrorStateFromResetKey,
+  shouldReloadAfterRouteError,
 } from "@/components/route-error-state";
 
 interface RouteBoundaryProps {
@@ -38,6 +39,9 @@ class RouteErrorBoundary extends Component<
       error?.message,
       errorInfo?.componentStack
     );
+    if (shouldReloadAfterRouteError(error?.message, sessionStorage)) {
+      window.location.reload();
+    }
   }
 
   render() {

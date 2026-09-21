@@ -514,9 +514,11 @@ describe("create_automation tool", () => {
   test("persists discord delivery and optional channelId", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-tool-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    await mkdir(getDiscordConfigDir(), { recursive: true });
+    await mkdir(getDiscordConfigDir({ orgId: ORG_ID, profileId: PROFILE_ID }), {
+      recursive: true,
+    });
     await writeFile(
-      getDiscordConfigPath(),
+      getDiscordConfigPath({ orgId: ORG_ID, profileId: PROFILE_ID }),
       "bot_token=test-token\npaired_user_ids=123456789012345678\n",
       "utf8"
     );

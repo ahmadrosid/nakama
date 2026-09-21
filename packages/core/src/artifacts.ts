@@ -1,7 +1,12 @@
 import {
+  link,
+  lstat,
+  mkdir,
   readdir,
   readFile,
   realpath,
+  rename,
+  rmdir,
   stat,
   unlink,
   writeFile,
@@ -15,19 +20,25 @@ import {
   isLegacyDocFile,
   isMarkdownArtifactMimeType,
 } from "./artifact-mime";
+import { createChatLock } from "./channel-chat-lock";
 import type {
   ArtifactFile,
   DeleteArtifactResponse,
   ListArtifactsOptions,
   ListArtifactsResponse,
+  ListWorkspaceFilesResponse,
   UpdateArtifactResponse,
+  WorkspaceEntry,
 } from "./contract";
 import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
-import { getProfileArtifactsDir } from "./soul/resolve";
-import { guardFilePath } from "./tools/paths";
+import { SOUL_FILES } from "./soul/load";
+import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
+import { guardFilePath, PathGuardError } from "./tools/paths";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
+// ponytail: per-process locking; coordinate replicas before sharing writable workspaces.
+const workspaceRenameLock = createChatLock();
 
 const artifactMetaSchema = z.object({
   mimeType: z.string().trim().min(1),
@@ -57,7 +68,13 @@ export async function listArtifacts(
   }
 
   const resolvedDirectory = await realpath(directory);
-  const artifacts = await walkArtifacts(resolvedDirectory, resolvedDirectory);
+  const files = await walkArtifacts(resolvedDirectory, resolvedDirectory);
+  const folder = options.folder
+    ?.replaceAll("\\", "/")
+    .replace(/^\/+|\/+$/g, "");
+  const artifacts = folder
+    ? files.filter((file) => file.filename.startsWith(`${folder}/`))
+    : files;
   artifacts.sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt)
   );
@@ -137,6 +154,24 @@ async function readArtifactMeta(
   }
 }
 
+// Callers may pass the absolute path listArtifacts returned, so name only the
+// basename: the full path is the server filesystem layout.
+function artifactNotFound(filename: string): NakamaApiError {
+  return new NakamaApiError(
+    `Artifact not found: ${path.basename(filename)}`,
+    404
+  );
+}
+
+// A stale chat link, or a profile that never wrote an artifact, is a missing
+// resource. Left as a raw fs error it answers 500 and logs a stack per click.
+function artifactNotFoundOr(error: unknown, filename: string): unknown {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR"
+    ? artifactNotFound(filename)
+    : error;
+}
+
 export async function readArtifactFile(input: {
   orgId: string;
   profileId: string;
@@ -148,16 +183,22 @@ export async function readArtifactFile(input: {
   render?: "markdown";
 }): Promise<{ bytes: Buffer; contentType: string; filePath: string }> {
   const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
-  const resolvedArtifactsDir = await realpath(artifactsDir);
+  const resolvedArtifactsDir = await realpath(artifactsDir).catch(
+    (error: unknown) => {
+      throw artifactNotFoundOr(error, input.filename);
+    }
+  );
   const guarded = await guardFilePath(input.filename, null, undefined, {
     allowedDirs: [resolvedArtifactsDir],
     cwd: resolvedArtifactsDir,
   });
   const filePath = guarded.resolved;
-  const fileStat = await stat(filePath);
+  const fileStat = await stat(filePath).catch((error: unknown) => {
+    throw artifactNotFoundOr(error, input.filename);
+  });
 
   if (!fileStat.isFile()) {
-    throw new Error(`Artifact not found: ${input.filename}`);
+    throw artifactNotFound(input.filename);
   }
 
   const metadata = await readArtifactMeta(
@@ -287,4 +328,275 @@ export async function deleteArtifactFile(input: {
     filename: path.relative(resolvedArtifactsDir, filePath),
     profileId: input.profileId,
   };
+}
+
+async function resolveWorkspacePath(
+  orgId: string,
+  profileId: string,
+  filename: string
+) {
+  const root = getProfileSoulDir(orgId, profileId);
+  if (
+    path.isAbsolute(filename) ||
+    filename.includes("\\") ||
+    filename.split("/").includes("..")
+  ) {
+    throw new NakamaApiError("Invalid workspace path", 400);
+  }
+  try {
+    return (
+      await guardFilePath(filename || ".", null, undefined, {
+        allowedDirs: [root],
+        cwd: root,
+      })
+    ).resolved;
+  } catch (error) {
+    if (error instanceof PathGuardError) {
+      throw new NakamaApiError("Invalid workspace path", 400);
+    }
+    throw error;
+  }
+}
+
+export async function listWorkspaceFiles(
+  orgId: string,
+  profileId: string,
+  folder = ""
+): Promise<ListWorkspaceFilesResponse> {
+  const directory = await resolveWorkspacePath(orgId, profileId, folder);
+  let children;
+  try {
+    children = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" && !folder) {
+      return { entries: [] };
+    }
+    throw artifactNotFoundOr(error, folder);
+  }
+  const entries: WorkspaceEntry[] = [];
+  for (const child of children) {
+    // Do not follow symlinks into another profile or outside the workspace.
+    if (!(child.isFile() || child.isDirectory())) {
+      continue;
+    }
+    const filename = path.posix.join(folder, child.name);
+    const filePath = await resolveWorkspacePath(orgId, profileId, filename);
+    const info = await stat(filePath);
+    entries.push({
+      filename,
+      kind: child.isDirectory() ? "directory" : "file",
+      mimeType: inferArtifactMimeType(child.name),
+      path: filename,
+      sizeBytes: info.size,
+      updatedAt: info.mtime.toISOString(),
+    });
+  }
+  entries.sort(
+    (a, b) =>
+      Number(b.kind === "directory") - Number(a.kind === "directory") ||
+      a.filename.localeCompare(b.filename)
+  );
+  return { entries };
+}
+
+export async function getWorkspaceEntry(
+  orgId: string,
+  profileId: string,
+  filename: string
+) {
+  const filePath = await resolveWorkspacePath(orgId, profileId, filename);
+  const info = await stat(filePath).catch((error: unknown) => {
+    throw artifactNotFoundOr(error, filename);
+  });
+  if (!(info.isFile() || info.isDirectory())) {
+    throw new NakamaApiError("File not found", 404);
+  }
+  const entry: WorkspaceEntry = {
+    filename,
+    kind: info.isDirectory() ? "directory" : "file",
+    mimeType: inferArtifactMimeType(filename),
+    path: filename,
+    sizeBytes: info.size,
+    updatedAt: info.mtime.toISOString(),
+  };
+  return { contentType: entry.mimeType, entry, filePath };
+}
+
+export async function readWorkspaceFile(
+  orgId: string,
+  profileId: string,
+  filename: string
+) {
+  const file = await getWorkspaceEntry(orgId, profileId, filename);
+  if (file.entry.kind !== "file") {
+    throw new NakamaApiError("File not found", 404);
+  }
+  return file;
+}
+
+function assertRenamableWorkspacePath(filename: string) {
+  const parts = filename.split("/");
+  if (
+    parts.some((part) => !part || part === "." || part === "..") ||
+    filename.includes("\\") ||
+    Array.from(filename).some((char) => char.charCodeAt(0) < 32)
+  ) {
+    throw new NakamaApiError("Invalid workspace path", 400);
+  }
+  const top = parts[0]!.toLowerCase();
+  const normalized = filename.toLowerCase();
+  const managed = [
+    "attachments",
+    "knowledge-base",
+    "memory-archive",
+    "skills",
+    "artifacts/coding-agent-runs",
+    "data/knowledge-base",
+    "data/memory-archive",
+  ];
+  const fixedNames = [
+    ...Object.values(SOUL_FILES),
+    "USER.md",
+    "artifacts",
+    "data",
+    "examples",
+  ];
+  if (
+    top.startsWith(".") ||
+    managed.some(
+      (directory) =>
+        normalized === directory || normalized.startsWith(`${directory}/`)
+    ) ||
+    (parts.length === 1 &&
+      fixedNames.some((name) => name.toLowerCase() === top)) ||
+    normalized.endsWith(ARTIFACT_META_SUFFIX)
+  ) {
+    throw new NakamaApiError(
+      "This path is managed by Nakama and cannot be renamed.",
+      400
+    );
+  }
+}
+
+async function workspacePathExists(filename: string): Promise<boolean> {
+  try {
+    await lstat(filename);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+// Reserve the destination rather than overwriting an existing file or folder.
+async function moveWorkspacePath(source: string, target: string) {
+  const info = await lstat(source);
+  if (info.isDirectory()) {
+    // Windows already rejects replacing a directory, including an empty reservation.
+    if (process.platform === "win32") {
+      await rename(source, target);
+      return;
+    }
+    await mkdir(target);
+    try {
+      await rename(source, target);
+    } catch (error) {
+      await rmdir(target);
+      throw error;
+    }
+  } else if (info.isFile()) {
+    await link(source, target);
+    try {
+      await unlink(source);
+    } catch (error) {
+      await unlink(target);
+      throw error;
+    }
+  } else {
+    throw new NakamaApiError(
+      "Only regular files and folders can be renamed.",
+      400
+    );
+  }
+}
+
+export async function renameWorkspaceEntry(input: {
+  orgId: string;
+  profileId: string;
+  path: string;
+  newName: string;
+  updateReferences: (newPath: string) => Promise<void>;
+}): Promise<WorkspaceEntry> {
+  const { orgId, profileId, newName } = input;
+  if (
+    !newName ||
+    newName !== newName.trim() ||
+    newName.endsWith(".") ||
+    /[<>:"/\\|?*]/.test(newName) ||
+    Buffer.byteLength(newName) > 255
+  ) {
+    throw new NakamaApiError("Enter a valid file or folder name.", 400);
+  }
+  assertRenamableWorkspacePath(input.path);
+  const newPath = path.posix.join(path.posix.dirname(input.path), newName);
+  assertRenamableWorkspacePath(newPath);
+  let result!: WorkspaceEntry;
+  await workspaceRenameLock.withLock(
+    getProfileSoulDir(orgId, profileId),
+    async () => {
+      const source = await getWorkspaceEntry(orgId, profileId, input.path);
+      const root = await realpath(getProfileSoulDir(orgId, profileId));
+      if (source.filePath !== path.join(root, input.path)) {
+        throw new NakamaApiError("Symbolic links cannot be renamed.", 400);
+      }
+      result = {
+        ...source.entry,
+        filename: newPath,
+        mimeType: inferArtifactMimeType(newName),
+        path: newPath,
+      };
+      if (input.path === newPath) {
+        return;
+      }
+      const target = path.join(path.dirname(source.filePath), newName);
+      const sourceMeta = getArtifactMetaPath(source.filePath);
+      const targetMeta = getArtifactMetaPath(target);
+      const hasMeta =
+        source.entry.kind === "file" && (await workspacePathExists(sourceMeta));
+      if (
+        (await workspacePathExists(target)) ||
+        (await workspacePathExists(targetMeta))
+      ) {
+        throw new NakamaApiError(
+          "A file or folder with that name already exists.",
+          409
+        );
+      }
+      const moved: [string, string][] = [];
+      try {
+        await moveWorkspacePath(source.filePath, target);
+        moved.push([source.filePath, target]);
+        if (hasMeta) {
+          await moveWorkspacePath(sourceMeta, targetMeta);
+          moved.push([sourceMeta, targetMeta]);
+        }
+        await input.updateReferences(newPath);
+      } catch (error) {
+        // Keep the old paths usable if metadata or the database update fails.
+        for (const [before, after] of moved.reverse()) {
+          await moveWorkspacePath(after, before);
+        }
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+          throw new NakamaApiError(
+            "A file or folder with that name already exists.",
+            409
+          );
+        }
+        throw error;
+      }
+    }
+  );
+  return result;
 }

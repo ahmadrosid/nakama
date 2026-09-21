@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   apiKeyEnvVarForProvider,
   defaultDiscoveryBaseUrl,
@@ -42,44 +45,8 @@ describe("parseProviderName", () => {
 });
 
 describe("apiKeyEnvVarForProvider", () => {
-  test("maps Xiaomi MiMo to its env key", () => {
-    expect(apiKeyEnvVarForProvider("xiaomi")).toBe("XIAOMI_API_KEY");
-  });
-
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
-  });
-
-  test("maps Together AI to its env key", () => {
-    expect(apiKeyEnvVarForProvider("together")).toBe("TOGETHER_API_KEY");
-  });
-
-  test("maps Qwen regions to distinct env keys", () => {
-    expect(apiKeyEnvVarForProvider("qwen")).toBe("QWEN_API_KEY");
-    expect(apiKeyEnvVarForProvider("qwen_cn")).toBe("QWEN_CN_API_KEY");
-  });
-
-  test("maps Vercel AI Gateway to its env key", () => {
-    expect(apiKeyEnvVarForProvider("vercel_ai_gateway")).toBe(
-      "VERCEL_AI_GATEWAY_API_KEY"
-    );
-  });
-
-  test("mistral uses MISTRAL_API_KEY", () => {
-    expect(apiKeyEnvVarForProvider("mistral")).toBe("MISTRAL_API_KEY");
-  });
-
-  test("doubao uses DOUBAO_API_KEY", () => {
-    expect(apiKeyEnvVarForProvider("doubao")).toBe("DOUBAO_API_KEY");
-  });
-
-  test("perplexity uses PERPLEXITY_API_KEY", () => {
-    expect(apiKeyEnvVarForProvider("perplexity")).toBe("PERPLEXITY_API_KEY");
-  });
-
-  test("maps Moonshot regions to distinct env keys", () => {
-    expect(apiKeyEnvVarForProvider("moonshot")).toBe("MOONSHOT_API_KEY");
-    expect(apiKeyEnvVarForProvider("moonshot_cn")).toBe("MOONSHOT_CN_API_KEY");
   });
 });
 
@@ -113,6 +80,41 @@ describe("resolveProvider", () => {
     });
 
     expect(provider).toBe("gemini");
+  });
+
+  test("uses an API key mounted through a companion file variable", () => {
+    const directory = mkdtempSync(join(tmpdir(), "nakama-provider-key-"));
+    const keyPath = join(directory, "gemini");
+    writeFileSync(keyPath, "mounted-secret\n");
+
+    try {
+      expect(
+        resolveProvider({
+          env: { GEMINI_API_KEY_FILE: keyPath },
+        })
+      ).toBe("gemini");
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  test("prefers a direct API key over its companion file", () => {
+    expect(
+      resolveProvider({
+        env: {
+          GEMINI_API_KEY: "direct-secret",
+          GEMINI_API_KEY_FILE: "/missing/secret",
+        },
+      })
+    ).toBe("gemini");
+  });
+
+  test("fails when a configured API key file cannot be read", () => {
+    expect(() =>
+      resolveProvider({
+        env: { GEMINI_API_KEY_FILE: "/missing/secret" },
+      })
+    ).toThrow();
   });
 
   test("returns null when multiple env API keys are set", () => {

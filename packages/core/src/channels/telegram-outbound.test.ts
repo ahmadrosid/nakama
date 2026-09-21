@@ -5,6 +5,8 @@ import path from "node:path";
 import { saveTelegramConfig } from "../telegram-config";
 import { createTelegramOutboundAdapter } from "./telegram-outbound";
 
+const owner = { orgId: "org_test", profileId: "agent_test" };
+
 describe("createTelegramOutboundAdapter", () => {
   let tempHome = "";
   let homedirSpy: ReturnType<typeof spyOn<typeof os, "homedir">> | null = null;
@@ -22,7 +24,7 @@ describe("createTelegramOutboundAdapter", () => {
   async function useTempHome(run: () => Promise<void>): Promise<void> {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-tg-outbound-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
-    await saveTelegramConfig(null, { botToken: "1234567890:TEST" });
+    await saveTelegramConfig(owner, { botToken: "1234567890:TEST" });
     await run();
   }
 
@@ -40,7 +42,7 @@ describe("createTelegramOutboundAdapter", () => {
       });
 
       await expect(
-        adapter.send({ chatIds: [1001], text: "hello" })
+        adapter.send({ ...owner, chatIds: [1001], text: "hello" })
       ).resolves.toEqual({
         ok: true,
       });
@@ -59,7 +61,7 @@ describe("createTelegramOutboundAdapter", () => {
       });
 
       await expect(
-        adapter.send({ chatIds: [1001], text: "hello", topicId: 22 })
+        adapter.send({ ...owner, chatIds: [1001], text: "hello", topicId: 22 })
       ).resolves.toEqual({ ok: true });
       expect(calls[0]).toEqual({
         chat_id: 1001,
@@ -81,6 +83,7 @@ describe("createTelegramOutboundAdapter", () => {
 
       await expect(
         adapter.send({
+          ...owner,
           chatIds: [1001],
           parseMode: "HTML",
           text: "✅ **New payment**\n\nCustomer: [Ahmad](https://example.com)",

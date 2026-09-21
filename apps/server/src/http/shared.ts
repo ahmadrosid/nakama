@@ -10,6 +10,7 @@ import {
   formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  reportError,
   resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
@@ -441,6 +442,43 @@ export function errorResponse(
   );
 }
 
+/**
+ * The page an OAuth provider's redirect lands on. A browser gets it, not a
+ * client, so it answers HTML on success and on failure alike.
+ */
+export function oauthResultPage(
+  title: string,
+  detail: string,
+  link: { href: string; label: string },
+  status = 200
+): Response {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${Bun.escapeHTML(title)} - Nakama</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    a { color: #0b57d0; }
+  </style>
+</head>
+<body>
+  <h1>${Bun.escapeHTML(title)}</h1>
+  <p>${Bun.escapeHTML(detail)}</p>
+  <p><a href="${Bun.escapeHTML(link.href)}">${Bun.escapeHTML(link.label)}</a></p>
+</body>
+</html>`,
+    {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      status,
+    }
+  );
+}
+
 const CHANNEL_LIST = `${AGENT_CHANNELS.slice(0, -1).join(", ")}, or ${
   AGENT_CHANNELS[AGENT_CHANNELS.length - 1]
 }`;
@@ -496,6 +534,7 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
       }),
     onThinking: (delta: string) => send({ delta, type: "thinking" }),
     onToolEnd: (event: {
+      toolGroupId?: string;
       toolCallId: string;
       tool: string;
       result: unknown;
@@ -504,6 +543,7 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
         result: event.result,
         tool: event.tool,
         toolCallId: event.toolCallId,
+        toolGroupId: event.toolGroupId,
         type: "tool_end",
       });
 
@@ -524,6 +564,7 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
       }
     },
     onToolInputDelta: (event: {
+      toolGroupId?: string;
       toolCallId: string;
       tool: string;
       delta: string;
@@ -534,9 +575,11 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
         delta: event.delta,
         tool: event.tool,
         toolCallId: event.toolCallId,
+        toolGroupId: event.toolGroupId,
         type: "tool_input_delta",
       }),
     onToolStart: (event: {
+      toolGroupId?: string;
       toolCallId: string;
       tool: string;
       input: Record<string, unknown>;
@@ -545,6 +588,7 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
         input: event.input,
         tool: event.tool,
         toolCallId: event.toolCallId,
+        toolGroupId: event.toolGroupId,
         type: "tool_start",
       }),
     onUsage: (usage: ChatUsage) => send({ type: "usage", usage }),
@@ -707,11 +751,20 @@ export function streamMessage(
           ...(contextUsage ? { contextUsage } : {}),
         });
       } catch (error) {
+        const cancelled = turnSignal.aborted && !timedOut;
+        // The first-token timeout is a NakamaApiError 504, and it is exactly the
+        // failure an operator needs, so only a 4xx refusal is skipped.
+        if (
+          !(
+            cancelled ||
+            (error instanceof NakamaApiError && error.status < 500)
+          )
+        ) {
+          // The stream already told the user; without this the operator never hears.
+          void reportError(error, { kind: "turn", source: "server" });
+        }
         send({
-          error:
-            turnSignal.aborted && !timedOut
-              ? "Turn cancelled."
-              : formatServerError(error),
+          error: cancelled ? "Turn cancelled." : formatServerError(error),
           type: "error",
         });
       } finally {

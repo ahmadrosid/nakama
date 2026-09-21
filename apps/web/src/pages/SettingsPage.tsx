@@ -3,6 +3,7 @@ import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { useCallback, useEffect, useState } from "react";
+import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
@@ -88,84 +89,66 @@ export function SettingsPage() {
             </div>
           ) : null}
 
-          {isOrgAdmin ? (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="font-medium text-foreground text-sm">
-                    Timezone
-                  </p>
-                  {timezoneHint ? (
-                    <p
-                      className="text-emerald-700 text-xs dark:text-emerald-300"
-                      role="status"
-                    >
-                      {timezoneHint}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <TimezoneSelect
-                    className="w-44 min-w-0 sm:w-52"
-                    disabled={saveTimezoneMutation.isPending}
-                    emptyLabel="Select timezone"
-                    id="timezone"
-                    onValueChange={(nextTimezone) => {
-                      if (nextTimezone) {
-                        setTimezone(nextTimezone);
-                        setTimezoneHint(null);
-                      }
-                    }}
-                    value={timezone}
-                  />
-                  <Button
-                    disabled={
-                      saveTimezoneMutation.isPending || !timezone.trim()
-                    }
-                    onClick={handleSaveTimezone}
-                    size="sm"
-                    type="button"
+          {isPlatformAdmin ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0 space-y-0.5">
+                <p className="font-medium text-foreground text-sm">Timezone</p>
+                {timezoneHint ? (
+                  <p
+                    className="text-emerald-700 text-xs dark:text-emerald-300"
+                    role="status"
                   >
-                    {saveTimezoneMutation.isPending ? (
-                      <>
-                        <Spinner className="mr-2" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save"
-                    )}
-                  </Button>
-                </div>
+                    {timezoneHint}
+                  </p>
+                ) : null}
               </div>
-
-              <WebPublicUrlSettingsRow />
-            </>
+              <div className="flex items-center gap-2">
+                <TimezoneSelect
+                  className="w-44 min-w-0 sm:w-52"
+                  disabled={saveTimezoneMutation.isPending}
+                  emptyLabel="Select timezone"
+                  id="timezone"
+                  onValueChange={(nextTimezone) => {
+                    if (nextTimezone) {
+                      setTimezone(nextTimezone);
+                      setTimezoneHint(null);
+                    }
+                  }}
+                  value={timezone}
+                />
+                <Button
+                  disabled={saveTimezoneMutation.isPending || !timezone.trim()}
+                  onClick={handleSaveTimezone}
+                  size="sm"
+                  type="button"
+                >
+                  {saveTimezoneMutation.isPending ? (
+                    <>
+                      <Spinner className="mr-2" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+              </div>
+            </div>
           ) : null}
+
+          {isOrgAdmin ? <WebPublicUrlSettingsRow /> : null}
         </CardContent>
       </Card>
 
+      {formError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formError}
+        </p>
+      ) : null}
+
       {isOrgAdmin ? (
-        <>
-          <ProviderSettingsCard
-            formError={formError}
-            onFormError={setFormError}
-          />
-
-          <Card className="w-full shadow-none">
-            <CardContent className="divide-y divide-border p-0">
-              <VisionSettingsCard />
-              <TranscriptionSettingsCard />
-              <ImageGenerationSettingsCard />
-              <WebSearchSettingsCard />
-            </CardContent>
-          </Card>
-
-          {formError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {formError}
-            </p>
-          ) : null}
-        </>
+        <section id="local-token">
+          <LocalAuthTokenCard />
+        </section>
       ) : null}
 
       {isPlatformAdmin ? (
@@ -175,6 +158,23 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+export function LlmProvidersPage() {
+  const [formError, setFormError] = useState<string | null>(null);
+  return (
+    <div className="mx-auto max-w-3xl space-y-8">
+      <ProviderSettingsCard formError={formError} onFormError={setFormError} />
+      <Card className="w-full shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          <VisionSettingsCard />
+          <TranscriptionSettingsCard />
+          <ImageGenerationSettingsCard />
+          <WebSearchSettingsCard />
+        </CardContent>
+      </Card>
     </div>
   );
 }

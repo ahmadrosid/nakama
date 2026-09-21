@@ -1,4 +1,6 @@
+import uFuzzy from "@leeoniya/ufuzzy";
 import type {
+  ListUserOrgsResponse,
   ModelsResponse,
   ProfileSummary,
   ProviderModelOption,
@@ -131,6 +133,7 @@ export interface PromptSuggestion {
   description: string;
   insertValue: string;
   label: string;
+  submitOnEnter?: boolean;
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
@@ -143,15 +146,16 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { description: "distill a reusable skill from sources", name: "/learn" },
   { description: "show or initialize profile soul files", name: "/soul" },
   { description: "show or initialize USER.md", name: "/user" },
-  { description: "choose a model", name: "/models" },
-  { description: "show or switch model", name: "/model" },
+  { description: "choose a model", name: "/model" },
   { description: "show or change extended thinking", name: "/thinking" },
   { description: "toggle layout debug overlay", name: "/debug" },
   { description: "show or switch bot profile", name: "/profile" },
+  { description: "list or switch organizations", name: "/org" },
   { description: "quit", name: "/exit" },
 ];
 
 const COMMANDS_WITH_ARGS = new Set([
+  "/org",
   "/model",
   "/thinking",
   "/profile",
@@ -161,12 +165,19 @@ const COMMANDS_WITH_ARGS = new Set([
   "/user",
 ]);
 
+const commandSearch = new uFuzzy({
+  compare: () => 0,
+  intraIns: Number.POSITIVE_INFINITY,
+});
+
 export interface ResolveSuggestionsOptions {
   currentModel?: string | null;
+  currentOrgId?: string | null;
   currentProfileId?: string | null;
   currentProviderId?: string | null;
   input: string;
   models?: ProviderModelOption[];
+  orgs?: ListUserOrgsResponse["orgs"];
   profiles?: ProfileSummary[];
 }
 
@@ -174,6 +185,8 @@ export function resolveSuggestions(
   options: ResolveSuggestionsOptions
 ): PromptSuggestion[] {
   const {
+    orgs = [],
+    currentOrgId = null,
     input,
     models = [],
     currentModel = null,
@@ -184,6 +197,23 @@ export function resolveSuggestions(
 
   if (!input.startsWith("/")) {
     return [];
+  }
+
+  const orgMatch = input.match(/^\/org(?:\s+(.*))?$/);
+  if (orgMatch) {
+    const query = (orgMatch[1] ?? "").trim().toLowerCase();
+    return orgs
+      .filter((org) =>
+        [org.id, org.slug, org.name].some((value) =>
+          value.toLowerCase().includes(query)
+        )
+      )
+      .map((org) => ({
+        description: `${org.slug}${org.id === currentOrgId ? " (current)" : ""}`,
+        insertValue: `/org ${org.id}`,
+        label: org.name,
+        submitOnEnter: orgMatch[1] === undefined ? undefined : true,
+      }));
   }
 
   const profileMatch = input.match(/^\/profile(?:\s+(.*))?$/);
@@ -211,9 +241,9 @@ export function resolveSuggestions(
           .join(", ");
 
         return {
-          description: `${profile.name}${markers ? ` (${markers})` : ""}`,
+          description: markers ? `(${markers})` : "",
           insertValue: `/profile ${profile.id}`,
-          label: profile.id,
+          label: profile.name,
         };
       });
   }
@@ -248,6 +278,7 @@ export function resolveSuggestions(
           description: `${model.name} [${model.providerLabel ?? model.provider}]${markers ? ` (${markers})` : ""}`,
           insertValue: `/model ${formatModelCommandArg(model)}`,
           label: model.id,
+          submitOnEnter: modelMatch[1] === undefined ? undefined : true,
         };
       });
   }
@@ -293,18 +324,22 @@ export function resolveSuggestions(
     return [];
   }
 
-  const query = input.toLowerCase();
+  let commands = SLASH_COMMANDS;
 
-  return SLASH_COMMANDS.filter((command) => {
-    if (query === "/") {
-      return true;
-    }
-
-    return (
-      command.name.toLowerCase().startsWith(query) ||
-      command.description.toLowerCase().includes(query.slice(1))
+  if (input !== "/") {
+    const needle = input.slice(1).toLowerCase().replace(/[-_]/g, "");
+    const [indices, info, order] = commandSearch.search(
+      SLASH_COMMANDS.map((command) =>
+        command.name.slice(1).toLowerCase().replace(/[-_]/g, "")
+      ),
+      needle
     );
-  }).map((command) => ({
+    const matches =
+      info && order ? order.map((index) => info.idx[index]) : indices;
+    commands = (matches ?? []).map((index) => SLASH_COMMANDS[index]);
+  }
+
+  return commands.map((command) => ({
     description: command.description,
     insertValue: COMMANDS_WITH_ARGS.has(command.name)
       ? `${command.name} `

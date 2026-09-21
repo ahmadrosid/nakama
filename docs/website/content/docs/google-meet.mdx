@@ -1,0 +1,102 @@
+---
+title: "Google Meet"
+description: "Capture Google Meet audio in Chrome and read the live transcript in Nakama."
+---
+
+Nakama can listen to a Google Meet call through Chrome and turn the conversation into text you and your agent can use.
+
+## Why use Google Meet capture
+
+The Chrome extension picks up sound from the Meet tab and your microphone on your computer. Nakama sends that sound to OpenAI, which turns it into text and saves it with the meeting.
+
+There is no bot participant joining the call.
+
+## What you need
+
+- An organization admin who can install and enable the Google Meet plugin
+- An OpenAI key for transcription. This is a secret key from OpenAI that pays for turning speech into text.
+- Google Chrome with the Nakama extension installed
+- A Google Meet call that you are allowed to record and transcribe
+
+Always tell participants before transcription starts. Follow your organization's recording and privacy rules.
+
+## Set up Google Meet
+
+### 1. Install the plugin
+
+Open **System → Plugins** and install the official **Google Meet** plugin. An organization admin then enables it for the active organization.
+
+### 2. Add the OpenAI key
+
+Open **Google Meet → Settings**, enter the OpenAI key, and save it. This key is used only for meeting transcription and is billed separately from a ChatGPT subscription.
+
+### 3. Install the Chrome extension
+
+Ask your Nakama administrator for the Google Meet extension folder. This is a one-time setup in Chrome:
+
+1. Open `chrome://extensions`
+2. Turn on **Developer mode**
+3. Choose **Load unpacked**
+4. Select the extension folder
+
+Keep the extension enabled while you use Google Meet.
+
+## Start a transcription
+
+1. Open the Google Meet call in Chrome.
+2. Open **Google Meet** in Nakama.
+3. Enter the Meet link and choose the maximum meeting time.
+4. Choose **Start capture session**.
+
+Nakama sends a one-time private connection link to the extension. The extension finds the matching Meet tab and starts sending audio. If it does not start, copy the backup link shown on the page into the extension popup.
+
+The meeting moves through **Waiting**, **Transcribing**, and **Finished**. Open the meeting in Nakama to see new text while the call is running.
+
+## Read the transcript with your agent
+
+The agent can:
+
+- list meetings
+- check a meeting's status
+- read new transcript text
+- stop an active capture
+
+Ask questions such as:
+
+> What decisions were made in the latest Google Meet?
+
+> Summarize the action items from meeting ABC.
+
+The agent only sees meetings that the current user is allowed to see.
+
+## Stop and save
+
+Choose **Leave** in Nakama or stop capture from the Chrome extension. Nakama finishes the current transcript and keeps the saved meeting available under **Saved transcripts**.
+
+If Chrome closes or the connection breaks, Nakama keeps the text collected so far and marks the meeting as incomplete. It does not silently reconnect to the call.
+
+## Remote Nakama servers
+
+If Chrome and Nakama run on different computers, ask your administrator to connect them through a secure web address that supports a live connection. The address should start with `wss://`.
+
+Do not share the connection links. They contain a temporary private passcode for one organization and one meeting.
+
+## Troubleshooting
+
+### The capture does not start
+
+- Make sure the Meet tab is open in Chrome.
+- Make sure the extension is enabled.
+- Refresh both the Nakama Google Meet page and the Meet tab.
+- Use the backup link in the extension popup.
+
+### The meeting is ready but no transcript appears
+
+- Check that the OpenAI key is saved in **Google Meet → Settings**.
+- Check that the background service is running in **System → Workers**.
+- Confirm that Chrome allowed microphone access.
+- Confirm that participants are speaking in the Meet tab being captured.
+
+### The extension cannot reach Nakama
+
+The Chrome extension and Nakama must be able to reach the same connection address. For remote servers, ask your administrator to check the secure connection and firewall.

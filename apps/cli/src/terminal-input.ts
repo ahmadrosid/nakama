@@ -1,3 +1,5 @@
+import { isKeyRelease, ProcessTerminal } from "@earendil-works/pi-tui";
+
 const CURSOR_POSITION_REPORT = /^\x1b\[(\d+);(\d+)R$/;
 const CURSOR_POSITION_REPORT_GLOBAL = /\x1b\[(\d+);(\d+)R/g;
 const MOUSE_EVENT_REPORT = /^\x1b\[<\d+;\d+;\d+[mM]$/;
@@ -75,7 +77,7 @@ export function isIncompleteEscapeSequence(pending: string): boolean {
     return true;
   }
 
-  if (/^\x1b\[[0-9;]*$/.test(pending)) {
+  if (/^\x1b\[[0-9;:]*$/.test(pending)) {
     return true;
   }
 
@@ -112,7 +114,7 @@ export function consumeTerminalInput(buffer: string): {
 
     if (pending.startsWith("\x1b")) {
       const match = pending.match(
-        /^\x1b(?:\[[0-9;]*[A-Za-z]|\[<\d+;\d+;\d+[mM]|\][^\x07]*(?:\x07|\x1b\\)|[OPINOZ=><^]|\([AB012])/
+        /^\x1b(?:\r|\[[0-9;:]*[A-Za-z~]|\[<\d+;\d+;\d+[mM]|\][^\x07]*(?:\x07|\x1b\\)|[OPINOZ=><^]|\([AB012])/
       );
 
       if (!match) {
@@ -130,7 +132,7 @@ export function consumeTerminalInput(buffer: string): {
 
       if (isMouseEventReport(sequence)) {
         events.push(sequence);
-      } else if (!isTerminalResponse(sequence)) {
+      } else if (!(isTerminalResponse(sequence) || isKeyRelease(sequence))) {
         events.push(sequence);
       }
 
@@ -152,6 +154,7 @@ export class TerminalInput {
   private listeners = new Set<(chunk: string) => void>();
   private cursorWaiters = new Set<(row: number) => void>();
   private previousEncoding: BufferEncoding | null | undefined;
+  private readonly terminal = new ProcessTerminal();
 
   start(): void {
     if (this.active) {
@@ -160,11 +163,7 @@ export class TerminalInput {
 
     this.active = true;
     this.previousEncoding = process.stdin.readableEncoding;
-    process.stdin.setEncoding("utf8");
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.on("data", this.handleData);
-    process.stdout.write("\x1b[?2004h");
+    this.terminal.start(this.handleData, () => {});
 
     if (this.mouseTracking) {
       process.stdout.write("\x1b[?1000h\x1b[?1006h");
@@ -177,8 +176,7 @@ export class TerminalInput {
     }
 
     this.active = false;
-    process.stdin.off("data", this.handleData);
-    process.stdin.setRawMode(false);
+    this.terminal.stop();
     restoreReadableEncoding(process.stdin, this.previousEncoding);
     this.previousEncoding = undefined;
 
@@ -187,7 +185,6 @@ export class TerminalInput {
       this.mouseTracking = false;
     }
 
-    process.stdout.write("\x1b[?2004l");
     this.listeners.clear();
     this.cursorWaiters.clear();
     this.pending = "";

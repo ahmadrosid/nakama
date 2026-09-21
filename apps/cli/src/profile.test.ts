@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { NakamaClient } from "@nakama/client";
 import type { ProfileSummary } from "@nakama/core";
+import { loadSavedCliProfileId, saveCliProfileId } from "./cli-config";
 import {
   parseCliProfileArgs,
   resolveProfileInput,
+  resolveStartupProfile,
   sortProfilesForPicker,
 } from "./profile";
 
@@ -27,6 +33,41 @@ const sampleProfiles = [
   profile({ id: "profile_default", isDefault: true, name: "Default Bot" }),
   profile({ id: "profile_custom", name: "Research Bot" }),
 ];
+
+test("startup defaults to Super Bot and respects saved and explicit choices", async () => {
+  const configDir = await mkdtemp(join(tmpdir(), "nakama-cli-profile-"));
+  const previous = process.env.NAKAMA_CONFIG_DIR;
+  process.env.NAKAMA_CONFIG_DIR = configDir;
+  const client = {
+    listProfiles: async () => ({ profiles: sampleProfiles }),
+  } as NakamaClient;
+
+  try {
+    expect((await resolveStartupProfile(client, {})).profileId).toBe(
+      "super_bot"
+    );
+    expect(await loadSavedCliProfileId()).toBe("super_bot");
+    await saveCliProfileId("profile_custom");
+    expect((await resolveStartupProfile(client, {})).profileId).toBe(
+      "profile_custom"
+    );
+    expect(
+      (await resolveStartupProfile(client, { profileId: "profile_default" }))
+        .profileId
+    ).toBe("profile_default");
+    await saveCliProfileId("deleted_profile");
+    expect((await resolveStartupProfile(client, {})).profileId).toBe(
+      "super_bot"
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previous;
+    }
+    await rm(configDir, { force: true, recursive: true });
+  }
+});
 
 describe("parseCliProfileArgs", () => {
   test("reads --profile and -p", () => {

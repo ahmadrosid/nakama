@@ -99,6 +99,8 @@ A badge on **Proposals** shows the pending count.
 
 Every write logs a snapshot (manual edits, approvals, pin/unpin, archive, and restores). **Undo latest** rolls back to the previous revision. **Restore** on an older row replays that snapshot as the new live memory (and logs the restore as a new history entry).
 
+History keeps the **newest 50 revisions** on disk. Past that, older snapshots are pruned automatically. The Settings history panel and `GET /v1/orgs/{orgId}/memory/history` report the cap (`maxEntries`) and whether pruning has already dropped older revisions (`truncated`).
+
 Use **Archive** when the pinned list grows large — it keeps the live file within limits while preserving history under `memory-archive/`.
 
 For per-bot continuity the agent manages itself, use the profile `update-profile-memory` skill — see [Profiles](/profiles#knowledge-base-and-memory).

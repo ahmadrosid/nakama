@@ -1,13 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {
-  useProfilesQuery,
+  useChannelProfileId,
   useReconnectWhatsApp,
   useRegenerateWhatsAppPairingCode,
   useSaveWhatsAppSettings,
   useWhatsAppSettings,
 } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
+import { useStartWorker } from "@/hooks/use-worker-actions";
 import { formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -99,12 +100,13 @@ function hintForSavedSettings(
   if (configured) {
     return "Saved.";
   }
-  return "Enabled. Start the bridge and scan the QR code.";
+  return "WhatsApp enabled. Preparing the QR code.";
 }
 
 function resolveWhatsAppStatusCopy(input: {
   awaitingQr: boolean;
   bridgeStarting: boolean;
+  connected: boolean;
   configured: boolean;
   linkingAfterScan: boolean;
   paired: boolean;
@@ -114,22 +116,23 @@ function resolveWhatsAppStatusCopy(input: {
 }): { headerSubtitle: string; statusBadge: string } {
   if (!input.configured) {
     return {
-      headerSubtitle: "Choose a profile and enable WhatsApp to get started",
+      headerSubtitle: "Connect WhatsApp to let this agent receive messages",
       statusBadge: "Not set up",
     };
   }
 
-  if (input.paired && input.running && !input.showQr) {
+  if (input.paired && input.running && input.connected && !input.showQr) {
     return {
-      headerSubtitle: "WhatsApp is linked and the bridge is running",
+      headerSubtitle: "Connected",
       statusBadge: "Connected",
     };
   }
 
-  if (input.paired && !input.running) {
+  if (input.paired && !(input.running && input.connected)) {
     return {
-      headerSubtitle: "Linked. Start the WhatsApp bridge to receive messages",
-      statusBadge: "Paired",
+      headerSubtitle:
+        "WhatsApp is offline. Use the connection controls to reconnect.",
+      statusBadge: "Offline",
     };
   }
 
@@ -149,7 +152,7 @@ function resolveWhatsAppStatusCopy(input: {
 
   if (input.bridgeStarting) {
     return {
-      headerSubtitle: "Bridge starting — enter the pairing code in WhatsApp",
+      headerSubtitle: "Connecting — enter the code in WhatsApp",
       statusBadge: "Starting…",
     };
   }
@@ -181,11 +184,12 @@ export function useWhatsAppSettingsCard({
   onSaveSuccess?: () => void;
   submitLabel?: string;
 }) {
+  const ownerProfileId = useChannelProfileId();
   const queryClient = useQueryClient();
   const { data: settings, isLoading, error: loadError } = useWhatsAppSettings();
   const { data: status } = useSystemStatusQuery();
-  const { data: profiles = [] } = useProfilesQuery();
   const saveMutation = useSaveWhatsAppSettings();
+  const startWorkerMutation = useStartWorker();
   const regenerateMutation = useRegenerateWhatsAppPairingCode();
   const reconnectMutation = useReconnectWhatsApp();
 
@@ -199,7 +203,7 @@ export function useWhatsAppSettingsCard({
   const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
   const [requireGroupMention, setRequireGroupMention] = useState(true);
 
-  const settingsProfileId = settings?.profileId;
+  const settingsProfileId = ownerProfileId ?? settings?.profileId;
   const settingsAllowedPhones = settings?.allowedPhones;
   const settingsRequireGroupMention = settings?.requireGroupMention;
 
@@ -284,6 +288,7 @@ export function useWhatsAppSettingsCard({
     awaitingQr: linking.awaitingQr,
     bridgeStarting: linking.bridgeStarting,
     configured,
+    connected,
     linkingAfterScan: linking.linkingAfterScan,
     paired,
     pairingCode,
@@ -324,8 +329,22 @@ export function useWhatsAppSettingsCard({
           setFormError(formatError(error));
         },
         onSuccess: (saved) => {
-          setHint(hintForSavedSettings(saved, configured));
-          onSaveSuccess?.();
+          if (configured || running) {
+            setHint(hintForSavedSettings(saved, configured));
+            onSaveSuccess?.();
+            return;
+          }
+
+          setHint("Starting WhatsApp…");
+          startWorkerMutation.mutate("whatsapp", {
+            onError: (error) => {
+              setFormError(formatError(error));
+            },
+            onSuccess: () => {
+              setHint("WhatsApp is ready. Scan the QR code.");
+              onSaveSuccess?.();
+            },
+          });
         },
       }
     );
@@ -353,31 +372,9 @@ export function useWhatsAppSettingsCard({
         setFormError(formatError(error));
       },
       onSuccess: () => {
-        setHint("Session reset. Scan the QR code when it appears.");
+        setHint("Scan the new QR code when it appears.");
       },
     });
-  }
-
-  function handleProfileChange(nextProfileId: string) {
-    setProfileId(nextProfileId);
-    setHint(null);
-    setFormError(null);
-
-    if (!configured || nextProfileId === settings?.profileId) {
-      return;
-    }
-
-    saveMutation.mutate(
-      { profileId: nextProfileId.trim() || "default" },
-      {
-        onError: (error) => {
-          setFormError(formatError(error));
-        },
-        onSuccess: () => {
-          setHint("Reply profile saved.");
-        },
-      }
-    );
   }
 
   function handleRequireGroupMentionChange(next: boolean) {
@@ -404,7 +401,8 @@ export function useWhatsAppSettingsCard({
   }
 
   return {
-    actionLabel: submitLabel ?? (configured ? "Save" : "Enable WhatsApp"),
+    actionLabel:
+      submitLabel ?? (configured ? "Save changes" : "Connect WhatsApp"),
     allowedPhoneSummary: formatAllowedPhoneSummary(allowedPhones.length),
     allowedPhones,
     allowedPhonesOpen,
@@ -426,7 +424,6 @@ export function useWhatsAppSettingsCard({
     },
     onError: setFormError,
     onManageAllowedPhones: () => setAllowedPhonesOpen(true),
-    onProfileChange: handleProfileChange,
     onReconnect: handleReconnect,
     onRegeneratePairingCode: handleRegeneratePairingCode,
     onRequireGroupMentionChange: handleRequireGroupMentionChange,
@@ -438,13 +435,12 @@ export function useWhatsAppSettingsCard({
     paired,
     pairingCode,
     profileId,
-    profiles,
     qrCode,
     reconnectPending: reconnectMutation.isPending,
     regeneratePending: regenerateMutation.isPending,
     requireGroupMention,
     running,
-    savePending: saveMutation.isPending,
+    savePending: saveMutation.isPending || startWorkerMutation.isPending,
     showQr: linking.showQr,
     showReconnect: linking.showReconnect,
     statusBadge,

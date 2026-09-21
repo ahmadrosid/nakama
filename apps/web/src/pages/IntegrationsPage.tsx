@@ -1,87 +1,21 @@
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import {
-  Bug01Icon,
-  CodeIcon,
-  CpuChargeIcon,
-  HashtagIcon,
-  Key01Icon,
-  Notification01Icon,
-  Plug01Icon,
-  TelegramIcon,
-  WhatsappIcon,
-} from "hugeicons-react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { CodingAgentsSettingsCard } from "@/components/CodingAgentsSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
-import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ErrorTrackingSettingsCard } from "@/components/ErrorTrackingSettingsCard";
-import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
-import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
-import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
-
-const sectionClass = "rounded-md border border-border bg-card";
-
-const INTEGRATION_SECTIONS = [
-  {
-    icon: TelegramIcon,
-    id: "telegram",
-    label: "Telegram",
-  },
-  {
-    icon: WhatsappIcon,
-    id: "whatsapp",
-    label: "WhatsApp",
-  },
-  {
-    icon: HashtagIcon,
-    id: "discord",
-    label: "Discord",
-  },
-  {
-    icon: Notification01Icon,
-    id: "notifications",
-    label: "Notifications",
-  },
-  {
-    icon: Plug01Icon,
-    id: "composio",
-    label: "Composio",
-  },
-  {
-    icon: Key01Icon,
-    id: "token",
-    label: "Local token",
-  },
-  {
-    icon: CodeIcon,
-    id: "coding-agents",
-    label: "Coding agents",
-  },
-  {
-    icon: CpuChargeIcon,
-    id: "optimization",
-    label: "Context savings",
-  },
-  {
-    icon: Bug01Icon,
-    id: "error-tracking",
-    label: "Error tracking",
-  },
-] as const;
-
-type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
+import {
+  type IntegrationSectionId,
+  visibleIntegrationSections,
+} from "@/lib/navigation";
 
 function resolveSection(value: string | null): IntegrationSectionId {
   if (
-    value === "token" ||
     value === "notifications" ||
-    value === "whatsapp" ||
-    value === "discord" ||
     value === "composio" ||
     value === "optimization" ||
     value === "error-tracking" ||
@@ -90,20 +24,18 @@ function resolveSection(value: string | null): IntegrationSectionId {
     return value;
   }
 
-  return "telegram";
+  return "composio";
 }
 
 function IntegrationSectionPanel({
+  canUseOrgIntegrations,
   section,
-  isOrgAdmin,
+  isPlatformAdmin,
 }: {
+  canUseOrgIntegrations: boolean;
   section: IntegrationSectionId;
-  isOrgAdmin: boolean;
+  isPlatformAdmin: boolean;
 }) {
-  if (section === "token") {
-    return <LocalAuthTokenCard />;
-  }
-
   if (section === "optimization") {
     return <TokenOptimizationCard />;
   }
@@ -114,19 +46,13 @@ function IntegrationSectionPanel({
 
   if (section === "composio") {
     return (
-      <div className={cn(isOrgAdmin && "space-y-4")}>
-        {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
-        <ComposioConnectionsCard bordered embedded />
+      <div className={cn(isPlatformAdmin && "space-y-4")}>
+        {isPlatformAdmin ? <ComposioSettingsCard embedded /> : null}
+        {canUseOrgIntegrations ? (
+          <ComposioConnectionsCard bordered embedded />
+        ) : null}
       </div>
     );
-  }
-
-  if (section === "telegram") {
-    return <TelegramSettingsCard />;
-  }
-
-  if (section === "discord") {
-    return <DiscordSettingsCard />;
   }
 
   if (section === "notifications") {
@@ -137,117 +63,54 @@ function IntegrationSectionPanel({
     return <ErrorTrackingSettingsCard />;
   }
 
-  return <WhatsAppSettingsCard />;
-}
-
-function IntegrationsPageBody({ isOrgAdmin }: { isOrgAdmin: boolean }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const section = resolveSection(
-    isOrgAdmin ? searchParams.get("section") : "composio"
-  );
-  const visibleSections = isOrgAdmin
-    ? INTEGRATION_SECTIONS
-    : INTEGRATION_SECTIONS.filter((item) => item.id === "composio");
-
-  function setSection(nextSection: IntegrationSectionId) {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        if (nextSection === "telegram") {
-          next.delete("section");
-        } else {
-          next.set("section", nextSection);
-        }
-        return next;
-      },
-      { replace: true }
-    );
-  }
-
-  return (
-    <section
-      className={cn(
-        sectionClass,
-        "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden"
-      )}
-    >
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="shrink-0 border-border border-b px-4 sm:px-5 md:w-56 md:border-r md:border-b-0 md:p-4">
-          <nav
-            aria-label="Integration settings"
-            className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
-          >
-            {visibleSections.map((item) => (
-              <SidebarButton
-                active={section === item.id}
-                icon={item.icon}
-                key={item.id}
-                label={item.label}
-                onClick={() => setSection(item.id)}
-              />
-            ))}
-          </nav>
-        </aside>
-
-        <div className="min-w-0 flex-1 p-4 sm:p-5">
-          <IntegrationSectionPanel isOrgAdmin={isOrgAdmin} section={section} />
-        </div>
-      </div>
-    </section>
-  );
+  return null;
 }
 
 export function IntegrationsPage() {
-  const { activeOrg, isLoading } = useAuth();
-
+  const [searchParams] = useSearchParams();
+  const { section } = useParams();
+  const { activeOrg, isLoading, user } = useAuth();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
   if (isLoading) {
+    return <Spinner className="size-5" />;
+  }
+  if (!section) {
+    if (searchParams.get("section") === "token") {
+      return <Navigate replace to="/settings#local-token" />;
+    }
+    const target = resolveSection(searchParams.get("section"));
+    const remaining = new URLSearchParams(searchParams);
+    remaining.delete("section");
     return (
-      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
-        <Spinner className="size-5" />
-      </div>
+      <Navigate
+        replace
+        to={`/customize/connections/${target}${remaining.size ? `?${remaining}` : ""}`}
+      />
     );
   }
-
-  if (activeOrg?.role === "viewer") {
-    return <Navigate replace to="/chat" />;
+  const selected = visibleIntegrationSections(
+    isPlatformAdmin,
+    activeOrg?.role
+  ).find((item) => item.id === section);
+  if (!selected) {
+    return <Navigate replace to="/customize" />;
   }
-
-  return <IntegrationsPageBody isOrgAdmin={activeOrg?.role === "admin"} />;
-}
-
-function SidebarButton({
-  label,
-  icon: Icon,
-  active,
-  onClick,
-}: {
-  label: string;
-  icon: typeof TelegramIcon;
-  active: boolean;
-  onClick: () => void;
-}) {
   return (
-    <button
-      className={cn(
-        "flex shrink-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-[color,background-color,border-color,box-shadow,scale] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.96] sm:px-4 md:w-full md:shrink md:gap-3 md:rounded-md md:px-2",
-        active
-          ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <Icon
-        aria-hidden
-        className={cn(
-          "size-4 shrink-0",
-          active ? "text-primary" : "text-muted-foreground"
+    <div className="mx-auto max-w-3xl space-y-6">
+      <Link
+        className="block w-fit text-muted-foreground text-sm hover:text-foreground"
+        to="/customize"
+      >
+        ← Back to Control center
+      </Link>
+      <h1 className="font-medium text-xl">{selected.label}</h1>
+      <IntegrationSectionPanel
+        canUseOrgIntegrations={Boolean(
+          activeOrg && activeOrg.role !== "viewer"
         )}
-        strokeWidth={1.75}
+        isPlatformAdmin={isPlatformAdmin}
+        section={selected.id}
       />
-      <span className="min-w-0 whitespace-nowrap font-medium text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
-        {label}
-      </span>
-    </button>
+    </div>
   );
 }

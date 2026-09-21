@@ -1,10 +1,17 @@
 import {
   emptyObjectSchema,
+  getProfileSharedDocumentIds,
+  type KnowledgeBaseDocument,
+  listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
   type OrgRole,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
 import type { OrgMemoryService } from "../services/org-memory-service";
+
+/** The one org-memory tool that writes. Cognito sessions drop it. */
+export const PROPOSE_ORG_MEMORY_TOOL_NAME = "propose_org_memory";
 
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
@@ -40,6 +47,70 @@ function readString(input: unknown, key: string): string | null {
   }
   const value = (input as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Agents usually see filenames in the KB catalog / search hits, not raw ids.
+ * Accept either and store only ids that resolve to a real document. Attached
+ * organization documents resolve too: the catalog lists them as searchable, so
+ * a citation that names one must not be dropped here.
+ */
+async function resolveSourceDocumentIds(
+  orgId: string,
+  profileId: string | null | undefined,
+  raw: unknown
+): Promise<string[] | undefined> {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  if (!profileId?.trim()) {
+    return raw.filter((entry): entry is string => typeof entry === "string");
+  }
+
+  const [profileDocuments, sharedDocumentIds, organizationDocuments] =
+    await Promise.all([
+      listKnowledgeBaseDocuments(orgId, profileId),
+      getProfileSharedDocumentIds(orgId, profileId),
+      listOrganizationKnowledgeBaseDocuments(orgId),
+    ]);
+  const documents: KnowledgeBaseDocument[] = [
+    ...profileDocuments,
+    ...organizationDocuments.filter((document) =>
+      sharedDocumentIds.includes(document.id)
+    ),
+  ];
+  const byId = new Map<string, KnowledgeBaseDocument>();
+  const byFilename = new Map<string, KnowledgeBaseDocument>();
+  for (const document of documents) {
+    byId.set(document.id, document);
+    // Profile scope is listed first, so it wins a filename collision.
+    const filename = document.filename.toLowerCase();
+    if (!byFilename.has(filename)) {
+      byFilename.set(filename, document);
+    }
+  }
+
+  const resolved: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const key = entry.trim();
+    if (!key) {
+      continue;
+    }
+    const document = byId.get(key) ?? byFilename.get(key.toLowerCase()) ?? null;
+    if (!document || seen.has(document.id)) {
+      continue;
+    }
+    seen.add(document.id);
+    resolved.push(document.id);
+  }
+  return resolved;
 }
 
 export function createOrgMemoryTools(
@@ -83,8 +154,8 @@ export function createOrgMemoryTools(
     },
     {
       description:
-        "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log.",
-      name: "propose_org_memory",
+        "Propose a durable org-wide fact (team conventions, policies, shared context) for admin approval. Never propose secrets, credentials, API keys, tokens, or PII. Facts require admin approval before appearing in org memory. Do not re-propose if the tool reports the fact is already pending, pinned, or in the recent log. When the fact came from a knowledge-base document, pass its document id(s) or filename(s) in sourceDocumentIds.",
+      name: PROPOSE_ORG_MEMORY_TOOL_NAME,
       parallelSafe: false,
       parameters: {
         additionalProperties: false,
@@ -93,6 +164,12 @@ export function createOrgMemoryTools(
             description:
               "A single concise org-wide fact to propose for admin review.",
             type: "string",
+          },
+          sourceDocumentIds: {
+            description:
+              "Optional knowledge-base document ids or filenames the fact was derived from. Pass these when the bullet summarizes or cites uploaded documents.",
+            items: { type: "string" },
+            type: "array",
           },
         },
         required: ["bullet"],
@@ -104,11 +181,22 @@ export function createOrgMemoryTools(
         if (!bullet) {
           throw new Error("bullet is required.");
         }
+        const rawSourceIds =
+          typeof input === "object" &&
+          input !== null &&
+          "sourceDocumentIds" in input
+            ? (input as Record<string, unknown>).sourceDocumentIds
+            : undefined;
         return service.propose(orgId, {
           bullet,
           profileId: context.profileId ?? null,
           proposedByUserId: context.userId ?? null,
           sessionId: context.sessionId ?? null,
+          sourceDocumentIds: await resolveSourceDocumentIds(
+            orgId,
+            context.profileId,
+            rawSourceIds
+          ),
         });
       },
     },

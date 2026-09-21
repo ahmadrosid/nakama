@@ -13,6 +13,9 @@ import {
   messagesWithoutFailedTurn,
   nextSuccessfulTurnAt,
   planPromptBranch,
+  releaseChatStream,
+  shouldShowCognitoControl,
+  welcomeAnimationKey,
 } from "@/pages/chat/chat-page.shared";
 
 function user(
@@ -66,6 +69,17 @@ describe("markStreamingTurnFailed", () => {
 });
 
 describe("appendFailedTurnIfNeeded", () => {
+  test("reuses the saved user message after a failed turn", () => {
+    const saved = user("retry me", { historyIndex: 0 });
+    const next = appendFailedTurnIfNeeded([saved], {
+      error: "429",
+      text: "retry me",
+    });
+    expect(next).toHaveLength(2);
+    expect(next[0]).toBe(saved);
+    expect(next[1]).toMatchObject({ failed: true, role: "assistant" });
+  });
+
   test("appends stored user + failed assistant after reload", () => {
     const next = appendFailedTurnIfNeeded(
       [user("earlier", { historyIndex: 0 })],
@@ -262,5 +276,54 @@ describe("the edit flow", () => {
     const plan = planPromptBranch(messages, edited);
 
     expect(plan?.initialMessages).toHaveLength(2);
+  });
+});
+
+describe("cognito control visibility", () => {
+  test("an ordinary chat shows it only before the first message", () => {
+    expect(shouldShowCognitoControl(false, true)).toBe(true);
+    expect(shouldShowCognitoControl(false, false)).toBe(false);
+  });
+
+  test("an active cognito chat keeps it, or there is no way out of the mode", () => {
+    expect(shouldShowCognitoControl(true, false)).toBe(true);
+    expect(shouldShowCognitoControl(true, true)).toBe(true);
+  });
+});
+
+describe("welcome copy animation key", () => {
+  test("toggling produces a different key, so the entrance replays", () => {
+    expect(welcomeAnimationKey(true)).not.toBe(welcomeAnimationKey(false));
+  });
+});
+
+describe("releaseChatStream", () => {
+  test("detaches a send stream instead of aborting the turn behind it", () => {
+    const abort = new AbortController();
+    let detached = false;
+
+    const released = releaseChatStream({
+      abort,
+      detach: () => {
+        detached = true;
+      },
+    });
+
+    expect(released).toBe("detached");
+    expect(detached).toBe(true);
+    // The abort is what ends the turn server-side, so switching chats must not
+    // reach it: that is what made a second chat impossible to run.
+    expect(abort.signal.aborted).toBe(false);
+  });
+
+  test("aborts a subscribe stream, which owns no turn", () => {
+    const abort = new AbortController();
+
+    expect(releaseChatStream({ abort, detach: null })).toBe("aborted");
+    expect(abort.signal.aborted).toBe(true);
+  });
+
+  test("reports idle when nothing is streaming", () => {
+    expect(releaseChatStream({ abort: null, detach: null })).toBe("idle");
   });
 });

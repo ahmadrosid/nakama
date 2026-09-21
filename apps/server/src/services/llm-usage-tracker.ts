@@ -86,13 +86,15 @@ export class LlmUsageTracker {
   record(
     modelId: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
+    cachedInputTokens = 0
   ): number | null {
     const costDelta = estimateUsageCostUsd(
       modelId,
       inputTokens,
       outputTokens,
-      this.pricingContext
+      this.pricingContext,
+      cachedInputTokens
     );
 
     this.recordRevision += 1;

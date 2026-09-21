@@ -495,8 +495,7 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const changes = await service.listHistory(orgId);
-    return json({ changes });
+    return json(await service.listHistory(orgId));
   });
 
   // GET /v1/orgs/{orgId}/memory/history/{revisionId} — admin only

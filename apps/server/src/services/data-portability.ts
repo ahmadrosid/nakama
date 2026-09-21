@@ -29,8 +29,9 @@ import {
   NakamaApiError,
   pathExists,
   type RestoreDataImportResponse,
+  readAttachmentBytes,
 } from "@nakama/core";
-import { resolveDatabasePath } from "@nakama/db";
+import { type DatabaseAdapter, resolveDatabasePath } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
 import {
   PluginExportBarrierError,
@@ -41,6 +42,8 @@ import {
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
+export const NAKAMA_USER_EXPORT_MANIFEST = "nakama-user-export.json";
+export const NAKAMA_USER_EXPORT_FORMAT_VERSION = 1;
 
 // Setup import is unauthenticated until the first admin exists, so an archive
 // has to be capped on the way in rather than once it is already in memory.
@@ -62,6 +65,11 @@ export interface CreateDataExportResult {
   data: Buffer;
   filename: string;
   manifest: DataExportManifest;
+}
+
+export interface CreateUserDataExportResult {
+  data: Buffer;
+  filename: string;
 }
 
 export interface PreviewDataImportOptions {
@@ -208,6 +216,116 @@ export async function createNakamaDataExport(
     }
     throw error;
   }
+}
+
+export async function createNakamaUserDataExport(
+  databaseAdapter: DatabaseAdapter,
+  userId: string,
+  options: { now?: Date } = {}
+): Promise<CreateUserDataExportResult> {
+  const user = await databaseAdapter.getUserById(userId);
+  if (!user) {
+    throw new NakamaApiError("Not found", 404);
+  }
+
+  const memberships = [];
+  for (const organization of await databaseAdapter.listOrganizations()) {
+    const member = await databaseAdapter.getOrgMember(organization.id, userId);
+    if (!member) {
+      continue;
+    }
+    memberships.push({
+      joinedAt: member.createdAt,
+      organization: {
+        archivedAt: organization.archivedAt ?? null,
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+      },
+      role: member.role,
+      userContext: member.userContext ?? null,
+    });
+  }
+
+  const entries: Record<string, Uint8Array> = {};
+  const sessions = [];
+  const userSessions = await databaseAdapter.listSessionsForUser(userId);
+  for (const session of userSessions) {
+    const attachments = [];
+    for (const attachment of await databaseAdapter.listAttachmentsForSession(
+      session.id
+    )) {
+      const attachmentPath = `attachments/${attachment.id}`;
+      validateArchivePath(attachmentPath);
+      const bytes = attachment.orgId
+        ? await readAttachmentBytes(
+            attachment.orgId,
+            attachment.profileId,
+            attachment.id
+          )
+        : null;
+      if (bytes) {
+        entries[attachmentPath] = bytes;
+      }
+      attachments.push({
+        channel: attachment.channel,
+        createdAt: attachment.createdAt,
+        filename: attachment.filename,
+        id: attachment.id,
+        kind: attachment.kind,
+        mediaType: attachment.mediaType,
+        path: bytes ? attachmentPath : null,
+        sizeBytes: attachment.sizeBytes,
+      });
+    }
+
+    sessions.push({
+      agentQuestionnaire: session.agentQuestionnaire,
+      agentTodos: session.agentTodos,
+      attachments,
+      channel: session.channel,
+      createdAt: session.createdAt,
+      id: session.id,
+      messages: await databaseAdapter.listMessagesForSession(session.id),
+      model: session.model,
+      orgId: session.orgId ?? null,
+      pinned: session.pinned ?? false,
+      profileId: session.profileId,
+      title: session.title,
+    });
+  }
+
+  const createdAt = (options.now ?? new Date()).toISOString();
+  entries[NAKAMA_USER_EXPORT_MANIFEST] = Buffer.from(
+    JSON.stringify(
+      {
+        apiVersion: NAKAMA_API_VERSION,
+        createdAt,
+        kind: "nakama-user-export",
+        memberships,
+        sessions,
+        user: {
+          createdAt: user.createdAt,
+          disabledAt: user.disabledAt ?? null,
+          email: user.email,
+          id: user.id,
+          isPlatformAdmin: user.isPlatformAdmin ?? false,
+          name: user.name ?? null,
+          phone: user.phone ?? null,
+          updatedAt: user.updatedAt,
+        },
+        version: NAKAMA_USER_EXPORT_FORMAT_VERSION,
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  return {
+    data: Buffer.from(zipSync(entries)),
+    filename: `nakama-user-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
+  };
 }
 
 export async function previewNakamaDataImport(
@@ -578,6 +696,14 @@ function skipRelativePathReason(
     first.startsWith(PLUGIN_SNAPSHOT_PREFIX)
   ) {
     return "Internal data-portability temporary path.";
+  }
+  if (
+    parts[0] === "orgs" &&
+    parts[2] === "plugins" &&
+    parts[4] === "workers" &&
+    parts[6] === "cache"
+  ) {
+    return "Re-downloadable plugin worker cache is excluded.";
   }
   if (parts[0] === "plugins" && parts[1] === ".staging") {
     return "Transient plugin package staging is excluded.";

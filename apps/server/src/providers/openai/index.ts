@@ -21,6 +21,7 @@ import {
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
+  formatHttpErrorBody,
   normalizeThinkingEffort,
   notifyToolInputDelta,
   parseJsonRecord,
@@ -548,7 +549,7 @@ async function requestChatCompletion(
 
   if (!response.ok) {
     throw new Error(
-      `${client.label} request failed (${response.status}): ${await response.text()}`
+      formatHttpErrorBody(client.label, response.status, await response.text())
     );
   }
 
@@ -622,7 +623,7 @@ async function streamChatCompletion(
 
   if (!response.ok) {
     throw new Error(
-      `${client.label} request failed (${response.status}): ${await response.text()}`
+      formatHttpErrorBody(client.label, response.status, await response.text())
     );
   }
 
@@ -660,7 +661,7 @@ async function requestCompletion(
 
   if (!response.ok) {
     throw new Error(
-      `${client.label} request failed (${response.status}): ${await response.text()}`
+      formatHttpErrorBody(client.label, response.status, await response.text())
     );
   }
 

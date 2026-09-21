@@ -97,6 +97,7 @@ export async function readStreamEvents(
           delta: payload.delta,
           tool: payload.tool,
           toolCallId: payload.toolCallId,
+          toolGroupId: payload.toolGroupId,
         });
       }
 
@@ -105,6 +106,7 @@ export async function readStreamEvents(
           input: payload.input,
           tool: payload.tool,
           toolCallId: payload.toolCallId,
+          toolGroupId: payload.toolGroupId,
         });
       }
 
@@ -113,6 +115,7 @@ export async function readStreamEvents(
           result: payload.result,
           tool: payload.tool,
           toolCallId: payload.toolCallId,
+          toolGroupId: payload.toolGroupId,
         });
       }
 

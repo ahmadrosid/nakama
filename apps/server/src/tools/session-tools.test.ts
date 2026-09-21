@@ -184,6 +184,57 @@ describe("session reader tools", () => {
     ]);
   });
 
+  test("qualifies artifact paths from another profile, not from its own", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const { readTool, webSessionId } = await setUp(db);
+    await db.replaceMessagesForSession(webSessionId, [
+      {
+        createdAt: "2026-08-21T10:00:00.000Z",
+        id: `${webSessionId}_msg_0`,
+        payload: {
+          content:
+            "Saved artifacts/shots/frame.png and /srv/orgs/org_a/profiles/profile_target/artifacts/raw.mp4",
+          role: "assistant",
+          toolCalls: [
+            {
+              arguments: { path: "artifacts/shots/frame.png" },
+              id: "call_1",
+              name: "write_file",
+            },
+          ],
+        },
+        seq: 0,
+        sessionId: webSessionId,
+      },
+    ]);
+
+    const read = async (profileId: string) =>
+      (
+        (await readTool.run(
+          { sessionId: webSessionId },
+          { orgId: ORG_A, profileId }
+        )) as {
+          messages: Array<{
+            content: string;
+            toolCalls?: Array<{ arguments: { path: string } }>;
+          }>;
+        }
+      ).messages[0];
+
+    const fromReader = await read("profile_reader");
+    expect(fromReader?.content).toBe(
+      "Saved profiles/profile_target/artifacts/shots/frame.png and /srv/orgs/org_a/profiles/profile_target/artifacts/raw.mp4"
+    );
+    expect(fromReader?.toolCalls?.[0]?.arguments.path).toBe(
+      "profiles/profile_target/artifacts/shots/frame.png"
+    );
+
+    const fromOwner = await read("profile_target");
+    expect(fromOwner?.content).toBe(
+      "Saved artifacts/shots/frame.png and /srv/orgs/org_a/profiles/profile_target/artifacts/raw.mp4"
+    );
+  });
+
   test("pages the transcript with limit and offset", async () => {
     const { readTool, webSessionId } = await setUp(
       createInMemoryDatabaseAdapter()

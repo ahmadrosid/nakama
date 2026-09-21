@@ -5,6 +5,8 @@ import {
   resolveWhatsAppOutboundPort,
   WHATSAPP_OUTBOUND_TOKEN_HEADER,
 } from "@nakama/core";
+import type { ChannelConfigScope } from "@nakama/core/channel-config-shared";
+import { saveWhatsAppOutboundPort } from "@nakama/core/whatsapp-config";
 import { rememberWhatsAppOutbound } from "./inbound-message";
 
 function tokenMatches(provided: string | null, expected: string): boolean {
@@ -24,15 +26,17 @@ export interface WhatsAppOutboundSendHandle {
 
 export interface WhatsAppOutboundServerOptions {
   getSendHandle: () => WhatsAppOutboundSendHandle | null;
+  orgId?: ChannelConfigScope;
 }
 
 export async function startWhatsAppOutboundServer(
   options: WhatsAppOutboundServerOptions
 ): Promise<{ port: number; stop: () => void }> {
-  const config = await loadWhatsAppConfigFile();
-  const port = resolveWhatsAppOutboundPort(config);
+  const orgId = options.orgId ?? null;
+  const config = await loadWhatsAppConfigFile(orgId);
+  const port = orgId ? 0 : resolveWhatsAppOutboundPort(config);
   // Mint it before the port opens so the first send already has a token to send.
-  await ensureWhatsAppOutboundToken();
+  const startupToken = await ensureWhatsAppOutboundToken(orgId);
   let stopped = false;
 
   const server = Bun.serve({
@@ -44,14 +48,12 @@ export async function startWhatsAppOutboundServer(
       const url = new URL(request.url);
 
       if (request.method === "POST" && url.pathname === "/send") {
-        const latestConfig = await loadWhatsAppConfigFile();
-        // Re-read per request: pairing can create the config after startup.
-        const expectedToken =
-          latestConfig?.outboundToken?.trim() ||
-          (await ensureWhatsAppOutboundToken());
+        const latestConfig = await loadWhatsAppConfigFile(orgId);
+        const expectedToken = latestConfig?.outboundToken?.trim();
 
         if (
           !(
+            expectedToken === startupToken &&
             expectedToken &&
             tokenMatches(
               request.headers.get(WHATSAPP_OUTBOUND_TOKEN_HEADER),
@@ -113,6 +115,13 @@ export async function startWhatsAppOutboundServer(
     hostname: "127.0.0.1",
     port,
   });
+
+  try {
+    await saveWhatsAppOutboundPort(server.port ?? port, orgId);
+  } catch (error) {
+    server.stop();
+    throw error;
+  }
 
   return {
     port: server.port ?? port,

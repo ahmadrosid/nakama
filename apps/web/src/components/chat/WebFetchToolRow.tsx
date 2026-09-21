@@ -10,17 +10,14 @@ import {
 export function WebFetchToolRow({ message }: { message: ChatListItem }) {
   const state = buildWebFetchToolState(message);
   const isRunning = state.status === "running";
-  const [collapsedWhileRunning, setCollapsedWhileRunning] = useState(false);
+  const [open, setOpen] = useState(isRunning);
   const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
 
   if (isRunning !== prevIsRunning) {
     setPrevIsRunning(isRunning);
-    if (isRunning) {
-      setCollapsedWhileRunning(false);
-    }
+    setOpen(isRunning);
   }
 
-  const open = isRunning ? !collapsedWhileRunning : false;
   const siteStates = useWebSourceSiteStates(state.sources.length, state.status);
 
   if (!shouldRenderWebFetchToolRow(message)) {
@@ -33,11 +30,7 @@ export function WebFetchToolRow({ message }: { message: ChatListItem }) {
         headerText={state.headerText ?? "page"}
         isComplete={!isRunning}
         mode="fetch"
-        onOpenChange={(nextOpen) => {
-          if (isRunning) {
-            setCollapsedWhileRunning(!nextOpen);
-          }
-        }}
+        onOpenChange={setOpen}
         open={open}
         siteStates={siteStates}
         sources={state.sources}

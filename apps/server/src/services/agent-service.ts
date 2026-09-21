@@ -14,6 +14,7 @@ import type {
   AgentChannel,
   AgentQuestionnaire,
   AgentTodo,
+  ApplyTelegramPairingRequest,
   AssignSkillRequest,
   AssignToolRequest,
   BranchSessionResponse,
@@ -32,6 +33,7 @@ import type {
   CreateToolRequest,
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
+  DeleteOrganizationKnowledgeBaseResponse,
   DeleteProviderResponse,
   DiscordSettingsResponse,
   DiscoverModelsRequest,
@@ -46,6 +48,7 @@ import type {
   InitSoulResponse,
   InitUserContextResponse,
   InstallSkillRequest,
+  KnowledgeBaseDocument,
   KnowledgeBaseDuplicateAction,
   ListArtifactsOptions,
   ListArtifactsResponse,
@@ -55,6 +58,7 @@ import type {
   ListSessionsResponse,
   ListSkillsResponse,
   ListToolsResponse,
+  LoadedAttachmentBytes,
   ModelsResponse,
   MoveProfileRequest,
   PatchSkillRequest,
@@ -62,13 +66,17 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   RunToolResponse,
+  SaveInlineAttachment,
   SendEmailTestResponse,
   SendErrorTrackingTestResponse,
   SkillResponse,
   SoulStackResponse,
   SoulStatusResponse,
+  StartTelegramPairingRequest,
   SuggestToolParamsResponse,
   SyncSkillsResponse,
+  TelegramPairingStartResponse,
+  TelegramPairingStatusResponse,
   TelegramSettingsResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
@@ -98,6 +106,7 @@ import type {
   UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UploadKnowledgeBaseResponse,
+  UploadOrganizationKnowledgeBaseResponse,
   UserConfig,
   UserContextStatusResponse,
   VisionSettings,
@@ -185,11 +194,16 @@ import {
   saveWebSearchConfig,
   saveWhatsAppConfig,
   toMailboxConfig,
+  transcribeAudio,
   USER_CONTEXT_TEMPLATE,
   WRITABLE_SOUL_FILES,
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import {
+  type ChannelConfigScope,
+  isChannelOwner,
+} from "@nakama/core/channel-config-shared";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
@@ -207,9 +221,9 @@ import {
   fetchFireworksGatewayModels,
   fetchOllamaModels,
   fetchRemoteOpenAIModels,
-  getModelById,
   getModelsForProviderInstance,
   isCostEstimated,
+  resolveModelLimits,
 } from "../providers";
 import {
   fetchChatgptCodexModels,
@@ -223,7 +237,10 @@ import {
   resolveXaiOAuthCredentials,
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
-import { createOrgMemoryTools } from "../tools/org-memory-tools";
+import {
+  createOrgMemoryTools,
+  PROPOSE_ORG_MEMORY_TOOL_NAME,
+} from "../tools/org-memory-tools";
 import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
 import {
   createSkillManageTools,
@@ -252,7 +269,6 @@ import {
 import {
   resolveTranscriptionProviderSelection,
   TRANSCRIPTION_MODEL_REQUIRED_MESSAGE,
-  transcribeAudioWithOpenAI,
 } from "./audio-transcription";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -275,6 +291,10 @@ import {
   getCustomToolHandler,
 } from "./custom-tool-handlers";
 import {
+  type EphemeralSession,
+  EphemeralSessionStore,
+} from "./ephemeral-session-store";
+import {
   generateImageWithOpenAI,
   IMAGE_MODEL_REQUIRED_MESSAGE,
   resolveImageGenerationSelection,
@@ -289,6 +309,7 @@ import type { LlmUsageTracker } from "./llm-usage-tracker";
 import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
+import { MemoryBackendService } from "./memory-backend-service";
 import { OrgMemoryService } from "./org-memory-service";
 import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import type { PluginService } from "./plugin-service";
@@ -326,10 +347,12 @@ import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
+import { telegramManagedBotPairing } from "./telegram-managed-bot-pairing";
 import {
   resolveProfileStoredTools,
   type ServerToolOverrides,
 } from "./tool-resolver";
+import type { WorkerManagerService } from "./worker-manager-service";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -340,12 +363,24 @@ interface StoredSession {
 
 export type { SubAgentRunInput, SubAgentRunResult };
 
+interface CognitoSessionOptions {
+  /** Seeds a rebuild (model change) with the history held in memory. */
+  initialHistory?: ChatMessage[];
+}
+
 export interface CreateSessionOptions {
+  codingWorkspaceRoot?: string;
+  cognito?: boolean;
   excludeSuperBot?: boolean;
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
 }
+
+type ChatProfileAccess = Pick<
+  CreateSessionOptions,
+  "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
+>;
 
 export class AgentService {
   private harness: AgentDependencies;
@@ -361,6 +396,14 @@ export class AgentService {
   private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
   private todoTools: ToolDefinition[] = [];
+  channelWorkers?: WorkerManagerService;
+
+  setChannelOwnerCleanup(
+    cleanup: (orgId: string, profileId: string) => Promise<void>
+  ) {
+    this.profileService.beforeChannelOwnerDelete = cleanup;
+  }
+
   private automationRunner: AutomationRunner | null = null;
 
   private mcpClientManager: McpClientManager | null = null;
@@ -371,7 +414,11 @@ export class AgentService {
   private skillProposalService: SkillProposalService | null = null;
   private skillSuggestionService: SkillSuggestionService | null = null;
   private orgMemoryService: OrgMemoryService | null = null;
+  private readonly memoryBackend: MemoryBackendService;
   private readonly sessions = new Map<string, StoredSession>();
+  private readonly ephemeralSessions = new EphemeralSessionStore((entry) =>
+    this.purgeEphemeralAttachments(entry)
+  );
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
@@ -389,6 +436,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
+    this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
     this.sessionTitleService = new SessionTitleService(
@@ -407,7 +455,27 @@ export class AgentService {
     this.todoTools = createTodoTools(this.agentTodoState);
     this.superBotTools = createSuperBotTools(
       this.profileService,
-      this.superBotSessionState
+      this.superBotSessionState,
+      async (profileModel, context) => {
+        const session =
+          context.sessionId && context.orgId
+            ? await this.getSessionRecordForOrg(
+                context.sessionId,
+                context.orgId
+              )
+            : null;
+        const selection = resolveProfileProviderSelection({
+          defaultProviderId: this.userConfig?.defaultProviderId,
+          profileModel:
+            (session?.profileId === context.profileId
+              ? session?.model
+              : null) ?? profileModel,
+          providers: this.userConfig?.providers ?? [],
+        });
+        return selection
+          ? `${selection.instance.id}::${selection.model}`
+          : profileModel;
+      }
     );
     this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured =
@@ -790,7 +858,8 @@ export class AgentService {
   }
 
   async transcribeAudio(
-    input: TranscribeAudioRequest
+    input: TranscribeAudioRequest,
+    signal?: AbortSignal
   ): Promise<TranscribeAudioResponse> {
     await this.ensureTranscriptionSettingsLoaded();
 
@@ -819,16 +888,16 @@ export class AgentService {
       throw new NakamaApiError(TRANSCRIPTION_MODEL_REQUIRED_MESSAGE, 400);
     }
 
-    const text = await transcribeAudioWithOpenAI(
-      selection.instance.apiKey,
-      selection.instance.baseUrl,
-      selection.model,
-      {
+    const text = await transcribeAudio({
+      audio: {
         bytes,
         filename: input.filename?.trim() || "audio.ogg",
         mediaType,
-      }
-    );
+      },
+      model: selection.model,
+      provider: selection.instance,
+      signal,
+    });
 
     return { text };
   }
@@ -1104,12 +1173,14 @@ export class AgentService {
     };
   }
 
-  async getTelegramSettings(orgId: string): Promise<TelegramSettingsResponse> {
+  async getTelegramSettings(
+    orgId: ChannelConfigScope
+  ): Promise<TelegramSettingsResponse> {
     return loadTelegramSettingsPublic(orgId);
   }
 
   async setTelegramSettings(
-    orgId: string,
+    orgId: ChannelConfigScope,
     input: UpdateTelegramSettingsRequest
   ): Promise<TelegramSettingsResponse> {
     const existing = await loadTelegramSettingsPublic(orgId);
@@ -1145,31 +1216,105 @@ export class AgentService {
       }
     }
 
-    return saveTelegramConfig(orgId, {
-      ...(botToken ? { botToken } : {}),
-      ...(input.allowedUserIds === undefined
-        ? existing.allowedUserIds.length > 0
-          ? { allowedUserIds: existing.allowedUserIds.join(",") }
-          : {}
-        : { allowedUserIds: input.allowedUserIds }),
-      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
-    });
+    const save = () =>
+      saveTelegramConfig(orgId, {
+        ...(botToken ? { botToken } : {}),
+        ...(input.allowedUserIds === undefined
+          ? existing.allowedUserIds.length > 0
+            ? { allowedUserIds: existing.allowedUserIds.join(",") }
+            : {}
+          : { allowedUserIds: input.allowedUserIds }),
+        ...(input.pairedUserIds === undefined
+          ? existing.pairedUserIds.length > 0
+            ? { pairedUserIds: existing.pairedUserIds.join(",") }
+            : {}
+          : { pairedUserIds: input.pairedUserIds }),
+        ...(input.profileId === undefined
+          ? {}
+          : { profileId: input.profileId }),
+      });
+    return isChannelOwner(orgId) && this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("telegram", orgId, save)
+      : save();
+  }
+  async startTelegramPairing(
+    orgId: string,
+    userId: string,
+    input: StartTelegramPairingRequest
+  ): Promise<TelegramPairingStartResponse> {
+    return telegramManagedBotPairing.start(orgId, userId, input.profileId);
+  }
+
+  async getTelegramPairingStatus(
+    orgId: string,
+    userId: string,
+    pairingId: string,
+    profileId?: string
+  ): Promise<TelegramPairingStatusResponse> {
+    return telegramManagedBotPairing.status(
+      pairingId,
+      orgId,
+      userId,
+      profileId
+    );
+  }
+
+  cancelTelegramPairing(
+    orgId: string,
+    userId: string,
+    pairingId: string,
+    profileId?: string
+  ): Promise<TelegramPairingStatusResponse> {
+    return telegramManagedBotPairing.cancel(
+      pairingId,
+      orgId,
+      userId,
+      profileId
+    );
+  }
+
+  async applyTelegramPairing(
+    orgId: string,
+    userId: string,
+    pairingId: string,
+    input: ApplyTelegramPairingRequest
+  ): Promise<TelegramPairingStatusResponse> {
+    const settings = await telegramManagedBotPairing.apply(
+      pairingId,
+      orgId,
+      userId,
+      input.profileId,
+      async (saveInput) => {
+        await this.setTelegramSettings(
+          { orgId, profileId: input.profileId },
+          saveInput
+        );
+      }
+    );
+    return settings;
   }
 
   async regenerateTelegramHandshake(
-    orgId: string
+    orgId: ChannelConfigScope
   ): Promise<TelegramSettingsResponse> {
-    return regenerateTelegramHandshake(orgId);
+    return isChannelOwner(orgId) && this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("telegram", orgId, () =>
+          regenerateTelegramHandshake(orgId)
+        )
+      : regenerateTelegramHandshake(orgId);
   }
 
-  async getDiscordSettings(): Promise<DiscordSettingsResponse> {
-    return loadDiscordSettingsPublic();
+  async getDiscordSettings(
+    scope: ChannelConfigScope = null
+  ): Promise<DiscordSettingsResponse> {
+    return loadDiscordSettingsPublic(scope);
   }
 
   async setDiscordSettings(
-    input: UpdateDiscordSettingsRequest
+    input: UpdateDiscordSettingsRequest,
+    scope: ChannelConfigScope = null
   ): Promise<DiscordSettingsResponse> {
-    const existing = await loadDiscordSettingsPublic();
+    const existing = await loadDiscordSettingsPublic(scope);
     const botToken =
       input.botToken !== undefined && input.botToken.trim()
         ? input.botToken.trim()
@@ -1186,19 +1331,34 @@ export class AgentService {
       throw new Error("Discord bot token could not be validated.");
     }
 
-    return saveDiscordConfig({
-      ...(botToken ? { botToken } : {}),
-      ...(input.allowedUserIds === undefined
-        ? existing.allowedUserIds.length > 0
-          ? { allowedUserIds: existing.allowedUserIds.join(",") }
-          : {}
-        : { allowedUserIds: input.allowedUserIds }),
-      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
-    });
+    const save = () =>
+      saveDiscordConfig(
+        {
+          ...(botToken ? { botToken } : {}),
+          ...(input.allowedUserIds === undefined
+            ? existing.allowedUserIds.length > 0
+              ? { allowedUserIds: existing.allowedUserIds.join(",") }
+              : {}
+            : { allowedUserIds: input.allowedUserIds }),
+          ...(input.profileId === undefined
+            ? {}
+            : { profileId: input.profileId }),
+        },
+        scope
+      );
+    return isChannelOwner(scope) && this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("discord", scope, save)
+      : save();
   }
 
-  async regenerateDiscordHandshake(): Promise<DiscordSettingsResponse> {
-    return regenerateDiscordHandshake();
+  async regenerateDiscordHandshake(
+    scope: ChannelConfigScope = null
+  ): Promise<DiscordSettingsResponse> {
+    return isChannelOwner(scope) && this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("discord", scope, () =>
+          regenerateDiscordHandshake(scope)
+        )
+      : regenerateDiscordHandshake(scope);
   }
 
   async getComposioSettings(): Promise<ComposioSettingsResponse> {
@@ -1334,29 +1494,62 @@ export class AgentService {
     return getAgentBrowserStatus();
   }
 
-  async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
-    return loadWhatsAppSettingsPublic();
+  async getWhatsAppSettings(
+    orgId: ChannelConfigScope
+  ): Promise<WhatsAppSettingsResponse> {
+    return loadWhatsAppSettingsPublic(orgId);
   }
 
   async setWhatsAppSettings(
+    orgId: ChannelConfigScope,
     input: UpdateWhatsAppSettingsRequest
   ): Promise<WhatsAppSettingsResponse> {
-    return saveWhatsAppConfig({
-      ...(input.allowedPhones === undefined
-        ? {}
-        : { allowedPhones: input.allowedPhones }),
-      ...(input.phoneNumber === undefined
-        ? {}
-        : { phoneNumber: input.phoneNumber.trim() }),
-      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
-      ...(input.requireGroupMention === undefined
-        ? {}
-        : { requireGroupMention: input.requireGroupMention }),
-    });
+    const profileId = isChannelOwner(orgId)
+      ? orgId.profileId
+      : input.profileId?.trim();
+    const resolvedProfileId =
+      profileId === "default"
+        ? await this.resolveSessionProfile(
+            isChannelOwner(orgId) ? orgId.orgId : orgId!
+          )
+        : profileId;
+    if (resolvedProfileId) {
+      await this.requireProfile(
+        isChannelOwner(orgId) ? orgId.orgId : orgId!,
+        resolvedProfileId
+      );
+    }
+    const save = () =>
+      saveWhatsAppConfig(
+        {
+          ...(input.allowedPhones === undefined
+            ? {}
+            : { allowedPhones: input.allowedPhones }),
+          ...(input.phoneNumber === undefined
+            ? {}
+            : { phoneNumber: input.phoneNumber.trim() }),
+          ...(resolvedProfileId === undefined
+            ? {}
+            : { profileId: resolvedProfileId }),
+          ...(input.requireGroupMention === undefined
+            ? {}
+            : { requireGroupMention: input.requireGroupMention }),
+        },
+        orgId
+      );
+    return isChannelOwner(orgId) && this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("whatsapp", orgId, save)
+      : save();
   }
 
-  async regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsResponse> {
-    return regenerateWhatsAppPairingCode();
+  async regenerateWhatsAppPairingCode(
+    orgId: ChannelConfigScope
+  ): Promise<WhatsAppSettingsResponse> {
+    return isChannelOwner(orgId) && this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("whatsapp", orgId, () =>
+          regenerateWhatsAppPairingCode(orgId)
+        )
+      : regenerateWhatsAppPairingCode(orgId);
   }
 
   async runAutomationPrompt(
@@ -1396,6 +1589,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         automationId,
+        ...this.memoryBackend.toolContext(orgId, profileId),
         automationRunId,
         orgId,
         orgRole: "member",
@@ -1433,6 +1627,7 @@ export class AgentService {
     }
   ): ToolContext {
     return buildToolExecutionContext({
+      ...this.memoryBackend.toolContext(orgId, context.profileId),
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       orgId,
       orgRole: "member",
@@ -1545,6 +1740,7 @@ export class AgentService {
       systemPrompt: childSystemPrompt,
       toolContext: buildToolExecutionContext({
         agentDepth: input.agentDepth,
+        ...this.memoryBackend.toolContext(input.orgId, input.profileId),
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
@@ -1651,25 +1847,12 @@ export class AgentService {
       profileId
     );
     const profile = await this.requireProfile(orgId, resolvedProfileId);
-
-    if (
-      profile.isSuper &&
-      (options?.excludeSuperBot ||
-        !canAccessSuperBotProfile({
-          isPlatformAdmin: options?.isPlatformAdmin,
-          orgRole: options?.orgRole,
-        }))
-    ) {
-      throw new NakamaApiError(
-        "Super Bot is only available to org admins.",
-        403
-      );
-    }
+    this.assertChatProfileAccess(profile, options ?? {});
 
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
-
-    await this.db.upsertSession({
+    const cognito = options?.cognito;
+    const record: StoredSessionRecord = {
       agentQuestionnaire: null,
       agentTodos: [],
       channel,
@@ -1679,7 +1862,14 @@ export class AgentService {
       profileId: resolvedProfileId,
       title: null,
       userId: userId ?? null,
-    });
+    };
+
+    // A cognito session skips this row on purpose. Without it there is nothing
+    // for session_messages to hang off, so the conversation cannot be
+    // persisted even by a path that forgets to check.
+    if (!cognito) {
+      await this.db.upsertSession(record);
+    }
 
     const session = await this.buildChatSession(
       channel,
@@ -1689,8 +1879,21 @@ export class AgentService {
       modelOverride,
       userId ?? null,
       options?.orgRole,
-      options?.isPlatformAdmin
+      options?.isPlatformAdmin,
+      options?.codingWorkspaceRoot,
+      cognito ? {} : undefined
     );
+
+    if (cognito) {
+      await this.ephemeralSessions.set({
+        attachmentIds: new Set(),
+        lastActiveAt: Date.now(),
+        record,
+        session,
+      });
+
+      return sessionId;
+    }
 
     this.sessions.set(sessionId, {
       channel,
@@ -1700,6 +1903,141 @@ export class AgentService {
     });
 
     return sessionId;
+  }
+
+  async assertSessionProfileAccess(
+    sessionId: string,
+    orgId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    // A missing session is left to the route, which still answers 404.
+    if (record) {
+      this.assertChatProfileAccess(
+        await this.requireProfile(orgId, record.profileId),
+        access
+      );
+    }
+  }
+
+  async readChatImageAttachment(
+    orgId: string,
+    attachmentId: string,
+    access: ChatProfileAccess
+  ): Promise<LoadedAttachmentBytes | null> {
+    const record = await this.db.getAttachment(attachmentId);
+    if (!record || record.orgId !== orgId || record.kind !== "image") {
+      return null;
+    }
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, record.profileId),
+      access
+    );
+    return createAttachmentLoader(this.db, {
+      orgId,
+      profileId: record.profileId,
+    })(attachmentId);
+  }
+
+  private assertChatProfileAccess(
+    profile: StoredProfileRecord,
+    access: ChatProfileAccess
+  ): void {
+    if (
+      profile.isSuper &&
+      (access.excludeSuperBot || !canAccessSuperBotProfile(access))
+    ) {
+      throw new NakamaApiError(
+        "Super Bot is only available to org admins.",
+        403
+      );
+    }
+  }
+
+  /**
+   * Cognito attachments carry a null session_id, so the tracked ids are the
+   * only handle on them. Runs when the session is deleted and when an idle
+   * one is evicted.
+   */
+  private async purgeEphemeralAttachments(
+    entry: EphemeralSession
+  ): Promise<void> {
+    entry.session.clear();
+    this.superBotSessionState.clearSession(entry.record.id);
+    this.agentTodoState.clearSession(entry.record.id);
+    this.agentQuestionnaireState.clearSession(entry.record.id);
+
+    for (const attachmentId of entry.attachmentIds) {
+      const attachment = await this.db.getAttachment(attachmentId);
+
+      if (!attachment) {
+        continue;
+      }
+
+      await deleteAttachmentBytes(
+        attachment.orgId ?? "",
+        attachment.profileId,
+        attachment.id
+      );
+      await this.db.deleteAttachment(attachment.id);
+    }
+  }
+
+  /**
+   * A model change needs a new provider, which means a new session object. The
+   * conversation only exists in the old one, so it is carried across by hand.
+   */
+  private async rebuildEphemeralSession(
+    entry: EphemeralSession,
+    orgId: string,
+    model: string | null
+  ): Promise<boolean> {
+    const channel = parseAgentChannel(entry.record.channel);
+
+    if (!channel) {
+      return false;
+    }
+
+    const { isPlatformAdmin, orgRole } = await this.resolveSessionAccess(
+      orgId,
+      entry.record.userId
+    );
+    const session = await this.buildChatSession(
+      channel,
+      orgId,
+      entry.record.profileId,
+      entry.record.id,
+      model,
+      entry.record.userId ?? null,
+      orgRole,
+      isPlatformAdmin,
+      undefined,
+      { initialHistory: [...entry.session.getHistory()] }
+    );
+
+    entry.record.model = model;
+    entry.session = session;
+    await this.ephemeralSessions.set(entry);
+    return true;
+  }
+
+  /**
+   * A hard restart drops the in-memory map before its entries can be evicted,
+   * which leaves attachment rows and files nothing will ever claim.
+   */
+  async sweepEphemeralAttachments(): Promise<number> {
+    const leftovers = await this.db.listEphemeralAttachments();
+
+    for (const attachment of leftovers) {
+      await deleteAttachmentBytes(
+        attachment.orgId ?? "",
+        attachment.profileId,
+        attachment.id
+      );
+      await this.db.deleteAttachment(attachment.id);
+    }
+
+    return leftovers.length;
   }
 
   async getSessionTodos(
@@ -1752,7 +2090,12 @@ export class AgentService {
       return null;
     }
 
-    if (!options?.persistedOnly && sessionTurnRegistry.isActive(sessionId)) {
+    // Live history is the only history a cognito session has, so it answers
+    // here whether or not a turn is in flight.
+    if (
+      this.ephemeralSessions.has(sessionId) ||
+      (!options?.persistedOnly && sessionTurnRegistry.isActive(sessionId))
+    ) {
       const liveSession = await this.resolveSession(sessionId, orgId);
 
       if (liveSession) {
@@ -1884,9 +2227,13 @@ export class AgentService {
   async listSessions(
     orgId: string,
     profileId: string,
-    channel: AgentChannel
+    channel: AgentChannel,
+    access: ChatProfileAccess
   ): Promise<ListSessionsResponse> {
-    await this.requireProfile(orgId, profileId);
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
 
     const sessions = await this.db.listSessionSummaries(profileId, channel);
 
@@ -1896,6 +2243,7 @@ export class AgentService {
         createdAt: session.createdAt,
         id: session.id,
         messageCount: session.messageCount,
+        pinned: session.pinned,
         preview: session.preview,
         profileId: session.profileId,
         title: session.title,
@@ -1905,10 +2253,22 @@ export class AgentService {
   }
 
   scheduleSessionTitleGeneration(sessionId: string): void {
+    // A cognito session has no row to title, and generating one would spend a
+    // turn summarising a conversation that is meant to leave no trace.
+    if (this.ephemeralSessions.has(sessionId)) {
+      return;
+    }
+
     this.sessionTitleService.scheduleSessionTitleGeneration(sessionId);
   }
 
   schedulePostTurnSkillReview(sessionId: string): void {
+    // The review writes skill suggestions, which is exactly the write-back a
+    // cognito session promises not to do.
+    if (this.ephemeralSessions.has(sessionId)) {
+      return;
+    }
+
     this.skillPostTurnReviewService.schedulePostTurnSkillReview(sessionId);
   }
 
@@ -1921,6 +2281,10 @@ export class AgentService {
 
     if (!record) {
       return false;
+    }
+
+    if (await this.ephemeralSessions.delete(sessionId)) {
+      return true;
     }
 
     this.sessions.get(sessionId)?.session.clear();
@@ -1946,6 +2310,14 @@ export class AgentService {
 
     if (!record) {
       return null;
+    }
+
+    // Never rebuilt: the history only exists inside this object, so dropping
+    // it to pick up a config change would silently empty the conversation.
+    const ephemeral = this.ephemeralSessions.get(sessionId);
+
+    if (ephemeral) {
+      return ephemeral.session;
     }
 
     const stored = this.sessions.get(sessionId);
@@ -2017,6 +2389,16 @@ export class AgentService {
         return true;
       }
 
+      const ephemeral = this.ephemeralSessions.get(sessionId);
+
+      if (ephemeral) {
+        return await this.rebuildEphemeralSession(
+          ephemeral,
+          orgId,
+          normalizedModel
+        );
+      }
+
       const updated = await this.db.updateSessionModel(
         sessionId,
         normalizedModel
@@ -2030,6 +2412,31 @@ export class AgentService {
     } finally {
       sessionTurnRegistry.cancelTurn(sessionId);
     }
+  }
+  async renameSession(
+    sessionId: string,
+    orgId: string,
+    title: string
+  ): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (!record) {
+      return false;
+    }
+
+    return this.db.renameSessionTitle(sessionId, title.trim());
+  }
+
+  async updateSessionPinned(
+    sessionId: string,
+    orgId: string,
+    pinned: boolean
+  ): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (!record) {
+      return false;
+    }
+
+    return this.db.updateSessionPinned(sessionId, pinned);
   }
 
   async beginSessionTurn(
@@ -2055,6 +2462,13 @@ export class AgentService {
 
     if (!record) {
       return false;
+    }
+
+    // Clearing a cognito session is the same as ending it: there is no
+    // durable copy to keep the id pointing at.
+    if (await this.ephemeralSessions.delete(sessionId)) {
+      await this.agentQuestionnaireState.clear(sessionId);
+      return true;
     }
 
     const stored = this.sessions.get(sessionId);
@@ -2389,6 +2803,17 @@ export class AgentService {
     const existing = this.userConfig?.providers ?? [];
     const instance = buildProviderInstanceFromCreateRequest(request, existing);
     const model = resolveInitialModel(instance, request.model);
+    if (instance.type === "gemini") {
+      const provider = createProviderForInstance(instance, model);
+      if (!provider) {
+        throw new Error("Gemini provider could not be initialized.");
+      }
+      await provider.generateText({
+        format: "text",
+        prompt: "Reply with OK.",
+        system: "Reply with OK.",
+      });
+    }
     const providers = [...existing, instance];
     const isFirst = providers.length === 1;
     const thinking = await this.resolveThinkingSettings();
@@ -2809,6 +3234,7 @@ export class AgentService {
     }
 
     const toolContext = buildToolExecutionContext({
+      ...this.memoryBackend.toolContext(context.orgId, profileId),
       orgId: context.orgId,
       profileId,
       userId: context.userId,
@@ -2917,12 +3343,20 @@ export class AgentService {
     );
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
-    return this.requireSkillsService().listSkills();
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
+    return this.requireSkillsService().listSkills(orgId);
   }
 
-  async getSkill(skillId: string): Promise<SkillResponse> {
-    return this.requireSkillsService().getSkill(skillId);
+  async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
+    return this.requireSkillsService().getSkill(skillId, orgId);
+  }
+
+  async listSkillFiles(orgId: string, skillId: string) {
+    return this.requireSkillsService().listSkillFiles(orgId, skillId);
+  }
+
+  async readSkillFile(orgId: string, skillId: string, filePath: string) {
+    return this.requireSkillsService().readSkillFile(orgId, skillId, filePath);
   }
 
   async cloneProfile(
@@ -2975,7 +3409,14 @@ export class AgentService {
     request: AssignSkillRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.assignSkill(orgId, profileId, request, meta);
+    const profile = await this.profileService.assignSkill(
+      orgId,
+      profileId,
+      request,
+      meta
+    );
+    await this.skillsService?.materializeAssignedPluginSkills(orgId, profileId);
+    return profile;
   }
 
   async unassignSkill(
@@ -2984,7 +3425,14 @@ export class AgentService {
     skillId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    return this.profileService.unassignSkill(orgId, profileId, skillId, meta);
+    const profile = await this.profileService.unassignSkill(
+      orgId,
+      profileId,
+      skillId,
+      meta
+    );
+    await this.skillsService?.materializeAssignedPluginSkills(orgId, profileId);
+    return profile;
   }
 
   async uploadProfileAvatar(
@@ -3057,6 +3505,46 @@ export class AgentService {
     );
   }
 
+  async listOrganizationKnowledgeBase(
+    orgId: string
+  ): Promise<{ documents: KnowledgeBaseDocument[] }> {
+    return this.profileService.listOrganizationKnowledgeBase(orgId);
+  }
+
+  async uploadOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    document: DocumentAttachment,
+    onDuplicate?: KnowledgeBaseDuplicateAction
+  ): Promise<UploadOrganizationKnowledgeBaseResponse> {
+    return this.profileService.uploadOrganizationKnowledgeBaseDocument(
+      orgId,
+      document,
+      onDuplicate
+    );
+  }
+
+  async deleteOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string
+  ): Promise<DeleteOrganizationKnowledgeBaseResponse> {
+    return this.profileService.deleteOrganizationKnowledgeBaseDocument(
+      orgId,
+      documentId
+    );
+  }
+
+  async readOrganizationKnowledgeBaseDocument(
+    orgId: string,
+    documentId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    return this.profileService.readOrganizationKnowledgeBaseDocument(
+      orgId,
+      documentId,
+      options
+    );
+  }
+
   async getProfileSoulStatus(
     orgId: string,
     profileId: string,
@@ -3069,7 +3557,11 @@ export class AgentService {
       return { ...status, profileId };
     }
 
-    const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
+    const stack = await loadSoulStack(
+      getProfileSoulDir(orgId, profileId),
+      (content) =>
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
+    );
     return { ...status, contents: stack.files, profileId };
   }
 
@@ -3099,7 +3591,11 @@ export class AgentService {
     profileId: string
   ): Promise<SoulStackResponse> {
     await this.requireProfile(orgId, profileId);
-    const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
+    const stack = await loadSoulStack(
+      getProfileSoulDir(orgId, profileId),
+      (content) =>
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
+    );
     return { ...stack, profileId };
   }
 
@@ -3121,6 +3617,14 @@ export class AgentService {
     const before =
       (await readTextIfExists(join(soulDir, WRITABLE_SOUL_FILES[key]))) ?? null;
 
+    if (key === "memory") {
+      await this.memoryBackend.readMemory(
+        orgId,
+        profileId,
+        "MEMORY.md",
+        request.content
+      );
+    }
     await writeSoulFile(soulDir, key, request.content);
 
     if (meta && field && before !== request.content) {
@@ -3319,7 +3823,11 @@ export class AgentService {
     sessionId: string,
     orgId: string
   ): Promise<StoredSessionRecord | null> {
-    const record = await this.db.getSession(sessionId);
+    // Cognito sessions have no row, so the map answers first. Everything that
+    // reaches a session funnels through here, which is why the rest of the
+    // file needs no branch of its own.
+    const ephemeral = this.ephemeralSessions.get(sessionId);
+    const record = ephemeral?.record ?? (await this.db.getSession(sessionId));
 
     if (!record) {
       return null;
@@ -3390,6 +3898,8 @@ export class AgentService {
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
       includeSkillManageTools?: boolean;
+      /** False in a cognito session: proposing org memory is a write-back. */
+      includeMemoryWriteTools?: boolean;
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
@@ -3520,6 +4030,12 @@ export class AgentService {
       resolved = [...resolved, ...this.orgMemoryTools];
     }
 
+    if (options.includeMemoryWriteTools === false) {
+      resolved = resolved.filter(
+        (tool) => tool.name !== PROPOSE_ORG_MEMORY_TOOL_NAME
+      );
+    }
+
     if (!includeSubAgentTool) {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
@@ -3535,11 +4051,17 @@ export class AgentService {
     modelOverride: string | null,
     userId?: string | null,
     orgRole?: OrgRole | null,
-    isPlatformAdmin?: boolean
+    isPlatformAdmin?: boolean,
+    codingWorkspaceRoot?: string,
+    cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const includeSkillManageTools = SKILL_MANAGE_CHANNELS[channel];
+    // skill_manage writes skills and expands /learn, both of which outlive the
+    // chat, so a cognito session never gets it whatever the channel allows.
+    const includeSkillManageTools = cognito
+      ? false
+      : SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
       channel === "telegram" || channel === "whatsapp" || channel === "discord"
         ? "member"
@@ -3551,6 +4073,7 @@ export class AgentService {
         pluginOrgRole === "viewer"
           ? pluginOrgRole
           : undefined,
+      includeMemoryWriteTools: !cognito,
       includeSkillManageTools,
       userId,
     });
@@ -3568,7 +4091,8 @@ export class AgentService {
       profileId,
       profile.systemPrompt,
       orgRole,
-      skillUsageContext
+      skillUsageContext,
+      !cognito
     );
     // Per-org override for the tool-output optimiser. Undefined leaves the
     // decision to the server's env var, so an operator who never opened the UI
@@ -3578,7 +4102,12 @@ export class AgentService {
     const resolvedSystemPrompt = profile.isSuper
       ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
       : systemPrompt;
-    const initialHistory = await loadSessionHistory(this.db, sessionId);
+    // A cognito session has nothing stored to load. On a model change it is
+    // handed the live history instead, so the conversation survives the
+    // rebuild that a new provider needs.
+    const initialHistory = cognito
+      ? (cognito.initialHistory ?? [])
+      : await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, userId);
     const selectedModel = modelOverride
@@ -3592,12 +4121,26 @@ export class AgentService {
     if (tools.length > 0) {
       tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
     }
-    const saveAttachment = createAttachmentSaver(this.db, {
+    const persistAttachment = createAttachmentSaver(this.db, {
       channel,
+      ephemeral: Boolean(cognito),
       orgId,
       profileId,
-      sessionId,
+      // No `sessions` row exists for a cognito session, and the column is a
+      // foreign key, so it has to be null rather than the session id.
+      sessionId: cognito ? null : sessionId,
     });
+    const trackEphemeralAttachment = cognito
+      ? (attachmentId: string) =>
+          this.ephemeralSessions.trackAttachment(sessionId, attachmentId)
+      : undefined;
+    const saveAttachment: SaveInlineAttachment = trackEphemeralAttachment
+      ? async (input) => {
+          const saved = await persistAttachment(input);
+          trackEphemeralAttachment(saved.attachmentId);
+          return saved;
+        }
+      : persistAttachment;
     const loadAttachment = createAttachmentLoader(this.db, {
       orgId,
       profileId,
@@ -3731,12 +4274,17 @@ export class AgentService {
 
                   if (matched.some((skill) => skill.name === "coding-agent")) {
                     parts.push(
-                      await this.formatCodingDelegationContext(orgId, profileId)
+                      await this.formatCodingDelegationContext(
+                        orgId,
+                        profileId,
+                        codingWorkspaceRoot
+                      )
                     );
                   }
 
                   return parts.filter(Boolean).join("\n\n");
                 },
+                recordUsage: !cognito,
                 usageContext: skillUsageContext,
               }
             );
@@ -3753,6 +4301,9 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
+        ...this.memoryBackend.toolContext(orgId, profileId),
+        codingWorkspaceRoot,
+        forbidMemoryWrites: cognito ? true : undefined,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
         isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
@@ -3766,12 +4317,19 @@ export class AgentService {
         recordTurnUsage: this.turnUsageRecorderFor(orgId),
         sessionId,
         tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
+        trackEphemeralAttachment,
         userId: userId ?? undefined,
       }),
       tools,
       userContext,
       userTimezone,
     });
+
+    if (cognito) {
+      // Deliberately unwrapped: wrapPersistedSession is what writes every turn
+      // into session_messages.
+      return session;
+    }
 
     const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
       onBeginTurn: (id) => {
@@ -3812,11 +4370,13 @@ export class AgentService {
 
   private async formatCodingDelegationContext(
     orgId: string,
-    profileId: string
+    profileId: string,
+    codingWorkspaceRoot?: string
   ): Promise<string> {
     const profile = await this.db.getProfile(profileId);
     const installed = await listInstalledCodingAgentHarnesses(this.db);
-    const workspaceRoot = getProfileSoulDir(orgId, profileId);
+    const workspaceRoot =
+      codingWorkspaceRoot ?? getProfileSoulDir(orgId, profileId);
     const probeContext = {
       profileModel: profile?.model ?? null,
       userConfig: this.userConfig,
@@ -3900,9 +4460,15 @@ export class AgentService {
     profileId: string,
     profilePrompt: string,
     orgRole?: OrgRole | null,
-    usageContext?: import("./skills-service").SkillUsageRecordingContext
+    usageContext?: import("./skills-service").SkillUsageRecordingContext,
+    recordSkillUsage = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
-    const stack = await resolveSoulStackForProfile(orgId, profileId);
+    const stack = await resolveSoulStackForProfile(
+      orgId,
+      profileId,
+      (content) =>
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
+    );
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })
       : profilePrompt;
@@ -3911,7 +4477,8 @@ export class AgentService {
       const skillsCatalog = await this.skillsService.composeCatalogForProfile(
         orgId,
         profileId,
-        usageContext
+        usageContext,
+        recordSkillUsage
       );
 
       if (skillsCatalog.trim()) {
@@ -4075,12 +4642,11 @@ export class AgentService {
       return;
     }
 
-    const model = getModelById(resolved.model);
-
-    return {
-      contextWindow: model?.contextWindow ?? 128_000,
-      maxOutputTokens: model?.maxOutputTokens ?? 8192,
-    };
+    return resolveModelLimits(
+      resolved.instance.type,
+      resolved.model,
+      resolved.instance.customModels
+    );
   }
 
   private resolveWorkspaceThinkingDefaults(): ThinkingSettings {

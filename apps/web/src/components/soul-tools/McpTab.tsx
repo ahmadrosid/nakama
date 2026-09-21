@@ -1,4 +1,7 @@
-import type { McpServerSummary } from "@nakama/core/contract";
+import type {
+  McpServerResponse,
+  McpServerSummary,
+} from "@nakama/core/contract";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import { Button } from "@nakama/ui/button";
 import {
@@ -10,7 +13,8 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { McpServerAuthorizeDialog } from "@/components/soul-tools/mcp-tab/McpServerAuthorizeDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import {
   McpPageState,
@@ -25,22 +29,41 @@ import {
   useSyncMcpServerMutation,
   useUpdateMcpServerMutation,
 } from "@/hooks/use-resource-mutations";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
+
+/** The callback connects the server on its own, so the list is re-read until it lands. */
+const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
 
 export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
-  const { data: servers = [], isLoading, error } = useMcpServersQuery();
+  const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
+    serverId: string;
+    url: string;
+  } | null>(null);
+  const {
+    data: servers = [],
+    isLoading,
+    error,
+  } = useMcpServersQuery(
+    pendingAuth ? { refetchInterval: AUTHORIZATION_POLL_INTERVAL_MS } : {}
+  );
   const createMutation = useCreateMcpServerMutation();
   const updateMutation = useUpdateMcpServerMutation();
   const deleteMutation = useDeleteMcpServerMutation();
   const connectMutation = useConnectMcpServerMutation();
   const syncMutation = useSyncMcpServerMutation();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [testingServerId, setTestingServerId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editServerId, setEditServerId] = useState<string | null>(null);
   const [detailServerId, setDetailServerId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
     null
   );
+  const pendingAuthStatus = pendingAuth
+    ? servers.find((server) => server.id === pendingAuth.serverId)?.status
+    : undefined;
   const editServer =
     servers.find((server) => server.id === editServerId) ?? null;
   const detailServer =
@@ -48,12 +71,34 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
 
   const loading = isLoading && servers.length === 0;
   const busy =
-    createMutation.isPending ||
-    updateMutation.isPending ||
-    deleteMutation.isPending ||
-    connectMutation.isPending ||
-    syncMutation.isPending;
+    [
+      createMutation,
+      updateMutation,
+      deleteMutation,
+      connectMutation,
+      syncMutation,
+    ].some((mutation) => mutation.isPending) || testingServerId !== null;
   const errorMessage = actionError ?? (error ? formatError(error) : null);
+
+  useEffect(() => {
+    if (pendingAuthStatus === "connected") {
+      setPendingAuth(null);
+    }
+  }, [pendingAuthStatus]);
+
+  function startAuthorization(response: McpServerResponse): boolean {
+    if (!response.authorizationUrl) {
+      return false;
+    }
+
+    setPendingAuth({
+      name: response.server.name,
+      serverId: response.server.id,
+      url: response.authorizationUrl,
+    });
+
+    return true;
+  }
 
   function requestDelete(server: McpServerSummary) {
     if (
@@ -88,7 +133,12 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     setActionError(null);
 
     try {
-      await connectMutation.mutateAsync(serverId);
+      const response = await connectMutation.mutateAsync(serverId);
+
+      if (startAuthorization(response)) {
+        return;
+      }
+
       setDetailServerId(serverId);
     } catch (err) {
       setActionError(formatError(err));
@@ -106,6 +156,32 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     }
   }
 
+  async function handleTestConnection(server: McpServerSummary) {
+    setActionError(null);
+    setActionNotice(null);
+    setTestingServerId(server.id);
+
+    try {
+      const result = await client.testMcpServer({
+        config: server.transport === "http" ? { url: "" } : { command: "" },
+        name: server.name,
+        serverId: server.id,
+        transport: server.transport,
+      });
+      if (result.ok) {
+        setActionNotice(
+          `Connection successful. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`
+        );
+      } else {
+        setActionError(result.error ?? "Connection test failed.");
+      }
+    } catch (err) {
+      setActionError(formatError(err));
+    } finally {
+      setTestingServerId(null);
+    }
+  }
+
   if (loading) {
     return <McpPageState embedded={embedded} message="Loading MCP servers…" />;
   }
@@ -113,10 +189,26 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   return (
     <>
       {errorMessage ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
+        <p className="mx-auto mb-4 max-w-3xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {errorMessage}
         </p>
       ) : null}
+      {actionNotice ? (
+        <p className="mx-auto mb-4 max-w-3xl rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-emerald-700 text-sm dark:text-emerald-300">
+          {actionNotice}
+        </p>
+      ) : null}
+
+      <McpServerAuthorizeDialog
+        authorizationUrl={pendingAuth?.url ?? null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setPendingAuth(null);
+          }
+        }}
+        open={pendingAuth !== null}
+        serverName={pendingAuth?.name ?? ""}
+      />
 
       <McpServersSection
         busy={busy}
@@ -126,6 +218,12 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         onDelete={requestDelete}
         onEdit={setEditServerId}
         onSync={(serverId) => void handleSync(serverId)}
+        onTestConnection={(serverId) => {
+          const server = servers.find((item) => item.id === serverId);
+          if (server) {
+            void handleTestConnection(server);
+          }
+        }}
         onViewTools={setDetailServerId}
         servers={servers}
       />
@@ -157,6 +255,11 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
               connect: true,
             });
             setCreateOpen(false);
+
+            if (startAuthorization(response)) {
+              return;
+            }
+
             setDetailServerId(response.server.id);
           } catch (err) {
             const message = formatError(err);
@@ -204,50 +307,64 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         server={editServer}
       />
 
-      <Dialog
-        onOpenChange={(open) => {
-          if (!(open || deleteMutation.isPending)) {
-            setDeleteTarget(null);
-          }
-        }}
-        open={deleteTarget !== null}
-      >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Delete MCP server?</DialogTitle>
-            <DialogDescription>
-              Remove{" "}
-              {deleteTarget?.name
-                ? `"${deleteTarget.name}"`
-                : "this MCP server"}
-              . This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-            <Button
-              disabled={deleteMutation.isPending}
-              onClick={() => setDeleteTarget(null)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={deleteMutation.isPending}
-              onClick={() => void confirmDelete()}
-              type="button"
-              variant="destructive"
-            >
-              {deleteMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteMcpServerDialog
+        busy={deleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => void confirmDelete()}
+        target={deleteTarget}
+      />
     </>
+  );
+}
+
+function DeleteMcpServerDialog({
+  busy,
+  onClose,
+  onConfirm,
+  target,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  target: McpServerSummary | null;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!(open || busy)) {
+          onClose();
+        }
+      }}
+      open={target !== null}
+    >
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-3">
+          <DialogTitle>Delete MCP server?</DialogTitle>
+          <DialogDescription>
+            Remove {target?.name ? `"${target.name}"` : "this MCP server"}. This
+            cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+          <Button
+            disabled={busy}
+            onClick={() => onClose()}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {busy ? <Spinner className="size-4" /> : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

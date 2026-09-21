@@ -1,14 +1,5 @@
-import type { ProfileSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -18,8 +9,6 @@ import {
   DiscordPairingGuide,
   SettingsRow,
 } from "@/components/discord-settings-card.shared";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { WorkerActionBar } from "@/components/WorkerActionBar";
 
 function pairingCodeDescription(
   pairingCode: string | null,
@@ -140,6 +129,70 @@ function DiscordPairingCodeControls({
   );
 }
 
+function DiscordLinkAccount({
+  inviteUrl,
+  pairingCode,
+  copied,
+  regeneratePending,
+  savePending,
+  onCopyHandshakeCode,
+  onRegenerateHandshake,
+}: {
+  inviteUrl: string | null;
+  pairingCode: string | null;
+  copied: boolean;
+  regeneratePending: boolean;
+  savePending: boolean;
+  onCopyHandshakeCode: () => void;
+  onRegenerateHandshake: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-muted-foreground text-sm">
+        Send this code to your bot in a private Discord message.
+      </p>
+      {inviteUrl ? (
+        <a
+          className="block text-primary text-sm underline"
+          href={inviteUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Invite the bot to your server
+        </a>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        {pairingCode ? (
+          <code className="rounded-lg bg-muted px-3 py-2 text-lg tracking-widest">
+            {pairingCode}
+          </code>
+        ) : null}
+        <Button
+          disabled={regeneratePending || savePending}
+          onClick={pairingCode ? onCopyHandshakeCode : onRegenerateHandshake}
+          size="sm"
+        >
+          {pairingCode
+            ? copied
+              ? "Copied"
+              : "Copy code"
+            : regeneratePending
+              ? "Generating…"
+              : "Get linking code"}
+        </Button>
+      </div>
+      <details>
+        <summary className="cursor-pointer text-muted-foreground text-sm">
+          Need help?
+        </summary>
+        <div className="pt-3">
+          <DiscordPairingGuide compact inviteUrl={inviteUrl} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export function DiscordSettingsPairingSection({
   isPaired,
   pairingCode,
@@ -151,6 +204,7 @@ export function DiscordSettingsPairingSection({
   onRegenerateHandshake,
   rowClassName,
   compact = false,
+  guided = false,
 }: {
   isPaired: boolean;
   pairingCode: string | null;
@@ -162,13 +216,28 @@ export function DiscordSettingsPairingSection({
   onRegenerateHandshake: () => void;
   rowClassName?: string;
   compact?: boolean;
+  guided?: boolean;
 }) {
+  if (guided) {
+    return (
+      <DiscordLinkAccount
+        copied={copied}
+        inviteUrl={inviteUrl}
+        onCopyHandshakeCode={onCopyHandshakeCode}
+        onRegenerateHandshake={onRegenerateHandshake}
+        pairingCode={pairingCode}
+        regeneratePending={regeneratePending}
+        savePending={savePending}
+      />
+    );
+  }
+
   return (
-    <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
+    <div className="divide-y divide-border">
       <SettingsRow
         className={rowClassName}
         description={pairingCodeDescription(pairingCode, isPaired)}
-        label="Pairing code"
+        label="Link with a code"
       >
         <DiscordPairingCodeControls
           copied={copied}
@@ -184,100 +253,6 @@ export function DiscordSettingsPairingSection({
       {pairingCode ? (
         <DiscordPairingGuide compact={compact} inviteUrl={inviteUrl} />
       ) : null}
-    </div>
-  );
-}
-
-export function DiscordSettingsConfiguredRows({
-  allowedUserSummary,
-  savePending,
-  onManageAllowedUsers,
-  profileId,
-  profiles,
-  onProfileChange,
-  running,
-  worker,
-  rowClassName,
-}: {
-  allowedUserSummary: string;
-  savePending: boolean;
-  onManageAllowedUsers: () => void;
-  profileId: string;
-  profiles: ProfileSummary[];
-  onProfileChange: (profileId: string) => void;
-  running: boolean;
-  worker: { process?: { managed?: boolean } } | null | undefined;
-  rowClassName?: string;
-}) {
-  return (
-    <div className="space-y-4">
-      <SettingsRow
-        className={rowClassName}
-        description="Discord user IDs that can use this bot"
-        label="Allowed users"
-      >
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="text-muted-foreground text-xs">
-            {allowedUserSummary}
-          </span>
-          <Button
-            disabled={savePending}
-            onClick={onManageAllowedUsers}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Manage
-          </Button>
-        </div>
-      </SettingsRow>
-
-      <SettingsRow
-        className={rowClassName}
-        description="Which agent answers on Discord"
-        label="Reply as"
-      >
-        <Select
-          disabled={savePending || profiles.length === 0}
-          onValueChange={(value) => {
-            if (value) {
-              onProfileChange(String(value));
-            }
-          }}
-          value={profileId}
-        >
-          <SelectTrigger
-            className="w-[11rem] sm:w-[13rem]"
-            id="discord-profile"
-          >
-            <SelectValue placeholder="Profile">
-              {profiles.find((profile) => profile.id === profileId)?.name}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent align="end">
-            {profiles.map((profile) => (
-              <SelectItem key={profile.id} value={profile.id}>
-                <span className="flex items-center gap-2">
-                  <ProfileAvatar profile={profile} size="sm" />
-                  <span>{profile.name}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-
-      <SettingsRow
-        className={rowClassName}
-        description={running ? "Running" : "Stopped"}
-        label="Bridge worker"
-      >
-        <WorkerActionBar
-          pm2Managed={worker?.process?.managed ?? false}
-          running={running}
-          workerName="discord"
-        />
-      </SettingsRow>
     </div>
   );
 }

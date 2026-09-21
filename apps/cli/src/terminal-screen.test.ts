@@ -35,6 +35,27 @@ describe("stripCursorPositionReports", () => {
 });
 
 describe("consumeTerminalInput", () => {
+  test("typing does not insert Kitty key-release reports", () => {
+    expect(consumeTerminalInput("H\x1b[104:72;2:3ui\x1b[105;1:3u")).toEqual({
+      events: ["H", "i"],
+      pending: "",
+    });
+  });
+
+  test("keeps Kitty key events intact across chunk boundaries", () => {
+    const sequence = "\x1b[104:72;2:1u";
+    for (let split = 1; split < sequence.length; split++) {
+      const first = consumeTerminalInput(sequence.slice(0, split));
+      expect(first.events).toEqual([]);
+      expect(
+        consumeTerminalInput(first.pending + sequence.slice(split))
+      ).toEqual({
+        events: [sequence],
+        pending: "",
+      });
+    }
+  });
+
   test("swallows cursor reports and emits key input", () => {
     const consumed = consumeTerminalInput("a\x1b[12;1Rb");
 
@@ -59,6 +80,20 @@ describe("consumeTerminalInput", () => {
     expect(consumeTerminalInput("\x1b").pending).toBe("\x1b");
     expect(consumeTerminalInput("\x1b[").pending).toBe("\x1b[");
     expect(consumeTerminalInput("\x1b[12").pending).toBe("\x1b[12");
+  });
+
+  test("keeps legacy shift+enter together", () => {
+    expect(consumeTerminalInput("\x1b\r")).toEqual({
+      events: ["\x1b\r"],
+      pending: "",
+    });
+  });
+
+  test("keeps modifyOtherKeys shift+enter together", () => {
+    expect(consumeTerminalInput("\x1b[27;2;13~")).toEqual({
+      events: ["\x1b[27;2;13~"],
+      pending: "",
+    });
   });
 
   test("recovers from malformed ESC instead of leaking pending", () => {

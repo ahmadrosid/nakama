@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir, symlink } from "node:fs/promises";
+import { join } from "node:path";
 import {
   claimLegacyTelegramConfig,
   generateHandshakeCode,
@@ -65,6 +67,58 @@ describeSharedChannelConfigTests({
 });
 
 describe("per-org telegram config", () => {
+  test("claims a bot once even with concurrent rotated tokens", async () => {
+    await withTempHomedir("nakama-telegram-claim-race-", async () => {
+      const results = await Promise.allSettled([
+        saveTelegramConfig(
+          { orgId: "org_a", profileId: "a" },
+          { botToken: "111:OLD" }
+        ),
+        saveTelegramConfig(
+          { orgId: "org_b", profileId: "b" },
+          { botToken: "111:NEW" }
+        ),
+      ]);
+      expect(
+        results.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+    });
+  });
+
+  test("refuses symlinked credential directories", async () => {
+    await withTempHomedir("nakama-telegram-symlink-", async (home) => {
+      const owner = { orgId: "org_a", profileId: "a" };
+      const directory = getTelegramConfigDir(owner);
+      await mkdir(join(directory, ".."), { recursive: true });
+      await symlink(home, directory);
+      await expect(
+        saveTelegramConfig(owner, { botToken: "111:AAA" })
+      ).rejects.toThrow();
+    });
+  });
+
+  test("isolates agent credentials and pairing within an organization", async () => {
+    await withTempHomedir("nakama-telegram-profile-", async () => {
+      const first = { orgId: "org_a", profileId: "agent_a" };
+      const second = { orgId: "org_a", profileId: "agent_b" };
+      const saved = await saveTelegramConfig(first, { botToken: "111:AAA" });
+      await saveTelegramConfig(second, { botToken: "222:BBB" });
+      await verifyAndPairTelegramUser(first, saved.handshakeCode!, 42);
+      expect((await loadTelegramConfigFile(first))?.pairedUserIds).toEqual([
+        42,
+      ]);
+      expect((await loadTelegramConfigFile(second))?.pairedUserIds).toEqual([]);
+      expect((await loadTelegramConfigFile(first))?.profileId).toBe("agent_a");
+      expect(await loadTelegramConfigFile("org_a")).toBeNull();
+      expect(
+        await loadTelegramConfigFile({ ...first, orgId: "org_b" })
+      ).toBeNull();
+      expect(() =>
+        getTelegramConfigDir({ ...first, profileId: "../escape" })
+      ).toThrow();
+    });
+  });
+
   test("keeps each org's credentials out of the other scopes", async () => {
     await withTempHomedir("nakama-telegram-org-", async () => {
       await saveTelegramConfig("org_a", { botToken: "111:AAA" });

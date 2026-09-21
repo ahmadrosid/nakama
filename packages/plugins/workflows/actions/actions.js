@@ -137,7 +137,6 @@ var WORKFLOW_STEP_KINDS = [
   "summarize"
 ];
 var WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"];
-var SKIP_WORKFLOW_TOOLS = new Set(["web_search"]);
 function validateWorkflowSteps(steps, allowedTools) {
   if (steps.length === 0) {
     throw new Error("Workflow must include at least one step.");
@@ -723,7 +722,7 @@ async function run(input, context) {
           Object.assign(changes, { [key]: input[key] });
         }
       }
-      return context.actionKey === "create_workflow" ? service.create(changes, agentId, allowed) : service.update(input.workflowId, changes, allowed);
+      return context.actionKey === "create_workflow" ? await service.create(changes, agentId, allowed) : await service.update(input.workflowId, changes, allowed);
     }
     if (context.actionKey === "run_workflow") {
       const runner = new WorkflowRunner(service, {

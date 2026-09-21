@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   getDefaultModel,
   getModelById,
+  getModelsForProvider,
   isOpenRouterModelSlug,
   modelSupportsVision,
   resolveModel,
+  resolveModelLimits,
 } from "./models";
 
 describe("isOpenRouterModelSlug", () => {
@@ -18,6 +20,33 @@ describe("isOpenRouterModelSlug", () => {
 });
 
 describe("resolveModel", () => {
+  test("defaults ChatGPT to Terra without changing OpenAI", () => {
+    expect(resolveModel("chatgpt")).toBe("gpt-5.6-terra");
+    expect(getDefaultModel("chatgpt", [])).toBe("gpt-5.6-terra");
+    expect(getDefaultModel("openai")).toBe("gpt-5.4");
+    expect(getModelsForProvider("chatgpt").map((model) => model.id)).toEqual([
+      "gpt-5.6-terra",
+      "gpt-5.6-sol",
+      "gpt-5.6-luna",
+      "gpt-6-astra",
+      "gpt-5.5",
+    ]);
+  });
+
+  test("honors ChatGPT instance defaults without replacing explicit selections", () => {
+    const customModels = [
+      { id: "gpt-5.6-sol" },
+      { default: true, id: "gpt-5.6-luna" },
+    ];
+    expect(resolveModel("chatgpt", undefined, customModels)).toBe(
+      "gpt-5.6-luna"
+    );
+    expect(getDefaultModel("chatgpt", [{ id: "account-model" }])).toBe(
+      "account-model"
+    );
+    expect(resolveModel("chatgpt", " gpt-5.4 ", customModels)).toBe("gpt-5.4");
+  });
+
   test("uses xiaomi custom model shortlist when provided", () => {
     const customModels = [
       { default: true, id: "mimo-v2.5", name: "MiMo V2.5" },
@@ -56,6 +85,24 @@ describe("resolveModel", () => {
   test("resolves catalog models for Gemini", () => {
     expect(resolveModel("gemini", "gemini-2.5-pro")).toBe("gemini-2.5-pro");
     expect(getDefaultModel("gemini")).toBe("gemini-2.5-flash");
+  });
+
+  test("exposes current Gemini limits and standard text prices without changing defaults", () => {
+    for (const [id, input, output] of [
+      ["gemini-2.5-flash", 0.3, 2.5],
+      ["gemini-2.5-pro", 1.25, 10],
+      ["gemini-3.8-flash", 0.75, 3.75],
+      ["gemini-3.1-pro-preview", 2, 12],
+    ] as const) {
+      expect(getModelById(id)).toMatchObject({
+        contextWindow: 1_048_576,
+        inputPerMillionUsd: input,
+        maxOutputTokens: 65_536,
+        outputPerMillionUsd: output,
+        provider: "gemini",
+      });
+    }
+    expect(getModelById("gemini-3.8-flash")?.default).not.toBe(true);
   });
 
   test("resolves custom shortlist models for OpenAI", () => {
@@ -497,5 +544,49 @@ describe("modelSupportsVision", () => {
     expect(modelSupportsVision("sonar-deep-research", "perplexity")).toBe(
       false
     );
+  });
+});
+
+describe("resolveModelLimits", () => {
+  test("keeps ChatGPT limits separate from OpenAI for the same model id", () => {
+    expect(resolveModelLimits("chatgpt", "gpt-5.6-luna")).toEqual({
+      contextWindow: 272_000,
+      maxOutputTokens: 8192,
+    });
+    expect(resolveModelLimits("openai", "gpt-5.6-luna")).toEqual({
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
+    });
+  });
+
+  test("uses the instance entry for a model the catalog does not know", () => {
+    expect(
+      resolveModelLimits("openai_compatible", "my-org/llama-4-1m", [
+        { contextWindow: 1_000_000, id: "my-org/llama-4-1m" },
+      ])
+    ).toEqual({ contextWindow: 1_000_000, maxOutputTokens: 8192 });
+  });
+
+  test("falls back to 128k when nothing declares a window", () => {
+    expect(
+      resolveModelLimits("openai_compatible", "my-org/llama-4-1m").contextWindow
+    ).toBe(128_000);
+    expect(
+      resolveModelLimits("openai_compatible", "my-org/llama-4-1m", [
+        { id: "my-org/llama-4-1m" },
+      ]).contextWindow
+    ).toBe(128_000);
+  });
+
+  test("prefers the instance entry over the catalog", () => {
+    expect(
+      resolveModelLimits("chatgpt", "gpt-5.6-luna", [
+        {
+          contextWindow: 32_000,
+          id: "gpt-5.6-luna",
+          maxOutputTokens: 4096,
+        },
+      ])
+    ).toEqual({ contextWindow: 32_000, maxOutputTokens: 4096 });
   });
 });

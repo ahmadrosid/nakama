@@ -1,36 +1,24 @@
-import type { ProfileSummary } from "@nakama/core/contract";
-import { Button } from "@nakama/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
 import { Switch } from "@nakama/ui/switch";
-import { cn } from "@nakama/ui/utils";
 import {
+  ChannelAccessSettings,
+  ChannelConnectionStep,
+  ChannelSettings,
+  ChannelSetupChecklist,
   IntegrationSettingsFooter,
-  IntegrationStatusHeader,
   SettingsRow,
 } from "@/components/integration-settings.shared";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-linking-section";
 
 export function WhatsAppSettingsCardContent({
   embedded,
-  headerSubtitle,
   statusBadge,
   configured,
   paired,
   running,
   showQr,
   linkedNumber,
-  profileId,
-  profiles,
   savePending,
-  onProfileChange,
   pairingCode,
   copied,
   onCopyPairingCode,
@@ -63,10 +51,7 @@ export function WhatsAppSettingsCardContent({
   running: boolean;
   showQr: boolean;
   linkedNumber: string | null;
-  profileId: string;
-  profiles: ProfileSummary[];
   savePending: boolean;
-  onProfileChange: (profileId: string) => void;
   pairingCode: string | null;
   copied: boolean;
   onCopyPairingCode: () => void;
@@ -91,145 +76,112 @@ export function WhatsAppSettingsCardContent({
   onRequireGroupMentionChange: (value: boolean) => void;
   onSave: () => void;
 }) {
-  const paneItemClass = embedded ? undefined : "px-0 py-0";
-
-  return (
-    <div className={cn(!embedded && "space-y-4 py-4")}>
-      {embedded ? null : (
-        <IntegrationStatusHeader
-          className={paneItemClass}
-          configured={configured}
-          connected={paired && running && !showQr}
-          statusBadge={statusBadge}
-          subtitle={headerSubtitle}
-          title="WhatsApp"
-        />
-      )}
-
-      {linkedNumber ? (
-        <SettingsRow
-          className={paneItemClass}
-          description="From your WhatsApp session"
-          label="Linked account"
-        >
-          <span className="text-foreground text-sm">{linkedNumber}</span>
-        </SettingsRow>
-      ) : null}
-
-      <SettingsRow
-        className={paneItemClass}
-        description="Which agent answers on WhatsApp"
-        label="Reply as"
-      >
-        <Select
-          disabled={savePending || profiles.length === 0}
-          onValueChange={(value) => {
-            if (value) {
-              onProfileChange(String(value));
-            }
-          }}
-          value={profileId}
-        >
-          <SelectTrigger
-            className="w-[11rem] sm:w-[13rem]"
-            id="whatsapp-profile"
-          >
-            <SelectValue placeholder="Profile">
-              {profiles.find((profile) => profile.id === profileId)?.name}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent align="end">
-            {profiles.map((profile) => (
-              <SelectItem key={profile.id} value={profile.id}>
-                <span className="flex items-center gap-2">
-                  <ProfileAvatar profile={profile} size="sm" />
-                  <span>{profile.name}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-
-      <SettingsRow
-        className={paneItemClass}
-        description="Off: anyone in the group can talk without tagging the bot"
-        label="Require @mention in groups"
-      >
-        <Switch
-          aria-label="Require @mention in groups"
-          checked={requireGroupMention}
-          disabled={savePending}
-          id="whatsapp-require-group-mention"
-          onCheckedChange={onRequireGroupMentionChange}
-        />
-      </SettingsRow>
-
-      {configured ? (
-        <SettingsRow className={paneItemClass} label="Allowed numbers">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="text-muted-foreground text-xs">
-              {allowedPhoneSummary}
-            </span>
-            <Button
-              disabled={savePending}
-              onClick={onManageAllowedPhones}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Manage
-            </Button>
-          </div>
-        </SettingsRow>
-      ) : null}
-
-      {configured ? (
-        <WhatsAppSettingsLinkingSection
-          awaitingQr={awaitingQr}
-          bridgeStarting={bridgeStarting}
-          compact={!embedded}
-          copied={copied}
-          linkingAfterScan={linkingAfterScan}
-          onCopyPairingCode={onCopyPairingCode}
-          onReconnect={onReconnect}
-          onRegeneratePairingCode={onRegeneratePairingCode}
-          paired={paired}
-          pairingCode={pairingCode}
-          qrCode={qrCode}
-          reconnectPending={reconnectPending}
-          regeneratePending={regeneratePending}
-          rowClassName={paneItemClass}
-          savePending={savePending}
-          showQr={showQr}
-          showReconnect={showReconnect}
-        />
-      ) : null}
-
-      {configured ? (
-        <SettingsRow
-          className={paneItemClass}
-          description={running ? "Running" : "Stopped"}
-          label="Bridge worker"
+  const paneItemClass = "px-4 py-3";
+  const linking = (
+    <WhatsAppSettingsLinkingSection
+      awaitingQr={awaitingQr}
+      bridgeStarting={bridgeStarting}
+      compact={!embedded}
+      copied={copied}
+      linkingAfterScan={linkingAfterScan}
+      onCopyPairingCode={onCopyPairingCode}
+      onReconnect={onReconnect}
+      onRegeneratePairingCode={onRegeneratePairingCode}
+      paired={paired}
+      pairingCode={pairingCode}
+      qrCode={qrCode}
+      reconnectPending={reconnectPending}
+      regeneratePending={regeneratePending}
+      rowClassName={paneItemClass}
+      savePending={savePending}
+      showQr={showQr}
+      showReconnect={showReconnect}
+    />
+  );
+  const footer = (
+    <IntegrationSettingsFooter
+      canSave={canSave}
+      className={paneItemClass}
+      formError={formError}
+      loadError={loadError}
+      onSave={onSave}
+      savePending={savePending}
+      showSave={canSave || savePending}
+      statusLine={statusLine}
+      submitLabel={actionLabel}
+    />
+  );
+  const step =
+    !(configured && running) || (paired && statusBadge !== "Connected")
+      ? 0
+      : paired && !showQr
+        ? 2
+        : 1;
+  const checklist = (
+    <ChannelSetupChecklist
+      label="WhatsApp setup progress"
+      step={step}
+      steps={["Start connection", "Link account"]}
+    >
+      {step === 0 && configured ? (
+        <ChannelConnectionStep
+          managed={worker?.process?.managed === true}
+          platform="whatsapp"
+          running={running}
+          starting={savePending}
         >
           <WorkerActionBar
+            compact
             pm2Managed={worker?.process?.managed ?? false}
             running={running}
             workerName="whatsapp"
           />
-        </SettingsRow>
+        </ChannelConnectionStep>
       ) : null}
-
-      <IntegrationSettingsFooter
-        canSave={canSave}
-        className={paneItemClass}
-        formError={formError}
-        loadError={loadError}
-        onSave={onSave}
-        savePending={savePending}
-        statusLine={statusLine}
-        submitLabel={actionLabel}
+      {step === 1 ? linking : null}
+      {footer}
+    </ChannelSetupChecklist>
+  );
+  if (step < 2) {
+    return checklist;
+  }
+  return (
+    <div className="space-y-4">
+      {checklist}
+      <ChannelAccessSettings
+        actions={
+          <WorkerActionBar
+            compact
+            pm2Managed={worker?.process?.managed ?? false}
+            running={running}
+            workerName="whatsapp"
+          />
+        }
+        configured={configured}
+        onEdit={onManageAllowedPhones}
+        pending={savePending}
+        statusBadge={statusBadge}
+        summary={allowedPhoneSummary}
       />
+      <ChannelSettings>
+        {linkedNumber ? (
+          <SettingsRow label="Connected number">
+            <span className="text-foreground text-sm">{linkedNumber}</span>
+          </SettingsRow>
+        ) : null}
+        <SettingsRow label="Only reply when mentioned in groups">
+          <Switch
+            aria-label="Only reply when mentioned in groups"
+            checked={requireGroupMention}
+            disabled={savePending}
+            id="whatsapp-require-group-mention"
+            onCheckedChange={onRequireGroupMentionChange}
+          />
+        </SettingsRow>
+        {linking}
+      </ChannelSettings>
+
+      {footer}
     </div>
   );
 }

@@ -59,7 +59,7 @@ export function ProviderSettingsCard({
         <CardHeader className="border-border border-b px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="min-w-0 font-medium text-sm leading-snug tracking-normal">
-              LLM providers
+              AI Providers
             </CardTitle>
             {isConfigured ? (
               <Button

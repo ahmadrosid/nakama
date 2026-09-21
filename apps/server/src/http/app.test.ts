@@ -68,6 +68,7 @@ function createServerOptions() {
     agent: {
       beginSessionTurn: async () => true,
       createSession: async () => "session_1",
+      getProfile: async () => ({ profile: { id: "default" } }),
       getWhatsAppSettings: async () => ({ enabled: false }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       listSessions: async (
@@ -140,13 +141,31 @@ describe("createHonoApp", () => {
     expect(importLimitResponse.status).toBe(413);
   });
 
+  test("knowledge uploads allow a base64-encoded 20 MiB document through the body limit", async () => {
+    const app = createHonoApp(createServerOptions());
+    const request = (size: number) =>
+      new Request("http://localhost:4310/v1/profiles/example/knowledge-base", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(size),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    expect(
+      (await app.fetch(request(Math.ceil((20 * 1024 * 1024) / 3) * 4 + 1024)))
+        .status
+    ).not.toBe(413);
+    expect((await app.fetch(request(30 * 1024 * 1024 + 1))).status).toBe(413);
+  });
+
   test("liveness stays up while readiness tracks a closed and reopened database", async () => {
     const database = await createSqliteDatabase(":memory:");
     const { app } = createMinimalHonoApp({
       databaseAdapter: database.adapter,
-      webDistDir: resolve(import.meta.dir, "../../../web"),
     });
     try {
+      expect((await app.request("/up")).status).toBe(200);
       expect((await app.request("/healthz")).status).toBe(200);
       expect((await app.request("/readyz")).status).toBe(200);
       await database.close();
@@ -275,12 +294,15 @@ describe("createHonoApp", () => {
       });
 
       const whatsappResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/settings/whatsapp", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Org-Id": TEST_ORG_ID,
-          },
-        })
+        new Request(
+          "http://localhost:4310/v1/settings/whatsapp?profileId=default",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-Org-Id": TEST_ORG_ID,
+            },
+          }
+        )
       );
 
       expect(whatsappResponse.status).toBe(200);
@@ -386,6 +408,53 @@ describe("createHonoApp", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(csp).not.toContain("frame-ancestors");
   });
+
+  test.each(["/docs", "/docs/"])(
+    "allows the docs scripts on %s",
+    async (path) => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`)
+      );
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+      const scriptUrl = html.match(/<script src="([^"]+)"/)?.[1];
+      expect(inlineScript).toBeDefined();
+      expect(scriptUrl).toBeDefined();
+      const hash = new Bun.CryptoHasher("sha256")
+        .update(inlineScript!)
+        .digest("base64");
+      const csp = response.headers.get("Content-Security-Policy") ?? "";
+      const scriptSrc =
+        csp
+          .split(";")
+          .find((directive) => directive.trim().startsWith("script-src")) ?? "";
+      expect(scriptSrc).toContain(scriptUrl!);
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+      expect(scriptSrc).not.toContain("'unsafe-inline'");
+      expect(scriptSrc).not.toContain("'unsafe-eval'");
+      expect(csp).toContain("font-src 'self' data: https://fonts.scalar.com;");
+      expect(csp).toContain(
+        "connect-src 'self' https://cdn.jsdelivr.net/sm/ https://api.scalar.com/vector/registry/;"
+      );
+    }
+  );
+
+  test.each(["/health", "/openapi.json", "/docs-other"])(
+    "keeps Scalar resource permissions off %s",
+    async (path) => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`)
+      );
+      const csp = response.headers.get("Content-Security-Policy") ?? "";
+      expect(csp).toContain("font-src 'self' data:;");
+      expect(csp).toContain("connect-src 'self';");
+      expect(csp).not.toContain("scalar.com");
+      expect(csp).not.toContain("jsdelivr.net");
+    }
+  );
 
   test("allows the theme bootstrap by hash instead of every inline script", async () => {
     const indexHtml = await Bun.file(
@@ -868,11 +937,56 @@ describe("createHonoApp", () => {
     ).toBe(true);
   });
 
-  test("requires platform admin to control messaging workers", async () => {
+  test("disconnect routes all agent channels to their scoped connection", async () => {
+    const options = createServerOptions();
+    const calls: Array<{
+      name: string;
+      owner: { orgId: string; profileId: string };
+    }> = [];
+    options.workerManager.disconnectChannel = async (
+      name: string,
+      owner: { orgId: string; profileId: string }
+    ) => {
+      calls.push({ name, owner });
+    };
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const disconnect = (path: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/workers/${path}`, {
+          headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+          method: "POST",
+        })
+      );
+    for (const name of ["telegram", "discord", "whatsapp"]) {
+      const response = await disconnect(`${name}/disconnect?profileId=default`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ ok: true });
+    }
+    expect(calls).toEqual(
+      ["telegram", "discord", "whatsapp"].map((name) => ({
+        name,
+        owner: { orgId: session.orgId, profileId: "default" },
+      }))
+    );
+    expect((await disconnect("discord/disconnect")).status).toBe(400);
+    expect(
+      (await disconnect("automation/disconnect?profileId=default")).status
+    ).toBe(400);
+    expect(calls).toHaveLength(3);
+  });
+
+  test("allows org admins to control their WhatsApp worker", async () => {
     const options = createServerOptions();
     const calls: string[] = [];
-    options.workerManager.startWorker = async (name: string) => {
-      calls.push(`start:${name}`);
+    options.workerManager.startWorker = async (
+      name: string,
+      owner: { orgId: string; profileId: string }
+    ) => {
+      calls.push(`start:${name}:${owner.orgId}:${owner.profileId}`);
     };
     options.workerManager.stopWorker = async (name: string) => {
       calls.push(`stop:${name}`);
@@ -905,28 +1019,114 @@ describe("createHonoApp", () => {
       platformSession.orgId
     );
     const denied = await app.fetch(
-      new Request("http://localhost:4310/v1/workers/whatsapp/start", {
-        headers: orgAdminSession.headers({
-          "X-CSRF-Token": orgAdminSession.csrfToken,
-        }),
-        method: "POST",
-      })
+      new Request(
+        "http://localhost:4310/v1/workers/whatsapp/start?profileId=default",
+        {
+          headers: orgAdminSession.headers({
+            "X-CSRF-Token": orgAdminSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
     );
 
-    expect(denied.status).toBe(403);
-    expect(calls).toEqual([]);
+    expect(denied.status).toBe(200);
+    expect(calls).toEqual([`start:whatsapp:${platformSession.orgId}:default`]);
 
     const allowed = await app.fetch(
-      new Request("http://localhost:4310/v1/workers/telegram/stop", {
-        headers: platformSession.headers({
-          "X-CSRF-Token": platformSession.csrfToken,
-        }),
-        method: "POST",
-      })
+      new Request(
+        "http://localhost:4310/v1/workers/telegram/stop?profileId=default",
+        {
+          headers: platformSession.headers({
+            "X-CSRF-Token": platformSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
     );
 
     expect(allowed.status).toBe(200);
-    expect(calls).toEqual(["stop:telegram"]);
+    expect(calls).toEqual([
+      `start:whatsapp:${platformSession.orgId}:default`,
+      "stop:telegram",
+    ]);
+  });
+
+  test("plugin worker controls and logs require an admin of the owning org", async () => {
+    const options = createServerOptions();
+    const calls: string[] = [];
+    let owner = "";
+    Object.assign(options.workerManager, {
+      isPluginWorkerForOrg: (name: string, orgId: string) =>
+        name === "plugin-owned" && orgId === owner,
+      listPluginWorkers: async (orgId: string) => {
+        calls.push("list:" + orgId);
+        return [];
+      },
+      startWorker: async (name: string) => {
+        calls.push(name);
+      },
+    });
+    const app = createHonoApp(options);
+    const admin = await setupFreshInstallSession(app, options.databaseAdapter);
+    owner = admin.orgId!;
+    for (const suffix of ["start", "logs", "clear-logs"]) {
+      const response = await app.fetch(
+        new Request(
+          "http://localhost:4310/v1/workers/plugin-foreign/" + suffix,
+          {
+            headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+            method: suffix === "logs" ? "GET" : "POST",
+          }
+        )
+      );
+      expect(response.status).toBe(404);
+    }
+    expect(calls).toEqual([]);
+    const allowed = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/plugin-owned/start", {
+        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+        method: "POST",
+      })
+    );
+    expect(allowed.status).toBe(200);
+    const listed = await app.fetch(
+      new Request("http://localhost:4310/v1/workers/plugins", {
+        headers: admin.headers(),
+      })
+    );
+    expect(listed.status).toBe(200);
+    expect(calls).toEqual(["plugin-owned", "list:" + owner]);
+
+    const now = new Date().toISOString();
+    await options.databaseAdapter.createUser({
+      createdAt: now,
+      email: "worker-member@example.com",
+      id: "worker-member",
+      passwordHash: await options.authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+    await options.databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: owner,
+      role: "member",
+      userId: "worker-member",
+    });
+    const member = await loginUserSession(
+      app,
+      "worker-member@example.com",
+      "password123",
+      owner
+    );
+    for (const suffix of ["start", "logs", "clear-logs"]) {
+      const denied = await app.fetch(
+        new Request("http://localhost:4310/v1/workers/plugin-owned/" + suffix, {
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
+          method: suffix === "logs" ? "GET" : "POST",
+        })
+      );
+      expect(denied.status).toBe(403);
+    }
   });
 
   test("creates and lists sessions through Hono routes", async () => {

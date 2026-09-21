@@ -86,10 +86,17 @@ function resolvenakamaProvider(
 }
 
 async function fetchModelsDev(): Promise<ModelsDevRow[]> {
-  const data = (await client.getExternalModelCatalog("models-dev")) as Record<
-    string,
-    unknown
-  >;
+  return parseModelsDevCatalog(
+    (await client.getExternalModelCatalog("models-dev")) as Record<
+      string,
+      unknown
+    >
+  );
+}
+
+export function parseModelsDevCatalog(
+  data: Record<string, unknown>
+): ModelsDevRow[] {
   const rows: ModelsDevRow[] = [];
 
   for (const [providerId, p] of Object.entries(data)) {
@@ -100,9 +107,10 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
     const models =
       (provider.models as Record<string, unknown> | undefined) ?? {};
     const nakamaProvider = resolvenakamaProvider(providerId, npm);
-    const unsupportedReason = npm ? UNSUPPORTED_NPM[npm] : undefined;
-    const supported = !unsupportedReason;
-    const experimental = supported && !OFFICIAL_PROVIDER_IDS.has(providerId);
+    const providerUnsupportedReason = npm ? UNSUPPORTED_NPM[npm] : undefined;
+    const experimental = !(
+      providerUnsupportedReason || OFFICIAL_PROVIDER_IDS.has(providerId)
+    );
 
     for (const [modelId, m] of Object.entries(models)) {
       const model = m as Record<string, unknown>;
@@ -122,12 +130,19 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
         (model.modalities as Record<string, string[]> | undefined) ?? {};
 
       const inputModalities = new Set(modalities.input ?? []);
+      const isFree = inputCost === 0 && outputCost === 0;
+      // OpenCode rejects its free tier from any other client, with or without a key.
+      const unsupportedReason =
+        providerUnsupportedReason ??
+        (providerId === "opencode" && isFree
+          ? "OpenCode's free tier only works inside OpenCode"
+          : undefined);
 
       rows.push({
         apiUrl,
         context: (limit.context as number | undefined) ?? 0,
         deprecated: (model.status as string | undefined) === "deprecated",
-        isFree: inputCost === 0 && outputCost === 0,
+        isFree,
         isZen: providerId === "opencode",
         modelId,
         modelName: (model.name as string | undefined) ?? modelId,
@@ -135,7 +150,7 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
         providerId,
         providerName,
         reasoning: !!(model.reasoning as boolean | undefined),
-        supported,
+        supported: !unsupportedReason,
         toolCall: !!(model.tool_call as boolean | undefined),
         vision: inputModalities.has("image"),
         ...(unsupportedReason ? { unsupportedReason } : {}),

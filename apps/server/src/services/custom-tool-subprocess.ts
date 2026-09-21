@@ -45,6 +45,7 @@ interface SpawnJsonToolTransport {
 }
 
 export interface SpawnJsonToolOptions {
+  apiKey?: string;
   args: string[];
   bin: string;
   context: ToolContext;
@@ -74,6 +75,9 @@ export async function spawnJsonTool(
     transport?.includeConfigDir ?? true
   );
   const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
+  if (options.apiKey) {
+    env.NAKAMA_TOOL_API_KEY = options.apiKey;
+  }
 
   const result = await new Promise<{ stderr: string; stdout: string }>(
     (resolve, reject) => {

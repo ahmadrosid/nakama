@@ -17,8 +17,9 @@ import {
   writeTextFile,
 } from "../fs";
 import { createId } from "../ids";
-import { MAX_DOCUMENT_BYTES } from "../message-content";
+import { MAX_KNOWLEDGE_DOCUMENT_BYTES } from "../message-content";
 import { getProfileSoulDir } from "../soul/resolve";
+import { getOrgConfigDir } from "../user-config";
 import {
   buildExtractedTextHeader,
   extractText,
@@ -30,10 +31,13 @@ import {
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
+  getOrgKnowledgeBaseDir,
 } from "./paths";
 
 interface KnowledgeBaseManifest {
   documents: KnowledgeBaseDocument[];
+  /** Additive references to organization-owned documents. */
+  sharedDocumentIds?: string[];
 }
 
 export type KnowledgeBaseDuplicateMatch = "content_hash" | "name_size";
@@ -52,6 +56,18 @@ export class KnowledgeBaseDuplicateError extends Error {
     this.name = "KnowledgeBaseDuplicateError";
     this.existing = existing;
     this.match = match;
+  }
+}
+
+export class KnowledgeBaseDocumentInUseError extends Error {
+  constructor(
+    readonly documentId: string,
+    readonly profileIds: string[]
+  ) {
+    super(
+      `Shared knowledge base document is still used by ${profileIds.length} profile(s).`
+    );
+    this.name = "KnowledgeBaseDocumentInUseError";
   }
 }
 
@@ -86,12 +102,15 @@ function findDuplicateDocument(
   return null;
 }
 
+function legacyKnowledgeBaseDir(orgId: string, profileId: string): string {
+  return join(getProfileSoulDir(orgId, profileId), "data", "knowledge-base");
+}
+
 async function migrateLegacyKnowledgeBaseDir(
   orgId: string,
   profileId: string
 ): Promise<void> {
-  const profileDir = getProfileSoulDir(orgId, profileId);
-  const legacyDir = join(profileDir, "data", "knowledge-base");
+  const legacyDir = legacyKnowledgeBaseDir(orgId, profileId);
   const currentDir = getKnowledgeBaseDir(orgId, profileId);
 
   if (!(await pathExists(legacyDir)) || (await pathExists(currentDir))) {
@@ -109,13 +128,9 @@ async function moveIfPresent(from: string, to: string): Promise<void> {
   await rename(from, to);
 }
 
-async function flattenKnowledgeBaseLayout(
-  orgId: string,
-  profileId: string
-): Promise<void> {
-  const knowledgeBaseDir = getKnowledgeBaseDir(orgId, profileId);
-  const uploadsDir = join(knowledgeBaseDir, "uploads");
-  const extractedDir = join(knowledgeBaseDir, "extracted");
+async function flattenKnowledgeBaseLayout(dir: string): Promise<void> {
+  const uploadsDir = join(dir, "uploads");
+  const extractedDir = join(dir, "extracted");
 
   if (await pathExists(extractedDir)) {
     const entries = await readdir(extractedDir, { withFileTypes: true });
@@ -128,7 +143,7 @@ async function flattenKnowledgeBaseLayout(
       const documentId = entry.name.replace(/\.txt$/i, "");
       await moveIfPresent(
         legacyPath,
-        getKnowledgeBaseExtractedPath(orgId, profileId, documentId)
+        getKnowledgeBaseExtractedPath(dir, documentId)
       );
     }
     await rm(extractedDir, { force: true, recursive: true });
@@ -150,17 +165,34 @@ async function flattenKnowledgeBaseLayout(
 
         await moveIfPresent(
           join(legacyDocumentDir, file.name),
-          getKnowledgeBaseStoredDocumentPath(
-            orgId,
-            profileId,
-            documentDir.name,
-            file.name
-          )
+          getKnowledgeBaseStoredDocumentPath(dir, documentDir.name, file.name)
         );
       }
     }
     await rm(uploadsDir, { force: true, recursive: true });
   }
+}
+
+/**
+ * Resolve a profile's knowledge base root, migrating the pre-`knowledge-base`
+ * layout first. Every profile-scoped entry point goes through here so a legacy
+ * profile is never read from the wrong directory.
+ */
+async function profileKnowledgeBaseDir(
+  orgId: string,
+  profileId: string
+): Promise<string> {
+  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
+  const dir = getKnowledgeBaseDir(orgId, profileId);
+  await flattenKnowledgeBaseLayout(dir);
+  return dir;
+}
+
+/** Resolve the organization knowledge base root used for shared documents. */
+async function orgKnowledgeBaseDir(orgId: string): Promise<string> {
+  const dir = getOrgKnowledgeBaseDir(orgId);
+  await flattenKnowledgeBaseLayout(dir);
+  return dir;
 }
 
 function decodeDocumentBytes(data: string): Buffer {
@@ -175,13 +207,8 @@ function sanitizeFilename(filename: string): string {
   return base.replace(/[^\w.\-() ]+/g, "_") || "document";
 }
 
-async function readManifest(
-  orgId: string,
-  profileId: string
-): Promise<KnowledgeBaseManifest> {
-  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
-  await flattenKnowledgeBaseLayout(orgId, profileId);
-  const manifestPath = getKnowledgeBaseManifestPath(orgId, profileId);
+async function readManifestFrom(dir: string): Promise<KnowledgeBaseManifest> {
+  const manifestPath = getKnowledgeBaseManifestPath(dir);
   const raw = await readTextOrNull(manifestPath);
 
   if (!raw) {
@@ -195,7 +222,24 @@ async function readManifest(
       parsed !== null &&
       Array.isArray((parsed as KnowledgeBaseManifest).documents)
     ) {
-      return parsed as KnowledgeBaseManifest;
+      // A manifest written by an older build or edited by hand can carry
+      // `sharedDocumentIds` in any shape: normalized on read, a string would
+      // substring-match document ids and break `filter` on detach.
+      const rawShared = (parsed as KnowledgeBaseManifest).sharedDocumentIds;
+      const sharedDocumentIds = Array.isArray(rawShared)
+        ? rawShared.filter(
+            (entry): entry is string =>
+              typeof entry === "string" && entry.length > 0
+          )
+        : undefined;
+
+      return {
+        documents: (parsed as KnowledgeBaseManifest).documents,
+        sharedDocumentIds:
+          sharedDocumentIds && sharedDocumentIds.length > 0
+            ? sharedDocumentIds
+            : undefined,
+      };
     }
   } catch {
     // fall through to empty manifest
@@ -204,14 +248,31 @@ async function readManifest(
   return { documents: [] };
 }
 
-async function writeManifest(
+/**
+ * Read the references a profile holds without touching its layout. Asking
+ * whether a shared document is still in use must not write: the directory
+ * helpers rename the legacy layout and `rm -rf` its `extracted/` and `uploads/`
+ * folders, so a failed rename mid-loop would abort the delete on a half
+ * migrated tree.
+ */
+async function readProfileManifestForReference(
   orgId: string,
-  profileId: string,
+  profileId: string
+): Promise<KnowledgeBaseManifest> {
+  const dir = getKnowledgeBaseDir(orgId, profileId);
+
+  if (await pathExists(getKnowledgeBaseManifestPath(dir))) {
+    return await readManifestFrom(dir);
+  }
+
+  return await readManifestFrom(legacyKnowledgeBaseDir(orgId, profileId));
+}
+
+async function writeManifestTo(
+  dir: string,
   manifest: KnowledgeBaseManifest
 ): Promise<void> {
-  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
-  await flattenKnowledgeBaseLayout(orgId, profileId);
-  const manifestPath = getKnowledgeBaseManifestPath(orgId, profileId);
+  const manifestPath = getKnowledgeBaseManifestPath(dir);
   const tempPath = `${manifestPath}.tmp`;
   const content = `${JSON.stringify(manifest, null, 2)}\n`;
 
@@ -219,30 +280,62 @@ async function writeManifest(
   await rename(tempPath, manifestPath);
 }
 
+function sortByUploadedAt(
+  documents: KnowledgeBaseDocument[]
+): KnowledgeBaseDocument[] {
+  return [...documents].sort((left, right) =>
+    right.uploadedAt.localeCompare(left.uploadedAt)
+  );
+}
+
 export async function ensureKnowledgeBaseDirs(
   orgId: string,
   profileId: string
 ): Promise<void> {
-  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
-  await flattenKnowledgeBaseLayout(orgId, profileId);
-  await ensureDir(getKnowledgeBaseDir(orgId, profileId));
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  await ensureDir(dir);
 }
 
 export async function listKnowledgeBaseDocuments(
   orgId: string,
   profileId: string
 ): Promise<KnowledgeBaseDocument[]> {
-  const manifest = await readManifest(orgId, profileId);
-  return [...manifest.documents].sort((left, right) =>
-    right.uploadedAt.localeCompare(left.uploadedAt)
-  );
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
+  return sortByUploadedAt(manifest.documents);
 }
 
-export async function uploadKnowledgeBaseDocument(
+export async function listOrganizationKnowledgeBaseDocuments(
+  orgId: string
+): Promise<KnowledgeBaseDocument[]> {
+  const manifest = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
+  return sortByUploadedAt(manifest.documents);
+}
+
+/**
+ * Refuse to drop an organization document while any profile still references
+ * it, so an attachment can never point at a missing file.
+ */
+async function guardSharedDocumentRemoval(
   orgId: string,
-  profileId: string,
+  documentId: string,
+  knownProfileIds?: readonly string[]
+): Promise<void> {
+  const profileIds = await findProfilesReferencingSharedDocument(
+    orgId,
+    documentId,
+    knownProfileIds
+  );
+  if (profileIds.length > 0) {
+    throw new KnowledgeBaseDocumentInUseError(documentId, profileIds);
+  }
+}
+
+async function uploadDocumentTo(
+  dir: string,
   attachment: DocumentAttachment,
-  onDuplicate: KnowledgeBaseDuplicateAction = "error"
+  onDuplicate: KnowledgeBaseDuplicateAction,
+  guardRemoval?: (documentId: string) => Promise<void>
 ): Promise<UploadKnowledgeBaseDocumentResult> {
   const filename = attachment.filename.trim();
 
@@ -267,18 +360,18 @@ export async function uploadKnowledgeBaseDocument(
     throw new Error("Document data must not be empty.");
   }
 
-  if (bytes.length > MAX_DOCUMENT_BYTES) {
+  if (bytes.length > MAX_KNOWLEDGE_DOCUMENT_BYTES) {
     throw new Error(
-      `Document must be at most ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.`
+      `Document must be at most ${MAX_KNOWLEDGE_DOCUMENT_BYTES / (1024 * 1024)} MB.`
     );
   }
 
-  await ensureKnowledgeBaseDirs(orgId, profileId);
+  await ensureDir(dir);
 
   const contentHash = createHash("sha256").update(bytes).digest("hex");
   let outcome: KnowledgeBaseUploadOutcome = "created";
 
-  const existingManifest = await readManifest(orgId, profileId);
+  const existingManifest = await readManifestFrom(dir);
   const duplicate = findDuplicateDocument(existingManifest.documents, {
     contentHash,
     filename,
@@ -297,10 +390,10 @@ export async function uploadKnowledgeBaseDocument(
       );
     }
 
-    const removed = await deleteKnowledgeBaseDocument(
-      orgId,
-      profileId,
-      duplicate.document.id
+    const removed = await deleteDocumentFrom(
+      dir,
+      duplicate.document.id,
+      guardRemoval
     );
     if (!removed) {
       throw new Error("Failed to replace existing knowledge base document.");
@@ -312,8 +405,7 @@ export async function uploadKnowledgeBaseDocument(
   const uploadedAt = new Date().toISOString();
   const safeFilename = sanitizeFilename(filename);
   const originalPath = getKnowledgeBaseStoredDocumentPath(
-    orgId,
-    profileId,
+    dir,
     documentId,
     safeFilename
   );
@@ -336,7 +428,7 @@ export async function uploadKnowledgeBaseDocument(
       uploadedAt,
     });
     await writeTextFile(
-      getKnowledgeBaseExtractedPath(orgId, profileId, documentId),
+      getKnowledgeBaseExtractedPath(dir, documentId),
       `${header}${body}\n`
     );
   } catch (extractError) {
@@ -358,19 +450,82 @@ export async function uploadKnowledgeBaseDocument(
     ...(error ? { error } : {}),
   };
 
-  const manifest = await readManifest(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
   manifest.documents.push(document);
-  await writeManifest(orgId, profileId, manifest);
+  await writeManifestTo(dir, manifest);
 
   return { document, outcome };
 }
 
-export async function deleteKnowledgeBaseDocument(
+export async function uploadKnowledgeBaseDocument(
   orgId: string,
   profileId: string,
-  documentId: string
+  attachment: DocumentAttachment,
+  onDuplicate: KnowledgeBaseDuplicateAction = "error"
+): Promise<UploadKnowledgeBaseDocumentResult> {
+  return uploadDocumentTo(
+    await profileKnowledgeBaseDir(orgId, profileId),
+    attachment,
+    onDuplicate
+  );
+}
+
+export async function uploadOrganizationKnowledgeBaseDocument(
+  orgId: string,
+  attachment: DocumentAttachment,
+  onDuplicate: KnowledgeBaseDuplicateAction = "error",
+  knownProfileIds?: readonly string[]
+): Promise<UploadKnowledgeBaseDocumentResult> {
+  return await uploadDocumentTo(
+    await orgKnowledgeBaseDir(orgId),
+    attachment,
+    onDuplicate,
+    (documentId) =>
+      guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
+  );
+}
+
+/**
+ * Profiles that still reference a shared document. `knownProfileIds` comes from
+ * the profile table so a leftover directory whose profile row is gone can never
+ * block the delete: the endpoint used to answer `409` with a `profileIds` entry
+ * that `listProfiles` does not return, leaving no way to detach it.
+ */
+export async function findProfilesReferencingSharedDocument(
+  orgId: string,
+  documentId: string,
+  knownProfileIds?: readonly string[]
+): Promise<string[]> {
+  const candidates = knownProfileIds
+    ? [...knownProfileIds]
+    : await listProfileIdsOnDisk(orgId);
+  const profileIds: string[] = [];
+  for (const profileId of candidates) {
+    const manifest = await readProfileManifestForReference(orgId, profileId);
+    if (manifest.sharedDocumentIds?.includes(documentId)) {
+      profileIds.push(profileId);
+    }
+  }
+  return profileIds.sort();
+}
+
+async function listProfileIdsOnDisk(orgId: string): Promise<string[]> {
+  const profilesDir = join(getOrgConfigDir(orgId), "profiles");
+  if (!(await pathExists(profilesDir))) {
+    return [];
+  }
+  const entries = await readdir(profilesDir, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+}
+
+async function deleteDocumentFrom(
+  dir: string,
+  documentId: string,
+  guardRemoval?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
-  const manifest = await readManifest(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
   const index = manifest.documents.findIndex(
     (document) => document.id === documentId
   );
@@ -379,21 +534,20 @@ export async function deleteKnowledgeBaseDocument(
     return false;
   }
 
+  if (guardRemoval) {
+    await guardRemoval(documentId);
+  }
+
   const document = manifest.documents[index]!;
   manifest.documents.splice(index, 1);
-  await writeManifest(orgId, profileId, manifest);
+  await writeManifestTo(dir, manifest);
 
   const storedPath = getKnowledgeBaseStoredDocumentPath(
-    orgId,
-    profileId,
+    dir,
     documentId,
     document.filename
   );
-  const extractedPath = getKnowledgeBaseExtractedPath(
-    orgId,
-    profileId,
-    documentId
-  );
+  const extractedPath = getKnowledgeBaseExtractedPath(dir, documentId);
 
   if (await pathExists(storedPath)) {
     await removeFile(storedPath);
@@ -403,6 +557,68 @@ export async function deleteKnowledgeBaseDocument(
     await removeFile(extractedPath);
   }
 
+  return true;
+}
+
+export async function deleteKnowledgeBaseDocument(
+  orgId: string,
+  profileId: string,
+  documentId: string
+): Promise<boolean> {
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  return deleteDocumentFrom(dir, documentId);
+}
+
+export async function deleteOrganizationKnowledgeBaseDocument(
+  orgId: string,
+  documentId: string,
+  knownProfileIds?: readonly string[]
+): Promise<boolean> {
+  const dir = await orgKnowledgeBaseDir(orgId);
+  return await deleteDocumentFrom(dir, documentId, (candidate) =>
+    guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
+  );
+}
+
+export async function getProfileSharedDocumentIds(
+  orgId: string,
+  profileId: string
+): Promise<string[]> {
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
+  return [...new Set(manifest.sharedDocumentIds ?? [])];
+}
+
+export async function attachSharedKnowledgeBaseDocument(
+  orgId: string,
+  profileId: string,
+  documentId: string
+): Promise<void> {
+  const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
+  if (!shared.documents.some((document) => document.id === documentId)) {
+    throw new Error("Shared knowledge base document not found.");
+  }
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
+  manifest.sharedDocumentIds = [
+    ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
+  ];
+  await writeManifestTo(dir, manifest);
+}
+
+export async function detachSharedKnowledgeBaseDocument(
+  orgId: string,
+  profileId: string,
+  documentId: string
+): Promise<boolean> {
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
+  const ids = manifest.sharedDocumentIds ?? [];
+  if (!ids.includes(documentId)) {
+    return false;
+  }
+  manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
+  await writeManifestTo(dir, manifest);
   return true;
 }
 
@@ -424,13 +640,12 @@ function stripExtractedTextHeader(text: string): string {
   return text;
 }
 
-export async function readKnowledgeBaseDocumentContent(
-  orgId: string,
-  profileId: string,
+async function readDocumentContentFrom(
+  dir: string,
   documentId: string,
-  options: { render?: "text" } = {}
+  options: { render?: "text" }
 ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
-  const manifest = await readManifest(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
   const document = manifest.documents.find((entry) => entry.id === documentId);
 
   if (!document) {
@@ -438,8 +653,7 @@ export async function readKnowledgeBaseDocumentContent(
   }
 
   const storedPath = getKnowledgeBaseStoredDocumentPath(
-    orgId,
-    profileId,
+    dir,
     documentId,
     document.filename
   );
@@ -458,11 +672,7 @@ export async function readKnowledgeBaseDocumentContent(
       };
     }
 
-    const extractedPath = getKnowledgeBaseExtractedPath(
-      orgId,
-      profileId,
-      documentId
-    );
+    const extractedPath = getKnowledgeBaseExtractedPath(dir, documentId);
 
     if (await pathExists(extractedPath)) {
       const raw = (await readBytes(extractedPath)).toString("utf8");
@@ -486,4 +696,23 @@ export async function readKnowledgeBaseDocumentContent(
     contentType: document.mediaType,
     filename: document.filename,
   };
+}
+
+export async function readKnowledgeBaseDocumentContent(
+  orgId: string,
+  profileId: string,
+  documentId: string,
+  options: { render?: "text" } = {}
+): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  return readDocumentContentFrom(dir, documentId, options);
+}
+
+export async function readOrganizationKnowledgeBaseDocumentContent(
+  orgId: string,
+  documentId: string,
+  options: { render?: "text" } = {}
+): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+  const dir = await orgKnowledgeBaseDir(orgId);
+  return readDocumentContentFrom(dir, documentId, options);
 }

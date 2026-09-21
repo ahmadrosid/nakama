@@ -116,7 +116,11 @@ export function createAnthropicProvider(
         }
 
         const usage = buildTokenUsage({
-          inputTokens: message.usage?.input_tokens,
+          cachedInputTokens: message.usage?.cache_read_input_tokens,
+          inputTokens:
+            (message.usage?.input_tokens ?? 0) +
+            (message.usage?.cache_read_input_tokens ?? 0) +
+            (message.usage?.cache_creation_input_tokens ?? 0),
           outputTokens: message.usage?.output_tokens,
         });
 

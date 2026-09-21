@@ -25,10 +25,7 @@ export function ArtifactMarkdownToc({
   }
 
   return (
-    <details
-      className="group rounded-lg border border-border bg-muted/40 px-3 py-2"
-      open
-    >
+    <details className="group rounded-lg border border-border bg-muted/40 px-3 py-2">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-muted-foreground text-xs [&::-webkit-details-marker]:hidden">
         <ArrowDown01Icon
           aria-hidden

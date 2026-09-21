@@ -9,6 +9,7 @@ import {
   resolveBashSandboxImage,
   resolveBashSandboxNetwork,
 } from "./bash-config";
+import { createBoundedOutput } from "./bash-microsandbox-runtime";
 import { buildBashSandboxEnv } from "./bash-sandbox-env";
 import {
   type BashSandboxEnsureArgs,
@@ -412,5 +413,93 @@ describe("bash microsandbox path with fake runtime", () => {
         { backend: "microsandbox", sandboxManager: manager, workspaceRoot }
       )
     ).rejects.toBeInstanceOf(PathGuardError);
+  });
+});
+
+describe("profile sandbox concurrency and output bounds", () => {
+  const runArgs = {
+    command: "echo hi",
+    env: {},
+    hostCwd: "/w",
+    hostWorkspace: "/w",
+    image: "alpine",
+    network: "off" as const,
+    orgId: "org_a",
+    profileId: "profile_a",
+    timeoutMs: 1000,
+  };
+
+  test("two overlapping first runs for one profile ensure once", async () => {
+    let ensures = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runtime: BashSandboxRuntime = {
+      async ensure() {
+        ensures += 1;
+        await gate;
+      },
+      exec(args: BashSandboxExecArgs) {
+        return Promise.resolve({
+          exitCode: 0,
+          stderr: "",
+          stdout: `ran:${args.name}`,
+          timedOut: false,
+        });
+      },
+    };
+    const manager = new ProfileSandboxManager(runtime);
+
+    const both = Promise.all([
+      manager.run(runArgs),
+      manager.run({ ...runArgs, command: "echo two" }),
+    ]);
+    release();
+    const results = await both;
+
+    // Both callers used to miss the map and ensure, and the builder replaces,
+    // so the first exec ran in a microVM the second had already torn down.
+    expect(ensures).toBe(1);
+    expect(results).toHaveLength(2);
+  });
+
+  test("a rejected ensure is not cached, so the next call retries", async () => {
+    let ensures = 0;
+    const runtime: BashSandboxRuntime = {
+      ensure() {
+        ensures += 1;
+        return ensures === 1
+          ? Promise.reject(new Error("msb unavailable"))
+          : Promise.resolve();
+      },
+      exec() {
+        return Promise.resolve({
+          exitCode: 0,
+          stderr: "",
+          stdout: "ok",
+          timedOut: false,
+        });
+      },
+    };
+    const manager = new ProfileSandboxManager(runtime);
+
+    await expect(manager.run(runArgs)).rejects.toThrow("msb unavailable");
+    // Holding the in-flight promise would replay that rejection forever.
+    await expect(manager.run(runArgs)).resolves.toMatchObject({ exitCode: 0 });
+    expect(ensures).toBe(2);
+  });
+
+  test("bounded output stops growing and keeps the truncation marker", () => {
+    const out = createBoundedOutput(10);
+    out.append("12345");
+    expect(out.read()).toBe("12345");
+
+    out.append("678901234567890");
+    expect(out.read()).toBe("1234567890\n...[truncated]");
+
+    // Past the cap nothing more is retained, which is the whole point.
+    out.append("and more");
+    expect(out.read()).toBe("1234567890\n...[truncated]");
   });
 });

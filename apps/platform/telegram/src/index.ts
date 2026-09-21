@@ -36,8 +36,8 @@ let spawnedChild: Bun.Subprocess | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 const started: StartedIdentity[] = [];
 
-registerCleanupHandlers(() => {
-  void stopAll();
+registerCleanupHandlers(async () => {
+  await stopAll();
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -49,7 +49,9 @@ registerCleanupHandlers(() => {
 
 try {
   const identities = await loadTelegramIdentities();
-  const { serverUrl, spawnedChild: child } = await ensureServerRunning();
+  const { serverUrl, spawnedChild: child } = await ensureServerRunning({
+    spawn: false,
+  });
   spawnedChild = child;
 
   const authToken =
@@ -85,7 +87,7 @@ try {
     const bot = await startIdentity(config, serverUrl, authToken);
 
     if (bot) {
-      running.push(bot);
+      running.push(bot.running);
     }
   }
 
@@ -129,9 +131,11 @@ async function startIdentity(
   config: TelegramBridgeConfig,
   serverUrl: string,
   authToken: string | undefined
-): Promise<Promise<void> | null> {
+): Promise<{ running: Promise<void> } | null> {
   const label = config.orgId ? `org ${config.orgId}` : "install-wide config";
-  const heartbeat = createTelegramWorkerHeartbeat(config.orgId);
+  const heartbeat = createTelegramWorkerHeartbeat(
+    config.owner ?? config.orgId ?? null
+  );
   const existing = await heartbeat.read();
 
   if (existing && existing.pid !== process.pid && isHeartbeatAlive(existing)) {
@@ -141,11 +145,13 @@ async function startIdentity(
     return null;
   }
 
-  const configDir = getTelegramConfigDir(config.orgId);
+  await heartbeat.acquire();
+  const configDir = getTelegramConfigDir(config.owner ?? config.orgId ?? null);
   const client = new NakamaClient({
     authToken,
     baseUrl: serverUrl,
     clientOrigin: resolveWebPublicUrl(),
+    orgId: config.orgId,
   });
 
   const sessionStore = new ChannelSessionStore(
@@ -156,7 +162,7 @@ async function startIdentity(
   const orgStore = new ChannelOrgStore(join(configDir, "org-selection.json"));
   await orgStore.load();
 
-  const authStore = new TelegramAuthStore(config.orgId);
+  const authStore = new TelegramAuthStore(config.owner ?? config.orgId ?? null);
   await authStore.reload();
 
   const bot = await createBot(config, {
@@ -182,11 +188,13 @@ async function startIdentity(
     `${label}: profile ${config.profileId} · paired ${authConfig?.pairedUserIds.length ?? 0} · pending handshake ${authConfig?.handshakeCode ? "yes" : "no"}`
   );
 
-  return bot.start({
-    onStart: (info) => {
-      console.log(`Bot @${info.username} is listening for ${label}.`);
-    },
-  });
+  return {
+    running: bot.start({
+      onStart: (info) => {
+        console.log(`Bot @${info.username} is listening for ${label}.`);
+      },
+    }),
+  };
 }
 
 async function stopAll(): Promise<void> {
@@ -203,10 +211,10 @@ async function stopAll(): Promise<void> {
   );
 }
 
-function registerCleanupHandlers(cleanup: () => void): void {
+function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-    process.on(signal, () => {
-      cleanup();
+    process.on(signal, async () => {
+      await cleanup();
       process.exit(0);
     });
   }

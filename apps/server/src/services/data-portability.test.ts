@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   lstat,
+  mkdir,
   mkdtemp,
   readdir,
   readFile,
@@ -35,6 +36,23 @@ afterEach(async () => {
 });
 
 describe("Nakama data portability", () => {
+  test("exports plugin worker data but omits redownloadable runtime caches", async () => {
+    const worker = join(rootDir, "orgs/org-1/plugins/memory/workers/server");
+    await mkdir(join(worker, "cache"), { recursive: true });
+    await mkdir(join(worker, "data"), { recursive: true });
+    await writeFile(join(worker, "cache/server"), "binary");
+    await writeFile(join(worker, "data/memory.db"), "memories");
+    const result = await createNakamaDataExport({ rootDir });
+    expect(
+      result.manifest.skipped.some((entry) => entry.path.includes("cache"))
+    ).toBe(true);
+    await restoreNakamaDataImport(result.data, { confirm: true, rootDir });
+    expect(await readFile(join(worker, "data/memory.db"), "utf8")).toBe(
+      "memories"
+    );
+    expect(await Bun.file(join(worker, "cache/server")).exists()).toBe(false);
+  });
+
   test("exports config root content with a manifest", async () => {
     await writeFile(join(rootDir, "config.ini"), "provider=openai");
     await writeFile(join(rootDir, "nakama.db"), "sqlite");

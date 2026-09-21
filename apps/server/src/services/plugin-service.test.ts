@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { getPluginReleaseDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
@@ -87,10 +95,125 @@ describe("PluginService", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
+  test("installs the bundled Google Meet plugin and executes its isolated action", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const workers: string[] = [];
+    const service = new PluginService(db, configDir, {
+      officialPackagesDir: resolve(
+        import.meta.dir,
+        "../../../../packages/plugins"
+      ),
+      workerManager: {
+        async registerPluginWorkers(registration, start) {
+          expect(start).toBe(true);
+          workers.push(...registration.workers.map((worker) => worker.key));
+        },
+        async unregisterPluginWorkers() {},
+      },
+    });
+    const actor = { id: "admin", role: "admin" as const };
+    const installed = await service.installOfficialPlugin(
+      "org-meet",
+      "google-meet",
+      actor
+    );
+    expect(installed.lifecycleState).toBe("enabled");
+    expect(workers).toContain("meet");
+    const result = await service.invokePluginAction({
+      access: "ui",
+      actionKey: "meetings",
+      actor,
+      input: {},
+      orgId: "org-meet",
+      pluginId: "google-meet",
+    });
+    expect(result.result).toMatchObject({
+      authenticated: false,
+      configured: false,
+      meetings: [],
+      worker: { state: "stopped" },
+    });
+    const release = getPluginReleaseDir("google-meet", "0.1.0", configDir);
+    // Import the bundled worker from the installed release, outside package dependencies.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        "await import(process.argv[1])",
+        join(release, "workers/meet.js"),
+      ],
+      { cwd: configDir, stderr: "pipe", stdout: "pipe" }
+    );
+    const errors = await new Response(child.stderr).text();
+    expect(await child.exited, errors).toBe(0);
+  });
+
+  test("installs rebuilt Google Meet bytes without replacing another org's release", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const officialPackagesDir = join(configDir, "official");
+    await cp(
+      resolve(import.meta.dir, "../../../../packages/plugins/google-meet"),
+      join(officialPackagesDir, "google-meet"),
+      { recursive: true }
+    );
+    const service = new PluginService(db, configDir, {
+      officialPackagesDir,
+      workerManager: {
+        async registerPluginWorkers() {},
+        async unregisterPluginWorkers() {},
+      },
+    });
+    const actor = { id: "admin", role: "admin" as const };
+    const first = await service.installOfficialPlugin(
+      "org-a",
+      "google-meet",
+      actor
+    );
+    const originalPath = join(
+      getPluginReleaseDir("google-meet", first.selectedVersion!, configDir),
+      "ui/app.js"
+    );
+    const original = await readFile(originalPath, "utf8");
+    await appendFile(
+      join(officialPackagesDir, "google-meet/ui/app.js"),
+      "\n// rebuilt\n"
+    );
+
+    const second = await service.installOfficialPlugin(
+      "org-b",
+      "google-meet",
+      actor
+    );
+    expect(second.lifecycleState).toBe("enabled");
+    expect(second.selectedVersion).not.toBe(first.selectedVersion);
+    expect(
+      await readFile(
+        join(
+          getPluginReleaseDir(
+            "google-meet",
+            second.selectedVersion!,
+            configDir
+          ),
+          "ui/app.js"
+        ),
+        "utf8"
+      )
+    ).toBe(`${original}\n// rebuilt\n`);
+    expect(await readFile(originalPath, "utf8")).toBe(original);
+    expect(await db.getOrgPlugin("org-a", "google-meet")).toEqual(first);
+    const repeated = await service.installOfficialPlugin(
+      "org-b",
+      "google-meet",
+      actor
+    );
+    expect(repeated.selectedVersion).toBe(second.selectedVersion);
+  });
+
   test("previews and installs a npm package without running top-level side-effect code", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
-    const archive = validBundle();
+    const icon = "https://example.com/notes.svg";
+    const archive = validBundle({ icon });
 
     const preview = await service.previewPluginPackage(archive);
     expect(preview.digest).toBe(approvedPluginPackage(archive).expectedDigest);
@@ -118,6 +241,10 @@ describe("PluginService", () => {
 
     const stored = await db.getPluginRelease("notes", "1.0.0");
     expect(stored?.digest).toBe(preview.digest);
+    expect(stored?.manifest.icon).toBe(icon);
+    expect((await service.getOrgPluginDetail("org-a", "notes"))?.icon).toBe(
+      icon
+    );
   });
 
   test("rejects traversal, encoded paths, symlinks, duplicates, and oversized expansion before writing outside staging", async () => {

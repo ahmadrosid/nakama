@@ -11,12 +11,18 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
-import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
-import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import {
+  KnowledgeTabPanel,
+  SharedKnowledgeDocuments,
+} from "@/components/soul-tools/knowledge-tab-panel";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
+  useAttachSharedKnowledgeBaseDocumentMutation,
   useDeleteKnowledgeBaseDocumentMutation,
+  useDetachSharedKnowledgeBaseDocumentMutation,
   useKnowledgeBaseQuery,
+  useOrganizationKnowledgeBaseQuery,
   useUploadKnowledgeBaseDocumentMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
@@ -33,6 +39,7 @@ type DuplicatePrompt = {
 };
 
 export function KnowledgeTab({ profileId }: { profileId: string | null }) {
+  const { activeOrg } = useAuth();
   const { data: profiles = [], error: profilesError } = useProfilesQuery();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -40,8 +47,12 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     isLoading: knowledgeLoading,
     error: knowledgeError,
   } = useKnowledgeBaseQuery(profileId);
+  const { data: organizationKnowledgeBase = null } =
+    useOrganizationKnowledgeBaseQuery(activeOrg?.id ?? null);
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
+  const attachSharedMutation = useAttachSharedKnowledgeBaseDocumentMutation();
   const deleteMutation = useDeleteKnowledgeBaseDocumentMutation();
+  const detachSharedMutation = useDetachSharedKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<KnowledgeBaseDocument | null>(null);
@@ -51,14 +62,15 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const selectedProfile =
     profiles.find((profile) => profile.id === profileId) ?? null;
   const documents = knowledgeBase?.documents ?? [];
-  const sources = knowledgeBase?.sources ?? [];
   const readyCount = documents.filter(
     (document) => document.status === "ready"
   ).length;
   const loading = knowledgeLoading && !knowledgeBase;
   const busy =
     uploadMutation.isPending ||
+    attachSharedMutation.isPending ||
     deleteMutation.isPending ||
+    detachSharedMutation.isPending ||
     duplicatePrompt !== null;
 
   useEffect(() => {
@@ -146,6 +158,19 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     }
   }
 
+  async function handleAttachSharedDocument(documentId: string) {
+    if (!profileId) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await attachSharedMutation.mutateAsync({ documentId, profileId });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleDelete() {
     if (!(profileId && deleteTarget)) {
       return;
@@ -154,10 +179,17 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     setError(null);
 
     try {
-      await deleteMutation.mutateAsync({
-        documentId: deleteTarget.id,
-        profileId,
-      });
+      if (deleteTarget.scope === "organization") {
+        await detachSharedMutation.mutateAsync({
+          documentId: deleteTarget.id,
+          profileId,
+        });
+      } else {
+        await deleteMutation.mutateAsync({
+          documentId: deleteTarget.id,
+          profileId,
+        });
+      }
       setDeleteTarget(null);
     } catch (err) {
       setError(formatError(err));
@@ -182,13 +214,20 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   }
 
   return (
-    <ChatAttachmentPanelProvider presentation="overlay">
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+    <>
+      <div className="min-w-0">
         {error ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
             {error}
           </p>
         ) : null}
+
+        <SharedKnowledgeDocuments
+          availableDocuments={organizationKnowledgeBase?.documents}
+          busy={busy}
+          documents={documents}
+          onAttach={handleAttachSharedDocument}
+        />
 
         <KnowledgeTabPanel
           busy={busy}
@@ -198,43 +237,17 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           onUpload={(files) => void handleUpload(files)}
           profileId={profileId}
           readyCount={readyCount}
-          sources={sources}
           uploadPending={uploadMutation.isPending}
         />
       </div>
 
-      <Dialog
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        open={deleteTarget !== null}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete document</DialogTitle>
-            <DialogDescription>
-              Remove {deleteTarget?.filename} from{" "}
-              {selectedProfile?.name ?? "this profile"}?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => setDeleteTarget(null)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={deleteMutation.isPending}
-              onClick={() => void handleDelete()}
-              type="button"
-              variant="destructive"
-            >
-              {deleteMutation.isPending ? <Spinner className="size-4" /> : null}
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteKnowledgeDocumentDialog
+        busy={deleteMutation.isPending || detachSharedMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => void handleDelete()}
+        profileName={selectedProfile?.name ?? "this profile"}
+        target={deleteTarget}
+      />
 
       <Dialog
         onOpenChange={(open) => {
@@ -275,6 +288,53 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </ChatAttachmentPanelProvider>
+    </>
+  );
+}
+
+function DeleteKnowledgeDocumentDialog({
+  busy,
+  onClose,
+  onConfirm,
+  profileName,
+  target,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  profileName: string;
+  target: KnowledgeBaseDocument | null;
+}) {
+  return (
+    <Dialog onOpenChange={(open) => !open && onClose()} open={target !== null}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {target?.scope === "organization"
+              ? "Detach shared document"
+              : "Delete document"}
+          </DialogTitle>
+          <DialogDescription>
+            {target?.scope === "organization"
+              ? `Detach ${target.filename} from ${profileName}? The organization document will remain available to other profiles.`
+              : `Remove ${target?.filename} from ${profileName}?`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button onClick={() => onClose()} type="button" variant="outline">
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {busy ? <Spinner className="size-4" /> : null}
+            {target?.scope === "organization" ? "Detach" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

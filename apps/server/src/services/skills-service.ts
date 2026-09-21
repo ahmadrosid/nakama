@@ -1,10 +1,26 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type {
   CreateSkillRequest,
   InstallSkillRequest,
   ListSkillsResponse,
   PatchSkillRequest,
+  SkillFileResponse,
+  SkillFilesResponse,
   SkillResponse,
   SkillSummary,
   SkillUsageSummary,
@@ -27,7 +43,10 @@ import {
   discoverSkillDirectory,
   discoverSkills,
   extractExplicitSkillName,
-  fetchGitHubSkillMarkdown,
+  fetchGitHubSkillBundle,
+  type GitHubSkillBundle,
+  getProfileSoulDir,
+  guardFilePath,
   isGlobalSkillSourcePath,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
@@ -39,10 +58,14 @@ import {
   patchSkillFile,
   pickPreferredSkillSourcePath,
   removeProfileSkillSupportingFile,
+  resolveProfileSkillDirectory,
+  resolveProfileSkillSupportingFilePath,
   SKILL_FILE_NAME,
   writeProfileSkillSupportingFile,
   writeRawProfileSkillMarkdown,
 } from "@nakama/core";
+import { inferArtifactMimeType } from "@nakama/core/artifact-mime";
+import { pathExists } from "@nakama/core/fs";
 import type {
   DatabaseAdapter,
   SkillCreatedBy,
@@ -69,11 +92,20 @@ function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
 
 export class SkillsService {
   private pluginService: PluginService | null = null;
+  private readonly profileSkillSyncs = new Map<string, Promise<unknown>>();
 
   constructor(private readonly db: DatabaseAdapter) {}
 
   setPluginService(service: PluginService | null): void {
+    this.pluginService?.setProfileSkillSync(null);
     this.pluginService = service;
+    service?.setProfileSkillSync(async (orgId) => {
+      for (const profile of await this.db.listProfiles()) {
+        if (profile.orgId === orgId) {
+          await this.materializeAssignedPluginSkills(orgId, profile.id);
+        }
+      }
+    });
   }
 
   async syncDiscoveredSkills(): Promise<SyncSkillsResponse> {
@@ -108,13 +140,13 @@ export class SkillsService {
     }
   }
 
-  async listSkills(): Promise<ListSkillsResponse> {
+  async listSkills(orgId?: string): Promise<ListSkillsResponse> {
     await this.syncDiscoveredSkills();
 
     const profiles = await this.db.listProfiles();
 
     for (const profile of profiles) {
-      if (!profile.orgId) {
+      if (!profile.orgId || (orgId && profile.orgId !== orgId)) {
         continue;
       }
 
@@ -122,7 +154,11 @@ export class SkillsService {
     }
 
     const skills = await this.db.listSkills();
-    return { skills: skills.map(toSkillSummary) };
+    return {
+      skills: skills
+        .filter((skill) => !(orgId && skill.orgId) || skill.orgId === orgId)
+        .map(toSkillSummary),
+    };
   }
 
   async createSkill(
@@ -268,7 +304,8 @@ export class SkillsService {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
-    const content = await fetchGitHubSkillMarkdown(url);
+    const bundle = await fetchGitHubSkillBundle(url);
+    const { content } = bundle;
 
     try {
       parseSkillMarkdown(content, url);
@@ -286,7 +323,7 @@ export class SkillsService {
         orgId,
         profileId,
         content,
-        { createdBy: "human" }
+        { createdBy: "human", supportingFiles: bundle.files }
       );
       return { skill: installed.skill };
     } catch (error) {
@@ -318,7 +355,11 @@ export class SkillsService {
     orgId: string,
     profileId: string,
     content: string,
-    options?: { createdBy?: SkillCreatedBy; changeMeta?: ProfileChangeMeta }
+    options?: {
+      createdBy?: SkillCreatedBy;
+      changeMeta?: ProfileChangeMeta;
+      supportingFiles?: GitHubSkillBundle["files"];
+    }
   ): Promise<SkillResponse & { created: boolean }> {
     const { name } = parseRawProfileSkillContent(content, orgId, profileId);
     const createdBy = options?.createdBy ?? "agent";
@@ -354,12 +395,73 @@ export class SkillsService {
       }
     }
 
-    const written = await writeRawProfileSkillMarkdown({
-      allowExisting: true,
-      content,
-      orgId,
-      profileId,
-    });
+    // A reinstall may repair missing files, but must never overwrite local edits.
+    if (options?.supportingFiles) {
+      const directory = resolveProfileSkillDirectory(orgId, profileId, name);
+      try {
+        const existing = await readFile(
+          path.join(directory, SKILL_FILE_NAME),
+          "utf8"
+        );
+        if (existing.trimEnd() !== content.trimEnd()) {
+          throw new Error(
+            `Skill "${name}" already exists with different content.`
+          );
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+    }
+    const missingFiles: GitHubSkillBundle["files"] = [];
+    for (const file of options?.supportingFiles ?? []) {
+      const { absolutePath } = resolveProfileSkillSupportingFilePath(
+        orgId,
+        profileId,
+        name,
+        file.path
+      );
+      try {
+        const existing = await readFile(absolutePath);
+        if (!existing.equals(Buffer.from(file.content))) {
+          throw new Error(
+            `Supporting file "${file.path}" already exists with different content.`
+          );
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+        missingFiles.push(file);
+      }
+    }
+
+    // Publish SKILL.md last. If a disk write fails, remove only files this call added.
+    const addedPaths: string[] = [];
+    let written: Awaited<ReturnType<typeof writeRawProfileSkillMarkdown>>;
+    try {
+      for (const file of missingFiles) {
+        const added = await writeProfileSkillSupportingFile({
+          content: file.content,
+          name,
+          orgId,
+          overwrite: false,
+          profileId,
+          relativePath: file.path,
+        });
+        addedPaths.push(added.absolutePath);
+      }
+      written = await writeRawProfileSkillMarkdown({
+        allowExisting: true,
+        content,
+        orgId,
+        profileId,
+      });
+    } catch (error) {
+      await Promise.all(addedPaths.map((file) => unlink(file)));
+      throw error;
+    }
 
     // written.directory came from resolveProfileSkillDirectory (containment already
     // enforced); syncSkillRecordFromDirectory keys off that same path.
@@ -646,8 +748,11 @@ export class SkillsService {
     }
   }
 
-  async getSkill(skillId: string): Promise<SkillResponse> {
+  async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
     const record = await this.requireSkill(skillId);
+    if (orgId && record.orgId && record.orgId !== orgId) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
     const directory = await this.resolveSkillDirectory(record);
     const discovered = directory
       ? await discoverSkillDirectory(directory)
@@ -663,17 +768,164 @@ export class SkillsService {
     };
   }
 
+  private async skillFilesRoot(
+    orgId: string,
+    skillId: string
+  ): Promise<string> {
+    const record = await this.db.getSkill(skillId);
+    if (!record || (record.orgId && record.orgId !== orgId)) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
+    const directory = await this.resolveSkillDirectory(record);
+    if (!directory) {
+      throw new NakamaApiError("Skill files are unavailable.", 404);
+    }
+    try {
+      return await realpath(directory);
+    } catch {
+      throw new NakamaApiError("Skill files are unavailable.", 404);
+    }
+  }
+
+  async listSkillFiles(
+    orgId: string,
+    skillId: string
+  ): Promise<SkillFilesResponse> {
+    const root = await this.skillFilesRoot(orgId, skillId);
+    const files: SkillFilesResponse["files"] = [];
+    let truncated = false;
+    async function visit(
+      directory: string,
+      prefix: string,
+      depth: number
+    ): Promise<void> {
+      if (depth > 12) {
+        truncated = true;
+        return;
+      }
+      const entries = await readdir(directory, { withFileTypes: true });
+      entries.sort(
+        (a, b) =>
+          Number(b.isDirectory()) - Number(a.isDirectory()) ||
+          a.name.localeCompare(b.name)
+      );
+      for (const entry of entries) {
+        if (
+          entry.isSymbolicLink() ||
+          !(entry.isDirectory() || entry.isFile())
+        ) {
+          continue;
+        }
+        if (files.length >= 1000) {
+          truncated = true;
+          return;
+        }
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        files.push({
+          path: relative,
+          type: entry.isDirectory() ? "directory" : "file",
+        });
+        if (entry.isDirectory()) {
+          await visit(path.join(directory, entry.name), relative, depth + 1);
+        }
+      }
+    }
+    await visit(root, "", 0);
+    return { files, truncated };
+  }
+
+  async readSkillFile(
+    orgId: string,
+    skillId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    const root = await this.skillFilesRoot(orgId, skillId);
+    if (
+      !filePath ||
+      filePath.includes("\0") ||
+      filePath.includes("\\") ||
+      path.isAbsolute(filePath) ||
+      filePath.split("/").includes("..")
+    ) {
+      throw new NakamaApiError("Invalid skill file path.", 400);
+    }
+    let target: string;
+    try {
+      target = await realpath(path.join(root, filePath));
+    } catch {
+      throw new NakamaApiError("Skill file not found.", 404);
+    }
+    if (!target.startsWith(`${root}${path.sep}`)) {
+      throw new NakamaApiError("File is outside the skill directory.", 403);
+    }
+    const handle = await open(target, "r");
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile()) {
+        throw new NakamaApiError("Select a file.", 400);
+      }
+      const maxBytes = 1024 * 1024;
+      if (stat.size > maxBytes) {
+        return {
+          content: null,
+          path: filePath,
+          unavailableReason: "Preview is limited to files up to 1 MB.",
+        };
+      }
+      const buffer = Buffer.alloc(maxBytes + 1);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if (bytesRead > maxBytes) {
+        return {
+          content: null,
+          path: filePath,
+          unavailableReason: "Preview is limited to files up to 1 MB.",
+        };
+      }
+      const bytes = buffer.subarray(0, bytesRead);
+      const mediaType = inferArtifactMimeType(filePath);
+      if (mediaType.startsWith("image/")) {
+        return {
+          content: null,
+          image: { dataBase64: bytes.toString("base64"), mediaType },
+          path: filePath,
+        };
+      }
+      try {
+        if (bytes.includes(0)) {
+          throw new Error("Binary file");
+        }
+        return {
+          content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+          path: filePath,
+        };
+      } catch {
+        return {
+          content: null,
+          path: filePath,
+          unavailableReason: "Preview is unavailable for binary files.",
+        };
+      }
+    } finally {
+      await handle.close();
+    }
+  }
+
   async composeCatalogForProfile(
     orgId: string,
     profileId: string,
-    usageContext?: SkillUsageRecordingContext
+    usageContext?: SkillUsageRecordingContext,
+    // False in a cognito session: a usage row records which skills the chat
+    // touched, which is a durable trace of what it was about.
+    recordUsage = true
   ): Promise<string> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
     const skillIds = assigned
       .map((item) => item.record.id)
       .filter((skillId): skillId is string => Boolean(skillId));
 
-    void this.recordCatalogViews(orgId, profileId, skillIds, usageContext);
+    if (recordUsage) {
+      void this.recordCatalogViews(orgId, profileId, skillIds, usageContext);
+    }
 
     return composeSkillsCatalog(assigned.map((item) => item.discovered));
   }
@@ -694,6 +946,8 @@ export class SkillsService {
     userMessage: string,
     options: {
       appendContext?: (matched: DiscoveredSkill[]) => string | Promise<string>;
+      /** False in a cognito session, for the same reason as the catalog. */
+      recordUsage?: boolean;
       usageContext?: SkillUsageRecordingContext;
     } = {}
   ): Promise<string> {
@@ -712,7 +966,9 @@ export class SkillsService {
         )
         .filter((skillId): skillId is string => Boolean(skillId));
 
-      void this.recordMatches(orgId, profileId, matchedSkillIds);
+      if (options.recordUsage !== false) {
+        void this.recordMatches(orgId, profileId, matchedSkillIds);
+      }
     }
 
     const prompt = composeMatchedSkillsPrompt(matched, {
@@ -848,7 +1104,98 @@ export class SkillsService {
     }
   }
 
+  async materializeAssignedPluginSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<void> {
+    await this.getAssignedDiscoveredSkills(orgId, profileId);
+  }
+
+  private async copyPluginSkillToProfile(
+    orgId: string,
+    profileId: string,
+    record: StoredSkillRecord
+  ): Promise<string | null> {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId || record.orgId !== orgId) {
+      return null;
+    }
+    const source = await this.resolveSkillDirectory(record);
+    if (!source) {
+      return null;
+    }
+
+    // Releases are immutable. A new release gets a new copy, and concurrent
+    // readers only see complete bundles. Nesting prevents standalone discovery.
+    const version = createHash("sha256").update(source).digest("hex");
+    const workspace = getProfileSoulDir(orgId, profileId);
+    await mkdir(workspace, { mode: 0o700, recursive: true });
+    const parent = path.join(workspace, "skills", ".plugins");
+    const directory = path.join(parent, version);
+    await guardFilePath(directory, null, undefined, { cwd: workspace });
+    await guardFilePath(
+      path.join(directory, SKILL_FILE_NAME),
+      null,
+      undefined,
+      { cwd: workspace }
+    );
+    if (await pathExists(path.join(directory, SKILL_FILE_NAME))) {
+      return directory;
+    }
+
+    await mkdir(parent, { mode: 0o700, recursive: true });
+    const staging = await mkdtemp(path.join(parent, ".copy-"));
+    try {
+      await cp(source, staging, {
+        filter: async (file) => {
+          if ((await lstat(file)).isSymbolicLink()) {
+            throw new Error(
+              "Plugin skill bundles cannot contain symbolic links."
+            );
+          }
+          return true;
+        },
+        recursive: true,
+      });
+      try {
+        await rename(staging, directory);
+      } catch (error) {
+        // Another request may have published the same immutable release.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EEXIST" && code !== "ENOTEMPTY") {
+          throw error;
+        }
+      }
+      return directory;
+    } finally {
+      await rm(staging, { force: true, recursive: true });
+    }
+  }
+
   private async getAssignedDiscoveredSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<
+    Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
+  > {
+    // Serialize copies and removals so an in-flight prompt cannot restore a
+    // revoked skill after cleanup has completed.
+    const key = JSON.stringify([orgId, profileId]);
+    const previous = this.profileSkillSyncs.get(key) ?? Promise.resolve();
+    const pending = previous
+      .catch(() => undefined)
+      .then(() => this.syncAssignedDiscoveredSkills(orgId, profileId));
+    this.profileSkillSyncs.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.profileSkillSyncs.get(key) === pending) {
+        this.profileSkillSyncs.delete(key);
+      }
+    }
+  }
+
+  private async syncAssignedDiscoveredSkills(
     orgId: string,
     profileId: string
   ): Promise<
@@ -869,7 +1216,11 @@ export class SkillsService {
 
     for (const record of assigned) {
       if (isPluginOwnedSkill(record)) {
-        const directory = await this.resolveSkillDirectory(record);
+        const directory = await this.copyPluginSkillToProfile(
+          orgId,
+          profileId,
+          record
+        );
         if (!directory) {
           continue;
         }
@@ -893,7 +1244,41 @@ export class SkillsService {
       }
     }
 
+    await this.prunePluginSkillCopies(
+      orgId,
+      profileId,
+      new Set(
+        resolved
+          .filter((item) => isPluginOwnedSkill(item.record))
+          .map((item) => item.discovered.directory)
+      )
+    );
     return resolved;
+  }
+
+  private async prunePluginSkillCopies(
+    orgId: string,
+    profileId: string,
+    retained: Set<string>
+  ): Promise<void> {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId || !this.pluginService) {
+      return;
+    }
+    const workspace = getProfileSoulDir(orgId, profileId);
+    const parent = path.join(workspace, "skills", ".plugins");
+    if (!(await pathExists(parent))) {
+      return;
+    }
+    await guardFilePath(parent, null, undefined, { cwd: workspace });
+    for (const entry of await readdir(parent)) {
+      const directory = path.join(parent, entry);
+      // Only delete host-generated release copies, never unrelated files.
+      if (/^[a-f0-9]{64}$/.test(entry) && !retained.has(directory)) {
+        await guardFilePath(directory, null, undefined, { cwd: workspace });
+        await rm(directory, { force: true, recursive: true });
+      }
+    }
   }
 
   private async resolveSkillDirectory(
@@ -1112,6 +1497,7 @@ function toSkillSummary(
     hasTool: record.hasTool,
     id: record.id,
     name: record.name,
+    orgId: record.orgId ?? null,
     pluginId: record.pluginId ?? null,
     pluginKey: record.pluginKey ?? null,
     sourcePath: record.sourcePath,

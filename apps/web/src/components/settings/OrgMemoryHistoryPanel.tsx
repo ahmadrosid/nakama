@@ -265,9 +265,10 @@ function HistoryTimelineItem({
 export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
   const { data, isLoading, error } = useOrgMemoryHistory(orgId);
   const { data: memoryData } = useOrgMemory(orgId);
-  const undoMutation = useUndoOrgMemoryChange(orgId);
   const { data: membersData } = useOrgMembers(orgId);
   const changes = data?.changes ?? [];
+  const maxEntries = data?.maxEntries ?? 50;
+  const truncated = data?.truncated === true;
   const { data: latestRevision } = useOrgMemoryHistoryRevision(
     orgId,
     changes[0]?.id ?? null
@@ -283,6 +284,44 @@ export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
     liveContent !== undefined &&
     latestRevisionContent !== undefined &&
     changes.length >= (latestRevisionIsCurrent ? 2 : 1);
+
+  return (
+    <OrgMemoryHistoryPanelContent
+      canUndo={canUndo}
+      changes={changes}
+      error={error}
+      isLoading={isLoading}
+      latestRevisionIsCurrent={latestRevisionIsCurrent}
+      maxEntries={maxEntries}
+      members={members}
+      orgId={orgId}
+      truncated={truncated}
+    />
+  );
+}
+
+function OrgMemoryHistoryPanelContent({
+  canUndo,
+  changes,
+  latestRevisionIsCurrent,
+  maxEntries,
+  members,
+  orgId,
+  truncated,
+  error,
+  isLoading,
+}: {
+  canUndo: boolean;
+  changes: OrgMemoryChangeLogEntry[];
+  latestRevisionIsCurrent: boolean;
+  maxEntries: number;
+  members: { userId: string; name?: string | null; email: string }[];
+  orgId: string;
+  truncated: boolean;
+  error: unknown;
+  isLoading: boolean;
+}) {
+  const undoMutation = useUndoOrgMemoryChange(orgId);
 
   async function handleUndo() {
     try {
@@ -312,10 +351,17 @@ export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
   return (
     <div className="min-w-0">
       <div className="flex items-center justify-between gap-3 border-border border-b px-4 py-2">
-        <p className="text-muted-foreground text-xs">
-          Timeline of every change. View snapshots or revert to an earlier
-          revision.
-        </p>
+        <div className="min-w-0 space-y-1">
+          <p className="text-muted-foreground text-xs">
+            Timeline of every change. View snapshots or revert to an earlier
+            revision.
+          </p>
+          <p className="text-muted-foreground text-xs">
+            {truncated
+              ? `Keeping the newest ${maxEntries} revisions. Older snapshots were removed.`
+              : `Keeps up to ${maxEntries} revisions.`}
+          </p>
+        </div>
         <Button
           disabled={!canUndo || undoMutation.isPending}
           onClick={() => void handleUndo()}

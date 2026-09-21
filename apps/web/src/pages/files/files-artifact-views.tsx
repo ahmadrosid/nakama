@@ -1,35 +1,28 @@
 import type { ArtifactFile } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { useState } from "react";
 import { formatError } from "@/lib/client";
 import type { FilesViewMode } from "@/lib/files-page.shared";
 import { ArtifactFolderCard } from "@/pages/files/files-artifact-folder-card";
 import type { ArtifactFolderEntry } from "@/pages/files/files-artifact-folders";
 import { ArtifactGridCard } from "@/pages/files/files-artifact-grid-card";
-import { ArtifactListView } from "@/pages/files/files-artifact-list-view";
-
-type FilesArtifactPagination = {
-  loadingMore: boolean;
-  onShowMore: () => void;
-  remainingCount: number;
-};
+import {
+  ArtifactListView,
+  FileEntriesLayout,
+} from "@/pages/files/files-artifact-list-view";
 
 function ArtifactGridSkeleton() {
   return (
     <ul
       aria-hidden
-      className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3 p-3"
+      className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-3"
     >
       {Array.from({ length: 6 }).map((_, index) => (
         <li
-          className="overflow-hidden rounded-md border border-border"
+          className="overflow-hidden rounded-xl border border-border bg-card"
           key={`artifact-grid-skeleton-${index}`}
         >
-          <div className="skeleton-shimmer aspect-[4/3] w-full" />
-          <div className="space-y-2 p-3">
-            <div className="skeleton-shimmer h-4 w-3/4 rounded" />
-            <div className="skeleton-shimmer h-3 w-1/2 rounded" />
-            <div className="skeleton-shimmer h-3 w-2/3 rounded" />
-          </div>
+          <div className="skeleton-shimmer min-h-32 w-full" />
         </li>
       ))}
     </ul>
@@ -38,7 +31,10 @@ function ArtifactGridSkeleton() {
 
 function ArtifactListSkeleton() {
   return (
-    <ul aria-hidden className="divide-y divide-border">
+    <ul
+      aria-hidden
+      className="divide-y divide-border rounded-xl border border-border bg-card"
+    >
       {Array.from({ length: 6 }).map((_, index) => (
         <li
           className="flex items-center justify-between gap-3 px-4 py-3"
@@ -65,21 +61,17 @@ function ArtifactGridView({
   profileId,
   folders,
   artifacts,
-  deletePending,
   showFullPath,
-  onDelete,
   onOpenFolder,
 }: {
   profileId: string;
   folders: ArtifactFolderEntry[];
   artifacts: ArtifactFile[];
-  deletePending: boolean;
   showFullPath: boolean;
-  onDelete: (artifact: ArtifactFile) => void;
   onOpenFolder: (prefix: string) => void;
 }) {
   return (
-    <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
+    <FileEntriesLayout viewMode="grid">
       {folders.map((folder) => (
         <ArtifactFolderCard
           folder={folder}
@@ -90,46 +82,12 @@ function ArtifactGridView({
       {artifacts.map((artifact) => (
         <ArtifactGridCard
           artifact={artifact}
-          deletePending={deletePending}
           key={artifact.filename}
-          onDelete={() => onDelete(artifact)}
           profileId={profileId}
           showFullPath={showFullPath}
         />
       ))}
-    </ul>
-  );
-}
-
-function ShowMoreArtifactsButton({
-  loadingMore,
-  onShowMore,
-  remainingCount,
-}: FilesArtifactPagination) {
-  if (remainingCount <= 0) {
-    return null;
-  }
-
-  return (
-    <div className="border-border border-t bg-muted/20 px-4 py-3 text-center">
-      <Button
-        disabled={loadingMore}
-        onClick={onShowMore}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {loadingMore ? (
-          "Loading…"
-        ) : (
-          <>
-            Show more
-            <span aria-hidden="true"> · </span>
-            <span className="tabular-nums">{remainingCount}</span> remaining
-          </>
-        )}
-      </Button>
-    </div>
+    </FileEntriesLayout>
   );
 }
 
@@ -194,17 +152,13 @@ function FilesArtifactViewsBody({
 
   if (viewMode === "grid") {
     return (
-      <div className="p-4">
-        <ArtifactGridView
-          artifacts={listingFiles}
-          deletePending={deletePending}
-          folders={folders}
-          onDelete={onDelete}
-          onOpenFolder={onOpenFolder}
-          profileId={profileId}
-          showFullPath={showFullPath}
-        />
-      </div>
+      <ArtifactGridView
+        artifacts={listingFiles}
+        folders={folders}
+        onOpenFolder={onOpenFolder}
+        profileId={profileId}
+        showFullPath={showFullPath}
+      />
     );
   }
 
@@ -221,15 +175,6 @@ function FilesArtifactViewsBody({
   );
 }
 
-function canShowArtifactPagination(
-  isLoading: boolean,
-  error: unknown,
-  artifacts: ArtifactFile[],
-  pagination: FilesArtifactPagination | null
-): pagination is FilesArtifactPagination {
-  return !(isLoading || error || artifacts.length === 0 || !pagination);
-}
-
 export function FilesArtifactViews({
   viewMode,
   isLoading,
@@ -241,7 +186,6 @@ export function FilesArtifactViews({
   showFullPath,
   profileId,
   deletePending,
-  pagination,
   onDelete,
   onOpenFolder,
 }: {
@@ -255,32 +199,44 @@ export function FilesArtifactViews({
   showFullPath: boolean;
   profileId: string;
   deletePending: boolean;
-  pagination: FilesArtifactPagination | null;
   onDelete: (artifact: ArtifactFile) => void;
   onOpenFolder: (prefix: string) => void;
 }) {
+  const [visibleCount, setVisibleCount] = useState(30);
+  const remainingCount = Math.max(
+    folders.length + listingFiles.length - visibleCount,
+    0
+  );
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card">
+    <div className="space-y-4">
       <FilesArtifactViewsBody
         artifacts={artifacts}
         deletePending={deletePending}
         emptyFilterMessage={emptyFilterMessage}
         error={error}
-        folders={folders}
+        folders={folders.slice(0, visibleCount)}
         isLoading={isLoading}
-        listingFiles={listingFiles}
+        listingFiles={listingFiles.slice(
+          0,
+          Math.max(visibleCount - folders.length, 0)
+        )}
         onDelete={onDelete}
         onOpenFolder={onOpenFolder}
         profileId={profileId}
         showFullPath={showFullPath}
         viewMode={viewMode}
       />
-      {canShowArtifactPagination(isLoading, error, artifacts, pagination) ? (
-        <ShowMoreArtifactsButton
-          loadingMore={pagination.loadingMore}
-          onShowMore={pagination.onShowMore}
-          remainingCount={pagination.remainingCount}
-        />
+      {!(isLoading || error) && remainingCount > 0 ? (
+        <div className="text-center">
+          <Button
+            onClick={() => setVisibleCount((count) => count + 30)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Show more · {remainingCount} remaining
+          </Button>
+        </div>
       ) : null}
     </div>
   );

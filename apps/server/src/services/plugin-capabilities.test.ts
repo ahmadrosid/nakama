@@ -1,13 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   derivePluginToolName,
+  discoverSkills,
   getOrgPluginDataDir,
+  getProfileSoulDir,
   loadSkillTool,
   PLUGIN_MANIFEST_API_VERSION,
+  runReadFile,
 } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
@@ -84,6 +94,7 @@ function v1Bundle(): ReturnType<typeof pluginPackage> {
   return pluginPackage({
     "actions/write.js": ACTION_JS,
     "nakama.plugin.json": JSON.stringify(manifest("1.0.0")),
+    "skills/notes/references/usage.md": "Reference instructions",
     "skills/notes/SKILL.md": SKILL_MD,
     "skills/notes/tool.js": SKILL_TOOL_JS,
   });
@@ -167,6 +178,41 @@ describe("plugin capabilities", () => {
     expect(catalog).toContain("notes");
     expect(catalog).toContain("**notes**");
 
+    const workspaceRoot = getProfileSoulDir(ORG_ID, profile.id);
+    const copyRoot = join(workspaceRoot, "skills", ".plugins");
+    const [copy] = await readdir(copyRoot);
+    const instructionPath = join(copyRoot, copy!, "SKILL.md");
+    expect(catalog).toContain(instructionPath);
+    const context = { orgId: ORG_ID, profileId: profile.id, workspaceRoot };
+    expect(
+      (await runReadFile({ path: instructionPath }, context)).content
+    ).toBe(SKILL_MD);
+    expect(
+      (
+        await runReadFile(
+          { path: join(copyRoot, copy!, "references/usage.md") },
+          context
+        )
+      ).content
+    ).toBe("Reference instructions");
+    expect(
+      (await discoverSkills({ orgId: ORG_ID, profileId: profile.id })).some(
+        (entry) => entry.directory.startsWith(copyRoot)
+      )
+    ).toBe(false);
+    await rm(join(copyRoot, copy!), { recursive: true });
+    await Promise.all([
+      skills.composeCatalogForProfile(ORG_ID, profile.id),
+      skills.composeCatalogForProfile(ORG_ID, profile.id),
+    ]);
+    expect(await readdir(copyRoot)).toEqual([copy!]);
+    expect(
+      (await runReadFile({ path: instructionPath }, context)).content
+    ).toBe(SKILL_MD);
+    expect(
+      await skills.composeCatalogForProfile("other_org", profile.id)
+    ).not.toContain("**notes**");
+
     const matched = await skills.formatMatchedSkillsForPrompt(
       ORG_ID,
       profile.id,
@@ -214,6 +260,63 @@ describe("plugin capabilities", () => {
         (item) => item.name === derivePluginToolName("notes", "write")
       )
     ).toBe(false);
+
+    await db.assignSkillToProfile(OTHER_PROFILE, skill!.id);
+    await skills.materializeAssignedPluginSkills(ORG_ID, OTHER_PROFILE);
+    const otherCopyRoot = join(
+      getProfileSoulDir(ORG_ID, OTHER_PROFILE),
+      "skills",
+      ".plugins"
+    );
+    await db.unassignSkillFromProfile(profile.id, skill!.id);
+    await skills.materializeAssignedPluginSkills(ORG_ID, profile.id);
+    expect(await readdir(copyRoot)).toEqual([]);
+    expect(await readdir(otherCopyRoot)).toEqual([copy!]);
+    await db.assignSkillToProfile(profile.id, skill!.id);
+    await skills.materializeAssignedPluginSkills(ORG_ID, profile.id);
+    const install = await db.getOrgPlugin(ORG_ID, "notes");
+    const disabled = await plugins.disableOrgPlugin(
+      ORG_ID,
+      "notes",
+      install!.revision
+    );
+    expect(await readdir(copyRoot)).toEqual([]);
+    expect(await readdir(otherCopyRoot)).toEqual([]);
+
+    // Uninstall also cleans copies left by older hosts that did not prune on disable.
+    await mkdir(join(copyRoot, copy!));
+    await writeFile(join(copyRoot, copy!, "SKILL.md"), SKILL_MD);
+    await plugins.uninstallOrgPlugin(ORG_ID, "notes", disabled.revision);
+    expect(await readdir(copyRoot)).toEqual([]);
+  });
+
+  test("plugin skill copies reject workspace symlink escapes", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrgDefaultProfile(db, ORG_ID);
+    const plugins = new PluginService(db, configDir);
+    const skills = new SkillsService(db);
+    skills.setPluginService(plugins);
+    await plugins.installPluginPackage(v1Bundle());
+    const added = await plugins.addOrgPlugin(ORG_ID, "notes");
+    await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
+    const skill = (await db.listSkills()).find(
+      (row) => row.pluginId === "notes"
+    )!;
+    await db.assignSkillToProfile(profile.id, skill.id);
+    const workspace = getProfileSoulDir(ORG_ID, profile.id);
+    const outside = join(configDir, "outside");
+    await mkdir(join(workspace, "skills"), { recursive: true });
+    await mkdir(outside);
+    await symlink(outside, join(workspace, "skills", ".plugins"));
+    await expect(
+      skills.composeCatalogForProfile(ORG_ID, profile.id)
+    ).rejects.toThrow("Path outside allowed directories");
+    expect(await readdir(outside)).toEqual([]);
+    await db.unassignSkillFromProfile(profile.id, skill.id);
+    await expect(
+      skills.materializeAssignedPluginSkills(ORG_ID, profile.id)
+    ).rejects.toThrow("Path outside allowed directories");
+    expect(await readdir(outside)).toEqual([]);
   });
 
   test("member resolve skips admin-only plugin tools", async () => {
@@ -370,6 +473,8 @@ describe("plugin capabilities", () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrgDefaultProfile(db, ORG_ID);
     const plugins = new PluginService(db, configDir);
+    const skills = new SkillsService(db);
+    skills.setPluginService(plugins);
 
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
@@ -384,6 +489,17 @@ describe("plugin capabilities", () => {
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
+
+    const oldCatalog = await skills.composeCatalogForProfile(
+      ORG_ID,
+      profile.id
+    );
+    const copyRoot = join(
+      getProfileSoulDir(ORG_ID, profile.id),
+      "skills",
+      ".plugins"
+    );
+    const [oldCopy] = await readdir(copyRoot);
 
     const disabled = await plugins.disableOrgPlugin(
       ORG_ID,
@@ -429,6 +545,21 @@ describe("plugin capabilities", () => {
     );
     const afterUpdate = await db.getOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(ORG_ID, "notes", afterUpdate!.revision);
+
+    const newCatalog = await skills.composeCatalogForProfile(
+      ORG_ID,
+      profile.id
+    );
+    expect(newCatalog).not.toBe(oldCatalog);
+    expect(newCatalog).not.toContain(join(copyRoot, oldCopy!));
+    const newCopy = (await readdir(copyRoot)).find(
+      (entry) => entry !== oldCopy
+    )!;
+    expect(existsSync(join(copyRoot, oldCopy!))).toBe(false);
+    expect(existsSync(join(copyRoot, newCopy, "SKILL.md"))).toBe(true);
+    expect(existsSync(join(copyRoot, newCopy, "references/usage.md"))).toBe(
+      false
+    );
 
     expect(
       (await db.listSkills()).find((row) => row.pluginKey === "notes")?.id

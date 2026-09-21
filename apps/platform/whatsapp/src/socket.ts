@@ -1,4 +1,9 @@
-import { getWhatsAppConfigDir } from "@nakama/core/whatsapp-config";
+import type { ChannelConfigScope } from "@nakama/core/channel-config-shared";
+import { isChannelOwner } from "@nakama/core/channel-config-shared";
+import {
+  getWhatsAppConfigDir,
+  syncWhatsAppOwnerPairing,
+} from "@nakama/core/whatsapp-config";
 import {
   DEFAULT_CONNECTION_CONFIG,
   DisconnectReason,
@@ -8,6 +13,7 @@ import {
   jidDecode,
   jidEncode,
   makeWASocket,
+  type proto,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { usePrivateMultiFileAuthState } from "./auth-state";
@@ -28,6 +34,7 @@ export interface WhatsAppSocketDeps {
   onDisconnected?: () => void;
   onMessage: (data: WhatsAppInboundChat) => Promise<void>;
   onQr?: (qr: string) => void;
+  orgId?: ChannelConfigScope;
 }
 
 export interface WhatsAppSocketHandle {
@@ -39,7 +46,7 @@ export interface WhatsAppSocketHandle {
 export async function createWhatsAppSocket(
   deps: WhatsAppSocketDeps
 ): Promise<WhatsAppSocketHandle> {
-  const authDir = getWhatsAppConfigDir() + "/auth";
+  const authDir = getWhatsAppConfigDir(deps.orgId) + "/auth";
   const { state, saveCreds } = await usePrivateMultiFileAuthState(authDir);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -69,13 +76,15 @@ export async function createWhatsAppSocket(
         browser: ["Nakama", "Chrome", "4.0.0"] as [string, string, string],
         connectTimeoutMs: 30_000,
         logger: baileysLogger,
-        makeSignalRepository(auth) {
-          const repository =
-            DEFAULT_CONNECTION_CONFIG.makeSignalRepository(auth);
+        makeSignalRepository(auth, logger, pnToLIDFunc) {
+          const repository = DEFAULT_CONNECTION_CONFIG.makeSignalRepository(
+            auth,
+            logger,
+            pnToLIDFunc
+          );
           const decrypt = repository.decryptMessage.bind(repository);
           const recovered = new Map<string, string>();
-          // Baileys 6 looks up PN and LID sessions separately. Only our own
-          // credentials provide a trusted identity pair without stanza metadata.
+          // Retry stale sessions using only our own trusted identity pair.
           repository.decryptMessage = async (message) => {
             const sender = jidDecode(message.jid);
             const pn = jidDecode(state.creds.me?.id);
@@ -132,6 +141,7 @@ export async function createWhatsAppSocket(
         return;
       }
 
+      let identityAccepted = !isChannelOwner(deps.orgId ?? null);
       socket = next;
       wrapSocketSendMessage(next);
 
@@ -150,7 +160,23 @@ export async function createWhatsAppSocket(
           reconnectAttempt = 0;
           const me = state.creds.me;
           if (me?.id) {
-            deps.onConnected?.({ id: me.id, lid: me.lid ?? null });
+            try {
+              await syncWhatsAppOwnerPairing(
+                { ownerJid: me.id, ownerLid: me.lid },
+                deps.orgId
+              );
+              if (myGen !== generation || stopped) {
+                return;
+              }
+              identityAccepted = true;
+              deps.onConnected?.({ id: me.id, lid: me.lid ?? null });
+            } catch (error) {
+              stopped = true;
+              generation += 1;
+              await retireSocket(next);
+              socket = null;
+              console.error("WhatsApp account could not be claimed", error);
+            }
           }
         }
 
@@ -158,12 +184,13 @@ export async function createWhatsAppSocket(
           generation += 1;
           // Drop listeners before reconnect so buffered Baileys events on this
           // socket cannot dispatch after the next generation is bound.
-          next.ev.removeAllListeners();
+          next.ev.destroy();
           deps.onDisconnected?.();
-          const statusCode = lastDisconnect?.error?.message
-            ? (lastDisconnect.error as { output?: { statusCode?: number } })
-                .output?.statusCode
-            : lastDisconnect?.statusCode;
+          const statusCode = (
+            lastDisconnect?.error as
+              | { output?: { statusCode?: number } }
+              | undefined
+          )?.output?.statusCode;
           const shouldReconnect =
             statusCode !== DisconnectReason.loggedOut && !stopped;
 
@@ -210,6 +237,9 @@ export async function createWhatsAppSocket(
 
         const me = state.creds.me;
 
+        if (!identityAccepted) {
+          return;
+        }
         for (const msg of m.messages) {
           const remoteJid = msg.key.remoteJid ?? null;
           const text = extractInboundText(msg.message);
@@ -220,7 +250,7 @@ export async function createWhatsAppSocket(
 
           if (remoteJid && isChannelDebugEnabled()) {
             console.log(
-              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} participantPn=${maskWhatsAppJid(msg.key.participantPn)} textBytes=${Buffer.byteLength(text, "utf8")} handle=${inbound ? "yes" : "no"}`
+              `WhatsApp upsert item id=${msg.key.id ?? "-"} jid=${maskWhatsAppJid(remoteJid)} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${maskWhatsAppJid(msg.key.participant)} participantAlt=${maskWhatsAppJid(msg.key.participantAlt)} textBytes=${Buffer.byteLength(text, "utf8")} handle=${inbound ? "yes" : "no"}`
             );
           }
 
@@ -336,7 +366,7 @@ function retireSocket(target: WASocket | null | undefined): Promise<void> {
   }
 
   // Strip listeners first so end()'s close emit cannot re-enter reconnect.
-  target.ev.removeAllListeners();
+  target.ev.destroy();
   return Promise.resolve(target.end(undefined));
 }
 
@@ -351,7 +381,7 @@ export function summarizeMissingTextPayload(msg: {
     participant?: string | null;
     id?: string | null;
   };
-  message?: Record<string, unknown> | null;
+  message?: proto.IMessage | null;
   messageStubType?: unknown;
 }): string {
   const extracted = extractMessageContent(msg.message as any);

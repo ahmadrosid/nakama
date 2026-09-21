@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { persistInlineAttachmentsInContent } from "@nakama/core/attachments/content";
 import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
 import { AGENT_CHANNELS } from "@nakama/core/contract";
 import { extractTurnArtifacts } from "./chat-artifacts";
@@ -11,11 +12,72 @@ import {
   isEditableUserMessage,
   isReadOnlySessionChannel,
 } from "./chat-history";
+import { appendOutgoingMessages } from "./chat-stream";
 
 const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("chatMessagesToListItems", () => {
+  test("keeps a sent image when completed-turn history replaces the preview", async () => {
+    let items: ChatListItem[] = [];
+    appendOutgoingMessages(
+      (next) => {
+        items = typeof next === "function" ? next(items) : next;
+      },
+      "Describe this",
+      [
+        {
+          mediaType: "image/png",
+          url: `data:image/png;base64,${tinyPngBase64}`,
+        },
+      ]
+    );
+    expect(items[0]?.images).toHaveLength(1);
+    const content = await persistInlineAttachmentsInContent(
+      [
+        { text: "Describe this", type: "text" },
+        { data: tinyPngBase64, mediaType: "image/png", type: "image" },
+      ],
+      async ({ bytes }) => ({ attachmentId: "att_image", size: bytes.length })
+    );
+    items = chatMessagesToListItems(
+      structuredClone([
+        { content, role: "user" },
+        { content: "A small image.", role: "assistant" },
+      ])
+    );
+    expect(items[0]).toMatchObject({
+      content: "Describe this",
+      images: [
+        { mediaType: "image/png", url: "/v1/attachments/att_image/content" },
+      ],
+    });
+  });
+
+  test("restores tool execution timestamps rather than persistence time", () => {
+    const messages = JSON.parse(
+      '[{"role":"tool","name":"sample","toolCallId":"t1","content":"{}","toolStartedAt":1000,"toolCompletedAt":9000}]'
+    );
+    expect(chatMessagesToListItems(messages)[0]).toMatchObject({
+      toolCompletedAt: 9000,
+      toolStartedAt: 1000,
+    });
+  });
+  test("restores recorded reasoning duration when loading history", () => {
+    const messages: ChatMessage[] = [
+      {
+        content: "Answer",
+        role: "assistant",
+        thinking: "Let me think",
+        thinkingDurationMs: 8000,
+      },
+    ];
+    expect(chatMessagesToListItems(messages)[0]).toMatchObject({
+      thinking: "Let me think",
+      thinkingDurationMs: 8000,
+    });
+  });
+
   test("folds usage of hidden tool-call steps into the next rendered reply", () => {
     const messages: ChatMessage[] = [
       { content: "Hello", role: "user" },

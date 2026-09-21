@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createGeminiProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
@@ -58,6 +58,121 @@ function streamFromEvents(events: string[]): ReadableStream<Uint8Array> {
 }
 
 describe("createGeminiProvider", () => {
+  test("replays signed model parts unchanged after a tool result and history reload", async () => {
+    const parts = [
+      {
+        text: "Checking",
+        thought: true,
+        thoughtSignature: "thought-signature",
+      },
+      {
+        functionCall: { args: {}, id: "call-1", name: "read_probe" },
+        thoughtSignature: "call-signature",
+      },
+      {
+        functionCall: { args: { city: "B" }, id: "call-2", name: "read_probe" },
+      },
+    ];
+    const fetchMock = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({ candidates: [{ content: { parts, role: "model" } }] })
+      )
+      .mockImplementationOnce(async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        expect(body.contents[1]).toEqual({ parts, role: "model" });
+        return Response.json({
+          candidates: [
+            { content: { parts: [{ text: "Done" }], role: "model" } },
+          ],
+        });
+      });
+    const provider = createGeminiProvider({
+      apiKey: "test-key",
+      model: "gemini-3.8-flash",
+    });
+    const first = await provider.generateChat({
+      messages: [{ content: "Check both places", role: "user" }],
+      system: "Use the tools.",
+    });
+    expect(first.toolCalls).toHaveLength(2);
+    const second = await provider.generateChat({
+      messages: [
+        { content: "Check both places", role: "user" },
+        JSON.parse(JSON.stringify(first.assistantMessage)),
+        ...first.toolCalls.map((call) => ({
+          content: '{"value":7}',
+          name: call.name,
+          role: "tool" as const,
+          toolCallId: call.id,
+        })),
+      ],
+      system: "Use the tools.",
+    });
+    expect(second.content).toBe("Done");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("replays streamed parts including a signature-only final chunk", async () => {
+    const parts = [
+      { text: "Looking up " },
+      { text: "the code." },
+      {
+        functionCall: { args: {}, id: "call-1", name: "read_probe" },
+        thoughtSignature: "call-signature",
+      },
+      { text: "", thoughtSignature: "final-signature" },
+    ];
+    spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          streamFromEvents(
+            parts.map((part) =>
+              JSON.stringify({
+                candidates: [{ content: { parts: [part], role: "model" } }],
+              })
+            )
+          ),
+          { headers: { "Content-Type": "text/event-stream" } }
+        )
+      )
+      .mockImplementationOnce(async (_url, init) => {
+        expect(JSON.parse(String(init?.body)).contents[1]).toEqual({
+          parts,
+          role: "model",
+        });
+        return new Response(generateContentResponse({ text: "Done" }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+    const provider = createGeminiProvider({
+      apiKey: "test-key",
+      model: "gemini-3.8-flash",
+    });
+    const user = { content: "Get the code", role: "user" as const };
+    const first = await provider.streamChat(
+      { messages: [user], system: "Use the tool." },
+      { onChunk() {} }
+    );
+    expect(first.content).toBe("Looking up the code.");
+    expect(first.toolCalls).toEqual([
+      { arguments: {}, id: "call-1", name: "read_probe" },
+    ]);
+    const second = await provider.generateChat({
+      messages: [
+        user,
+        first.assistantMessage,
+        {
+          content: '{"code":7319}',
+          name: "read_probe",
+          role: "tool",
+          toolCallId: "call-1",
+        },
+      ],
+      system: "Use the tool.",
+    });
+    expect(second.content).toBe("Done");
+  });
+
   test("generateText returns model text", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL) => {
       const url = String(input);

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="dark" name="color-scheme">
+    <title>Nakama Meet · Microphone access</title>
+    <style>
+    body {
+      max-width: 440px;
+      padding: 24px;
+      margin: 12vh auto;
+      font: 16px / 1.6 system-ui;
+      color: #fafafa;
+      background: #0a0a0b;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    p {
+      color: #a1a1aa;
+    }
+    button {
+      padding: 12px 18px;
+      font: inherit;
+      color: #0a0a0b;
+      cursor: pointer;
+      background: #f59e0b;
+      border: 0;
+      border-radius: 8px;
+    }
+    button:focus-visible {
+      outline: 2px solid #fafafa;
+      outline-offset: 4px;
+    }
+    button:disabled {
+      opacity: 0.6;
+    }
+    </style>
+  </head>
+  <body>
+    <h1>Include your voice</h1>
+    <p>
+      Allow Nakama Meet to use your microphone so your words appear in the
+      transcript too.
+    </p>
+    <button id="allow" type="button">Allow microphone</button>
+    <p aria-live="polite" id="status" role="status"></p>
+    <script defer src="microphone.js"></script>
+  </body>
+</html>

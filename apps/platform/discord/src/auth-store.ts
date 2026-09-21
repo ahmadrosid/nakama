@@ -1,3 +1,4 @@
+import type { ChannelConfigScope } from "@nakama/core/channel-config-shared";
 import type { DiscordConfigFile } from "@nakama/core/discord-config";
 import {
   isDiscordUserAuthorized,
@@ -6,10 +7,12 @@ import {
 } from "@nakama/core/discord-config";
 
 export class DiscordAuthStore {
+  constructor(private readonly scope: ChannelConfigScope = null) {}
+
   private config: DiscordConfigFile | null = null;
 
   async reload(): Promise<DiscordConfigFile | null> {
-    this.config = await loadDiscordConfigFile();
+    this.config = await loadDiscordConfigFile(this.scope);
     return this.config;
   }
 
@@ -34,7 +37,11 @@ export class DiscordAuthStore {
     handshakeInput: string,
     userId: string
   ): Promise<{ ok: boolean; message: string }> {
-    const result = await verifyAndPairDiscordUser(handshakeInput, userId);
+    const result = await verifyAndPairDiscordUser(
+      handshakeInput,
+      userId,
+      this.scope
+    );
     await this.reload();
     return result;
   }

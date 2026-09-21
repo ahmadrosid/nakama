@@ -43,6 +43,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
   atomic(migrateBrowserSessionsTable);
+  atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateWorkspaceSettingsTable);
@@ -58,6 +59,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
+  atomic(migrateFilePinsTable);
 }
 
 function migrateAuditEventsTable(db: Database): void {
@@ -532,6 +534,7 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
       session_id TEXT,
       proposed_by_user_id TEXT,
       bullet TEXT NOT NULL,
+      source_document_ids TEXT,
       status TEXT NOT NULL,
       pinned INTEGER NOT NULL DEFAULT 0,
       reviewer_user_id TEXT,
@@ -541,6 +544,16 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(org_memory_proposals)")
+    .all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("source_document_ids")) {
+    db.exec(
+      "ALTER TABLE org_memory_proposals ADD COLUMN source_document_ids TEXT;"
+    );
+  }
 }
 
 function migrateSkillProposalsTable(db: Database): void {
@@ -573,6 +586,9 @@ function migrateSkillProposalsTable(db: Database): void {
   const names = new Set(columns.map((column) => column.name));
   if (!names.has("relative_path")) {
     db.exec("ALTER TABLE skill_proposals ADD COLUMN relative_path TEXT;");
+  }
+  if (!names.has("supporting_files")) {
+    db.exec("ALTER TABLE skill_proposals ADD COLUMN supporting_files TEXT;");
   }
   if (!names.has("consolidate_loser_skill_names")) {
     db.exec(
@@ -1049,6 +1065,22 @@ function migrateBrowserSessionsTable(db: Database): void {
   }
 }
 
+function migratePasswordResetTokensTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_unique
+      ON password_reset_tokens (token_hash);
+  `);
+}
+
 const LEGACY_PROFILE_ID_MAP = [
   ["profile_default", "default"],
   ["profile_super_bot", "super_bot"],
@@ -1296,6 +1328,11 @@ function migrateSessionsTable(db: Database): void {
       WHERE updated_at IS NULL;
     `);
   }
+  if (!columnNames.has("pinned")) {
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
 }
 
 function migrateWorkspaceSettingsTable(db: Database): void {
@@ -1461,11 +1498,25 @@ function migrateAttachmentsTable(db: Database): void {
       size_bytes INTEGER NOT NULL,
       storage_path TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      ephemeral INTEGER DEFAULT 0 NOT NULL,
       FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
       FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
       FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL
     );
   `);
+
+  const columns = db.prepare("PRAGMA table_info(attachments)").all() as Array<{
+    name: string;
+  }>;
+
+  // A cognito session has no `sessions` row to hang the foreign key on, so its
+  // attachments carry a null session_id. This column is what a restart sweep
+  // has left to tell them apart from ordinary orphans.
+  if (!columns.some((column) => column.name === "ephemeral")) {
+    db.exec(`
+      ALTER TABLE attachments ADD COLUMN ephemeral INTEGER DEFAULT 0 NOT NULL;
+    `);
+  }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS attachments_session_id ON attachments (session_id);
@@ -1724,5 +1775,17 @@ function migrateComposioTables(db: Database): void {
       FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
       FOREIGN KEY (toolkit_id) REFERENCES composio_toolkits (id) ON DELETE CASCADE
     );
+  `);
+}
+
+function migrateFilePinsTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS file_pins (
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  PRIMARY KEY (org_id, user_id, profile_id, path)
+);
   `);
 }

@@ -25,4 +25,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run tests
-        run: bun run test
+        run: |
+          bun apps/desktop/node_modules/electron/install.js
+          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
+          xvfb-run -a bun run test

@@ -117,4 +117,40 @@ describe("AutomationScheduler", () => {
     expect(runs).toEqual([{ id: "a1", orgId: "org_1" }]);
     scheduler.stop();
   });
+
+  test("logs a run the delegate refuses", async () => {
+    const at = new Date(Date.now() + 20).toISOString();
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = ((...args: unknown[]) => {
+      errors.push(args.join(" "));
+    }) as typeof console.error;
+
+    try {
+      const delegate = createDelegate({
+        listScheduledAutomations: async () => [
+          schedule({ cron: undefined, id: "a1", runAt: at }),
+        ],
+        runAutomation: async () => ({
+          error: "Automation not found",
+          ok: false,
+        }),
+      });
+
+      const scheduler = new AutomationScheduler(delegate);
+      await scheduler.start();
+
+      const deadline = Date.now() + 2000;
+      while (errors.length === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      expect(errors).toEqual([
+        "Automation a1 run not started: Automation not found",
+      ]);
+      scheduler.stop();
+    } finally {
+      console.error = originalError;
+    }
+  });
 });

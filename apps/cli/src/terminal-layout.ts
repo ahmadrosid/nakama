@@ -1,21 +1,43 @@
 import {
+  type Component,
+  CURSOR_MARKER,
+  ProcessTerminal,
+  TuiMainScreen,
+} from "@earendil-works/pi-tui";
+import {
   normalizeStyledLine,
   plainLine,
   type StyledLine,
+  serializeStyledLine,
   styledLine,
   styledLineText,
 } from "./styled-text";
-import {
-  clampFrameCursor,
-  cursorColFromLine,
-  diffFrames,
-  type FrameModel,
-  serializeDiffOps,
-} from "./terminal-frame";
 import type { TerminalInput } from "./terminal-input";
-import { stripAnsi, wrapText } from "./text-measure";
+import { stripAnsi } from "./text-measure";
 import type { MessageKind } from "./virtual-message-list";
-import { VirtualMessageList } from "./virtual-message-list";
+import {
+  renderMarkdownLines,
+  VirtualMessageList,
+} from "./virtual-message-list";
+
+interface FrameModel {
+  lines: StyledLine[];
+  topRow: number;
+}
+
+class FrameComponent implements Component {
+  constructor(private lines: string[] = []) {}
+
+  render(): string[] {
+    return this.lines;
+  }
+
+  invalidate(): void {}
+
+  setLines(lines: string[]): void {
+    this.lines = lines;
+  }
+}
 
 export function getVisiblePinnedInputRows(
   inputRows: number,
@@ -34,36 +56,6 @@ export function getTerminalColumns(): number {
   return process.stdout.columns ?? 80;
 }
 
-const TRANSCRIPT_HORIZONTAL_PADDING = 1;
-
-function wrapPlainTextToLines(text: string, width: number): string[] {
-  const normalized = text.replace(/\r\n?/g, "\n");
-  const logicalLines = normalized.split("\n");
-  const wrappedLines: string[] = [];
-
-  for (const logicalLine of logicalLines) {
-    if (logicalLine === "") {
-      wrappedLines.push("");
-      continue;
-    }
-
-    wrappedLines.push(...wrapText(logicalLine, Math.max(1, width)));
-  }
-
-  return wrappedLines.length > 0 ? wrappedLines : [""];
-}
-
-function padTranscriptLine(text: string): string {
-  return `${" ".repeat(TRANSCRIPT_HORIZONTAL_PADDING)}${text}${" ".repeat(TRANSCRIPT_HORIZONTAL_PADDING)}`;
-}
-
-function wrapPaddedTranscriptLines(text: string, width: number): string[] {
-  const contentWidth = Math.max(1, width - TRANSCRIPT_HORIZONTAL_PADDING * 2);
-  return wrapPlainTextToLines(text, contentWidth).map((line) =>
-    padTranscriptLine(line)
-  );
-}
-
 export class TerminalLayout {
   private enabled = false;
   private reservedRows = 1;
@@ -74,14 +66,19 @@ export class TerminalLayout {
   private streamBuffer = "";
   private statusLine: StyledLine | null = null;
   private inputLines: StyledLine[] = [plainLine("")];
-  private previousFrame: FrameModel | null = null;
+  previousFrame: FrameModel | null = null;
+  private readonly frameComponent = new FrameComponent();
+  private readonly tui = new TuiMainScreen(new ProcessTerminal());
+  private hasPainted = false;
   private historyOffset = 0;
   private followOutput = true;
   private debugOverlay = false;
   private contentWindowRows = 1;
   private resizeHandler: (() => void) | null = null;
 
-  constructor(private readonly terminalInput: TerminalInput | null = null) {}
+  constructor(private readonly terminalInput: TerminalInput | null = null) {
+    this.tui.addChild(this.frameComponent);
+  }
 
   apply(): boolean {
     if (!(process.stdout.isTTY && process.stdin.isTTY)) {
@@ -92,6 +89,7 @@ export class TerminalLayout {
     this.anchored = false;
     this.previousFrame = null;
     this.viewportTopRow = 1;
+    this.hasPainted = false;
 
     this.resizeHandler = () => {
       this.render();
@@ -118,6 +116,7 @@ export class TerminalLayout {
   }
 
   beginMessage(kind: MessageKind): void {
+    this.flushStreamBuffer();
     this.messages.beginMessage(kind);
   }
 
@@ -153,10 +152,30 @@ export class TerminalLayout {
     this.statusLine = null;
     this.inputLines = [plainLine("")];
     this.previousFrame = null;
+    this.frameComponent.setLines([]);
+    this.tui.resetRenderState();
+    this.hasPainted = false;
   }
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  clear(): void {
+    this.messages.clear();
+    this.streamBuffer = "";
+    this.statusLine = null;
+    this.historyOffset = 0;
+    this.followOutput = true;
+    this.anchorRow = 1;
+    this.viewportTopRow = 1;
+    this.previousFrame = null;
+    this.tui.resetRenderState();
+    this.hasPainted = false;
+    if (this.enabled) {
+      process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+    }
+    this.render();
   }
 
   setDebugOverlay(enabled: boolean): void {
@@ -306,7 +325,9 @@ export class TerminalLayout {
       return;
     }
 
+    this.messages.beginMessage("assistant");
     this.messages.appendLine(this.streamBuffer);
+    this.messages.sealMessage();
     this.streamBuffer = "";
   }
 
@@ -315,10 +336,7 @@ export class TerminalLayout {
       return [];
     }
 
-    const lines = wrapPaddedTranscriptLines(
-      this.streamBuffer,
-      getTerminalColumns()
-    ).map((line) => plainLine(line));
+    const lines = renderMarkdownLines(this.streamBuffer, getTerminalColumns());
     return this.messages.messageCount > 0 ? [plainLine(""), ...lines] : lines;
   }
 
@@ -433,34 +451,29 @@ export class TerminalLayout {
       lines[inputStart + index] = visibleInput[index] ?? plainLine("");
     }
 
-    const cursorLine = visibleInput[visibleInput.length - 1] ?? plainLine("");
-    const cursorRow =
-      viewportTop + Math.max(1, inputStart + visibleInput.length) - 1;
-    const scrollBottom = pinned
-      ? Math.max(viewportTop, rows - visibleInput.length - GAP_ROWS)
-      : rows;
-    const frame = clampFrameCursor(
-      {
-        cursor: {
-          col: cursorColFromLine(cursorLine, cols),
-          row: cursorRow,
-          visible: false,
-        },
-        lines,
-        scrollBottom,
-        scrollTop: viewportTop,
-        topRow: viewportTop,
-      },
-      rows,
-      cols
-    );
-    const operations = diffFrames(this.previousFrame, frame);
-    const output = serializeDiffOps(operations);
-
-    if (output) {
-      process.stdout.write(output);
-    }
-
+    const frame = {
+      lines,
+      topRow: viewportTop,
+    };
     this.previousFrame = frame;
+    const renderedLines = lines.map(serializeStyledLine);
+    const cursorLine = inputStart + visibleInput.length - 2;
+    if (cursorLine >= 0 && cursorLine < renderedLines.length) {
+      const cursorText = styledLineText(lines[cursorLine]).trimEnd();
+      const cursorTextStart = renderedLines[cursorLine]?.indexOf(cursorText);
+      if (cursorTextStart !== undefined && cursorTextStart >= 0) {
+        const cursorEnd = cursorTextStart + cursorText.length;
+        renderedLines[cursorLine] =
+          renderedLines[cursorLine].slice(0, cursorEnd) +
+          CURSOR_MARKER +
+          renderedLines[cursorLine].slice(cursorEnd);
+      }
+    }
+    this.frameComponent.setLines(renderedLines);
+    if (!this.hasPainted) {
+      this.tui.terminal.write(`\x1b[${viewportTop};1H`);
+      this.hasPainted = true;
+    }
+    this.tui.renderNow();
   }
 }

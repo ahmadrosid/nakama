@@ -2,12 +2,17 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { resolveCustomToolModulePath } from "./custom-tool-shared";
+import {
+  loadToolApiKey,
+  resolveCustomToolModulePath,
+  saveToolApiKey,
+} from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
   setupCustomToolsDir,
 } from "./custom-tool-test-helpers";
 import { loadJavascriptTool } from "./javascript-tool-loader";
+import { loadPythonTool } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 const setupToolsDir = setupCustomToolsDir;
@@ -54,6 +59,76 @@ describe("javascript tool loader", () => {
     )) as { echoed: string; root: string };
     expect(result.echoed).toBe("hello");
     expect(result.root).toBe("/tmp/nakama-ws");
+  });
+
+  test("credentials stay scoped, are injected for both runtimes, and are redacted from results and failures", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+    const apiKey = 'test-key-with-"quotes"\\slash';
+    await writeFile(
+      path.join(toolsDir, "credential.js"),
+      `export async function run(input) {
+      const key = process.env.NAKAMA_TOOL_API_KEY;
+      if (input.fail) throw new Error("bad key " + key);
+      return { present: Boolean(key), echo: key, nested: [key], count: 1 };
+    }`
+    );
+    const record = makeRecord({
+      handlerConfig: { modulePath: "credential.js", requiresApiKey: true },
+    });
+    const tool = (await loadJavascriptTool(record))!;
+    expect(await tool.run({}, { orgId: "org_a" })).toMatchObject({
+      orgId: "org_a",
+      toolId: record.id,
+      type: "tool_credentials_required",
+    });
+    await Promise.all([
+      saveToolApiKey("org_a", record.id, apiKey),
+      saveToolApiKey("org_b", record.id, "other-key"),
+    ]);
+    expect(await loadToolApiKey("org_a", record.id)).toBe(apiKey);
+    expect(await loadToolApiKey("org_b", record.id)).toBe("other-key");
+    expect(await loadToolApiKey("org_a", "another_tool")).toBeUndefined();
+    expect(await tool.run({}, { orgId: "org_a" })).toEqual({
+      count: 1,
+      echo: "[REDACTED]",
+      nested: ["[REDACTED]"],
+      present: true,
+    });
+    expect(await tool.run({}, { orgId: "org_c" })).toMatchObject({
+      type: "tool_credentials_required",
+    });
+    await expect(tool.run({ fail: true }, { orgId: "org_a" })).rejects.toThrow(
+      "bad key [REDACTED]"
+    );
+    await expect(tool.run({}, {})).rejects.toThrow();
+    await saveToolApiKey("org_a", record.id, "1");
+    expect(await tool.run({}, { orgId: "org_a" })).toMatchObject({
+      count: 1,
+      echo: "[REDACTED]",
+    });
+    for (const invalid of ["", " \n", "key\n[provider.evil]", "key\0", 123]) {
+      expect(() => saveToolApiKey("org_a", record.id, invalid)).toThrow();
+    }
+    await writeFile(
+      path.join(toolsDir, "credential.py"),
+      `import os, sys, json
+def run(input, context):
+    return {"present": bool(os.environ.get("NAKAMA_TOOL_API_KEY")), "echo": os.environ.get("NAKAMA_TOOL_API_KEY")}
+if __name__ == "__main__":
+    sys.stdout.write(json.dumps(run(json.load(sys.stdin), {})))
+`
+    );
+    const python = (await loadPythonTool(
+      makeRecord({
+        handlerConfig: { modulePath: "credential.py", requiresApiKey: true },
+        handlerType: "python",
+      })
+    ))!;
+    expect(await python.run({}, { orgId: "org_a" })).toEqual({
+      echo: "[REDACTED]",
+      present: true,
+    });
   });
 
   test("reads parallelSafe from handlerConfig, not the module", async () => {

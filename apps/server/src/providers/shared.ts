@@ -13,10 +13,12 @@ function readNumber(value: unknown): number | undefined {
 }
 
 export function buildTokenUsage(options: {
+  cachedInputTokens?: unknown;
   inputTokens?: unknown;
   outputTokens?: unknown;
   totalTokens?: unknown;
 }): ChatCompletionResult["usage"] | undefined {
+  const cachedInputTokens = readNumber(options.cachedInputTokens);
   let inputTokens = readNumber(options.inputTokens);
   let outputTokens = readNumber(options.outputTokens);
   let totalTokens = readNumber(options.totalTokens);
@@ -49,14 +51,24 @@ export function buildTokenUsage(options: {
     totalTokens = inputTokens + outputTokens;
   }
 
-  return { inputTokens, outputTokens, totalTokens };
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    // A zero carries the same information as the provider saying nothing, and
+    // emitting it would change the shape of every existing usage object.
+    ...(cachedInputTokens ? { cachedInputTokens } : {}),
+  };
 }
 
 export function extractOpenAITokenUsage(
   value: unknown
 ): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
+  // OpenAI counts cached tokens inside prompt_tokens, so this is a subset.
+  const details = readRecord(record.prompt_tokens_details);
   return buildTokenUsage({
+    cachedInputTokens: details.cached_tokens,
     inputTokens: record.prompt_tokens,
     outputTokens: record.completion_tokens,
     totalTokens: record.total_tokens,
@@ -68,6 +80,7 @@ export function extractGeminiTokenUsage(
 ): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
   return buildTokenUsage({
+    cachedInputTokens: record.cachedContentTokenCount,
     inputTokens: record.promptTokenCount,
     outputTokens: record.candidatesTokenCount,
     totalTokens: record.totalTokenCount,
@@ -93,6 +106,7 @@ export function notifyToolInputDelta(
 
 export function buildChatCompletionResult(options: {
   content: string | null | undefined;
+  providerContent?: unknown[];
   toolCalls: ToolCall[];
   thinking?: string | null | undefined;
   usage?: ChatCompletionResult["usage"];
@@ -102,6 +116,9 @@ export function buildChatCompletionResult(options: {
   const assistantMessage: Extract<ChatMessage, { role: "assistant" }> = {
     content,
     role: "assistant",
+    ...(options.providerContent?.length
+      ? { providerContent: options.providerContent }
+      : {}),
     ...(thinking ? { thinking } : {}),
     ...(options.toolCalls.length > 0 ? { toolCalls: options.toolCalls } : {}),
   };
@@ -306,6 +323,10 @@ export function formatHttpErrorBody(
 
   if (!trimmed) {
     return `${label} request failed (${status}).`;
+  }
+
+  if (/^<!doctype\s+html|^<html[\s>]/i.test(trimmed)) {
+    return `${label} request failed (${status}): received an HTML error page.`;
   }
 
   try {

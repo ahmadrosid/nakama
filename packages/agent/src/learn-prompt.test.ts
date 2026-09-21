@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildLearnPrompt,
   expandLearnInLastUserMessage,
   tryParseLearnCommand,
 } from "./learn-prompt";
@@ -27,13 +26,6 @@ describe("tryParseLearnCommand", () => {
     expect(tryParseLearnCommand("/learning")).toBeNull();
     expect(tryParseLearnCommand("/skill learn")).toBeNull();
     expect(tryParseLearnCommand("please /learn later")).toBeNull();
-  });
-});
-
-describe("buildLearnPrompt", () => {
-  test("defaults empty request to the current conversation workflow", () => {
-    const prompt = buildLearnPrompt("");
-    expect(prompt).toContain("workflow we just went through");
   });
 });
 

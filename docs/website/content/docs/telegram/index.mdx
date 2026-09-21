@@ -18,13 +18,38 @@ With Telegram enabled, users can:
 - chat with a Nakama profile in a private chat
 - use the bot in Telegram groups
 - receive outbound webhook notifications in a group or topic
-- switch org and profile with commands
+- keep every conversation attached to the connection’s agent
 - send text, photos, voice notes, and supported documents
 - receive Markdown-style rich replies when Telegram accepts the formatting
 
-## Step 1: Create a bot with BotFather
+## Create a bot with a QR code
 
-Every Telegram setup starts with a bot token from `@BotFather`.
+QR setup connects your Telegram bot without copying a token from BotFather.
+An organization admin can open **Agents → your agent → Connections → Telegram**, and select **Create with QR**.
+
+1. Scan the QR code or select **Open Telegram to Create Bot**.
+2. If Telegram prompts you, press **Start**, then create the bot with the supplied button.
+3. Keep the suggested username so Nakama can match your bot securely.
+4. Return to Nakama and select **Connect bot** once the bot is ready.
+
+The pairing expires after 10 minutes. If it expires or you change the suggested
+username, cancel and start again.
+
+### Who can access the bot?
+
+By default, QR setup uses the shared manager at **getnakama.cloud**. Its operator
+can retrieve your managed bot's token and control the bot. Nakama saves your bot
+token on your own server; normal chats go directly between that server and Telegram.
+Ending the setup session does not remove the manager's access to the bot.
+
+The manager's [source code is public](https://github.com/ahmadrosid/nakama/tree/main/packages/telegram-manager).
+Operators can inspect and host it themselves, or configure their own manager.
+Public code does not verify which version a hosted service runs. Use the manual
+BotFather setup below if you do not want to grant a shared manager access.
+
+## Step 1: Create a bot manually with BotFather
+
+For manual setup, create a bot token with `@BotFather`.
 
 1. Open Telegram and search for `@BotFather`
 2. Send `/newbot`
@@ -36,33 +61,23 @@ Keep the token secret. Anyone with the token can control your Telegram bot.
 
 ## Step 2: Save Telegram settings in Nakama
 
-Open **Integrations → Telegram** in the Nakama web app, then:
+Open **Agents → your agent → Connections → Telegram** in the Nakama web app, then:
 
 1. Paste the bot token
-2. Choose the default Nakama profile for Telegram replies
+2. Check that you opened the agent you want to connect
 3. Save
 
-![Paste the bot token from @BotFather on Integrations → Telegram](/screenshots/telegram-bot-token.png)
+![Paste the bot token from @BotFather on Agents → your agent → Connections → Telegram](/screenshots/telegram-bot-token.png)
 
 When you save for the first time, Nakama can generate a pairing code for linking your Telegram account.
 
-## One bot per organization
+## One bot per agent
 
-Each organization saves its own bot token under **Integrations → Telegram**, and a
-bot answers for exactly one organization. Org A's token is never readable from Org
-B, and a save is refused when another organization already runs that token, because
-Telegram delivers each update to one poller only.
+Each agent can own one Telegram bot. Its chats, pairing, worker controls, and logs belong only to that agent. The same bot cannot be connected to another agent, even in another organization.
 
-The bridge starts one bot per configured organization, so a single
-`bun run dev:telegram` covers all of them. Credentials live in
-`~/.nakama/orgs/<org id>/telegram/config.ini`.
+Organization admins and platform admins manage connections. **Stop** keeps the connection for later. **Disconnect** removes its credentials and pairings while keeping chat history. Disconnect channels before moving an agent to another organization. Cloning or exporting an agent does not copy its connections.
 
-Installs configured before this existed keep one config at
-`~/.nakama/telegram/config.ini`. With a single organization the server moves it into
-that org on the next start and logs a line asking you to restart the bridge. With
-several organizations it keeps serving every org as the shared bot until an admin
-saves a token of their own, and `/org` still picks which organization a chat
-belongs to.
+Existing connections move automatically when Nakama can identify their owner. If ownership is unclear, the worker stays stopped. Open **Integrations → Telegram**, choose an agent, and claim the existing connection. Only a platform admin can claim an installation-wide connection.
 
 ## Step 3: Enable audio transcription for voice chat
 
@@ -70,7 +85,7 @@ Telegram voice notes and audio files are turned into text before they are sent t
 
 To enable that:
 
-1. Open **Settings** in the Nakama web app
+1. Open **Customize → LLM providers** in the Nakama web app
 2. Add an **OpenAI** provider in **LLM providers** if you have not added one yet
 3. In **Audio transcription model**, choose an OpenAI model such as Whisper
 4. Wait for the `Saved` confirmation
@@ -78,13 +93,13 @@ To enable that:
 If no OpenAI provider is connected, the audio transcription setting stays unavailable.
 Without this setting, text chat still works, but Telegram audio messages will not be transcribed for the agent.
 
-![Choose an OpenAI audio transcription model under Settings](/screenshots/telegram-audio-transcription.png)
+![Choose an OpenAI audio transcription model under LLM providers](/screenshots/telegram-audio-transcription.png)
 
 ## Step 4: Pair your Telegram account
 
 Pairing is required so random Telegram users cannot talk to your internal Nakama bot.
 
-1. Copy the pairing code from **Integrations → Telegram**
+1. Copy the pairing code from **Agents → your agent → Connections → Telegram**
 2. Start a private chat with your bot
 3. Send the pairing code as a normal text message
 
@@ -106,17 +121,7 @@ That means Nakama can:
 
 ## Step 5: Start the Telegram bridge
 
-For local development, start it from the repo root:
-
-```bash
-bun run dev:telegram
-```
-
-The bridge uses long polling and forwards Telegram messages to your Nakama server.
-
-If the Nakama server is not already running, the bridge will try to start it.
-
-For production, start the Telegram bridge worker from the **Integrations** page in the Nakama web app instead of using the dev command.
+Select **Start** in the agent’s Telegram connection. Keep the Nakama server running. Starting or stopping this worker does not affect another agent’s connections.
 
 ## Optional: Direct allowlist instead of pairing
 
@@ -126,13 +131,13 @@ This is useful when you want to pre-authorize specific users without the one-tim
 
 To add users from the dashboard:
 
-1. Open **Integrations → Telegram**
+1. Open **Agents → your agent → Connections → Telegram**
 2. In **Allowed users**, click **Manage**
 3. Paste a numeric Telegram user ID and click **Add**
 
 To paste raw Telegram update JSON instead:
 
-1. Open **Integrations → Telegram**
+1. Open **Agents → your agent → Connections → Telegram**
 2. In **Allowed users**, click **Manage**
 3. Click **Import JSON**
 4. Paste the raw Telegram update JSON
@@ -158,7 +163,7 @@ The allowed user ID is:
 213193924
 ```
 
-You can also configure allowed users through `TELEGRAM_ALLOWED_USER_IDS` for environment-based deployments.
+
 
 ## Step 6: Configure Telegram privacy mode for groups
 
@@ -173,31 +178,6 @@ If you want mention-based group usage to work reliably:
 5. Add it back again
 
 That re-add step matters because Telegram may keep the old delivery behavior for bots already in the group.
-
-## Configuration notes
-
-Nakama stores Telegram bridge settings under its local config directory.
-
-Important values include:
-
-- bot token
-- default Telegram profile
-- pairing code
-- paired user IDs
-- allowed user IDs from the dashboard allowlist
-
-Environment-based setup is also supported. The main env var is:
-
-```text
-TELEGRAM_BOT_TOKEN
-```
-
-Nakama also supports:
-
-```text
-TELEGRAM_ALLOWED_USER_IDS
-NAKAMA_TELEGRAM_PROFILE_ID
-```
 
 ## Next steps
 

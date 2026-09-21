@@ -1,4 +1,3 @@
-import type { ProfileSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   InputGroup,
@@ -6,15 +5,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@nakama/ui/input-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
 import {
   Copy01Icon,
   RefreshIcon,
@@ -22,12 +13,15 @@ import {
   ViewOffIcon,
 } from "hugeicons-react";
 import {
+  ChannelAccessSettings,
+  ChannelConnectionStep,
+  ChannelSettings,
+  ChannelSetupChecklist,
   IntegrationSettingsFooter,
-  IntegrationStatusHeader,
   PairingStepTile,
   SettingsRow,
 } from "@/components/integration-settings.shared";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { TelegramQrSetup } from "@/components/telegram-qr-setup";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 
 function pairingCodeDescription(
@@ -138,11 +132,11 @@ function TelegramPairingCodeControls({
     </Button>
   );
 }
-
 function TelegramBotTokenRow({
   botToken,
   configured,
   onBotTokenChange,
+  onBotTokenPaste,
   onToggleShowBotToken,
   paneItemClass,
   savePending,
@@ -152,6 +146,7 @@ function TelegramBotTokenRow({
   botToken: string;
   configured: boolean;
   onBotTokenChange: (value: string) => void;
+  onBotTokenPaste: (value: string) => void;
   onToggleShowBotToken: () => void;
   paneItemClass: string | undefined;
   savePending: boolean;
@@ -159,21 +154,52 @@ function TelegramBotTokenRow({
   showBotToken: boolean;
 }) {
   return (
-    <SettingsRow
-      className={paneItemClass}
-      description="From @BotFather"
-      label="Bot token"
-    >
-      <InputGroup className="w-full min-w-[12rem] sm:w-[16rem]">
+    <SettingsRow className={paneItemClass} label="Bot token" layout="stacked">
+      <details className="mb-3 text-sm">
+        <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
+          How to get your bot token
+        </summary>
+        <ol className="list-decimal space-y-2 pt-3 pl-5 text-muted-foreground">
+          <li>
+            <a
+              className="font-medium text-primary hover:underline"
+              href="https://t.me/BotFather"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open @BotFather ↗
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>{" "}
+            in Telegram.
+          </li>
+          <li>
+            Send <strong>/newbot</strong> and follow the instructions to choose
+            a name and username.
+          </li>
+          <li>Copy the token BotFather sends you, then paste it below.</li>
+        </ol>
+      </details>
+      <InputGroup className="w-full">
         <InputGroupInput
+          aria-label="Bot token"
           autoComplete="off"
           disabled={savePending}
           id="telegram-bot-token"
           onChange={(event) => onBotTokenChange(event.target.value)}
+          onPaste={(event) => {
+            if (configured) {
+              return;
+            }
+            const token = event.clipboardData.getData("text").trim();
+            if (token) {
+              event.preventDefault();
+              onBotTokenPaste(token);
+            }
+          }}
           placeholder={
             configured && settings?.botTokenMasked
               ? `Saved (${settings.botTokenMasked})`
-              : "Paste token"
+              : "Paste token from @BotFather"
           }
           type={showBotToken ? "text" : "password"}
           value={botToken}
@@ -197,132 +223,9 @@ function TelegramBotTokenRow({
   );
 }
 
-function TelegramConfiguredSections({
-  allowedUserSummary,
-  isPaired,
-  onCopyHandshakeCode,
-  onManageAllowedUsers,
-  onProfileChange,
-  onRegenerateHandshake,
-  pairingCode,
-  paneItemClass,
-  profileId,
-  profiles,
-  regeneratePending,
-  running,
-  savePending,
-  worker,
-}: {
-  allowedUserSummary: string;
-  isPaired: boolean;
-  onCopyHandshakeCode: () => void;
-  onManageAllowedUsers: () => void;
-  onProfileChange: (profileId: string) => void;
-  onRegenerateHandshake: () => void;
-  pairingCode: string | null;
-  paneItemClass: string | undefined;
-  profileId: string;
-  profiles: ProfileSummary[];
-  regeneratePending: boolean;
-  running: boolean;
-  savePending: boolean;
-  worker: { process?: { managed?: boolean } } | null | undefined;
-}) {
-  return (
-    <>
-      <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
-        <SettingsRow
-          className={paneItemClass}
-          description={pairingCodeDescription(pairingCode, isPaired)}
-          label="Pairing code"
-        >
-          <TelegramPairingCodeControls
-            isPaired={isPaired}
-            onCopyHandshakeCode={onCopyHandshakeCode}
-            onRegenerateHandshake={onRegenerateHandshake}
-            pairingCode={pairingCode}
-            regeneratePending={regeneratePending}
-            savePending={savePending}
-          />
-        </SettingsRow>
-
-        {pairingCode ? <TelegramPairingGuide /> : null}
-      </div>
-
-      <SettingsRow
-        className={paneItemClass}
-        description="Telegram user IDs that can use this bot"
-        label="Allowed users"
-      >
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="text-muted-foreground text-xs">
-            {allowedUserSummary}
-          </span>
-          <Button
-            disabled={savePending}
-            onClick={onManageAllowedUsers}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Manage
-          </Button>
-        </div>
-      </SettingsRow>
-
-      <SettingsRow
-        className={paneItemClass}
-        description="Which agent answers on Telegram"
-        label="Reply as"
-      >
-        <Select
-          disabled={savePending || profiles.length === 0}
-          onValueChange={(value) => {
-            if (value) {
-              onProfileChange(String(value));
-            }
-          }}
-          value={profileId}
-        >
-          <SelectTrigger
-            className="w-[11rem] sm:w-[13rem]"
-            id="telegram-profile"
-          >
-            <SelectValue placeholder="Profile">
-              {profiles.find((profile) => profile.id === profileId)?.name}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent align="end">
-            {profiles.map((profile) => (
-              <SelectItem key={profile.id} value={profile.id}>
-                <span className="flex items-center gap-2">
-                  <ProfileAvatar profile={profile} size="sm" />
-                  <span>{profile.name}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-
-      <SettingsRow
-        className={paneItemClass}
-        description={running ? "Running" : "Stopped"}
-        label="Bridge worker"
-      >
-        <WorkerActionBar
-          pm2Managed={worker?.process?.managed ?? false}
-          running={running}
-          workerName="telegram"
-        />
-      </SettingsRow>
-    </>
-  );
-}
-
 function TelegramPairingGuide() {
   return (
-    <div className="space-y-3">
+    <div className="mx-4 space-y-3">
       <p className="font-medium text-foreground text-xs">Link in Telegram</p>
       <div className="overflow-hidden rounded-md border border-border">
         <div className="grid grid-cols-1 sm:grid-cols-2">
@@ -340,7 +243,7 @@ function TelegramPairingGuide() {
         </div>
       </div>
 
-      <details className="group">
+      <details className="group mt-4 mb-3">
         <summary className="cursor-pointer text-muted-foreground text-xs transition-colors hover:text-foreground">
           Using the bot in a group?
         </summary>
@@ -399,15 +302,15 @@ export type TelegramSettingsCardView = {
   isPaired: boolean;
   regeneratePending: boolean;
   canSave: boolean;
+  statusBadge: string;
 };
-
 export function TelegramSettingsCardContent({
   view,
-  headerSubtitle,
   statusBadge,
   settings,
   botToken,
   onBotTokenChange,
+  onBotTokenPaste,
   onToggleShowBotToken,
   pairingCode,
   onCopyHandshakeCode,
@@ -415,8 +318,6 @@ export function TelegramSettingsCardContent({
   allowedUserSummary,
   onManageAllowedUsers,
   profileId,
-  profiles,
-  onProfileChange,
   worker,
   statusLine,
   formError,
@@ -424,21 +325,19 @@ export function TelegramSettingsCardContent({
   submitLabel,
   onSave,
 }: {
-  view: TelegramSettingsCardView;
-  headerSubtitle: string;
-  statusBadge: string;
   settings: { botTokenMasked?: string | null } | null | undefined;
   botToken: string;
   onBotTokenChange: (value: string) => void;
+  onBotTokenPaste: (value: string) => void;
   onToggleShowBotToken: () => void;
+  view: TelegramSettingsCardView;
+  statusBadge: string;
   pairingCode: string | null;
   onCopyHandshakeCode: () => void;
   onRegenerateHandshake: () => void;
   allowedUserSummary: string;
   onManageAllowedUsers: () => void;
   profileId: string;
-  profiles: ProfileSummary[];
-  onProfileChange: (profileId: string) => void;
   worker: { process?: { managed?: boolean } } | null | undefined;
   statusLine: string | null;
   formError: string | null;
@@ -447,72 +346,130 @@ export function TelegramSettingsCardContent({
   onSave: () => void;
 }) {
   const {
-    embedded,
+    canSave,
     configured,
     hasLinkedUsers,
-    running,
-    showBotToken,
-    savePending,
     isPaired,
     regeneratePending,
-    canSave,
+    running,
+    savePending,
+    showBotToken,
   } = view;
 
-  const paneItemClass = embedded ? undefined : "px-0 py-0";
+  const paneItemClass = "px-4 py-3";
 
-  return (
-    <div className={cn(!embedded && "space-y-4 py-4")}>
-      {embedded ? null : (
-        <IntegrationStatusHeader
-          className={paneItemClass}
-          configured={configured}
-          connected={hasLinkedUsers && running}
-          statusBadge={statusBadge}
-          subtitle={headerSubtitle}
-          title="Telegram"
-        />
-      )}
-
-      <TelegramBotTokenRow
-        botToken={botToken}
-        configured={configured}
-        onBotTokenChange={onBotTokenChange}
-        onToggleShowBotToken={onToggleShowBotToken}
-        paneItemClass={paneItemClass}
-        savePending={savePending}
-        settings={settings}
-        showBotToken={showBotToken}
-      />
-
-      {configured ? (
-        <TelegramConfiguredSections
-          allowedUserSummary={allowedUserSummary}
+  const step = configured ? (running ? (hasLinkedUsers ? 3 : 2) : 1) : 0;
+  const workerActions = (
+    <WorkerActionBar
+      compact
+      pm2Managed={worker?.process?.managed ?? false}
+      running={running}
+      workerName="telegram"
+    />
+  );
+  const tokenEditor = (
+    <TelegramBotTokenRow
+      botToken={botToken}
+      configured={configured}
+      onBotTokenChange={onBotTokenChange}
+      onBotTokenPaste={onBotTokenPaste}
+      onToggleShowBotToken={onToggleShowBotToken}
+      paneItemClass={paneItemClass}
+      savePending={savePending}
+      settings={settings}
+      showBotToken={showBotToken}
+    />
+  );
+  const pairing = (
+    <div className="space-y-3">
+      <SettingsRow
+        description={pairingCodeDescription(pairingCode, isPaired)}
+        label="Link with a code"
+        layout="stacked"
+      >
+        <TelegramPairingCodeControls
           isPaired={isPaired}
           onCopyHandshakeCode={onCopyHandshakeCode}
-          onManageAllowedUsers={onManageAllowedUsers}
-          onProfileChange={onProfileChange}
           onRegenerateHandshake={onRegenerateHandshake}
           pairingCode={pairingCode}
-          paneItemClass={paneItemClass}
-          profileId={profileId}
-          profiles={profiles}
           regeneratePending={regeneratePending}
-          running={running}
           savePending={savePending}
-          worker={worker}
         />
+      </SettingsRow>
+      <details className="px-4 pb-3 text-sm">
+        <summary className="cursor-pointer text-muted-foreground">
+          Need help?
+        </summary>
+        <div className="pt-3">
+          <TelegramPairingGuide />
+        </div>
+      </details>
+    </div>
+  );
+  const footer = (
+    <IntegrationSettingsFooter
+      canSave={canSave}
+      className={paneItemClass}
+      formError={formError}
+      loadError={loadError}
+      onSave={onSave}
+      savePending={savePending}
+      showSave={canSave || savePending || !configured}
+      statusLine={statusLine}
+      submitLabel={configured ? submitLabel : "Continue"}
+    />
+  );
+  const checklist = (
+    <ChannelSetupChecklist
+      label="Telegram setup progress"
+      step={step}
+      steps={["Add bot", "Start connection", "Link account"]}
+    >
+      {step === 0 ? (
+        <div className="grid gap-4 px-4 pb-3 md:grid-cols-2">
+          <div className="min-w-0 rounded-xl border border-primary/20 bg-primary/5">
+            <TelegramQrSetup profileId={profileId} running={running} />
+          </div>
+          <div className="flex min-w-0 flex-col justify-between rounded-xl border border-border">
+            {tokenEditor}
+            {footer}
+          </div>
+        </div>
       ) : null}
-
-      <IntegrationSettingsFooter
-        canSave={canSave}
-        className={paneItemClass}
-        formError={formError}
-        loadError={loadError}
-        onSave={onSave}
-        savePending={savePending}
-        statusLine={statusLine}
-        submitLabel={submitLabel}
+      {step === 1 ? (
+        <ChannelConnectionStep
+          managed={worker?.process?.managed === true}
+          platform="telegram"
+          running={running}
+          starting={savePending}
+        >
+          {workerActions}
+          {tokenEditor}
+        </ChannelConnectionStep>
+      ) : null}
+      {step === 2 ? pairing : null}
+      {step === 0 ? null : footer}
+    </ChannelSetupChecklist>
+  );
+  if (step < 3) {
+    return checklist;
+  }
+  return (
+    <div className="space-y-4">
+      {checklist}
+      <ChannelAccessSettings
+        actions={workerActions}
+        configured={configured}
+        onEdit={onManageAllowedUsers}
+        pending={savePending}
+        statusBadge={statusBadge}
+        summary={allowedUserSummary}
       />
+      <ChannelSettings>
+        {tokenEditor}
+        {pairing}
+      </ChannelSettings>
+      {footer}
     </div>
   );
 }

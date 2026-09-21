@@ -597,6 +597,39 @@ describe("browser session schema", () => {
   });
 });
 
+describe("password reset schema", () => {
+  test("creates single-use password reset token storage", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      const columns = db
+        .prepare("PRAGMA table_info(password_reset_tokens)")
+        .all() as Array<{ name: string }>;
+      const indexes = db
+        .prepare("PRAGMA index_list(password_reset_tokens)")
+        .all() as Array<{ name: string }>;
+
+      expect(columns.map((column) => column.name)).toEqual([
+        "id",
+        "user_id",
+        "token_hash",
+        "expires_at",
+        "consumed_at",
+        "created_at",
+      ]);
+      expect(
+        indexes.some(
+          (index) => index.name === "password_reset_tokens_token_hash_unique"
+        )
+      ).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("organization schema migration", () => {
   test("creates org tables and allows org with admin member", () => {
     const db = new Database(":memory:");
@@ -1007,4 +1040,100 @@ describe("migration SQL hardening", () => {
       db.close();
     }
   });
+});
+
+test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec("ALTER TABLE skill_proposals DROP COLUMN supporting_files");
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec(`INSERT INTO skill_proposals (id, org_id, profile_id, action, skill_name, content, status, created_at)
+      VALUES ('pending', 'org', 'profile', 'create', 'demo', 'original content', 'pending', '2026-01-01')`);
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(
+      db
+        .query(
+          "SELECT content, supporting_files FROM skill_proposals WHERE id = 'pending'"
+        )
+        .get()
+    ).toEqual({ content: "original content", supporting_files: null });
+  } finally {
+    db.close();
+  }
+});
+
+describe("ephemeral attachment marking", () => {
+  test("adds the ephemeral column and defaults existing rows to 0", () => {
+    const db = new Database(":memory:");
+
+    try {
+      // A pre-migration attachments table, as an older install has it.
+      db.exec(`
+        CREATE TABLE attachments (
+          id TEXT PRIMARY KEY NOT NULL,
+          org_id TEXT,
+          profile_id TEXT NOT NULL,
+          session_id TEXT,
+          channel TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          filename TEXT,
+          media_type TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          storage_path TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO attachments (
+          id, org_id, profile_id, session_id, channel, kind, filename,
+          media_type, size_bytes, storage_path, created_at
+        ) VALUES (
+          'att_old', NULL, 'profile_test', NULL, 'web', 'image', NULL,
+          'image/png', 10, 'a/b.png', '2026-09-01T00:00:00.000Z'
+        );
+      `);
+
+      migrateDatabase(db);
+
+      const columns = db
+        .prepare("PRAGMA table_info(attachments)")
+        .all() as Array<{ name: string }>;
+      expect(columns.some((column) => column.name === "ephemeral")).toBe(true);
+
+      const existing = db
+        .prepare("SELECT ephemeral FROM attachments WHERE id = 'att_old'")
+        .get() as { ephemeral: number };
+      expect(existing.ephemeral).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("file pins migrate existing databases, survive reopen and cascade with profiles", () => {
+  const directory = mkdtempSync(join(tmpdir(), "nakama-file-pins-"));
+  const filename = join(directory, "pins.sqlite");
+  let db = new Database(filename);
+  try {
+    migrateDatabase(db);
+    db.exec("DROP TABLE file_pins");
+    migrateDatabase(db);
+    db.exec(`
+      INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES ('pin-org', 'Pins', 'pins', 'now', 'now');
+      INSERT INTO users (id, email, password_hash, created_at, updated_at) VALUES ('pin-user', 'pins@example.com', 'unused', 'now', 'now');
+      INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES ('pin-profile', 'Pins', 'pin-org', 'now', 'now');
+      INSERT INTO file_pins VALUES ('pin-org', 'pin-user', 'pin-profile', 'notes.md');
+    `);
+    db.close();
+    db = new Database(filename);
+    migrateDatabase(db);
+    expect(db.query("SELECT path FROM file_pins").all()).toEqual([
+      { path: "notes.md" },
+    ]);
+    db.exec("DELETE FROM profiles WHERE id = 'pin-profile'");
+    expect(db.query("SELECT path FROM file_pins").all()).toEqual([]);
+  } finally {
+    db.close();
+    rmSync(directory, { force: true, recursive: true });
+  }
 });

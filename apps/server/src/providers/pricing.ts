@@ -7,6 +7,11 @@ import { DISCOVERY_MODEL_PROVIDERS } from "@nakama/core/discovery-providers";
 import { getModelById, IMAGE_GENERATION_MODEL_ID } from "./models";
 
 export interface ModelPricing {
+  /**
+   * USD per 1M input tokens served from the provider's prompt cache. Falls back
+   * to the full input rate when a model does not publish one.
+   */
+  cachedInputPerMillionUsd?: number;
   /** USD per 1M input tokens */
   inputPerMillionUsd: number;
   /** USD per 1M output tokens */
@@ -49,6 +54,9 @@ function getCustomModelPricing(
     entry.outputPerMillionUsd !== undefined
   ) {
     return {
+      ...(entry.cachedInputPerMillionUsd === undefined
+        ? {}
+        : { cachedInputPerMillionUsd: entry.cachedInputPerMillionUsd }),
       inputPerMillionUsd: entry.inputPerMillionUsd,
       outputPerMillionUsd: entry.outputPerMillionUsd,
     };
@@ -127,7 +135,8 @@ export function estimateUsageCostUsd(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
-  context: PricingContext = {}
+  context: PricingContext = {},
+  cachedInputTokens = 0
 ): number {
   const pricing = getModelPricing(modelId, context);
 
@@ -135,9 +144,17 @@ export function estimateUsageCostUsd(
     return 0;
   }
 
-  const inputCost = (inputTokens / 1_000_000) * pricing.inputPerMillionUsd;
+  // A provider reporting more cached than total input would otherwise price
+  // the remainder negatively.
+  const cached = Math.min(Math.max(cachedInputTokens, 0), inputTokens);
+  const fresh = inputTokens - cached;
+  const cachedRate =
+    pricing.cachedInputPerMillionUsd ?? pricing.inputPerMillionUsd;
+
+  const inputCost = (fresh / 1_000_000) * pricing.inputPerMillionUsd;
+  const cachedCost = (cached / 1_000_000) * cachedRate;
   const outputCost = (outputTokens / 1_000_000) * pricing.outputPerMillionUsd;
-  return inputCost + outputCost;
+  return inputCost + cachedCost + outputCost;
 }
 
 export function hasCatalogPricing(

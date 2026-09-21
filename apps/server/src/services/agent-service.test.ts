@@ -8,6 +8,7 @@ import {
   loadDiscordConfigFile,
   loadTelegramConfigFile,
   loadWhatsAppConfigFile,
+  type ProfileResponse,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -21,6 +22,7 @@ import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
 const TEST_ORG_ID = "org_test";
@@ -43,6 +45,67 @@ function createDefaultProfile(): StoredProfileRecord {
     updatedAt: now,
   };
 }
+
+describe("Super Bot provider inheritance", () => {
+  setupTestConfigDir("nakama-inherited-provider-");
+
+  test.each(["server default", "profile", "session"] as const)(
+    "persists the resolved %s selection on the new profile",
+    async (source) => {
+      const db = createInMemoryDatabaseAdapter();
+      const profile = {
+        ...createDefaultProfile(),
+        isSuper: true,
+        model: source === "server default" ? null : "openai-1::gpt-4.1",
+      };
+      await db.upsertProfile(profile);
+      await db.upsertSession({
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: profile.createdAt,
+        id: "super-session",
+        model: source === "session" ? "openai-2::gpt-4.1-mini" : null,
+        profileId: profile.id,
+        title: null,
+      });
+      const provider = {
+        apiKey: "test-key",
+        createdAt: profile.createdAt,
+        id: "openai-1",
+        label: "OpenAI",
+        type: "openai" as const,
+      };
+      const service = new AgentService(
+        {
+          defaultProviderId: provider.id,
+          providers: [provider, { ...provider, id: "openai-2" }],
+        },
+        null,
+        db
+      );
+      const tool = (
+        service as unknown as { superBotTools: ToolDefinition[] }
+      ).superBotTools.find((entry) => entry.name === "create_profile");
+      expect(tool).toBeDefined();
+      const result = (await tool!.run(
+        { name: "New Agent" },
+        {
+          orgId: ORG_ID,
+          profileId: profile.id,
+          sessionId: "super-session",
+        }
+      )) as ProfileResponse;
+      const expected =
+        source === "session"
+          ? "openai-2::gpt-4.1-mini"
+          : (profile.model ??
+            `${provider.id}::${resolveDefaultModelForInstance(provider)}`);
+      expect(result.profile.model).toBe(expected);
+      expect((await db.getProfile(result.profile.id))?.model).toBe(expected);
+    }
+  );
+});
 
 describe("AgentService sub-agent roles", () => {
   setupTestConfigDir("nakama-sub-agent-role-");
@@ -109,6 +172,40 @@ describe("AgentService sub-agent roles", () => {
 });
 
 describe("AgentService branching", () => {
+  test("reopens a saved session with a retired ChatGPT model", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const sessionId = await new AgentService(null, null, db).createSession(
+      ORG_ID,
+      "web",
+      "profile_default"
+    );
+    await db.updateSessionModel(sessionId, "chatgpt-1::gpt-5.4-mini");
+    const service = new AgentService(
+      {
+        defaultProviderId: "chatgpt-1",
+        providers: [
+          {
+            apiKey: "",
+            createdAt: "2026-09-16T00:00:00.000Z",
+            id: "chatgpt-1",
+            label: "ChatGPT",
+            type: "chatgpt",
+          },
+        ],
+      },
+      null,
+      db
+    );
+
+    expect((await service.getSessionMessages(sessionId, ORG_ID))?.model).toBe(
+      "chatgpt-1::gpt-5.4-mini"
+    );
+    expect((await db.getSession(sessionId))?.model).toBe(
+      "chatgpt-1::gpt-5.4-mini"
+    );
+  });
+
   test("keeps model selection scoped to the chat session", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile({
@@ -1215,65 +1312,104 @@ describe("AgentService WhatsApp allowed phones", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("writes allowed phones to WhatsApp config", async () => {
-    const service = new AgentService(
-      null,
-      null,
-      createInMemoryDatabaseAdapter()
-    );
+  async function createWhatsAppService() {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: "well-test-report-validator",
+    });
+    return new AgentService(null, null, db);
+  }
 
-    const saved = await service.setWhatsAppSettings({
+  test("writes allowed phones to WhatsApp config", async () => {
+    const service = await createWhatsAppService();
+
+    const saved = await service.setWhatsAppSettings(ORG_ID, {
       allowedPhones: "+62 813-5231-1912",
       profileId: "well-test-report-validator",
     });
 
     expect(saved.allowedPhones).toEqual(["6281352311912"]);
-    expect((await service.getWhatsAppSettings()).allowedPhones).toEqual([
+    expect((await service.getWhatsAppSettings(ORG_ID)).allowedPhones).toEqual([
       "6281352311912",
     ]);
-    expect((await loadWhatsAppConfigFile())?.allowedPhones).toEqual([
+    expect((await loadWhatsAppConfigFile(ORG_ID))?.allowedPhones).toEqual([
       "6281352311912",
     ]);
   });
 
   test("keeps allowed phones when only the profile is saved", async () => {
-    const service = new AgentService(
-      null,
-      null,
-      createInMemoryDatabaseAdapter()
-    );
-    await service.setWhatsAppSettings({
+    const service = await createWhatsAppService();
+    await service.setWhatsAppSettings(ORG_ID, {
       allowedPhones: "6281352311912",
       profileId: "well-test-report-validator",
     });
 
-    const saved = await service.setWhatsAppSettings({
+    const saved = await service.setWhatsAppSettings(ORG_ID, {
       profileId: "well-test-report-validator",
     });
 
     expect(saved.allowedPhones).toEqual(["6281352311912"]);
-    expect((await loadWhatsAppConfigFile())?.allowedPhones).toEqual([
+    expect((await loadWhatsAppConfigFile(ORG_ID))?.allowedPhones).toEqual([
       "6281352311912",
     ]);
   });
 
   test("writes requireGroupMention to WhatsApp config", async () => {
-    const service = new AgentService(
-      null,
-      null,
-      createInMemoryDatabaseAdapter()
-    );
+    const service = await createWhatsAppService();
 
-    const saved = await service.setWhatsAppSettings({
+    const saved = await service.setWhatsAppSettings(ORG_ID, {
       profileId: "default",
       requireGroupMention: false,
     });
 
     expect(saved.requireGroupMention).toBe(false);
-    expect((await service.getWhatsAppSettings()).requireGroupMention).toBe(
+    expect(
+      (await service.getWhatsAppSettings(ORG_ID)).requireGroupMention
+    ).toBe(false);
+    expect((await loadWhatsAppConfigFile(ORG_ID))?.requireGroupMention).toBe(
       false
     );
-    expect((await loadWhatsAppConfigFile())?.requireGroupMention).toBe(false);
+  });
+});
+
+describe("AgentService organization knowledge base", () => {
+  setupTestConfigDir("nakama-org-knowledge-base-");
+
+  test("serves organization documents through the profile service", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(null, null, db);
+
+    const uploaded = await service.uploadOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      {
+        data: Buffer.from("shared organization fact", "utf8").toString(
+          "base64"
+        ),
+        filename: "shared.txt",
+        mediaType: "text/plain",
+      }
+    );
+    expect(uploaded.outcome).toBe("created");
+    expect(uploaded.document.scope).toBe("organization");
+
+    const listed = await service.listOrganizationKnowledgeBase(ORG_ID);
+    expect(listed.documents.map((document) => document.id)).toEqual([
+      uploaded.document.id,
+    ]);
+
+    const read = await service.readOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      uploaded.document.id
+    );
+    expect(read.filename).toBe("shared.txt");
+
+    const deleted = await service.deleteOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      uploaded.document.id
+    );
+    expect(deleted.deleted).toBe(true);
+    expect(deleted.documentId).toBe(uploaded.document.id);
   });
 });
 

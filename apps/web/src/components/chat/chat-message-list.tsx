@@ -34,8 +34,12 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
-import { AssistantTurnSegmentView } from "@/components/chat/assistant-tool-group";
+import {
+  AssistantTurnSegmentView,
+  ProfileCreatedCard,
+} from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
+import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
@@ -56,7 +60,11 @@ import {
   type MessageTurn,
   turnKey,
 } from "@/lib/chat-message-turns";
-import { awaitingModelLabel, isAwaitingModelResponse } from "@/lib/chat-stream";
+import {
+  awaitingModelLabel,
+  isAwaitingModelResponse,
+  parseProfileCreatedResult,
+} from "@/lib/chat-stream";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
@@ -108,9 +116,11 @@ interface ChatMessageListProps {
   messages: ChatListItem[];
   modelLabel?: string | null;
   onBranchMessage?: (message: ChatListItem) => void;
+  onContinueToolSetup?: (setupId: string) => Promise<void>;
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   profileId?: string | null;
+  sessionId?: string;
   showThinking?: boolean;
   /** Show tokens and estimated cost under each completed assistant turn. */
   showUsage?: boolean;
@@ -125,6 +135,8 @@ export function ChatMessageList(props: ChatMessageListProps) {
 }
 
 function ChatMessageListSession({
+  sessionId,
+  onContinueToolSetup,
   messages,
   profileId,
   showThinking = true,
@@ -271,8 +283,10 @@ function ChatMessageListSession({
             messages={turn.messages}
             modelLabel={modelLabel}
             onBranchMessage={onBranchMessage}
+            onContinueToolSetup={onContinueToolSetup}
             onRetryMessage={onRetryMessage}
             profileId={profileId}
+            sessionId={sessionId}
             showAwaiting={
               turnIndex === turns.length - 1 && awaitingLabel === "Working…"
             }
@@ -280,11 +294,14 @@ function ChatMessageListSession({
             showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
+            workStreamActive={streamActive && turnIndex === turns.length - 1}
           />
         </div>
       );
     },
     [
+      sessionId,
+      onContinueToolSetup,
       actionsDisabled,
       awaitingLabel,
       branchingMessageId,
@@ -348,6 +365,9 @@ function ChatMessageListSession({
 }
 
 function AssistantTurn({
+  sessionId,
+  onContinueToolSetup,
+  workStreamActive,
   messages,
   profileId,
   showThinking,
@@ -361,6 +381,9 @@ function AssistantTurn({
   onBranchMessage,
   onRetryMessage,
 }: {
+  sessionId?: string;
+  onContinueToolSetup?: (setupId: string) => Promise<void>;
+  workStreamActive: boolean;
   messages: IndexedMessage[];
   profileId?: string | null;
   showThinking: boolean;
@@ -375,7 +398,7 @@ function AssistantTurn({
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
   const turnMessages = messages.map(({ message }) => message);
-  const segments = segmentAssistantTurn(turnMessages);
+  const segments = segmentAssistantTurn(turnMessages, workStreamActive);
   const artifacts = extractTurnArtifacts(turnMessages);
   const artifactTurnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
@@ -397,7 +420,7 @@ function AssistantTurn({
         <AssistantTurnSegmentView
           key={
             segment.kind === "work"
-              ? `work:${segment.thinking?.id ?? "thought"}:${segment.tools.map((message) => message.id).join(":")}`
+              ? `work:${segment.groupId ?? segment.thinking?.id ?? "thought"}`
               : `text:${segment.message.id}`
           }
           modelLabel={modelLabel}
@@ -408,7 +431,22 @@ function AssistantTurn({
           showThinking={showThinking}
         />
       ))}
-      {showAwaiting ? <TurnAwaitingElapsed startedAt={turnStartedAt} /> : null}
+      {showAwaiting && !segments.some((segment) => segment.kind === "work") ? (
+        <TurnAwaitingElapsed startedAt={turnStartedAt} />
+      ) : null}
+      {!workStreamActive &&
+        turnComplete &&
+        turnMessages
+          .filter((message) => message.toolResult != null)
+          .map((message) => (
+            <ToolCredentialCard
+              disabled={actionsDisabled}
+              key={message.id}
+              onContinue={onContinueToolSetup}
+              result={message.toolResult}
+              sessionId={sessionId}
+            />
+          ))}
       {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {artifacts.map((artifact) => {
@@ -425,6 +463,7 @@ function AssistantTurn({
           })}
         </div>
       ) : null}
+      <CreatedProfiles complete={turnComplete} messages={turnMessages} />
       {showActions && anchorMessage ? (
         <AssistantMessageActions
           actionsDisabled={actionsDisabled}
@@ -436,6 +475,36 @@ function AssistantTurn({
           usage={turnUsage}
         />
       ) : null}
+    </div>
+  );
+}
+
+function CreatedProfiles({
+  complete,
+  messages,
+}: {
+  complete: boolean;
+  messages: ChatListItem[];
+}) {
+  if (!complete) {
+    return null;
+  }
+  const profiles = messages.flatMap((message) => {
+    if (message.tool !== "create_profile") {
+      return [];
+    }
+
+    const profile = parseProfileCreatedResult(message.toolResult);
+    return profile ? [profile] : [];
+  });
+  if (profiles.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex w-full flex-col gap-2">
+      {profiles.map((profile) => (
+        <ProfileCreatedCard key={profile.id} profile={profile} />
+      ))}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { cn } from "@nakama/ui/utils";
-import { BrainIcon, WorkflowSquare01Icon } from "hugeicons-react";
+import { ArrowRight01Icon, BrainIcon, SharedWifiIcon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import type { NotificationItem } from "@/hooks/use-notifications";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
@@ -11,12 +11,12 @@ function NotificationIcon({
   kind: NotificationItem["kind"];
   size?: "sm" | "md";
 }) {
-  const Icon = kind === "automation-run" ? WorkflowSquare01Icon : BrainIcon;
+  const Icon = kind === "automation-run" ? SharedWifiIcon : BrainIcon;
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground",
-        size === "sm" ? "size-7" : "size-9"
+        "flex shrink-0 items-center justify-center text-muted-foreground",
+        size === "sm" ? "size-7 rounded-md bg-muted" : "mt-0.5 size-4"
       )}
     >
       <Icon aria-hidden className={size === "sm" ? "size-3.5" : "size-4"} />
@@ -36,8 +36,8 @@ function NotificationListItem({
   return (
     <Link
       className={cn(
-        "flex min-w-0 overflow-hidden rounded-md transition-colors hover:bg-muted/60",
-        compact ? "gap-2.5 px-2 py-2" : "gap-2.5 px-2 py-2.5"
+        "flex min-w-0 overflow-hidden transition-colors hover:bg-muted/60",
+        compact ? "gap-2.5 rounded-md px-2 py-2" : "gap-3 px-4 py-3"
       )}
       onClick={onNavigate}
       to={item.href}
@@ -46,7 +46,12 @@ function NotificationListItem({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate font-medium text-foreground text-sm leading-tight">
+            <p
+              className={cn(
+                "text-foreground text-sm leading-tight",
+                compact ? "truncate font-medium" : "break-words font-normal"
+              )}
+            >
               {item.title}
             </p>
           </div>
@@ -71,12 +76,18 @@ function NotificationListItem({
             "min-w-0 break-all text-muted-foreground",
             compact
               ? "mt-1 line-clamp-2 text-xs leading-snug"
-              : "mt-1.5 whitespace-pre-wrap text-sm leading-relaxed"
+              : "mt-1 whitespace-pre-wrap text-xs leading-relaxed"
           )}
         >
           {item.description}
         </p>
       </div>
+      {!compact && (
+        <ArrowRight01Icon
+          aria-hidden
+          className="size-4 shrink-0 self-center text-muted-foreground"
+        />
+      )}
     </Link>
   );
 }
@@ -97,7 +108,9 @@ export function NotificationList({
   }
 
   return (
-    <div className={cn(compact ? "space-y-1 py-0.5" : "space-y-2")}>
+    <div
+      className={cn(compact ? "space-y-1 py-0.5" : "divide-y divide-border")}
+    >
       {items.map((item) => (
         <NotificationListItem
           compact={compact}

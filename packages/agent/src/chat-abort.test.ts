@@ -64,6 +64,66 @@ const callThenReply: ChatCompletionResult[] = [
 ];
 
 describe("agent chat cancellation", () => {
+  for (const parallelSafe of [false, true]) {
+    test(`preserves completed tools and closes interrupted calls (parallel: ${parallelSafe})`, async () => {
+      const controller = new AbortController();
+      const tools: ToolDefinition[] = [
+        {
+          description: "Completes",
+          name: "completed",
+          parallelSafe,
+          parameters: { properties: {}, type: "object" },
+          run: () => Promise.resolve({ saved: true }),
+        },
+        {
+          description: "Cancels",
+          name: "cancel",
+          parallelSafe,
+          parameters: { properties: {}, type: "object" },
+          run() {
+            controller.abort();
+            return Promise.reject(controller.signal.reason);
+          },
+        },
+      ];
+      const calls = tools.map((tool) => ({
+        arguments: {},
+        id: tool.name,
+        name: tool.name,
+      }));
+      const { provider, getCallCount } = createCountingProvider([
+        {
+          assistantMessage: {
+            content: "Working",
+            role: "assistant",
+            toolCalls: calls,
+          },
+          content: "Working",
+          toolCalls: calls,
+        },
+      ]);
+      const session = createAgentChatSession({ provider, tools }, { tools });
+      await expect(
+        session.sendStream(
+          "Run tools",
+          { onChunk() {} },
+          { signal: controller.signal }
+        )
+      ).rejects.toThrow();
+      expect(getCallCount()).toBe(1);
+      expect(session.getHistory()).toEqual([
+        { content: "Run tools", role: "user" },
+        { content: "Working", role: "assistant", toolCalls: calls },
+        expect.objectContaining({
+          content: JSON.stringify({ saved: true }),
+          role: "tool",
+          toolCallId: "completed",
+        }),
+        expect.objectContaining({ role: "tool", toolCallId: "cancel" }),
+      ]);
+    });
+  }
+
   test("stops the tool loop and hands the signal to tools", async () => {
     const controller = new AbortController();
     let seenSignal: AbortSignal | undefined;

@@ -68,9 +68,24 @@ export class NotificationWebhookService {
     }
 
     const normalized = normalizeNotificationWebhookRequest(payload);
+    if (
+      !(
+        destination.config.profileId &&
+        (await this.databaseAdapter.listProfilesForOrg(destination.orgId)).some(
+          (profile) => profile.id === destination.config.profileId
+        )
+      )
+    ) {
+      throw new NakamaApiError(
+        "Choose an agent connection for this notification destination.",
+        409
+      );
+    }
     const result = await this.telegram.send({
       chatIds: [destination.config.chatId],
+      orgId: destination.orgId,
       parseMode: "HTML",
+      profileId: destination.config.profileId,
       text: formatNotificationMessage(normalized),
       ...(destination.config.topicId
         ? { topicId: destination.config.topicId }

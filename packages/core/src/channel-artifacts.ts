@@ -5,6 +5,20 @@ const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 const ARTIFACTS_SEGMENT = "/artifacts/";
 const ARTIFACTS_PREFIX = "artifacts/";
 
+/** Filenames that look like agent scratch, never user-facing deliverables. */
+export function isScratchArtifactPath(relativePath: string): boolean {
+  const filename = relativePath.split("/").pop() ?? relativePath;
+  return (
+    filename.startsWith(".") ||
+    filename.startsWith("_") ||
+    filename.startsWith("~") ||
+    filename.endsWith("~") ||
+    filename.endsWith(".tmp") ||
+    filename.endsWith(".bak") ||
+    filename.endsWith(".swp")
+  );
+}
+
 export interface ChannelArtifactRef {
   filename: string;
   mimeType: string;

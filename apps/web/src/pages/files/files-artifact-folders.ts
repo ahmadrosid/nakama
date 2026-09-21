@@ -20,10 +20,6 @@ export function normalizeArtifactFolderPrefix(prefix: string): string {
   return normalizeArtifactPath(prefix);
 }
 
-export function artifactFolderFileLabel(fileCount: number): string {
-  return fileCount === 1 ? "1 file" : `${fileCount} files`;
-}
-
 export function artifactBasename(filename: string): string {
   const normalized = filename.replaceAll("\\", "/");
   const separator = normalized.lastIndexOf("/");

@@ -10,7 +10,9 @@ import {
   getOrgMemoryDir,
   getOrgMemoryFilePath,
   getOrgMemoryHistoryEntry,
+  type ListOrgMemoryHistoryResponse,
   listOrgMemoryHistory,
+  listOrgMemoryHistoryWithCap,
   NakamaApiError,
   normalizeOrgMemoryBullet,
   normalizeOrgMemoryDedupKey,
@@ -28,9 +30,36 @@ import {
   writeTextFile,
 } from "@nakama/core/fs";
 import type { DatabaseAdapter, StoredOrgMemoryProposal } from "@nakama/db";
+import { MemoryBackendService } from "./memory-backend-service";
 
 const SUMMARY_BYTE_CAP = 2048;
 const MAX_PROPOSAL_BULLET_LENGTH = 500;
+const MAX_SOURCE_DOCUMENT_IDS = 20;
+
+function normalizeSourceDocumentIds(
+  value: string[] | null | undefined
+): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const id = entry.trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= MAX_SOURCE_DOCUMENT_IDS) {
+      break;
+    }
+  }
+  return ids;
+}
 
 export interface OrgMemoryContent {
   content: string;
@@ -67,10 +96,12 @@ export interface ProposeOrgMemoryInput {
   profileId?: string | null;
   proposedByUserId?: string | null;
   sessionId?: string | null;
+  sourceDocumentIds?: string[] | null;
 }
 
 export interface OrgMemoryServiceOptions {
   configDir?: string;
+  memoryBackend?: MemoryBackendService;
 }
 
 export interface OrgMemoryChangeContext {
@@ -104,10 +135,15 @@ function assertNoOrgMemoryInjection(raw: string, normalized: string): void {
 }
 
 export class OrgMemoryService {
+  private readonly memoryBackend: MemoryBackendService | null;
   constructor(
     private readonly database: DatabaseAdapter | null = null,
     private readonly options: OrgMemoryServiceOptions = {}
-  ) {}
+  ) {
+    this.memoryBackend =
+      options.memoryBackend ??
+      (database ? new MemoryBackendService(database, options) : null);
+  }
 
   /**
    * Read the live org MEMORY.md. Returns the canonical preamble when the file
@@ -117,10 +153,20 @@ export class OrgMemoryService {
     const existing = await readTextIfExists(
       getOrgMemoryFilePath(orgId, this.options.configDir)
     );
-    if (!existing || existing.trim().length === 0) {
-      return `${ORG_MEMORY_PREAMBLE}\n`;
+    const content = existing?.trim() ? existing : `${ORG_MEMORY_PREAMBLE}\n`;
+    if (!this.memoryBackend) {
+      return content;
     }
-    return existing;
+    const raw = existing
+      ? await readText(getOrgMemoryFilePath(orgId, this.options.configDir))
+      : content;
+    const stored = await this.memoryBackend.readMemory(
+      orgId,
+      null,
+      "MEMORY.md",
+      raw
+    );
+    return existing ? stored.trim() : stored;
   }
 
   /** Render the `## Org Memory` section injected into profile system prompts. */
@@ -160,8 +206,8 @@ export class OrgMemoryService {
   async listHistory(
     orgId: string,
     limit?: number
-  ): Promise<OrgMemoryChangeLogEntry[]> {
-    return listOrgMemoryHistory(orgId, limit, this.options.configDir);
+  ): Promise<ListOrgMemoryHistoryResponse> {
+    return listOrgMemoryHistoryWithCap(orgId, limit, this.options.configDir);
   }
 
   async getHistoryRevision(orgId: string, revisionId: string) {
@@ -506,6 +552,9 @@ export class OrgMemoryService {
       };
     }
 
+    const sourceDocumentIds = normalizeSourceDocumentIds(
+      input.sourceDocumentIds
+    );
     const now = new Date().toISOString();
     const proposal: StoredOrgMemoryProposal = {
       bullet: text,
@@ -518,6 +567,7 @@ export class OrgMemoryService {
       reviewedAt: null,
       reviewerUserId: null,
       sessionId: input.sessionId ?? null,
+      sourceDocumentIds,
       status: "pending",
     };
     await db.createOrgMemoryProposal(proposal);
@@ -628,26 +678,20 @@ export class OrgMemoryService {
       return { matches, query };
     }
 
-    const live = await readTextIfExists(
-      getOrgMemoryFilePath(orgId, this.options.configDir)
-    );
+    const live = await this.getMemory(orgId);
     if (live) {
       const parsed = parseOrgMemoryContent(live);
       for (const bullet of parsed.pinned) {
-        if (bullet.toLowerCase().includes(normalizedQuery)) {
-          matches.push({ bullet, source: "live", tier: "pinned" });
-        }
+        matches.push({ bullet, source: "live", tier: "pinned" });
       }
       for (const section of parsed.sections) {
         for (const bullet of section.bullets) {
-          if (bullet.toLowerCase().includes(normalizedQuery)) {
-            matches.push({
-              bullet,
-              date: section.date,
-              source: "live",
-              tier: "recent-log",
-            });
-          }
+          matches.push({
+            bullet,
+            date: section.date,
+            source: "live",
+            tier: "recent-log",
+          });
         }
       }
     }
@@ -662,14 +706,31 @@ export class OrgMemoryService {
       for (const filename of files) {
         const archiveContent = await readText(join(archiveDir, filename));
         for (const bullet of this.collectArchiveBullets(archiveContent)) {
-          if (bullet.toLowerCase().includes(normalizedQuery)) {
-            matches.push({ bullet, source: filename, tier: "archive" });
-          }
+          matches.push({ bullet, source: filename, tier: "archive" });
         }
       }
     }
 
-    return { matches, query };
+    const remote = await this.memoryBackend?.search(
+      orgId,
+      "org-search",
+      matches.map((match, index) => ({
+        content: match.bullet,
+        id: String(index),
+      })),
+      query,
+      100
+    );
+    return {
+      matches: remote
+        ? remote.flatMap((hit) =>
+            matches[Number(hit.id)] ? [matches[Number(hit.id)]!] : []
+          )
+        : matches.filter((match) =>
+            match.bullet.toLowerCase().includes(normalizedQuery)
+          ),
+      query,
+    };
   }
 
   private bulletExistsInMemory(
@@ -748,6 +809,8 @@ export class OrgMemoryService {
     if (current === content) {
       return;
     }
+
+    await this.memoryBackend?.readMemory(orgId, null, "MEMORY.md", content);
 
     await writeTextFile(
       getOrgMemoryFilePath(orgId, this.options.configDir),

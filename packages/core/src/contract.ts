@@ -51,6 +51,7 @@ export interface StoredAutomation extends AutomationDefinition {
   createdAt: string;
   enabled: boolean;
   lastRunAt?: string | null;
+  lastRunStatus?: AutomationRunStatus | null;
   nextRunAt?: string | null;
   orgId?: string | null;
   profileId: string;
@@ -176,6 +177,13 @@ export interface WhatsAppWorkerStatus {
   process?: WorkerProcessInfo;
   qrCode: string | null;
   running: boolean;
+}
+
+export interface PluginWorkerStatus {
+  label: string;
+  name: string;
+  pluginId: string;
+  process: WorkerProcessInfo;
 }
 
 export interface WorkerLogsResponse {
@@ -602,8 +610,9 @@ export interface OrganizationResponse {
 }
 
 export interface OrgInviteCreatedResponse {
+  delivered: boolean;
   invite: OrgInviteSummary;
-  token: string;
+  token: string | null;
 }
 
 export interface AddOrgMemberResponse {
@@ -727,6 +736,10 @@ export interface OrgMemoryChangeLogEntry {
 
 export interface ListOrgMemoryHistoryResponse {
   changes: OrgMemoryChangeLogEntry[];
+  /** Soft cap kept on disk; older revisions are pruned. */
+  maxEntries: number;
+  /** True once pruning has discarded at least one older revision. */
+  truncated: boolean;
 }
 
 export interface RestoreOrgMemoryHistoryResponse {
@@ -751,6 +764,8 @@ export interface OrgMemoryProposal {
   reviewedAt: string | null;
   reviewerUserId: string | null;
   sessionId: string | null;
+  /** Knowledge-base document ids cited when the bullet was proposed. */
+  sourceDocumentIds: string[];
   status: OrgMemoryProposalStatus;
 }
 
@@ -794,6 +809,7 @@ export interface SkillProposal {
   sessionId: string | null;
   skillName: string;
   status: SkillProposalStatus;
+  supportingFiles?: { path: string; contentBase64: string }[] | null;
   warnings?: string[];
 }
 
@@ -872,6 +888,20 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface RequestPasswordResetResponse {
+  delivered: boolean;
+  token: string | null;
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string;
+  token: string;
+}
+
 export interface ChannelOrgMappingSummary {
   channel: ChannelType;
   channelUserId: string;
@@ -892,6 +922,14 @@ export interface ListChannelOrgMappingsResponse {
 
 export interface CreateSessionRequest {
   channel: AgentChannel;
+  codingWorkspaceRoot?: string;
+  /**
+   * A cognito session lives only in server memory: no `sessions` row, no
+   * `session_messages`, no generated title, and no write-back into profile or
+   * org memory. It still loads soul, skills, plugins and memory, it just
+   * leaves nothing behind. Absent or false means an ordinary session.
+   */
+  cognito?: boolean;
   model?: string;
   profileId?: string;
 }
@@ -901,7 +939,9 @@ export interface CreateSessionResponse {
 }
 
 export interface UpdateSessionRequest {
-  model: string | null;
+  model?: string | null;
+  pinned?: boolean;
+  title?: string;
 }
 
 export interface BranchSessionRequest {
@@ -1006,6 +1046,7 @@ export interface SessionSummary {
   createdAt: string;
   id: string;
   messageCount: number;
+  pinned: boolean;
   preview: string | null;
   profileId: string;
   title: string | null;
@@ -1077,6 +1118,7 @@ export type StreamEvent =
   | { type: "thinking"; delta: string }
   | {
       type: "tool_input_delta";
+      toolGroupId?: string;
       toolCallId: string;
       tool: string;
       delta: string;
@@ -1084,12 +1126,14 @@ export type StreamEvent =
     }
   | {
       type: "tool_start";
+      toolGroupId?: string;
       toolCallId: string;
       tool: string;
       input: Record<string, unknown>;
     }
   | {
       type: "tool_end";
+      toolGroupId?: string;
       toolCallId: string;
       tool: string;
       result: unknown;
@@ -1437,7 +1481,32 @@ export interface TelegramSettingsResponse {
 export interface UpdateTelegramSettingsRequest {
   allowedUserIds?: string;
   botToken?: string;
+  pairedUserIds?: string;
   profileId?: string;
+}
+export interface StartTelegramPairingRequest {
+  profileId: string;
+}
+
+export interface TelegramPairingStartResponse {
+  deepLink: string;
+  expiresAt: string;
+  pairingId: string;
+  qrPayload: string;
+  suggestedUsername: string;
+}
+
+export interface TelegramPairingStatusResponse {
+  botUsername: string | null;
+  expiresAt: string;
+  ownerUserId: number | null;
+  pairingId: string;
+  profileId: string;
+  status: "waiting" | "ready" | "expired" | "cancelled" | "applied";
+}
+
+export interface ApplyTelegramPairingRequest {
+  profileId: string;
 }
 
 export interface DiscordSettingsResponse {
@@ -1486,6 +1555,7 @@ export type NotificationWebhookLevel = "info" | "success" | "warning" | "error";
 
 export interface TelegramNotificationDestinationConfig {
   chatId: number;
+  profileId?: string;
   topicId?: number | null;
 }
 
@@ -1650,9 +1720,15 @@ export interface ApiErrorResponse {
 }
 
 export interface CustomModelEntry {
+  /** USD per 1M input tokens served from the provider's prompt cache. */
+  cachedInputPerMillionUsd?: number;
+  /** Total context the model accepts. Blank falls back to the catalog entry,
+   * then to a conservative default, so existing entries keep their behaviour. */
+  contextWindow?: number;
   default?: boolean;
   id: string;
   inputPerMillionUsd?: number;
+  maxOutputTokens?: number;
   name?: string;
   outputPerMillionUsd?: number;
   supportsThinking?: boolean;
@@ -1814,6 +1890,8 @@ export interface SkillSummary {
   hasTool: boolean;
   id: string;
   name: string;
+  /** null means shared across organizations. */
+  orgId?: string | null;
   pluginId?: string | null;
   pluginKey?: string | null;
   sourcePath: string;
@@ -1831,6 +1909,18 @@ export interface ListSkillsResponse {
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface SkillFilesResponse {
+  files: { path: string; type: "file" | "directory" }[];
+  truncated: boolean;
+}
+
+export interface SkillFileResponse {
+  content: string | null;
+  image?: { mediaType: string; dataBase64: string };
+  path: string;
+  unavailableReason?: string;
 }
 
 export interface AssignSkillRequest {
@@ -1873,7 +1963,12 @@ export interface SyncSkillsResponse {
   updated: number;
 }
 
-export type McpServerStatus = "connected" | "disconnected" | "error";
+export type McpServerStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  /** Waiting for someone to approve the server's OAuth sign-in in a browser. */
+  | "needs_auth";
 export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
@@ -1911,6 +2006,8 @@ export interface McpServerSummary {
 export interface McpServerDetail extends McpServerSummary {
   cachedTools: CachedMcpToolSummary[];
   config: McpServerConfig;
+  /** Authenticated by a browser sign-in rather than by headers. */
+  usesOAuth: boolean;
 }
 
 export interface ListMcpServersResponse {
@@ -1918,6 +2015,11 @@ export interface ListMcpServersResponse {
 }
 
 export interface McpServerResponse {
+  /**
+   * Present when the server needs a browser sign-in before it can connect.
+   * Open it, approve, and the OAuth callback finishes the connection.
+   */
+  authorizationUrl?: string;
   server: McpServerDetail;
 }
 
@@ -1945,6 +2047,8 @@ export interface AssignMcpServerRequest {
 export interface TestMcpServerResponse {
   error?: string;
   ok: boolean;
+  /** The server answers 401 and advertises OAuth: sign-in, not a broken config. */
+  requiresAuthorization?: boolean;
   toolCount: number;
   tools: CachedMcpToolSummary[];
 }
@@ -2031,8 +2135,14 @@ export type ProfileChangeField =
   | "pack_import";
 
 export interface ProfileChangeEvent {
+  actorName?: string | null;
   actorUserId: string | null;
   afterValue: string | null;
+  assignmentChanges?: {
+    added: Array<{ id: string; name: string | null }>;
+    removed: Array<{ id: string; name: string | null }>;
+  };
+  assignmentNames?: Record<string, string | null>;
   beforeValue: string | null;
   createdAt: string;
   field: ProfileChangeField;
@@ -2051,6 +2161,18 @@ export interface CreateToolRequest {
   handlerConfig?: unknown;
   handlerType?: string;
   name: string;
+}
+
+export interface ToolSetupPlan {
+  description: string;
+  id: string;
+  name: string;
+  plan: string;
+  profileId?: string;
+  requiresApiKey: boolean;
+  sessionId: string;
+  status: "pending" | "approved" | "ready";
+  toolId?: string;
 }
 
 export interface ListToolsResponse {
@@ -2116,7 +2238,26 @@ export interface ArtifactFile {
   updatedAt: string;
 }
 
+export interface WorkspaceEntry extends ArtifactFile {
+  kind: "file" | "directory";
+}
+
+export interface SetFilePinnedRequest {
+  path: string;
+  pinned: boolean;
+}
+
+export interface RenameWorkspaceEntryRequest {
+  newName: string;
+  path: string;
+}
+
+export interface ListWorkspaceFilesResponse {
+  entries: WorkspaceEntry[];
+}
+
 export interface ListArtifactsOptions {
+  folder?: string;
   limit?: number;
   offset?: number;
 }
@@ -2196,6 +2337,8 @@ export interface KnowledgeBaseDocument {
   filename: string;
   id: string;
   mediaType: string;
+  /** Absent in legacy profile responses; new responses may identify ownership. */
+  scope?: "organization" | "profile";
   sizeBytes: number;
   status: KnowledgeBaseDocumentStatus;
   uploadedAt: string;
@@ -2233,6 +2376,17 @@ export interface DeleteKnowledgeBaseResponse {
   deleted: boolean;
   documentId: string;
   profileId: string;
+}
+
+/** Organization documents are shared, so their responses carry no profile id. */
+export interface UploadOrganizationKnowledgeBaseResponse {
+  document: KnowledgeBaseDocument;
+  outcome: KnowledgeBaseUploadOutcome;
+}
+
+export interface DeleteOrganizationKnowledgeBaseResponse {
+  deleted: boolean;
+  documentId: string;
 }
 
 export interface UserContextStatusResponse {
@@ -2347,6 +2501,8 @@ export type ChatMessage =
       content: string;
       /** Model reasoning trace for display; not sent as plain assistant text to providers. */
       thinking?: string;
+      /** Observed reasoning stream time, excluding answer generation. */
+      thinkingDurationMs?: number;
       summary?: boolean;
       toolCalls?: ToolCall[];
       /** Provider-specific assistant payload for multi-turn replay (Anthropic blocks, OpenAI response items). */
@@ -2354,9 +2510,24 @@ export type ChatMessage =
       /** Tokens and estimated cost of the LLM call that produced this message. */
       usage?: ChatUsage;
     }
-  | { role: "tool"; toolCallId: string; name: string; content: string };
+  | {
+      role: "tool";
+      toolGroupId?: string;
+      toolCallId: string;
+      name: string;
+      content: string;
+      /** Visual tool output, kept separate from the JSON/text result. */
+      attachments?: MessageContentPart[];
+      toolStartedAt?: number;
+      toolCompletedAt?: number;
+    };
 
 export interface ChatUsage {
+  /**
+   * Input tokens the provider served from its prompt cache. A subset of
+   * `inputTokens`, so never add the two together.
+   */
+  cachedInputTokens?: number;
   /** Absent when the model has no known pricing. */
   costUsd?: number;
   /** True when input/output tokens were estimated rather than reported by the provider. */
@@ -2446,8 +2617,16 @@ export interface ToolContext {
   channel?: AgentChannel;
   /** Browser origin for OAuth callbacks during this tool run. */
   clientOrigin?: string;
+  /** Local CLI launch directory for shell commands, including coding agents. */
+  codingWorkspaceRoot?: string;
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
+  /**
+   * When true (a cognito session), write_file / write_docx / edit_file / delete_file
+   * refuse MEMORY.md and memory-archive/YYYY-MM.md under the profile workspace, so a
+   * chat that leaves no trace cannot leave one through the file tools either.
+   */
+  forbidMemoryWrites?: boolean;
   /**
    * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
@@ -2457,6 +2636,12 @@ export interface ToolContext {
   isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
+  /** Host-owned memory storage; file guards run before these callbacks. */
+  memoryFiles?: {
+    read(path: string, content: string): Promise<string>;
+    write(path: string, content: string): Promise<void>;
+    remove(path: string): Promise<void>;
+  };
   /** Invalidates the cached skills catalog after a live skill mutation. */
   onSkillCatalogChange?: () => void;
   orgId?: string;
@@ -2486,6 +2671,15 @@ export interface ToolContext {
     optimized: boolean;
     outputTokens: number;
   }) => void;
+  searchKnowledge?: (input: {
+    query: string;
+    filename?: string;
+    maxResults: number;
+    regex: boolean;
+  }) => Promise<{
+    matches: { file: string; line: number; text: string }[];
+    truncated: boolean;
+  } | null>;
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
@@ -2494,6 +2688,12 @@ export interface ToolContext {
    * was never chosen, which falls back to the server's NAKAMA_OMNI env var.
    */
   tokenOptimizerEnabled?: boolean | null;
+  /**
+   * Present only in a cognito session. Attachments there have no `sessions`
+   * row to reference, so they are written with a null session_id and their
+   * ids reported here, which is the only handle on them for cleanup.
+   */
+  trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
   workflowId?: string;
   workflowRunId?: string;
@@ -2650,6 +2850,7 @@ export interface OrgPluginDetail extends OrgPluginSummary {
   actions: PluginActionDescription[];
   availableVersions: string[];
   description: string;
+  icon?: string;
   installed: boolean;
   name: string;
   ui: PluginUiSummary | null;
@@ -2671,6 +2872,7 @@ export interface PluginPackageRequest {
 export interface PluginPackagePreviewResponse {
   contributions: {
     actionKeys: string[];
+    workerKeys?: string[];
     hasDatabase: boolean;
     hasUi: boolean;
     skillKeys: string[];

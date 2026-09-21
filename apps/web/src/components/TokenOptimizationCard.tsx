@@ -237,7 +237,7 @@ function TokenOptimizationHeader({
   toggle: (next: boolean) => Promise<void>;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
@@ -268,9 +268,9 @@ function TokenOptimizationHeader({
       <Switch
         aria-label={`Enable ${omni?.id ?? "omni"}`}
         checked={Boolean(omni?.enabled)}
-        className="mt-0.5"
         disabled={saving}
         onCheckedChange={toggle}
+        size="sm"
       />
     </div>
   );
@@ -286,7 +286,7 @@ function TokenInputComparison({
     inputTokens.control.turns < MIN_TURNS
   ) {
     return (
-      <div className="rounded-md border border-border border-dashed px-4 py-3.5">
+      <div className="rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
         <p className="font-medium text-sm">Provider input tokens per turn</p>
         <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
           Needs {MIN_TURNS} turns in each arm before the two are worth
@@ -298,7 +298,7 @@ function TokenInputComparison({
   }
 
   return (
-    <div className="rounded-md border border-border px-4 py-3.5">
+    <div className="rounded-xl border border-border bg-card px-4 py-3.5 text-card-foreground">
       <p className="mb-3 font-medium text-sm">Provider input tokens per turn</p>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
@@ -346,73 +346,77 @@ function TokenOptimizationStats({
 
   return (
     <>
-      <div>
-        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span
-            className="font-semibold text-4xl tabular-nums leading-none"
-            style={{ color: "var(--out)" }}
-          >
-            {percent.toFixed(0)}%
-          </span>
-          <span className="text-pretty text-muted-foreground text-sm">
-            of tool output saved
-          </span>
-        </p>
-        <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
-          {formatBytes(totals.bytesRemoved)} saved from{" "}
-          {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
-        </p>
-      </div>
-
-      <div className="space-y-2.5">
-        <div className="flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1.5">
+      <div className="overflow-hidden rounded-xl border border-border bg-card text-card-foreground">
+        <div className="border-border border-b px-4 py-3.5">
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span
-              aria-hidden
-              className="size-2.5 rounded-[2px]"
-              style={{ background: "var(--out)" }}
-            />
-            <span className="text-muted-foreground">saved</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="size-2.5 rounded-[2px]"
-              style={{ background: "var(--in)" }}
-            />
-            <span className="text-muted-foreground">sent to the model</span>
-          </span>
+              className="font-medium text-2xl tabular-nums leading-none"
+              style={{ color: "var(--out)" }}
+            >
+              {percent.toFixed(0)}%
+            </span>
+            <span className="text-pretty text-muted-foreground text-sm">
+              of tool output saved
+            </span>
+          </p>
+          <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
+            {formatBytes(totals.bytesRemoved)} saved from{" "}
+            {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
+          </p>
         </div>
-        <DailyChart days={days} />
+
+        <div className="space-y-2.5 px-4 py-4">
+          <div className="flex items-center gap-4 text-xs">
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-2.5 rounded-[2px]"
+                style={{ background: "var(--out)" }}
+              />
+              <span className="text-muted-foreground">saved</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-2.5 rounded-[2px]"
+                style={{ background: "var(--in)" }}
+              />
+              <span className="text-muted-foreground">sent to the model</span>
+            </span>
+          </div>
+          <DailyChart days={days} />
+        </div>
       </div>
 
       <TokenInputComparison inputTokens={inputTokens} />
 
       {byTool?.length ? (
-        <table className="w-full text-sm">
-          <tbody>
-            {byTool.map((row) => (
-              <tr className="border-border/60 border-t" key={row.tool}>
-                <td className="py-1.5">{row.tool}</td>
-                <td className="py-1.5 text-right text-muted-foreground tabular-nums">
-                  {row.calls} calls
+        <div className="overflow-hidden rounded-xl border border-border bg-card text-card-foreground">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-border">
+              {byTool.map((row) => (
+                <tr key={row.tool}>
+                  <td className="px-4 py-3.5">{row.tool}</td>
+                  <td className="px-4 py-3.5 text-right text-muted-foreground tabular-nums">
+                    {row.calls} calls
+                  </td>
+                  <td className="px-4 py-3.5 text-right tabular-nums">
+                    {formatBytes(row.bytesIn - row.bytesOut)} saved
+                  </td>
+                </tr>
+              ))}
+              <tr className="text-muted-foreground">
+                <td className="px-4 py-3.5">passthrough</td>
+                <td className="px-4 py-3.5 text-right tabular-nums">
+                  {arms.control.calls} calls
                 </td>
-                <td className="py-1.5 text-right tabular-nums">
-                  {formatBytes(row.bytesIn - row.bytesOut)} saved
+                <td className="px-4 py-3.5 text-right tabular-nums">
+                  {formatBytes(arms.control.bytesIn)} sent
                 </td>
               </tr>
-            ))}
-            <tr className="border-border/60 border-t text-muted-foreground">
-              <td className="py-1.5">passthrough</td>
-              <td className="py-1.5 text-right tabular-nums">
-                {arms.control.calls} calls
-              </td>
-              <td className="py-1.5 text-right tabular-nums">
-                {formatBytes(arms.control.bytesIn)} sent
-              </td>
-            </tr>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </>
   );
@@ -450,7 +454,7 @@ function TokenOptimizationBody({
       ) : null}
 
       {totals.calls === 0 ? (
-        <p className="text-muted-foreground text-sm">
+        <p className="rounded-xl border border-border bg-card px-4 py-10 text-center text-muted-foreground text-sm">
           Nothing measured in the last {windowDays} days.
         </p>
       ) : (

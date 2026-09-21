@@ -1,6 +1,8 @@
 node_modules
 **/node_modules
 **/dist
+# This package is installed directly from GitHub, without consumer build scripts.
+!packages/telegram-manager/dist/
 coverage
 .DS_Store
 .env
@@ -28,6 +30,7 @@ apps/data/*
 .cursor/
 docs/plans/*
 docs/brainstorms/*
+docs/ideation/
 .worktrees/
 outputs/
 .commandcode
@@ -38,3 +41,5 @@ tmp-repro-artifacts/
 tmp-repro-setup-auth.mjs
 .tmp-test-config/
 .vscode/
+# jscpd duplication report
+.jscpd-report/

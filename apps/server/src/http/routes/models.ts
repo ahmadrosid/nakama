@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   type AgentBrowserStatusResponse,
+  type ApplyTelegramPairingRequest,
   type ComposioSettingsResponse,
   type ConfigureProviderRequest,
   type ConfigureProviderResponse,
@@ -10,6 +11,7 @@ import {
   type DiscordSettingsResponse,
   type DiscoverModelsRequest,
   type EmailSettingsResponse,
+  type ErrorTrackingSettingsResponse,
   formatServerError,
   type GenerateImageRequest,
   type GenerateImageResponse,
@@ -18,9 +20,14 @@ import {
   type ListTimezonesResponse,
   type ModelsResponse,
   NakamaApiError,
+  reportError,
   resetWhatsAppSessionForReconnect,
   type SendEmailTestRequest,
   type SendEmailTestResponse,
+  type SendErrorTrackingTestResponse,
+  type StartTelegramPairingRequest,
+  type TelegramPairingStartResponse,
+  type TelegramPairingStatusResponse,
   type TelegramSettingsResponse,
   type ThinkingSettingsResponse,
   type TimezoneSettingsResponse,
@@ -30,6 +37,7 @@ import {
   type UpdateComposioSettingsRequest,
   type UpdateDiscordSettingsRequest,
   type UpdateEmailSettingsRequest,
+  type UpdateErrorTrackingSettingsRequest,
   type UpdateImageGenerationRequest,
   type UpdateProviderRequest,
   type UpdateProviderResponse,
@@ -44,6 +52,7 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import type { Context } from "hono";
 import {
   completeChatgptOAuthDeviceSession,
   fetchChatgptCodexModels,
@@ -67,6 +76,7 @@ import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requirePlatformAdminFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -75,7 +85,7 @@ import {
   readJson,
   readOptionalJson,
 } from "../shared";
-import type { HonoApp } from "../types";
+import type { AppEnv, HonoApp } from "../types";
 
 export function registerModelRoutes(
   app: HonoApp,
@@ -226,6 +236,20 @@ export function registerModelRoutes(
     .object({})
     .passthrough()
     .openapi("TelegramSettingsResponse");
+  const telegramPairingStartSchema = z
+    .object({})
+    .passthrough()
+    .openapi("TelegramPairingStartResponse");
+  const telegramPairingStatusSchema = z
+    .object({})
+    .passthrough()
+    .openapi("TelegramPairingStatusResponse");
+  const startTelegramPairingSchema = z
+    .object({ profileId: z.string() })
+    .openapi("StartTelegramPairingRequest");
+  const applyTelegramPairingSchema = z
+    .object({ profileId: z.string() })
+    .openapi("ApplyTelegramPairingRequest");
   const discordSettingsSchema = z
     .object({})
     .passthrough()
@@ -843,6 +867,7 @@ export function registerModelRoutes(
       method: "get",
       operationId: "getTelegramSettings",
       path: "/v1/settings/telegram",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: telegramSettingsSchema } },
@@ -859,6 +884,7 @@ export function registerModelRoutes(
       operationId: "setTelegramSettings",
       path: "/v1/settings/telegram",
       request: {
+        query: z.object({ profileId: z.string().min(1) }),
         body: {
           content: {
             "application/json": { schema: updateTelegramRequestSchema },
@@ -885,6 +911,7 @@ export function registerModelRoutes(
       method: "post",
       operationId: "regenerateTelegramHandshake",
       path: "/v1/settings/telegram/handshake",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: telegramSettingsSchema } },
@@ -901,9 +928,109 @@ export function registerModelRoutes(
   );
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "post",
+      operationId: "startTelegramPairing",
+      path: "/v1/settings/telegram/pairing",
+      request: {
+        query: z.object({ profileId: z.string().min(1) }),
+        body: {
+          content: {
+            "application/json": { schema: startTelegramPairingSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: telegramPairingStartSchema },
+          },
+          description: "Telegram pairing",
+        },
+      },
+      summary: "Start Telegram QR pairing",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getTelegramPairingStatus",
+      path: "/v1/settings/telegram/pairing/{pairingId}",
+      request: {
+        query: z.object({ profileId: z.string().min(1) }),
+        params: z.object({ pairingId: z.string() }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: telegramPairingStatusSchema },
+          },
+          description: "Telegram pairing status",
+        },
+      },
+      summary: "Get Telegram QR pairing status",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "cancelTelegramPairing",
+      path: "/v1/settings/telegram/pairing/{pairingId}/cancel",
+      request: {
+        query: z.object({ profileId: z.string().min(1) }),
+        params: z.object({ pairingId: z.string() }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: telegramPairingStatusSchema },
+          },
+          description: "Telegram pairing status",
+        },
+      },
+      summary: "Cancel Telegram QR pairing",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "applyTelegramPairing",
+      path: "/v1/settings/telegram/pairing/{pairingId}/apply",
+      request: {
+        query: z.object({ profileId: z.string().min(1) }),
+        params: z.object({ pairingId: z.string() }),
+        body: {
+          content: {
+            "application/json": { schema: applyTelegramPairingSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: telegramPairingStatusSchema },
+          },
+          description: "Telegram pairing status",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Apply Telegram QR pairing",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "get",
       operationId: "getDiscordSettings",
       path: "/v1/settings/discord",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: discordSettingsSchema } },
@@ -920,6 +1047,7 @@ export function registerModelRoutes(
       operationId: "setDiscordSettings",
       path: "/v1/settings/discord",
       request: {
+        query: z.object({ profileId: z.string().min(1) }),
         body: {
           content: {
             "application/json": { schema: updateDiscordRequestSchema },
@@ -946,6 +1074,7 @@ export function registerModelRoutes(
       method: "post",
       operationId: "regenerateDiscordHandshake",
       path: "/v1/settings/discord/handshake",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: discordSettingsSchema } },
@@ -1241,6 +1370,7 @@ export function registerModelRoutes(
       method: "get",
       operationId: "getWhatsAppSettings",
       path: "/v1/settings/whatsapp",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: whatsappSettingsSchema } },
@@ -1257,6 +1387,7 @@ export function registerModelRoutes(
       operationId: "setWhatsAppSettings",
       path: "/v1/settings/whatsapp",
       request: {
+        query: z.object({ profileId: z.string().min(1) }),
         body: {
           content: {
             "application/json": { schema: updateWhatsappRequestSchema },
@@ -1283,6 +1414,7 @@ export function registerModelRoutes(
       method: "post",
       operationId: "regenerateWhatsAppPairingCode",
       path: "/v1/settings/whatsapp/pairing-code",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: whatsappSettingsSchema } },
@@ -1302,6 +1434,7 @@ export function registerModelRoutes(
       method: "post",
       operationId: "reconnectWhatsApp",
       path: "/v1/settings/whatsapp/reconnect",
+      request: { query: z.object({ profileId: z.string().min(1) }) },
       responses: {
         200: {
           content: { "application/json": { schema: whatsappSettingsSchema } },
@@ -1328,6 +1461,7 @@ export function registerModelRoutes(
     try {
       return json(await getExternalModelCatalog(catalogId));
     } catch (error) {
+      void reportError(error, { kind: "http", source: "server" });
       return errorResponse(formatServerError(error), 502);
     }
   });
@@ -1355,7 +1489,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/providers", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<CreateProviderRequest>(c.req.raw);
 
     try {
@@ -1371,7 +1505,7 @@ export function registerModelRoutes(
   });
 
   app.patch("/v1/providers/:providerId", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateProviderRequest>(c.req.raw);
 
     try {
@@ -1392,14 +1526,14 @@ export function registerModelRoutes(
   });
 
   app.delete("/v1/providers/:providerId", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     return json<DeleteProviderResponse>(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId")))
     );
   });
 
   app.post("/v1/xai-oauth/device/start", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
 
     try {
@@ -1415,7 +1549,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/xai-oauth/device/complete", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
     const body = await readJson<{ sessionId?: string }>(c.req.raw);
     const sessionId =
@@ -1448,7 +1582,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/chatgpt-oauth/device/start", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     try {
       return json(await startChatgptOAuthDeviceSession());
@@ -1463,7 +1597,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/chatgpt-oauth/device/complete", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<{ sessionId?: string }>(c.req.raw);
     const sessionId = body.sessionId?.trim();
 
@@ -1488,10 +1622,21 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/provider", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<ConfigureProviderRequest>(c.req.raw);
-    const result = await agent.configureProvider(body);
-    return json<ConfigureProviderResponse>(result);
+
+    try {
+      return json<ConfigureProviderResponse>(
+        await agent.configureProvider(body)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.get("/v1/timezones", async (c) => {
@@ -1507,7 +1652,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/timezone", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateTimezoneRequest>(c.req.raw);
     const timezone = await agent.setUserTimezone(body.timezone);
     return json<TimezoneSettingsResponse>({ timezone });
@@ -1519,7 +1664,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/thinking", async (c) => {
-    getRequestAuth(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateThinkingRequest>(c.req.raw);
     return json<ThinkingSettingsResponse>(
       await agent.setThinkingSettings(body)
@@ -1532,7 +1677,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/vision", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateVisionRequest>(c.req.raw);
 
     try {
@@ -1555,7 +1700,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/transcription", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateTranscriptionRequest>(c.req.raw);
 
     try {
@@ -1580,6 +1725,9 @@ export function registerModelRoutes(
       return json<TranscribeAudioResponse>(await agent.transcribeAudio(body));
     } catch (error) {
       if (error instanceof NakamaApiError) {
+        if (error.status >= 500) {
+          void reportError(error, { kind: "http", source: "server" });
+        }
         return errorResponse(error.message, error.status);
       }
 
@@ -1596,7 +1744,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/image-generation", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateImageGenerationRequest>(c.req.raw);
 
     try {
@@ -1621,6 +1769,9 @@ export function registerModelRoutes(
       return json<GenerateImageResponse>(await agent.generateImage(body));
     } catch (error) {
       if (error instanceof NakamaApiError) {
+        if (error.status >= 500) {
+          void reportError(error, { kind: "http", source: "server" });
+        }
         return errorResponse(error.message, error.status);
       }
 
@@ -1635,7 +1786,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/email", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateEmailSettingsRequest>(c.req.raw);
 
     try {
@@ -1650,7 +1801,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/email/test", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const body = await readOptionalJson<SendEmailTestRequest>(c.req.raw, {});
 
     try {
@@ -1667,12 +1818,12 @@ export function registerModelRoutes(
   });
 
   app.get("/v1/settings/web-search", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     return json<WebSearchSettingsResponse>(await agent.getWebSearchSettings());
   });
 
   app.put("/v1/settings/web-search", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateWebSearchSettingsRequest>(c.req.raw);
 
     try {
@@ -1696,7 +1847,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/agent-browser/install", async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     return streamAgentBrowserInstall(
       async (send, signal) => {
@@ -1722,15 +1873,114 @@ export function registerModelRoutes(
     );
   });
 
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      path: "/v1/settings/channel-legacy",
+      operationId: "listLegacyChannels",
+      responses: {
+        200: {
+          description: "Connections awaiting an owner",
+          content: {
+            "application/json": {
+              schema: z.array(
+                z.object({
+                  platform: z.enum(["telegram", "discord", "whatsapp"]),
+                  global: z.boolean(),
+                })
+              ),
+            },
+          },
+        },
+      },
+      tags: ["Workers"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      path: "/v1/settings/channel-legacy/claim",
+      operationId: "claimLegacyChannel",
+      request: {
+        query: z.object({ profileId: z.string().min(1) }),
+        body: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: z.object({
+                platform: z.enum(["telegram", "discord", "whatsapp"]),
+                global: z.boolean().optional(),
+              }),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Connection assigned",
+          content: {
+            "application/json": { schema: z.object({ ok: z.boolean() }) },
+          },
+        },
+      },
+      tags: ["Workers"],
+    })
+  );
+  app.get("/v1/settings/channel-legacy", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    return json(
+      await workerManager.legacyChannels(
+        requireActiveOrgIdFromContext(c),
+        getRequestAuth(c).isPlatformAdmin === true
+      )
+    );
+  });
+  app.post("/v1/settings/channel-legacy/claim", async (c) => {
+    const owner = await channelOwner(c);
+    const body = await readJson<{ platform: string; global?: boolean }>(
+      c.req.raw
+    );
+    if (!["telegram", "discord", "whatsapp"].includes(body.platform)) {
+      throw new NakamaApiError("Unknown channel", 400);
+    }
+    if (body.global) {
+      requirePlatformAdminFromContext(c);
+    }
+    if (!options.databaseAdapter) {
+      throw new NakamaApiError("Database unavailable", 503);
+    }
+    await workerManager.claimLegacyChannel(
+      body.platform as "telegram" | "discord" | "whatsapp",
+      body.global ? null : owner.orgId,
+      owner,
+      options.databaseAdapter
+    );
+    return json({ ok: true });
+  });
+
+  async function channelOwner(c: Context<AppEnv>) {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = c.req.query("profileId")?.trim();
+    if (!profileId) {
+      throw new NakamaApiError(
+        "Choose an agent to manage this connection.",
+        400
+      );
+    }
+    await agent.getProfile(orgId, profileId);
+    return { orgId, profileId };
+  }
+
   app.get("/v1/settings/telegram", async (c) =>
     json<TelegramSettingsResponse>(
-      await agent.getTelegramSettings(requireActiveOrgIdFromContext(c))
+      await agent.getTelegramSettings(await channelOwner(c))
     )
   );
 
   app.put("/v1/settings/telegram", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
+    const orgId = await channelOwner(c);
     const body = await readJson<UpdateTelegramSettingsRequest>(c.req.raw);
 
     try {
@@ -1748,7 +1998,7 @@ export function registerModelRoutes(
 
   app.post("/v1/settings/telegram/handshake", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
+    const orgId = await channelOwner(c);
     try {
       return json<TelegramSettingsResponse>(
         await agent.regenerateTelegramHandshake(orgId)
@@ -1758,10 +2008,81 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
+  app.post("/v1/settings/telegram/pairing", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const owner = await channelOwner(c);
+    const orgId = owner.orgId;
+    const body = await readJson<StartTelegramPairingRequest>(c.req.raw);
+    try {
+      return json<TelegramPairingStartResponse>(
+        await agent.startTelegramPairing(orgId, getRequestAuth(c).user.id, {
+          ...body,
+          profileId: owner.profileId,
+        })
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.get("/v1/settings/telegram/pairing/:pairingId", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    try {
+      return json<TelegramPairingStatusResponse>(
+        await agent.getTelegramPairingStatus(
+          requireActiveOrgIdFromContext(c),
+          getRequestAuth(c).user.id,
+          c.req.param("pairingId"),
+          (await channelOwner(c)).profileId
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/settings/telegram/pairing/:pairingId/cancel", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    try {
+      return json<TelegramPairingStatusResponse>(
+        await agent.cancelTelegramPairing(
+          requireActiveOrgIdFromContext(c),
+          getRequestAuth(c).user.id,
+          c.req.param("pairingId"),
+          (await channelOwner(c)).profileId
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/settings/telegram/pairing/:pairingId/apply", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const body = await readJson<ApplyTelegramPairingRequest>(c.req.raw);
+    try {
+      return json<TelegramPairingStatusResponse>(
+        await agent.applyTelegramPairing(
+          requireActiveOrgIdFromContext(c),
+          getRequestAuth(c).user.id,
+          c.req.param("pairingId"),
+          { ...body, profileId: (await channelOwner(c)).profileId }
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
 
   app.get("/v1/settings/discord", async (c) => {
     getRequestAuth(c);
-    return json<DiscordSettingsResponse>(await agent.getDiscordSettings());
+    return json<DiscordSettingsResponse>(
+      await agent.getDiscordSettings(await channelOwner(c))
+    );
   });
 
   app.put("/v1/settings/discord", async (c) => {
@@ -1770,7 +2091,7 @@ export function registerModelRoutes(
 
     try {
       return json<DiscordSettingsResponse>(
-        await agent.setDiscordSettings(body)
+        await agent.setDiscordSettings(body, await channelOwner(c))
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
@@ -1785,7 +2106,7 @@ export function registerModelRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       return json<DiscordSettingsResponse>(
-        await agent.regenerateDiscordHandshake()
+        await agent.regenerateDiscordHandshake(await channelOwner(c))
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1799,7 +2120,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/composio", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateComposioSettingsRequest>(c.req.raw);
 
     try {
@@ -1824,7 +2145,7 @@ export function registerModelRoutes(
   app.put("/v1/settings/error-tracking", async (c) => {
     // Workspace-global config, so there is no org to scope it to and a role guard is
     // the only thing standing between a viewer and the whole install's error routing.
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateErrorTrackingSettingsRequest>(c.req.raw);
 
     try {
@@ -1841,7 +2162,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/error-tracking/test", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
 
     try {
       return json<SendErrorTrackingTestResponse>(
@@ -1858,7 +2179,9 @@ export function registerModelRoutes(
 
   app.get("/v1/settings/whatsapp", async (c) => {
     getRequestAuth(c);
-    return json<WhatsAppSettingsResponse>(await agent.getWhatsAppSettings());
+    return json<WhatsAppSettingsResponse>(
+      await agent.getWhatsAppSettings(await channelOwner(c))
+    );
   });
 
   app.put("/v1/settings/whatsapp", async (c) => {
@@ -1867,7 +2190,7 @@ export function registerModelRoutes(
 
     try {
       return json<WhatsAppSettingsResponse>(
-        await agent.setWhatsAppSettings(body)
+        await agent.setWhatsAppSettings(await channelOwner(c), body)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
@@ -1883,7 +2206,7 @@ export function registerModelRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       return json<WhatsAppSettingsResponse>(
-        await agent.regenerateWhatsAppPairingCode()
+        await agent.regenerateWhatsAppPairingCode(await channelOwner(c))
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1894,18 +2217,13 @@ export function registerModelRoutes(
   app.post("/v1/settings/whatsapp/reconnect", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     try {
-      await workerManager.stopWorker("whatsapp").catch(() => {});
-      const settings = await resetWhatsAppSessionForReconnect();
-
-      try {
-        await workerManager.startWorker("whatsapp");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return errorResponse(
-          `Session reset, but the WhatsApp worker could not start: ${message}. Start it manually from Settings.`,
-          400
-        );
-      }
+      const orgId = await channelOwner(c);
+      const settings = await workerManager.saveChannelConfig(
+        "whatsapp",
+        orgId,
+        () => resetWhatsAppSessionForReconnect(orgId),
+        true
+      );
 
       return json<WhatsAppSettingsResponse>(settings);
     } catch (error) {

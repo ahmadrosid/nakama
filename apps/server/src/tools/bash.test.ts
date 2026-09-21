@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { PathGuardError } from "@nakama/core";
+import { getProfileSoulDir, PathGuardError } from "@nakama/core";
 import { runBash } from "./bash";
 
 async function waitForPositivePid(pidPath: string): Promise<number> {
@@ -47,6 +47,117 @@ describe("bash tool", () => {
       await rm(workspaceRoot, { force: true, recursive: true });
       workspaceRoot = "";
     }
+  });
+
+  for (const mode of ["abort", "timeout"] as const) {
+    test(`${mode} stops shell descendants and finishes the tool`, async () => {
+      workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+      const controller = new AbortController();
+      const pending = runBash(
+        {
+          command: "sleep 30 & echo $! > child.pid; wait",
+          timeoutMs: mode === "timeout" ? 500 : 30_000,
+        },
+        {
+          orgId: "org_test",
+          profileId: "profile_test",
+          signal: controller.signal,
+        },
+        { backend: "host", workspaceRoot }
+      ).catch((error: unknown) => error);
+      const pid = await waitForPositivePid(
+        path.join(workspaceRoot, "child.pid")
+      );
+      try {
+        expect(pid).toBeGreaterThan(0);
+        if (mode === "abort") {
+          controller.abort();
+        }
+        const result = await Promise.race([
+          pending,
+          Bun.sleep(2000).then(() => "hung"),
+        ]);
+        expect(result).not.toBe("hung");
+        if (mode === "abort") {
+          expect(result).toMatchObject({ name: "AbortError" });
+        } else {
+          expect(result).toMatchObject({ timedOut: true });
+        }
+        // Reaping descendants can lag the shell's close event slightly.
+        for (let i = 0; i < 50 && isProcessAlive(pid); i++) {
+          await Bun.sleep(10);
+        }
+        expect(isProcessAlive(pid)).toBe(false);
+      } finally {
+        if (pid > 0 && isProcessAlive(pid)) {
+          process.kill(pid, "SIGKILL");
+        }
+        controller.abort();
+        await pending;
+      }
+    });
+  }
+
+  test("returns after shell exit when a quiet descendant holds the pipes", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const pending = runBash(
+      { command: "sleep 30 & echo $! > child.pid; echo done; exit 0" },
+      { orgId: "org_test", profileId: "profile_test" },
+      { backend: "host", workspaceRoot }
+    );
+    const pid = await waitForPositivePid(path.join(workspaceRoot, "child.pid"));
+    try {
+      expect(pid).toBeGreaterThan(0);
+      const result = await Promise.race([
+        pending,
+        Bun.sleep(2000).then(() => "hung"),
+      ]);
+      expect(result).toMatchObject({
+        exitCode: 0,
+        stdout: "done\n",
+        timedOut: false,
+      });
+    } finally {
+      if (pid > 0 && isProcessAlive(pid)) {
+        process.kill(pid, "SIGKILL");
+      }
+      await pending;
+    }
+  });
+
+  test("drains active descendant output after the shell exits", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const result = await runBash(
+      {
+        command:
+          '(for i in 1 2 3 4 5 6 7 8; do echo "$i"; sleep 0.04; done) & exit 0',
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { backend: "host", workspaceRoot }
+    );
+    expect(result).toMatchObject({
+      exitCode: 0,
+      stdout: "1\n2\n3\n4\n5\n6\n7\n8\n",
+      timedOut: false,
+    });
+  });
+
+  test("does not spawn a command after cancellation", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      runBash(
+        { command: "echo started > marker" },
+        {
+          orgId: "org_test",
+          profileId: "profile_test",
+          signal: controller.signal,
+        },
+        { backend: "host", workspaceRoot }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(await readdir(workspaceRoot)).toEqual([]);
   });
 
   test("kills the shell when the turn is cancelled", async () => {
@@ -123,6 +234,96 @@ describe("bash tool", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe(await realpath(workspaceRoot));
     expect(result.timedOut).toBe(false);
+  });
+
+  test("ordinary commands resolve the profile workspace without an override", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = workspaceRoot;
+
+    try {
+      const profileWorkspace = getProfileSoulDir("org_test", "profile_test");
+      await mkdir(profileWorkspace, { recursive: true });
+
+      for (const codingWorkspaceRoot of [undefined, workspaceRoot]) {
+        for (const cwd of [undefined, ".", profileWorkspace]) {
+          const result = await runBash(
+            { command: "pwd", cwd },
+            {
+              codingWorkspaceRoot,
+              orgId: "org_test",
+              profileId: "profile_test",
+            },
+            { backend: "host" }
+          );
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout.trim()).toBe(await realpath(profileWorkspace));
+        }
+      }
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+    }
+  });
+
+  test("CLI commands use the launch directory without coding-agent mode", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const context = {
+      channel: "cli" as const,
+      codingWorkspaceRoot: workspaceRoot,
+      orgId: "org_test",
+      profileId: "profile_test",
+    };
+    const nestedDir = path.join(workspaceRoot, "nested");
+    await mkdir(nestedDir);
+
+    for (const cwd of [undefined, ".", workspaceRoot, "nested"]) {
+      const result = await runBash({ command: "pwd", cwd }, context, {
+        backend: "host",
+      });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe(
+        await realpath(cwd === "nested" ? nestedDir : workspaceRoot)
+      );
+    }
+
+    await expect(
+      runBash({ command: "pwd", cwd: ".." }, context, { backend: "host" })
+    ).rejects.toBeInstanceOf(PathGuardError);
+  });
+
+  test("coding-agent workspace selection respects explicit overrides", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const codingWorkspaceRoot = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-coding-workspace-")
+    );
+
+    const codingResult = await runBash(
+      { codingAgent: true, command: "pwd" },
+      {
+        codingWorkspaceRoot,
+        orgId: "org_test",
+        profileId: "profile_test",
+      }
+    );
+    const ordinaryResult = await runBash(
+      { command: "pwd" },
+      {
+        codingWorkspaceRoot,
+        orgId: "org_test",
+        profileId: "profile_test",
+      },
+      { workspaceRoot }
+    );
+
+    expect(codingResult.stdout.trim().split("\n")[0]).toBe(
+      await realpath(codingWorkspaceRoot)
+    );
+    expect(ordinaryResult.stdout.trim()).toBe(await realpath(workspaceRoot));
+    await rm(codingWorkspaceRoot, { force: true, recursive: true });
   });
 
   test("supports cwd within the profile workspace", async () => {

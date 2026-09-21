@@ -756,7 +756,7 @@ describe("createChatHandler security", () => {
       await handleMessage(ctx);
 
       expect(replies).toEqual([
-        "Invalid pairing code. Copy it from Integrations → Telegram and try again.",
+        "Invalid pairing code. Copy it from this agent’s Connections → Telegram and try again.",
       ]);
       expect(authStore.isAuthorized(1001)).toBe(false);
       expect(calls.sendStream).toBe(0);
@@ -2445,5 +2445,71 @@ describe("createChatHandler session hot cache", () => {
       expect(calls.getMessages).toBe(3);
       expect(calls.sendStream).toBe(2);
     });
+  });
+});
+
+test("owned connection discards foreign hot sessions and never switches or falls back", async () => {
+  await withTempHome(async (homeDir) => {
+    await writeTelegramConfigIni(homeDir, {
+      botToken: TEST_CONFIG.botToken,
+      pairedUserIds: [42],
+    });
+    const authStore = new TelegramAuthStore(null);
+    await authStore.reload();
+    const profiles = [
+      { id: "agent_a", name: "A" },
+      { id: "agent_b", isDefault: true, name: "B" },
+    ];
+    const { client, calls, getLastCreateSessionProfileId } = createMockClient({
+      profiles,
+    });
+    client.listSessions = async () => ({ sessions: [] });
+    const sessionStore = new SessionStore(
+      path.join(homeDir, "owned-sessions.json")
+    );
+    sessionStore.set("42", {
+      profileId: "agent_b",
+      sessionId: "foreign",
+      updatedAt: new Date().toISOString(),
+    });
+    sessionStore.setHotSession("42", {
+      sendStream: () => {
+        throw new Error("Foreign session used");
+      },
+    });
+    const orgStore = createTestOrgStore(homeDir);
+    await orgStore.load();
+    const handle = createChatHandler({
+      authStore,
+      client,
+      config: {
+        ...TEST_CONFIG,
+        orgId: "org_test",
+        owner: { orgId: "org_test", profileId: "agent_a" },
+      },
+      getBotInfo: () => TEST_BOT_INFO,
+      orgStore,
+      sessionStore,
+    });
+    await handle(
+      createMessageContext({ chatId: 42, text: "hello", userId: 42 }).ctx
+    );
+    expect(getLastCreateSessionProfileId()).toBe("agent_a");
+    expect(sessionStore.get("42")?.profileId).toBe("agent_a");
+    await handle(
+      createMessageContext({ chatId: 42, text: "/profile agent_b", userId: 42 })
+        .ctx
+    );
+    expect(sessionStore.get("42")?.profileId).toBe("agent_a");
+    const sent = calls.sendStream;
+    profiles.splice(0, 1);
+    await expect(
+      handle(
+        createMessageContext({ chatId: 42, text: "hello again", userId: 42 })
+          .ctx
+      )
+    ).rejects.toThrow();
+    expect(calls.sendStream).toBe(sent);
+    expect(calls.createSession).toBe(1);
   });
 });

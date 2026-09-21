@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
 import {
+  extractOpenAITokenUsage,
   formatHttpErrorBody,
   normalizeThinkingEffort,
   parseJsonRecord,
@@ -143,5 +144,32 @@ describe("provider shared helpers", () => {
       { content: "Done", role: "assistant" },
     ];
     expect(sanitizeToolCallHistory(messages)).toEqual(messages);
+  });
+});
+
+describe("extractOpenAITokenUsage", () => {
+  test("keeps the cached prompt slice that OpenAI reports inside prompt_tokens", () => {
+    expect(
+      extractOpenAITokenUsage({
+        completion_tokens: 10,
+        prompt_tokens: 6348,
+        prompt_tokens_details: { cached_tokens: 6144 },
+        total_tokens: 6358,
+      })
+    ).toEqual({
+      cachedInputTokens: 6144,
+      inputTokens: 6348,
+      outputTokens: 10,
+      totalTokens: 6358,
+    });
+
+    // A provider that reports no cache detail must not grow a zeroed field.
+    expect(
+      extractOpenAITokenUsage({
+        completion_tokens: 10,
+        prompt_tokens: 6348,
+        total_tokens: 6358,
+      })
+    ).toEqual({ inputTokens: 6348, outputTokens: 10, totalTokens: 6358 });
   });
 });

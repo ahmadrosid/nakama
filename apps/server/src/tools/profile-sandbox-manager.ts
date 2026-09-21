@@ -65,7 +65,16 @@ export function toGuestCwd(args: {
 }
 
 export class ProfileSandboxManager {
-  private readonly ensured = new Map<string, string>();
+  /**
+   * Holds the in-flight ensure, not just its fingerprint. Two first-time calls
+   * for one profile used to both miss the map and both ensure, and the builder
+   * replaces, so the second call tore down the microVM the first was about to
+   * exec in. The second caller now awaits the first.
+   */
+  private readonly ensured = new Map<
+    string,
+    { fingerprint: string; ready: Promise<void> }
+  >();
 
   constructor(private readonly runtime: BashSandboxRuntime) {}
 
@@ -85,15 +94,30 @@ export class ProfileSandboxManager {
     const guestWorkspace = BASH_SANDBOX_GUEST_WORKSPACE;
     const fingerprint = `${args.hostWorkspace}|${args.network}|${args.image}|${guestWorkspace}`;
 
-    if (this.ensured.get(name) !== fingerprint) {
-      await this.runtime.ensure({
+    const cached = this.ensured.get(name);
+    let ready: Promise<void>;
+    if (cached && cached.fingerprint === fingerprint) {
+      ready = cached.ready;
+    } else {
+      // A different fingerprint is a config change and still replaces.
+      ready = this.runtime.ensure({
         guestWorkspace,
         hostWorkspace: args.hostWorkspace,
         image: args.image,
         name,
         network: args.network,
       });
-      this.ensured.set(name, fingerprint);
+      this.ensured.set(name, { fingerprint, ready });
+    }
+
+    try {
+      await ready;
+    } catch (error) {
+      // A rejected ensure must not stay cached, or every later call replays it.
+      if (this.ensured.get(name)?.ready === ready) {
+        this.ensured.delete(name);
+      }
+      throw error;
     }
 
     const guestCwd = toGuestCwd({

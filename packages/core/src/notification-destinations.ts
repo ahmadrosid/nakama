@@ -24,6 +24,8 @@ function normalizeTelegramConfig(
   }
 
   const record = value as Record<string, unknown>;
+  const profileId =
+    typeof record.profileId === "string" ? record.profileId.trim() : undefined;
   const chatId = record.chatId;
 
   if (!isNonZeroInteger(chatId)) {
@@ -32,7 +34,7 @@ function normalizeTelegramConfig(
 
   const topicId = record.topicId;
   if (topicId === undefined || topicId === null) {
-    return { chatId, topicId: null };
+    return { chatId, profileId, topicId: null };
   }
 
   if (!isPositiveInteger(topicId)) {
@@ -41,7 +43,7 @@ function normalizeTelegramConfig(
     );
   }
 
-  return { chatId, topicId };
+  return { chatId, profileId, topicId };
 }
 
 export function normalizeNotificationWebhookLevel(

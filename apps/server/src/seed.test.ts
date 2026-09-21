@@ -70,7 +70,7 @@ describe("runFirstBootSeed", () => {
 
     const result = await runFirstBootSeed(services);
 
-    expect(result).toEqual({ providerWritten: false, seeded: false });
+    expect(result).toEqual({ seeded: false });
     expect(await services.databaseAdapter.countHumanUsers()).toBe(0);
     expect(await loadUserConfig()).toBeNull();
   });
@@ -115,12 +115,12 @@ describe("runFirstBootSeed", () => {
       },
     });
 
-    expect(result).toEqual({ providerWritten: false, seeded: false });
+    expect(result).toEqual({ seeded: false });
     expect(await services.databaseAdapter.countHumanUsers()).toBe(1);
     expect(await loadUserConfig()).toBeNull();
   });
 
-  test("writes OpenCode Zen provider with exact shape and merges existing config", async () => {
+  test("seeds admin and org without touching the provider config", async () => {
     await withFreshConfigDir();
     const services = createServices();
     const existingId = createProviderInstanceId();
@@ -138,6 +138,7 @@ describe("runFirstBootSeed", () => {
       thinkingEnabled: false,
       timezone: "America/New_York",
     });
+    const before = await loadUserConfig();
 
     const result = await runFirstBootSeed({
       ...services,
@@ -148,44 +149,12 @@ describe("runFirstBootSeed", () => {
       },
     });
 
-    expect(result).toEqual({ providerWritten: true, seeded: true });
+    expect(result).toEqual({ seeded: true });
     expect(await services.databaseAdapter.countHumanUsers()).toBe(1);
-
-    const loaded = await loadUserConfig();
-    expect(loaded?.timezone).toBe("America/New_York");
-    expect(loaded?.thinkingEnabled).toBe(false);
-    expect(loaded?.providers).toHaveLength(2);
-    expect(loaded?.providers[0]?.id).toBe(existingId);
-    expect(loaded?.providers[0]?.label).toBe("OpenAI");
-    expect(loaded?.providers[0]?.apiKey).toBe("sk-existing");
-
-    const zen = loaded?.providers.find(
-      (provider) => provider.label === "OpenCode Zen"
-    );
-    expect(zen).toMatchObject({
-      apiKey: "public",
-      baseUrl: "https://opencode.ai/zen/v1",
-      customModels: [
-        {
-          id: "big-pickle",
-          name: "Big Pickle",
-          supportsThinking: true,
-        },
-        {
-          id: "hy3-free",
-          name: "Hy3 Free",
-          supportsThinking: true,
-        },
-      ],
-      label: "OpenCode Zen",
-      type: "openai_compatible",
-    });
-    expect(zen?.customModels?.[0]).not.toHaveProperty("default");
-    expect(loaded?.defaultProviderId).toBe(zen?.id);
-    expect(isProviderConfigured(loaded)).toBe(true);
+    expect(await loadUserConfig()).toEqual(before);
   });
 
-  test("boot-level health reports userConfigured and providerConfigured after seed", async () => {
+  test("health sends a seeded admin to provider setup", async () => {
     await withFreshConfigDir();
     const services = createServices();
 
@@ -221,7 +190,7 @@ describe("runFirstBootSeed", () => {
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      providerConfigured: true,
+      providerConfigured: false,
       userConfigured: true,
     });
   });

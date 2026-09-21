@@ -10,17 +10,14 @@ import {
 export function WebSearchToolRow({ message }: { message: ChatListItem }) {
   const state = buildWebSearchToolState(message);
   const isRunning = state.status === "running";
-  const [collapsedWhileRunning, setCollapsedWhileRunning] = useState(false);
+  const [open, setOpen] = useState(isRunning);
   const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
 
   if (isRunning !== prevIsRunning) {
     setPrevIsRunning(isRunning);
-    if (isRunning) {
-      setCollapsedWhileRunning(false);
-    }
+    setOpen(isRunning);
   }
 
-  const open = isRunning ? !collapsedWhileRunning : false;
   const siteStates = useWebSourceSiteStates(state.sources.length, state.status);
 
   if (!shouldRenderWebSearchToolRow(message)) {
@@ -33,11 +30,7 @@ export function WebSearchToolRow({ message }: { message: ChatListItem }) {
         headerText={state.query ?? "the web"}
         isComplete={!isRunning}
         mode="search"
-        onOpenChange={(nextOpen) => {
-          if (isRunning) {
-            setCollapsedWhileRunning(!nextOpen);
-          }
-        }}
+        onOpenChange={setOpen}
         open={open}
         siteStates={siteStates}
         sources={state.sources}

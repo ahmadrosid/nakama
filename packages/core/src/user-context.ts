@@ -19,6 +19,11 @@ export const USER_CONTEXT_FIELDS: readonly UserContextField[] = [
     placeholder: "Backend engineer on a payments team",
   },
   {
+    key: "help",
+    label: "Help with",
+    placeholder: "What would you like help with?",
+  },
+  {
     key: "projects",
     label: "Current projects",
     placeholder: "Moving the billing API off the monolith",

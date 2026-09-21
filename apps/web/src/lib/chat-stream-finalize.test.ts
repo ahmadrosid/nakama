@@ -1,8 +1,40 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { ChatListItem } from "@/lib/chat-history";
-import { finalizeStreamingMessages } from "./chat-stream";
+import { buildStreamHandlers, finalizeStreamingMessages } from "./chat-stream";
 
 describe("finalizeStreamingMessages", () => {
+  test.each([false, true])(
+    "freezes live tool timing on completion or cancellation: %s",
+    (cancelled) => {
+      let now = 1000;
+      const clock = spyOn(Date, "now").mockImplementation(() => now);
+      try {
+        let messages: ChatListItem[] = [];
+        const handlers = buildStreamHandlers((update) => {
+          messages = typeof update === "function" ? update(messages) : update;
+        });
+        handlers.onToolStart?.({ input: {}, tool: "sample", toolCallId: "t1" });
+        now = 9000;
+        if (cancelled) {
+          messages = finalizeStreamingMessages(messages);
+        } else {
+          handlers.onToolEnd?.({
+            result: {},
+            tool: "sample",
+            toolCallId: "t1",
+          });
+        }
+        now = 100_000;
+        expect(finalizeStreamingMessages(messages)[0]).toMatchObject({
+          toolCompletedAt: 9000,
+          toolStartedAt: 1000,
+          toolStatus: "done",
+        });
+      } finally {
+        clock.mockRestore();
+      }
+    }
+  );
   test("clears streaming on every affected assistant, not only the last one", () => {
     const messages: ChatListItem[] = [
       { content: "hi", id: "u1", role: "user" },

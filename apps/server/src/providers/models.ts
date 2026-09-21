@@ -19,7 +19,6 @@ export { isOpenRouterModelSlug } from "@nakama/core";
 
 export type ProviderModelOption = ContractProviderModelOption & {
   contextWindow: number;
-  maxOutputTokens: number;
 };
 
 function withVisionDefaults(
@@ -38,50 +37,24 @@ function withVisionDefaults(
   }));
 }
 
-const CHATGPT_SHARED_MODEL_IDS = [
-  "gpt-5.4",
-  "gpt-5.5",
-  "gpt-5.6-luna",
-] as const;
-
-function deriveChatgptModels(
-  catalog: ProviderModelOption[]
-): ProviderModelOption[] {
-  const openaiById = new Map(
-    catalog
-      .filter((model) => model.provider === "openai")
-      .map((model) => [model.id, model])
-  );
-
-  const shared = CHATGPT_SHARED_MODEL_IDS.map((id) => {
-    const source = openaiById.get(id);
-
-    if (!source) {
-      throw new Error(`Missing OpenAI catalog model for ChatGPT: ${id}`);
-    }
-
-    return {
-      ...source,
-      default: id === "gpt-5.4",
-      inputPerMillionUsd: 0,
-      outputPerMillionUsd: 0,
-      provider: "chatgpt" as const,
-    };
-  });
-
-  return [
-    ...shared,
-    {
-      contextWindow: 128_000,
-      id: "gpt-5.4-mini",
-      inputPerMillionUsd: 0,
-      maxOutputTokens: 8192,
-      name: "GPT-5.4 mini",
-      outputPerMillionUsd: 0,
-      provider: "chatgpt" as const,
-    },
-  ];
-}
+// ChatGPT sign-in has its own catalog and default context window, not API limits.
+// https://github.com/openai/codex/blob/main/codex-rs/models-manager/models.json
+// This catalog omits an output ceiling; compaction uses its local fallback.
+const CHATGPT_MODELS: ProviderModelOption[] = [
+  { default: true, id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
+  { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
+  { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
+  { id: "gpt-6-astra", name: "GPT-6 Astra" },
+  { id: "gpt-5.5", name: "GPT-5.5" },
+].map((model) => ({
+  ...model,
+  contextWindow: 272_000,
+  inputPerMillionUsd: 0,
+  outputPerMillionUsd: 0,
+  provider: "chatgpt",
+  supportsThinking: true,
+  supportsVision: true,
+}));
 
 const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
@@ -150,23 +123,45 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     provider: "openai",
     supportsThinking: false,
   },
+  // Gemini standard text prices: https://ai.google.dev/gemini-api/docs/pricing
   {
-    contextWindow: 1_000_000,
+    contextWindow: 1_048_576,
     default: true,
     id: "gemini-2.5-flash",
-    inputPerMillionUsd: 0.15,
-    maxOutputTokens: 8192,
+    inputPerMillionUsd: 0.3,
+    maxOutputTokens: 65_536,
     name: "Gemini 2.5 Flash",
-    outputPerMillionUsd: 0.6,
+    outputPerMillionUsd: 2.5,
     provider: "gemini",
   },
   {
-    contextWindow: 1_000_000,
+    contextWindow: 1_048_576,
     id: "gemini-2.5-pro",
+    // Base tier for prompts <= 200k tokens; longer prompts cost more.
     inputPerMillionUsd: 1.25,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 65_536,
     name: "Gemini 2.5 Pro",
-    outputPerMillionUsd: 5,
+    outputPerMillionUsd: 10,
+    provider: "gemini",
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "gemini-3.8-flash",
+    // Promotional prices through 2026-12-31; double on 2027-01-01.
+    inputPerMillionUsd: 0.75,
+    maxOutputTokens: 65_536,
+    name: "Gemini 3.8 Flash",
+    outputPerMillionUsd: 3.75,
+    provider: "gemini",
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "gemini-3.1-pro-preview",
+    // Base tier for prompts <= 200k tokens; longer prompts cost more.
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 65_536,
+    name: "Gemini 3.1 Pro (Preview)",
+    outputPerMillionUsd: 12,
     provider: "gemini",
   },
   {
@@ -805,7 +800,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
 
 export const AVAILABLE_MODELS: ProviderModelOption[] = [
   ...BASE_MODELS,
-  ...deriveChatgptModels(BASE_MODELS),
+  ...CHATGPT_MODELS,
 ];
 
 export function validateOpenRouterCustomModels(
@@ -898,6 +893,29 @@ export function getModelById(modelId: string): ProviderModelOption | undefined {
   return AVAILABLE_MODELS.find((model) => model.id === modelId);
 }
 
+/** Compaction sizing for one model.
+ *
+ * A custom model id is never in the built-in catalog, so without the instance
+ * entry every custom provider would silently compact at the fallback window.
+ * Entries that leave the sizes blank keep the catalog value, then the fallback.
+ */
+export function resolveModelLimits(
+  provider: ProviderName,
+  modelId: string,
+  customModels?: CustomModelEntry[]
+): { contextWindow: number; maxOutputTokens: number } {
+  const catalog = getModelsForProvider(provider).find(
+    (model) => model.id === modelId
+  );
+  const custom = findCustomModel(customModels, modelId);
+
+  return {
+    contextWindow: custom?.contextWindow ?? catalog?.contextWindow ?? 128_000,
+    maxOutputTokens:
+      custom?.maxOutputTokens ?? catalog?.maxOutputTokens ?? 8192,
+  };
+}
+
 export function getModelsForProvider(
   provider: ProviderName
 ): ProviderModelOption[] {
@@ -932,6 +950,7 @@ export function getDefaultModel(
 
   if (
     (provider === "openai" ||
+      provider === "chatgpt" ||
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||

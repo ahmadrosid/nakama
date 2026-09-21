@@ -19,9 +19,9 @@ const switchSizes = {
   },
   sm: {
     off: "translate-x-0.5",
-    on: "translate-x-4",
-    thumb: "size-4",
-    track: "h-5 w-9",
+    on: "translate-x-3.5",
+    thumb: "size-3.5",
+    track: "h-4.5 w-8",
   },
 } as const;
 

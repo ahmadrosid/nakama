@@ -1,5 +1,48 @@
 import type { NakamaClient } from "@nakama/client";
-import { loadSavedCliOrgId, saveCliOrgId } from "./cli-config";
+import { type AgentChannel, pickProfileForOrg } from "@nakama/core";
+import {
+  loadSavedCliOrgId,
+  saveCliOrgId,
+  saveCliProfileId,
+} from "./cli-config";
+
+export async function switchChatOrg(
+  client: NakamaClient,
+  orgRef: string,
+  channel: AgentChannel,
+  write: (line: string) => void,
+  codingWorkspaceRoot?: string
+) {
+  if (!orgRef) {
+    const { orgs } = await client.listUserOrgs();
+    for (const org of orgs) {
+      write(`${org.slug}  ${org.name}`);
+    }
+    write("Use /org <slug> to switch.");
+    return;
+  }
+
+  const orgId = await assertOrgMembership(client, orgRef);
+  // Prepare an independent scope so failed switches leave the current chat intact.
+  const nextClient = client.forOrg(orgId);
+  const { profiles } = await nextClient.listProfiles();
+  const profile =
+    profiles.find((entry) => entry.isSuper) ?? pickProfileForOrg(profiles);
+  const health = await nextClient.health();
+  const session = await nextClient.createSession(channel, {
+    codingWorkspaceRoot,
+    profileId: profile.id,
+  });
+  await saveCliProfileId(profile.id);
+  await saveCliOrgId(orgId);
+  return {
+    client: nextClient,
+    offline: !health.providerConfigured,
+    orgId,
+    profile,
+    session,
+  };
+}
 
 export interface CliOrgOptions {
   orgId?: string;

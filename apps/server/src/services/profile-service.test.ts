@@ -121,18 +121,27 @@ describe("profile service createTool", () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const tool = await service.createTool({
       description: "Echo input",
-      handlerConfig: { modulePath: "echo.py", parameters },
+      handlerConfig: {
+        modulePath: "echo.py",
+        parameters,
+        requiresApiKey: true,
+      },
       handlerType: "python",
       name: "echo_py",
     });
 
-    expect(tool.handlerConfig).toEqual({ modulePath: "echo.py", parameters });
+    expect(tool.handlerConfig).toEqual({
+      modulePath: "echo.py",
+      parameters,
+      requiresApiKey: true,
+    });
     expect(tool.parameters).toEqual(parameters);
 
     const stored = await service.getTool(tool.id);
     expect(stored.tool.handlerConfig).toEqual({
       modulePath: "echo.py",
       parameters,
+      requiresApiKey: true,
     });
     expect(stored.tool.parameters).toEqual(parameters);
   });

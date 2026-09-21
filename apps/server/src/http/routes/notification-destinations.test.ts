@@ -16,7 +16,9 @@ function createApp() {
 describe("notification destination routes", () => {
   test("org admin can create, list, rotate, and delete destinations", async () => {
     const { app, databaseAdapter } = createApp();
-    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
+    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter, {
+      profileId: "agent_1",
+    });
 
     const session = await loginUserSession(app, email, password, orgId);
 
@@ -25,7 +27,7 @@ describe("notification destination routes", () => {
         body: JSON.stringify({
           channel: "telegram",
           name: "Payments",
-          telegram: { chatId: 1001, topicId: 22 },
+          telegram: { profileId: "agent_1", chatId: 1001, topicId: 22 },
         }),
         headers: session.headers({
           "Content-Type": "application/json",

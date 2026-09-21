@@ -1,0 +1,42 @@
+{
+  "name": "@nakama/telegram-manager",
+  "version": "0.1.0",
+  "description": "Public shared Telegram bot onboarding gateway for Nakama",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmadrosid/nakama.git",
+    "directory": "packages/telegram-manager"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema.sql": "./schema.sql"
+  },
+  "files": [
+    "dist",
+    "src",
+    "schema.sql",
+    "tsconfig.json",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "postgres": "^3.4.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.3.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

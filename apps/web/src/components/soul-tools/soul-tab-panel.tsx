@@ -13,14 +13,7 @@ import {
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import {
-  ArrowRight01Icon,
-  CheckmarkCircle01Icon,
-  CircleIcon,
-  File01Icon,
-  Folder01Icon,
-  RefreshIcon,
-} from "hugeicons-react";
+import { ArrowRight01Icon, CircleIcon, RefreshIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
@@ -31,19 +24,11 @@ export function SoulTabPanel({
   embedded,
   selectedProfile,
   status,
-  presentCount,
-  busy,
-  refreshing,
-  onRefresh,
   onOpenFile,
 }: {
   embedded: boolean;
   selectedProfile: ProfileSummary | null;
   status: { directory: string; files: SoulFileStatus } | null;
-  presentCount: number;
-  busy: boolean;
-  refreshing: boolean;
-  onRefresh: () => void;
   onOpenFile: (fileKey: keyof SoulStackFiles) => void;
 }) {
   return (
@@ -60,10 +45,10 @@ export function SoulTabPanel({
               ) : null}
             </div>
           )}
-          <p className={cn("type-body text-xs", !embedded && "mt-1")}>
-            Profile prompt · one stack per bot
+          <p className="font-normal text-muted-foreground/55 text-sm">
+            Agent prompt
           </p>
-          {status ? (
+          {status && !embedded ? (
             <p
               className="type-code mt-2 truncate text-muted-foreground"
               title={status.directory}
@@ -72,42 +57,13 @@ export function SoulTabPanel({
             </p>
           ) : null}
         </div>
-
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-2",
-            !embedded && "hidden lg:flex"
-          )}
-        >
-          <Button
-            disabled={busy || refreshing}
-            onClick={onRefresh}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {refreshing ? (
-              <Spinner className="size-4" />
-            ) : (
-              <RefreshIcon aria-hidden className="size-4" />
-            )}
-            Refresh
-          </Button>
-        </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-xs tabular-nums">
-          {status
-            ? `${presentCount} of ${SOUL_FILES.length} files present`
-            : "Checking files…"}
-        </p>
-        <p className="text-muted-foreground text-xs lg:hidden">
-          Tap a file to view or edit
-        </p>
-      </div>
+      <p className="mb-4 text-muted-foreground text-xs lg:hidden">
+        Tap a file to view or edit
+      </p>
 
-      <ul className="divide-y divide-border rounded-md border border-border">
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {SOUL_FILES.map((file) => (
           <FileStatusListItem
             description={file.description}
@@ -115,7 +71,6 @@ export function SoulTabPanel({
             label={file.label}
             onClick={() => onOpenFile(file.key)}
             present={status?.files[file.key] ?? false}
-            writable={file.writable}
           />
         ))}
       </ul>
@@ -279,13 +234,11 @@ function ScopeButton({
 function FileStatusListItem({
   label,
   description,
-  writable,
   present,
   onClick,
 }: {
   label: string;
   description: string;
-  writable: boolean;
   present: boolean;
   onClick: () => void;
 }) {
@@ -294,27 +247,11 @@ function FileStatusListItem({
       <button
         className={cn(
           "group flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition",
-          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset",
-          present && "bg-emerald-50/40 dark:bg-emerald-950/10"
+          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
         )}
         onClick={onClick}
         type="button"
       >
-        <span
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background",
-            present
-              ? "text-emerald-700 dark:text-emerald-300"
-              : "text-muted-foreground"
-          )}
-        >
-          {writable ? (
-            <File01Icon aria-hidden className="size-4" />
-          ) : (
-            <Folder01Icon aria-hidden className="size-4" />
-          )}
-        </span>
-
         <div className="min-w-0 flex-1">
           <p className="truncate font-mono text-foreground text-sm">{label}</p>
           <p className="mt-0.5 truncate text-muted-foreground text-xs">
@@ -322,21 +259,12 @@ function FileStatusListItem({
           </p>
         </div>
 
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium text-xs",
-            present
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          {present ? (
-            <CheckmarkCircle01Icon className="size-3.5" />
-          ) : (
-            <CircleIcon className="size-3.5" />
-          )}
-          {present ? "Present" : "Missing"}
-        </span>
+        {!present && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
+            <CircleIcon aria-hidden className="size-3.5" />
+            Missing
+          </span>
+        )}
 
         <ArrowRight01Icon
           aria-hidden

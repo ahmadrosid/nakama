@@ -71,7 +71,13 @@ function readClaimedOrigin(
 function isAllowedClientOrigin(candidate: string, request?: Request): boolean {
   const configured = resolveWebPublicUrl();
   if (configured) {
-    return sameHost(candidate, configured);
+    // The desktop app saves its loopback origin at setup and binds a new port
+    // every launch, so a loopback URL vouches for loopback, not for one port.
+    return (
+      sameHost(candidate, configured) ||
+      (isLoopbackComposioCallbackBaseUrl(configured) &&
+        isLoopbackComposioCallbackBaseUrl(candidate))
+    );
   }
 
   if (!request) {
@@ -162,7 +168,10 @@ export function resolveComposioCallbackBaseUrl(
   );
 
   const configured = resolveWebPublicUrl();
-  if (configured) {
+  if (
+    configured &&
+    !(fromBrowser && isLoopbackComposioCallbackBaseUrl(configured))
+  ) {
     return configured;
   }
 
@@ -170,7 +179,20 @@ export function resolveComposioCallbackBaseUrl(
     return fromBrowser;
   }
 
-  const self = resolveRequestSelfOrigin(options.request);
+  return fallbackCallbackBaseUrl(options.request);
+}
+
+/**
+ * Callback base for a request that arrives *from* the OAuth provider. Its
+ * `Origin` and `Referer` belong to the provider, so the only answers worth
+ * trusting are the configured public URL and the host the request landed on.
+ */
+export function resolveCallbackBaseUrlFromRedirect(request: Request): string {
+  return resolveWebPublicUrl() ?? fallbackCallbackBaseUrl(request);
+}
+
+function fallbackCallbackBaseUrl(request?: Request): string {
+  const self = resolveRequestSelfOrigin(request);
   if (self) {
     return self;
   }

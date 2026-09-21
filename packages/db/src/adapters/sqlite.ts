@@ -174,6 +174,7 @@ interface SessionRow {
   created_at: string;
   id: string;
   model: string | null;
+  pinned: number;
   profile_id: string;
   title: string | null;
   updated_at?: string | null;
@@ -191,6 +192,7 @@ interface SessionMessageRow {
 interface AttachmentRow {
   channel: string;
   created_at: string;
+  ephemeral: number;
   filename: string | null;
   id: string;
   kind: string;
@@ -208,6 +210,7 @@ interface SessionSummaryRow {
   first_user_payload: string | null;
   id: string;
   message_count: number;
+  pinned: number;
   profile_id: string;
   title: string | null;
   updated_at: string;
@@ -403,6 +406,7 @@ interface OrgMemoryProposalRow {
   reviewed_at: string | null;
   reviewer_user_id: string | null;
   session_id: string | null;
+  source_document_ids: string | null;
   status: string;
 }
 
@@ -435,6 +439,7 @@ interface SkillProposalRow {
   session_id: string | null;
   skill_name: string;
   status: string;
+  supporting_files: string | null;
 }
 
 interface SkillSuggestionRow {
@@ -950,10 +955,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   });
 
   const listSessionsStmt = db.prepare("SELECT * FROM sessions");
+  const listSessionsForUserStmt = db.prepare(
+    "SELECT * FROM sessions WHERE user_id = ? ORDER BY created_at ASC"
+  );
   const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, user_id, model)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, user_id, model, pinned)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
@@ -967,11 +975,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const updateSessionModelStmt = db.prepare(
     "UPDATE sessions SET model = ? WHERE id = ?"
   );
+  const updateSessionPinnedStmt = db.prepare(
+    "UPDATE sessions SET pinned = ? WHERE id = ?"
+  );
   const updateSessionTitleStmt = db.prepare(`
     UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL
   `);
   const getSessionTodosStmt = db.prepare(
     "SELECT agent_todos FROM sessions WHERE id = ?"
+  );
+  const renameSessionTitleStmt = db.prepare(
+    "UPDATE sessions SET title = ? WHERE id = ?"
   );
   const updateSessionTodosStmt = db.prepare(
     "UPDATE sessions SET agent_todos = ? WHERE id = ?"
@@ -1026,15 +1040,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const insertAttachmentStmt = db.prepare(`
     INSERT INTO attachments (
       id, org_id, profile_id, session_id, channel, kind, filename,
-      media_type, size_bytes, storage_path, created_at
+      media_type, size_bytes, storage_path, created_at, ephemeral
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getAttachmentStmt = db.prepare(
     "SELECT * FROM attachments WHERE id = ?"
   );
   const listAttachmentsForSessionStmt = db.prepare(
     "SELECT * FROM attachments WHERE session_id = ?"
+  );
+  const listEphemeralAttachmentsStmt = db.prepare(
+    "SELECT * FROM attachments WHERE ephemeral = 1"
   );
   const deleteAttachmentStmt = db.prepare(
     "DELETE FROM attachments WHERE id = ?"
@@ -1046,6 +1063,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       s.channel,
       s.created_at,
       s.title,
+      s.pinned,
       COUNT(m.id) AS message_count,
       max(
         COALESCE(MAX(m.created_at), s.created_at),
@@ -1064,7 +1082,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE s.profile_id = ? AND s.channel = ?
     GROUP BY s.id
     HAVING COUNT(m.id) > 0
-    ORDER BY updated_at DESC, s.created_at DESC
+    ORDER BY s.pinned DESC, updated_at DESC, s.created_at DESC
   `);
 
   const getLlmUsageStatsStmt = db.prepare(
@@ -1629,6 +1647,90 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET disabled_at = NULL, updated_at = ?
     WHERE id = ?
   `);
+  const clearErasedUserSessionsStmt = db.prepare(
+    "UPDATE sessions SET user_id = NULL WHERE user_id = ?"
+  );
+  const clearErasedUserOrgMemoryProposalsStmt = db.prepare(`
+    UPDATE org_memory_proposals
+    SET proposed_by_user_id = CASE WHEN proposed_by_user_id = ? THEN NULL ELSE proposed_by_user_id END,
+        reviewer_user_id = CASE WHEN reviewer_user_id = ? THEN NULL ELSE reviewer_user_id END
+    WHERE proposed_by_user_id = ? OR reviewer_user_id = ?
+  `);
+  const clearErasedUserSkillProposalsStmt = db.prepare(`
+    UPDATE skill_proposals
+    SET proposed_by_user_id = CASE WHEN proposed_by_user_id = ? THEN NULL ELSE proposed_by_user_id END,
+        reviewer_user_id = CASE WHEN reviewer_user_id = ? THEN NULL ELSE reviewer_user_id END
+    WHERE proposed_by_user_id = ? OR reviewer_user_id = ?
+  `);
+  const clearErasedUserSkillSuggestionsStmt = db.prepare(`
+    UPDATE skill_suggestions SET proposed_by_user_id = NULL
+    WHERE proposed_by_user_id = ?
+  `);
+  const clearErasedUserProfileEventsStmt = db.prepare(`
+    UPDATE profile_change_events SET actor_user_id = NULL
+    WHERE actor_user_id = ?
+  `);
+  const deleteErasedUserAutomationReadsStmt = db.prepare(
+    "DELETE FROM automation_run_read_state WHERE user_id = ?"
+  );
+  const deleteErasedUserMembershipsStmt = db.prepare(
+    "DELETE FROM org_members WHERE user_id = ?"
+  );
+  const deleteErasedUserChannelMappingsStmt = db.prepare(
+    "DELETE FROM channel_org_mappings WHERE user_id = ?"
+  );
+  const deleteErasedUserBrowserSessionsStmt = db.prepare(
+    "DELETE FROM browser_sessions WHERE user_id = ?"
+  );
+  const deleteErasedUserPasswordResetsStmt = db.prepare(
+    "DELETE FROM password_reset_tokens WHERE user_id = ?"
+  );
+  const deleteErasedUserComposioConnectionsStmt = db.prepare(
+    "DELETE FROM composio_user_connections WHERE user_id = ?"
+  );
+  const anonymizeErasedUserStmt = db.prepare(`
+    UPDATE users
+    SET email = ?, password_hash = ?, name = NULL, phone = NULL,
+        is_platform_admin = 0, disabled_at = ?, user_context = NULL, updated_at = ?
+    WHERE id = ?
+  `);
+  const eraseUserTransaction = db.transaction(
+    (input: {
+      id: string;
+      email: string;
+      passwordHash: string;
+      updatedAt: string;
+    }) => {
+      clearErasedUserSessionsStmt.run(input.id);
+      clearErasedUserOrgMemoryProposalsStmt.run(
+        input.id,
+        input.id,
+        input.id,
+        input.id
+      );
+      clearErasedUserSkillProposalsStmt.run(
+        input.id,
+        input.id,
+        input.id,
+        input.id
+      );
+      clearErasedUserSkillSuggestionsStmt.run(input.id);
+      clearErasedUserProfileEventsStmt.run(input.id);
+      deleteErasedUserAutomationReadsStmt.run(input.id);
+      deleteErasedUserMembershipsStmt.run(input.id);
+      deleteErasedUserChannelMappingsStmt.run(input.id);
+      deleteErasedUserBrowserSessionsStmt.run(input.id);
+      deleteErasedUserPasswordResetsStmt.run(input.id);
+      deleteErasedUserComposioConnectionsStmt.run(input.id);
+      return anonymizeErasedUserStmt.run(
+        input.email,
+        input.passwordHash,
+        input.updatedAt,
+        input.updatedAt,
+        input.id
+      ).changes;
+    }
+  );
   // Per-org context lives on org_members only. users.user_context is a legacy
   // column left in place for existing installs; migrateLegacyUserContextToOrgMembers
   // copies any remaining values once, and this read path must not use it (#550).
@@ -1706,6 +1808,38 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
+  const createPasswordResetTokenStmt = db.prepare(`
+    INSERT INTO password_reset_tokens (
+      id, user_id, token_hash, expires_at, consumed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const getUsablePasswordResetTokenStmt = db.prepare(`
+    SELECT user_id
+    FROM password_reset_tokens
+    WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?
+    LIMIT 1
+  `);
+  const consumePasswordResetTokensForUserStmt = db.prepare(`
+    UPDATE password_reset_tokens
+    SET consumed_at = ?
+    WHERE user_id = ? AND consumed_at IS NULL
+  `);
+  const consumePasswordResetTokenTransaction = db.transaction(
+    (tokenHash: string, passwordHash: string, consumedAt: string) => {
+      const token = getUsablePasswordResetTokenStmt.get(
+        tokenHash,
+        consumedAt
+      ) as { user_id: string } | null;
+      if (!token) {
+        return false;
+      }
+
+      consumePasswordResetTokensForUserStmt.run(consumedAt, token.user_id);
+      updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
+      revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
+      return true;
+    }
+  );
   const tryMarkOrganizationArchivedStmt = db.prepare(`
     UPDATE organizations
     SET archived_at = ?, updated_at = ?
@@ -1713,6 +1847,37 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       AND archived_at IS NULL
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
   `);
+  const deleteOrganizationStmt = db.prepare(
+    "DELETE FROM organizations WHERE id = ?"
+  );
+  const organizationExistsStmt = db.prepare(
+    "SELECT 1 FROM organizations WHERE id = ?"
+  );
+  const deleteOrganizationTransaction = db.transaction((orgId: string) => {
+    if (!organizationExistsStmt.get(orgId)) {
+      return false;
+    }
+
+    db.query(
+      "UPDATE browser_sessions SET active_org_id = NULL WHERE active_org_id = ?"
+    ).run(orgId);
+
+    // These tables gained org_id through migrations rather than FK-backed
+    // schema definitions, so the organization cascade cannot remove them.
+    for (const table of [
+      "llm_turn_usage",
+      "llm_usage_stats",
+      "mcp_servers",
+      "skills",
+      "tool_output_savings",
+      "tools",
+      "workspace_settings",
+    ]) {
+      db.query(`DELETE FROM ${table} WHERE org_id = ?`).run(orgId);
+    }
+
+    return deleteOrganizationStmt.run(orgId).changes > 0;
+  });
   const upsertOrganizationStmt = db.prepare(`
     INSERT INTO organizations (id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1799,8 +1964,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const createOrgMemoryProposalStmt = db.prepare(`
     INSERT INTO org_memory_proposals (
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const createProfileChangeEventStmt = db.prepare(`
     INSERT INTO profile_change_events (
@@ -1820,7 +1985,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND status = ?
     ORDER BY created_at DESC
@@ -1828,7 +1993,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAllOrgMemoryProposalsStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ?
     ORDER BY created_at DESC
@@ -1836,7 +2001,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getOrgMemoryProposalStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND id = ?
     LIMIT 1
@@ -1844,7 +2009,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getPendingOrgMemoryProposalByBulletStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
-      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+      bullet, source_document_ids, status, pinned, reviewer_user_id, reviewed_at, created_at
     FROM org_memory_proposals
     WHERE org_id = ? AND bullet = ? AND status = 'pending'
     LIMIT 1
@@ -1863,15 +2028,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     INSERT INTO skill_proposals (
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const listSkillProposalsByStatusStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND status = ?
@@ -1881,7 +2046,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND status = ? AND profile_id = ?
@@ -1891,7 +2056,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ?
@@ -1901,7 +2066,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ?
@@ -1911,7 +2076,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND id = ?
@@ -1921,7 +2086,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND action = 'create' AND status = 'pending'
@@ -1931,7 +2096,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND status = 'pending'
@@ -1941,7 +2106,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SELECT
       id, org_id, profile_id, session_id, proposed_by_user_id,
       action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names,
+      consolidate_loser_skill_names, supporting_files,
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND action = 'patch'
@@ -2446,6 +2611,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return compareAndSetOrgPluginStateTx(input);
     },
 
+    async consumePasswordResetToken(tokenHash, passwordHash, consumedAt) {
+      return consumePasswordResetTokenTransaction.immediate(
+        tokenHash,
+        passwordHash,
+        consumedAt
+      );
+    },
+
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID) as {
         count: number;
@@ -2555,10 +2728,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.sessionId,
         record.proposedByUserId,
         record.bullet,
+        record.sourceDocumentIds.length > 0
+          ? JSON.stringify(record.sourceDocumentIds)
+          : null,
         record.status,
         record.pinned ? 1 : 0,
         record.reviewerUserId,
         record.reviewedAt,
+        record.createdAt
+      );
+    },
+
+    async createPasswordResetToken(record) {
+      createPasswordResetTokenStmt.run(
+        record.id,
+        record.userId,
+        record.tokenHash,
+        record.expiresAt,
+        record.consumedAt,
         record.createdAt
       );
     },
@@ -2593,6 +2780,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.consolidateLoserSkillNames
           ? JSON.stringify(record.consolidateLoserSkillNames)
           : null,
+        record.supportingFiles ? JSON.stringify(record.supportingFiles) : null,
         record.status,
         record.reviewerUserId,
         record.reviewedAt,
@@ -2663,6 +2851,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async deleteOrganization(id) {
+      const foreignKeys = db.query("PRAGMA foreign_keys").get() as {
+        foreign_keys: number;
+      };
+      const restoreForeignKeys = foreignKeys.foreign_keys === 0;
+      if (restoreForeignKeys) {
+        db.exec("PRAGMA foreign_keys = ON");
+      }
+
+      try {
+        return deleteOrganizationTransaction(id);
+      } finally {
+        if (restoreForeignKeys) {
+          db.exec("PRAGMA foreign_keys = OFF");
+        }
+      }
+    },
+
     async deleteOrgMember(orgId, userId) {
       const result = deleteOrgMemberStmt.run(orgId, userId, orgId);
       return result.changes > 0;
@@ -2715,6 +2921,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async enableUser(id) {
       enableUserStmt.run(new Date().toISOString(), id);
+    },
+
+    async eraseUser(input) {
+      return eraseUserTransaction.immediate(input) > 0;
     },
 
     async failInterruptedRuns() {
@@ -3161,7 +3371,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.mediaType,
         record.sizeBytes,
         record.storagePath,
-        record.createdAt
+        record.createdAt,
+        record.ephemeral ? 1 : 0
       );
     },
 
@@ -3264,6 +3475,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) =>
           toComposioUserConnectionRecord(row as ComposioUserConnectionRow)
         );
+    },
+
+    async listEphemeralAttachments() {
+      return listEphemeralAttachmentsStmt
+        .all()
+        .map((row) => toAttachmentRecord(row as AttachmentRow));
+    },
+
+    async listFilePins(orgId, userId, profileId) {
+      return (
+        db
+          .query(
+            "SELECT path FROM file_pins WHERE org_id = ? AND user_id = ? AND profile_id = ? ORDER BY path"
+          )
+          .all(orgId, userId, profileId) as { path: string }[]
+      ).map((row) => row.path);
     },
 
     async listLlmTurnUsage(orgId) {
@@ -3438,6 +3665,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toSessionRecord(row as SessionRow));
     },
 
+    async listSessionsForUser(userId) {
+      return listSessionsForUserStmt
+        .all(userId)
+        .map((row) => toSessionRecord(row as SessionRow));
+    },
+
     async listSkillProposals(orgId, options = {}) {
       const { status, profileId, sessionId } = options;
       let rows: SkillProposalRow[];
@@ -3598,6 +3831,38 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return publishOrgPluginReleaseTx(input);
     },
 
+    async renameFilePins(orgId, profileId, oldPath, newPath) {
+      if (oldPath === newPath) {
+        return;
+      }
+      db.transaction(() => {
+        db.query(`INSERT OR IGNORE INTO file_pins (org_id, user_id, profile_id, path)
+          SELECT org_id, user_id, profile_id, ? || substr(path, length(?) + 1)
+          FROM file_pins WHERE org_id = ? AND profile_id = ?
+          AND (path = ? OR substr(path, 1, length(?) + 1) = ? || '/')`).run(
+          newPath,
+          oldPath,
+          orgId,
+          profileId,
+          oldPath,
+          oldPath,
+          oldPath
+        );
+        db.query(`DELETE FROM file_pins WHERE org_id = ? AND profile_id = ?
+          AND (path = ? OR substr(path, 1, length(?) + 1) = ? || '/')`).run(
+          orgId,
+          profileId,
+          oldPath,
+          oldPath,
+          oldPath
+        );
+      })();
+    },
+    async renameSessionTitle(sessionId, title) {
+      const result = renameSessionTitleStmt.run(title, sessionId);
+      return result.changes > 0;
+    },
+
     async replaceMessagesForSession(sessionId, messages) {
       replaceMessagesForSessionTransaction(sessionId, messages);
     },
@@ -3622,6 +3887,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async revokeBrowserSessionsForUser(userId, revokedAt) {
       const result = revokeBrowserSessionsForUserStmt.run(revokedAt, userId);
       return result.changes;
+    },
+    async setFilePinned(orgId, userId, profileId, path, pinned) {
+      if (pinned) {
+        db.query(
+          "INSERT OR IGNORE INTO file_pins (org_id, user_id, profile_id, path) VALUES (?, ?, ?, ?)"
+        ).run(orgId, userId, profileId, path);
+      } else {
+        db.query(
+          "DELETE FROM file_pins WHERE org_id = ? AND user_id = ? AND profile_id = ? AND path = ?"
+        ).run(orgId, userId, profileId, path);
+      }
     },
 
     async setUserContext(orgId, userId, content, _updatedAt) {
@@ -3723,6 +3999,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async updateSessionModel(sessionId, model) {
       const result = updateSessionModelStmt.run(model, sessionId);
+      return result.changes > 0;
+    },
+    async updateSessionPinned(sessionId, pinned) {
+      const result = updateSessionPinnedStmt.run(pinned ? 1 : 0, sessionId);
       return result.changes > 0;
     },
 
@@ -3908,10 +4188,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt,
         record.createdAt,
         record.userId ?? null,
-        record.model
+        record.model,
+        record.pinned ? 1 : 0
       );
     },
-
     async upsertSkill(record) {
       upsertSkillStmt.run(
         record.id,
@@ -4305,6 +4585,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
     createdAt: row.created_at,
     id: row.id,
     model: row.model ?? null,
+    pinned: row.pinned === 1,
     profileId: row.profile_id,
     title: row.title ?? null,
     userId: row.user_id ?? null,
@@ -4327,6 +4608,7 @@ function toAttachmentRecord(row: AttachmentRow): StoredAttachmentRecord {
   return {
     channel: row.channel,
     createdAt: row.created_at,
+    ephemeral: row.ephemeral === 1,
     filename: row.filename,
     id: row.id,
     kind: row.kind as StoredAttachmentRecord["kind"],
@@ -4368,6 +4650,7 @@ function toSessionSummaryRecord(
     createdAt: row.created_at,
     id: row.id,
     messageCount: row.message_count,
+    pinned: row.pinned === 1,
     preview: previewFromFirstUserPayload(row.first_user_payload),
     profileId: row.profile_id,
     title: row.title ?? null,
@@ -4678,6 +4961,24 @@ function toOrgInviteRecord(row: OrgInviteRow): StoredOrgInviteRecord {
   };
 }
 
+function parseOrgMemorySourceDocumentIds(raw: string | null): string[] {
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((item) => typeof item === "string")
+    ) {
+      return parsed;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
 function toOrgMemoryProposalRecord(
   row: OrgMemoryProposalRow
 ): StoredOrgMemoryProposal {
@@ -4692,6 +4993,7 @@ function toOrgMemoryProposalRecord(
     reviewedAt: row.reviewed_at,
     reviewerUserId: row.reviewer_user_id,
     sessionId: row.session_id,
+    sourceDocumentIds: parseOrgMemorySourceDocumentIds(row.source_document_ids),
     status: row.status as OrgMemoryProposalStatus,
   };
 }
@@ -4745,6 +5047,9 @@ function toSkillProposalRecord(row: SkillProposalRow): StoredSkillProposal {
     sessionId: row.session_id,
     skillName: row.skill_name,
     status: row.status as StoredSkillProposal["status"],
+    supportingFiles: row.supporting_files
+      ? JSON.parse(row.supporting_files)
+      : null,
   };
 }
 

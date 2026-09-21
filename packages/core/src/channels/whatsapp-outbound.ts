@@ -35,12 +35,22 @@ export function createWhatsAppOutboundAdapter(
   return {
     async send(input): Promise<ChannelSendResult> {
       try {
-        const config = await loadWhatsAppConfigFile();
+        if (!(input.orgId && input.profileId)) {
+          return {
+            error: "Choose an agent connection before sending.",
+            ok: false,
+          };
+        }
+        const owner = { orgId: input.orgId, profileId: input.profileId };
+        const config = await loadWhatsAppConfigFile(owner);
 
         if (!config?.pairedJid) {
           return { error: "WhatsApp is not paired.", ok: false };
         }
 
+        if (!(config.outboundPort && config.outboundToken)) {
+          return { error: "WhatsApp worker is not connected.", ok: false };
+        }
         const port = resolveWhatsAppOutboundPort(config);
         const response = await fetchImpl(`http://127.0.0.1:${port}/send`, {
           body: JSON.stringify({ text: input.text }),

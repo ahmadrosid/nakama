@@ -16,17 +16,24 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
-import { Logout03Icon, SparklesIcon, UserIcon } from "hugeicons-react";
+import {
+  Building03Icon,
+  Logout03Icon,
+  SparklesIcon,
+  UserIcon,
+} from "hugeicons-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { THEME_OPTIONS } from "@/components/theme-options";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
+import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
 
 export function SidebarUserMenu() {
-  const { user, logout, refreshSession } = useAuth();
+  const { user, activeOrg, logout, refreshSession } = useAuth();
   const { health } = useAppContext();
   const { theme, setTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -100,6 +107,21 @@ export function SidebarUserMenu() {
                       <SparklesIcon className="size-4 text-muted-foreground" />
                       Personalisation
                     </DropdownMenuItem>
+                    {canAccessSystemPage(
+                      user.isPlatformAdmin === true,
+                      activeOrg?.role
+                    ) && (
+                      <DropdownMenuItem
+                        className="px-2.5 py-2"
+                        render={<Link to={PAGE_PATHS.organization} />}
+                      >
+                        <Building03Icon
+                          aria-hidden="true"
+                          className="size-4 text-muted-foreground"
+                        />
+                        Organization
+                      </DropdownMenuItem>
+                    )}
                   </div>
 
                   <div className="h-px bg-border" />

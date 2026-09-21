@@ -216,7 +216,13 @@ export function wrapProviderWithUsageTracking(
       result.usage?.inputTokens ?? estimateChatInputTokens(input);
     const outputTokens =
       result.usage?.outputTokens ?? estimateChatOutputTokens(result);
-    const costUsd = tracker.record(modelId, inputTokens, outputTokens);
+    const cachedInputTokens = result.usage?.cachedInputTokens;
+    const costUsd = tracker.record(
+      modelId,
+      inputTokens,
+      outputTokens,
+      cachedInputTokens ?? 0
+    );
 
     return {
       ...result,
@@ -225,6 +231,7 @@ export function wrapProviderWithUsageTracking(
         outputTokens,
         totalTokens: inputTokens + outputTokens,
         ...(estimated ? { estimated: true } : {}),
+        ...(cachedInputTokens == null ? {} : { cachedInputTokens }),
         ...(costUsd == null ? {} : { costUsd }),
       },
     };

@@ -1,6 +1,7 @@
 import {
   type ChannelArtifactRef,
   extractPairedTurnArtifacts,
+  isScratchArtifactPath,
 } from "./channel-artifacts";
 import type { ChatMessage } from "./contract";
 
@@ -43,6 +44,24 @@ export interface ListedArtifactCandidate {
   mimeType: string;
   sizeBytes: number;
   updatedAt: string;
+}
+
+const FRESHNESS_MARKERS =
+  "harian|hari\\s+ini|terbaru|today|daily|latest|yang\\s+baru|update|diperbarui";
+
+const FILENAME_TOKEN = /\S+\.[a-z0-9]{2,5}\b/gi;
+
+export function isFreshReportRequest(text: string): boolean {
+  // Filenames can carry a marker word (`daily-report.csv`, `update-harga.csv`)
+  // and those requests still want the file itself, not a fresh agent turn.
+  const normalized = text.trim().replace(FILENAME_TOKEN, " ");
+  if (!normalized) {
+    return false;
+  }
+
+  return new RegExp(String.raw`\b(?:${FRESHNESS_MARKERS})\b`, "i").test(
+    normalized
+  );
 }
 
 export function isAttachIntent(text: string): boolean {
@@ -224,7 +243,9 @@ export async function deliverTurnArtifactShares(input: {
   };
 }): Promise<DeliverableChannelArtifact[]> {
   const messages = await input.session.getMessages();
-  const paired = extractPairedTurnArtifacts(messages);
+  const paired = extractPairedTurnArtifacts(messages).filter(
+    (artifact) => !isScratchArtifactPath(artifact.path)
+  );
   if (paired.length === 0) {
     return [];
   }

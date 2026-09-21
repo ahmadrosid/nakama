@@ -20,6 +20,23 @@ function createProviderInstance(
 }
 
 describe("resolveProfileProviderSelection", () => {
+  test("preserves a bare retired ChatGPT selection without making it the default", () => {
+    const instance = createProviderInstance({
+      id: "chatgpt-1",
+      label: "ChatGPT",
+      type: "chatgpt",
+    });
+    const options = { defaultProviderId: instance.id, providers: [instance] };
+
+    expect(
+      resolveProfileProviderSelection({ ...options, profileModel: "gpt-5.4" })
+    ).toEqual({ instance, model: "gpt-5.4" });
+    expect(
+      resolveProfileProviderSelection({ ...options, profileModel: null })?.model
+    ).toBe("gpt-5.6-terra");
+    expect(modelExistsOnInstance(instance, "unknown-model")).toBe(false);
+  });
+
   test("uses the explicitly selected provider instance for provider-qualified profile models", () => {
     const providers: ProviderInstance[] = [
       createProviderInstance({

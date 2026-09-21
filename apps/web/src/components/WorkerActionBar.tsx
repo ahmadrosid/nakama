@@ -1,4 +1,11 @@
 import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import {
   Loading03Icon,
@@ -9,7 +16,9 @@ import {
 } from "hugeicons-react";
 import { useState } from "react";
 import { WorkerLogDialog } from "@/components/WorkerLogDialog";
+import { useChannelProfileId } from "@/hooks/use-app-queries";
 import {
+  useDisconnectChannel,
   useRestartWorker,
   useStartWorker,
   useStopWorker,
@@ -57,30 +66,67 @@ function ActionGlyph({
   );
 }
 
+function WorkerActionsMenu({
+  busy,
+  running,
+  showLogs,
+  onAction,
+  onViewLogs,
+}: {
+  busy: boolean;
+  running: boolean;
+  showLogs: boolean;
+  onAction: () => void;
+  onViewLogs: () => void;
+}) {
+  if (!(running || showLogs)) {
+    return null;
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button disabled={busy} size="sm" variant="outline" />}
+      >
+        {busy ? "Working…" : "More"}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {running ? (
+          <DropdownMenuItem onClick={onAction}>Restart</DropdownMenuItem>
+        ) : null}
+        {showLogs ? (
+          <DropdownMenuItem onClick={onViewLogs}>View logs</DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function WorkerActionBar({
   running,
   pm2Managed,
   workerName,
   className,
   showLogs = true,
+  compact = false,
 }: {
   running: boolean;
   pm2Managed: boolean;
   workerName: string;
   className?: string;
   showLogs?: boolean;
+  compact?: boolean;
 }) {
   const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const ownerProfileId = useChannelProfileId();
+  const disconnect = useDisconnectChannel();
   const startWorker = useStartWorker();
   const stopWorker = useStopWorker();
   const restartWorker = useRestartWorker();
 
-  const starting =
-    startWorker.isPending && startWorker.variables === workerName;
-  const stopping = stopWorker.isPending && stopWorker.variables === workerName;
-  const restarting =
-    restartWorker.isPending && restartWorker.variables === workerName;
-  const isBusy = starting || stopping || restarting;
+  const starting = startWorker.isPending;
+  const stopping = stopWorker.isPending;
+  const restarting = restartWorker.isPending;
+  const isBusy = starting || stopping || restarting || disconnect.isPending;
 
   if (!pm2Managed) {
     return (
@@ -94,39 +140,45 @@ export function WorkerActionBar({
     <>
       <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
         {running ? (
-          <>
-            <Button
-              aria-busy={stopping || undefined}
-              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={isBusy}
-              onClick={() => stopWorker.mutate(workerName)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <ActionGlyph busy={stopping} icon={StopIcon} />
-              Stop
-            </Button>
-            <Button
-              aria-busy={restarting || undefined}
-              disabled={isBusy}
-              onClick={() => restartWorker.mutate(workerName)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <ActionGlyph busy={restarting} icon={Rotate02Icon} />
-              Restart
-            </Button>
-          </>
+          compact ? null : (
+            <>
+              <Button
+                aria-busy={stopping}
+                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={isBusy}
+                onClick={() => stopWorker.mutate(workerName)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <ActionGlyph busy={stopping} icon={StopIcon} />
+                Stop
+              </Button>
+              <Button
+                aria-busy={restarting}
+                disabled={isBusy}
+                onClick={() => restartWorker.mutate(workerName)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <ActionGlyph busy={restarting} icon={Rotate02Icon} />
+                Restart
+              </Button>
+            </>
+          )
         ) : (
           <Button
-            aria-busy={starting || undefined}
+            aria-busy={starting}
             disabled={isBusy}
-            onClick={() => startWorker.mutate(workerName)}
+            onClick={() =>
+              startWorker.mutate(workerName, {
+                onError: (error) => toast(error.message),
+              })
+            }
             size="sm"
             type="button"
-            variant="outline"
+            variant={compact ? "default" : "outline"}
           >
             <ActionGlyph
               busy={starting}
@@ -136,7 +188,34 @@ export function WorkerActionBar({
             Start
           </Button>
         )}
-        {showLogs ? (
+        {ownerProfileId ? (
+          <Button
+            disabled={isBusy}
+            onClick={() =>
+              disconnect.mutate(workerName, {
+                onError: (error) => toast(error.message),
+              })
+            }
+            size="sm"
+            variant="ghost"
+          >
+            Disconnect
+          </Button>
+        ) : null}
+        {compact ? (
+          <WorkerActionsMenu
+            busy={isBusy}
+            onAction={() => {
+              const mutation = running ? restartWorker : startWorker;
+              mutation.mutate(workerName, {
+                onError: (error) => toast(error.message),
+              });
+            }}
+            onViewLogs={() => setLogDialogOpen(true)}
+            running={running}
+            showLogs={showLogs}
+          />
+        ) : showLogs ? (
           <Button
             className="ml-auto"
             onClick={() => setLogDialogOpen(true)}

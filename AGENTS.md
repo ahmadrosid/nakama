@@ -2,20 +2,27 @@
 
 Agent platform built to work with your team — not replace them. Multi-tenant monorepo; orgs are flat tenants, each profile has a **soul** (identity, style, instructions, memory).
 
-**Constraints:**
+## Rules
+
+**Code**
 - Prefer edit over extract; no new package/file unless an existing module cannot hold the change
 - No new abstractions for a single call site
-- ADHD-shaped replies (lead with the action; numbered steps; no preamble/recap)
-- Human voice — short, concrete, no corporate filler
+- Tests assert behavior (status, data, side effects), not prompt/description/error copy
+- React UI: one self-explanatory heading/label; no subtitles or helper copy unless the user asks or misunderstanding would cause errors
+
+**Replies**
+- ADHD-shaped: lead with the action; numbered steps; no preamble/recap
+- Human voice — short, concrete, plain words (not tech jargon), no corporate filler
 - If ambiguous, give 3 options numbered — the user will reply with a number
+
+**Process**
+- PRs: ready for review by default; drafts only on explicit user request. Overrides skills.
+- Browser checks only when explicitly requested (`agent-browser`); otherwise tests, type checks, builds. Do not add Playwright.
 
 ## Dev
 
 - Bun 1.3+: `bun install`, `bun run`, `bun test`
-- Servers: `bun run dev:server` | `dev:web` | `dev:cli`
-- Layout: `apps/{server,web,cli}`, channel workers in `apps/platform/{telegram,whatsapp,discord,automation}`
-- Tests: assert behavior (status, data, side effects), not prompt/description/error copy
-- React UI: one self-explanatory heading/label; no subtitles or helper copy unless the user asks or misunderstanding would cause errors
+- Servers: `bun run dev:server` | `dev:web` | `cli`
 - Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
 
 ## LLM cassette tests (MSW)
@@ -29,17 +36,17 @@ LLM_VCR_MODE=record bun test path/to/foo.llm.test.ts  # re-record (needs provide
 
 ## GitHub
 
-Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always run outside the sandbox (`required_permissions: ["all"]`) — sandbox returns `Forbidden`.
+Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always run outside the sandbox — inside it `gh` returns `Forbidden`.
 
 `gh issue` / `gh pr` / `--json` go through GraphQL and often time out here. Prefer REST: `gh api repos/{owner}/{repo}/issues` or `/pulls`, body in a JSON file, `POST --input`. On GraphQL timeout, retry REST once.
 
 **PR descriptions:** use [`.agents/skills/adhd-pr-description/SKILL.md`](.agents/skills/adhd-pr-description/SKILL.md) (default body shape). GitHub fills the same shape via `.github/PULL_REQUEST_TEMPLATE.md`. Agents composing PR bodies (including `ce-commit-push-pr`) must follow that skill.
 
+Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it in the PR description.
+
+**Releases:** Bump root `package.json` to the next patch after the latest GitHub release, check, commit, push, tag `vX.Y.Z`, and publish with generated notes.
+
 ## Browser automation
-
-Use `gh pr edit <number> --attach <image-path>` to upload a screenshot and embed it in the PR description.
-
-Run browser checks only when explicitly requested, using `agent-browser`; otherwise use tests, type checks, and builds. Do not add Playwright.
 
 ```bash
 bun run agent:ui
@@ -81,16 +88,7 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 
 Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
 
-| Role | Can |
-|---|---|
-| Platform admin | Orgs (`/v1/platform/orgs`), profiles/tools/MCP/skills |
-| Org admin | Members/invites (`/v1/orgs/{orgId}/members`); profile pack export/import for the active org (create/clone profiles → platform admin or Super Bot `create-profile`) |
-| Org member | Chat, agents, automations |
-| Org viewer | Read chat only — no agent invoke / mutations |
-
 **Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or `active_org_id` cookie (`POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
-
-**Onboard:** setup → `POST /v1/auth/setup`; more orgs → platform admin; invite → `/v1/orgs/{orgId}/invites` + `POST /v1/auth/accept-invite`; switch → `OrgSwitcher.tsx` / `client.setActiveOrg()`.
 
 | Change | Where |
 |---|---|
@@ -117,13 +115,6 @@ Merged in `agent-service` `resolveProfileSystemPrompt` → `generateReply` (`pro
 ## Soul (`packages/core/src/soul/`)
 
 Profile workspace / soul dir: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Override root: `NAKAMA_CONFIG_DIR`. Load: `loadSoulStack()`; inject: `composeSoulSystemPrompt()`.
-
-| File | Role |
-|---|---|
-| `SOUL.md` | Identity |
-| `STYLE.md` | Voice |
-| `INSTRUCTIONS.md` | Operating rules |
-| `MEMORY.md` | Cross-session facts |
 
 ## Tools (`packages/core/src/tools/`)
 
@@ -175,9 +166,12 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 
 ## Packages & server
 
+- `apps/{server,web,cli}`; channel workers in `apps/platform/{telegram,whatsapp,discord,automation}`
 - `packages/core` — soul, tools, skills, contracts
 - `packages/agent` — chat loop, prompts, compaction
 - `packages/db` — DB
 - `packages/client` — API client
 
-Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI: `openapi.ts` (`/openapi.json`). Mutation authority matches the Multi-tenancy role table; viewers blocked by `requireNotViewer` on worker control and agent invoke.
+Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI: `openapi.ts` (`/openapi.json`). Viewers are blocked by `requireNotViewer` (worker control, agent invoke).
+
+Don't use compound engineering skills!

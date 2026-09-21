@@ -65,6 +65,7 @@ export function createMockClient(
       handlers?: StreamHandlers
     ) => Promise<string>;
     artifactContentBytes?: Uint8Array;
+    sessions?: import("@nakama/core/contract").SessionSummary[];
   } = {}
 ) {
   const calls = {
@@ -121,6 +122,7 @@ export function createMockClient(
       }
       return session;
     },
+    forOrg: () => client,
     getModels: async () => ({
       currentProviderId: null,
       displayName: null,
@@ -159,6 +161,7 @@ export function createMockClient(
           name: profile.name ?? profile.id,
         })),
       }),
+    listSessions: async () => ({ sessions: options.sessions ?? [] }),
     listUserOrgs: async () => parseListUserOrgsResponse({ orgs }),
     publishProfileArtifactShare: async () => {
       calls.publishProfileArtifactShare += 1;
@@ -518,6 +521,7 @@ export function createSlashInteraction(options: {
   threadId?: string;
   /** Resolved USER option for commands like /allow. Pass `null` for missing. */
   userOption?: { id: string; username?: string } | null;
+  stringOptions?: Record<string, string>;
 }): {
   interaction: import("discord.js").ChatInputCommandInteraction;
   replies: string[];
@@ -572,6 +576,7 @@ export function createSlashInteraction(options: {
       replies.push(content);
     },
     options: {
+      getString: (name: string) => options.stringOptions?.[name] ?? null,
       getUser: (name: string) => {
         if (name !== "user" || !hasUserOption) {
           return null;

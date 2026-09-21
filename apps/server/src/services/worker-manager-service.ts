@@ -1,13 +1,43 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
 import {
   type PlatformWorkerName,
+  type PluginWorkerContribution,
   readRuntimeServerUrl,
   readWorkerDesiredState,
+  resolvePluginReleaseEntry,
   setWorkerDesiredRunning,
 } from "@nakama/core";
+import {
+  assertChannelPath,
+  type ChannelConfigScope,
+  type ChannelOwner,
+  type ChannelPlatform,
+  claimChannelIdentity,
+  getChannelConfigDir,
+  isChannelOwner,
+  listChannelOwners,
+  removeChannelConnection,
+} from "@nakama/core/channel-config-shared";
+import { resolveDiscordApplicationId } from "@nakama/core/discord-config";
+import { parseIni, readTextOrNull, writeTextFile } from "@nakama/core/fs";
+import { listWhatsAppConfigOrgIds } from "@nakama/core/whatsapp-config";
+import {
+  createWorkerHeartbeatStore,
+  isProcessAlive,
+} from "@nakama/core/worker-heartbeat";
+import type { DatabaseAdapter } from "@nakama/db";
 
 const WORKER_SCRIPTS: Record<string, string> = {
   automation: "apps/platform/automation/src/index.ts",
@@ -25,6 +55,23 @@ const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
 
 const VALID_WORKERS = Object.keys(WORKER_SCRIPTS);
 
+export interface PluginWorkerRegistration {
+  configDir?: string;
+  dataDir: string;
+  orgId: string;
+  pluginId: string;
+  releaseDir: string;
+  version: string;
+  workers: PluginWorkerContribution[];
+}
+
+interface RegisteredPluginWorker {
+  contribution: PluginWorkerContribution;
+  directory: string;
+  registration: PluginWorkerRegistration;
+  script: string;
+}
+
 function promisifyPm2<T>(
   fn: (cb: (err: Error | null, result?: T) => void) => void
 ): Promise<T> {
@@ -40,11 +87,308 @@ function promisifyPm2<T>(
 }
 
 export class WorkerManagerService {
+  async legacyChannels(orgId: string, includeGlobal: boolean) {
+    const pending: { platform: ChannelPlatform; global: boolean }[] = [];
+    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      for (const scope of includeGlobal ? [orgId, null] : [orgId]) {
+        if (
+          await readTextOrNull(
+            join(getChannelConfigDir(platform, scope), "config.ini")
+          )
+        ) {
+          pending.push({ global: scope === null, platform });
+        }
+      }
+    }
+    return pending;
+  }
+
+  claimLegacyChannel(
+    platform: ChannelPlatform,
+    scope: string | null,
+    owner: ChannelOwner,
+    db: DatabaseAdapter
+  ) {
+    return this.queueChannelChange(() =>
+      this.migrateLegacyConnection(platform, scope, owner, db)
+    );
+  }
+
+  private async migrateLegacyConnection(
+    platform: ChannelPlatform,
+    scope: string | null,
+    owner: ChannelOwner,
+    db: DatabaseAdapter
+  ) {
+    if (
+      this.channelOwnerAvailable &&
+      !(await this.channelOwnerAvailable(owner))
+    ) {
+      throw new Error("The connection owner is unavailable");
+    }
+    const source = getChannelConfigDir(platform, scope);
+    const target = getChannelConfigDir(platform, owner);
+    assertChannelPath(source);
+    for (const entry of await readdir(source, {
+      recursive: true,
+      withFileTypes: true,
+    })) {
+      if (entry.isSymbolicLink()) {
+        throw new Error("Legacy channel files cannot contain symbolic links");
+      }
+    }
+    if (!(await readTextOrNull(join(source, "config.ini")))) {
+      throw new Error("Legacy connection not found");
+    }
+    if (existsSync(join(target, "config.ini"))) {
+      throw new Error("This agent already has a connection");
+    }
+    await this.withPm2((pm2) =>
+      this.deletePluginProcess(pm2, this.processName(platform, scope))
+    );
+    const heartbeat = createWorkerHeartbeatStore({ getDir: () => source });
+    const running = await heartbeat.read();
+    if (running && isProcessAlive(running.pid)) {
+      throw new Error(
+        "Stop the manually started legacy worker before claiming its connection"
+      );
+    }
+    const desired = (await readWorkerDesiredState(scope))[platform];
+    const sessions = await db.listSessions();
+    const allowed = new Set(
+      sessions
+        .filter(
+          (session) =>
+            session.orgId === owner.orgId &&
+            session.profileId === owner.profileId
+        )
+        .map((session) => session.id)
+    );
+    const sessionPath = join(source, "chat-sessions.json");
+    const rawSessions = await readTextOrNull(sessionPath);
+    if (rawSessions) {
+      const records = JSON.parse(rawSessions) as Record<
+        string,
+        { sessionId: string; profileId: string }
+      >;
+      await writeTextFile(
+        sessionPath,
+        JSON.stringify(
+          Object.fromEntries(
+            Object.entries(records).filter(
+              ([, record]) =>
+                allowed.has(record.sessionId) &&
+                record.profileId === owner.profileId
+            )
+          )
+        )
+      );
+    }
+    const raw = (await readTextOrNull(join(source, "config.ini")))!;
+    const values = parseIni(raw);
+    let identity: string | undefined;
+    if (platform === "telegram") {
+      identity = values.bot_token?.split(":")[0];
+    }
+    if (platform === "discord") {
+      identity =
+        (await resolveDiscordApplicationId(values.bot_token ?? "")) ??
+        undefined;
+    }
+    if (platform === "whatsapp") {
+      const auth = await readTextOrNull(join(source, "auth", "creds.json"));
+      const jid = auth
+        ? (JSON.parse(auth) as { me?: { id?: string } }).me?.id
+        : undefined;
+      if (jid) {
+        identity = jid.replace(/:\d+@/, "@");
+      }
+    }
+    if (identity) {
+      await claimChannelIdentity(platform, owner, identity);
+    } else if (platform !== "whatsapp") {
+      throw new Error("Legacy bot account could not be validated");
+    }
+
+    await writeTextFile(
+      join(source, "config.ini"),
+      (raw.match(/^profile_id=.*$/m)
+        ? raw.replace(/^profile_id=.*$/m, `profile_id=${owner.profileId}`)
+        : `${raw}\nprofile_id=${owner.profileId}\n`
+      ).replace(/^outbound_(port|token)=.*\n?/gm, "")
+    );
+    for (const entry of [
+      "worker-heartbeat.json",
+      "worker-qr.txt",
+      "worker-lock.sqlite",
+      "org-selection.json",
+    ]) {
+      await rm(join(source, entry), { force: true });
+    }
+    await mkdir(join(target, ".."), { mode: 0o700, recursive: true });
+    if (existsSync(target)) {
+      await rm(target, { recursive: true });
+    }
+    await rename(source, target);
+    await setWorkerDesiredRunning(platform, false, scope);
+    await setWorkerDesiredRunning(platform, desired, owner);
+  }
+
+  async migrateAgentChannels(db: DatabaseAdapter) {
+    const migratedTelegramOwners: ChannelOwner[] = [];
+    const allOrgs = await db.listOrganizations();
+    const orgs = allOrgs.filter((org) => !org.archivedAt);
+    // Stop every legacy identity first, even when its owner needs manual repair.
+    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      for (const scope of [null, ...allOrgs.map((org) => org.id)]) {
+        await this.withPm2((pm2) =>
+          this.deletePluginProcess(pm2, this.processName(platform, scope))
+        );
+      }
+    }
+    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      for (const scope of [null, ...orgs.map((org) => org.id)]) {
+        const raw = await readTextOrNull(
+          join(getChannelConfigDir(platform, scope), "config.ini")
+        );
+        if (!raw) {
+          continue;
+        }
+        const profileId = parseIni(raw).profile_id || "default";
+        const candidates: ChannelOwner[] = [];
+        for (const org of orgs.filter(
+          (org) => scope === null || org.id === scope
+        )) {
+          for (const profile of await db.listProfilesForOrg(org.id)) {
+            if (
+              profileId === "default"
+                ? profile.isDefault && (scope !== null || orgs.length === 1)
+                : profile.id === profileId
+            ) {
+              candidates.push({ orgId: org.id, profileId: profile.id });
+            }
+          }
+        }
+        if (candidates.length === 1) {
+          try {
+            await this.claimLegacyChannel(platform, scope, candidates[0]!, db);
+            if (platform === "telegram") {
+              migratedTelegramOwners.push(candidates[0]!);
+            }
+          } catch (error) {
+            console.warn(
+              `Legacy ${platform} connection needs administrator repair`,
+              error
+            );
+          }
+        }
+      }
+    }
+    const telegramOwners = migratedTelegramOwners;
+    for (const org of orgs) {
+      const owners = telegramOwners.filter((owner) => owner.orgId === org.id);
+      if (owners.length !== 1) {
+        continue;
+      }
+      for (const destination of await db.listNotificationDestinationsForOrg(
+        org.id
+      )) {
+        if (!destination.config.profileId) {
+          await db.upsertNotificationDestination({
+            ...destination,
+            config: { ...destination.config, profileId: owners[0]!.profileId },
+          });
+        }
+      }
+    }
+  }
+
+  channelOwnerAvailable?: (owner: ChannelOwner) => Promise<boolean>;
+  private readonly disabledOwners = new Set<string>();
+
+  private readonly disabledConnections = new Set<string>();
+  private configQueue: Promise<unknown> = Promise.resolve();
+  private queueChannelChange<T>(change: () => Promise<T>): Promise<T> {
+    const operation = this.configQueue.catch(() => {}).then(change);
+    this.configQueue = operation;
+    return operation;
+  }
+  async saveChannelConfig<T>(
+    platform: ChannelPlatform,
+    owner: ChannelOwner,
+    save: () => Promise<T>,
+    startAfterSave?: boolean
+  ): Promise<T> {
+    // ponytail: one configuration queue per server; split by owner if saves become frequent.
+    return this.queueChannelChange(async () => {
+      if (
+        this.disabledOwners.has(JSON.stringify(owner)) ||
+        (this.channelOwnerAvailable &&
+          !(await this.channelOwnerAvailable(owner)))
+      ) {
+        throw new Error("The connection owner is unavailable");
+      }
+      const key = getChannelConfigDir(platform, owner);
+      const desired =
+        startAfterSave ?? (await readWorkerDesiredState(owner))[platform];
+      this.disabledConnections.add(key);
+      let stopped = false;
+      try {
+        await this.stopWorker(platform, owner);
+        stopped = true;
+        return await save();
+      } finally {
+        this.disabledConnections.delete(key);
+        if (stopped && desired) {
+          await this.startWorker(platform, owner);
+        }
+      }
+    });
+  }
+
+  async disconnectChannel(platform: ChannelPlatform, owner: ChannelOwner) {
+    return this.queueChannelChange(async () => {
+      const key = getChannelConfigDir(platform, owner);
+      this.disabledConnections.add(key);
+      try {
+        await this.stopWorker(platform, owner);
+        await removeChannelConnection(platform, owner);
+      } finally {
+        this.disabledConnections.delete(key);
+      }
+    });
+  }
+
+  allowProfileChannels(owner: ChannelOwner) {
+    this.disabledOwners.delete(JSON.stringify(owner));
+  }
+
+  async disableProfileChannels(owner: ChannelOwner, remove = false) {
+    this.disabledOwners.add(JSON.stringify(owner));
+    return this.queueChannelChange(async () => {
+      for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+        if (
+          !existsSync(join(getChannelConfigDir(platform, owner), "config.ini"))
+        ) {
+          continue;
+        }
+        await this.stopWorker(platform, owner);
+        if (remove) {
+          await removeChannelConnection(platform, owner);
+        }
+      }
+    });
+  }
+
+  private readonly pluginWorkers = new Map<string, RegisteredPluginWorker>();
+  private pluginWorkersPaused = false;
+  private pm2Queue: Promise<unknown> = Promise.resolve();
   private pm2Module: typeof import("pm2") | null = null;
 
   constructor(
     private readonly projectRoot: string,
-    pm2?: typeof import("pm2")
+    pm2?: typeof import("pm2"),
+    private readonly getWorkerLlm?: (providerType?: "openai") => unknown
   ) {
     this.pm2Module = pm2 ?? null;
   }
@@ -69,19 +413,284 @@ export class WorkerManagerService {
   private async withPm2<T>(
     action: (pm2: NonNullable<typeof import("pm2")>) => Promise<T>
   ): Promise<T> {
-    const pm2 = await this.ensurePm2();
+    const operation = this.pm2Queue
+      .catch(() => {})
+      .then(async () => {
+        const pm2 = await this.ensurePm2();
+        await promisifyPm2<void>((cb) => pm2.connect(cb));
+        try {
+          return await action(pm2);
+        } finally {
+          pm2.disconnect();
+        }
+      });
+    this.pm2Queue = operation;
+    return operation;
+  }
 
-    await promisifyPm2<void>((cb) => pm2.connect(cb));
-
-    try {
-      return await action(pm2);
-    } finally {
-      pm2.disconnect();
+  async registerPluginWorkers(
+    registration: PluginWorkerRegistration,
+    start: boolean
+  ): Promise<void> {
+    for (const contribution of registration.workers) {
+      const name =
+        "plugin-" +
+        createHash("sha256")
+          .update(
+            JSON.stringify([
+              registration.dataDir,
+              registration.orgId,
+              registration.pluginId,
+              contribution.key,
+            ])
+          )
+          .digest("hex")
+          .slice(0, 32);
+      const script = resolvePluginReleaseEntry(
+        registration.releaseDir,
+        contribution.entry
+      );
+      if (!existsSync(script)) {
+        throw new Error("Plugin worker entry is missing");
+      }
+      const directory = join(registration.dataDir, "workers", contribution.key);
+      await mkdir(directory, { mode: 0o700, recursive: true });
+      this.pluginWorkers.set(name, {
+        contribution,
+        directory,
+        registration,
+        script,
+      });
+      let desired = true;
+      try {
+        desired = JSON.parse(
+          await readFile(join(directory, "desired.json"), "utf8")
+        );
+        if (typeof desired !== "boolean") {
+          throw new Error("Invalid worker desired state");
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+      if (start) {
+        await this.startWorker(name);
+      } else if (desired) {
+        const process = (await this.listAllPm2Processes()).find(
+          (item) => item.name === name
+        );
+        if (
+          process?.pm2_env?.status !== "online" ||
+          process.pm2_env.NAKAMA_PLUGIN_VERSION !== registration.version
+        ) {
+          await this.startWorker(name);
+        }
+      }
     }
   }
 
+  private async deletePluginProcess(pm2: typeof import("pm2"), name: string) {
+    const existing = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+      pm2.describe(name, cb)
+    );
+    if (existing.length) {
+      await promisifyPm2<void>((cb) => pm2.delete(name, (error) => cb(error)));
+    }
+  }
+
+  async clearPluginWorkers() {
+    const registrations = [...this.pluginWorkers.values()].map(
+      (worker) => worker.registration
+    );
+    for (const registration of registrations) {
+      await this.unregisterPluginWorkers(
+        registration.orgId,
+        registration.pluginId
+      );
+    }
+  }
+
+  async removeOrphanPluginWorkers(configDir: string) {
+    await this.withPm2(async (pm2) => {
+      const processes = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+        pm2.list(cb)
+      );
+      for (const process of processes) {
+        if (
+          process.name?.startsWith("plugin-") &&
+          process.pm2_env?.NAKAMA_PLUGIN_WORKER_ROOT === configDir &&
+          !this.pluginWorkers.has(process.name)
+        ) {
+          await this.deletePluginProcess(pm2, process.name);
+        }
+      }
+    });
+  }
+
+  async pausePluginWorkers(): Promise<string[]> {
+    this.pluginWorkersPaused = true;
+    const running: string[] = [];
+    if (!this.pluginWorkers.size) {
+      return running;
+    }
+    try {
+      await this.withPm2(async (pm2) => {
+        const processes = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+          pm2.list(cb)
+        );
+        for (const [name] of this.pluginWorkers) {
+          const process = processes.find((item) => item.name === name);
+          if (process && process.pm2_env?.status !== "stopped") {
+            const shouldResume = process.pm2_env?.status !== "errored";
+            await promisifyPm2<void>((cb) =>
+              pm2.stop(name, (error) => cb(error))
+            );
+            if (shouldResume) {
+              running.push(name);
+            }
+          }
+        }
+      });
+      return running;
+    } catch (error) {
+      await this.resumePluginWorkers(running);
+      throw error;
+    }
+  }
+
+  async resumePluginWorkers(names: string[]): Promise<void> {
+    this.pluginWorkersPaused = false;
+    for (const name of names) {
+      if (this.pluginWorkers.has(name)) {
+        await this.startWorker(name);
+      }
+    }
+  }
+
+  isPluginWorkerForOrg(name: string, orgId: string): boolean {
+    return this.pluginWorkers.get(name)?.registration.orgId === orgId;
+  }
+
+  async unregisterPluginWorkers(
+    orgId: string,
+    pluginId: string
+  ): Promise<void> {
+    const entries = [...this.pluginWorkers].filter(
+      ([, worker]) =>
+        worker.registration.orgId === orgId &&
+        worker.registration.pluginId === pluginId
+    );
+    for (const [name, worker] of entries) {
+      // Remove admission before awaiting PM2 so a concurrent Start cannot resurrect it.
+      this.pluginWorkers.delete(name);
+      try {
+        await this.withPm2((pm2) => this.deletePluginProcess(pm2, name));
+      } catch (error) {
+        this.pluginWorkers.set(name, worker);
+        throw error;
+      }
+    }
+  }
+
+  async listPluginWorkers(orgId: string) {
+    const statuses = await this.getAllWorkerStatuses();
+    return [...this.pluginWorkers]
+      .filter(([, worker]) => worker.registration.orgId === orgId)
+      .map(([name, worker]) => ({
+        label: worker.contribution.name,
+        name,
+        pluginId: worker.registration.pluginId,
+        process: statuses[name]!,
+      }));
+  }
+
+  private async writePluginWorkerDesired(
+    worker: RegisteredPluginWorker,
+    desired: boolean
+  ) {
+    const path = join(worker.directory, "desired.json");
+    await writeFile(path + ".tmp", JSON.stringify(desired), { mode: 0o600 });
+    await rename(path + ".tmp", path);
+  }
+
+  private async startPluginWorker(
+    name: string,
+    worker: RegisteredPluginWorker
+  ) {
+    await this.withPm2(async (pm2) => {
+      if (this.pluginWorkersPaused || this.pluginWorkers.get(name) !== worker) {
+        throw new Error("Plugin worker is disabled");
+      }
+      const env = {
+        ...this.workerProcessEnv(),
+        NAKAMA_ORG_ID: worker.registration.orgId,
+        NAKAMA_PLUGIN_DATA_DIR: worker.registration.dataDir,
+        NAKAMA_PLUGIN_ID: worker.registration.pluginId,
+        NAKAMA_PLUGIN_VERSION: worker.registration.version,
+        NAKAMA_PLUGIN_WORKER_ROOT: worker.registration.configDir ?? "",
+        NAKAMA_WORKER_DATA_DIR: worker.directory,
+      };
+      if (worker.registration.pluginId === "google-meet") {
+        for (const key of [
+          "NAKAMA_MEET_CAPTURE_HOST",
+          "NAKAMA_MEET_CAPTURE_PORT",
+          "NAKAMA_MEET_CAPTURE_ORIGIN",
+        ]) {
+          const value = process.env[key];
+          if (value) {
+            (env as Record<string, string>)[key] = value;
+          }
+        }
+      }
+      if (
+        worker.registration.pluginId === "supermemory" &&
+        worker.contribution.key === "server"
+      ) {
+        const path = join(worker.directory, "auto-provider.json");
+        await writeFile(
+          path + ".tmp",
+          JSON.stringify(this.getWorkerLlm?.("openai") ?? null),
+          { mode: 0o600 }
+        );
+        await rename(path + ".tmp", path);
+      }
+      if (worker.contribution.useHostLlm) {
+        const llm = this.getWorkerLlm?.();
+
+        await writeFile(
+          join(worker.directory, "llm.json"),
+          JSON.stringify(llm ?? null),
+          { mode: 0o600 }
+        );
+      }
+      await this.deletePluginProcess(pm2, name);
+      await promisifyPm2<void>((cb) =>
+        pm2.start(
+          {
+            args: ["run", worker.script],
+            autorestart: true,
+            cwd: worker.registration.dataDir,
+            env,
+            error: join(worker.directory, "stderr.log"),
+            exp_backoff_restart_delay: 1000,
+            interpreter: "none",
+            kill_timeout: 10_000,
+            max_restarts: 5,
+            min_uptime: 10_000,
+            name,
+            output: join(worker.directory, "stdout.log"),
+            script: process.env.NAKAMA_BUN_BIN ?? "bun",
+          },
+          (error) => cb(error)
+        )
+      );
+      await this.writePluginWorkerDesired(worker, true);
+    });
+  }
+
   isValidWorker(name: string): boolean {
-    return VALID_WORKERS.includes(name);
+    return VALID_WORKERS.includes(name) || this.pluginWorkers.has(name);
   }
 
   private resolveWorkerScript(name: string): string {
@@ -102,52 +711,186 @@ export class WorkerManagerService {
     pm2: NonNullable<typeof import("pm2")>,
     name: string
   ): Promise<void> {
-    await promisifyPm2<void>((cb) => pm2.stop(name, cb)).catch(() => {});
-    await promisifyPm2<void>((cb) => pm2.delete(name, cb)).catch(() => {});
+    await promisifyPm2<void>((cb) =>
+      pm2.stop(name, (error) => cb(error))
+    ).catch(() => {});
+    await promisifyPm2<void>((cb) =>
+      pm2.delete(name, (error) => cb(error))
+    ).catch(() => {});
   }
 
-  async startWorker(name: string): Promise<void> {
+  async startWorker(
+    name: string,
+    orgId: ChannelConfigScope = null
+  ): Promise<void> {
+    const pluginWorker = this.pluginWorkers.get(name);
+    if (pluginWorker) {
+      return this.startPluginWorker(name, pluginWorker);
+    }
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
+    if (
+      name === "whatsapp" &&
+      orgId === null &&
+      (await listWhatsAppConfigOrgIds()).length > 0
+    ) {
+      throw new Error(
+        "WhatsApp workers must be started with an organization scope."
+      );
+    }
 
-    await setWorkerDesiredRunning(name as PlatformWorkerName, true);
+    const scope = isChannelOwner(orgId) || name === "whatsapp" ? orgId : null;
+    const processName = this.processName(name, scope);
 
     await this.withPm2(async (pm2) => {
+      if (isChannelOwner(scope)) {
+        if (
+          this.disabledConnections.has(
+            getChannelConfigDir(name as ChannelPlatform, scope)
+          ) ||
+          this.disabledOwners.has(JSON.stringify(scope)) ||
+          (this.channelOwnerAvailable &&
+            !(await this.channelOwnerAvailable(scope)))
+        ) {
+          throw new Error("The connection owner is unavailable.");
+        }
+        if (
+          !existsSync(
+            join(
+              getChannelConfigDir(name as ChannelPlatform, scope),
+              "config.ini"
+            )
+          )
+        ) {
+          throw new Error(
+            "Configure this agent connection before starting its worker."
+          );
+        }
+      }
+      await setWorkerDesiredRunning(name as PlatformWorkerName, true, scope);
       const script = this.resolveWorkerScript(name);
-      await this.removeWorkerFromPm2(pm2, name);
+      if (isChannelOwner(scope)) {
+        await this.deletePluginProcess(pm2, processName);
+      } else {
+        await this.removeWorkerFromPm2(pm2, processName);
+      }
       await promisifyPm2<void>((cb) =>
         pm2.start(
           {
             args: ["run", script],
             cwd: this.projectRoot,
-            env: this.workerProcessEnv(),
-            name,
+            env: {
+              ...this.workerProcessEnv(),
+              ...(isChannelOwner(scope)
+                ? {
+                    NAKAMA_CHANNEL_ORG_ID: scope.orgId,
+                    NAKAMA_CHANNEL_PROFILE_ID: scope.profileId,
+                  }
+                : {}),
+              ...(name === "whatsapp"
+                ? {
+                    NAKAMA_WHATSAPP_ORG_ID: isChannelOwner(scope)
+                      ? scope.orgId
+                      : (scope ?? ""),
+                  }
+                : {}),
+            },
+            ...(isChannelOwner(scope)
+              ? {
+                  error: join(
+                    getChannelConfigDir(name as ChannelPlatform, scope),
+                    "stderr.log"
+                  ),
+                  output: join(
+                    getChannelConfigDir(name as ChannelPlatform, scope),
+                    "stdout.log"
+                  ),
+                }
+              : {}),
+            name: processName,
             script: "bun",
           },
-          cb
+          (error) => cb(error)
         )
       );
     });
   }
 
-  async stopWorker(name: string): Promise<void> {
+  async stopWorker(
+    name: string,
+    orgId: ChannelConfigScope = null
+  ): Promise<void> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
-
+    const pluginWorker = this.pluginWorkers.get(name);
     await this.withPm2(async (pm2) => {
-      await promisifyPm2<void>((cb) => pm2.stop(name, cb));
+      if (
+        pluginWorker &&
+        (this.pluginWorkersPaused ||
+          this.pluginWorkers.get(name) !== pluginWorker)
+      ) {
+        throw new Error("Plugin worker is disabled");
+      }
+      const processName = this.processName(name, orgId);
+      if (isChannelOwner(orgId)) {
+        const existing = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+          pm2.describe(processName, cb)
+        );
+        if (existing.length) {
+          await promisifyPm2<void>((cb) =>
+            pm2.delete(processName, (error) => cb(error))
+          );
+        }
+      } else {
+        await promisifyPm2<void>((cb) =>
+          pm2.stop(processName, (error) => cb(error))
+        );
+      }
+      if (pluginWorker) {
+        await this.writePluginWorkerDesired(pluginWorker, false);
+      }
+      if (!pluginWorker) {
+        if (isChannelOwner(orgId)) {
+          const heartbeat = await createWorkerHeartbeatStore({
+            getDir: () => getChannelConfigDir(name as ChannelPlatform, orgId),
+          }).read();
+          if (heartbeat && isProcessAlive(heartbeat.pid)) {
+            throw new Error("Stop the manually started agent worker first");
+          }
+        }
+        await setWorkerDesiredRunning(
+          name as PlatformWorkerName,
+          false,
+          isChannelOwner(orgId) || name === "whatsapp" ? orgId : null
+        );
+      }
     });
-
-    await setWorkerDesiredRunning(name as PlatformWorkerName, false);
   }
 
   async recoverDesiredWorkers(): Promise<void> {
+    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      for (const owner of await listChannelOwners(platform)) {
+        if (!(await readWorkerDesiredState(owner))[platform]) {
+          continue;
+        }
+        if (
+          (await this.getWorkerStatus(platform, owner))?.status === "online"
+        ) {
+          continue;
+        }
+        try {
+          await this.startWorker(platform, owner);
+        } catch (error) {
+          console.warn("Could not recover agent channel worker", error);
+        }
+      }
+    }
     const desired = await readWorkerDesiredState();
     const statuses = await this.getAllWorkerStatuses();
 
-    for (const name of VALID_WORKERS) {
+    for (const name of ["automation"]) {
       if (!desired[name as PlatformWorkerName]) {
         continue;
       }
@@ -166,12 +909,32 @@ export class WorkerManagerService {
     }
   }
 
-  async restartWorker(name: string): Promise<void> {
+  async restartWorker(
+    name: string,
+    orgId: ChannelConfigScope = null
+  ): Promise<void> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
 
-    await this.startWorker(name);
+    await this.startWorker(name, orgId);
+  }
+
+  private processName(name: string, orgId: ChannelConfigScope): string {
+    if (
+      isChannelOwner(orgId) &&
+      name !== "automation" &&
+      !name.startsWith("plugin-")
+    ) {
+      return `${name}-${createHash("sha256")
+        .update(getChannelConfigDir(name as ChannelPlatform, orgId))
+        .digest("hex")
+        .slice(0, 24)}`;
+    }
+    return name === "whatsapp" && typeof orgId === "string"
+      ? "whatsapp-" +
+          createHash("sha256").update(orgId).digest("hex").slice(0, 24)
+      : name;
   }
 
   private pm2ProcessToInfo(
@@ -196,9 +959,10 @@ export class WorkerManagerService {
     return {
       cpuPercent: match.monit?.cpu ?? null,
       managed: true,
-      memoryMb: match.monit
-        ? Math.round((match.monit.memory / 1024 / 1024) * 100) / 100
-        : null,
+      memoryMb:
+        match.monit?.memory === undefined
+          ? null
+          : Math.round((match.monit.memory / 1024 / 1024) * 100) / 100,
       status: mappedStatus,
       uptimeSeconds: match.pm2_env?.pm_uptime
         ? Math.round((Date.now() - match.pm2_env.pm_uptime) / 1000)
@@ -216,48 +980,72 @@ export class WorkerManagerService {
     };
   }
 
-  async getWorkerStatus(name: string): Promise<WorkerProcessInfo | null> {
+  async getWorkerStatus(
+    name: string,
+    orgId: ChannelConfigScope = null
+  ): Promise<WorkerProcessInfo | null> {
     if (!this.isValidWorker(name)) {
       return null;
     }
 
     try {
       const list = await this.listAllPm2Processes();
-      const match = list.find((p) => p.name === name);
+      const match = list.find((p) => p.name === this.processName(name, orgId));
       return this.pm2ProcessToInfo(match);
     } catch {
       return this.pm2UnavailableInfo();
     }
   }
 
-  async getAllWorkerStatuses(): Promise<Record<string, WorkerProcessInfo>> {
+  async getAllWorkerStatuses(
+    orgId: ChannelConfigScope = null
+  ): Promise<Record<string, WorkerProcessInfo>> {
     try {
       const list = await this.listAllPm2Processes();
 
       return Object.fromEntries(
-        VALID_WORKERS.map((name) => {
-          const match = list.find((p) => p.name === name);
+        [...VALID_WORKERS, ...this.pluginWorkers.keys()].map((name) => {
+          const match = list.find(
+            (p) => p.name === this.processName(name, orgId)
+          );
           return [name, this.pm2ProcessToInfo(match)];
         })
       );
     } catch {
       return Object.fromEntries(
-        VALID_WORKERS.map((name) => [name, this.pm2UnavailableInfo()])
+        [...VALID_WORKERS, ...this.pluginWorkers.keys()].map((name) => [
+          name,
+          this.pm2UnavailableInfo(),
+        ])
       );
     }
   }
 
   async getWorkerLogs(
     name: string,
-    lines: number
+    lines: number,
+    orgId: ChannelConfigScope = null
   ): Promise<WorkerLogsResponse> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
 
+    if (isChannelOwner(orgId)) {
+      const dir = getChannelConfigDir(name as ChannelPlatform, orgId);
+      const outPath = join(dir, "stdout.log");
+      const errPath = join(dir, "stderr.log");
+      assertChannelPath(outPath);
+      assertChannelPath(errPath);
+      const [stdout, stderr] = await Promise.all([
+        readLastLines(outPath, lines),
+        readLastLines(errPath, lines),
+      ]);
+      return { stderr, stdout };
+    }
+
     return this.withPm2(async (pm2) => {
       const descriptions = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
-        pm2.describe(name, cb)
+        pm2.describe(this.processName(name, orgId), cb)
       );
       const desc = descriptions[0];
       const outPath = desc?.pm2_env?.pm_out_log_path as string | undefined;
@@ -272,13 +1060,36 @@ export class WorkerManagerService {
     });
   }
 
-  async clearWorkerLogs(name: string): Promise<void> {
+  async clearWorkerLogs(
+    name: string,
+    orgId: ChannelConfigScope = null
+  ): Promise<void> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
 
+    if (isChannelOwner(orgId)) {
+      for (const file of ["stdout.log", "stderr.log"]) {
+        const path = join(
+          getChannelConfigDir(name as ChannelPlatform, orgId),
+          file
+        );
+        assertChannelPath(path);
+        try {
+          await truncate(path, 0);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+          }
+        }
+      }
+      return;
+    }
+
     await this.withPm2(async (pm2) => {
-      await promisifyPm2<void>((cb) => pm2.flush(name, cb));
+      await promisifyPm2<void>((cb) =>
+        pm2.flush(this.processName(name, orgId), (error) => cb(error))
+      );
     });
   }
 
@@ -322,7 +1133,7 @@ async function readLastLines(path: string, lineCount: number): Promise<string> {
 }
 
 interface Pm2ProcessDescription {
-  monit?: { cpu: number; memory: number };
+  monit?: { cpu?: number; memory?: number };
   name?: string;
   pid?: number;
   pm_id?: number;
@@ -331,6 +1142,7 @@ interface Pm2ProcessDescription {
     pm_uptime?: number;
     pm_out_log_path?: string;
     pm_err_log_path?: string;
-    [key: string]: unknown;
+    NAKAMA_PLUGIN_VERSION?: string;
+    NAKAMA_PLUGIN_WORKER_ROOT?: string;
   };
 }

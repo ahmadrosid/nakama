@@ -8,11 +8,13 @@ import type {
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
+  ReadFileOutput,
   SendMessageInput,
   ToolCall,
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
+import { createId } from "@nakama/core";
 
 export interface AgentRequest {
   channel: AgentChannel;
@@ -71,17 +73,20 @@ export interface StreamHandlers {
   }) => void;
   onThinking?: (delta: string) => void;
   onToolEnd?: (event: {
+    toolGroupId?: string;
     toolCallId: string;
     tool: string;
     result: unknown;
   }) => void;
   onToolInputDelta?: (event: {
+    toolGroupId?: string;
     toolCallId: string;
     tool: string;
     delta: string;
     accumulatedArguments?: string;
   }) => void;
   onToolStart?: (event: {
+    toolGroupId?: string;
     toolCallId: string;
     tool: string;
     input: Record<string, unknown>;
@@ -99,7 +104,7 @@ export interface AgentChatSession {
   getContextUsage(): ChatContextUsage | null;
   getHistory(): readonly ChatMessage[];
   getHistoryRevision(): number;
-  send(input: SendMessageArg): Promise<string>;
+  send(input: SendMessageArg, options?: SendStreamOptions): Promise<string>;
   sendStream(
     input: SendMessageArg,
     handlers: StreamHandlers,
@@ -108,6 +113,8 @@ export interface AgentChatSession {
 }
 
 export interface SendStreamOptions {
+  /** Persist the accepted user message before any provider call. */
+  onUserMessage?: () => Promise<void>;
   /** Cancels the turn: stops the tool loop and asks running tools to abort. */
   signal?: AbortSignal;
 }
@@ -363,7 +370,7 @@ export function createAgentChatSession(
     getHistoryRevision() {
       return historyRevision;
     },
-    async send(input) {
+    async send(input, sendOptions) {
       activeTools = createTurnTools(tools);
       return sendMessage(
         dependencies,
@@ -375,10 +382,12 @@ export function createAgentChatSession(
         {
           enableToolLoop,
           onContextUsage: rememberContextUsage,
+          onUserMessage: sendOptions?.onUserMessage,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
+          signal: sendOptions?.signal,
           toolContext,
         }
       );
@@ -396,6 +405,7 @@ export function createAgentChatSession(
           enableToolLoop,
           handlers,
           onContextUsage: rememberContextUsage,
+          onUserMessage: streamOptions?.onUserMessage,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
           resolvePromptContext: options.resolvePromptContext,
@@ -422,6 +432,7 @@ async function sendMessage(
   options: {
     enableToolLoop: boolean;
     handlers?: StreamHandlers;
+    onUserMessage?: () => Promise<void>;
     toolContext?: ToolContext;
     runCompaction?: (force: boolean) => Promise<CompactionResponse>;
     onContextUsage?: (
@@ -452,6 +463,7 @@ async function sendMessage(
 
   const userMessage = getUserMessageText(userContent);
   history.push({ content: userContent, role: "user" });
+  await options.onUserMessage?.();
   const multimodalTurn =
     messageContentHasImages(userContent) ||
     messageContentHasDocuments(userContent) ||
@@ -536,12 +548,43 @@ async function sendMessage(
       effectiveToolContext,
       options.rehydrateMessagesForProvider,
       options.onContextUsage,
-      options.signal
+      options.signal,
+      options.preprocessUserContent
     );
 
     return reply;
   } catch (error) {
-    rollbackFailedSend(history);
+    if (options.signal?.aborted) {
+      // Every tool call needs a result before the next user turn, including
+      // calls interrupted by Stop or never started in the cancelled batch.
+      const assistantIndex = history.findLastIndex(
+        (message) => message.role === "assistant"
+      );
+      const assistant = history[assistantIndex];
+      const completed = new Set(
+        history
+          .slice(assistantIndex + 1)
+          .flatMap((message) =>
+            message.role === "tool" ? [message.toolCallId] : []
+          )
+      );
+      if (assistant?.role === "assistant") {
+        for (const call of assistant.toolCalls ?? []) {
+          if (!completed.has(call.id)) {
+            history.push({
+              content: JSON.stringify({
+                error: "Turn cancelled before a result was received.",
+              }),
+              name: call.name,
+              role: "tool",
+              toolCallId: call.id,
+            });
+          }
+        }
+      }
+    } else {
+      rollbackFailedSend(history);
+    }
     throw error;
   }
 }
@@ -558,10 +601,6 @@ function rollbackFailedSend(history: ChatMessage[]): void {
     if (last?.role === "assistant" && (last.toolCalls?.length ?? 0) > 0) {
       history.pop();
       continue;
-    }
-
-    if (last?.role === "user") {
-      history.pop();
     }
 
     break;
@@ -585,7 +624,8 @@ async function runConversation(
     usedTokens: number,
     source: ChatContextUsage["source"]
   ) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  preprocessUserContent?: AgentChatSessionOptions["preprocessUserContent"]
 ): Promise<string> {
   let producedTokens = 0;
   let stoppedReply = "";
@@ -608,6 +648,7 @@ async function runConversation(
       ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
     await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
 
+    const toolGroupId = createId("toolgroup");
     const result = await generateReply(
       provider,
       systemPrompt,
@@ -617,7 +658,8 @@ async function runConversation(
       mode,
       handlers,
       rehydrateMessagesForProvider,
-      signal
+      signal,
+      toolGroupId
     );
 
     const usedTokens =
@@ -651,8 +693,7 @@ async function runConversation(
 
     // Backstop for providers that ignore the signal. The in-flight request is
     // aborted through GenerateChatInput.signal; this only catches the case where
-    // it returned anyway, so a cancelled turn leaves no half-written assistant
-    // message and never starts another tool batch.
+    // it returned anyway, so a cancelled turn never starts another tool batch.
     signal?.throwIfAborted();
 
     if (result.usage) {
@@ -687,7 +728,9 @@ async function runConversation(
       result.toolCalls,
       history,
       handlers,
-      toolContext
+      toolContext,
+      preprocessUserContent,
+      toolGroupId
     );
     // Check between batches: one batch can overshoot, but no next request runs.
     producedTokens += estimateHistoryTokens(
@@ -721,7 +764,9 @@ async function executeToolCalls(
   toolCalls: ToolCall[],
   history: ChatMessage[],
   handlers?: StreamHandlers,
-  toolContext: ToolContext = {}
+  toolContext: ToolContext = {},
+  preprocessUserContent?: AgentChatSessionOptions["preprocessUserContent"],
+  toolGroupId?: string
 ): Promise<void> {
   const contextForCall = (call: ToolCall): ToolContext => {
     if (!handlers?.onSubAgentActivity || call.name !== "sub_agent") {
@@ -739,63 +784,129 @@ async function executeToolCalls(
   };
 
   if (canRunToolCallsInParallel(tools, toolCalls)) {
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       toolCalls.map(async (call) => {
+        const toolStartedAt = Date.now();
         handlers?.onToolStart?.({
           input: call.arguments,
           tool: call.name,
           toolCallId: call.id,
+          toolGroupId,
         });
 
-        const result = await executeToolCall(tools, call, contextForCall(call));
+        const { result, attachments } = await prepareReadFileResult(
+          call,
+          await executeToolCall(tools, call, contextForCall(call)),
+          preprocessUserContent
+        );
+        const toolCompletedAt = Date.now();
 
         handlers?.onToolEnd?.({
           result,
           tool: call.name,
           toolCallId: call.id,
+          toolGroupId,
         });
 
-        return { call, result };
+        return { attachments, call, result, toolCompletedAt, toolStartedAt };
       })
     );
 
-    const resultsByCallId = new Map(
-      results.map((entry) => [entry.call.id, entry.result])
-    );
-
-    for (const call of toolCalls) {
+    for (const result of results) {
+      if (result.status === "rejected") {
+        continue;
+      }
+      const entry = result.value;
       history.push({
-        content: JSON.stringify(resultsByCallId.get(call.id)),
-        name: call.name,
+        content: JSON.stringify(entry.result),
+        ...(entry.attachments ? { attachments: entry.attachments } : {}),
+        name: entry.call.name,
         role: "tool",
-        toolCallId: call.id,
+        toolCallId: entry.call.id,
+        toolCompletedAt: entry.toolCompletedAt,
+        toolGroupId,
+        toolStartedAt: entry.toolStartedAt,
       });
+    }
+
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") {
+      throw failed.reason;
     }
 
     return;
   }
 
   for (const call of toolCalls) {
+    toolContext.signal?.throwIfAborted();
+    const toolStartedAt = Date.now();
     handlers?.onToolStart?.({
       input: call.arguments,
       tool: call.name,
       toolCallId: call.id,
+      toolGroupId,
     });
 
-    const result = await executeToolCall(tools, call, contextForCall(call));
+    const { result, attachments } = await prepareReadFileResult(
+      call,
+      await executeToolCall(tools, call, contextForCall(call)),
+      preprocessUserContent
+    );
+    const toolCompletedAt = Date.now();
 
     handlers?.onToolEnd?.({
       result,
       tool: call.name,
       toolCallId: call.id,
+      toolGroupId,
     });
 
     history.push({
       content: JSON.stringify(result),
+      ...(attachments ? { attachments } : {}),
       name: call.name,
       role: "tool",
       toolCallId: call.id,
+      toolCompletedAt,
+      toolGroupId,
+      toolStartedAt,
     });
+  }
+}
+
+async function prepareReadFileResult(
+  call: ToolCall,
+  result: unknown,
+  preprocess?: AgentChatSessionOptions["preprocessUserContent"]
+): Promise<{ result: unknown; attachments?: MessageContentPart[] }> {
+  if (call.name !== "read_file" || !result || typeof result !== "object") {
+    return { result };
+  }
+  const { images, ...metadata } = result as ReadFileOutput;
+  if (!images?.length) {
+    return { result };
+  }
+  try {
+    const content = normalizeUserContent("", images);
+    const prepared = preprocess ? await preprocess(content) : content;
+    return {
+      attachments:
+        typeof prepared === "string"
+          ? [{ text: prepared, type: "text" }]
+          : prepared,
+      result: metadata,
+    };
+  } catch (error) {
+    return {
+      result: {
+        ...metadata,
+        content:
+          "Image contents were not inspected. Only file metadata is available; do not infer what the image shows.",
+        inspected: false,
+        mediaType: images[0]?.mediaType,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+    };
   }
 }
 
@@ -819,29 +930,115 @@ async function generateReply(
   rehydrateMessagesForProvider?: (
     messages: readonly ChatMessage[]
   ) => Promise<ChatMessage[]>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  toolGroupId?: string
 ) {
   const dateLine = `Today is ${formatCurrentDate()}.`;
+  // All tool replies must precede the visual content, including parallel calls.
+  // Expand only for the provider so these don't become fabricated user turns.
+  const expanded: ChatMessage[] = [];
+  let attachments: MessageContentPart[] = [];
+  for (const [index, message] of history.entries()) {
+    if (message.role === "tool" && message.attachments?.length) {
+      const { attachments: parts, ...toolMessage } = message;
+      expanded.push(toolMessage);
+      attachments.push(
+        {
+          text: `Image output from ${message.name} (${message.toolCallId}): ${message.content}`,
+          type: "text",
+        },
+        ...parts
+      );
+    } else {
+      expanded.push(message);
+    }
+    if (attachments.length && history[index + 1]?.role !== "tool") {
+      expanded.push({ content: attachments, role: "user" });
+      attachments = [];
+    }
+  }
   const messages =
     rehydrateMessagesForProvider === undefined
-      ? history
-      : await rehydrateMessagesForProvider(history);
+      ? expanded
+      : await rehydrateMessagesForProvider(expanded);
   const input = {
     messages,
-    providerOptions,
+    providerOptions: messagesIncludeUserImages(messages)
+      ? undefined
+      : providerOptions,
     signal,
     system: `${systemPrompt}\n\n${dateLine}`,
     tools,
   };
 
   if (mode === "stream" && handlers) {
-    return provider.streamChat(input, {
-      onChunk: handlers.onChunk,
-      onThinking: handlers.onThinking,
-      onToolEnd: handlers.onToolEnd,
-      onToolInputDelta: handlers.onToolInputDelta,
-      onToolStart: handlers.onToolStart,
-    });
+    let content = "";
+    let thinking = "";
+    let thinkingStartedAt: number | undefined;
+    let thinkingDurationMs: number | undefined;
+    const finishThinking = () => {
+      if (thinkingStartedAt !== undefined) {
+        thinkingDurationMs =
+          (thinkingDurationMs ?? 0) +
+          Math.max(0, Date.now() - thinkingStartedAt);
+        thinkingStartedAt = undefined;
+      }
+    };
+    try {
+      const result = await provider.streamChat(input, {
+        onChunk: (delta) => {
+          if (signal?.aborted) {
+            return;
+          }
+          content += delta;
+          if (delta) {
+            finishThinking();
+          }
+          handlers.onChunk(delta);
+        },
+        onThinking: (delta) => {
+          if (signal?.aborted) {
+            return;
+          }
+          thinking += delta;
+          if (delta) {
+            thinkingStartedAt ??= Date.now();
+          }
+          handlers.onThinking?.(delta);
+        },
+        onToolEnd: (event) => handlers.onToolEnd?.({ ...event, toolGroupId }),
+        onToolInputDelta: (event) => {
+          finishThinking();
+          handlers.onToolInputDelta?.({ ...event, toolGroupId });
+        },
+        onToolStart: (event) => {
+          finishThinking();
+          handlers.onToolStart?.({ ...event, toolGroupId });
+        },
+      });
+      signal?.throwIfAborted();
+      finishThinking();
+      return thinkingDurationMs === undefined
+        ? result
+        : {
+            ...result,
+            assistantMessage: {
+              ...result.assistantMessage,
+              thinkingDurationMs,
+            },
+          };
+    } catch (error) {
+      if (signal?.aborted && (content || thinking)) {
+        finishThinking();
+        history.push({
+          content,
+          role: "assistant",
+          ...(thinking ? { thinking } : {}),
+          ...(thinkingDurationMs === undefined ? {} : { thinkingDurationMs }),
+        });
+      }
+      throw error;
+    }
   }
 
   return provider.generateChat(input);

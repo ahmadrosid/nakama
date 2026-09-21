@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import { setupFreshInstallSession } from "../test-session-helpers";
 
 const DSN = "https://publickey@errors.example.com/42";
 
@@ -23,10 +23,9 @@ async function createApp() {
 }
 
 describe("error tracking routes", () => {
-  test("an org admin saves a DSN and reads it back masked", async () => {
+  test("a platform admin saves a DSN and reads it back masked", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
-    const session = await loginUserSession(app, email, password, orgId);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
 
     const saved = await app.fetch(
       new Request("http://localhost:4310/v1/settings/error-tracking", {
@@ -52,8 +51,7 @@ describe("error tracking routes", () => {
 
   test("an empty DSN clears a saved one instead of keeping it", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
-    const session = await loginUserSession(app, email, password, orgId);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
 
     const put = (dsn: string) =>
       app.fetch(
@@ -81,8 +79,7 @@ describe("error tracking routes", () => {
 
   test("a malformed DSN is rejected instead of being saved", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
-    const session = await loginUserSession(app, email, password, orgId);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/settings/error-tracking", {
@@ -100,8 +97,7 @@ describe("error tracking routes", () => {
 
   test("the test event is refused before a DSN is saved", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
-    const session = await loginUserSession(app, email, password, orgId);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/settings/error-tracking/test", {

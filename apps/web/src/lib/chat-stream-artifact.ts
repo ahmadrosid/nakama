@@ -116,6 +116,7 @@ export function upsertStreamingToolMessage(
   messages: ChatListItem[],
   event: {
     toolCallId: string;
+    toolGroupId?: string;
     tool: string;
     accumulatedArguments: string;
   }
@@ -151,6 +152,7 @@ export function upsertStreamingToolMessage(
     role: "tool",
     tool: event.tool,
     toolCallId: event.toolCallId,
+    toolGroupId: event.toolGroupId,
     toolInputAccumulatedJson: event.accumulatedArguments,
     toolStatus: "running",
     ...(toolInput ? { toolInput } : {}),

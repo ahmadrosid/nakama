@@ -1,6 +1,11 @@
 import { join } from "node:path";
+import {
+  type ChannelConfigScope,
+  getChannelConfigDir,
+  isChannelOwner,
+} from "./channel-config-shared";
 import { readTextOrNull, writeTextFile } from "./fs";
-import { getUserConfigDir } from "./user-config";
+import { getOrgConfigDir, getUserConfigDir } from "./user-config";
 
 export type PlatformWorkerName =
   | "telegram"
@@ -22,8 +27,12 @@ const DEFAULT_STATE: WorkerDesiredState = {
   whatsapp: false,
 };
 
-function getWorkerDesiredStatePath(): string {
-  return join(getUserConfigDir(), "runtime", "worker-desired-state.json");
+function getWorkerDesiredStatePath(orgId: string | null = null): string {
+  return join(
+    orgId ? getOrgConfigDir(orgId) : getUserConfigDir(),
+    "runtime",
+    "worker-desired-state.json"
+  );
 }
 
 export function parseWorkerDesiredState(raw: string): WorkerDesiredState {
@@ -48,8 +57,22 @@ export function parseWorkerDesiredState(raw: string): WorkerDesiredState {
   }
 }
 
-export async function readWorkerDesiredState(): Promise<WorkerDesiredState> {
-  const raw = await readTextOrNull(getWorkerDesiredStatePath());
+export async function readWorkerDesiredState(
+  orgId: ChannelConfigScope = null
+): Promise<WorkerDesiredState> {
+  if (isChannelOwner(orgId)) {
+    const state = { ...DEFAULT_STATE, automation: false };
+    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      state[platform] =
+        (
+          await readTextOrNull(
+            join(getChannelConfigDir(platform, orgId), "desired.json")
+          )
+        )?.trim() === "true";
+    }
+    return state;
+  }
+  const raw = await readTextOrNull(getWorkerDesiredStatePath(orgId));
 
   if (raw === null) {
     return { ...DEFAULT_STATE };
@@ -60,14 +83,24 @@ export async function readWorkerDesiredState(): Promise<WorkerDesiredState> {
 
 export async function setWorkerDesiredRunning(
   name: PlatformWorkerName,
-  running: boolean
+  running: boolean,
+  orgId: ChannelConfigScope = null
 ): Promise<void> {
-  const state = await readWorkerDesiredState();
+  if (isChannelOwner(orgId)) {
+    if (name === "automation") {
+      throw new Error("Automation has no channel owner");
+    }
+    await writeTextFile(
+      join(getChannelConfigDir(name, orgId), "desired.json"),
+      JSON.stringify(running)
+    );
+    return;
+  }
+  const state = await readWorkerDesiredState(orgId);
   state[name] = running;
 
   await writeTextFile(
-    getWorkerDesiredStatePath(),
-    `${JSON.stringify(state)}\n`,
-    { ensureDir: join(getUserConfigDir(), "runtime") }
+    getWorkerDesiredStatePath(orgId),
+    `${JSON.stringify(state)}\n`
   );
 }

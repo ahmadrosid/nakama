@@ -1,0 +1,24 @@
+{
+  "name": "@nakama/desktop",
+  "version": "0.1.6",
+  "private": true,
+  "description": "The Nakama web app in a desktop window",
+  "author": "Nakama",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "build:runtime": "bun scripts/build-runtime.mjs",
+    "dev": "bun run build:runtime && electron .",
+    "package": "bun run build:runtime && electron-builder --mac --arm64 --publish never",
+    "package:store": "pwsh -NoProfile -File scripts/package-store.ps1",
+    "test": "bun test scripts/publish-release.test.mjs tests/runtime.test.mjs && electron tests/smoke.mjs --smoke-test",
+    "test:runtime": "electron tests/smoke.mjs --smoke-test --runtime-test"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "26.16.1"
+  }
+}

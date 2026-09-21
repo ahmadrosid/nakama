@@ -1,7 +1,4 @@
-import {
-  loadTelegramConfigFile,
-  resolveTelegramScopeForOrg,
-} from "../telegram-config";
+import { loadTelegramConfigFile } from "../telegram-config";
 import { splitTelegramChunks } from "./message-format";
 import { renderTelegramRichText } from "./telegram-rich-text";
 import type { ChannelSendResult, TelegramOutboundAdapter } from "./types";
@@ -18,9 +15,14 @@ export function createTelegramOutboundAdapter(
   return {
     async send(input): Promise<ChannelSendResult> {
       try {
-        const config = await loadTelegramConfigFile(
-          await resolveTelegramScopeForOrg(input.orgId ?? null)
-        );
+        if (!(input.orgId && input.profileId)) {
+          return {
+            error: "Choose an agent connection before sending.",
+            ok: false,
+          };
+        }
+        const owner = { orgId: input.orgId, profileId: input.profileId };
+        const config = await loadTelegramConfigFile(owner);
         const token = config?.botToken.trim();
 
         if (!token) {

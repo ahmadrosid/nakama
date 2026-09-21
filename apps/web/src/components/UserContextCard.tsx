@@ -9,16 +9,16 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useState } from "react";
-import {
-  clearUserContextDraft,
-  UserContextForm,
-  useUserContextEditor,
-} from "@/components/UserContextForm";
+import { UserContextForm } from "@/components/UserContextForm";
 import { useAuth } from "@/context/use-auth";
 import {
   useUserContextQuery,
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
+import {
+  clearUserContextDraft,
+  useUserContextEditor,
+} from "@/hooks/use-user-context-editor";
 import { formatError } from "@/lib/client";
 
 function formatUserContextError(error: unknown): string {
@@ -39,6 +39,20 @@ export function UserContextEditorDialog({
   open,
   onOpenChange,
 }: UserContextEditorDialogProps) {
+  const { activeOrg } = useAuth();
+  return open ? (
+    <UserContextDialogSession
+      key={activeOrg?.id}
+      onOpenChange={onOpenChange}
+      open
+    />
+  ) : null;
+}
+
+function UserContextDialogSession({
+  open,
+  onOpenChange,
+}: UserContextEditorDialogProps) {
   const { activeOrg, user } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const {
@@ -55,7 +69,6 @@ export function UserContextEditorDialog({
     useUserContextEditor({
       defaultName: user?.name,
       orgId,
-      resetKey: open,
       status,
     });
 
@@ -92,9 +105,9 @@ export function UserContextEditorDialog({
 
   return (
     <Dialog onOpenChange={handleOpenChange} open={open}>
-      <DialogContent className="flex max-h-[min(90dvh,44rem)] w-[calc(100%-1.5rem)] flex-col sm:max-w-2xl">
+      <DialogContent className="flex max-h-[min(90dvh,44rem)] w-[calc(100%-1.5rem)] flex-col sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Personalisation (USER.md)</DialogTitle>
+          <DialogTitle>About you</DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
@@ -102,7 +115,7 @@ export function UserContextEditorDialog({
             <Spinner />
           </div>
         ) : (
-          <div className="no-scrollbar -mx-1 flex-1 overflow-y-auto px-1">
+          <div className="no-scrollbar -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
             <UserContextForm
               disabled={busy}
               idPrefix="user-context-dialog"

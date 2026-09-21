@@ -82,19 +82,27 @@ export class AutomationScheduler {
           name: automation.id,
           timezone,
         },
-        () => {
-          void this.delegate
-            .runAutomation(automation.id, automation.orgId)
-            .catch((error: unknown) => {
-              const message =
-                error instanceof Error ? error.message : String(error);
-              console.error(`Automation ${automation.id} run failed:`, message);
-            });
-        }
+        () => this.dispatch(automation)
       );
 
       this.jobs.set(automation.id, job);
     }
+  }
+
+  private dispatch(automation: AutomationSchedule): void {
+    void this.delegate
+      .runAutomation(automation.id, automation.orgId)
+      .then((result) => {
+        if (!result.ok) {
+          console.error(
+            `Automation ${automation.id} run not started: ${result.error ?? "unknown error"}`
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Automation ${automation.id} run failed:`, message);
+      });
   }
 
   private scheduleRunAt(automation: AutomationSchedule): void {
@@ -110,13 +118,7 @@ export class AutomationScheduler {
 
     const timer = setTimeout(() => {
       this.timers.delete(automation.id);
-      void this.delegate
-        .runAutomation(automation.id, automation.orgId)
-        .catch((error: unknown) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          console.error(`Automation ${automation.id} run failed:`, message);
-        });
+      this.dispatch(automation);
     }, delay);
 
     this.timers.set(automation.id, timer);

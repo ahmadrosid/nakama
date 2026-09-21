@@ -1,3 +1,4 @@
+import { Key, matchesKey } from "@earendil-works/pi-tui";
 import type { ImageAttachment } from "@nakama/core";
 import { readClipboardImage } from "./clipboard-image";
 import type { PromptSuggestion } from "./commands";
@@ -266,13 +267,11 @@ export class PersistentPrompt {
 
     const suggestions = this.currentSuggestions();
 
-    if (this.hasNavigated && suggestions.length > 0) {
-      const suggestion = suggestions[this.selectedIndex] ?? suggestions[0];
+    const suggestion = suggestions[this.selectedIndex] ?? suggestions[0];
 
-      if (suggestion) {
-        this.applySuggestion(suggestion, true);
-        return;
-      }
+    if (suggestion && (this.hasNavigated || suggestion.submitOnEnter)) {
+      this.applySuggestion(suggestion, true);
+      return;
     }
 
     this.submitValue();
@@ -320,7 +319,19 @@ export class PersistentPrompt {
       return;
     }
 
-    if (key === "\r" || key === "\n") {
+    if (
+      key === "\n" ||
+      key === "\u001b\r" ||
+      matchesKey(key, Key.shift("enter"))
+    ) {
+      this.value += "\n";
+      this.resetSelection();
+      this.cursorVisible = true;
+      this.render();
+      return;
+    }
+
+    if (key === "\r") {
       void this.submit();
       return;
     }

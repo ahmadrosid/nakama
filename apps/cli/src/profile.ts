@@ -97,12 +97,11 @@ export function formatProfileLine(
   const markers = [
     profile.isDefault ? "default" : null,
     profile.isSuper ? "orchestrator" : null,
-    profile.id,
   ]
     .filter(Boolean)
     .join(", ");
 
-  return `  ${index + 1}) ${profile.name} (${markers})`;
+  return `  ${index + 1}) ${profile.name}${markers ? ` (${markers})` : ""}`;
 }
 
 function findProfile(
@@ -142,6 +141,12 @@ export async function resolveStartupProfile(
     if (explicitProfileId) {
       throw new Error(`Unknown profile: ${explicitProfileId}`);
     }
+  }
+
+  const superBot = profiles.find((profile) => profile.isSuper);
+  if (superBot) {
+    await saveCliProfileId(superBot.id);
+    return { profile: superBot, profileId: superBot.id };
   }
 
   if (!(process.stdin.isTTY && process.stdout.isTTY)) {

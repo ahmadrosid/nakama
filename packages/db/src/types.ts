@@ -120,6 +120,7 @@ export interface StoredSessionRecord {
   id: string;
   model: string | null;
   orgId?: string | null;
+  pinned?: boolean;
   profileId: string;
   title: string | null;
   userId?: string | null;
@@ -138,6 +139,12 @@ export type AttachmentKind = "image" | "document";
 export interface StoredAttachmentRecord {
   channel: string;
   createdAt: string;
+  /**
+   * True for attachments made in a cognito session. They carry a null
+   * sessionId (there is no `sessions` row to reference), so this is what a
+   * startup sweep has to find the ones a hard restart left behind.
+   */
+  ephemeral: boolean;
   filename: string | null;
   id: string;
   kind: AttachmentKind;
@@ -155,6 +162,7 @@ export interface StoredSessionSummaryRecord {
   id: string;
   messageCount: number;
   orgId?: string | null;
+  pinned: boolean;
   preview: string | null;
   profileId: string;
   title: string | null;
@@ -230,6 +238,7 @@ export interface StoredCodingAgentHarnessRecord {
 export interface StoredNotificationDestinationRecord {
   channel: "telegram";
   config: {
+    profileId?: string;
     chatId: number;
     topicId?: number | null;
   };
@@ -496,6 +505,15 @@ export interface StoredOrgInviteRecord {
   tokenHash: string;
 }
 
+export interface StoredPasswordResetTokenRecord {
+  consumedAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  tokenHash: string;
+  userId: string;
+}
+
 export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
 export type ProfileChangeSource =
@@ -538,6 +556,8 @@ export interface StoredOrgMemoryProposal {
   reviewedAt: string | null;
   reviewerUserId: string | null;
   sessionId: string | null;
+  /** Knowledge-base document ids the bullet was derived from (optional). */
+  sourceDocumentIds: string[];
   status: OrgMemoryProposalStatus;
 }
 
@@ -567,6 +587,7 @@ export interface StoredSkillProposal {
   sessionId: string | null;
   skillName: string;
   status: SkillProposalStatus;
+  supportingFiles?: { path: string; contentBase64: string }[] | null;
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
@@ -660,6 +681,11 @@ export interface DatabaseAdapter {
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  consumePasswordResetToken(
+    tokenHash: string,
+    passwordHash: string,
+    consumedAt: string
+  ): Promise<boolean>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(
@@ -687,6 +713,10 @@ export interface DatabaseAdapter {
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
 
+  createPasswordResetToken(
+    record: StoredPasswordResetTokenRecord
+  ): Promise<void>;
+
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
 
@@ -702,6 +732,7 @@ export interface DatabaseAdapter {
   deleteMcpServer(id: string): Promise<boolean>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
+  deleteOrganization(id: string): Promise<boolean>;
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
   deleteOrgPlugin(
     orgId: string,
@@ -717,6 +748,12 @@ export interface DatabaseAdapter {
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
   disableUser(id: string, disabledAt: string): Promise<void>;
   enableUser(id: string): Promise<void>;
+  eraseUser(input: {
+    id: string;
+    email: string;
+    passwordHash: string;
+    updatedAt: string;
+  }): Promise<boolean>;
   /**
    * Settles runs left `running` by a process that exited mid-run. Only a
    * `finally` in the owning process completes a run, so a kill leaves the row
@@ -926,6 +963,12 @@ export interface DatabaseAdapter {
     orgId: string,
     userId: string
   ): Promise<StoredComposioUserConnectionRecord[]>;
+  listEphemeralAttachments(): Promise<StoredAttachmentRecord[]>;
+  listFilePins(
+    orgId: string,
+    userId: string,
+    profileId: string
+  ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
   listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
@@ -971,6 +1014,7 @@ export interface DatabaseAdapter {
   ): Promise<StoredSessionSummaryRecord[]>;
 
   listSessions(): Promise<StoredSessionRecord[]>;
+  listSessionsForUser(userId: string): Promise<StoredSessionRecord[]>;
   listSkillProposals(
     orgId: string,
     options?: {
@@ -1028,6 +1072,13 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  renameFilePins(
+    orgId: string,
+    profileId: string,
+    oldPath: string,
+    newPath: string
+  ): Promise<void>;
+  renameSessionTitle(sessionId: string, title: string): Promise<boolean>;
   replaceMessagesForSession(
     sessionId: string,
     messages: StoredSessionMessageRecord[]
@@ -1045,6 +1096,13 @@ export interface DatabaseAdapter {
     userId: string,
     revokedAt: string
   ): Promise<number>;
+  setFilePinned(
+    orgId: string,
+    userId: string,
+    profileId: string,
+    path: string,
+    pinned: boolean
+  ): Promise<void>;
   setUserContext(
     orgId: string,
     userId: string,
@@ -1103,6 +1161,7 @@ export interface DatabaseAdapter {
     }
   ): Promise<boolean>;
   updateSessionModel(sessionId: string, model: string | null): Promise<boolean>;
+  updateSessionPinned(sessionId: string, pinned: boolean): Promise<boolean>;
   updateSessionQuestionnaire(
     sessionId: string,
     questionnaire: AgentQuestionnaire | null

@@ -90,6 +90,95 @@ describe("PersistentPrompt", () => {
     });
   });
 
+  test("enter submits the highlighted suggestion", async () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const terminalInput = new FakeTerminalInput();
+    const submitted: PromptLineResult[] = [];
+    const suggestion: PromptSuggestion = {
+      description: "Claude Sonnet [Anthropic]",
+      insertValue: "/model provider-a::claude-sonnet",
+      label: "claude-sonnet",
+      submitOnEnter: true,
+    };
+    const prompt = new PersistentPrompt({
+      getSuggestions: (input) => (input === "/model " ? [suggestion] : []),
+      onCancel: () => {},
+      onSubmit: (result) => submitted.push(result),
+      renderer: new FakeRenderer(),
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+
+    prompts.push(prompt);
+    prompt.start();
+    prompt.prefill("/model ");
+    terminalInput.emit("\r");
+    await Bun.sleep(0);
+
+    expect(submitted).toEqual([{ text: "/model provider-a::claude-sonnet" }]);
+  });
+
+  test("enter keeps the typed command when suggestions are not selectable", async () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const terminalInput = new FakeTerminalInput();
+    const submitted: PromptLineResult[] = [];
+    const prompt = new PersistentPrompt({
+      getSuggestions: () => [
+        {
+          description: "scaffold soul templates",
+          insertValue: "/soul init",
+          label: "init",
+        },
+      ],
+      onCancel: () => {},
+      onSubmit: (result) => submitted.push(result),
+      renderer: new FakeRenderer(),
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+
+    prompts.push(prompt);
+    prompt.start();
+    prompt.prefill("/soul");
+    terminalInput.emit("\r");
+    await Bun.sleep(0);
+
+    expect(submitted).toEqual([{ text: "/soul" }]);
+  });
+
+  test("shift+enter adds a new input line without submitting", () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const renderer = new FakeRenderer();
+    const terminalInput = new FakeTerminalInput();
+    const submitted: PromptLineResult[] = [];
+    const prompt = new PersistentPrompt({
+      onCancel: () => {},
+      onSubmit: (result) => submitted.push(result),
+      renderer,
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+
+    prompts.push(prompt);
+    prompt.start();
+    prompt.prefill("first line");
+    terminalInput.emit("\n");
+
+    expect(renderer.state?.value).toBe("first line\n");
+    expect(submitted).toEqual([]);
+
+    terminalInput.emit("\x1b[13;2u");
+    expect(renderer.state?.value).toBe("first line\n\n");
+    expect(submitted).toEqual([]);
+
+    terminalInput.emit("\x1b[27;2;13~");
+    expect(renderer.state?.value).toBe("first line\n\n\n");
+    expect(submitted).toEqual([]);
+  });
+
   test("drops bracketed paste when the buffer exceeds the byte cap", () => {
     stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
       () => true

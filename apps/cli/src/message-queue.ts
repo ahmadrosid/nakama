@@ -1,5 +1,6 @@
 import type { ImageAttachment, SendMessageInput } from "@nakama/core";
 import { splitInputDisplayLines } from "./prompt-display";
+import { visibleLength } from "./text-measure";
 
 export interface PendingMessage {
   echoed?: boolean;
@@ -26,7 +27,7 @@ export function formatPendingDisplayLines(
   }
 
   const lines: string[] = [];
-  const prefixLength = PENDING_PREFIX.length;
+  const prefixLength = visibleLength(PENDING_PREFIX);
 
   for (
     let messageIndex = 0;

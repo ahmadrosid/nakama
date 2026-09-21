@@ -1,0 +1,279 @@
+{
+  "name": "gemini-signed-tool-continuation",
+  "recordedAt": "2026-09-17T02:45:17.489Z",
+  "request": {
+    "body": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "Read the probe and tell me its code."
+            }
+          ],
+          "role": "user"
+        }
+      ],
+      "systemInstruction": {
+        "parts": [
+          {
+            "text": "Call read_probe exactly once to get the secret code. After the tool result, reply with only the code returned by the tool. Never invent a code."
+          }
+        ],
+        "role": "user"
+      },
+      "tools": [
+        {
+          "functionDeclarations": [
+            {
+              "description": "Read the secret probe code.",
+              "name": "read_probe",
+              "parameters": {
+                "properties": {},
+                "type": "OBJECT"
+              }
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "thinkingConfig": {
+          "thinkingBudget": 0
+        }
+      }
+    },
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+  },
+  "response": {
+    "body": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "functionCall": {
+                  "name": "read_probe",
+                  "args": {},
+                  "id": "call_220748"
+                },
+                "thoughtSignature": "EmcKZQERTTIPDEH6hLZUdjXHB1IPFYvJBexld+0sD5z/sj5ScVA090assPh6lyFLO9aCSQlL/RBRkEKtst1ie0SLYr1SecpjnFKvkKwWyXaDhZQk/dG6BNzwXEDEIpHIxI27kJuHbV9p"
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0,
+          "finishMessage": "Model generated function call(s)."
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 70,
+        "candidatesTokenCount": 10,
+        "totalTokenCount": 80,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 70
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "modelVersion": "gemini-3.8-flash",
+      "responseId": "N1SraojPFMOMjuMP-8vlgAI"
+    },
+    "status": 200
+  },
+  "version": 2,
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Read the probe and tell me its code."
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "Call read_probe exactly once to get the secret code. After the tool result, reply with only the code returned by the tool. Never invent a code."
+              }
+            ],
+            "role": "user"
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "description": "Read the secret probe code.",
+                  "name": "read_probe",
+                  "parameters": {
+                    "properties": {},
+                    "type": "OBJECT"
+                  }
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "thinkingConfig": {
+              "thinkingBudget": 0
+            }
+          }
+        },
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+      },
+      "response": {
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "read_probe",
+                      "args": {},
+                      "id": "call_220748"
+                    },
+                    "thoughtSignature": "EmcKZQERTTIPDEH6hLZUdjXHB1IPFYvJBexld+0sD5z/sj5ScVA090assPh6lyFLO9aCSQlL/RBRkEKtst1ie0SLYr1SecpjnFKvkKwWyXaDhZQk/dG6BNzwXEDEIpHIxI27kJuHbV9p"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 70,
+            "candidatesTokenCount": 10,
+            "totalTokenCount": 80,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 70
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.8-flash",
+          "responseId": "N1SraojPFMOMjuMP-8vlgAI"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Read the probe and tell me its code."
+                }
+              ],
+              "role": "user"
+            },
+            {
+              "parts": [
+                {
+                  "functionCall": {
+                    "args": {},
+                    "id": "call_220748",
+                    "name": "read_probe"
+                  },
+                  "thoughtSignature": "EmcKZQERTTIPDEH6hLZUdjXHB1IPFYvJBexld+0sD5z/sj5ScVA090assPh6lyFLO9aCSQlL/RBRkEKtst1ie0SLYr1SecpjnFKvkKwWyXaDhZQk/dG6BNzwXEDEIpHIxI27kJuHbV9p"
+                }
+              ],
+              "role": "model"
+            },
+            {
+              "parts": [
+                {
+                  "functionResponse": {
+                    "id": "call_220748",
+                    "name": "read_probe",
+                    "response": {
+                      "code": "PROBE-7319"
+                    }
+                  }
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "Call read_probe exactly once to get the secret code. After the tool result, reply with only the code returned by the tool. Never invent a code."
+              }
+            ],
+            "role": "user"
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "description": "Read the secret probe code.",
+                  "name": "read_probe",
+                  "parameters": {
+                    "properties": {},
+                    "type": "OBJECT"
+                  }
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "thinkingConfig": {
+              "thinkingBudget": 0
+            }
+          }
+        },
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+      },
+      "response": {
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "PROBE-7319",
+                    "thoughtSignature": "EmcKZQERTTIPvczQW3RD7llDZakb96uTk33bJ8Sv3qlmhV9C00ytbTgb0XRK9Y30GLvD6gzWCGb6anTlt4zEq/VoonWtQJX0XcbPUL+LXjKv0mWH/WAOKgppzwpGYmObEDfNzj0H+NkT"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 100,
+            "candidatesTokenCount": 7,
+            "totalTokenCount": 107,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 100
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.8-flash",
+          "responseId": "OVSravWUDvSiqfkP0s_pkQE"
+        },
+        "status": 200
+      }
+    }
+  ]
+}

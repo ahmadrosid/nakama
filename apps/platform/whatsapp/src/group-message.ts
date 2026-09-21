@@ -104,6 +104,7 @@ export function extraJidsFromGroupParticipants(
     id?: string | null;
     jid?: string | null;
     lid?: string | null;
+    phoneNumber?: string | null;
   }>,
   senderJids: readonly string[]
 ): string[] {
@@ -114,6 +115,7 @@ export function extraJidsFromGroupParticipants(
       participant.id,
       participant.jid,
       participant.lid,
+      participant.phoneNumber,
     ].filter((jid): jid is string => Boolean(jid));
 
     if (

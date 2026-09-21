@@ -34,7 +34,7 @@ import {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 30 * 60_000;
 const MAX_OUTPUT_CHARS = 32_000;
-const SIGKILL_GRACE_MS = 5000;
+const EXIT_STDIO_GRACE_MS = 100;
 /** In-memory capture for coding-agent runs before summarize / keep-tail. */
 const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
 /** Keep the newest N coding-agent logs; prune the rest after each write. */
@@ -91,7 +91,7 @@ export function resetBashSandboxManagerForTests(): void {
 }
 
 const BASH_TOOL_DESCRIPTION_BASE =
-  "Run a one-off shell command starting in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
+  "Run a one-off shell command and return stdout, stderr, and exit code. In local CLI sessions, commands start in the directory where the CLI was launched; otherwise they start in the active profile workspace. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
 
 function bashToolDescription(): string {
   try {
@@ -118,7 +118,7 @@ export const bashTool: ToolDefinition<BashInput, BashOutput> = {
       command: { description: "Shell command to run.", type: "string" },
       cwd: {
         description:
-          "Optional working directory within the profile workspace. Defaults to the profile workspace root.",
+          "Optional working directory within the active shell workspace. Defaults to the CLI launch directory in local CLI sessions, or the profile workspace otherwise.",
         type: "string",
       },
       env: {
@@ -160,8 +160,17 @@ export async function runBash(
     throw new Error("command is required.");
   }
 
+  const codingAgentMode =
+    readOptionalBoolean(input, "codingAgent") === true ||
+    commandLooksLikeCursorAgent(command);
+  const codingWorkspace =
+    context.channel === "cli" || codingAgentMode
+      ? context.codingWorkspaceRoot
+      : undefined;
   const workspaceRoot = await resolveWorkspaceRoot(
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
+    options.workspaceRoot ??
+      codingWorkspace ??
+      getProfileSoulDir(orgId, profileId)
   );
   const rawCwd = readString(input, "cwd");
   const cwd = rawCwd
@@ -174,9 +183,6 @@ export async function runBash(
     : workspaceRoot;
   const timeoutMs = readTimeout(readOptionalNumber(input, "timeoutMs"));
   const env = readStringRecord(readOptionalRecord(input, "env"));
-  const codingAgentMode =
-    readOptionalBoolean(input, "codingAgent") === true ||
-    commandLooksLikeCursorAgent(command);
 
   const backend = options.backend ?? resolveBashBackend();
 
@@ -220,10 +226,13 @@ function runShellCommand(
   options: ShellRunOptions
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
+    options.signal?.throwIfAborted();
     const child = spawn("/bin/bash", ["-lc", command], {
       cwd,
+      detached: process.platform !== "win32",
       env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     let stdout = "";
@@ -231,23 +240,37 @@ function runShellCommand(
     let timedOut = false;
     let stdoutOverflow = false;
     let stderrOverflow = false;
-    let killTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    let exited = false;
+    let settled = false;
     let abortHandled = false;
 
-    const scheduleForcedKill = () => {
-      if (killTimeoutId) {
+    const killCommand = () => {
+      if (!child.pid) {
         return;
       }
-
-      killTimeoutId = setTimeout(() => {
-        killTimeoutId = null;
+      if (process.platform === "win32") {
+        const killer = spawn(
+          path.join(
+            process.env.SystemRoot ?? "C:\\Windows",
+            "System32",
+            "taskkill.exe"
+          ),
+          ["/F", "/T", "/PID", String(child.pid)],
+          { stdio: "ignore", windowsHide: true }
+        );
+        killer.once("error", () => child.kill("SIGKILL"));
+        return;
+      }
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
         try {
           child.kill("SIGKILL");
         } catch {
           // already exited
         }
-      }, SIGKILL_GRACE_MS);
-      killTimeoutId.unref();
+      }
     };
 
     const onAbort = () => {
@@ -255,9 +278,7 @@ function runShellCommand(
         return;
       }
       abortHandled = true;
-      child.kill("SIGTERM");
-      scheduleForcedKill();
-      reject(new DOMException("The operation was aborted", "AbortError"));
+      killCommand();
     };
 
     options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -267,11 +288,23 @@ function runShellCommand(
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      scheduleForcedKill();
+      killCommand();
     }, timeoutMs);
 
+    // A descendant may retain the pipes after the shell exits. Keep draining
+    // active output, but release idle inherited handles like Pi does.
+    const armExitTimer = () => {
+      if (exited && !settled) {
+        clearTimeout(exitTimer);
+        exitTimer = setTimeout(
+          () => finish(child.exitCode),
+          EXIT_STDIO_GRACE_MS
+        );
+      }
+    };
+
     child.stdout?.on("data", (chunk: Buffer | string) => {
+      armExitTimer();
       if (options.codingAgentMode) {
         const next = appendCodingAgentCapture(stdout, String(chunk));
         stdout = next.value;
@@ -283,6 +316,7 @@ function runShellCommand(
     });
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
+      armExitTimer();
       if (options.codingAgentMode) {
         const next = appendCodingAgentCapture(stderr, String(chunk));
         stderr = next.value;
@@ -293,19 +327,22 @@ function runShellCommand(
       stderr = appendOutput(stderr, String(chunk));
     });
 
-    child.on("error", (error) => {
-      clearTimeout(timeoutId);
-      options.signal?.removeEventListener("abort", onAbort);
-      reject(error);
-    });
-
-    child.on("close", (exitCode) => {
-      clearTimeout(timeoutId);
-      if (killTimeoutId) {
-        clearTimeout(killTimeoutId);
-        killTimeoutId = null;
+    function finish(exitCode: number | null, error?: Error) {
+      if (settled) {
+        return;
       }
+      settled = true;
+      clearTimeout(timeoutId);
+      clearTimeout(exitTimer);
       options.signal?.removeEventListener("abort", onAbort);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      if (error || abortHandled) {
+        reject(
+          error ?? new DOMException("The operation was aborted", "AbortError")
+        );
+        return;
+      }
 
       void finalizeCodingAgentOutput({
         codingAgentMode: options.codingAgentMode,
@@ -319,7 +356,14 @@ function runShellCommand(
       })
         .then(resolve)
         .catch(reject);
+    }
+
+    child.once("error", (error) => finish(null, error));
+    child.once("exit", () => {
+      exited = true;
+      armExitTimer();
     });
+    child.once("close", (exitCode) => finish(exitCode));
   });
 }
 

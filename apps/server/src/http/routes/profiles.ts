@@ -21,7 +21,18 @@ import type {
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
 } from "@nakama/core";
-import { NakamaApiError } from "@nakama/core";
+import {
+  attachSharedKnowledgeBaseDocument,
+  detachSharedKnowledgeBaseDocument,
+  getProfileSharedDocumentIds,
+  getWorkspaceEntry,
+  KnowledgeBaseDocumentInUseError,
+  listWorkspaceFiles,
+  NakamaApiError,
+  readOrganizationKnowledgeBaseDocumentContent,
+  readWorkspaceFile,
+  renameWorkspaceEntry,
+} from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
@@ -64,6 +75,12 @@ export function registerProfileRoutes(
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+  const renameWorkspaceSchema = z
+    .object({
+      path: z.string().min(1).max(4096),
+      newName: z.string().min(1).max(255),
+    })
+    .strict();
   const profileIdParam = z.object({
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
   });
@@ -72,6 +89,51 @@ export function registerProfileRoutes(
       .string()
       .openapi({ param: { in: "path", name: "documentId" } }),
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
+  });
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "patch",
+      path: "/v1/profiles/{profileId}/workspace/rename",
+      operationId: "renameProfileWorkspaceEntry",
+      summary: "Rename a workspace file or folder (platform admin)",
+      tags: ["Profiles"],
+      request: {
+        params: profileIdParam,
+        body: {
+          required: true,
+          content: { "application/json": { schema: renameWorkspaceSchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: "Renamed entry",
+          content: {
+            "application/json": {
+              schema: z.object({
+                filename: z.string(),
+                path: z.string(),
+                kind: z.enum(["file", "directory"]),
+                mimeType: z.string(),
+                sizeBytes: z.number(),
+                updatedAt: z.string(),
+              }),
+            },
+          },
+        },
+        400: { description: "Invalid or protected path" },
+        403: { description: "Platform administrator required" },
+        404: { description: "Profile or entry not found" },
+        409: { description: "Name already exists" },
+      },
+    })
+  );
+  const orgIdParam = z.object({
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+  });
+  const orgDocumentIdParam = orgIdParam.extend({
+    documentId: z
+      .string()
+      .openapi({ param: { in: "path", name: "documentId" } }),
   });
   const soulFileParam = z.object({
     fileKey: z
@@ -144,10 +206,88 @@ export function registerProfileRoutes(
     .object({})
     .passthrough()
     .openapi("DeleteKnowledgeBaseResponse");
+  const sharedKnowledgeBaseDocumentSchema = z
+    .object({
+      documentId: z.string(),
+      profileId: z.string(),
+    })
+    .passthrough()
+    .openapi("SharedKnowledgeBaseDocumentResponse");
+  const knowledgeBaseDocumentInUseSchema = z
+    .object({
+      documentId: z.string(),
+      error: z.string(),
+      profileIds: z.array(z.string()),
+    })
+    .openapi("KnowledgeBaseDocumentInUseResponse");
   const imageAttachmentSchema = z
     .object({})
     .passthrough()
     .openapi("ImageAttachment");
+
+  for (const method of ["get", "put"] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method,
+        path: "/v1/profiles/{profileId}/workspace/pins",
+        operationId:
+          method === "get" ? "listProfileFilePins" : "setProfileFilePinned",
+        tags: ["Profiles"],
+        summary:
+          method === "get"
+            ? "List your pinned files"
+            : "Pin or unpin a file for your account",
+        request: {
+          params: profileIdParam,
+          ...(method === "put"
+            ? {
+                body: {
+                  required: true,
+                  content: {
+                    "application/json": {
+                      schema: z.object({
+                        path: z.string(),
+                        pinned: z.boolean(),
+                      }),
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+        responses:
+          method === "get"
+            ? {
+                200: {
+                  description: "Pinned workspace files",
+                  content: {
+                    "application/json": {
+                      schema: z.object({
+                        entries: z.array(
+                          z.object({
+                            filename: z.string(),
+                            path: z.string(),
+                            kind: z.enum(["file", "directory"]),
+                            mimeType: z.string(),
+                            sizeBytes: z.number(),
+                            updatedAt: z.string(),
+                          })
+                        ),
+                      }),
+                    },
+                  },
+                },
+                403: { description: "Forbidden" },
+              }
+            : {
+                204: { description: "Pin updated" },
+                400: { description: "Invalid path" },
+                403: { description: "Forbidden" },
+                404: { description: "File not found" },
+              },
+      })
+    );
+  }
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -258,7 +398,27 @@ export function registerProfileRoutes(
               schema: z.object({
                 events: z.array(
                   z.object({
+                    actorName: z.string().nullable().optional(),
+                    assignmentNames: z
+                      .record(z.string(), z.string().nullable())
+                      .optional(),
                     actorUserId: z.string().nullable(),
+                    assignmentChanges: z
+                      .object({
+                        added: z.array(
+                          z.object({
+                            id: z.string(),
+                            name: z.string().nullable(),
+                          })
+                        ),
+                        removed: z.array(
+                          z.object({
+                            id: z.string(),
+                            name: z.string().nullable(),
+                          })
+                        ),
+                      })
+                      .optional(),
                     afterValue: z.string().nullable(),
                     beforeValue: z.string().nullable(),
                     createdAt: z.string(),
@@ -390,11 +550,71 @@ export function registerProfileRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
+      operationId: "listProfileWorkspaceFiles",
+      path: "/v1/profiles/{profileId}/workspace",
+      request: {
+        params: profileIdParam,
+        query: z.object({ folder: z.string().optional() }),
+      },
+      responses: {
+        200: {
+          description: "Workspace directory entries",
+          content: {
+            "application/json": {
+              schema: z.object({
+                entries: z.array(
+                  z.object({
+                    filename: z.string(),
+                    path: z.string(),
+                    kind: z.enum(["file", "directory"]),
+                    mimeType: z.string(),
+                    sizeBytes: z.number(),
+                    updatedAt: z.string(),
+                  })
+                ),
+              }),
+            },
+          },
+        },
+        400: { description: "Invalid workspace path" },
+        403: { description: "Platform administrator required" },
+        404: { description: "Profile or folder not found" },
+      },
+      summary: "List a profile workspace folder (platform admin)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "readProfileWorkspaceFile",
+      path: "/v1/profiles/{profileId}/workspace/content",
+      request: {
+        params: profileIdParam,
+        query: z.object({ path: z.string().min(1) }),
+      },
+      responses: {
+        200: {
+          description: "Workspace file bytes",
+          content: { "*/*": { schema: z.string() } },
+        },
+        400: { description: "Invalid workspace path" },
+        403: { description: "Platform administrator required" },
+        404: { description: "Profile or file not found" },
+      },
+      summary: "Download a profile workspace file (platform admin)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
       operationId: "listProfileArtifacts",
       path: "/v1/profiles/{profileId}/artifacts",
       request: {
         params: profileIdParam,
         query: z.object({
+          folder: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(100).optional(),
           offset: z.coerce.number().int().min(0).optional(),
         }),
@@ -609,6 +829,198 @@ export function registerProfileRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
+      operationId: "listOrganizationKnowledgeBase",
+      path: "/v1/orgs/{orgId}/knowledge-base",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: listKnowledgeBaseSchema } },
+          description: "Shared organization knowledge base documents",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "List shared organization knowledge base documents (platform admins)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "uploadOrganizationKnowledgeBaseDocument",
+      path: "/v1/orgs/{orgId}/knowledge-base",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: uploadKnowledgeBaseSchema },
+          },
+          required: true,
+        },
+        params: orgIdParam,
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: uploadKnowledgeBaseResponseSchema },
+          },
+          description: "Shared organization knowledge base document kept",
+        },
+        201: {
+          content: {
+            "application/json": { schema: uploadKnowledgeBaseResponseSchema },
+          },
+          description: "Shared organization knowledge base document created",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Upload a shared organization knowledge base document (platform admins)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "deleteOrganizationKnowledgeBaseDocument",
+      path: "/v1/orgs/{orgId}/knowledge-base/{documentId}",
+      request: { params: orgDocumentIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: deleteKnowledgeBaseSchema },
+          },
+          description: "Deleted shared organization knowledge base document",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: {
+            "application/json": { schema: knowledgeBaseDocumentInUseSchema },
+          },
+          description: "Document is still attached to one or more profiles",
+        },
+      },
+      summary:
+        "Delete a shared organization knowledge base document (platform admins)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getOrganizationKnowledgeBaseDocumentContent",
+      path: "/v1/orgs/{orgId}/knowledge-base/{documentId}/content",
+      request: {
+        params: orgDocumentIdParam,
+        query: z.object({
+          inline: z.enum(["0", "1"]).optional(),
+          render: z.enum(["text"]).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "*/*": { schema: z.string() } },
+          description: "Shared organization document bytes",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Read shared organization document bytes (render=text returns extracted text for preview)",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "attachSharedKnowledgeBaseDocument",
+      path: "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
+      request: { params: documentIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: sharedKnowledgeBaseDocumentSchema },
+          },
+          description: "Shared document attached to the profile",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Attach a shared organization document to a profile (platform admins)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "detachSharedKnowledgeBaseDocument",
+      path: "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
+      request: { params: documentIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: sharedKnowledgeBaseDocumentSchema },
+          },
+          description: "Shared document detached from the profile",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Detach a shared organization document from a profile (platform admins)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
       operationId: "getProfileAvatar",
       path: "/v1/profiles/{profileId}/avatar",
       request: { params: profileIdParam },
@@ -746,6 +1158,136 @@ export function registerProfileRoutes(
     return new Response(null, { status: 204 });
   });
 
+  app.get("/v1/profiles/:profileId/workspace/pins", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    await agent.getProfile(orgId, profileId);
+    if (!options.databaseAdapter) {
+      throw new NakamaApiError("Database unavailable", 503);
+    }
+    const paths = await options.databaseAdapter.listFilePins(
+      orgId,
+      auth.user.id,
+      profileId
+    );
+    const entries = [];
+    for (const filename of paths) {
+      try {
+        entries.push(
+          (await getWorkspaceEntry(orgId, profileId, filename)).entry
+        );
+      } catch (error) {
+        // Missing files and paths that no longer pass workspace guards stay hidden.
+        if (
+          !(
+            error instanceof NakamaApiError &&
+            (error.status === 404 || error.status === 400)
+          )
+        ) {
+          throw error;
+        }
+      }
+    }
+    return json({ entries });
+  });
+
+  app.patch("/v1/profiles/:profileId/workspace/rename", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    await agent.getProfile(orgId, profileId);
+    const parsed = renameWorkspaceSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) {
+      throw new NakamaApiError("Invalid rename request", 400);
+    }
+    const database = options.databaseAdapter;
+    if (!database) {
+      throw new NakamaApiError("Database unavailable", 503);
+    }
+    return json(
+      await renameWorkspaceEntry({
+        ...parsed.data,
+        orgId,
+        profileId,
+        updateReferences: (newPath) =>
+          database.renameFilePins(orgId, profileId, parsed.data.path, newPath),
+      })
+    );
+  });
+
+  app.put("/v1/profiles/:profileId/workspace/pins", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    await agent.getProfile(orgId, profileId);
+    const parsed = z
+      .object({
+        path: z
+          .string()
+          .min(1)
+          .max(4096)
+          .refine(
+            (value) =>
+              !(value.includes("\\") || value.includes("\0")) &&
+              value
+                .split("/")
+                .every((part) => part !== "" && part !== "." && part !== "..")
+          ),
+        pinned: z.boolean(),
+      })
+      .strict()
+      .safeParse(await readJson(c.req.raw));
+    if (!parsed.success) {
+      throw new NakamaApiError("Invalid file pin", 400);
+    }
+    if (!options.databaseAdapter) {
+      throw new NakamaApiError("Database unavailable", 503);
+    }
+    if (parsed.data.pinned) {
+      await getWorkspaceEntry(orgId, profileId, parsed.data.path);
+    }
+    await options.databaseAdapter.setFilePinned(
+      orgId,
+      auth.user.id,
+      profileId,
+      parsed.data.path,
+      parsed.data.pinned
+    );
+    return new Response(null, { status: 204 });
+  });
+
+  app.get("/v1/profiles/:profileId/workspace", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    await agent.getProfile(orgId, profileId);
+    return json(
+      await listWorkspaceFiles(orgId, profileId, c.req.query("folder") ?? "")
+    );
+  });
+
+  app.get("/v1/profiles/:profileId/workspace/content", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    await agent.getProfile(orgId, profileId);
+    const filename = c.req.query("path");
+    if (!filename) {
+      return json({ error: "path is required" }, 400);
+    }
+    const file = await readWorkspaceFile(orgId, profileId, filename);
+    return new Response(Bun.file(file.filePath), {
+      headers: {
+        "Content-Type": file.contentType,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename.split("/").pop() ?? "file")}`,
+        "Content-Security-Policy": "sandbox",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      },
+    });
+  });
+
   app.get("/v1/profiles/:profileId/artifacts", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
@@ -775,6 +1317,7 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
+        folder: c.req.query("folder"),
         limit,
         offset,
       })
@@ -907,14 +1450,24 @@ export function registerProfileRoutes(
       const orgId = requireActiveOrgIdFromContext(c);
       const profileId = decodeURIComponent(c.req.param("profileId"));
       const documentId = decodeURIComponent(c.req.param("documentId"));
+      await agent.getProfile(orgId, profileId);
       const render =
         c.req.query("render") === "text" ? ("text" as const) : undefined;
-      const document = await agent.readKnowledgeBaseDocument(
+      const sharedDocumentIds = await getProfileSharedDocumentIds(
         orgId,
-        profileId,
-        documentId,
-        { render }
+        profileId
       );
+      const document = sharedDocumentIds.includes(documentId)
+        ? await readOrganizationKnowledgeBaseDocumentContent(
+            orgId,
+            documentId,
+            {
+              render,
+            }
+          )
+        : await agent.readKnowledgeBaseDocument(orgId, profileId, documentId, {
+            render,
+          });
       const downloadName = document.filename.replace(/["\\]/g, "_");
       const disposition =
         c.req.query("inline") === "1" ? "inline" : "attachment";
@@ -924,6 +1477,121 @@ export function registerProfileRoutes(
           "Content-Type": document.contentType,
         },
       });
+    }
+  );
+
+  app.get("/v1/orgs/:orgId/knowledge-base", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    return json(await agent.listOrganizationKnowledgeBase(orgId));
+  });
+
+  app.post("/v1/orgs/:orgId/knowledge-base", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const body = await readJson<UploadKnowledgeBaseRequest>(c.req.raw);
+    const result = await agent.uploadOrganizationKnowledgeBaseDocument(
+      orgId,
+      body.document,
+      body.onDuplicate
+    );
+    return json(result, result.outcome === "created" ? 201 : 200);
+  });
+
+  app.delete("/v1/orgs/:orgId/knowledge-base/:documentId", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const documentId = decodeURIComponent(c.req.param("documentId"));
+    try {
+      return json(
+        await agent.deleteOrganizationKnowledgeBaseDocument(orgId, documentId)
+      );
+    } catch (error) {
+      if (error instanceof KnowledgeBaseDocumentInUseError) {
+        return json(
+          {
+            documentId,
+            error: error.message,
+            profileIds: error.profileIds,
+          },
+          409
+        );
+      }
+      throw error;
+    }
+  });
+
+  app.get("/v1/orgs/:orgId/knowledge-base/:documentId/content", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const document = await agent.readOrganizationKnowledgeBaseDocument(
+      orgId,
+      decodeURIComponent(c.req.param("documentId")),
+      { render: c.req.query("render") === "text" ? "text" : undefined }
+    );
+    return new Response(document.bytes, {
+      headers: {
+        "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename="${document.filename.replace(/["\\]/g, "_")}"`,
+        "Content-Type": document.contentType,
+      },
+    });
+  });
+
+  app.put(
+    "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
+    async (c) => {
+      requirePlatformAdminFromContext(c);
+      const orgId = requireActiveOrgIdFromContext(c);
+      const profileId = decodeURIComponent(c.req.param("profileId"));
+      const documentId = decodeURIComponent(c.req.param("documentId"));
+      await agent.getProfile(orgId, profileId);
+      try {
+        await attachSharedKnowledgeBaseDocument(orgId, profileId, documentId);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "Shared knowledge base document not found."
+        ) {
+          throw new NakamaApiError(error.message, 404);
+        }
+        throw error;
+      }
+      return json({ attached: true, documentId, profileId });
+    }
+  );
+
+  app.delete(
+    "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
+    async (c) => {
+      requirePlatformAdminFromContext(c);
+      const orgId = requireActiveOrgIdFromContext(c);
+      const profileId = decodeURIComponent(c.req.param("profileId"));
+      const documentId = decodeURIComponent(c.req.param("documentId"));
+      await agent.getProfile(orgId, profileId);
+      const detached = await detachSharedKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        documentId
+      );
+      if (!detached) {
+        throw new NakamaApiError(
+          "Shared knowledge base document is not attached to this profile.",
+          404
+        );
+      }
+      return json({ detached: true, documentId, profileId });
     }
   );
 

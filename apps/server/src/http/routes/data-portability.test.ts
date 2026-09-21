@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getUserConfigDir } from "@nakama/core";
+import { getUserConfigDir, saveAttachmentBytes } from "@nakama/core";
+import { unzipSync } from "fflate";
+import { NAKAMA_USER_EXPORT_MANIFEST } from "../../services/data-portability";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -42,6 +44,182 @@ describe("data portability routes", () => {
       "nakama-export-"
     );
     expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+  });
+
+  test("platform admin exports one user's data without secrets or other users", async () => {
+    const { app, authService, databaseAdapter, orgService } = createApp();
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const targetOrg = await orgService.createOrganization({
+      name: "Target Org",
+      slug: "target-org",
+    });
+    const otherOrg = await orgService.createOrganization({
+      name: "Other Org",
+      slug: "other-org",
+    });
+    const [targetProfile] = await databaseAdapter.listProfilesForOrg(
+      targetOrg.organization.id
+    );
+    const [otherProfile] = await databaseAdapter.listProfilesForOrg(
+      otherOrg.organization.id
+    );
+    expect(targetProfile).toBeDefined();
+    expect(otherProfile).toBeDefined();
+
+    const now = new Date().toISOString();
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "target@example.com",
+      id: "user_dsar_target",
+      name: "Target User",
+      passwordHash: await authService.hashPassword("target-password"),
+      phone: "+628111111111",
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: targetOrg.organization.id,
+      role: "member",
+      userContext: "prefers concise replies",
+      userId: "user_dsar_target",
+    });
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "other@example.com",
+      id: "user_dsar_other",
+      passwordHash: await authService.hashPassword("other-password"),
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: otherOrg.organization.id,
+      role: "member",
+      userId: "user_dsar_other",
+    });
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_dsar_target",
+      model: null,
+      orgId: targetOrg.organization.id,
+      profileId: targetProfile!.id,
+      title: "Target chat",
+      userId: "user_dsar_target",
+    });
+    await databaseAdapter.appendMessagesForSession("session_dsar_target", [
+      {
+        createdAt: now,
+        id: "message_dsar_target",
+        payload: { content: "portable message", role: "user" },
+        seq: 0,
+        sessionId: "session_dsar_target",
+      },
+    ]);
+    const attachmentPath = await saveAttachmentBytes(
+      targetOrg.organization.id,
+      targetProfile!.id,
+      "attachment_dsar_target",
+      Buffer.from("portable attachment")
+    );
+    await databaseAdapter.insertAttachment({
+      channel: "web",
+      createdAt: now,
+      ephemeral: false,
+      filename: "note.txt",
+      id: "attachment_dsar_target",
+      kind: "document",
+      mediaType: "text/plain",
+      orgId: targetOrg.organization.id,
+      profileId: targetProfile!.id,
+      sessionId: "session_dsar_target",
+      sizeBytes: 19,
+      storagePath: attachmentPath,
+    });
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_dsar_other",
+      model: null,
+      orgId: otherOrg.organization.id,
+      profileId: otherProfile!.id,
+      title: "Other chat",
+      userId: "user_dsar_other",
+    });
+    await databaseAdapter.appendMessagesForSession("session_dsar_other", [
+      {
+        createdAt: now,
+        id: "message_dsar_other",
+        payload: { content: "other-tenant-secret", role: "user" },
+        seq: 0,
+        sessionId: "session_dsar_other",
+      },
+    ]);
+    await writeFile(
+      join(getUserConfigDir(), "config.ini"),
+      "api_key=provider-secret"
+    );
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/platform/users/user_dsar_target/data/export",
+        { headers: session.headers() }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/zip");
+    expect(response.headers.get("content-disposition")).toContain(
+      "nakama-user-export-"
+    );
+    const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(Object.keys(archive).sort()).toEqual([
+      "attachments/attachment_dsar_target",
+      NAKAMA_USER_EXPORT_MANIFEST,
+    ]);
+    const manifest = JSON.parse(
+      Buffer.from(archive[NAKAMA_USER_EXPORT_MANIFEST]!).toString("utf8")
+    ) as {
+      memberships: unknown[];
+      sessions: Array<{
+        attachments: Array<{ path: string }>;
+        messages: Array<{ payload: { content: string } }>;
+      }>;
+      user: { email: string; id: string };
+    };
+    expect(manifest.user).toMatchObject({
+      email: "target@example.com",
+      id: "user_dsar_target",
+    });
+    expect(manifest.memberships).toHaveLength(1);
+    expect(manifest.sessions).toHaveLength(1);
+    expect(manifest.sessions[0]!.messages[0]!.payload.content).toBe(
+      "portable message"
+    );
+    expect(manifest.sessions[0]!.attachments[0]!.path).toBe(
+      "attachments/attachment_dsar_target"
+    );
+    const exportedText = Object.values(archive)
+      .map((entry) => Buffer.from(entry).toString("utf8"))
+      .join("\n");
+    expect(exportedText).not.toContain("passwordHash");
+    expect(exportedText).not.toContain("provider-secret");
+    expect(exportedText).not.toContain("other-tenant-secret");
+
+    const missingResponse = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/platform/users/user_missing/data/export",
+        { headers: session.headers() }
+      )
+    );
+    expect(missingResponse.status).toBe(404);
   });
 
   test("platform admin can preview import without mutating local data", async () => {
@@ -185,6 +363,12 @@ describe("data portability routes", () => {
         headers: orgSession.headers(),
       })
     );
+    const userExportResponse = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/platform/users/user_missing/data/export",
+        { headers: orgSession.headers() }
+      )
+    );
     const previewResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/data/import/preview", {
         body: JSON.stringify({ data: Buffer.from("bad").toString("base64") }),
@@ -197,6 +381,7 @@ describe("data portability routes", () => {
     );
 
     expect(exportResponse.status).toBe(403);
+    expect(userExportResponse.status).toBe(403);
     expect(previewResponse.status).toBe(403);
   });
 

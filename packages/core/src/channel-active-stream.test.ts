@@ -31,9 +31,19 @@ describe("channel-active-stream", () => {
     expect(hasActiveStreams()).toBe(true);
   });
 
+  test("stale cleanup keeps the replacement stream registered", () => {
+    const first = registerActiveStream("chat-1");
+    const second = registerActiveStream("chat-1");
+
+    clearActiveStream("chat-1", first);
+
+    expect(stopActiveStream("chat-1")).toBe(true);
+    expect(second.aborted).toBe(true);
+  });
+
   test("clearActiveStream removes the chat", () => {
-    registerActiveStream("chat-1");
-    clearActiveStream("chat-1");
+    const signal = registerActiveStream("chat-1");
+    clearActiveStream("chat-1", signal);
 
     expect(hasActiveStreams()).toBe(false);
     expect(stopActiveStream("chat-1")).toBe(false);
@@ -47,20 +57,20 @@ describe("channel-active-stream", () => {
     expect(signal.aborted).toBe(true);
     expect(hasActiveStreams()).toBe(true);
 
-    clearActiveStream("chat-1");
+    clearActiveStream("chat-1", signal);
     expect(hasActiveStreams()).toBe(false);
     expect(stopActiveStream("chat-1")).toBe(false);
   });
 
   test("hasActiveStreams reflects map size across chats", () => {
-    registerActiveStream("chat-1");
-    registerActiveStream("chat-2");
+    const first = registerActiveStream("chat-1");
+    const second = registerActiveStream("chat-2");
     expect(hasActiveStreams()).toBe(true);
 
-    clearActiveStream("chat-1");
+    clearActiveStream("chat-1", first);
     expect(hasActiveStreams()).toBe(true);
 
-    clearActiveStream("chat-2");
+    clearActiveStream("chat-2", second);
     expect(hasActiveStreams()).toBe(false);
   });
 });

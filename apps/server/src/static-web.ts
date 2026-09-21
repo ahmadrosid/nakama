@@ -60,6 +60,12 @@ export function tryServeStaticWeb(
   const filePath = resolveDistFile(distDir, relativePath);
 
   if (!filePath) {
+    // Keep missing Vite chunks public so an old tab gets a useful 404 instead
+    // of an auth failure after the container is rebuilt with new asset hashes.
+    if (pathname.startsWith(IMMUTABLE_PREFIX)) {
+      return new Response("Not found", { status: 404 });
+    }
+
     if (!pathname.includes(".")) {
       const indexPath = resolveDistFile(distDir, "index.html");
       if (indexPath) {

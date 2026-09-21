@@ -1,0 +1,16 @@
+{
+  "path": ["apps", "packages"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.d.ts"
+  ],
+  "minLines": 10,
+  "minTokens": 70,
+  "threshold": 3,
+  "reporters": ["markdown"],
+  "output": ".jscpd-report",
+  "absolute": false
+}

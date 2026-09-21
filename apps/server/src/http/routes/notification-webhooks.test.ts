@@ -4,6 +4,7 @@ import * as os from "node:os";
 import path from "node:path";
 import { saveTelegramConfig } from "@nakama/core";
 import { createMinimalHonoApp } from "../test-app-helpers";
+import { seedOrgAdmin } from "../test-session-helpers";
 
 describe("notification webhook routes", () => {
   let tempHome = "";
@@ -22,7 +23,10 @@ describe("notification webhook routes", () => {
   async function createApp() {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-notify-webhook-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
-    await saveTelegramConfig(null, { botToken: "1234567890:TEST" });
+    await saveTelegramConfig(
+      { orgId: "org_1", profileId: "agent_1" },
+      { botToken: "1234567890:TEST" }
+    );
 
     return createMinimalHonoApp({
       agent: {},
@@ -40,6 +44,10 @@ describe("notification webhook routes", () => {
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
+      await seedOrgAdmin(databaseAdapter, {
+        orgId: "org_1",
+        profileId: "agent_1",
+      });
       await databaseAdapter.upsertOrganization({
         createdAt: "2026-07-04T10:00:00.000Z",
         id: "org_1",
@@ -49,7 +57,7 @@ describe("notification webhook routes", () => {
       });
       await databaseAdapter.upsertNotificationDestination({
         channel: "telegram",
-        config: { chatId: 1001, topicId: 22 },
+        config: { profileId: "agent_1", chatId: 1001, topicId: 22 },
         createdAt: "2026-07-04T10:00:00.000Z",
         id: "dest_1",
         name: "Payments",
@@ -90,7 +98,7 @@ describe("notification webhook routes", () => {
 
     await databaseAdapter.upsertNotificationDestination({
       channel: "telegram",
-      config: { chatId: 1001, topicId: null },
+      config: { profileId: "agent_1", chatId: 1001, topicId: null },
       createdAt: "2026-07-04T10:00:00.000Z",
       id: "dest_1",
       name: "Payments",
@@ -155,6 +163,10 @@ describe("notification webhook routes", () => {
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
+      await seedOrgAdmin(databaseAdapter, {
+        orgId: "org_1",
+        profileId: "agent_1",
+      });
       await databaseAdapter.upsertOrganization({
         archivedAt: "2026-08-21T00:00:00.000Z",
         createdAt: "2026-07-04T10:00:00.000Z",
@@ -165,7 +177,7 @@ describe("notification webhook routes", () => {
       });
       await databaseAdapter.upsertNotificationDestination({
         channel: "telegram",
-        config: { chatId: 1001, topicId: null },
+        config: { profileId: "agent_1", chatId: 1001, topicId: null },
         createdAt: "2026-07-04T10:00:00.000Z",
         id: "dest_1",
         name: "Payments",

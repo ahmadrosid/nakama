@@ -109,17 +109,19 @@ export function createOrgContextMiddleware(
     }
 
     const member = await databaseAdapter.getOrgMember(orgId, auth.user.id);
-    if (!member) {
+    if (!(member || auth.isPlatformAdmin)) {
       c.res = errorResponse("Not found", 404);
       return;
     }
 
-    assertOrgRole(member.role);
+    if (member) {
+      assertOrgRole(member.role);
+    }
 
     c.set("auth", {
       ...auth,
       activeOrgId: orgId,
-      orgRole: member.role,
+      orgRole: member?.role,
     });
 
     await next();

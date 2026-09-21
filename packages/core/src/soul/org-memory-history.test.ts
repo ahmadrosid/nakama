@@ -7,6 +7,7 @@ import {
   createOrgMemoryChangeId,
   getOrgMemoryHistoryEntry,
   listOrgMemoryHistory,
+  listOrgMemoryHistoryWithCap,
   ORG_MEMORY_HISTORY_MAX_ENTRIES,
   pruneOrgMemoryHistory,
 } from "./org-memory-history";
@@ -241,14 +242,51 @@ describe("org memory history", () => {
     }
 
     const historyDir = getOrgMemoryHistoryDir(orgId, tempDir);
+    // Bun's fs.promises.access resolves to null (1.4) or undefined (older) —
+    // only the reject/resolve matter here.
     await expect(
       access(path.join(historyDir, `${malformedId}.json`))
-    ).resolves.toBeNull();
+    ).resolves.toBeFalsy();
     await expect(
       access(path.join(historyDir, `${malformedId}.md`))
-    ).resolves.toBeNull();
+    ).resolves.toBeFalsy();
     await expect(
       access(path.join(historyDir, "omh_00000001_valid.json"))
     ).rejects.toThrow();
+  });
+  test("reports the revision cap after appending past the soft limit", async () => {
+    const orgId = await setupOrg();
+
+    async function append(index: number): Promise<void> {
+      await appendOrgMemoryHistory(
+        orgId,
+        {
+          action: "edit",
+          actorUserId: "user_a",
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+          id: createOrgMemoryChangeId(),
+          label: `edit-${index}`,
+          orgId,
+        },
+        `## Org Memory\n\n## Pinned\n\n- ${index}\n`,
+        tempDir
+      );
+    }
+
+    for (let index = 0; index < 3; index += 1) {
+      await append(index);
+    }
+    expect(
+      (await listOrgMemoryHistoryWithCap(orgId, 100, tempDir)).truncated
+    ).toBe(false);
+
+    for (let index = 3; index <= ORG_MEMORY_HISTORY_MAX_ENTRIES; index += 1) {
+      await append(index);
+    }
+
+    const listing = await listOrgMemoryHistoryWithCap(orgId, 100, tempDir);
+    expect(listing.maxEntries).toBe(ORG_MEMORY_HISTORY_MAX_ENTRIES);
+    expect(listing.changes).toHaveLength(ORG_MEMORY_HISTORY_MAX_ENTRIES);
+    expect(listing.truncated).toBe(true);
   });
 });

@@ -1,6 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { describe, expect, spyOn, test } from "bun:test";
+import { deleteAttachmentBytes } from "@nakama/core/attachments/store";
+import {
+  createInMemoryDatabaseAdapter,
+  seedOrgSuperBotProfile,
+} from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
+import { createAttachmentSaver } from "../../services/attachment-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
@@ -99,6 +104,114 @@ const CROSS_ORG_ROUTES: Array<{
 ];
 
 describe("session routes are scoped to the caller's active org", () => {
+  test("remote images require browser auth and org membership, returning only image bytes", async () => {
+    const { app } = await createScenario();
+    const user = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=",
+      "base64"
+    );
+    const url =
+      "http://localhost:4310/v1/chat/images/proxy?url=https%3A%2F%2F8.8.8.8%2Fimage.png";
+    const upstream = spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(png, {
+          headers: {
+            "content-type": "image/png",
+            "set-cookie": "upstream=secret",
+          },
+        })
+    );
+    try {
+      expect((await app.fetch(new Request(url))).status).toBe(401);
+      expect(
+        (
+          await app.fetch(
+            new Request(url, {
+              headers: user.headers({}, ATTACKER_ORG),
+            })
+          )
+        ).status
+      ).toBe(404);
+      expect(upstream).not.toHaveBeenCalled();
+      const response = await app.fetch(
+        new Request(url, { headers: { Cookie: user.cookieHeader } })
+      );
+      expect(response.status).toBe(200);
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
+      expect(response.headers.get("Content-Type")).toBe("image/png");
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(response.headers.has("set-cookie")).toBe(false);
+      expect(response.headers.get("Content-Security-Policy")).toContain(
+        "img-src 'self' data: blob:"
+      );
+      expect(upstream).toHaveBeenCalledTimes(1);
+    } finally {
+      upstream.mockRestore();
+    }
+  });
+
+  test("image content uses browser auth, stays org-scoped, and handles missing bytes", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+    const saved = await createAttachmentSaver(databaseAdapter, {
+      channel: "web",
+      orgId: VICTIM_ORG,
+      profileId: "profile_victim",
+      sessionId: victimSessionId,
+    })({
+      bytes: Buffer.from("private-image"),
+      kind: "image",
+      mediaType: "image/png",
+    });
+    await seedOrgAdmin(databaseAdapter, {
+      email: "viewer@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      role: "viewer",
+      userId: "user_viewer",
+    });
+    const viewer = await loginUserSession(
+      app,
+      "viewer@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const attacker = await loginUserSession(
+      app,
+      "attacker@example.com",
+      PASSWORD,
+      ATTACKER_ORG
+    );
+    const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
+    const response = await app.fetch(
+      new Request(url, { headers: { Cookie: viewer.cookieHeader } })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(await response.text()).toBe("private-image");
+    expect((await app.fetch(new Request(url))).status).toBe(401);
+    expect(
+      (await app.fetch(new Request(url, { headers: attacker.headers() })))
+        .status
+    ).toBe(404);
+    await deleteAttachmentBytes(
+      VICTIM_ORG,
+      "profile_victim",
+      saved.attachmentId
+    );
+    expect(
+      (await app.fetch(new Request(url, { headers: viewer.headers() }))).status
+    ).toBe(404);
+  });
+
   for (const route of CROSS_ORG_ROUTES) {
     test(`${route.method} ${route.path(":id")} -> 404 across orgs`, async () => {
       const { app, databaseAdapter, victimSessionId } = await createScenario();
@@ -223,5 +336,167 @@ describe("session routes are scoped to the caller's active org", () => {
     expect(
       (await databaseAdapter.getSession(victimSessionId))?.model
     ).toBeNull();
+  });
+  test("renames, pins, lists, and deletes a chat session", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+    const victim = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const headers = victim.headers({ "X-CSRF-Token": victim.csrfToken });
+
+    const updated = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${victimSessionId}`, {
+        body: JSON.stringify({ pinned: true, title: "Pinned chat" }),
+        headers,
+        method: "PATCH",
+      })
+    );
+    expect(updated.status).toBe(204);
+
+    const listed = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/sessions?profileId=profile_victim&channel=web",
+        { headers: victim.headers() }
+      )
+    );
+    expect(listed.status).toBe(200);
+    expect((await listed.json()).sessions[0]).toMatchObject({
+      id: victimSessionId,
+      pinned: true,
+      title: "Pinned chat",
+    });
+
+    const deleted = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/sessions/${victimSessionId}?purge=true`,
+        {
+          headers,
+          method: "DELETE",
+        }
+      )
+    );
+    expect(deleted.status).toBe(204);
+    expect(await databaseAdapter.getSession(victimSessionId)).toBeNull();
+  });
+});
+
+describe("Super Bot sessions stay admin-only after they are created", () => {
+  async function createSuperBotScenario() {
+    const scenario = await createScenario();
+    await seedOrgAdmin(scenario.databaseAdapter, {
+      email: "member@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      role: "member",
+      userId: "user_member",
+    });
+    const superProfile = await seedOrgSuperBotProfile(
+      scenario.databaseAdapter,
+      VICTIM_ORG
+    );
+    const superSessionId = await scenario.agent.createSession(
+      VICTIM_ORG,
+      "web",
+      superProfile.id,
+      "user_victim",
+      { orgRole: "admin" }
+    );
+    await scenario.databaseAdapter.replaceMessagesForSession(superSessionId, [
+      {
+        createdAt: "2026-09-14T10:00:00.000Z",
+        id: "msg_super",
+        payload: { content: "admin-only task", role: "user" },
+        seq: 0,
+        sessionId: superSessionId,
+      },
+    ]);
+    const member = await loginUserSession(
+      scenario.app,
+      "member@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    return {
+      ...scenario,
+      member,
+      superProfileId: superProfile.id,
+      superSessionId,
+    };
+  }
+
+  test("Super Bot images use the same profile access guard as chat history", async () => {
+    const { app, databaseAdapter, member, superProfileId, superSessionId } =
+      await createSuperBotScenario();
+    const saved = await createAttachmentSaver(databaseAdapter, {
+      channel: "web",
+      orgId: VICTIM_ORG,
+      profileId: superProfileId,
+      sessionId: superSessionId,
+    })({
+      bytes: Buffer.from("admin-image"),
+      kind: "image",
+      mediaType: "image/png",
+    });
+    const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
+    expect(
+      (await app.fetch(new Request(url, { headers: member.headers() }))).status
+    ).toBe(403);
+    const admin = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const response = await app.fetch(
+      new Request(url, { headers: admin.headers() })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("admin-image");
+  });
+
+  for (const route of CROSS_ORG_ROUTES) {
+    test(`${route.method} ${route.path(":id")} -> 403 for a member`, async () => {
+      const { app, databaseAdapter, member, superSessionId } =
+        await createSuperBotScenario();
+
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${route.path(superSessionId)}`, {
+          body: route.body ? JSON.stringify(route.body) : undefined,
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
+          method: route.method,
+        })
+      );
+
+      expect(response.status).toBe(403);
+      expect(
+        await databaseAdapter.listMessagesForSession(superSessionId)
+      ).toHaveLength(1);
+    });
+  }
+
+  test("a member cannot list Super Bot sessions, an admin still can", async () => {
+    const { app, member, superProfileId, superSessionId } =
+      await createSuperBotScenario();
+    const admin = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const get = (user: typeof member, path: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310${path}`, { headers: user.headers() })
+      );
+    const listPath = `/v1/sessions?profileId=${superProfileId}&channel=web`;
+
+    expect((await get(member, listPath)).status).toBe(403);
+    expect((await get(admin, listPath)).status).toBe(200);
+    expect(
+      (await get(admin, `/v1/sessions/${superSessionId}/messages`)).status
+    ).toBe(200);
   });
 });

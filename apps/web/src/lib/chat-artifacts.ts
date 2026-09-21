@@ -22,12 +22,17 @@ const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 const ARTIFACTS_SEGMENT = "/artifacts/";
 const ARTIFACTS_PREFIX = "artifacts/";
 const ARTIFACT_PATH_IN_TEXT =
-  /\bartifacts\/(?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9][A-Za-z0-9._-]*\b/g;
+  /(?:\bprofiles\/([\w-]+)\/)?\bartifacts\/((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)\b/g;
 
 export interface ChatArtifactRef {
   /** Basename for chip label (e.g. `report.md`). */
   filename: string;
   mimeType: string;
+  /**
+   * Set when the reference names another profile (`profiles/<id>/artifacts/...`).
+   * Bare paths belong to the chat profile.
+   */
+  ownerProfileId?: string;
   /** Path relative to the profile artifacts directory (e.g. `weekly/report.md`). */
   path: string;
   savedAt: string;
@@ -257,12 +262,14 @@ function relativePathFromWriteMessage(message: ChatListItem): string | null {
 
 function buildArtifactRef(
   relativePath: string,
-  meta: Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt">
+  meta: Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt">,
+  ownerProfileId?: string
 ): ChatArtifactRef {
   const filename = relativePath.split("/").pop() ?? relativePath;
   return {
     filename,
     mimeType: meta.mimeType,
+    ...(ownerProfileId ? { ownerProfileId } : {}),
     path: relativePath,
     savedAt: meta.savedAt,
     sizeBytes: meta.sizeBytes,
@@ -338,28 +345,35 @@ function inferredMetaForPath(
 }
 
 /**
- * Extract `artifacts/...` path mentions from assistant message text.
+ * Extract `artifacts/...` and `profiles/<id>/artifacts/...` mentions from
+ * assistant message text.
  */
-export function extractArtifactPathsFromText(content: string): string[] {
-  const matches = content.match(ARTIFACT_PATH_IN_TEXT) ?? [];
-  const paths: string[] = [];
+export function extractArtifactPathsFromText(
+  content: string
+): Array<{ path: string; ownerProfileId?: string }> {
+  const refs: Array<{ path: string; ownerProfileId?: string }> = [];
   const seen = new Set<string>();
 
-  for (const match of matches) {
-    const relativePath = match.slice(ARTIFACTS_PREFIX.length);
+  for (const match of content.matchAll(ARTIFACT_PATH_IN_TEXT)) {
+    const [, ownerProfileId, relativePath] = match;
+    const key = `${ownerProfileId ?? ""}:${relativePath}`;
     if (
       !relativePath ||
       isArtifactMetaRelativePath(relativePath) ||
-      seen.has(relativePath)
+      seen.has(key)
     ) {
       continue;
     }
 
-    seen.add(relativePath);
-    paths.push(relativePath);
+    seen.add(key);
+    refs.push(
+      ownerProfileId
+        ? { ownerProfileId, path: relativePath }
+        : { path: relativePath }
+    );
   }
 
-  return paths;
+  return refs;
 }
 
 /**
@@ -456,14 +470,18 @@ export function extractTurnArtifacts(
       continue;
     }
 
-    for (const relativePath of extractArtifactPathsFromText(message.content)) {
-      if (artifactsByPath.has(relativePath)) {
+    for (const { path, ownerProfileId } of extractArtifactPathsFromText(
+      message.content
+    )) {
+      // Same relative path in two profiles is two files.
+      const key = ownerProfileId ? `profiles/${ownerProfileId}/${path}` : path;
+      if (artifactsByPath.has(key)) {
         continue;
       }
 
       artifactsByPath.set(
-        relativePath,
-        buildArtifactRef(relativePath, inferredMetaForPath(relativePath))
+        key,
+        buildArtifactRef(path, inferredMetaForPath(path), ownerProfileId)
       );
     }
   }
