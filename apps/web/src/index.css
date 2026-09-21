@@ -261,6 +261,25 @@
     animation: todo-text-shimmer 4s linear infinite;
   }
 
+  /* Same sweep as .todo-shimmer-text, carrying the composer's streaming
+   * palette instead of a single accent. */
+  .ai-rainbow-text {
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(
+      90deg,
+      var(--ai-c1) 0%,
+      var(--ai-c3) 20%,
+      var(--ai-c4) 40%,
+      var(--ai-c5) 60%,
+      var(--ai-c2) 80%,
+      var(--ai-c1) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    background-size: 200% auto;
+    animation: todo-text-shimmer 3s linear infinite;
+  }
+
   @keyframes todo-text-shimmer {
     from {
       background-position: 200% center;
@@ -317,6 +336,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .ai-rainbow-text,
     .todo-shimmer-text,
     .thinking-shimmer-text {
       color: var(--foreground);
@@ -1219,6 +1239,15 @@
 }
 
 :root {
+  /* Streaming palette, shared by the composer rim and the running-chat title.
+   * composer-rim-glow.tsx rolls a random hue arc over these per rim. */
+  --ai-c1: #5b8ef0;
+  --ai-c2: #c5d4eb;
+  --ai-c3: #f0d66a;
+  --ai-c4: #f07a72;
+  --ai-c5: #e888e0;
+  --ai-c6: #f0c4e8aa;
+  --ai-tail: #a8c8f088;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
