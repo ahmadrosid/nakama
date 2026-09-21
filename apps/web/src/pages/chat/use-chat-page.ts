@@ -23,6 +23,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
+import { useRunningTurnsStore } from "@/context/running-turns-store";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
@@ -1000,6 +1001,11 @@ export function useChatPage() {
 
       const abortController = new AbortController();
       streamAbortRef.current = abortController;
+      // The session list is fetched on its own schedule and has no way to learn
+      // a turn started in a chat it already lists, so tell it. Captured here
+      // because the error paths below can move `activeSession` to a new one.
+      const turnSessionId = activeSession.id;
+      useRunningTurnsStore.getState().startTurn(turnSessionId);
       // Flipped by releaseActiveStream when the user opens another chat. The
       // request stays open so the turn survives; it just stops writing here.
       let detached = false;
@@ -1117,6 +1123,8 @@ export function useChatPage() {
         }
         setMessages((current) => markStreamingTurnFailed(current, message));
       } finally {
+        // Detached or not, the turn is over once the stream settles.
+        useRunningTurnsStore.getState().endTurn(turnSessionId);
         // The sessions list still wants the new title and preview, but nothing
         // else here belongs to a detached turn: the page has moved on and
         // releaseActiveStream already cleared the flags and the queue.
