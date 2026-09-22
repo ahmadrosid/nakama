@@ -69,12 +69,7 @@ export async function ensureAppUserSoulDir(
   const target = getAppUserSoulDir(orgId, profileId, appUserId);
   await ensureDir(target);
 
-  for (const relativePath of [
-    "SOUL.md",
-    "STYLE.md",
-    "INSTRUCTIONS.md",
-    "examples",
-  ]) {
+  for (const relativePath of ["SOUL.md", "STYLE.md", "INSTRUCTIONS.md"]) {
     const sourcePath = join(source, relativePath);
     const targetPath = join(target, relativePath);
     if ((await pathExists(sourcePath)) && !(await pathExists(targetPath))) {

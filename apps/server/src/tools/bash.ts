@@ -170,6 +170,7 @@ export async function runBash(
   const workspaceRoot = await resolveWorkspaceRoot(
     options.workspaceRoot ??
       codingWorkspace ??
+      context.workspaceRoot ??
       getProfileSoulDir(orgId, profileId)
   );
   const rawCwd = readString(input, "cwd");

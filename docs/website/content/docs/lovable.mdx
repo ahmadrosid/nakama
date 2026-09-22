@@ -92,6 +92,14 @@ const { reply: answer } = await reply.json();
 
 For streaming replies, send `{"message":"...","stream":true}` and proxy the returned server-sent events through your backend to the browser.
 
+## App-user workspace and storage
+
+Nakama creates the private workspace when an app user starts their first API-key session. It does not create a Nakama organization user.
+
+The initial workspace copies the profile's soul, style, and instructions. It also creates empty memory-archive and artifacts directories. With the default files, this is about **2.2 KB of file content per user**, or roughly **20 KB of practical disk allocation per user** on a typical filesystem. For 1,000 users, plan for about **2.2 MB of logical content** or **20 MB of initial disk usage**.
+
+Memory, archived memories, uploaded files, and saved artifacts grow beyond this baseline. Custom profile files also increase the initial size. The workspace is created on first session use, not when an app user record is created.
+
 ## Security checklist
 
 - Never use `NAKAMA_API_KEY` in a React component or browser fetch.

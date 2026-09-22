@@ -269,6 +269,22 @@ describe("bash tool", () => {
     }
   });
 
+  test("ordinary commands use the active user workspace from context", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-user-"));
+    const result = await runBash(
+      { command: "pwd" },
+      {
+        orgId: "org_test",
+        profileId: "profile_test",
+        workspaceRoot,
+      },
+      { backend: "host" }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(await realpath(workspaceRoot));
+  });
+
   test("CLI commands use the launch directory without coding-agent mode", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const context = {
