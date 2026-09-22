@@ -33,6 +33,7 @@ export type LlmCassette = {
 export const LLM_CASSETTES_DIR = join(import.meta.dir, "cassettes");
 
 const server = setupServer();
+let cassetteQueue = Promise.resolve();
 
 function resolveMode(explicit?: LlmCassetteMode): LlmCassetteMode {
   if (explicit) {
@@ -130,6 +131,13 @@ export async function withMswCassette<T>(
   let replayIndex = 0;
   const recordedExchanges: LlmCassetteExchange[] = [];
 
+  const previous = cassetteQueue;
+  let release = () => {};
+  cassetteQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+
   server.use(
     http.post(url, async ({ request }) => {
       if (shouldReplay) {
@@ -203,5 +211,6 @@ export async function withMswCassette<T>(
   } finally {
     server.resetHandlers();
     server.close();
+    release();
   }
 }
