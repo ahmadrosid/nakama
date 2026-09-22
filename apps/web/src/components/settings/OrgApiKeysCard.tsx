@@ -1,6 +1,5 @@
 import type { ApiKeySummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { Calendar } from "@nakama/ui/calendar";
 import { Card, CardContent } from "@nakama/ui/card";
 import {
   Dialog,
@@ -12,10 +11,8 @@ import {
   DialogTrigger,
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Spinner } from "@nakama/ui/spinner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
 import { useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
@@ -26,7 +23,6 @@ type SecretState = { key: ApiKeySummary; secret: string } | null;
 function useOrgApiKeys(orgId: string) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [secretState, setSecretState] = useState<SecretState>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
@@ -41,9 +37,6 @@ function useOrgApiKeys(orgId: string) {
   const createMutation = useMutation({
     mutationFn: () =>
       client.createApiKey(orgId, {
-        expiresAt: expiresAt
-          ? new Date(`${expiresAt}T23:59:59.999Z`).toISOString()
-          : null,
         name: name.trim(),
       }),
     onError: (cause) => setError(formatError(cause)),
@@ -117,14 +110,12 @@ function useOrgApiKeys(orgId: string) {
     createMutation,
     createOpen,
     error,
-    expiresAt,
     keysQuery,
     name,
     revokeMutation,
     rotateMutation,
     secretState,
     setCreateOpen,
-    setExpiresAt,
     setName,
   };
 }
@@ -141,13 +132,9 @@ function CreateApiKeyDialog({
     createKey,
     createMutation,
     createOpen,
-    environment,
     error,
-    expiresAt,
     name,
     setCreateOpen,
-    setEnvironment,
-    setExpiresAt,
     setName,
   } = controller;
 
@@ -184,36 +171,6 @@ function CreateApiKeyDialog({
               onChange={(event) => setName(event.target.value)}
               value={name}
             />
-          </label>
-          <label className="flex flex-col gap-3 text-sm">
-            <span className="font-medium text-foreground/90">Expires on</span>
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <Button
-                    className="w-full justify-start text-left font-normal"
-                    disabled={busy}
-                    type="button"
-                    variant="outline"
-                  />
-                }
-              >
-                {expiresAt ? format(parseISO(expiresAt), "PPP") : "Pick a date"}
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  disabled={{ before: new Date() }}
-                  mode="single"
-                  onSelect={(date) =>
-                    setExpiresAt(date ? format(date, "yyyy-MM-dd") : "")
-                  }
-                  selected={expiresAt ? parseISO(expiresAt) : undefined}
-                />
-              </PopoverContent>
-            </Popover>
-            <span className="block text-muted-foreground text-xs">
-              Optional
-            </span>
           </label>
           {error ? (
             <p className="text-destructive text-sm" role="alert">
