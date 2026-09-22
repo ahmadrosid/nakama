@@ -351,6 +351,24 @@ export function OrgApiKeysCard() {
             </div>
             <CreateApiKeyDialog controller={controller} />
           </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <a
+              className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+              href="/docs"
+              rel="noreferrer"
+              target="_blank"
+            >
+              REST API reference ↗
+            </a>
+            <a
+              className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+              href="https://ahmadrosid.github.io/nakama/lovable"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Lovable guide ↗
+            </a>
+          </div>
           <SecretBanner controller={controller} />
           <ApiKeysList controller={controller} />
         </CardContent>
