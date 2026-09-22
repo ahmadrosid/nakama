@@ -47,6 +47,7 @@
     "ultracite": "7.11.0"
   },
   "patchedDependencies": {
-    "@electron/osx-sign@1.3.3": "patches/@electron%2Fosx-sign@1.3.3.patch"
+    "@electron/osx-sign@1.3.3": "patches/@electron%2Fosx-sign@1.3.3.patch",
+    "postgres@3.4.9": "patches/postgres@3.4.9.patch"
   }
 }

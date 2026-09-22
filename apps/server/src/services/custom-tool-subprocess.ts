@@ -93,6 +93,7 @@ export async function spawnJsonTool(
       const hostAbort = new AbortController();
 
       let hostRequestPending = false;
+      let hostWork: Promise<unknown> | undefined;
       child.on("message", async (message: unknown) => {
         if (
           !(transport?.onHostRequest && message) ||
@@ -121,11 +122,9 @@ export async function spawnJsonTool(
         }
         hostRequestPending = true;
         try {
+          hostWork = transport.onHostRequest(request.request, hostAbort.signal);
           reply({
-            result: await transport.onHostRequest(
-              request.request,
-              hostAbort.signal
-            ),
+            result: await hostWork,
           });
         } catch (error) {
           reply({
@@ -190,10 +189,13 @@ export async function spawnJsonTool(
         reject(error);
       });
 
-      child.once("close", (exitCode) => {
+      child.once("close", async (exitCode) => {
         hostAbort.abort();
         context.signal?.removeEventListener("abort", onAbort);
         clearTimeout(sigtermTimer);
+        // Keep the invocation admitted until host I/O releases its database and
+        // network resources, even if the plugin subprocess was already killed.
+        await hostWork?.catch(() => undefined);
         const tail = stderr.trim() || "(no stderr)";
 
         // A child that traps SIGTERM can still exit 0 after the deadline;
