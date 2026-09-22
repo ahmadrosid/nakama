@@ -4089,9 +4089,8 @@ export class AgentService {
       : undefined;
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
-    const includeSkillManageTools = cognito
-      ? false
-      : SKILL_MANAGE_CHANNELS[channel];
+    const includeSkillManageTools =
+      !(cognito || appUserId) && SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
       channel === "telegram" || channel === "whatsapp" || channel === "discord"
         ? "member"
