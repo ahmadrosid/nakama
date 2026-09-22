@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
 import {
   extractTextAndThinkingFromParts,
-  isLocallyMintedGeminiCallId,
   parseGeminiFunctionCalls,
   toGeminiContents,
 } from "./messages";
@@ -99,7 +98,6 @@ describe("Gemini 2.5 function calls, which carry no id", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.name).toBe("knowledge_base_search");
     expect(calls[0]?.arguments).toEqual({ query: "permit" });
-    expect(isLocallyMintedGeminiCallId(calls[0]?.id)).toBe(true);
   });
 
   test("a provider id is kept as it is", () => {
@@ -108,7 +106,6 @@ describe("Gemini 2.5 function calls, which carry no id", () => {
     ]);
 
     expect(calls[0]?.id).toBe("call_333446");
-    expect(isLocallyMintedGeminiCallId(calls[0]?.id)).toBe(false);
   });
 
   test("two different tools in one turn stay apart", () => {

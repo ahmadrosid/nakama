@@ -165,7 +165,7 @@ function parseToolResultContent(content: string): Record<string, unknown> {
  */
 const LOCAL_CALL_ID_PREFIX = "gemini-local-";
 
-export function isLocallyMintedGeminiCallId(id: string | undefined): boolean {
+function isLocallyMintedGeminiCallId(id: string | undefined): boolean {
   return Boolean(id?.startsWith(LOCAL_CALL_ID_PREFIX));
 }
 
