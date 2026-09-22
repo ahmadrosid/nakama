@@ -384,8 +384,8 @@ export function OrgApiKeysCard() {
             >
               Lovable guide ↗
             </a>
+            <IntegrationPrompt controller={controller} />
           </div>
-          <IntegrationPrompt controller={controller} />
           <SecretBanner controller={controller} />
           <ApiKeysList controller={controller} />
         </CardContent>
