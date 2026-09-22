@@ -84,7 +84,7 @@ export function ModelListEditor({
               {models.map((row, index) => (
                 <tr
                   className="border-border/60 border-b last:border-0"
-                  key={row.id.trim() || rowKeysRef.current[index]}
+                  key={rowKeysRef.current[index]}
                 >
                   <td className="px-2 py-1.5">
                     <InputGroup>

@@ -6,6 +6,7 @@ import type {
 import { DISCOVERY_MODEL_PROVIDERS } from "@nakama/core/discovery-providers";
 import { renderToString } from "react-dom/server";
 import { CATALOG_SHORTLIST_PROVIDERS } from "@/components/catalog-provider-model-fields.shared";
+import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { useProviderInstanceCard } from "./use-provider-instance-card";
 
 const instance: ProviderInstanceSummary = {
@@ -89,16 +90,32 @@ describe("provider model management", () => {
       ...instance,
       customModels: [
         {
+          cachedInputPerMillionUsd: 0,
+          contextWindow: 32_768,
           default: true,
           id: "model-b",
+          inputPerMillionUsd: 0.25,
+          maxOutputTokens: 4096,
           name: "My model",
+          outputPerMillionUsd: 1.75,
+          supportsThinking: true,
           supportsVision: false,
         },
       ],
     });
-    expect(rows.map((row) => row.id)).toEqual(["model-b"]);
-    expect(rows[0]?.name).toBe("My model");
-    expect(rows[0]?.default).toBe(true);
-    expect(rows[0]?.supportsVision).toBe(false);
+    expect(normalizeModelListRows(rows)).toEqual([
+      {
+        cachedInputPerMillionUsd: 0,
+        contextWindow: 32_768,
+        default: true,
+        id: "model-b",
+        inputPerMillionUsd: 0.25,
+        maxOutputTokens: 4096,
+        name: "My model",
+        outputPerMillionUsd: 1.75,
+        supportsThinking: true,
+        supportsVision: false,
+      },
+    ]);
   });
 });

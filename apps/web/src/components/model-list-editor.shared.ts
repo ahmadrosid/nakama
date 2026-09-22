@@ -32,6 +32,9 @@ export function normalizeModelListRows(
         ...(row.supportsVision === undefined
           ? {}
           : { supportsVision: row.supportsVision }),
+        ...(row.cachedInputPerMillionUsd === undefined
+          ? {}
+          : { cachedInputPerMillionUsd: row.cachedInputPerMillionUsd }),
         ...(row.inputPerMillionUsd === undefined
           ? {}
           : { inputPerMillionUsd: row.inputPerMillionUsd }),
