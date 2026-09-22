@@ -4,7 +4,11 @@ import {
   type ProviderName,
 } from "@nakama/core";
 import { DISCOVERY_MODEL_PROVIDERS } from "@nakama/core/discovery-providers";
-import { getModelById, IMAGE_GENERATION_MODEL_ID } from "./models";
+import {
+  getModelById,
+  getModelsForProvider,
+  IMAGE_GENERATION_MODEL_ID,
+} from "./models";
 
 export interface ModelPricing {
   /**
@@ -103,7 +107,10 @@ export function getExplicitModelPricing(
     return getCustomModelPricing(modelId, context);
   }
 
-  const catalog = getModelById(modelId);
+  const provider = context.provider ?? context.providerInstance?.type;
+  const catalog = provider
+    ? getModelsForProvider(provider).find((model) => model.id === modelId)
+    : getModelById(modelId);
 
   if (
     catalog?.inputPerMillionUsd != null &&

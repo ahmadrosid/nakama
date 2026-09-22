@@ -48,6 +48,30 @@ const moonshotInstance = {
   type: "moonshot" as const,
 };
 describe("estimateUsageCostUsd", () => {
+  test("prices shared model ids by provider, including subscription zero rates", () => {
+    expect(
+      estimateUsageCostUsd("gpt-5.5", 100_000, 20_000, {
+        provider: "openai",
+        providerInstance: { ...openRouterInstance, type: "chatgpt" },
+      })
+    ).toBeCloseTo(1.1);
+    expect(
+      estimateUsageCostUsd("gpt-5.5", 100_000, 20_000, {
+        provider: "chatgpt",
+      })
+    ).toBe(0);
+    expect(
+      estimateUsageCostUsd("gpt-5.5", 100_000, 20_000, {
+        providerInstance: { ...openRouterInstance, type: "chatgpt" },
+      })
+    ).toBe(0);
+    // Legacy callers without provider context still use the global catalog.
+    expect(estimateUsageCostUsd("gpt-5.5", 100_000, 20_000)).toBeCloseTo(1.1);
+    expect(
+      getExplicitModelPricing("gpt-5.5", { provider: "anthropic" })
+    ).toBeNull();
+  });
+
   test("computes cost from catalog pricing", () => {
     const cost = estimateUsageCostUsd(
       "claude-sonnet-4-6",
@@ -249,14 +273,14 @@ describe("getExplicitModelPricing", () => {
     });
   });
 
-  test("returns what the user typed for a custom model", () => {
+  test("uses custom endpoint pricing even when the id exists in another catalog", () => {
     expect(
-      getExplicitModelPricing("llama3.2", {
+      getExplicitModelPricing("gpt-5.5", {
         provider: "openai_compatible",
         providerInstance: {
           ...compatibleInstance,
           customModels: [
-            { id: "llama3.2", inputPerMillionUsd: 2, outputPerMillionUsd: 4 },
+            { id: "gpt-5.5", inputPerMillionUsd: 2, outputPerMillionUsd: 4 },
           ],
         },
       })
