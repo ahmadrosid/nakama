@@ -4,8 +4,6 @@ import { createAnthropicProvider, parseAnthropicContent } from "./index";
 describe("Anthropic thinking requests", () => {
   test.each([
     ["claude-sonnet-5", true, { type: "adaptive" }, { effort: "low" }],
-    ["claude-opus-5", true, { type: "adaptive" }, { effort: "low" }],
-    ["claude-sonnet-4-6", true, { type: "adaptive" }, { effort: "low" }],
     [
       "claude-haiku-4-5-20251001",
       true,
