@@ -476,15 +476,6 @@ export function json<T>(body: T, status = 200, headers?: Headers): Response {
   return Response.json(body, { headers: responseHeaders, status });
 }
 
-/** Never lets usage bookkeeping replace the error it is reporting. */
-function readTurnUsage(
-  session: Pick<AgentChatSession, "getTurnUsage">
-): ChatTurnUsage | undefined {
-  try {
-    return session.getTurnUsage() ?? undefined;
-  } catch {}
-}
-
 export function errorResponse(
   message: string,
   status: number,
@@ -820,10 +811,14 @@ export function streamMessage(
           void reportError(error, { kind: "turn", source: "server" });
         }
         // The provider charged for the calls that did land, so a failed turn
-        // still reports them rather than billing silently. Wrapped because this
-        // runs inside the error path: a throw here would replace the real
-        // failure with a blank one.
-        const spent = readTurnUsage(session);
+        // still reports them rather than billing silently. Wrapped because a
+        // throw here would replace the real failure with a blank one.
+        let spent: ChatTurnUsage | undefined;
+        try {
+          spent = session.getTurnUsage() ?? undefined;
+        } catch {
+          spent = undefined;
+        }
         send({
           error: cancelled ? "Turn cancelled." : formatServerError(error),
           type: "error",

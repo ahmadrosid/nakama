@@ -3,6 +3,7 @@ import type { AgentChatSession } from "@nakama/agent";
 import type {
   BranchSessionRequest,
   BranchSessionResponse,
+  ChatTurnUsage,
   CompactionResponse,
   CompactSessionRequest,
   CreateSessionRequest,
@@ -874,7 +875,14 @@ export function registerSessionRoutes(
         void reportError(error, { kind: "turn", source: "server" });
       }
       const message = formatServerError(error);
-      const spent = session.getTurnUsage() ?? undefined;
+      // Same guard as the stream error branch: this read sits inside the catch,
+      // so a throw would swallow the failure it is meant to report.
+      let spent: ChatTurnUsage | undefined;
+      try {
+        spent = session.getTurnUsage() ?? undefined;
+      } catch {
+        spent = undefined;
+      }
       sessionTurnRegistry.endTurn(sessionId, {
         error: message,
         type: "error",
