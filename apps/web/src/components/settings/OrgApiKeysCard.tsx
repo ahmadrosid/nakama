@@ -1,5 +1,6 @@
 import type { ApiKeySummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { Calendar } from "@nakama/ui/calendar";
 import { Card, CardContent } from "@nakama/ui/card";
 import {
   Dialog,
@@ -11,8 +12,10 @@ import {
   DialogTrigger,
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Spinner } from "@nakama/ui/spinner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
 import { useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
@@ -162,11 +165,13 @@ function CreateApiKeyDialog({
       }}
       open={createOpen}
     >
-      <DialogTrigger asChild>
-        <Button disabled={busy} type="button">
-          Create API key
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger
+        render={
+          <Button disabled={busy} type="button">
+            Create API key
+          </Button>
+        }
+      />
       <DialogContent className="gap-6 p-6 sm:max-w-md">
         <DialogHeader className="gap-2">
           <DialogTitle>Create backend API key</DialogTitle>
@@ -202,13 +207,30 @@ function CreateApiKeyDialog({
           </fieldset>
           <label className="block space-y-1.5 text-sm">
             <span className="font-medium">Expires on</span>
-            <Input
-              disabled={busy}
-              min={new Date().toISOString().slice(0, 10)}
-              onChange={(event) => setExpiresAt(event.target.value)}
-              type="date"
-              value={expiresAt}
-            />
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    className="w-full justify-start text-left font-normal"
+                    disabled={busy}
+                    type="button"
+                    variant="outline"
+                  />
+                }
+              >
+                {expiresAt ? format(parseISO(expiresAt), "PPP") : "Pick a date"}
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  disabled={{ before: new Date() }}
+                  mode="single"
+                  onSelect={(date) =>
+                    setExpiresAt(date ? format(date, "yyyy-MM-dd") : "")
+                  }
+                  selected={expiresAt ? parseISO(expiresAt) : undefined}
+                />
+              </PopoverContent>
+            </Popover>
             <span className="block text-muted-foreground text-xs">
               Optional
             </span>

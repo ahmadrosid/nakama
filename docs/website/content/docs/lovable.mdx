@@ -40,6 +40,7 @@ Requirements:
 - Keep NAKAMA_API_KEY server-side. Never expose it in client code, HTML, logs, or URLs.
 - Add a server-side POST /api/chat route that calls Nakama.
 - Read NAKAMA_URL, NAKAMA_ORG_ID, NAKAMA_API_KEY, and NAKAMA_PROFILE_ID from server-side secrets.
+- Pass the authenticated app user's stable ID as `appUserId` when creating a Nakama session.
 - Create one Nakama web session per browser conversation and reuse its sessionId.
 - Forward the user message to Nakama and return the assistant reply.
 - Show loading, error, retry, and empty states.
@@ -60,6 +61,7 @@ const session = await fetch(`${process.env.NAKAMA_URL}/v1/sessions`, {
   body: JSON.stringify({
     channel: "web",
     profileId: process.env.NAKAMA_PROFILE_ID,
+    appUserId: authenticatedUser.id,
   }),
 });
 
@@ -75,6 +77,7 @@ const reply = await fetch(
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.NAKAMA_API_KEY}`,
+      "X-Nakama-App-User-Id": authenticatedUser.id,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ message: userMessage }),
@@ -93,5 +96,6 @@ For streaming replies, send `{"message":"...","stream":true}` and proxy the retu
 - Use separate `test` and `live` keys where possible.
 - Revoke or rotate a key when a project is duplicated, shared, or compromised.
 - Keep `NAKAMA_ORG_ID` fixed on the server; do not accept an organization ID from the browser.
+- Keep `appUserId` from your server-side auth session; never trust it from the browser.
 
 The generated AI-agent context index is available at [`/llms.txt`](/llms.txt). The focused Lovable page is also available as Markdown at [`/lovable.md`](/lovable.md).

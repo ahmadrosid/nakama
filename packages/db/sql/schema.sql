@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY NOT NULL,
   profile_id TEXT NOT NULL,
   channel TEXT NOT NULL,
+  app_user_id TEXT,
   user_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,

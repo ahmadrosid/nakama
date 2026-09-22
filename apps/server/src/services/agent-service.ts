@@ -369,6 +369,7 @@ interface CognitoSessionOptions {
 }
 
 export interface CreateSessionOptions {
+  appUserId?: string | null;
   codingWorkspaceRoot?: string;
   cognito?: boolean;
   excludeSuperBot?: boolean;
@@ -1855,6 +1856,7 @@ export class AgentService {
     const record: StoredSessionRecord = {
       agentQuestionnaire: null,
       agentTodos: [],
+      appUserId: options?.appUserId ?? null,
       channel,
       createdAt: new Date().toISOString(),
       id: sessionId,
@@ -1908,9 +1910,18 @@ export class AgentService {
   async assertSessionProfileAccess(
     sessionId: string,
     orgId: string,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    appUserId?: string,
+    requireAppUser = false
   ): Promise<void> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (
+      record &&
+      requireAppUser &&
+      (!appUserId || record.appUserId !== appUserId)
+    ) {
+      throw new NakamaApiError("Session not found", 404);
+    }
     // A missing session is left to the route, which still answers 404.
     if (record) {
       this.assertChatProfileAccess(
@@ -2175,6 +2186,7 @@ export class AgentService {
     await this.db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
+      appUserId: record.appUserId ?? null,
       channel: record.channel,
       createdAt: new Date().toISOString(),
       id: nextSessionId,
@@ -2228,14 +2240,19 @@ export class AgentService {
     orgId: string,
     profileId: string,
     channel: AgentChannel,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    appUserId?: string
   ): Promise<ListSessionsResponse> {
     this.assertChatProfileAccess(
       await this.requireProfile(orgId, profileId),
       access
     );
 
-    const sessions = await this.db.listSessionSummaries(profileId, channel);
+    const sessions = await this.db.listSessionSummaries(
+      profileId,
+      channel,
+      appUserId
+    );
 
     return {
       sessions: sessions.map((session) => ({

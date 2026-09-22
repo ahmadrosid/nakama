@@ -50,9 +50,23 @@ export function registerSessionRoutes(
   const requireSessionAccess = async (
     c: Parameters<typeof requireActiveOrgIdFromContext>[0]
   ) => {
+    const auth = getRequestAuth(c);
+    const appUserId = c.req.header("X-Nakama-App-User-Id")?.trim();
+    if (auth.mode === "api-key" && !appUserId) {
+      throw new NakamaApiError(
+        "X-Nakama-App-User-Id is required for API-key session access.",
+        400
+      );
+    }
     const orgId = requireActiveOrgIdFromContext(c);
     const sessionId = decodeURIComponent(c.req.param("sessionId") ?? "");
-    await agent.assertSessionProfileAccess(sessionId, orgId, getRequestAuth(c));
+    await agent.assertSessionProfileAccess(
+      sessionId,
+      orgId,
+      auth,
+      appUserId,
+      auth.mode === "api-key"
+    );
     return { orgId, sessionId };
   };
   const errorSchema = z
@@ -61,6 +75,7 @@ export function registerSessionRoutes(
   const agentChannelSchema = z.enum(AGENT_CHANNELS).openapi("AgentChannel");
   const createSessionRequestSchema = z
     .object({
+      appUserId: z.string().trim().min(1).max(200).optional(),
       channel: agentChannelSchema,
       cognito: z.boolean().optional(),
       codingWorkspaceRoot: z.string().optional(),
@@ -498,6 +513,12 @@ export function registerSessionRoutes(
       return errorResponse("Invalid session request.", 400);
     }
     const body: CreateSessionRequest = parsedBody.data;
+    if (auth.mode === "api-key" && !body.appUserId) {
+      return errorResponse(
+        "appUserId is required when creating a session with an API key.",
+        400
+      );
+    }
     const channel = parseChannel(body.channel);
     if (
       body.codingWorkspaceRoot !== undefined &&
@@ -514,6 +535,7 @@ export function registerSessionRoutes(
       body.profileId,
       auth.user.id,
       {
+        appUserId: body.appUserId,
         cognito: body.cognito,
         codingWorkspaceRoot: body.codingWorkspaceRoot,
         excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
@@ -527,6 +549,14 @@ export function registerSessionRoutes(
 
   app.get("/v1/sessions", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
+    const auth = getRequestAuth(c);
+    const appUserId = c.req.header("X-Nakama-App-User-Id")?.trim();
+    if (auth.mode === "api-key" && !appUserId) {
+      return errorResponse(
+        "X-Nakama-App-User-Id is required for API-key session access.",
+        400
+      );
+    }
     const profileId = c.req.query("profileId")?.trim();
     const channel = parseChannel(c.req.query("channel"));
 
@@ -535,7 +565,7 @@ export function registerSessionRoutes(
     }
 
     return json<ListSessionsResponse>(
-      await agent.listSessions(orgId, profileId, channel, getRequestAuth(c))
+      await agent.listSessions(orgId, profileId, channel, auth, appUserId)
     );
   });
 

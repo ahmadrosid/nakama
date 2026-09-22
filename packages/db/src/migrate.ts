@@ -23,6 +23,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAutomationsTable);
   atomic(migrateDropTasksTables);
   atomic(migrateSessionsTable);
+  atomic(migrateSessionAppUserId);
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
   atomic(migrateUsersTable);
@@ -61,6 +62,18 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
   atomic(migrateFilePinsTable);
+}
+
+function migrateSessionAppUserId(db: Database): void {
+  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
+    name: string;
+  }>;
+  if (!columns.some((column) => column.name === "app_user_id")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN app_user_id TEXT;");
+  }
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS sessions_app_user_id ON sessions (profile_id, channel, app_user_id)"
+  );
 }
 
 function migrateAuditEventsTable(db: Database): void {

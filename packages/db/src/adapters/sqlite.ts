@@ -171,6 +171,7 @@ interface ToolRow {
 interface SessionRow {
   agent_questionnaire: string | null;
   agent_todos: string;
+  app_user_id?: string | null;
   channel: string;
   created_at: string;
   id: string;
@@ -206,6 +207,7 @@ interface AttachmentRow {
 }
 
 interface SessionSummaryRow {
+  app_user_id?: string | null;
   channel: string;
   created_at: string;
   first_user_payload: string | null;
@@ -975,11 +977,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
   const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, user_id, model, pinned)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, pinned)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
+      app_user_id = COALESCE(excluded.app_user_id, sessions.app_user_id),
       user_id = COALESCE(excluded.user_id, sessions.user_id),
       model = excluded.model
   `);
@@ -1074,6 +1077,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listSessionSummariesStmt = db.prepare(`
     SELECT
       s.id,
+      s.app_user_id,
       s.profile_id,
       s.channel,
       s.created_at,
@@ -1095,6 +1099,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM sessions s
     LEFT JOIN session_messages m ON m.session_id = s.id
     WHERE s.profile_id = ? AND s.channel = ?
+      AND (? IS NULL OR s.app_user_id = ?)
     GROUP BY s.id
     HAVING COUNT(m.id) > 0
     ORDER BY s.pinned DESC, updated_at DESC, s.created_at DESC
@@ -3712,9 +3717,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toProfileRecord(row as ProfileRow));
     },
 
-    async listSessionSummaries(profileId, channel) {
+    async listSessionSummaries(profileId, channel, appUserId) {
       return listSessionSummariesStmt
-        .all(profileId, channel)
+        .all(profileId, channel, appUserId ?? null, appUserId ?? null)
         .map((row) => toSessionSummaryRecord(row as SessionSummaryRow));
     },
 
@@ -4255,6 +4260,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.channel,
         record.createdAt,
         record.createdAt,
+        record.appUserId ?? null,
         record.userId ?? null,
         record.model,
         record.pinned ? 1 : 0
@@ -4649,6 +4655,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
     agentQuestionnaire: parseAgentQuestionnaire(row.agent_questionnaire),
     agentTodos: parseAgentTodos(row.agent_todos),
+    appUserId: row.app_user_id ?? null,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,
@@ -4714,6 +4721,7 @@ function toSessionSummaryRecord(
   row: SessionSummaryRow
 ): StoredSessionSummaryRecord {
   return {
+    appUserId: row.app_user_id ?? null,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,

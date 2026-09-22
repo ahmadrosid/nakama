@@ -952,6 +952,8 @@ export interface ListChannelOrgMappingsResponse {
 }
 
 export interface CreateSessionRequest {
+  /** Stable end-user identifier supplied by a trusted backend using an API key. */
+  appUserId?: string;
   channel: AgentChannel;
   codingWorkspaceRoot?: string;
   /**

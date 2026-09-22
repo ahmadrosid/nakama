@@ -115,6 +115,7 @@ export interface StoredToolRecord {
 export interface StoredSessionRecord {
   agentQuestionnaire: AgentQuestionnaire | null;
   agentTodos: AgentTodo[];
+  appUserId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
@@ -157,6 +158,7 @@ export interface StoredAttachmentRecord {
 }
 
 export interface StoredSessionSummaryRecord {
+  appUserId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
@@ -1027,7 +1029,8 @@ export interface DatabaseAdapter {
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
   listSessionSummaries(
     profileId: string,
-    channel: string
+    channel: string,
+    appUserId?: string
   ): Promise<StoredSessionSummaryRecord[]>;
 
   listSessions(): Promise<StoredSessionRecord[]>;
