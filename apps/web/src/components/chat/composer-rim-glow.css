@@ -6,14 +6,10 @@
   initial-value: 0deg;
 }
 
+/* The --ai-* palette lives on :root in index.css, so the sidebar can sweep the
+ * same colours across a running chat's title. rollPalette still overrides it
+ * inline per rim, which wins over both. */
 .composer-rim {
-  --ai-c1: #5b8ef0;
-  --ai-c2: #c5d4eb;
-  --ai-c3: #f0d66a;
-  --ai-c4: #f07a72;
-  --ai-c5: #e888e0;
-  --ai-c6: #f0c4e8aa;
-  --ai-tail: #a8c8f088;
   --ai-from: 0deg;
 }
 

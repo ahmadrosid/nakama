@@ -133,7 +133,11 @@ describe("PluginService", () => {
       meetings: [],
       worker: { state: "stopped" },
     });
-    const release = getPluginReleaseDir("google-meet", "0.1.0", configDir);
+    const release = getPluginReleaseDir(
+      "google-meet",
+      installed.selectedVersion!,
+      configDir
+    );
     // Import the bundled worker from the installed release, outside package dependencies.
     const child = Bun.spawn(
       [

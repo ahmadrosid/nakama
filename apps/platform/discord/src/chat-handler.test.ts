@@ -2504,6 +2504,7 @@ describe("stream cleanup", () => {
 describe("Discord session history", () => {
   const key = "g:guild_channel_1:t:thread_1";
   const summary = (id: string) => ({
+    active: false,
     channel: "discord" as const,
     createdAt: "2026-09-14T08:00:00.000Z",
     id,

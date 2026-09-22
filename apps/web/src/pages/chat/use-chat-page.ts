@@ -23,6 +23,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
+import { useRunningTurnsStore } from "@/context/running-turns-store";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
@@ -952,9 +953,11 @@ export function useChatPage() {
 
       let activeSession = options.sessionOverride ?? session;
       let shouldDrainQueue = true;
+      let detached = false;
+      let turnSessionId: string | null = null;
 
-      if (!activeSession) {
-        try {
+      try {
+        if (!activeSession) {
           activeSession = await client.createSession("web", {
             cognito: cognitoRef.current || undefined,
             model: sessionModel ?? undefined,
@@ -979,44 +982,30 @@ export function useChatPage() {
               queryKey: queryKeys.sessions(profileId, "web"),
             });
           }
-        } catch (err) {
-          setError(formatError(err));
-          shouldDrainQueue = false;
-          setMessages((current) => current.slice(0, -2));
-          if (queueItem) {
-            messageQueueRef.current.unshift(queueItem);
-            setQueuedMessages((current) => [
-              {
-                attachmentCount: queueItem.files.length,
-                id: queueItem.id,
-                text: queueItem.text,
-              },
-              ...current,
-            ]);
-          }
-          return;
         }
-      }
 
-      const abortController = new AbortController();
-      streamAbortRef.current = abortController;
-      // Flipped by releaseActiveStream when the user opens another chat. The
-      // request stays open so the turn survives; it just stops writing here.
-      let detached = false;
-      detachStreamRef.current = () => {
-        detached = true;
-      };
-      setCanStop(true);
-
-      const whileAttached =
-        <TValue>(write: (value: TValue) => void) =>
-        (value: TValue) => {
-          if (!detached) {
-            write(value);
-          }
+        const abortController = new AbortController();
+        streamAbortRef.current = abortController;
+        // The session list is fetched on its own schedule and has no way to learn
+        // a turn started in a chat it already lists, so tell it. Captured here
+        // because the error paths below can move `activeSession` to a new one.
+        turnSessionId = activeSession.id;
+        useRunningTurnsStore.getState().startTurn(turnSessionId);
+        // Flipped by releaseActiveStream when the user opens another chat. The
+        // request stays open so the turn survives; it just stops writing here.
+        detachStreamRef.current = () => {
+          detached = true;
         };
+        setCanStop(true);
 
-      try {
+        const whileAttached =
+          <TValue>(write: (value: TValue) => void) =>
+          (value: TValue) => {
+            if (!detached) {
+              write(value);
+            }
+          };
+
         await activeSession.sendStream(
           {
             documents: documents.length > 0 ? documents : undefined,
@@ -1052,6 +1041,24 @@ export function useChatPage() {
         setSessionModel(nextSessionModel);
         setLastSuccessfulTurnAt((previous) => nextSuccessfulTurnAt(previous));
       } catch (err) {
+        if (!activeSession) {
+          setError(formatError(err));
+          shouldDrainQueue = false;
+          setMessages((current) => current.slice(0, -2));
+          if (queueItem) {
+            messageQueueRef.current.unshift(queueItem);
+            setQueuedMessages((current) => [
+              {
+                attachmentCount: queueItem.files.length,
+                id: queueItem.id,
+                text: queueItem.text,
+              },
+              ...current,
+            ]);
+          }
+          return;
+        }
+
         if (isAbortError(err)) {
           if (!detached) {
             setMessages((current) => finalizeStreamingMessages(current));
@@ -1117,6 +1124,10 @@ export function useChatPage() {
         }
         setMessages((current) => markStreamingTurnFailed(current, message));
       } finally {
+        // Detached or not, the turn is over once the stream settles.
+        if (turnSessionId) {
+          useRunningTurnsStore.getState().endTurn(turnSessionId);
+        }
         // The sessions list still wants the new title and preview, but nothing
         // else here belongs to a detached turn: the page has moved on and
         // releaseActiveStream already cleared the flags and the queue.
@@ -1128,7 +1139,7 @@ export function useChatPage() {
           streamAbortRef.current = null;
           detachStreamRef.current = null;
           setCanStop(false);
-          setBusy(false);
+          setBusy((current) => (detached ? current : false));
           setTurnStartedAt(null);
 
           const next = shouldDrainQueue
@@ -1144,7 +1155,8 @@ export function useChatPage() {
               next.files,
               {
                 ...next.options,
-                sessionOverride: next.options.sessionOverride ?? activeSession,
+                sessionOverride:
+                  next.options.sessionOverride ?? activeSession ?? undefined,
               },
               next
             );

@@ -46,6 +46,12 @@ export interface KnowledgeBaseSearchOutput {
   query: string;
   root: string;
   truncated: boolean;
+  /**
+   * Documents that are attached but hold no searchable text, so no query can
+   * ever reach them. Present only when there is at least one, so a healthy
+   * knowledge base returns the shape it always did.
+   */
+  unreadable?: string[];
 }
 
 interface KnowledgeBaseSearchOptions {
@@ -57,7 +63,7 @@ export const knowledgeBaseSearchTool: ToolDefinition<
   KnowledgeBaseSearchOutput
 > = {
   description:
-    "Search uploaded knowledge base documents for relevant facts. Includes profile documents and organization documents attached to this profile. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs.",
+    "Search uploaded knowledge base documents for relevant facts. Includes profile documents and organization documents attached to this profile. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs. When the result carries `unreadable`, those documents are attached but hold no searchable text, so report them as unreadable instead of telling the user nothing covers the topic.",
   name: "knowledge_base_search",
   parallelSafe: true,
   parameters: jsonSchemaFromZod(knowledgeBaseSearchInputSchema),
@@ -80,16 +86,27 @@ export async function runKnowledgeBaseSearch(
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
   // The backend call, the profile root and the organization target are
   // independent reads, so they share one round of I/O.
-  const [backend, workspaceRoot, organizationTarget] = await Promise.all([
-    context.searchKnowledge?.({
-      ...parsed,
-      regex: (input as { regex?: unknown }).regex === true,
-    }),
-    resolveWorkspaceRoot(
-      options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
-    ),
-    resolveOrganizationSearchTarget(orgId, profileId, parsed.filename ?? null),
-  ]);
+  const [backend, workspaceRoot, organizationTarget, profileTarget] =
+    await Promise.all([
+      context.searchKnowledge?.({
+        ...parsed,
+        regex: (input as { regex?: unknown }).regex === true,
+      }),
+      resolveWorkspaceRoot(
+        options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
+      ),
+      resolveOrganizationSearchTarget(
+        orgId,
+        profileId,
+        parsed.filename ?? null
+      ),
+      resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
+    ]);
+  const unreadable = [
+    ...profileTarget.unreadable,
+    ...organizationTarget.unreadable,
+  ];
+  const unreadableField = unreadable.length > 0 ? { unreadable } : {};
   // Organization hits are relative to the organization root, not to the
   // profile workspace they used to be resolved against.
   const organizationRoot = await resolveWorkspaceRoot(organizationTarget.root);
@@ -119,20 +136,13 @@ export async function runKnowledgeBaseSearch(
       root: getKnowledgeBaseDir(orgId, profileId),
       truncated:
         backend.truncated || organizationResult.truncated || merged.dropped,
+      ...unreadableField,
     };
   }
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
   const [profileResult, organizationResult] = await Promise.all([
-    runSearchTarget(
-      await resolveProfileSearchTarget(
-        orgId,
-        profileId,
-        parsed.filename ?? null
-      ),
-      parsed,
-      workspaceRoot
-    ),
+    runSearchTarget(profileTarget, parsed, workspaceRoot),
     runSearchTarget(organizationTarget, parsed, organizationRoot),
   ]);
   const merged = mergeScopedMatches(
@@ -147,6 +157,7 @@ export async function runKnowledgeBaseSearch(
     root: getKnowledgeBaseDir(orgId, profileId),
     truncated:
       profileResult.truncated || organizationResult.truncated || merged.dropped,
+    ...unreadableField,
   };
 }
 
@@ -172,10 +183,11 @@ function mergeScopedMatches(
   };
 }
 
-type SearchTarget =
+type SearchTarget = { unreadable: string[] } & (
   | { kind: "dir"; root: string; glob: string; scope: KnowledgeBaseScope }
   | { kind: "file"; root: string; glob: null; scope: KnowledgeBaseScope }
-  | { kind: "missing"; root: string; scope: KnowledgeBaseScope };
+  | { kind: "missing"; root: string; scope: KnowledgeBaseScope }
+);
 
 async function resolveProfileSearchTarget(
   orgId: string,
@@ -206,7 +218,9 @@ async function resolveOrganizationSearchTarget(
     sharedDocumentIds.includes(document.id)
   );
   if (attached.length === 0) {
-    return { kind: "missing", root, scope: "organization" };
+    // Nothing of the organization is in scope for this profile, so it has no
+    // unreadable documents to report either.
+    return { kind: "missing", root, scope: "organization", unreadable: [] };
   }
   return pickSearchTarget(root, "organization", attached, filename);
 }
@@ -217,12 +231,13 @@ function pickSearchTarget(
   documents: { filename: string; id: string; status: string }[],
   filename: string | null
 ): SearchTarget {
+  const unreadable = unreadableFilenames(documents, filename);
   if (!filename) {
     const ids = documents
       .filter((document) => document.status === "ready")
       .map((document) => document.id);
     if (ids.length === 0) {
-      return { kind: "missing", root, scope };
+      return { kind: "missing", root, scope, unreadable };
     }
     return {
       glob:
@@ -232,6 +247,7 @@ function pickSearchTarget(
       kind: "dir",
       root,
       scope,
+      unreadable,
     };
   }
   const normalized = filename.trim().toLowerCase();
@@ -241,14 +257,35 @@ function pickSearchTarget(
       entry.status === "ready"
   );
   if (!document) {
-    return { kind: "missing", root, scope };
+    return { kind: "missing", root, scope, unreadable };
   }
   return {
     glob: null,
     kind: "file",
     root: getKnowledgeBaseExtractedPath(root, document.id),
     scope,
+    unreadable,
   };
+}
+
+/**
+ * A document whose extraction failed has no `.extracted.txt`, so every glob
+ * below skips it and the caller sees exactly what it sees for a topic nobody
+ * uploaded. Naming it is the difference between "we have nothing on this" and
+ * "we have a document on this that could not be read".
+ */
+function unreadableFilenames(
+  documents: { filename: string; status: string }[],
+  filename: string | null
+): string[] {
+  const notReady = documents.filter((document) => document.status !== "ready");
+  if (!filename) {
+    return notReady.map((document) => document.filename);
+  }
+  const normalized = filename.trim().toLowerCase();
+  return notReady
+    .filter((document) => document.filename.trim().toLowerCase() === normalized)
+    .map((document) => document.filename);
 }
 
 async function runSearchTarget(

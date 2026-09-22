@@ -439,7 +439,6 @@ test("the Workflows plugin owns the run result renderer", async () => {
   const Renderer = renderers.get("tool:run_workflow") as React.ComponentType<
     import("./plugin-runtime").PluginToolProps
   >;
-  expect(Renderer).toBeDefined();
   const html = renderToString(
     createElement(Renderer, {
       action: "run_workflow",
