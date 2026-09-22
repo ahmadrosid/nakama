@@ -16,7 +16,6 @@ export class LlmUsageTracker {
     string,
     Omit<LlmUsageModelStats, "totalTokens">
   >();
-  private pricingContext: PricingContext = {};
   private recordRevision = 0;
   private readonly pendingWrites = new Set<Promise<void>>();
 
@@ -74,10 +73,6 @@ export class LlmUsageTracker {
     }
   }
 
-  setPricingContext(context: PricingContext): void {
-    this.pricingContext = context;
-  }
-
   /**
    * Returns the cost of this call, or null when the model has no published
    * rates. The running totals still use the fallback rate, but a null keeps
@@ -87,13 +82,14 @@ export class LlmUsageTracker {
     modelId: string,
     inputTokens: number,
     outputTokens: number,
-    cachedInputTokens = 0
+    cachedInputTokens = 0,
+    pricingContext: PricingContext = {}
   ): number | null {
     const costDelta = estimateUsageCostUsd(
       modelId,
       inputTokens,
       outputTokens,
-      this.pricingContext,
+      pricingContext,
       cachedInputTokens
     );
 
@@ -127,7 +123,7 @@ export class LlmUsageTracker {
       this.pendingWrites.delete(persistence);
     });
 
-    return getExplicitModelPricing(modelId, this.pricingContext) === null
+    return getExplicitModelPricing(modelId, pricingContext) === null
       ? null
       : costDelta;
   }

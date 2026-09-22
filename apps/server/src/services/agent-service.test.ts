@@ -1,14 +1,17 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  type ChatCompletionResult,
   ensureBundledSkillFiles,
   type GenerateChatInput,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
   loadWhatsAppConfigFile,
   type ProfileResponse,
+  type ProviderClient,
+  type ProviderInstance,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -22,6 +25,7 @@ import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { LlmUsageTracker } from "./llm-usage-tracker";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
@@ -538,6 +542,141 @@ describe("AgentService thinking provider options", () => {
     );
 
     expect(options?.thinking).toEqual({ effort: "high", enabled: true });
+  });
+});
+
+describe("AgentService usage pricing context", () => {
+  setupTestConfigDir("nakama-usage-context-");
+
+  test("retains each harness's rates when another provider completes during a stream", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const tracker = await LlmUsageTracker.create(db);
+    const service = new AgentService(null, null, db, tracker) as unknown as {
+      createHarness(options: {
+        provider: ProviderClient;
+        providerInstance: ProviderInstance;
+        modelId: string;
+        thinking: { enabled: boolean; effort: "medium" };
+      }): { provider: ProviderClient };
+    };
+    const result: ChatCompletionResult = {
+      assistantMessage: { content: "ok", role: "assistant" },
+      content: "ok",
+      toolCalls: [],
+      usage: {
+        inputTokens: 100_000,
+        outputTokens: 20_000,
+        totalTokens: 120_000,
+      },
+    };
+    const stream = Promise.withResolvers<ChatCompletionResult>();
+    const provider: ProviderClient = {
+      generateChat: () => Promise.resolve(result),
+      generateText: () => Promise.resolve({ content: "unused" }),
+      name: "openai",
+      streamChat: () => stream.promise,
+    };
+    const options = {
+      modelId: "gpt-5.5",
+      provider,
+      providerInstance: {
+        apiKey: "test",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "api",
+        label: "API",
+        type: "openai" as const,
+      },
+      thinking: { effort: "medium" as const, enabled: false },
+    };
+    const api = service.createHarness(options).provider;
+    const input = {
+      messages: [{ content: "hi", role: "user" as const }],
+      system: "s",
+    };
+    const pending = api.streamChat(input, { onChunk: () => undefined });
+    const subscription = service.createHarness({
+      ...options,
+      providerInstance: {
+        ...options.providerInstance,
+        id: "subscription",
+        type: "chatgpt",
+      },
+    }).provider;
+    expect((await subscription.generateChat(input)).usage?.costUsd).toBe(0);
+    stream.resolve(result);
+    expect((await pending).usage?.costUsd).toBeCloseTo(1.1);
+    // Cached harnesses keep their own rates after another harness is built.
+    expect((await api.generateChat(input)).usage?.costUsd).toBeCloseTo(1.1);
+    await tracker.reloadFromDatabase();
+    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(2.2);
+    expect(tracker.getStats().requestCount).toBe(3);
+  });
+
+  test("prices OpenAI image parsing independently of a DeepSeek primary", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = {
+      ...createDefaultProfile(),
+      model: "primary::deepseek-v4-flash",
+    };
+    await db.upsertProfile(profile);
+    const tracker = await LlmUsageTracker.create(db);
+    const service = new AgentService(
+      {
+        defaultProviderId: "primary",
+        providers: [
+          {
+            apiKey: "test",
+            createdAt: profile.createdAt,
+            id: "primary",
+            label: "Primary",
+            type: "deepseek",
+          },
+          {
+            apiKey: "test",
+            createdAt: profile.createdAt,
+            id: "vision",
+            label: "Vision",
+            type: "openai",
+          },
+        ],
+        visionModel: "vision::gpt-4o-mini",
+      },
+      null,
+      db,
+      tracker
+    );
+    using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+      async (_url: unknown, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        if (body.model === "gpt-4o-mini") {
+          return Response.json({
+            choices: [{ message: { content: "A small image." } }],
+            usage: { completion_tokens: 20_000, prompt_tokens: 100_000 },
+          });
+        }
+        expect(body.model).toBe("deepseek-v4-flash");
+        return Response.json({
+          choices: [{ message: { content: "ok" } }],
+          usage: { completion_tokens: 20_000, prompt_tokens: 100_000 },
+        });
+      }
+    );
+    const id = await service.createSession(ORG_ID, "web", profile.id);
+    const session = await service.resolveSession(id, ORG_ID);
+    await session!.send({
+      message: [{ data: "aGVsbG8=", mediaType: "image/png", type: "image" }],
+    });
+    await tracker.reloadFromDatabase();
+    const byModel = tracker.getStatsByModel();
+    expect(
+      byModel.find((row) => row.modelId === "gpt-4o-mini")?.estimatedCostUsd
+    ).toBeCloseTo(0.027, 6);
+    expect(
+      byModel.find((row) => row.modelId === "deepseek-v4-flash")
+        ?.estimatedCostUsd
+    ).toBeCloseTo(0.0196, 6);
+    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.0466, 6);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

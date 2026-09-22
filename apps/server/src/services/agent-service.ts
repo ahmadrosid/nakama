@@ -3784,14 +3784,16 @@ export class AgentService {
   }): AgentDependencies {
     const providerInstance = options.providerInstance ?? null;
 
-    this.syncUsagePricingContext(providerInstance);
-
     const trackedProvider =
       options.provider && this.llmUsageTracker && options.modelId
         ? wrapProviderWithUsageTracking(
             options.provider,
             this.llmUsageTracker,
-            options.modelId
+            options.modelId,
+            {
+              provider: providerInstance?.type ?? options.provider.name,
+              providerInstance,
+            }
           )
         : options.provider;
 
@@ -3802,15 +3804,6 @@ export class AgentService {
       ),
       provider: trackedProvider ?? undefined,
     };
-  }
-
-  private syncUsagePricingContext(
-    active: ReturnType<typeof getActiveProviderInstance>
-  ): void {
-    this.llmUsageTracker?.setPricingContext({
-      provider: active?.type ?? null,
-      providerInstance: active,
-    });
   }
 
   getUsageStatusFields(): {
@@ -4238,7 +4231,11 @@ export class AgentService {
           visionProvider = wrapProviderWithUsageTracking(
             visionProvider,
             this.llmUsageTracker,
-            visionSelection.model
+            visionSelection.model,
+            {
+              provider: visionSelection.instance.type,
+              providerInstance: visionSelection.instance,
+            }
           );
         }
 
