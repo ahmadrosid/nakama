@@ -1,6 +1,15 @@
 import type { ApiKeySummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +26,8 @@ export function OrgApiKeysCard() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("Lovable app");
   const [environment, setEnvironment] = useState<"live" | "test">("live");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [secretState, setSecretState] = useState<SecretState>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +40,18 @@ export function OrgApiKeysCard() {
 
   const createMutation = useMutation({
     mutationFn: () =>
-      client.createApiKey(orgId, { environment, name: name.trim() }),
+      client.createApiKey(orgId, {
+        environment,
+        expiresAt: expiresAt
+          ? new Date(`${expiresAt}T23:59:59.999Z`).toISOString()
+          : null,
+        name: name.trim(),
+      }),
     onError: (cause) => setError(formatError(cause)),
     onSuccess: (result) => {
       setError(null);
       setSecretState(result);
+      setCreateOpen(false);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.orgApiKeys(orgId),
       });
@@ -109,43 +127,103 @@ export function OrgApiKeysCard() {
       </div>
       <Card className="w-full overflow-hidden shadow-none">
         <CardContent className="space-y-4 p-4">
-          <form className="flex flex-wrap items-end gap-2" onSubmit={createKey}>
-            <label className="min-w-48 flex-1 space-y-1 text-sm">
-              <span className="text-muted-foreground text-xs">Name</span>
-              <Input
-                disabled={busy}
-                onChange={(event) => setName(event.target.value)}
-                value={name}
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-muted-foreground text-xs">Environment</span>
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-                disabled={busy}
-                onChange={(event) =>
-                  setEnvironment(event.target.value as "live" | "test")
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-sm">Create a backend key</p>
+              <p className="text-muted-foreground text-xs">
+                Use this key from a server-side app or integration.
+              </p>
+            </div>
+            <Dialog
+              onOpenChange={(open) => {
+                setCreateOpen(open);
+                if (open) {
+                  setError(null);
+                  createMutation.reset();
                 }
-                value={environment}
-              >
-                <option value="live">Live</option>
-                <option value="test">Test</option>
-              </select>
-            </label>
-            <Button disabled={busy} type="submit">
-              {createMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                "Create key"
-              )}
-            </Button>
-          </form>
-
-          {error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {error}
-            </p>
-          ) : null}
+              }}
+              open={createOpen}
+            >
+              <DialogTrigger asChild>
+                <Button disabled={busy} type="button">
+                  Create API key
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="gap-6 p-6 sm:max-w-md">
+                <DialogHeader className="gap-2">
+                  <DialogTitle>Create backend API key</DialogTitle>
+                  <DialogDescription>
+                    Use this key only from your backend. The secret will be
+                    shown once after creation.
+                  </DialogDescription>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={createKey}>
+                  <label className="block space-y-1.5 text-sm">
+                    <span className="font-medium">Key name</span>
+                    <Input
+                      autoFocus
+                      disabled={busy}
+                      onChange={(event) => setName(event.target.value)}
+                      value={name}
+                    />
+                  </label>
+                  <fieldset className="space-y-1.5">
+                    <legend className="font-medium text-sm">Environment</legend>
+                    <div className="flex gap-2">
+                      {(["live", "test"] as const).map((value) => (
+                        <Button
+                          className="flex-1"
+                          key={value}
+                          onClick={() => setEnvironment(value)}
+                          type="button"
+                          variant={
+                            environment === value ? "default" : "outline"
+                          }
+                        >
+                          {value === "live" ? "Live" : "Test"}
+                        </Button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <label className="block space-y-1.5 text-sm">
+                    <span className="font-medium">Expires on</span>
+                    <Input
+                      disabled={busy}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(event) => setExpiresAt(event.target.value)}
+                      type="date"
+                      value={expiresAt}
+                    />
+                    <span className="block text-muted-foreground text-xs">
+                      Optional. Leave blank for a key without an expiry.
+                    </span>
+                  </label>
+                  {error ? (
+                    <p className="text-destructive text-sm" role="alert">
+                      {error}
+                    </p>
+                  ) : null}
+                  <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+                    <Button
+                      disabled={busy}
+                      onClick={() => setCreateOpen(false)}
+                      type="button"
+                      variant="outline"
+                    >
+                      Cancel
+                    </Button>
+                    <Button disabled={busy} type="submit">
+                      {createMutation.isPending ? (
+                        <Spinner className="size-4" />
+                      ) : (
+                        "Create key"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
 
           {secretState ? (
             <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
