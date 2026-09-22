@@ -58,6 +58,8 @@ describe("knowledge_base_search tool", () => {
     attachments?: string[];
     organization?: DocumentFixture[];
     profile: DocumentFixture;
+    /** Listed in the manifest as failed, with no extracted file on disk. */
+    unreadable?: { filename: string; id: string }[];
   }): Promise<string> {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-kb-search-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
@@ -76,7 +78,18 @@ describe("knowledge_base_search tool", () => {
       path.join(profileKnowledgeBaseDir, "manifest.json"),
       JSON.stringify(
         {
-          documents: [manifestDocument(options.profile)],
+          documents: [
+            manifestDocument(options.profile),
+            ...(options.unreadable ?? []).map((document) => ({
+              error: "unsupported input: PDF has no extractable text",
+              filename: document.filename,
+              id: document.id,
+              mediaType: "application/pdf",
+              sizeBytes: 1024,
+              status: "failed" as const,
+              uploadedAt: UPLOADED_AT,
+            })),
+          ],
           ...(options.attachments
             ? { sharedDocumentIds: options.attachments }
             : {}),
@@ -341,6 +354,50 @@ describe("knowledge_base_search tool", () => {
     ).toBe(true);
     // The profile scope had to drop a match to keep the organization slot.
     expect(result.truncated).toBe(true);
+  });
+
+  test("names documents that hold no searchable text", async () => {
+    const workspaceRoot = await setupKnowledgeBase({
+      profile: {
+        body: "confined space entry needs a permit\n",
+        filename: "permits.txt",
+        id: PRIVATE_DOCUMENT_ID,
+      },
+      unreadable: [{ filename: "working-at-height.pdf", id: "kb_scanned" }],
+    });
+
+    const result = await runKnowledgeBaseSearch(
+      { query: "working at height" },
+      { orgId: ORG_ID, profileId: PROFILE_ID },
+      { workspaceRoot }
+    );
+
+    // Zero matches on their own read as "nobody uploaded anything on this",
+    // which is the wrong conclusion to hand an agent when the document is
+    // sitting there unreadable.
+    expect(result.matchCount).toBe(0);
+    expect(result.unreadable).toEqual(["working-at-height.pdf"]);
+  });
+
+  test("omits the unreadable field when every document extracted", async () => {
+    const workspaceRoot = await setupKnowledgeBase({
+      profile: {
+        body: "confined space entry needs a permit\n",
+        filename: "permits.txt",
+        id: PRIVATE_DOCUMENT_ID,
+      },
+    });
+
+    // Not "permit": the extracted header line carries the filename, so that
+    // query matches twice and the count stops meaning what it looks like.
+    const result = await runKnowledgeBaseSearch(
+      { query: "confined" },
+      { orgId: ORG_ID, profileId: PROFILE_ID },
+      { workspaceRoot }
+    );
+
+    expect(result.matchCount).toBe(1);
+    expect(result.unreadable).toBeUndefined();
   });
 
   test("reports truncation only when a match is actually dropped", async () => {
