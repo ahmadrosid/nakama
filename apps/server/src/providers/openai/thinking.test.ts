@@ -55,23 +55,29 @@ describe("openAIModelRejectsChatToolsWithReasoning", () => {
 
 describe("OpenAI codex vision routing", () => {
   test("routes codex image requests through the responses api", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("https://api.openai.com/v1/responses");
+        const body = JSON.parse(String(init?.body));
+        expect(body.model).toBe("gpt-5.3-codex");
+        // Catalog output capacity is not a requested generation budget.
+        expect(body.max_output_tokens).toBeUndefined();
 
-      return new Response(
-        JSON.stringify({
-          output: [
-            {
-              content: [
-                { text: "A screenshot of settings.", type: "output_text" },
-              ],
-              type: "message",
-            },
-          ],
-        }),
-        { headers: { "Content-Type": "application/json" }, status: 200 }
-      );
-    });
+        return new Response(
+          JSON.stringify({
+            output: [
+              {
+                content: [
+                  { text: "A screenshot of settings.", type: "output_text" },
+                ],
+                type: "message",
+              },
+            ],
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+    );
 
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 

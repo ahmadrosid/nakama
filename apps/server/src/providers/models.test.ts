@@ -8,6 +8,7 @@ import {
   resolveModel,
   resolveModelLimits,
 } from "./models";
+import { estimateUsageCostUsd } from "./pricing";
 
 describe("isOpenRouterModelSlug", () => {
   test("accepts vendor/model slugs", () => {
@@ -80,6 +81,33 @@ describe("resolveModel", () => {
     expect(resolveModel("openai", "gpt-5.6-luna")).toBe("gpt-5.6-luna");
     expect(resolveModel("openai", "gpt-4o-mini")).toBe("gpt-4o-mini");
     expect(getModelById("gpt-5.6-luna")?.provider).toBe("openai");
+  });
+
+  test("exposes OpenAI API limits and base text prices without changing selections", () => {
+    // Official model pages: https://developers.openai.com/api/docs/models/<id>
+    // Cost expectations use 100k input + 20k output, below long-context tiers.
+    for (const [id, context, output, inputPrice, outputPrice, cost] of [
+      ["gpt-5.6-luna", 1_050_000, 128_000, 0.2, 1.2, 0.044],
+      ["gpt-5.5", 1_050_000, 128_000, 5, 30, 1.1],
+      ["gpt-5.4", 1_050_000, 128_000, 2.5, 15, 0.55],
+      ["gpt-5.3-codex", 400_000, 128_000, 1.75, 14, 0.455],
+      ["gpt-4o-mini", 128_000, 16_384, 0.15, 0.6, 0.027],
+    ] as const) {
+      expect(
+        getModelsForProvider("openai").find((m) => m.id === id)
+      ).toMatchObject({
+        inputPerMillionUsd: inputPrice,
+        outputPerMillionUsd: outputPrice,
+        supportsVision: true,
+      });
+      expect(resolveModelLimits("openai", id)).toEqual({
+        contextWindow: context,
+        maxOutputTokens: output,
+      });
+      expect(estimateUsageCostUsd(id, 100_000, 20_000)).toBeCloseTo(cost);
+      expect(resolveModel("openai", id)).toBe(id);
+    }
+    expect(getDefaultModel("openai")).toBe("gpt-5.4");
   });
 
   test("resolves catalog models for Gemini", () => {
@@ -549,11 +577,11 @@ describe("modelSupportsVision", () => {
 
 describe("resolveModelLimits", () => {
   test("keeps ChatGPT limits separate from OpenAI for the same model id", () => {
-    expect(resolveModelLimits("chatgpt", "gpt-5.6-luna")).toEqual({
+    expect(resolveModelLimits("chatgpt", "gpt-5.5")).toEqual({
       contextWindow: 272_000,
       maxOutputTokens: 8192,
     });
-    expect(resolveModelLimits("openai", "gpt-5.6-luna")).toEqual({
+    expect(resolveModelLimits("openai", "gpt-5.5")).toEqual({
       contextWindow: 1_050_000,
       maxOutputTokens: 128_000,
     });
@@ -580,10 +608,10 @@ describe("resolveModelLimits", () => {
 
   test("prefers the instance entry over the catalog", () => {
     expect(
-      resolveModelLimits("chatgpt", "gpt-5.6-luna", [
+      resolveModelLimits("openai", "gpt-5.5", [
         {
           contextWindow: 32_000,
-          id: "gpt-5.6-luna",
+          id: "gpt-5.5",
           maxOutputTokens: 4096,
         },
       ])

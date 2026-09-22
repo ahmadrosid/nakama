@@ -60,6 +60,10 @@ describe("OpenAI provider streaming", () => {
       | (RequestInit & { idleTimeout?: number })
       | undefined;
     expect(streamInit?.idleTimeout).toBe(0);
+    const body = JSON.parse(String(streamInit?.body));
+    expect(body.model).toBe("gpt-5.4");
+    expect(body.max_tokens).toBeUndefined();
+    expect(body.max_completion_tokens).toBeUndefined();
   });
 
   test("appends Perplexity citations from the final stream chunk", async () => {
