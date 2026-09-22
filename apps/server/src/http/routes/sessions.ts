@@ -794,7 +794,9 @@ export function registerSessionRoutes(
   });
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
-    requireNotViewerFromContext(c);
+    const auth = requireNotViewerFromContext(c);
+    const webUserId =
+      auth.mode === "browser-session" ? auth.user.id : undefined;
     const { orgId, sessionId } = await requireSessionAccess(c);
 
     const turnStarted = await agent.beginSessionTurn(sessionId, orgId);
@@ -849,12 +851,15 @@ export function registerSessionRoutes(
             agent.schedulePostTurnSkillReview(sessionId);
           }
         },
-        c.req.raw.signal
+        c.req.raw.signal,
+        undefined,
+        undefined,
+        webUserId
       );
     }
 
     try {
-      const reply = await session.send(input);
+      const reply = await session.send(input, { webUserId });
       const contextUsage = session.getContextUsage() ?? undefined;
       const usage = session.getTurnUsage() ?? undefined;
       sessionTurnRegistry.endTurn(sessionId, {

@@ -633,6 +633,7 @@ export function registerPluginRoutes(
         signal: c.req.raw.signal,
         actionKey: decodeURIComponent(c.req.param("actionKey")),
         actor: pluginActor(auth),
+        webUserId: auth.mode === "browser-session" ? auth.user.id : undefined,
         input: body.input ?? {},
         orgId,
         pluginId: decodeURIComponent(c.req.param("pluginId")),
