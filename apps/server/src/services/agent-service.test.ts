@@ -674,8 +674,8 @@ describe("AgentService usage pricing context", () => {
     expect(
       byModel.find((row) => row.modelId === "deepseek-v4-flash")
         ?.estimatedCostUsd
-    ).toBeCloseTo(0.0196, 6);
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.0466, 6);
+    ).toBeCloseTo(0.054, 6);
+    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.081, 6);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

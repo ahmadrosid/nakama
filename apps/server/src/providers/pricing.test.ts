@@ -72,6 +72,15 @@ describe("estimateUsageCostUsd", () => {
     ).toBeNull();
   });
 
+  test("estimates direct DeepSeek usage at peak uncached rates", () => {
+    expect(
+      estimateUsageCostUsd("deepseek-flash", 2_000_000, 500_000)
+    ).toBeCloseTo(1.2);
+    expect(
+      estimateUsageCostUsd("deepseek-v4-pro", 2_000_000, 500_000)
+    ).toBeCloseTo(4.62);
+  });
+
   test("computes cost from catalog pricing", () => {
     const cost = estimateUsageCostUsd(
       "claude-sonnet-4-6",
@@ -79,6 +88,23 @@ describe("estimateUsageCostUsd", () => {
       1_000_000
     );
     expect(cost).toBe(18);
+  });
+
+  test("uses Cloudflare's published input and output rates for exact model ids", () => {
+    // https://developers.cloudflare.com/workers-ai/platform/pricing/
+    // Checked 2026-09-22. Each row guards a separately maintained catalog entry.
+    for (const [id, input, output] of [
+      ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", 0.293, 2.253],
+      ["@cf/meta/llama-3.1-8b-instruct", 0.282, 0.827],
+      ["@cf/meta/llama-4-scout-17b-16e-instruct", 0.27, 0.85],
+      ["@cf/qwen/qwen2.5-coder-32b-instruct", 0.66, 1],
+      ["@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", 0.497, 4.881],
+    ] as const) {
+      expect(getExplicitModelPricing(id, { provider: "cloudflare" })).toEqual({
+        inputPerMillionUsd: input,
+        outputPerMillionUsd: output,
+      });
+    }
   });
 
   test("uses fallback pricing for unknown models", () => {

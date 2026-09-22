@@ -166,24 +166,34 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     outputPerMillionUsd: 12,
     provider: "gemini",
   },
-  {
+  // https://api-docs.deepseek.com/quick_start/pricing
+  // Flat estimates use peak uncached rates; off-peak is half. Cache discounts
+  // and time-of-use billing are not represented. Legacy IDs still serve V4.1.
+  ...[
+    "deepseek-flash",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+  ].map((id) => ({
     contextWindow: 1_000_000,
-    default: true,
-    id: "deepseek-v4-flash",
-    inputPerMillionUsd: 0.14,
+    default: id === "deepseek-flash",
+    id,
+    inputPerMillionUsd: 0.3,
     maxOutputTokens: 384_000,
-    name: "DeepSeek V4 Flash",
-    outputPerMillionUsd: 0.28,
-    provider: "deepseek",
+    name:
+      id === "deepseek-flash"
+        ? "DeepSeek V4.1 Flash"
+        : `DeepSeek V4.1 Flash (${id})`,
+    outputPerMillionUsd: 1.2,
+    provider: "deepseek" as const,
     supportsThinking: true,
-  },
+  })),
   {
     contextWindow: 1_000_000,
     id: "deepseek-v4-pro",
-    inputPerMillionUsd: 0.435,
+    inputPerMillionUsd: 1.32,
     maxOutputTokens: 384_000,
-    name: "DeepSeek V4 Pro",
-    outputPerMillionUsd: 0.87,
+    name: "DeepSeek V4 Pro0813",
+    outputPerMillionUsd: 3.96,
     provider: "deepseek",
     supportsThinking: true,
   },
@@ -735,10 +745,10 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     contextWindow: 131_072,
     default: true,
     id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    inputPerMillionUsd: 0.38,
+    inputPerMillionUsd: 0.293,
     maxOutputTokens: 40_960,
     name: "Llama 3.3 70B (FP8)",
-    outputPerMillionUsd: 0.38,
+    outputPerMillionUsd: 2.253,
     provider: "cloudflare",
     supportsThinking: false,
     supportsVision: false,
@@ -746,10 +756,10 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 7968,
     id: "@cf/meta/llama-3.1-8b-instruct",
-    inputPerMillionUsd: 0.28,
+    inputPerMillionUsd: 0.282,
     maxOutputTokens: 4096,
     name: "Llama 3.1 8B",
-    outputPerMillionUsd: 0.83,
+    outputPerMillionUsd: 0.827,
     provider: "cloudflare",
     supportsThinking: false,
     supportsVision: false,
@@ -768,10 +778,10 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 131_072,
     id: "@cf/meta/llama-4-scout-17b-16e-instruct",
-    inputPerMillionUsd: 0.3,
+    inputPerMillionUsd: 0.27,
     maxOutputTokens: 40_960,
     name: "Llama 4 Scout 17B",
-    outputPerMillionUsd: 0.3,
+    outputPerMillionUsd: 0.85,
     provider: "cloudflare",
     supportsThinking: false,
     supportsVision: false,
@@ -779,10 +789,10 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 131_072,
     id: "@cf/qwen/qwen2.5-coder-32b-instruct",
-    inputPerMillionUsd: 0.38,
+    inputPerMillionUsd: 0.66,
     maxOutputTokens: 40_960,
     name: "Qwen 2.5 Coder 32B",
-    outputPerMillionUsd: 0.38,
+    outputPerMillionUsd: 1,
     provider: "cloudflare",
     supportsThinking: false,
     supportsVision: false,
@@ -790,10 +800,10 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     contextWindow: 131_072,
     id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
-    inputPerMillionUsd: 0.35,
+    inputPerMillionUsd: 0.497,
     maxOutputTokens: 40_960,
     name: "DeepSeek R1 Distill Qwen 32B",
-    outputPerMillionUsd: 0.7,
+    outputPerMillionUsd: 4.881,
     provider: "cloudflare",
     supportsThinking: false,
     supportsVision: false,
@@ -979,7 +989,7 @@ export function getDefaultModel(
         : provider === "gemini"
           ? "gemini-2.5-flash"
           : provider === "deepseek"
-            ? "deepseek-v4-flash"
+            ? "deepseek-flash"
             : provider === "together"
               ? "openai/gpt-oss-120b"
               : provider === "xiaomi"
