@@ -7,6 +7,7 @@ import type {
 } from "@nakama/core";
 import {
   createNakamaDataExport,
+  createNakamaOrgDataExport,
   createNakamaUserDataExport,
   decodeArchiveRequestData,
   previewNakamaDataImport,
@@ -44,6 +45,43 @@ export function registerDataPortabilityRoutes(
     .object({})
     .passthrough()
     .openapi("RestoreDataImportResponse");
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "exportPlatformOrganizationData",
+      path: "/v1/platform/orgs/{orgId}/data/export",
+      request: {
+        params: z.object({
+          orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/zip": {
+              schema: z.string().openapi({ format: "binary", type: "string" }),
+            },
+          },
+          description: "Organization data export ZIP",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Export one organization's portable data",
+      tags: ["Platform"],
+    })
+  );
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -185,6 +223,21 @@ export function registerDataPortabilityRoutes(
       tags: ["Platform"],
     })
   );
+
+  app.get("/v1/platform/orgs/:orgId/data/export", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const result = await createNakamaOrgDataExport(
+      options.databaseAdapter,
+      orgId
+    );
+    return new Response(result.data, {
+      headers: {
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+        "Content-Type": "application/zip",
+      },
+    });
+  });
 
   app.get("/v1/platform/users/:userId/data/export", async (c) => {
     requirePlatformAdminFromContext(c);
