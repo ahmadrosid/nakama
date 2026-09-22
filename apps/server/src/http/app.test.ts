@@ -1241,9 +1241,12 @@ describe("createHonoApp", () => {
       secretHash: options.authService.hashToken(secret),
     });
 
-    const headers = {
+    const apiKeyHeaders = {
       Authorization: `Bearer ${secret}`,
       "Content-Type": "application/json",
+    };
+    const headers = {
+      ...apiKeyHeaders,
       "X-Org-Id": adminSession.orgId,
     };
     const missingAppUser = await app.fetch(
@@ -1260,9 +1263,8 @@ describe("createHonoApp", () => {
         body: JSON.stringify({
           appUserId: "alice-123",
           channel: "web",
-          profileId: "default",
         }),
-        headers,
+        headers: apiKeyHeaders,
         method: "POST",
       })
     );
