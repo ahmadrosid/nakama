@@ -32,20 +32,25 @@ Save the returned `secret` as a server-side Lovable secret named `NAKAMA_API_KEY
 Paste this into Lovable’s chat:
 
 ```text
-Build an ai agent app using Nakama as the agent backend.
+Integrate this existing app with Nakama as the AI agent backend.
 
 Before coding, read:
 https://ahmadrosid.github.io/nakama/lovable.md
 https://ahmadrosid.github.io/nakama/llms.txt
 
 Requirements:
+- Inspect the existing app and preserve its current UI, authentication, and data model.
 - Keep NAKAMA_API_KEY server-side. Never expose it in client code, HTML, logs, or URLs.
 - Add a server-side POST /api/chat route that calls Nakama.
-- Read NAKAMA_URL and NAKAMA_API_KEY from server-side secrets.
+- Read only NAKAMA_URL and NAKAMA_API_KEY from server-side secrets.
 - Pass the authenticated app user's stable ID as `appUserId` when creating a Nakama session.
+- Omit `profileId` so Nakama uses the organization's default profile.
+- Send `X-Nakama-App-User-Id` with every request for that session.
 - Create one Nakama web session per browser conversation and reuse its sessionId.
 - Nakama gives each `appUserId` its own profile workspace, including private memory and files.
-- Forward the user message to Nakama and return the assistant reply.
+- Forward the user message to Nakama and return the assistant reply to the existing UI.
+- Support streaming SSE with `chunk`, `done`, and `error` events if streaming is enabled.
+- Keep each app user's Nakama session and memory isolated by their stable authenticated user ID.
 - Show loading, error, retry, and empty states.
 - Do not call Nakama directly from the browser.
 ```
