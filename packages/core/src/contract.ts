@@ -1992,6 +1992,7 @@ export interface CreateSkillRequest {
 }
 
 export interface InstallSkillRequest {
+  command?: string;
   profileId: string;
   url?: string;
   zipBase64?: string;

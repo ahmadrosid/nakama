@@ -52,15 +52,21 @@ function SkillInstallDialogContent({
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: InstallSkillRequest) => Promise<void>;
 }) {
+  const [method, setMethod] = useState<"command" | "github" | "upload">(
+    "github"
+  );
+  const [command, setCommand] = useState("");
   const [url, setUrl] = useState("");
   const [zip, setZip] = useState<File | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const canSubmit = url.trim().length > 0 || zip !== null;
+  const canSubmit =
+    (method === "command" && command.trim().length > 0) ||
+    (method === "github" && url.trim().length > 0) ||
+    (method === "upload" && zip !== null);
 
   function handleZipChange(event: ChangeEvent<HTMLInputElement>) {
     setZip(event.target.files?.[0] ?? null);
-    setUrl("");
   }
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
@@ -73,7 +79,7 @@ function SkillInstallDialogContent({
     setSubmitError(null);
 
     try {
-      if (zip) {
+      if (method === "upload" && zip) {
         const bytes = new Uint8Array(await zip.arrayBuffer());
         let binary = "";
         for (let index = 0; index < bytes.length; index += 32_768) {
@@ -82,6 +88,8 @@ function SkillInstallDialogContent({
           );
         }
         await onSubmit({ profileId, zipBase64: btoa(binary) });
+      } else if (method === "command") {
+        await onSubmit({ command: command.trim(), profileId });
       } else {
         await onSubmit({ profileId, url: url.trim() });
       }
@@ -99,38 +107,80 @@ function SkillInstallDialogContent({
           <DialogTitle>Add skill</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2.5">
-          <label
-            className="block font-medium text-foreground text-sm"
-            htmlFor="skill-install-url"
-          >
-            GitHub URL
-          </label>
-          <Input
-            autoFocus
-            disabled={busy}
-            id="skill-install-url"
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://github.com/org/repo/blob/main/skills/example/SKILL.md"
-            value={url}
-          />
+        <div className="grid grid-cols-3 gap-2" role="tablist">
+          {[
+            ["github", "GitHub URL"],
+            ["command", "npx command"],
+            ["upload", "Upload ZIP"],
+          ].map(([value, label]) => (
+            <Button
+              key={value}
+              onClick={() => setMethod(value as typeof method)}
+              role="tab"
+              type="button"
+              variant={method === value ? "default" : "outline"}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
 
-        <div className="space-y-2.5">
-          <label
-            className="block font-medium text-foreground text-sm"
-            htmlFor="skill-install-zip"
-          >
-            Or upload a ZIP file
-          </label>
-          <Input
-            accept=".zip,application/zip"
-            disabled={busy}
-            id="skill-install-zip"
-            onChange={handleZipChange}
-            type="file"
-          />
-        </div>
+        {method === "github" ? (
+          <div className="space-y-2.5">
+            <label
+              className="block font-medium text-foreground text-sm"
+              htmlFor="skill-install-url"
+            >
+              GitHub URL
+            </label>
+            <Input
+              autoFocus
+              disabled={busy}
+              id="skill-install-url"
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://github.com/org/repo/tree/main/skills/example"
+              value={url}
+            />
+          </div>
+        ) : null}
+
+        {method === "command" ? (
+          <div className="space-y-2.5">
+            <label
+              className="block font-medium text-foreground text-sm"
+              htmlFor="skill-install-command"
+            >
+              npx skills add command
+            </label>
+            <Input
+              autoFocus
+              disabled={busy}
+              id="skill-install-command"
+              onChange={(event) => setCommand(event.target.value)}
+              placeholder="npx skills add vercel-labs/agent-skills --skill pdf"
+              value={command}
+            />
+          </div>
+        ) : null}
+
+        {method === "upload" ? (
+          <div className="space-y-2.5">
+            <label
+              className="block font-medium text-foreground text-sm"
+              htmlFor="skill-install-zip"
+            >
+              ZIP file
+            </label>
+            <Input
+              accept=".zip,application/zip"
+              autoFocus
+              disabled={busy}
+              id="skill-install-zip"
+              onChange={handleZipChange}
+              type="file"
+            />
+          </div>
+        ) : null}
 
         {submitError ? (
           <p
