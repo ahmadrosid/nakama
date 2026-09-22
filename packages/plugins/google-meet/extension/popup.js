@@ -5,6 +5,7 @@ const status = document.querySelector("#status");
 const connect = document.querySelector("#connect");
 const start = document.querySelector("#start");
 const stop = document.querySelector("#stop");
+const openSidePanel = document.querySelector("#open-side-panel");
 let busy = false;
 
 async function refresh() {
@@ -87,6 +88,20 @@ async function run(type) {
 connect.onclick = () => run("CONNECT");
 start.onclick = () => run("START");
 stop.onclick = () => run("STOP");
+openSidePanel.onclick = async () => {
+  try {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (!tab?.id) {
+      throw new Error("Open the Google Meet tab first.");
+    }
+    await chrome.sidePanel.open({ tabId: tab.id });
+  } catch (error) {
+    status.textContent = error.message;
+  }
+};
 chrome.storage.onChanged.addListener((changes, area) => {
   if (
     area === "session" &&

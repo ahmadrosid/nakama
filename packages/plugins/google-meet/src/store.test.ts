@@ -243,3 +243,29 @@ test("speaker turns survive reopen and recording remains an exclusive active sta
     rmSync(directory, { force: true, recursive: true });
   }
 });
+
+test("caption names enrich matching audio turns without duplicating them", () => {
+  const meeting = store.create(meetingUrl, "me", undefined, 1);
+  store.addSegment(meeting.id, {
+    id: "0-0",
+    receivedAt: 1,
+    speakerName: "Speaker 1",
+    text: "Hello everyone",
+  });
+  store.addCaptionSegment(meeting.id, {
+    id: "caption-1",
+    receivedAt: 2,
+    speakerName: "Alice",
+    text: "Hello everyone",
+  });
+  expect(store.transcript(meeting.id)).toMatchObject([
+    { speakerName: "Alice", text: "Hello everyone" },
+  ]);
+  store.addCaptionSegment(meeting.id, {
+    id: "caption-2",
+    receivedAt: 3,
+    speakerName: "Bob",
+    text: "A new sentence",
+  });
+  expect(store.transcript(meeting.id)).toHaveLength(2);
+});

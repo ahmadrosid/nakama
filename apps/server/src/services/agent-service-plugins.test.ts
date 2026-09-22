@@ -11,7 +11,10 @@ import {
   createInMemoryDatabaseAdapter,
   seedOrgDefaultProfile,
 } from "@nakama/db";
-import { pluginPackage } from "../testing/plugin-package-fixture";
+import {
+  closePluginPackageRegistry,
+  pluginPackage,
+} from "../testing/plugin-package-fixture";
 import { AgentService } from "./agent-service";
 import { PluginService } from "./plugin-service";
 import { SkillsService } from "./skills-service";
@@ -19,6 +22,8 @@ import {
   pluginActorFromContext,
   resolveProfileStoredTools,
 } from "./tool-resolver";
+
+afterEach(closePluginPackageRegistry);
 
 const ORG_ID = "org_u5_agent";
 

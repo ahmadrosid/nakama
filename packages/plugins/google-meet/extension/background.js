@@ -90,6 +90,17 @@ async function transcriptForTab(tabId, after) {
   });
 }
 
+async function captionForTab(tabId, caption) {
+  const active = await meetingSessionForTab(tabId);
+  if (!active) {
+    return null;
+  }
+  return callNakama(active.connection, "caption", {
+    meetingId: active.session.meetingId,
+    ...caption,
+  });
+}
+
 async function connect() {
   const session = await getSession();
   if (starting || ["starting", "recording"].includes(session?.status)) {
@@ -225,12 +236,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
-  const fromPopup =
-    sender.url === chrome.runtime.getURL("popup.html") && !sender.tab;
+  const fromExtensionPage =
+    !sender.tab &&
+    ["popup.html", "sidepanel.html"].some((file) =>
+      sender.url?.startsWith(chrome.runtime.getURL(file))
+    );
   const fromMeetTab =
     Boolean(sender.tab?.id) &&
-    ["MEET_STATE", "MEET_TRANSCRIPT"].includes(message.type);
-  if (!(fromPopup || fromMeetTab)) {
+    ["MEET_STATE", "MEET_TRANSCRIPT", "MEET_CAPTION"].includes(message.type);
+  if (!(fromExtensionPage || fromMeetTab)) {
     return;
   }
   let work;
@@ -248,9 +262,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     );
   } else if (message.type === "MEET_TRANSCRIPT" && fromMeetTab) {
     work = transcriptForTab(sender.tab.id, message.after ?? 0);
+  } else if (message.type === "MEET_CAPTION" && fromMeetTab) {
+    work = captionForTab(sender.tab.id, message.caption);
   } else if (
     ["TRANSCRIPT", "OPEN_TRANSCRIPT"].includes(message.type) &&
-    fromPopup
+    fromExtensionPage
   ) {
     work = (async () => {
       const session = await getSession();

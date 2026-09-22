@@ -63,6 +63,10 @@ const registry = setupServer(
   })
 );
 
+export function closePluginPackageRegistry() {
+  registry.close();
+}
+
 export function pluginPackage(
   files: Record<string, string | Uint8Array>,
   options: {
