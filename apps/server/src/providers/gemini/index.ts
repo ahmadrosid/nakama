@@ -20,6 +20,7 @@ import {
 import { buildGeminiChatConfig, buildGeminiGenerateConfig } from "./config";
 import {
   extractTextAndThinkingFromParts,
+  localGeminiCallId,
   parseGeminiFunctionCalls,
   toGeminiContents,
 } from "./messages";
@@ -96,7 +97,9 @@ function mergePendingFunctionCall(
   call: { id?: string; name?: string; args?: Record<string, unknown> },
   handlers?: StreamChatHandlers
 ): void {
-  const id = call.id?.trim() || "pending";
+  // Gemini 2.5 sends no call id, so one is minted from the tool name. The old
+  // shared "pending" key merged every unnamed call into a single entry.
+  const id = call.id?.trim() || localGeminiCallId(call.name?.trim() ?? "");
   const current = pending.get(id) ?? { argsJson: "{}", id, name: "" };
 
   if (call.name) {
@@ -155,7 +158,9 @@ function accumulateStreamParts(
         handlers?.onToolStart?.({
           input: (part.functionCall.args ?? {}) as Record<string, unknown>,
           tool: part.functionCall.name ?? "",
-          toolCallId: part.functionCall.id ?? "pending",
+          toolCallId:
+            part.functionCall.id ??
+            localGeminiCallId(part.functionCall.name ?? ""),
         });
       }
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
 import {
   extractTextAndThinkingFromParts,
+  isLocallyMintedGeminiCallId,
   parseGeminiFunctionCalls,
   toGeminiContents,
 } from "./messages";
@@ -84,5 +85,70 @@ describe("extractTextAndThinkingFromParts", () => {
         { text: "Answer" },
       ])
     ).toEqual({ content: "Answer", thinking: "Plan" });
+  });
+});
+
+describe("Gemini 2.5 function calls, which carry no id", () => {
+  test("a call without an id is kept, not dropped", () => {
+    // The exact shape 2.5 Flash returns. Requiring an id discarded it, the turn
+    // then had no tool calls and no text, and the reply came back empty.
+    const calls = parseGeminiFunctionCalls([
+      { args: { query: "permit" }, name: "knowledge_base_search" },
+    ]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("knowledge_base_search");
+    expect(calls[0]?.arguments).toEqual({ query: "permit" });
+    expect(isLocallyMintedGeminiCallId(calls[0]?.id)).toBe(true);
+  });
+
+  test("a provider id is kept as it is", () => {
+    const calls = parseGeminiFunctionCalls([
+      { args: {}, id: "call_333446", name: "knowledge_base_search" },
+    ]);
+
+    expect(calls[0]?.id).toBe("call_333446");
+    expect(isLocallyMintedGeminiCallId(calls[0]?.id)).toBe(false);
+  });
+
+  test("two different tools in one turn stay apart", () => {
+    const calls = parseGeminiFunctionCalls([
+      { args: {}, name: "knowledge_base_search" },
+      { args: {}, name: "web_fetch" },
+    ]);
+
+    expect(calls.map((call) => call.name)).toEqual([
+      "knowledge_base_search",
+      "web_fetch",
+    ]);
+    expect(new Set(calls.map((call) => call.id)).size).toBe(2);
+  });
+
+  test("a minted id is never sent back to the model", async () => {
+    const [call] = parseGeminiFunctionCalls([
+      { args: { query: "permit" }, name: "knowledge_base_search" },
+    ]);
+    const messages: ChatMessage[] = [
+      { content: "cari", role: "user" },
+      { content: "", role: "assistant", toolCalls: [call] },
+      {
+        content: '{"matchCount":1}',
+        name: "knowledge_base_search",
+        role: "tool",
+        toolCallId: call.id,
+      },
+    ];
+
+    const contents = await toGeminiContents(messages);
+    const modelPart = contents[1]?.parts?.[0];
+    const responsePart = contents[2]?.parts?.[0];
+
+    // Gemini pairs a response to its call by id. It issued neither of these, so
+    // sending the handle we minted would point at a call that never existed.
+    expect(modelPart?.functionCall?.name).toBe("knowledge_base_search");
+    expect(modelPart?.functionCall?.id).toBeUndefined();
+    expect(responsePart?.functionResponse?.name).toBe("knowledge_base_search");
+    expect(responsePart?.functionResponse?.id).toBeUndefined();
+    expect("id" in (responsePart?.functionResponse ?? {})).toBe(false);
   });
 });

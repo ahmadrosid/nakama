@@ -35,18 +35,33 @@ export async function toGeminiContents(
     }
 
     contents.push({
-      parts: [
-        createPartFromFunctionResponse(
-          message.toolCallId,
-          message.name,
-          parseToolResultContent(message.content)
-        ),
-      ],
+      parts: [toGeminiFunctionResponsePart(message)],
       role: "user",
     });
   }
 
   return contents;
+}
+
+/**
+ * `createPartFromFunctionResponse` always writes the id, so an empty string
+ * would still be sent. A response to a call the model issued without an id has
+ * to carry none at all, which means building the part here.
+ */
+function toGeminiFunctionResponsePart(
+  message: Extract<ChatMessage, { role: "tool" }>
+): Part {
+  const response = parseToolResultContent(message.content);
+
+  if (isLocallyMintedGeminiCallId(message.toolCallId)) {
+    return { functionResponse: { name: message.name, response } };
+  }
+
+  return createPartFromFunctionResponse(
+    message.toolCallId,
+    message.name,
+    response
+  );
 }
 
 async function toGeminiUserParts(
@@ -106,7 +121,7 @@ function toGeminiAssistantParts(
     parts.push({
       functionCall: {
         args: call.arguments,
-        id: call.id,
+        ...(isLocallyMintedGeminiCallId(call.id) ? {} : { id: call.id }),
         name: call.name,
       },
     });
@@ -139,6 +154,30 @@ function parseToolResultContent(content: string): Record<string, unknown> {
   return { output: trimmed };
 }
 
+/**
+ * Gemini 3 returns an `id` on every function call. Gemini 2.5 returns none, and
+ * the id is optional in the API, so requiring one dropped every 2.5 tool call
+ * and left the turn with no calls to run and nothing to say.
+ *
+ * The tool loop does need a handle to match a result back to its call, so one
+ * is minted here. It is marked because it must never be sent back: the response
+ * id has to match the call id, and the model issued neither.
+ */
+const LOCAL_CALL_ID_PREFIX = "gemini-local-";
+
+export function isLocallyMintedGeminiCallId(id: string | undefined): boolean {
+  return Boolean(id?.startsWith(LOCAL_CALL_ID_PREFIX));
+}
+
+/**
+ * Keyed by tool name so two different tools called in one turn stay apart while
+ * streaming. Two calls to the same tool in one turn would still merge, which is
+ * what the previous shared "pending" key did to every call regardless of name.
+ */
+export function localGeminiCallId(name: string): string {
+  return `${LOCAL_CALL_ID_PREFIX}${name}`;
+}
+
 export function parseGeminiFunctionCalls(
   functionCalls:
     | Array<{ id?: string; name?: string; args?: Record<string, unknown> }>
@@ -149,12 +188,13 @@ export function parseGeminiFunctionCalls(
   }
 
   return functionCalls.flatMap((call) => {
-    const id = call.id?.trim();
     const name = call.name?.trim();
 
-    if (!(id && name)) {
+    if (!name) {
       return [];
     }
+
+    const id = call.id?.trim() || localGeminiCallId(name);
 
     return [
       {
