@@ -176,7 +176,7 @@ function CreateApiKeyDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={createKey}>
-          <label className="block space-y-2 text-sm">
+          <label className="flex flex-col gap-3 text-sm">
             <span className="font-medium">Key name</span>
             <Input
               autoFocus
@@ -185,7 +185,7 @@ function CreateApiKeyDialog({
               value={name}
             />
           </label>
-          <label className="block space-y-2 text-sm">
+          <label className="flex flex-col gap-3 text-sm">
             <span className="font-medium">Expires on</span>
             <Popover>
               <PopoverTrigger
