@@ -192,9 +192,44 @@ export function registerSessionRoutes(
       stream: z.boolean().optional(),
     })
     .openapi("SendMessageRequest");
+  const contextUsageSchema = z
+    .object({
+      breakdown: z
+        .object({
+          conversation: z.number(),
+          systemPrompt: z.number(),
+          toolDefinitions: z.number(),
+        })
+        .optional(),
+      bytesKeptOut: z.number().optional(),
+      bytesProduced: z.number().optional(),
+      contextWindow: z.number(),
+      source: z.enum(["provider", "estimate"]),
+      usableContextTokens: z.number(),
+      usedTokens: z.number(),
+    })
+    .openapi("ChatContextUsage");
   const sendMessageResponseSchema = z
-    .object({ reply: z.string() })
-    .openapi("SendMessageResponse");
+    .object({
+      contextUsage: contextUsageSchema.optional(),
+      reply: z.string(),
+    })
+    .openapi("SendMessageResponse", {
+      example: {
+        contextUsage: {
+          breakdown: {
+            conversation: 420,
+            systemPrompt: 980,
+            toolDefinitions: 310,
+          },
+          contextWindow: 128_000,
+          source: "estimate",
+          usableContextTokens: 120_000,
+          usedTokens: 1710,
+        },
+        reply: "Hello! How can I help?",
+      },
+    });
   const sessionIdParamSchema = z.object({
     sessionId: z.string().openapi({ param: { in: "path", name: "sessionId" } }),
   });

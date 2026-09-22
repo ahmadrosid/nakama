@@ -90,6 +90,27 @@ const reply = await fetch(
 const { reply: answer } = await reply.json();
 ```
 
+The non-streaming response is JSON:
+
+```json
+{
+  "reply": "Hello! How can I help?",
+  "contextUsage": {
+    "breakdown": {
+      "conversation": 420,
+      "systemPrompt": 980,
+      "toolDefinitions": 310
+    },
+    "contextWindow": 128000,
+    "source": "estimate",
+    "usableContextTokens": 120000,
+    "usedTokens": 1710
+  }
+}
+```
+
+`contextUsage` is optional. Use `reply` as the assistant message and ignore `contextUsage` unless you want to display context or token information.
+
 For streaming replies, send `{"message":"...","stream":true}` and proxy the returned server-sent events through your backend to the browser.
 
 ## App-user workspace and storage
