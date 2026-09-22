@@ -8,7 +8,7 @@ Use Lovable for the app UI and Nakama for the AI agent. Keep the Nakama API key 
 ## What you need
 
 1. A reachable Nakama instance with an LLM provider configured.
-2. An organization ID and an organization backend API key.
+2. An organization backend API key.
 3. A Lovable project with a server-side function or backend route.
 
 From the Nakama dashboard, open **Organization → Backend API keys**, enter a descriptive name such as `Lovable production`, and select **Create key**. Copy the secret immediately; it is shown only once.
@@ -25,7 +25,7 @@ curl -X POST "$NAKAMA_URL/v1/orgs/$NAKAMA_ORG_ID/api-keys" \
   -d '{"name":"Lovable production"}'
 ```
 
-Save the returned `secret` as a server-side Lovable secret named `NAKAMA_API_KEY`. Also save `NAKAMA_URL`, `NAKAMA_ORG_ID`, and the profile ID you want the app to use. The secret is returned only once; rotate it if it is exposed.
+Save the returned `secret` as a server-side Lovable secret named `NAKAMA_API_KEY`. Also save `NAKAMA_URL`. The API key identifies the Nakama organization, and Nakama uses that organization's default profile. The secret is returned only once; rotate it if it is exposed.
 
 ## Give Lovable the Nakama context
 
@@ -41,7 +41,7 @@ https://ahmadrosid.github.io/nakama/llms.txt
 Requirements:
 - Keep NAKAMA_API_KEY server-side. Never expose it in client code, HTML, logs, or URLs.
 - Add a server-side POST /api/chat route that calls Nakama.
-- Read NAKAMA_URL, NAKAMA_ORG_ID, NAKAMA_API_KEY, and NAKAMA_PROFILE_ID from server-side secrets.
+- Read NAKAMA_URL and NAKAMA_API_KEY from server-side secrets.
 - Pass the authenticated app user's stable ID as `appUserId` when creating a Nakama session.
 - Create one Nakama web session per browser conversation and reuse its sessionId.
 - Nakama gives each `appUserId` its own profile workspace, including private memory and files.
@@ -63,7 +63,6 @@ const session = await fetch(`${process.env.NAKAMA_URL}/v1/sessions`, {
   },
   body: JSON.stringify({
     channel: "web",
-    profileId: process.env.NAKAMA_PROFILE_ID,
     appUserId: authenticatedUser.id,
   }),
 });
@@ -160,9 +159,8 @@ Assigned skills are shared profile capabilities. Their user-created files stay i
 
 - Never use `NAKAMA_API_KEY` in a React component or browser fetch.
 - Never commit the key or include it in a client-visible response.
-- Use separate `test` and `live` keys where possible.
+- Use separate named keys for production and preview deployments where possible.
 - Revoke or rotate a key when a project is duplicated, shared, or compromised.
-- Keep `NAKAMA_ORG_ID` fixed on the server; do not accept an organization ID from the browser.
 - Keep `appUserId` from your server-side auth session; never trust it from the browser.
 - Keep `appUserId` stable for the same person so Nakama can return that person's workspace.
 
