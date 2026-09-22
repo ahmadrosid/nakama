@@ -57,6 +57,7 @@ import {
   parseSkillMarkdown,
   patchSkillFile,
   pickPreferredSkillSourcePath,
+  readUploadedSkillBundle,
   removeProfileSkillSupportingFile,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
@@ -295,8 +296,11 @@ export class SkillsService {
       throw new NakamaApiError("profileId is required.", 400);
     }
 
-    if (!url) {
-      throw new NakamaApiError("url is required.", 400);
+    if (!(url || request.zipBase64)) {
+      throw new NakamaApiError(
+        "url is required unless a ZIP file is uploaded.",
+        400
+      );
     }
 
     const profile = await this.db.getProfileForOrg(profileId, orgId);
@@ -304,7 +308,15 @@ export class SkillsService {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
-    const bundle = await fetchGitHubSkillBundle(url);
+    const bundle = request.zipBase64
+      ? (() => {
+          const archive = Buffer.from(request.zipBase64!, "base64");
+          if (archive.length > 50 * 1024 * 1024) {
+            throw new NakamaApiError("Skill ZIP is too large.", 400);
+          }
+          return readUploadedSkillBundle(archive);
+        })()
+      : await fetchGitHubSkillBundle(url);
     const { content } = bundle;
 
     try {

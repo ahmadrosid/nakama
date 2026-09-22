@@ -1993,7 +1993,8 @@ export interface CreateSkillRequest {
 
 export interface InstallSkillRequest {
   profileId: string;
-  url: string;
+  url?: string;
+  zipBase64?: string;
 }
 
 export interface PatchSkillRequest {

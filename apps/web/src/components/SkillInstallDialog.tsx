@@ -9,7 +9,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
-import { type SubmitEvent, useState } from "react";
+import { type ChangeEvent, type SubmitEvent, useState } from "react";
 import { formatError } from "@/lib/client";
 
 interface SkillInstallDialogProps {
@@ -53,9 +53,15 @@ function SkillInstallDialogContent({
   onSubmit: (request: InstallSkillRequest) => Promise<void>;
 }) {
   const [url, setUrl] = useState("");
+  const [zip, setZip] = useState<File | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const canSubmit = url.trim().length > 0;
+  const canSubmit = url.trim().length > 0 || zip !== null;
+
+  function handleZipChange(event: ChangeEvent<HTMLInputElement>) {
+    setZip(event.target.files?.[0] ?? null);
+    setUrl("");
+  }
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,10 +73,18 @@ function SkillInstallDialogContent({
     setSubmitError(null);
 
     try {
-      await onSubmit({
-        profileId,
-        url: url.trim(),
-      });
+      if (zip) {
+        const bytes = new Uint8Array(await zip.arrayBuffer());
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 32_768) {
+          binary += String.fromCharCode(
+            ...bytes.subarray(index, index + 32_768)
+          );
+        }
+        await onSubmit({ profileId, zipBase64: btoa(binary) });
+      } else {
+        await onSubmit({ profileId, url: url.trim() });
+      }
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : formatError(error)
@@ -82,7 +96,7 @@ function SkillInstallDialogContent({
     <DialogContent className="gap-6 p-6 sm:max-w-lg">
       <form className="space-y-6" onSubmit={handleSubmit}>
         <DialogHeader className="gap-2">
-          <DialogTitle>Install from GitHub</DialogTitle>
+          <DialogTitle>Add skill</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-2.5">
@@ -99,6 +113,22 @@ function SkillInstallDialogContent({
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://github.com/org/repo/blob/main/skills/example/SKILL.md"
             value={url}
+          />
+        </div>
+
+        <div className="space-y-2.5">
+          <label
+            className="block font-medium text-foreground text-sm"
+            htmlFor="skill-install-zip"
+          >
+            Or upload a ZIP file
+          </label>
+          <Input
+            accept=".zip,application/zip"
+            disabled={busy}
+            id="skill-install-zip"
+            onChange={handleZipChange}
+            type="file"
           />
         </div>
 
