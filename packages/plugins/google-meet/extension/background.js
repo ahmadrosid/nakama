@@ -66,8 +66,7 @@ async function meetingSessionForTab(tabId) {
   const session = await getSession();
   const { connection } = await chrome.storage.session.get("connection");
   if (
-    !session ||
-    !["starting", "recording"].includes(session.status) ||
+    !(session && ["starting", "recording"].includes(session.status)) ||
     session.tabId !== tabId ||
     connection?.tabId !== session.connection?.tabId ||
     connection?.url !== session.connection?.url
@@ -231,7 +230,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const fromMeetTab =
     Boolean(sender.tab?.id) &&
     ["MEET_STATE", "MEET_TRANSCRIPT"].includes(message.type);
-  if (!fromPopup && !fromMeetTab) {
+  if (!(fromPopup || fromMeetTab)) {
     return;
   }
   let work;

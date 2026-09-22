@@ -72,7 +72,7 @@ async function refreshTranscript() {
       after: transcriptCursor,
       type: "MEET_TRANSCRIPT",
     });
-    if (!result || !transcriptPanel) {
+    if (!(result && transcriptPanel)) {
       hideTranscript();
       return;
     }
@@ -85,8 +85,9 @@ async function refreshTranscript() {
       transcriptList.scrollTop + transcriptList.clientHeight >=
       transcriptList.scrollHeight - 24;
     for (const segment of result.segments) {
-      transcriptList.firstElementChild?.id === "empty" &&
+      if (transcriptList.firstElementChild?.id === "empty") {
         transcriptList.firstElementChild.remove();
+      }
       const turn = document.createElement("p");
       const speaker = document.createElement("span");
       speaker.textContent = segment.speakerName || "Unknown speaker";
