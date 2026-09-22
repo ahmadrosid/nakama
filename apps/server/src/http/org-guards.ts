@@ -4,7 +4,7 @@ import { getRequestAuth, type RequestAuthContext } from "./shared";
 import type { AppEnv } from "./types";
 
 export function requireOrgAdmin(auth: RequestAuthContext): void {
-  if (auth.orgRole !== "admin") {
+  if (auth.mode === "api-key" || auth.orgRole !== "admin") {
     throw new NakamaApiError("Forbidden", 403);
   }
 }

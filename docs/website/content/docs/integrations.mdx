@@ -15,6 +15,12 @@ Use **Integrations** in the Nakama dashboard to connect channels, bridge workers
 - [Error tracking](/error-tracking): send this instance's own crashes to your Sentry, GlitchTip, or Bugsink project
 - **Coding agents**: choose Nakama provider passthrough (default) or harness login on this server — see [Coding agent](/coding-agent#provider-passthrough)
 
+## Backend API keys
+
+Use organization backend API keys when a server-side app needs to call Nakama's AI API. Create them from the organization admin API, store the returned secret in that app's server-side environment, and send it as `Authorization: Bearer <key>`.
+
+The secret is shown only when the key is created or rotated. Nakama stores a hash, so list keys to see metadata and revoke or rotate compromised keys. Do not put these keys in browser code, mobile apps, or public repositories. The existing `~/.nakama/local-auth-token` remains for local CLI and worker access.
+
 ## What lives in Integrations
 
 The dashboard groups together deployment-level and organization-level configuration that is not tied to a single profile page.

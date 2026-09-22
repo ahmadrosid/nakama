@@ -40,6 +40,8 @@ import type {
   ComposioToolkitSummary,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
   CreateAutomationRequest,
   CreateMcpServerRequest,
   CreateNotificationDestinationRequest,
@@ -81,6 +83,7 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
+  ListApiKeysResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -148,6 +151,7 @@ import type {
   RestoreDataImportResponse,
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
+  RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
   RunSkillCuratorInternalRequest,
@@ -2815,6 +2819,39 @@ export class NakamaClient {
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`
+    );
+  }
+
+  async createApiKey(
+    orgId: string,
+    request: CreateApiKeyRequest
+  ): Promise<CreateApiKeyResponse> {
+    return this.request<CreateApiKeyResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`,
+      { body: JSON.stringify(request), method: "POST" }
+    );
+  }
+
+  async listApiKeys(orgId: string): Promise<ListApiKeysResponse> {
+    return this.request<ListApiKeysResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`
+    );
+  }
+
+  async rotateApiKey(
+    orgId: string,
+    keyId: string
+  ): Promise<RotateApiKeyResponse> {
+    return this.request<RotateApiKeyResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}/rotate`,
+      { method: "POST" }
+    );
+  }
+
+  async revokeApiKey(orgId: string, keyId: string): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}`,
+      { method: "DELETE" }
     );
   }
 

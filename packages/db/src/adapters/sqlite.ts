@@ -17,6 +17,7 @@ import type {
   OrgMemoryProposalStatus,
   PluginPublishResult,
   PublishOrgPluginReleaseInput,
+  StoredApiKeyRecord,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
   StoredAuditEvent,
@@ -361,6 +362,20 @@ interface BrowserSessionRow {
   revoked_at: string | null;
   session_token_hash: string;
   user_id: string;
+}
+
+interface ApiKeyRow {
+  created_at: string;
+  created_by_user_id: string;
+  environment: string;
+  expires_at: string | null;
+  id: string;
+  key_prefix: string;
+  last_used_at: string | null;
+  name: string;
+  org_id: string;
+  revoked_at: string | null;
+  secret_hash: string;
 }
 
 interface OrganizationRow {
@@ -1808,6 +1823,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
+  const createApiKeyStmt = db.prepare(`
+    INSERT INTO api_keys (
+      id, org_id, name, environment, key_prefix, secret_hash,
+      created_by_user_id, created_at, expires_at, last_used_at, revoked_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const getApiKeyByPrefixStmt = db.prepare(`
+    SELECT * FROM api_keys WHERE key_prefix = ? LIMIT 1
+  `);
+  const listApiKeysForOrgStmt = db.prepare(`
+    SELECT * FROM api_keys WHERE org_id = ? ORDER BY created_at DESC, id DESC
+  `);
+  const revokeApiKeyStmt = db.prepare(`
+    UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL
+  `);
+  const updateApiKeyLastUsedAtStmt = db.prepare(`
+    UPDATE api_keys SET last_used_at = ? WHERE id = ?
+  `);
   const createPasswordResetTokenStmt = db.prepare(`
     INSERT INTO password_reset_tokens (
       id, user_id, token_hash, expires_at, consumed_at, created_at
@@ -2660,6 +2693,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = countUsersStmt.get() as { count: number };
       return row.count;
     },
+    async createApiKey(record) {
+      createApiKeyStmt.run(
+        record.id,
+        record.orgId,
+        record.name,
+        record.environment,
+        record.keyPrefix,
+        record.secretHash,
+        record.createdByUserId,
+        record.createdAt,
+        record.expiresAt,
+        record.lastUsedAt,
+        record.revokedAt
+      );
+    },
 
     async createArtifactShare(record) {
       createArtifactShareStmt.run(
@@ -2960,6 +3008,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         automationId
       ) as AutomationRunRow | null;
       return row ? toAutomationRunRecord(row) : null;
+    },
+
+    async getApiKeyByPrefix(keyPrefix) {
+      const row = getApiKeyByPrefixStmt.get(keyPrefix) as ApiKeyRow | null;
+      return row ? toApiKeyRecord(row) : null;
     },
 
     async getArtifactShareById(orgId, profileId, shareId) {
@@ -3419,6 +3472,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async listApiKeysForOrg(orgId) {
+      return listApiKeysForOrgStmt
+        .all(orgId)
+        .map((row) => toApiKeyRecord(row as ApiKeyRow));
+    },
+
     async listArtifactSharesForProfile(orgId, profileId) {
       return listArtifactSharesForProfileStmt
         .all(orgId, profileId)
@@ -3871,6 +3930,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       replaceProfileComposioToolkitsTransaction(profileId, assignments);
     },
 
+    async revokeApiKey(id, revokedAt) {
+      const result = revokeApiKeyStmt.run(revokedAt, id);
+      return result.changes > 0;
+    },
+
     async revokeArtifactShare(id, revokedAt) {
       const result = revokeArtifactShareStmt.run(revokedAt, id);
       return result.changes > 0;
@@ -3942,6 +4006,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async unassignToolFromProfile(profileId, toolId) {
       const result = unassignToolStmt.run(profileId, toolId);
       return result.changes > 0;
+    },
+
+    async updateApiKeyLastUsedAt(id, lastUsedAt) {
+      updateApiKeyLastUsedAtStmt.run(lastUsedAt, id);
     },
 
     async updateArtifactShareSnapshot(id, snapshot) {
@@ -5107,6 +5175,22 @@ function toBrowserSessionRecord(
     revokedAt: row.revoked_at,
     sessionTokenHash: row.session_token_hash,
     userId: row.user_id,
+  };
+}
+
+function toApiKeyRecord(row: ApiKeyRow): StoredApiKeyRecord {
+  return {
+    createdAt: row.created_at,
+    createdByUserId: row.created_by_user_id,
+    environment: row.environment,
+    expiresAt: row.expires_at,
+    id: row.id,
+    keyPrefix: row.key_prefix,
+    lastUsedAt: row.last_used_at,
+    name: row.name,
+    orgId: row.org_id,
+    revokedAt: row.revoked_at,
+    secretHash: row.secret_hash,
   };
 }
 

@@ -378,6 +378,52 @@ describe("createHonoApp", () => {
     }
   });
 
+  test("resolves org context from a backend API key and rejects conflicts", async () => {
+    const options = createServerOptions();
+    await options.databaseAdapter.createUser({
+      createdAt: new Date().toISOString(),
+      email: "owner@example.com",
+      id: "user_owner",
+      passwordHash: "unused",
+      updatedAt: new Date().toISOString(),
+    });
+    await seedOrgForUser(options.databaseAdapter, "owner@example.com");
+    const user =
+      await options.databaseAdapter.getUserByEmail("owner@example.com");
+    const token = `nk_live_${"a".repeat(64)}`;
+    await options.databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: user!.id,
+      environment: "live",
+      expiresAt: null,
+      id: "key_test",
+      keyPrefix: token.slice(0, 20),
+      lastUsedAt: null,
+      name: "Test app",
+      orgId: TEST_ORG_ID,
+      revokedAt: null,
+      secretHash: options.authService.hashToken(token),
+    });
+    const app = createHonoApp(options);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+    expect(response.status).toBe(200);
+
+    const conflict = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Org-Id": "org_other",
+        },
+      })
+    );
+    expect(conflict.status).toBe(400);
+  });
+
   test("rejects invalid bearer auth with 401 instead of 500", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);

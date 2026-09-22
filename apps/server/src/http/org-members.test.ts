@@ -294,4 +294,89 @@ describe("org member management (AE2)", () => {
     );
     expect(badShapeResponse.status).toBe(400);
   });
+
+  test("admin can create, list, rotate, and revoke backend API keys", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const createOrgResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: { email: "api-key-admin@acme.com", name: "API Key Admin" },
+          name: "API Key Org",
+          slug: "api-key-org",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    const created = (await createOrgResponse.json()) as {
+      organization: { id: string };
+      adminMember: { temporaryPassword: string };
+    };
+    const orgId = created.organization.id;
+    const adminSession = await loginUserSession(
+      app,
+      "api-key-admin@acme.com",
+      created.adminMember.temporaryPassword
+    );
+    const headers = () =>
+      adminSession.headers(
+        {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": adminSession.csrfToken,
+        },
+        orgId
+      );
+
+    const createKeyResponse = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/api-keys`, {
+        body: JSON.stringify({ environment: "live", name: "Vibe app" }),
+        headers: headers(),
+        method: "POST",
+      })
+    );
+    expect(createKeyResponse.status).toBe(201);
+    const createdKey = (await createKeyResponse.json()) as {
+      key: { id: string };
+      secret: string;
+    };
+    expect(createdKey.secret).toStartWith("nk_live_");
+
+    const listResponse = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/api-keys`, {
+        headers: headers(),
+      })
+    );
+    expect(listResponse.status).toBe(200);
+    expect(await listResponse.json()).toEqual({
+      keys: [expect.objectContaining({ name: "Vibe app" })],
+    });
+
+    const rotateResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${orgId}/api-keys/${createdKey.key.id}/rotate`,
+        { headers: headers(), method: "POST" }
+      )
+    );
+    expect(rotateResponse.status).toBe(200);
+    const rotated = (await rotateResponse.json()) as {
+      key: { id: string };
+      secret: string;
+    };
+    expect(rotated.secret).not.toBe(createdKey.secret);
+
+    const revokeResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${orgId}/api-keys/${rotated.key.id}`,
+        { headers: headers(), method: "DELETE" }
+      )
+    );
+    expect(revokeResponse.status).toBe(204);
+  });
 });

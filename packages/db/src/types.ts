@@ -486,6 +486,20 @@ export interface StoredOrgMemberRecord {
   userId: string;
 }
 
+export interface StoredApiKeyRecord {
+  createdAt: string;
+  createdByUserId: string;
+  environment: string;
+  expiresAt: string | null;
+  id: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  name: string;
+  orgId: string;
+  revokedAt: string | null;
+  secretHash: string;
+}
+
 export interface StoredUserOrganizationRecord {
   joinedAt: string;
   organization: StoredOrganizationRecord;
@@ -702,6 +716,7 @@ export interface DatabaseAdapter {
     orgId: string
   ): Promise<AutomationUnreadCountRecord[]>;
   countUsers(): Promise<number>;
+  createApiKey(record: StoredApiKeyRecord): Promise<void>;
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   /** Append-only insert. Adapters must not expose update/delete for this table. */
@@ -770,6 +785,7 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
+  getApiKeyByPrefix(keyPrefix: string): Promise<StoredApiKeyRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
@@ -930,6 +946,7 @@ export interface DatabaseAdapter {
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
+  listApiKeysForOrg(orgId: string): Promise<StoredApiKeyRecord[]>;
 
   listArtifactSharesForProfile(
     orgId: string,
@@ -1087,6 +1104,7 @@ export interface DatabaseAdapter {
     profileId: string,
     assignments: StoredProfileComposioToolkitRecord[]
   ): Promise<void>;
+  revokeApiKey(id: string, revokedAt: string): Promise<boolean>;
   revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
   revokeBrowserSessionBySessionTokenHash(
     sessionTokenHash: string,
@@ -1131,6 +1149,7 @@ export interface DatabaseAdapter {
     skillId: string
   ): Promise<boolean>;
   unassignToolFromProfile(profileId: string, toolId: string): Promise<boolean>;
+  updateApiKeyLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
   updateArtifactShareSnapshot(
     id: string,
     snapshot: Pick<

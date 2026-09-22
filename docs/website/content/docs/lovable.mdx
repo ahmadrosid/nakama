@@ -1,0 +1,95 @@
+---
+title: "Build a Nakama AI app with Lovable"
+description: "Give Lovable the Nakama API context it needs to build a secure AI agent backend."
+---
+
+Use Lovable for the app UI and Nakama for the AI agent. Keep the Nakama API key in a server-side function, never in browser JavaScript.
+
+## What you need
+
+1. A reachable Nakama instance with an LLM provider configured.
+2. An organization ID and an organization backend API key.
+3. A Lovable project with a server-side function or backend route.
+
+Create the key from an authenticated admin environment:
+
+```bash
+curl -X POST "$NAKAMA_URL/v1/orgs/$NAKAMA_ORG_ID/api-keys" \
+  -H "Authorization: Bearer $NAKAMA_ADMIN_TOKEN" \
+  -H "X-Org-Id: $NAKAMA_ORG_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Lovable app","environment":"live"}'
+```
+
+Save the returned `secret` as a server-side Lovable secret named `NAKAMA_API_KEY`. Also save `NAKAMA_URL`, `NAKAMA_ORG_ID`, and the profile ID you want the app to use. The secret is returned only once; rotate it if it is exposed.
+
+## Give Lovable the Nakama context
+
+Paste this into Lovable’s chat:
+
+```text
+Build a full-stack AI chat app using Nakama as the agent backend.
+
+Before coding, read:
+https://ahmadrosid.github.io/nakama/lovable.md
+https://ahmadrosid.github.io/nakama/llms.txt
+
+Requirements:
+- Keep NAKAMA_API_KEY server-side. Never expose it in client code, HTML, logs, or URLs.
+- Add a server-side POST /api/chat route that calls Nakama.
+- Read NAKAMA_URL, NAKAMA_ORG_ID, NAKAMA_API_KEY, and NAKAMA_PROFILE_ID from server-side secrets.
+- Create one Nakama web session per browser conversation and reuse its sessionId.
+- Forward the user message to Nakama and return the assistant reply.
+- Show loading, error, retry, and empty states.
+- Do not call Nakama directly from the browser.
+```
+
+## Minimal server flow
+
+Your Lovable backend calls Nakama in two steps. Create a session once:
+
+```ts
+const session = await fetch(`${process.env.NAKAMA_URL}/v1/sessions`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.NAKAMA_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    channel: "web",
+    profileId: process.env.NAKAMA_PROFILE_ID,
+  }),
+});
+
+const { sessionId } = await session.json();
+```
+
+Then send each message with that `sessionId`:
+
+```ts
+const reply = await fetch(
+  `${process.env.NAKAMA_URL}/v1/sessions/${sessionId}/messages`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.NAKAMA_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message: userMessage }),
+  }
+);
+
+const { reply: answer } = await reply.json();
+```
+
+For streaming replies, send `{"message":"...","stream":true}` and proxy the returned server-sent events through your backend to the browser.
+
+## Security checklist
+
+- Never use `NAKAMA_API_KEY` in a React component or browser fetch.
+- Never commit the key or include it in a client-visible response.
+- Use separate `test` and `live` keys where possible.
+- Revoke or rotate a key when a project is duplicated, shared, or compromised.
+- Keep `NAKAMA_ORG_ID` fixed on the server; do not accept an organization ID from the browser.
+
+The generated AI-agent context index is available at [`/llms.txt`](/llms.txt). The focused Lovable page is also available as Markdown at [`/lovable.md`](/lovable.md).

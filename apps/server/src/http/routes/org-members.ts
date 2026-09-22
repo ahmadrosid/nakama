@@ -2,11 +2,15 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AddOrgMemberRequest,
   AddOrgMemberResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
   InviteOrgMemberRequest,
+  ListApiKeysResponse,
   ListOrgMembersResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
+  RotateApiKeyResponse,
   UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
@@ -66,6 +70,24 @@ export function registerOrgMemberRoutes(
   const orgMemberParams = orgIdParam.extend({
     userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
   });
+  const apiKeySchema = z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      environment: z.enum(["live", "test"]),
+      expiresAt: z.string().datetime().nullable().optional(),
+    })
+    .openapi("CreateApiKeyRequest");
+  const apiKeyParams = orgIdParam.extend({
+    keyId: z.string().openapi({ param: { in: "path", name: "keyId" } }),
+  });
+  const apiKeyResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ApiKeyResponse");
+  const apiKeyListResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ListApiKeysResponse");
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -357,6 +379,155 @@ export function registerOrgMemberRoutes(
     }
 
     await orgService.removeMember(orgId, userId);
+    return new Response(null, { status: 204 });
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createOrgApiKey",
+      path: "/v1/orgs/{orgId}/api-keys",
+      request: {
+        body: {
+          content: { "application/json": { schema: apiKeySchema } },
+          required: true,
+        },
+        params: orgIdParam,
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: apiKeyResponseSchema } },
+          description: "API key created",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Create an organization backend API key",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.post("/v1/orgs/:orgId/api-keys", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId || !orgService) {
+      return errorResponse("Not found", 404);
+    }
+    const body = await readJson<CreateApiKeyRequest>(c.req.raw, apiKeySchema);
+    const result = await orgService.createApiKey({
+      orgId,
+      request: body,
+      userId: auth.user.id,
+    });
+    return json<CreateApiKeyResponse>(result, 201);
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listOrgApiKeys",
+      path: "/v1/orgs/{orgId}/api-keys",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: apiKeyListResponseSchema },
+          },
+          description: "API keys listed",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List organization backend API keys",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.get("/v1/orgs/:orgId/api-keys", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId || !orgService) {
+      return errorResponse("Not found", 404);
+    }
+    return json<ListApiKeysResponse>(await orgService.listApiKeys(orgId));
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "rotateOrgApiKey",
+      path: "/v1/orgs/{orgId}/api-keys/{keyId}/rotate",
+      request: { params: apiKeyParams },
+      responses: {
+        200: {
+          content: { "application/json": { schema: apiKeyResponseSchema } },
+          description: "API key rotated",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Rotate an organization backend API key",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.post("/v1/orgs/:orgId/api-keys/:keyId/rotate", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId || !orgService) {
+      return errorResponse("Not found", 404);
+    }
+    const result = await orgService.rotateApiKey(
+      orgId,
+      auth.user.id,
+      c.req.param("keyId")
+    );
+    return json<RotateApiKeyResponse>(result);
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "revokeOrgApiKey",
+      path: "/v1/orgs/{orgId}/api-keys/{keyId}",
+      request: { params: apiKeyParams },
+      responses: {
+        204: { description: "API key revoked" },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Revoke an organization backend API key",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.delete("/v1/orgs/:orgId/api-keys/:keyId", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId || !orgService) {
+      return errorResponse("Not found", 404);
+    }
+    await orgService.revokeApiKey(orgId, auth.user.id, c.req.param("keyId"));
     return new Response(null, { status: 204 });
   });
 

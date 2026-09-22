@@ -36,8 +36,12 @@ function resolveOrgId(
 ): { conflict: true } | { orgId: string | null } {
   const headerOrgId = request.headers.get(ORG_ID_HEADER)?.trim() || null;
   const pathOrgId = pluginUiPathOrgId(pathname);
+  const authOrgId = auth.activeOrgId?.trim() || null;
 
   if (headerOrgId && pathOrgId && headerOrgId !== pathOrgId) {
+    return { conflict: true };
+  }
+  if (headerOrgId && authOrgId && headerOrgId !== authOrgId) {
     return { conflict: true };
   }
 
@@ -49,6 +53,10 @@ function resolveOrgId(
   }
   if (PLUGIN_ACTION_PATH.test(pathname) && request.method === "POST") {
     return { orgId: null };
+  }
+
+  if (authOrgId) {
+    return { orgId: authOrgId };
   }
 
   const sessionOrgId = auth.session?.activeOrgId?.trim();

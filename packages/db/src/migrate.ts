@@ -27,6 +27,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillsTables);
   atomic(migrateUsersTable);
   atomic(migrateOrgTables);
+  atomic(migrateApiKeysTable);
   atomic(migrateLegacyUserContextToOrgMembers);
   atomic(migrateOrgMemoryProposalsTable);
   atomic(migrateSkillProposalsTable);
@@ -491,6 +492,28 @@ function migrateOrgTables(db: Database): void {
   if (!columnNames.has("user_context")) {
     db.exec("ALTER TABLE org_members ADD COLUMN user_context TEXT;");
   }
+}
+
+function migrateApiKeysTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      environment TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      secret_hash TEXT NOT NULL,
+      created_by_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT,
+      last_used_at TEXT,
+      revoked_at TEXT,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS api_keys_prefix_unique ON api_keys (key_prefix);
+    CREATE INDEX IF NOT EXISTS api_keys_org_id ON api_keys (org_id, created_at DESC);
+  `);
 }
 
 /**

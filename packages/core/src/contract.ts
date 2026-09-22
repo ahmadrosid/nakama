@@ -667,6 +667,37 @@ export interface UpdateOrgMemberRequest {
   role?: OrgRole;
 }
 
+export interface ApiKeySummary {
+  createdAt: string;
+  environment: "live" | "test";
+  expiresAt: string | null;
+  id: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  name: string;
+  revokedAt: string | null;
+}
+
+export interface CreateApiKeyRequest {
+  environment: "live" | "test";
+  expiresAt?: string | null;
+  name: string;
+}
+
+export interface CreateApiKeyResponse {
+  key: ApiKeySummary;
+  secret: string;
+}
+
+export interface ListApiKeysResponse {
+  keys: ApiKeySummary[];
+}
+
+export interface RotateApiKeyResponse {
+  key: ApiKeySummary;
+  secret: string;
+}
+
 export interface OrgMemoryResponse {
   content: string;
 }
