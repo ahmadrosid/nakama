@@ -21,21 +21,23 @@ import { queryKeys } from "@/lib/query-keys";
 
 type SecretState = { key: ApiKeySummary; secret: string } | null;
 
-const INTEGRATION_PROMPT = `Build a full-stack AI agent app using Nakama as the backend.
+const INTEGRATION_PROMPT = `Integrate this existing app with Nakama as the AI agent backend.
 
 Read these docs before coding:
 - https://ahmadrosid.github.io/nakama/lovable.md
 - https://ahmadrosid.github.io/nakama/llms.txt
 
 Requirements:
+- Inspect the existing app and preserve its current UI, authentication, and data model.
 - Keep NAKAMA_API_KEY server-side. Never expose it in browser code, HTML, logs, or URLs.
 - Read only NAKAMA_URL and NAKAMA_API_KEY from server-side secrets.
-- Create a server-side POST /api/chat route.
+- Add a server-side chat route that connects the existing chat UI to Nakama.
 - Create one Nakama web session per browser conversation and reuse its sessionId.
 - Pass the authenticated app user's stable ID as appUserId when creating the session.
 - Omit profileId so Nakama uses the organization's default profile.
 - Send X-Nakama-App-User-Id with every request for that session.
-- Return the assistant reply to the browser. Support streaming SSE with chunk, done, and error events if streaming is enabled.
+- Return the assistant reply to the existing UI. Support streaming SSE with chunk, done, and error events if streaming is enabled.
+- Keep each app user's Nakama session and memory isolated by their stable authenticated user ID.
 - Do not call Nakama directly from the browser.`;
 
 function useOrgApiKeys(orgId: string) {
