@@ -32,7 +32,7 @@ Save the returned `secret` as a server-side Lovable secret named `NAKAMA_API_KEY
 Paste this into Lovable’s chat:
 
 ```text
-Build a full-stack AI chat app using Nakama as the agent backend.
+Build an ai agent app using Nakama as the agent backend.
 
 Before coding, read:
 https://ahmadrosid.github.io/nakama/lovable.md
@@ -111,7 +111,18 @@ The non-streaming response is JSON:
 
 `contextUsage` is optional. Use `reply` as the assistant message and ignore `contextUsage` unless you want to display context or token information.
 
-For streaming replies, send `{"message":"...","stream":true}` and proxy the returned server-sent events through your backend to the browser.
+For streaming replies, send `{"message":"...","stream":true}`. Nakama returns Server-Sent Events. Each event is one JSON object on a `data:` line:
+
+```text
+data: {"type":"chunk","delta":"Hello"}
+
+data: {"type":"chunk","delta":"!"}
+
+data: {"type":"done","reply":"Hello!","contextUsage":{"contextWindow":128000,"source":"estimate","usableContextTokens":120000,"usedTokens":1710}}
+
+```
+
+Append each `chunk.delta` to the assistant message. Stop on `done`; show `error.error` if an `error` event arrives. Other events can report `thinking`, tool activity, todos, questions, or usage. Proxy the SSE response through your backend to the browser.
 
 ## App-user workspace and storage
 

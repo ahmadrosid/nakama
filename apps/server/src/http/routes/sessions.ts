@@ -484,6 +484,11 @@ export function registerSessionRoutes(
         200: {
           content: {
             "application/json": { schema: sendMessageResponseSchema },
+            "text/event-stream": {
+              example:
+                'data: {"type":"chunk","delta":"Hello"}\\n\\ndata: {"type":"done","reply":"Hello"}\\n\\n',
+              schema: z.string(),
+            },
           },
           description: "Assistant reply",
         },
