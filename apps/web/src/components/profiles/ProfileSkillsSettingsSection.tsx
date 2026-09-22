@@ -59,6 +59,7 @@ export function ProfileSkillsSettingsSection({
                   .then(() => toast("Automation setting saved."))
                   .catch((error) => toast(formatError(error)));
               }}
+              size="sm"
             />
           </div>
         </div>
