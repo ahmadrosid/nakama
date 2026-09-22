@@ -486,7 +486,7 @@ export function registerSessionRoutes(
             "application/json": { schema: sendMessageResponseSchema },
             "text/event-stream": {
               example:
-                'data: {"type":"chunk","delta":"Hello"}\\n\\ndata: {"type":"done","reply":"Hello"}\\n\\n',
+                'data: {"type":"tool_start","toolCallId":"call_1","tool":"search_files","input":{"query":"pricing"}}\\n\\ndata: {"type":"tool_end","toolCallId":"call_1","tool":"search_files","result":{"matches":[]}}\\n\\ndata: {"type":"chunk","delta":"I could not find any pricing files."}\\n\\ndata: {"type":"done","reply":"I could not find any pricing files."}\\n\\n',
               schema: z.string(),
             },
           },

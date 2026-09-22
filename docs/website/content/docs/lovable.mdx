@@ -124,6 +124,28 @@ data: {"type":"done","reply":"Hello!","contextUsage":{"contextWindow":128000,"so
 
 Append each `chunk.delta` to the assistant message. Stop on `done`; show `error.error` if an `error` event arrives. Other events can report `thinking`, tool activity, todos, questions, or usage. Proxy the SSE response through your backend to the browser.
 
+Tool activity uses these events:
+
+```text
+data: {"type":"tool_start","toolCallId":"call_1","tool":"search_files","input":{"query":"pricing"}}
+
+data: {"type":"tool_end","toolCallId":"call_1","tool":"search_files","result":{"matches":[]}}
+```
+
+Other event examples:
+
+```text
+data: {"type":"thinking","delta":"Checking the available files..."}
+
+data: {"type":"usage","usage":{"inputTokens":1200,"outputTokens":80,"totalTokens":1280}}
+
+data: {"type":"todos_updated","todos":[{"id":"todo_1","content":"Check pricing files","status":"completed"}]}
+
+data: {"type":"questionnaire_updated","questionnaire":{"id":"question_1","title":"Need more details","questions":[]}}
+```
+
+Render tool activity or thinking as optional progress UI. Most clients only need to handle `chunk`, `done`, and `error`.
+
 ## App-user workspace and storage
 
 Nakama creates the private workspace when an app user starts their first API-key session. It does not create a Nakama organization user.
