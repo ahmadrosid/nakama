@@ -25,7 +25,7 @@ type SecretState = { key: ApiKeySummary; secret: string } | null;
 
 function useOrgApiKeys(orgId: string) {
   const queryClient = useQueryClient();
-  const [name, setName] = useState("Lovable app");
+  const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [secretState, setSecretState] = useState<SecretState>(null);
