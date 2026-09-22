@@ -73,7 +73,6 @@ export function registerOrgMemberRoutes(
   const apiKeySchema = z
     .object({
       name: z.string().trim().min(1).max(120),
-      environment: z.enum(["live", "test"]),
       expiresAt: z.string().datetime().nullable().optional(),
     })
     .openapi("CreateApiKeyRequest");

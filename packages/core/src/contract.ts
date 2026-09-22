@@ -679,7 +679,6 @@ export interface ApiKeySummary {
 }
 
 export interface CreateApiKeyRequest {
-  environment: "live" | "test";
   expiresAt?: string | null;
   name: string;
 }

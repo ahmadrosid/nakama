@@ -859,7 +859,8 @@ export class OrgService {
     request: CreateApiKeyRequest;
   }): Promise<CreateApiKeyResponse> {
     await this.requireActiveOrganization(input.orgId);
-    const { environment, expiresAt, name } = input.request;
+    const { expiresAt, name } = input.request;
+    const environment = "live" as const;
     const trimmedName = name.trim();
     if (!trimmedName || trimmedName.length > 120) {
       throw new NakamaApiError(

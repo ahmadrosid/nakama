@@ -26,7 +26,6 @@ type SecretState = { key: ApiKeySummary; secret: string } | null;
 function useOrgApiKeys(orgId: string) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("Lovable app");
-  const [environment, setEnvironment] = useState<"live" | "test">("live");
   const [expiresAt, setExpiresAt] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [secretState, setSecretState] = useState<SecretState>(null);
@@ -42,7 +41,6 @@ function useOrgApiKeys(orgId: string) {
   const createMutation = useMutation({
     mutationFn: () =>
       client.createApiKey(orgId, {
-        environment,
         expiresAt: expiresAt
           ? new Date(`${expiresAt}T23:59:59.999Z`).toISOString()
           : null,
@@ -118,7 +116,6 @@ function useOrgApiKeys(orgId: string) {
     createKey,
     createMutation,
     createOpen,
-    environment,
     error,
     expiresAt,
     keysQuery,
@@ -127,7 +124,6 @@ function useOrgApiKeys(orgId: string) {
     rotateMutation,
     secretState,
     setCreateOpen,
-    setEnvironment,
     setExpiresAt,
     setName,
   };
@@ -189,22 +185,6 @@ function CreateApiKeyDialog({
               value={name}
             />
           </label>
-          <fieldset className="space-y-1.5">
-            <legend className="font-medium text-sm">Environment</legend>
-            <div className="flex gap-2">
-              {(["live", "test"] as const).map((value) => (
-                <Button
-                  className="flex-1"
-                  key={value}
-                  onClick={() => setEnvironment(value)}
-                  type="button"
-                  variant={environment === value ? "default" : "outline"}
-                >
-                  {value === "live" ? "Live" : "Test"}
-                </Button>
-              ))}
-            </div>
-          </fieldset>
           <label className="block space-y-2 text-sm">
             <span className="font-medium">Expires on</span>
             <Popover>
@@ -314,7 +294,7 @@ function ApiKeysList({ controller }: { controller: OrgApiKeysController }) {
           <div className="min-w-0">
             <p className="font-medium">{key.name}</p>
             <p className="text-muted-foreground text-xs">
-              {key.keyPrefix} · {key.environment} · created{" "}
+              {key.keyPrefix} · created{" "}
               {new Date(key.createdAt).toLocaleDateString()}
               {key.revokedAt ? " · revoked" : ""}
             </p>

@@ -11,9 +11,9 @@ Use Lovable for the app UI and Nakama for the AI agent. Keep the Nakama API key 
 2. An organization ID and an organization backend API key.
 3. A Lovable project with a server-side function or backend route.
 
-From the Nakama dashboard, open **Organization → Backend API keys**, enter a name such as `Lovable app`, choose `Live`, and select **Create key**. Copy the secret immediately; it is shown only once.
+From the Nakama dashboard, open **Organization → Backend API keys**, enter a descriptive name such as `Lovable production`, and select **Create key**. Copy the secret immediately; it is shown only once.
 
-Use **Live** for your production app and real users. Use **Test** for local development, staging, and preview deployments. Keep the keys separate so a test key can be revoked without affecting production.
+Use the key name to identify its use, for example `Lovable production`, `Lovable staging`, or `Lovable preview`. Create separate keys when you want to revoke one environment without affecting another.
 
 You can also create a key from an authenticated admin environment:
 
@@ -22,7 +22,7 @@ curl -X POST "$NAKAMA_URL/v1/orgs/$NAKAMA_ORG_ID/api-keys" \
   -H "Authorization: Bearer $NAKAMA_ADMIN_TOKEN" \
   -H "X-Org-Id: $NAKAMA_ORG_ID" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Lovable app","environment":"live"}'
+  -d '{"name":"Lovable production"}'
 ```
 
 Save the returned `secret` as a server-side Lovable secret named `NAKAMA_API_KEY`. Also save `NAKAMA_URL`, `NAKAMA_ORG_ID`, and the profile ID you want the app to use. The secret is returned only once; rotate it if it is exposed.
