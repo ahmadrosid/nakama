@@ -171,8 +171,7 @@ function CreateApiKeyDialog({
         <DialogHeader className="gap-2">
           <DialogTitle>Create backend API key</DialogTitle>
           <DialogDescription>
-            Use this key only from your backend. The secret will be shown once
-            after creation.
+            Backend use only. Secret shown once.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={createKey}>
@@ -211,7 +210,7 @@ function CreateApiKeyDialog({
               value={expiresAt}
             />
             <span className="block text-muted-foreground text-xs">
-              Optional. Leave blank for a key without an expiry.
+              Optional
             </span>
           </label>
           {error ? (
@@ -251,7 +250,7 @@ function SecretBanner({ controller }: { controller: OrgApiKeysController }) {
     <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
       <p className="font-medium text-sm">Save this secret now</p>
       <p className="text-muted-foreground text-xs">
-        It will not be shown again. Keep it in your backend secret store.
+        Shown once. Store it in your backend secret manager.
       </p>
       <div className="flex gap-2">
         <Input readOnly value={secretState.secret} />
@@ -343,19 +342,12 @@ export function OrgApiKeysCard() {
         <h2 className="font-normal text-muted-foreground/55 text-sm">
           Backend API keys
         </h2>
-        <p className="mt-1 text-muted-foreground text-xs">
-          Create keys for server-side apps such as Lovable. The secret is shown
-          only once.
-        </p>
       </div>
       <Card className="w-full overflow-hidden shadow-none">
         <CardContent className="space-y-4 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-medium text-sm">Create a backend key</p>
-              <p className="text-muted-foreground text-xs">
-                Use this key from a server-side app or integration.
-              </p>
             </div>
             <CreateApiKeyDialog controller={controller} />
           </div>
