@@ -1,10 +1,13 @@
 /**
- * OMNI as a tool-output optimiser for two tools, in process, with no MCP server.
+ * OMNI as a tool-output optimiser for three tools, in process, with no MCP server.
  *
- * Why only `bash` and `read_file`: replayed against real sessions, OMNI's shell
- * path cuts 37.6% and every point of it comes from the cross-turn ledger folding
- * output the agent has already been shown. Its `Write`/`Edit` arms decline by
- * design, and `web_fetch` is already bounded by MAX_CONTENT_CHARS there.
+ * Why these three: replayed against real sessions, OMNI's shell path cuts 37.6%
+ * and every point of it comes from the cross-turn ledger folding output the
+ * agent has already been shown. `knowledge_base_search` folds far less of its
+ * own volume, 9.6% measured over 31 sessions of a retrieval agent, but it is
+ * often that agent's only tool output at all: a profile with no shell scored
+ * 37.6% of nothing before. Its `Write`/`Edit` arms decline by design, and
+ * `web_fetch` stays out because MAX_CONTENT_CHARS already bounds it.
  *
  * Why not the MCP server: it publishes 26 tools, 8,241 bytes of definitions that
  * ride on every request, which costs more than the distillation saves and makes
@@ -32,14 +35,46 @@ import { getOrgMemoryDir } from "./soul/resolve";
  */
 const OMNI_TOOL_NAMES: Record<string, string> = {
   bash: "Bash",
+  knowledge_base_search: "Read",
   read_file: "Read",
 };
 
-/** The field each tool carries its text in. Never the JSON envelope: OMNI passes
- * structured payloads through untouched, so wiring it to the envelope saves zero. */
-const TEXT_FIELD: Record<string, string> = {
-  bash: "stdout",
-  read_file: "content",
+/**
+ * How each tool's text is read out of its result and written back.
+ *
+ * Never the JSON envelope: OMNI passes structured payloads through untouched, so
+ * wiring it to the envelope saves zero.
+ *
+ * `bash` and `read_file` carry one string. `knowledge_base_search` carries its
+ * text inside `matches[].text`, and what repeats within a session is the whole
+ * result rather than one hit, so the array is folded as a unit. The hits are
+ * dropped on a fold because keeping them beside a marker that says "already
+ * shown" would ship the bytes the fold exists to remove; `matchCount` still
+ * states how many there were, and the handle expands them.
+ */
+type TextAccessor = {
+  read: (record: Record<string, unknown>) => string | undefined;
+  write: (record: Record<string, unknown>, text: string) => object;
+};
+
+function plainField(field: string): TextAccessor {
+  return {
+    read: (record) =>
+      typeof record[field] === "string" ? (record[field] as string) : undefined,
+    write: (record, text) => ({ ...record, [field]: text }),
+  };
+}
+
+const TEXT_ACCESSOR: Record<string, TextAccessor> = {
+  bash: plainField("stdout"),
+  knowledge_base_search: {
+    read: (record) =>
+      Array.isArray(record.matches) && record.matches.length > 0
+        ? JSON.stringify(record.matches)
+        : undefined,
+    write: (record, text) => ({ ...record, matches: [], omniMatches: text }),
+  },
+  read_file: plainField("content"),
 };
 
 const HOOK_TIMEOUT_MS = 5000;
@@ -188,7 +223,7 @@ export async function distillToolResult(
   context: ToolContext
 ): Promise<unknown> {
   const omniName = OMNI_TOOL_NAMES[toolName];
-  const field = TEXT_FIELD[toolName];
+  const accessor = TEXT_ACCESSOR[toolName];
   const orgId = context.orgId?.trim();
   // Automation runs carry no sessionId, only a run id, and that run is exactly
   // one conversation. Scoping by anything broader would let the ledger claim a
@@ -196,7 +231,7 @@ export async function distillToolResult(
   // statement rather than a missed saving.
   const scope = context.sessionId?.trim() || context.automationRunId?.trim();
 
-  if (!(omniName && field && orgId && scope)) {
+  if (!(omniName && accessor && orgId && scope)) {
     return result;
   }
   if (typeof result !== "object" || result === null) {
@@ -204,7 +239,7 @@ export async function distillToolResult(
   }
 
   const record = result as Record<string, unknown>;
-  const text = record[field];
+  const text = accessor.read(record);
   if (typeof text !== "string" || text.length === 0) {
     return result;
   }
@@ -272,7 +307,7 @@ export async function distillToolResult(
 
   report(OPTIMIZER_ID, replacement.length);
 
-  return { ...record, [field]: replacement, omniDistilled: true };
+  return { ...accessor.write(record, replacement), omniDistilled: true };
 }
 
 const OMNI_RETRIEVE_TOOL_NAME = "omni_retrieve";

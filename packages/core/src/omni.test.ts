@@ -35,6 +35,82 @@ describe("omni gating", () => {
   });
 });
 
+describe("knowledge_base_search", () => {
+  const longMatches = Array.from({ length: 30 }, (_, index) => ({
+    file: `doc-${index}.txt`,
+    line: index + 1,
+    scope: "profile" as const,
+    text: "a sentence of retrieved regulation text worth folding twice over",
+  }));
+
+  function savingsProbe() {
+    const seen: { bytesIn: number; bytesOut: number; tool: string }[] = [];
+    return {
+      ctx: {
+        ...CTX,
+        recordToolOutputSavings: (saving: {
+          bytesIn: number;
+          bytesOut: number;
+          optimizer: string;
+          tool: string;
+        }) => seen.push(saving),
+      },
+      seen,
+    };
+  }
+
+  test("measures the matches array, not the envelope", async () => {
+    process.env.NAKAMA_OMNI = "1";
+    const { ctx, seen } = savingsProbe();
+    const result = {
+      matchCount: longMatches.length,
+      matches: longMatches,
+      query: "ketinggian",
+      root: "/kb",
+      truncated: false,
+    };
+
+    await distillToolResult("knowledge_base_search", result, ctx);
+
+    // The bytes it reports are the ones it read. Reading the envelope, or
+    // reading nothing, both show up here rather than passing silently.
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.tool).toBe("knowledge_base_search");
+    expect(seen[0]?.bytesIn).toBe(JSON.stringify(longMatches).length);
+  });
+
+  test("a result with no hits is left alone entirely", async () => {
+    process.env.NAKAMA_OMNI = "1";
+    const { ctx, seen } = savingsProbe();
+    const result = {
+      matchCount: 0,
+      matches: [],
+      query: "ketinggian",
+      root: "/kb",
+      truncated: false,
+    };
+
+    expect(await distillToolResult("knowledge_base_search", result, ctx)).toBe(
+      result
+    );
+    // Not even a control-arm row: there was nothing to measure.
+    expect(seen).toHaveLength(0);
+  });
+
+  test("a short result reports the control arm and keeps its hits", async () => {
+    process.env.NAKAMA_OMNI = "1";
+    const { ctx, seen } = savingsProbe();
+    const matches = [{ file: "a.txt", line: 1, scope: "profile", text: "hi" }];
+    const result = { matchCount: 1, matches, query: "hi", truncated: false };
+
+    expect(await distillToolResult("knowledge_base_search", result, ctx)).toBe(
+      result
+    );
+    expect(seen[0]?.bytesIn).toBe(JSON.stringify(matches).length);
+    expect(seen[0]?.bytesIn).toBe(seen[0]?.bytesOut);
+  });
+});
+
 describe("omni result passthrough", () => {
   test("leaves tools it does not handle alone", async () => {
     process.env.NAKAMA_OMNI = "1";

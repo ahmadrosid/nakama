@@ -1,6 +1,6 @@
 ---
 title: "Token optimiser"
-description: "Shorten bash and read_file output before it reaches the model, measure what that saves, and expand anything folded."
+description: "Shorten bash, read_file and knowledge_base_search output before it reaches the model, measure what that saves, and expand anything folded."
 ---
 
 Long tool output is the most expensive thing in an agent turn, and most of it is output the model has already been shown. The **token optimiser** folds that away before it is inserted into the conversation, and keeps a handle so the agent can read the full text if it needs to.
@@ -9,9 +9,11 @@ It is on by default. Nothing is lost when it runs: folded text is archived and t
 
 ## What it touches
 
-Two tools, and only two: `bash` (its `stdout`) and `read_file` (its `content`). Output under 1,000 characters is passed through untouched.
+Three tools: `bash` (its `stdout`), `read_file` (its `content`) and `knowledge_base_search` (its `matches`). Output under 1,000 characters is passed through untouched.
 
 That narrowness is measured, not cautious. Replayed against real sessions, the shell path cuts 37.6%, and every point of it comes from folding output already shown earlier in the same conversation. The write and edit paths decline by design, and `web_fetch` is already bounded by its own content cap, so wiring them in would add surface without adding savings.
+
+`knowledge_base_search` folds a much smaller share of its own volume, 9.6% measured over 31 sessions of a retrieval agent, and all of it is whole results repeated within a session rather than partial overlap. It is in anyway because of the base rather than the ratio: an agent that answers from uploaded documents often has no shell at all, so the panel read `Nothing measured in the last 30 days` forever and looked identical to a broken install. A folded search result keeps its `matchCount` and drops its hits, which the handle expands.
 
 The optimiser runs in process. It is not an MCP server, deliberately: that server publishes 26 tools and 8,241 bytes of definitions that ride on every single request, which costs more than the folding saves and makes tool selection worse at the same time.
 
@@ -63,5 +65,5 @@ Only Linux and macOS targets are published. Windows is reported unsupported rath
 ## Limits
 
 - Bytes, not tokens, as above.
-- `bash` and `read_file` only.
+- `bash`, `read_file` and `knowledge_base_search` only.
 - Nothing is deleted. Folded text is archived and retrievable for the life of the org ledger.
