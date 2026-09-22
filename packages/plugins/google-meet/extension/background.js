@@ -62,6 +62,35 @@ async function callNakama(connection, action, input = {}) {
   return response.result;
 }
 
+async function meetingSessionForTab(tabId) {
+  const session = await getSession();
+  const { connection } = await chrome.storage.session.get("connection");
+  if (
+    !session ||
+    !["starting", "recording"].includes(session.status) ||
+    session.tabId !== tabId ||
+    connection?.tabId !== session.connection?.tabId ||
+    connection?.url !== session.connection?.url
+  ) {
+    return null;
+  }
+  return { connection, session };
+}
+
+async function transcriptForTab(tabId, after) {
+  if (!Number.isSafeInteger(after) || after < 0) {
+    throw new Error("Invalid transcript cursor");
+  }
+  const active = await meetingSessionForTab(tabId);
+  if (!active) {
+    return null;
+  }
+  return callNakama(active.connection, "transcript", {
+    after,
+    meetingId: active.session.meetingId,
+  });
+}
+
 async function connect() {
   const session = await getSession();
   if (starting || ["starting", "recording"].includes(session?.status)) {
@@ -197,7 +226,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
-  if (sender.url !== chrome.runtime.getURL("popup.html") || sender.tab) {
+  const fromPopup =
+    sender.url === chrome.runtime.getURL("popup.html") && !sender.tab;
+  const fromMeetTab =
+    Boolean(sender.tab?.id) &&
+    ["MEET_STATE", "MEET_TRANSCRIPT"].includes(message.type);
+  if (!fromPopup && !fromMeetTab) {
     return;
   }
   let work;
@@ -207,7 +241,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     work = start();
   } else if (message.type === "STOP") {
     work = chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
-  } else if (["TRANSCRIPT", "OPEN_TRANSCRIPT"].includes(message.type)) {
+  } else if (message.type === "MEET_STATE" && fromMeetTab) {
+    work = meetingSessionForTab(sender.tab.id).then((active) =>
+      active
+        ? { meetingId: active.session.meetingId, status: active.session.status }
+        : null
+    );
+  } else if (message.type === "MEET_TRANSCRIPT" && fromMeetTab) {
+    work = transcriptForTab(sender.tab.id, message.after ?? 0);
+  } else if (
+    ["TRANSCRIPT", "OPEN_TRANSCRIPT"].includes(message.type) &&
+    fromPopup
+  ) {
     work = (async () => {
       const session = await getSession();
       const { connection } = await chrome.storage.session.get("connection");

@@ -2,8 +2,118 @@
 
 const chrome = globalThis.chrome;
 const isMeet = location.hostname === "meet.google.com";
+const isMeeting =
+  isMeet && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(location.pathname);
 const isNakamaMeetPage = () => location.pathname === "/plugins/google-meet";
 const pending = new Map();
+let transcriptPanel;
+let transcriptList;
+let transcriptTimer;
+let transcriptCursor = 0;
+let transcriptMeeting;
+let transcriptRunning = false;
+
+function createTranscriptPanel() {
+  if (!isMeeting || transcriptPanel) {
+    return;
+  }
+  transcriptPanel = document.createElement("aside");
+  transcriptPanel.setAttribute("aria-label", "Nakama live transcript");
+  const shadow = transcriptPanel.attachShadow({ mode: "open" });
+  shadow.innerHTML = `
+    <style>
+      :host { all: initial; }
+      aside { position: fixed; z-index: 2147483646; top: 72px; right: 16px; width: 320px; max-height: min(70vh, 560px); display: grid; grid-template-rows: auto 1fr; overflow: hidden; color: #f8fafc; background: #18181b; border: 1px solid #3f3f46; border-radius: 12px; box-shadow: 0 12px 40px #0008; font: 14px/1.45 system-ui, sans-serif; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #3f3f46; }
+      strong { font-size: 14px; }
+      button { color: #a1a1aa; background: none; border: 0; font: inherit; font-size: 20px; line-height: 1; cursor: pointer; }
+      button:hover { color: #fff; }
+      #transcript { min-height: 100px; max-height: 500px; padding: 4px 14px 12px; overflow: auto; }
+      p { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      span { display: block; margin-bottom: 2px; color: #fbbf24; font-size: 12px; font-weight: 600; }
+      #empty { color: #a1a1aa; }
+    </style>
+    <aside>
+      <header><strong>Live transcript</strong><button type="button" aria-label="Close transcript">×</button></header>
+      <div id="transcript" role="log" aria-live="polite"><p id="empty">Waiting for the first transcript…</p></div>
+    </aside>`;
+  transcriptList = shadow.querySelector("#transcript");
+  shadow.querySelector("button").addEventListener("click", hideTranscript);
+  document.documentElement.append(transcriptPanel);
+}
+
+function hideTranscript() {
+  transcriptPanel?.remove();
+  transcriptPanel = undefined;
+  transcriptList = undefined;
+  clearInterval(transcriptTimer);
+  transcriptTimer = undefined;
+}
+
+function showTranscript() {
+  createTranscriptPanel();
+  if (!transcriptPanel || transcriptTimer) {
+    return;
+  }
+  transcriptCursor = 0;
+  transcriptMeeting = undefined;
+  transcriptRunning = false;
+  transcriptTimer = setInterval(() => void refreshTranscript(), 2000);
+  void refreshTranscript();
+}
+
+async function refreshTranscript() {
+  if (!transcriptPanel || transcriptRunning) {
+    return;
+  }
+  transcriptRunning = true;
+  try {
+    const result = await chrome.runtime.sendMessage({
+      after: transcriptCursor,
+      type: "MEET_TRANSCRIPT",
+    });
+    if (!result || !transcriptPanel) {
+      hideTranscript();
+      return;
+    }
+    if (transcriptMeeting !== result.meeting.id) {
+      transcriptMeeting = result.meeting.id;
+      transcriptCursor = 0;
+      transcriptList.replaceChildren();
+    }
+    const atBottom =
+      transcriptList.scrollTop + transcriptList.clientHeight >=
+      transcriptList.scrollHeight - 24;
+    for (const segment of result.segments) {
+      transcriptList.firstElementChild?.id === "empty" &&
+        transcriptList.firstElementChild.remove();
+      const turn = document.createElement("p");
+      const speaker = document.createElement("span");
+      speaker.textContent = segment.speakerName || "Unknown speaker";
+      turn.append(speaker, document.createTextNode(segment.text));
+      transcriptList.append(turn);
+    }
+    transcriptCursor = result.nextCursor;
+    if (atBottom) {
+      transcriptList.scrollTop = transcriptList.scrollHeight;
+    }
+  } catch {
+    // The panel retries on the next poll; Meet navigation can invalidate the bridge.
+  } finally {
+    transcriptRunning = false;
+  }
+}
+
+if (isMeeting) {
+  chrome.runtime
+    .sendMessage({ type: "MEET_STATE" })
+    .then((state) => {
+      if (state?.status === "starting" || state?.status === "recording") {
+        showTranscript();
+      }
+    })
+    .catch(() => undefined);
+}
 window.addEventListener("message", async (event) => {
   if (
     !isNakamaMeetPage() ||
@@ -33,7 +143,7 @@ window.addEventListener("message", async (event) => {
     pending.get(event.data.id)?.(event.data);
   }
 });
-const badge = isMeet ? document.createElement("div") : undefined;
+const badge = isMeeting ? document.createElement("div") : undefined;
 if (badge) {
   badge.textContent = "Nakama transcription active";
   badge.style.cssText =
@@ -60,8 +170,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "CAPTURE_STARTED" && badge) {
     badge.style.display = "block";
+    showTranscript();
   }
   if (message.type === "CAPTURE_STOPPED" && badge) {
     badge.style.display = "none";
+    hideTranscript();
   }
 });
