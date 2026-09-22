@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { cp } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { ensureDir, pathExists } from "../fs";
+import { ensureDir } from "../fs";
 import { getUserConfigDir } from "../user-config";
 import { loadSoulStack } from "./load";
 import type { LoadedSoulStack } from "./types";
@@ -65,27 +64,8 @@ export async function ensureAppUserSoulDir(
   profileId: string,
   appUserId: string
 ): Promise<string> {
-  const source = getProfileSoulDir(orgId, profileId);
   const target = getAppUserSoulDir(orgId, profileId, appUserId);
   await ensureDir(target);
-
-  for (const relativePath of ["SOUL.md", "STYLE.md", "INSTRUCTIONS.md"]) {
-    const sourcePath = join(source, relativePath);
-    const targetPath = join(target, relativePath);
-    if ((await pathExists(sourcePath)) && !(await pathExists(targetPath))) {
-      try {
-        await cp(sourcePath, targetPath, {
-          errorOnExist: false,
-          force: false,
-          recursive: true,
-        });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-          throw error;
-        }
-      }
-    }
-  }
 
   await ensureDir(join(target, "memory-archive"));
   await ensureDir(join(target, "artifacts"));

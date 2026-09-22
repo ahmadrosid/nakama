@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { getUserConfigDir } from "../user-config";
+import { loadSoulStack } from "./load";
 import {
   assertConfigPathSegment,
   ensureAppUserSoulDir,
@@ -80,24 +81,25 @@ describe("app user soul workspaces", () => {
     expect(() => getAppUserSoulDir("org_a", "p1", "  ")).toThrow(/appUserId/);
   });
 
-  test("bootstraps identity files without copying private memory", async () => {
+  test("creates private folders without copying profile files", async () => {
     const configDir = "/tmp/nakama-app-user-workspace-test";
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const source = getProfileSoulDir("org_a", "p1");
-    const { mkdir, rm, writeFile } = await import("node:fs/promises");
+    const { mkdir, readdir, rm, writeFile } = await import("node:fs/promises");
     await rm(configDir, { force: true, recursive: true });
     await mkdir(source, { recursive: true });
     await writeFile(join(source, "SOUL.md"), "shared identity");
     await writeFile(join(source, "MEMORY.md"), "shared memory");
 
     const target = await ensureAppUserSoulDir("org_a", "p1", "alice");
-    expect(await Bun.file(join(target, "SOUL.md")).text()).toBe(
-      "shared identity"
-    );
-    expect(await Bun.file(join(target, "examples", "one.md")).exists()).toBe(
-      false
-    );
+    expect(await Bun.file(join(target, "SOUL.md")).exists()).toBe(false);
     expect(await Bun.file(join(target, "MEMORY.md")).exists()).toBe(false);
+    await expect(readdir(join(target, "memory-archive"))).resolves.toEqual([]);
+    await expect(readdir(join(target, "artifacts"))).resolves.toEqual([]);
+
+    const stack = await loadSoulStack(target, undefined, source);
+    expect(stack.files.soul).toBe("shared identity");
+    expect(stack.files.memory).toBeUndefined();
     await rm(configDir, { force: true, recursive: true });
   });
 });

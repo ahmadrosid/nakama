@@ -4506,7 +4506,8 @@ export class AgentService {
           "MEMORY.md",
           content,
           workspaceRoot
-        )
+        ),
+      workspaceRoot ? getProfileSoulDir(orgId, profileId) : undefined
     );
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })

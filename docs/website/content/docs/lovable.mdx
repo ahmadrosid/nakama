@@ -96,9 +96,9 @@ For streaming replies, send `{"message":"...","stream":true}` and proxy the retu
 
 Nakama creates the private workspace when an app user starts their first API-key session. It does not create a Nakama organization user.
 
-The initial workspace copies the profile's soul, style, and instructions. It also creates empty memory-archive and artifacts directories. With the default files, this is about **2.2 KB of file content per user**, or roughly **20 KB of practical disk allocation per user** on a typical filesystem. For 1,000 users, plan for about **2.2 MB of logical content** or **20 MB of initial disk usage**.
+The initial workspace creates empty `memory-archive` and `artifacts` directories. The profile's soul, style, and instructions are shared and read live, so they are not copied for each user. The initial logical file content is effectively **0 KB per user**; practical disk usage is usually only a few KB for directory entries. For 1,000 users, plan for roughly **a few MB** before memory, uploads, and artifacts are added.
 
-Memory, archived memories, uploaded files, and saved artifacts grow beyond this baseline. Custom profile files also increase the initial size. The workspace is created on first session use, not when an app user record is created.
+Memory, archived memories, uploaded files, and saved artifacts grow beyond this baseline. The workspace is created on first session use, not when an app user record is created.
 
 Assigned skills are shared profile capabilities. Their user-created files stay in the app user's private workspace, but public API users cannot change the profile's shared skill configuration.
 
