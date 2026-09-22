@@ -535,7 +535,7 @@ export function registerSessionRoutes(
       body.profileId,
       auth.user.id,
       {
-        appUserId: body.appUserId,
+        appUserId: auth.mode === "api-key" ? body.appUserId : undefined,
         cognito: body.cognito,
         codingWorkspaceRoot: body.codingWorkspaceRoot,
         excludeSuperBot: auth.mode === "local-token" && channel !== "cli",

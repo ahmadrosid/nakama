@@ -63,14 +63,16 @@ export class MemoryBackendService {
 
   toolContext(
     orgId: string,
-    profileId: string
+    profileId: string,
+    workspaceRoot?: string
   ): Pick<ToolContext, "memoryFiles" | "searchKnowledge"> {
+    const memoryRoot = workspaceRoot ?? getProfileSoulDir(orgId, profileId);
     const readMemoryFile = async (path: string, content: string) => {
-      const root = await realpath(getProfileSoulDir(orgId, profileId));
+      const root = await realpath(memoryRoot);
       const name = relative(root, path);
       return name === "MEMORY.md" ||
         /^memory-archive\/[0-9]{4}-[0-9]{2}\.md$/.test(name)
-        ? this.readMemory(orgId, profileId, name, content)
+        ? this.readMemory(orgId, profileId, name, content, workspaceRoot)
         : content;
     };
     return {
@@ -231,9 +233,15 @@ export class MemoryBackendService {
     orgId: string,
     profileId: string | null,
     filename: string,
-    content: string
+    content: string,
+    workspaceRoot?: string
   ): Promise<string> {
-    const scope = JSON.stringify(["memory", profileId, filename]);
+    const scope = JSON.stringify([
+      "memory",
+      profileId,
+      workspaceRoot ?? "profile",
+      filename,
+    ]);
     const entries: Entry[] = [];
     for (const chunk of chunks(content)) {
       entries.push({
