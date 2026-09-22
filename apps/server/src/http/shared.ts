@@ -6,6 +6,7 @@ import {
   type AgentQuestionnaire,
   type AgentTodo,
   type ApiErrorResponse,
+  type ChatTurnUsage,
   type ChatUsage,
   formatServerError,
   LOCAL_CLIENT_EMAIL,
@@ -475,6 +476,15 @@ export function json<T>(body: T, status = 200, headers?: Headers): Response {
   return Response.json(body, { headers: responseHeaders, status });
 }
 
+/** Never lets usage bookkeeping replace the error it is reporting. */
+function readTurnUsage(
+  session: Pick<AgentChatSession, "getTurnUsage">
+): ChatTurnUsage | undefined {
+  try {
+    return session.getTurnUsage() ?? undefined;
+  } catch {}
+}
+
 export function errorResponse(
   message: string,
   status: number,
@@ -789,10 +799,12 @@ export function streamMessage(
         const reply = await Promise.race(raced);
 
         const contextUsage = session.getContextUsage() ?? undefined;
+        const usage = session.getTurnUsage() ?? undefined;
         send({
           reply,
           type: "done",
           ...(contextUsage ? { contextUsage } : {}),
+          ...(usage ? { usage } : {}),
         });
       } catch (error) {
         const cancelled = turnSignal.aborted && !timedOut;
@@ -807,9 +819,15 @@ export function streamMessage(
           // The stream already told the user; without this the operator never hears.
           void reportError(error, { kind: "turn", source: "server" });
         }
+        // The provider charged for the calls that did land, so a failed turn
+        // still reports them rather than billing silently. Wrapped because this
+        // runs inside the error path: a throw here would replace the real
+        // failure with a blank one.
+        const spent = readTurnUsage(session);
         send({
           error: cancelled ? "Turn cancelled." : formatServerError(error),
           type: "error",
+          ...(spent ? { usage: spent } : {}),
         });
       } finally {
         // Every turn scheduled these. Left pending, a long-running server

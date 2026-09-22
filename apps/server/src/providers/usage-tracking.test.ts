@@ -53,7 +53,7 @@ describe("usage tracking", () => {
       tracker,
       "gpt-4o"
     ).generateChat(input);
-    expect(offCatalog.usage).toEqual(usage);
+    expect(offCatalog.usage).toEqual({ ...usage, modelId: "gpt-4o" });
 
     tracker.setPricingContext({ provider: "openai_compatible" });
     const unpriced = await wrapProviderWithUsageTracking(
@@ -61,7 +61,7 @@ describe("usage tracking", () => {
       tracker,
       "my-local-model"
     ).generateChat(input);
-    expect(unpriced.usage).toEqual(usage);
+    expect(unpriced.usage).toEqual({ ...usage, modelId: "my-local-model" });
   });
 
   test("prefers provider-reported usage for chat calls", async () => {
@@ -206,6 +206,7 @@ describe("usage tracking", () => {
 
     expect(result.usage).toEqual({
       inputTokens: 123,
+      modelId: "gpt-4o",
       outputTokens: 45,
       totalTokens: 168,
     });

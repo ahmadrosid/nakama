@@ -3,6 +3,7 @@ import type {
   AutomationDefinition,
   ChatContextUsage,
   ChatMessage,
+  ChatTurnUsage,
   ChatUsage,
   CompactionResponse,
   MessageContentPart,
@@ -104,6 +105,8 @@ export interface AgentChatSession {
   getContextUsage(): ChatContextUsage | null;
   getHistory(): readonly ChatMessage[];
   getHistoryRevision(): number;
+  /** What the last turn cost. Null before any turn has run on this session. */
+  getTurnUsage(): ChatTurnUsage | null;
   send(input: SendMessageArg, options?: SendStreamOptions): Promise<string>;
   sendStream(
     input: SendMessageArg,
@@ -215,6 +218,9 @@ export function createAgentChatSession(
     : [];
   let historyRevision = 0;
   let lastContextUsage: ChatContextUsage | null = null;
+  // Filled as each provider call returns, not at the end, so a turn that fails
+  // part way still reports the tokens it already spent.
+  let turnUsageCalls: ChatUsage[] = [];
 
   function bumpHistoryRevision(): void {
     historyRevision += 1;
@@ -266,6 +272,45 @@ export function createAgentChatSession(
     source: ChatContextUsage["source"]
   ): void {
     lastContextUsage = buildContextUsage(usedTokens, source);
+  }
+
+  function aggregateTurnUsage(): ChatTurnUsage | null {
+    if (turnUsageCalls.length === 0) {
+      return null;
+    }
+
+    const totals = turnUsageCalls.reduce(
+      (acc, call) => ({
+        cachedInputTokens:
+          acc.cachedInputTokens + (call.cachedInputTokens ?? 0),
+        costUsd:
+          acc.costUsd == null || call.costUsd == null
+            ? undefined
+            : acc.costUsd + call.costUsd,
+        estimated: acc.estimated || call.estimated === true,
+        inputTokens: acc.inputTokens + call.inputTokens,
+        outputTokens: acc.outputTokens + call.outputTokens,
+      }),
+      {
+        cachedInputTokens: 0,
+        costUsd: 0 as number | undefined,
+        estimated: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      }
+    );
+
+    return {
+      cachedInputTokens: totals.cachedInputTokens,
+      calls: [...turnUsageCalls],
+      estimated: totals.estimated,
+      inputTokens: totals.inputTokens,
+      outputTokens: totals.outputTokens,
+      totalTokens: totals.inputTokens + totals.outputTokens,
+      // One unpriced call makes the turn total a lie, so it is dropped rather
+      // than reported short.
+      ...(totals.costUsd == null ? {} : { costUsd: totals.costUsd }),
+    };
   }
 
   function estimateCurrentContextUsage(): ChatContextUsage | null {
@@ -349,6 +394,7 @@ export function createAgentChatSession(
       history.length = 0;
       activeTools = createTurnTools(tools);
       lastContextUsage = null;
+      turnUsageCalls = [];
       bumpHistoryRevision();
     },
     compact(options) {
@@ -370,8 +416,12 @@ export function createAgentChatSession(
     getHistoryRevision() {
       return historyRevision;
     },
+    getTurnUsage() {
+      return aggregateTurnUsage();
+    },
     async send(input, sendOptions) {
       activeTools = createTurnTools(tools);
+      turnUsageCalls = [];
       return sendMessage(
         dependencies,
         activeTools,
@@ -382,6 +432,7 @@ export function createAgentChatSession(
         {
           enableToolLoop,
           onContextUsage: rememberContextUsage,
+          onTurnUsage: (usage) => turnUsageCalls.push(usage),
           onUserMessage: sendOptions?.onUserMessage,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
@@ -394,6 +445,7 @@ export function createAgentChatSession(
     },
     async sendStream(input, handlers, streamOptions) {
       activeTools = createTurnTools(tools);
+      turnUsageCalls = [];
       return sendMessage(
         dependencies,
         activeTools,
@@ -405,6 +457,7 @@ export function createAgentChatSession(
           enableToolLoop,
           handlers,
           onContextUsage: rememberContextUsage,
+          onTurnUsage: (usage) => turnUsageCalls.push(usage),
           onUserMessage: streamOptions?.onUserMessage,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
@@ -439,6 +492,7 @@ async function sendMessage(
       usedTokens: number,
       source: ChatContextUsage["source"]
     ) => void;
+    onTurnUsage?: (usage: ChatUsage) => void;
     resolvePromptContext?: (
       context?: ResolvePromptContextInput
     ) => string | Promise<string>;
@@ -549,7 +603,8 @@ async function sendMessage(
       options.rehydrateMessagesForProvider,
       options.onContextUsage,
       options.signal,
-      options.preprocessUserContent
+      options.preprocessUserContent,
+      options.onTurnUsage
     );
 
     return reply;
@@ -625,7 +680,8 @@ async function runConversation(
     source: ChatContextUsage["source"]
   ) => void,
   signal?: AbortSignal,
-  preprocessUserContent?: AgentChatSessionOptions["preprocessUserContent"]
+  preprocessUserContent?: AgentChatSessionOptions["preprocessUserContent"],
+  onTurnUsage?: (usage: ChatUsage) => void
 ): Promise<string> {
   let producedTokens = 0;
   let stoppedReply = "";
@@ -698,6 +754,7 @@ async function runConversation(
 
     if (result.usage) {
       handlers?.onUsage?.(result.usage);
+      onTurnUsage?.(result.usage);
     }
     producedTokens += Math.max(
       result.usage?.outputTokens ?? 0,

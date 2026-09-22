@@ -1145,6 +1145,8 @@ export interface SendMessageRequest {
 export interface SendMessageResponse {
   contextUsage?: ChatContextUsage;
   reply: string;
+  /** Billable tokens for this turn. `contextUsage` is not a substitute. */
+  usage?: ChatTurnUsage;
 }
 
 export type StreamEvent =
@@ -1180,8 +1182,13 @@ export type StreamEvent =
       label: string;
     }
   | { type: "usage"; usage: ChatUsage }
-  | { type: "done"; reply: string; contextUsage?: ChatContextUsage }
-  | { type: "error"; error: string };
+  | {
+      type: "done";
+      reply: string;
+      contextUsage?: ChatContextUsage;
+      usage?: ChatTurnUsage;
+    }
+  | { type: "error"; error: string; usage?: ChatTurnUsage };
 
 export interface DraftAutomationRequest {
   channel: AgentChannel;
@@ -1751,6 +1758,8 @@ export interface ProfileRef {
 export interface ApiErrorResponse {
   error: string;
   profiles?: ProfileRef[];
+  /** Tokens a failed turn had already spent. They are billable regardless. */
+  usage?: ChatTurnUsage;
 }
 
 export interface CustomModelEntry {
@@ -2566,6 +2575,27 @@ export interface ChatUsage {
   costUsd?: number;
   /** True when input/output tokens were estimated rather than reported by the provider. */
   estimated?: boolean;
+  inputTokens: number;
+  /** The model that served this call, so a turn spanning two can be split. */
+  modelId?: string;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+/**
+ * What one turn actually cost, as the provider counted it. Separate from
+ * `ChatContextUsage`, which is context window occupancy: that re-counts the
+ * system prompt and the tool definitions on every message and folds input and
+ * output into one number, so it is the wrong basis for billing.
+ */
+export interface ChatTurnUsage {
+  cachedInputTokens: number;
+  /** One entry per provider call, in the order they ran. */
+  calls: ChatUsage[];
+  /** Absent when any call in the turn has no known pricing. */
+  costUsd?: number;
+  /** True when any call's tokens were estimated rather than reported. */
+  estimated: boolean;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;

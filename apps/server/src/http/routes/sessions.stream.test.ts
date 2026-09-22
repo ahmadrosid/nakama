@@ -13,6 +13,7 @@ function createCancellableSession(): {
 
   const session = {
     getContextUsage: () => null,
+    getTurnUsage: () => null,
     sendStream: (
       _input: unknown,
       _handlers: unknown,
@@ -38,6 +39,7 @@ function createCancellableSession(): {
 function createChattyThenStalledSession(): AgentChatSession {
   return {
     getContextUsage: () => null,
+    getTurnUsage: () => null,
     sendStream: (
       _input: unknown,
       handlers: { onChunk: (delta: string) => void },
@@ -310,6 +312,7 @@ describe("streamMessage timeout", () => {
     try {
       const session = {
         getContextUsage: () => null,
+        getTurnUsage: () => null,
         sendStream: () => Promise.resolve("done"),
       } as unknown as AgentChatSession;
 

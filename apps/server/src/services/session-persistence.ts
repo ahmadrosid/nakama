@@ -222,6 +222,7 @@ export function wrapPersistedSession(
     getContextUsage: () => session.getContextUsage(),
     getHistory: () => session.getHistory(),
     getHistoryRevision: () => session.getHistoryRevision(),
+    getTurnUsage: () => session.getTurnUsage(),
     async send(message, sendOptions) {
       options.onBeginTurn?.(sessionId);
       try {

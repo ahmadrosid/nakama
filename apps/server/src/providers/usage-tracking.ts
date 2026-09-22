@@ -228,6 +228,8 @@ export function wrapProviderWithUsageTracking(
       ...result,
       usage: {
         inputTokens,
+        // The wrapper is the only layer that knows which model served the call.
+        modelId,
         outputTokens,
         totalTokens: inputTokens + outputTokens,
         ...(estimated ? { estimated: true } : {}),

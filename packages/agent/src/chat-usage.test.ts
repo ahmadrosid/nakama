@@ -131,4 +131,102 @@ describe("per-call usage", () => {
       );
     expect(assistantUsages).toEqual([firstUsage, secondUsage]);
   });
+  test("getTurnUsage totals the turn and keeps every call separate", async () => {
+    const session = createAgentChatSession(
+      { provider: providerWithUsage(), tools: [pingTool] },
+      { enableToolLoop: true }
+    );
+
+    expect(session.getTurnUsage()).toBeNull();
+    await session.send("hi");
+
+    const usage = session.getTurnUsage();
+    // Two provider calls: the tool call, then the reply. Billing has to split
+    // them, so the totals never replace the per-call entries.
+    expect(usage?.calls).toEqual([firstUsage, secondUsage]);
+    expect(usage?.inputTokens).toBe(300);
+    expect(usage?.outputTokens).toBe(30);
+    expect(usage?.totalTokens).toBe(330);
+    expect(usage?.costUsd).toBeCloseTo(0.003, 6);
+    expect(usage?.estimated).toBe(false);
+  });
+
+  test("a fresh session reports only its own turn", async () => {
+    const first = createAgentChatSession(
+      { provider: providerWithUsage(), tools: [pingTool] },
+      { enableToolLoop: true }
+    );
+    await first.send("hi");
+    expect(first.getTurnUsage()?.calls).toHaveLength(2);
+
+    const second = createAgentChatSession(
+      { provider: providerWithUsage(), tools: [pingTool] },
+      { enableToolLoop: true }
+    );
+    await second.send("hi");
+    // Carrying the first session's totals over would bill that turn twice.
+    expect(second.getTurnUsage()?.inputTokens).toBe(300);
+  });
+
+  test("a provider that reports nothing leaves the usage off", async () => {
+    const silent: ProviderClient = {
+      generateChat: () =>
+        Promise.resolve({
+          assistantMessage: { content: "Hi", role: "assistant" },
+          content: "Hi",
+          toolCalls: [],
+        }),
+      generateText: () => Promise.resolve({ content: "{}" }),
+      name: "openai",
+      streamChat: () =>
+        Promise.resolve({
+          assistantMessage: { content: "Hi", role: "assistant" },
+          content: "Hi",
+          toolCalls: [],
+        }),
+    };
+    const session = createAgentChatSession({ provider: silent, tools: [] }, {});
+
+    await session.send("hi");
+
+    // Null rather than a zero-token turn, so a caller cannot bill for a number
+    // the provider never gave, and the response field stays absent.
+    expect(session.getTurnUsage()).toBeNull();
+  });
+
+  test("a turn that fails after a billed call still reports it", async () => {
+    let call = 0;
+    const flaky: ProviderClient = {
+      generateChat: () => {
+        call += 1;
+        if (call === 1) {
+          return Promise.resolve({
+            assistantMessage: {
+              content: "",
+              role: "assistant",
+              toolCalls: [toolCall],
+            },
+            content: "",
+            toolCalls: [toolCall],
+            usage: firstUsage,
+          });
+        }
+        return Promise.reject(new Error("provider exploded"));
+      },
+      generateText: () => Promise.resolve({ content: "{}" }),
+      name: "openai",
+      streamChat: () => Promise.reject(new Error("provider exploded")),
+    };
+    const session = createAgentChatSession(
+      { provider: flaky, tools: [pingTool] },
+      { enableToolLoop: true }
+    );
+
+    await expect(session.send("hi")).rejects.toThrow("provider exploded");
+
+    // The first call was served and charged. Reporting nothing here bills the
+    // user for tokens the API never admitted to.
+    expect(session.getTurnUsage()?.calls).toEqual([firstUsage]);
+    expect(session.getTurnUsage()?.inputTokens).toBe(100);
+  });
 });
