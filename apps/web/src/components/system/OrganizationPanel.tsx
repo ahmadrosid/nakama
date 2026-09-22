@@ -1,3 +1,4 @@
+import { OrgApiKeysCard } from "@/components/settings/OrgApiKeysCard";
 import { OrgArchiveCard } from "@/components/settings/OrgArchiveCard";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
@@ -9,6 +10,7 @@ export function OrganizationPanel() {
   return (
     <div className="min-w-0 space-y-8">
       <OrgMembersCard />
+      <OrgApiKeysCard />
       <SkillsWriteApprovalOrgCard />
       <SkillsPostTurnReviewOrgCard />
       <SkillsCuratorOrgCard />

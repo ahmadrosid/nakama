@@ -11,7 +11,9 @@ Use Lovable for the app UI and Nakama for the AI agent. Keep the Nakama API key 
 2. An organization ID and an organization backend API key.
 3. A Lovable project with a server-side function or backend route.
 
-Create the key from an authenticated admin environment:
+From the Nakama dashboard, open **Organization → Backend API keys**, enter a name such as `Lovable app`, choose `Live`, and select **Create key**. Copy the secret immediately; it is shown only once.
+
+You can also create a key from an authenticated admin environment:
 
 ```bash
 curl -X POST "$NAKAMA_URL/v1/orgs/$NAKAMA_ORG_ID/api-keys" \
