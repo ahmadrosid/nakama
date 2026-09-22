@@ -461,12 +461,38 @@ export async function createNakamaOrgDataExport(
     });
   }
 
+  const automations = [];
+  for (const automation of await databaseAdapter.listAutomationsForOrg(orgId)) {
+    automations.push({
+      ...automation,
+      runs: await databaseAdapter.listAutomationRuns(
+        automation.id,
+        Number.MAX_SAFE_INTEGER
+      ),
+    });
+  }
+
+  const workflows = [];
+  for (const workflow of await databaseAdapter.listWorkflowsForOrg(orgId)) {
+    const runs = [];
+    for (const run of await databaseAdapter.listWorkflowRuns(
+      workflow.id,
+      Number.MAX_SAFE_INTEGER
+    )) {
+      runs.push({
+        ...run,
+        steps: await databaseAdapter.listWorkflowRunSteps(run.id),
+      });
+    }
+    workflows.push({ ...workflow, runs });
+  }
+
   const createdAt = (options.now ?? new Date()).toISOString();
   entries[NAKAMA_ORG_EXPORT_MANIFEST] = Buffer.from(
     JSON.stringify(
       {
         apiVersion: NAKAMA_API_VERSION,
-        automations: await databaseAdapter.listAutomationsForOrg(orgId),
+        automations,
         createdAt,
         kind: "nakama-org-export",
         members,
@@ -474,7 +500,7 @@ export async function createNakamaOrgDataExport(
         profiles,
         sessions,
         version: NAKAMA_ORG_EXPORT_FORMAT_VERSION,
-        workflows: await databaseAdapter.listWorkflowsForOrg(orgId),
+        workflows,
       },
       null,
       2

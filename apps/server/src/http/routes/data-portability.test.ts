@@ -322,6 +322,15 @@ describe("data portability routes", () => {
       updatedAt: now,
       version: 1,
     });
+    await databaseAdapter.insertAutomationRun({
+      automationId: "automation_org_export",
+      completedAt: now,
+      error: null,
+      id: "automation_run_org_export",
+      output: "portable automation result",
+      startedAt: now,
+      status: "completed",
+    });
 
     const artifactDir = getProfileArtifactsDir(
       targetOrg.organization.id,
@@ -400,7 +409,7 @@ describe("data portability routes", () => {
     const manifest = JSON.parse(
       Buffer.from(archive[NAKAMA_ORG_EXPORT_MANIFEST]!).toString("utf8")
     ) as {
-      automations: Array<{ id: string }>;
+      automations: Array<{ id: string; runs: Array<{ id: string }> }>;
       members: Array<{ user: { email?: string; id: string } }>;
       organization: { id: string };
       profiles: Array<{ id: string }>;
@@ -422,7 +431,10 @@ describe("data portability routes", () => {
       targetProfile!.id
     );
     expect(manifest.automations).toContainEqual(
-      expect.objectContaining({ id: "automation_org_export" })
+      expect.objectContaining({
+        id: "automation_org_export",
+        runs: [expect.objectContaining({ id: "automation_run_org_export" })],
+      })
     );
     expect(manifest.sessions).toHaveLength(1);
     expect(manifest.sessions[0]!.messages[0]!.payload.content).toBe(
