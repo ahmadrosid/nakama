@@ -57,8 +57,19 @@ export class AutomationService {
   /** All automations — used by the scheduler across orgs. */
   async listAll(): Promise<StoredAutomation[]> {
     const automations = await this.store.list();
+    const enabled = await Promise.all(
+      automations.map(async (automation) =>
+        (await this.isProfileAutomationEnabled(automation.profileId))
+          ? automation
+          : null
+      )
+    );
     return Promise.all(
-      automations.map((automation) => this.enrichAutomation(automation))
+      enabled
+        .filter(
+          (automation): automation is StoredAutomation => automation !== null
+        )
+        .map((automation) => this.enrichAutomation(automation))
     );
   }
 
@@ -109,6 +120,7 @@ export class AutomationService {
       profileIdOverride ?? input.profileId,
       access
     );
+    await this.assertProfileAutomationEnabled(profileId);
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
       isEmailConfigured: this.canSendEmail
@@ -409,6 +421,22 @@ export class AutomationService {
         ? this.computeNextRunAt(automation.trigger, userTimezone)
         : null,
     };
+  }
+
+  async isProfileAutomationEnabled(profileId: string): Promise<boolean> {
+    const profile = await this.db.getProfile(profileId);
+    return profile?.automationsEnabled !== false;
+  }
+
+  private async assertProfileAutomationEnabled(
+    profileId: string
+  ): Promise<void> {
+    if (!(await this.isProfileAutomationEnabled(profileId))) {
+      throw new NakamaApiError(
+        "Automations are disabled for this profile.",
+        403
+      );
+    }
   }
 
   private async notifyChange(): Promise<void> {

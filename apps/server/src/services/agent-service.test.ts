@@ -1090,6 +1090,43 @@ describe("AgentService skill_manage injection", () => {
     expect(withTools.some((tool) => tool.name === "todo_write")).toBe(true);
   });
 
+  test("omits automation tools for a disabled profile", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = {
+      ...createDefaultProfile(),
+      automationsEnabled: false,
+    };
+    await db.upsertProfile(profile);
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_automation_gate",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_for_automation_gate");
+
+    const service = new AgentService(null, null, db);
+    service.setAutomationTools([
+      { name: "create_automation" } as ToolDefinition,
+    ]);
+
+    type ResolveTools = {
+      resolveProfileTools(
+        profile: StoredProfileRecord,
+        options?: { includeAutomationTools?: boolean }
+      ): Promise<Array<{ name: string }>>;
+    };
+    const resolve = (
+      service as unknown as ResolveTools
+    ).resolveProfileTools.bind(service);
+
+    const tools = await resolve(profile, { includeAutomationTools: true });
+    expect(tools.some((tool) => tool.name === "create_automation")).toBe(false);
+  });
+
   test("keeps raw /learn in history on web when manage-skills is assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());

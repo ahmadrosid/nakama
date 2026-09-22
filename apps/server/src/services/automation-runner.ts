@@ -29,6 +29,17 @@ export class AutomationRunner {
       return { error: "Automation is disabled.", skipped: true };
     }
 
+    if (
+      !(await this.automationService.isProfileAutomationEnabled(
+        automation.profileId
+      ))
+    ) {
+      return {
+        error: "Automations are disabled for this profile.",
+        skipped: true,
+      };
+    }
+
     const orgId = automation.orgId?.trim();
     if (!orgId) {
       throw new Error("Automation organization is missing.");

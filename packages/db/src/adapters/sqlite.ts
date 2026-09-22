@@ -139,6 +139,7 @@ interface WorkflowRunStepRow {
 }
 
 interface ProfileRow {
+  automations_enabled: number;
   created_at: string;
   id: string;
   is_default: number;
@@ -728,13 +729,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_super,
       org_id,
       is_default,
+      automations_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -744,6 +746,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_super = excluded.is_super,
       org_id = excluded.org_id,
       is_default = excluded.is_default,
+      automations_enabled = excluded.automations_enabled,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
@@ -760,6 +763,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       record.isSuper ? 1 : 0,
       record.orgId ?? null,
       record.isDefault ? 1 : 0,
+      record.automationsEnabled === false ? 0 : 1,
       record.skillsWriteApproval == null
         ? null
         : record.skillsWriteApproval
@@ -4418,6 +4422,7 @@ function toWorkflowRunStepRecord(
 
 function toProfileRecord(row: ProfileRow): StoredProfileRecord {
   return {
+    automationsEnabled: row.automations_enabled !== 0,
     createdAt: row.created_at,
     id: row.id,
     isDefault: row.is_default !== 0,

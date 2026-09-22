@@ -216,6 +216,7 @@ export class ProfileService {
     const profileId = await this.resolveNewProfileId(request.id, name);
     const now = new Date().toISOString();
     const profile: StoredProfileRecord = {
+      automationsEnabled: true,
       createdAt: now,
       id: profileId,
       isDefault: false,
@@ -261,6 +262,7 @@ export class ProfileService {
     const now = new Date().toISOString();
 
     await this.db.upsertProfile({
+      automationsEnabled: source.automationsEnabled !== false,
       createdAt: now,
       id: profileId,
       isDefault: false,
@@ -374,6 +376,10 @@ export class ProfileService {
 
     await this.db.upsertProfile({
       ...profile,
+      automationsEnabled:
+        request.automationsEnabled === undefined
+          ? profile.automationsEnabled !== false
+          : request.automationsEnabled,
       model: request.model === undefined ? profile.model : request.model,
       name: request.name?.trim() ?? profile.name,
       skillsCuratorConsolidateEnabled:
@@ -1133,6 +1139,7 @@ export class ProfileService {
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
     return {
+      automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
       hasAvatar: await hasProfileAvatar(orgId, profile.id),
       id: profile.id,

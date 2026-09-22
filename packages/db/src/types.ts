@@ -80,6 +80,8 @@ export interface StoredWorkflowRunStepRecord {
 }
 
 export interface StoredProfileRecord {
+  /** Defaults to enabled when absent for legacy in-memory records. */
+  automationsEnabled?: boolean;
   createdAt: string;
   id: string;
   isDefault?: boolean;

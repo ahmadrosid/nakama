@@ -35,6 +35,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillSuggestionsTable);
   atomic(migrateSkillsWriteApprovalColumns);
   atomic(migrateSkillsPostTurnReviewColumns);
+  atomic(migrateAutomationsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
   atomic(migrateLlmUsageQuotaColumns);
   atomic(migrateOrgLlmMonthlyQuotaTable);
@@ -682,6 +683,19 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
     )
   ) {
     db.exec("ALTER TABLE profiles ADD COLUMN skills_write_approval INTEGER;");
+  }
+}
+
+function migrateAutomationsEnabledColumn(db: Database): void {
+  const columns = db.prepare("PRAGMA table_info(profiles)").all() as Array<{
+    name: string;
+  }>;
+  if (
+    !new Set(columns.map((column) => column.name)).has("automations_enabled")
+  ) {
+    db.exec(
+      "ALTER TABLE profiles ADD COLUMN automations_enabled INTEGER NOT NULL DEFAULT 1;"
+    );
   }
 }
 

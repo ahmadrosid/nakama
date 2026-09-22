@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
@@ -76,6 +77,42 @@ async function assignComposeioGmailSender(
 }
 
 describe("AutomationService", () => {
+  test("does not create or schedule automations for a disabled profile", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const profile = (await db.getProfile(PROFILE_ID))!;
+    await db.upsertProfile({ ...profile, automationsEnabled: false });
+
+    await expect(
+      service.create(
+        ORG_ID,
+        {
+          description: "Paused",
+          name: "Paused automation",
+          prompt: "Do not run",
+          trigger: { cron: "0 8 * * *", type: "schedule" },
+        },
+        PROFILE_ID
+      )
+    ).rejects.toBeInstanceOf(NakamaApiError);
+
+    await db.upsertAutomation({
+      createdAt: new Date().toISOString(),
+      definition: {},
+      enabled: true,
+      id: "automation_paused",
+      name: "Existing paused automation",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+      updatedAt: new Date().toISOString(),
+      version: 1,
+    });
+
+    expect(await service.listAll()).toEqual([]);
+  });
+
   test("accepts email delivery when composeio MCP email sending is assigned", async () => {
     const db = await createTestDb();
     await assignComposeioGmailSender(db, PROFILE_ID);

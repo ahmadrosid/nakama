@@ -85,6 +85,31 @@ function getPreviousAutomationRunsTool(service: AutomationService) {
 }
 
 describe("run_automation tool", () => {
+  test("skips an existing automation when its profile is disabled", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Existing automation",
+        name: "Paused task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+    const profile = (await db.getProfile(PROFILE_ID))!;
+    await db.upsertProfile({ ...profile, automationsEnabled: false });
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => {
+        throw new Error("must not run");
+      },
+    } as never);
+    expect(await runner.run(automation.id)).toMatchObject({ skipped: true });
+  });
+
   test("returns completed status and output on success", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {

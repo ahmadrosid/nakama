@@ -47,6 +47,7 @@ import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
+  "automationsEnabled",
   "skillsWriteApproval",
   "skillsPostTurnReview",
 ]);
