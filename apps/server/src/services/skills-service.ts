@@ -79,6 +79,7 @@ import {
   recordProfileChangeEvent,
   withAssignmentChange,
 } from "./profile-change-history";
+import { loadPythonSkillTool } from "./python-skill-tool-loader";
 
 export interface SkillUsageRecordingContext {
   seenCatalogSkillIds: Set<string>;
@@ -1058,13 +1059,23 @@ export class SkillsService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    return loadSkillTools(
-      assigned
-        .filter(
-          (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
-        )
+    const skillTools = assigned.filter(
+      (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
+    );
+    const javascriptTools = await loadSkillTools(
+      skillTools
+        .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
         .map((item) => item.discovered)
     );
+    const pythonTools = await Promise.all(
+      skillTools
+        .filter((item) => item.discovered.toolPath?.endsWith(".py"))
+        .map((item) => loadPythonSkillTool(item.discovered))
+    );
+    return [
+      ...javascriptTools,
+      ...pythonTools.filter((tool): tool is ToolDefinition => tool !== null),
+    ];
   }
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {
