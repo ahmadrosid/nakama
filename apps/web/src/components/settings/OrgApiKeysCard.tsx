@@ -20,9 +20,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 type SecretState = { key: ApiKeySummary; secret: string } | null;
 
-export function OrgApiKeysCard() {
-  const { activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? "";
+function useOrgApiKeys(orgId: string) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("Lovable app");
   const [environment, setEnvironment] = useState<"live" | "test">("live");
@@ -33,7 +31,7 @@ export function OrgApiKeysCard() {
   const [error, setError] = useState<string | null>(null);
 
   const keysQuery = useQuery({
-    enabled: Boolean(orgId) && activeOrg?.role === "admin",
+    enabled: Boolean(orgId),
     queryFn: () => client.listApiKeys(orgId),
     queryKey: queryKeys.orgApiKeys(orgId),
   });
@@ -81,10 +79,6 @@ export function OrgApiKeysCard() {
     },
   });
 
-  if (!activeOrg || activeOrg.role !== "admin") {
-    return null;
-  }
-
   const busy =
     createMutation.isPending ||
     rotateMutation.isPending ||
@@ -114,6 +108,235 @@ export function OrgApiKeysCard() {
     createMutation.mutate();
   }
 
+  return {
+    busy,
+    copyHint,
+    copySecret,
+    createKey,
+    createMutation,
+    createOpen,
+    environment,
+    error,
+    expiresAt,
+    keysQuery,
+    name,
+    revokeMutation,
+    rotateMutation,
+    secretState,
+    setCreateOpen,
+    setEnvironment,
+    setExpiresAt,
+    setName,
+  };
+}
+
+type OrgApiKeysController = ReturnType<typeof useOrgApiKeys>;
+
+function CreateApiKeyDialog({
+  controller,
+}: {
+  controller: OrgApiKeysController;
+}) {
+  const {
+    busy,
+    createKey,
+    createMutation,
+    createOpen,
+    environment,
+    error,
+    expiresAt,
+    name,
+    setCreateOpen,
+    setEnvironment,
+    setExpiresAt,
+    setName,
+  } = controller;
+
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        setCreateOpen(open);
+        if (open) {
+          createMutation.reset();
+        }
+      }}
+      open={createOpen}
+    >
+      <DialogTrigger asChild>
+        <Button disabled={busy} type="button">
+          Create API key
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-2">
+          <DialogTitle>Create backend API key</DialogTitle>
+          <DialogDescription>
+            Use this key only from your backend. The secret will be shown once
+            after creation.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="space-y-4" onSubmit={createKey}>
+          <label className="block space-y-1.5 text-sm">
+            <span className="font-medium">Key name</span>
+            <Input
+              autoFocus
+              disabled={busy}
+              onChange={(event) => setName(event.target.value)}
+              value={name}
+            />
+          </label>
+          <fieldset className="space-y-1.5">
+            <legend className="font-medium text-sm">Environment</legend>
+            <div className="flex gap-2">
+              {(["live", "test"] as const).map((value) => (
+                <Button
+                  className="flex-1"
+                  key={value}
+                  onClick={() => setEnvironment(value)}
+                  type="button"
+                  variant={environment === value ? "default" : "outline"}
+                >
+                  {value === "live" ? "Live" : "Test"}
+                </Button>
+              ))}
+            </div>
+          </fieldset>
+          <label className="block space-y-1.5 text-sm">
+            <span className="font-medium">Expires on</span>
+            <Input
+              disabled={busy}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(event) => setExpiresAt(event.target.value)}
+              type="date"
+              value={expiresAt}
+            />
+            <span className="block text-muted-foreground text-xs">
+              Optional. Leave blank for a key without an expiry.
+            </span>
+          </label>
+          {error ? (
+            <p className="text-destructive text-sm" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              disabled={busy}
+              onClick={() => setCreateOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button disabled={busy} type="submit">
+              {createMutation.isPending ? (
+                <Spinner className="size-4" />
+              ) : (
+                "Create key"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SecretBanner({ controller }: { controller: OrgApiKeysController }) {
+  const { copyHint, copySecret, secretState } = controller;
+  if (!secretState) {
+    return null;
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
+      <p className="font-medium text-sm">Save this secret now</p>
+      <p className="text-muted-foreground text-xs">
+        It will not be shown again. Keep it in your backend secret store.
+      </p>
+      <div className="flex gap-2">
+        <Input readOnly value={secretState.secret} />
+        <Button
+          onClick={() => void copySecret()}
+          type="button"
+          variant="outline"
+        >
+          Copy
+        </Button>
+      </div>
+      {copyHint ? (
+        <p className="text-muted-foreground text-xs">{copyHint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ApiKeysList({ controller }: { controller: OrgApiKeysController }) {
+  const { busy, keysQuery, revokeMutation, rotateMutation } = controller;
+  if (keysQuery.isLoading) {
+    return <p className="text-muted-foreground text-sm">Loading keys…</p>;
+  }
+  if (keysQuery.error) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {formatError(keysQuery.error)}
+      </p>
+    );
+  }
+  const keys = keysQuery.data?.keys ?? [];
+  return (
+    <div className="divide-y rounded-md border">
+      {keys.map((key) => (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm"
+          key={key.id}
+        >
+          <div className="min-w-0">
+            <p className="font-medium">{key.name}</p>
+            <p className="text-muted-foreground text-xs">
+              {key.keyPrefix} · {key.environment} · created{" "}
+              {new Date(key.createdAt).toLocaleDateString()}
+              {key.revokedAt ? " · revoked" : ""}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              disabled={busy || Boolean(key.revokedAt)}
+              onClick={() => rotateMutation.mutate(key.id)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Rotate
+            </Button>
+            <Button
+              disabled={busy || Boolean(key.revokedAt)}
+              onClick={() => revokeMutation.mutate(key.id)}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              Revoke
+            </Button>
+          </div>
+        </div>
+      ))}
+      {keys.length === 0 ? (
+        <p className="p-3 text-muted-foreground text-sm">
+          No backend keys yet.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function OrgApiKeysCard() {
+  const { activeOrg } = useAuth();
+  const controller = useOrgApiKeys(
+    activeOrg?.role === "admin" ? activeOrg.id : ""
+  );
+  if (!activeOrg || activeOrg.role !== "admin") {
+    return null;
+  }
   return (
     <section className="space-y-3">
       <div>
@@ -134,171 +357,10 @@ export function OrgApiKeysCard() {
                 Use this key from a server-side app or integration.
               </p>
             </div>
-            <Dialog
-              onOpenChange={(open) => {
-                setCreateOpen(open);
-                if (open) {
-                  setError(null);
-                  createMutation.reset();
-                }
-              }}
-              open={createOpen}
-            >
-              <DialogTrigger asChild>
-                <Button disabled={busy} type="button">
-                  Create API key
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="gap-6 p-6 sm:max-w-md">
-                <DialogHeader className="gap-2">
-                  <DialogTitle>Create backend API key</DialogTitle>
-                  <DialogDescription>
-                    Use this key only from your backend. The secret will be
-                    shown once after creation.
-                  </DialogDescription>
-                </DialogHeader>
-                <form className="space-y-4" onSubmit={createKey}>
-                  <label className="block space-y-1.5 text-sm">
-                    <span className="font-medium">Key name</span>
-                    <Input
-                      autoFocus
-                      disabled={busy}
-                      onChange={(event) => setName(event.target.value)}
-                      value={name}
-                    />
-                  </label>
-                  <fieldset className="space-y-1.5">
-                    <legend className="font-medium text-sm">Environment</legend>
-                    <div className="flex gap-2">
-                      {(["live", "test"] as const).map((value) => (
-                        <Button
-                          className="flex-1"
-                          key={value}
-                          onClick={() => setEnvironment(value)}
-                          type="button"
-                          variant={
-                            environment === value ? "default" : "outline"
-                          }
-                        >
-                          {value === "live" ? "Live" : "Test"}
-                        </Button>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <label className="block space-y-1.5 text-sm">
-                    <span className="font-medium">Expires on</span>
-                    <Input
-                      disabled={busy}
-                      min={new Date().toISOString().slice(0, 10)}
-                      onChange={(event) => setExpiresAt(event.target.value)}
-                      type="date"
-                      value={expiresAt}
-                    />
-                    <span className="block text-muted-foreground text-xs">
-                      Optional. Leave blank for a key without an expiry.
-                    </span>
-                  </label>
-                  {error ? (
-                    <p className="text-destructive text-sm" role="alert">
-                      {error}
-                    </p>
-                  ) : null}
-                  <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-                    <Button
-                      disabled={busy}
-                      onClick={() => setCreateOpen(false)}
-                      type="button"
-                      variant="outline"
-                    >
-                      Cancel
-                    </Button>
-                    <Button disabled={busy} type="submit">
-                      {createMutation.isPending ? (
-                        <Spinner className="size-4" />
-                      ) : (
-                        "Create key"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <CreateApiKeyDialog controller={controller} />
           </div>
-
-          {secretState ? (
-            <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/30">
-              <p className="font-medium text-sm">Save this secret now</p>
-              <p className="text-muted-foreground text-xs">
-                It will not be shown again. Keep it in your backend secret
-                store.
-              </p>
-              <div className="flex gap-2">
-                <Input readOnly value={secretState.secret} />
-                <Button
-                  onClick={() => void copySecret()}
-                  type="button"
-                  variant="outline"
-                >
-                  Copy
-                </Button>
-              </div>
-              {copyHint ? (
-                <p className="text-muted-foreground text-xs">{copyHint}</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {keysQuery.isLoading ? (
-            <p className="text-muted-foreground text-sm">Loading keys…</p>
-          ) : null}
-          {keysQuery.error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {formatError(keysQuery.error)}
-            </p>
-          ) : null}
-          <div className="divide-y rounded-md border">
-            {(keysQuery.data?.keys ?? []).map((key) => (
-              <div
-                className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm"
-                key={key.id}
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">{key.name}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {key.keyPrefix} · {key.environment} · created{" "}
-                    {new Date(key.createdAt).toLocaleDateString()}
-                    {key.revokedAt ? " · revoked" : ""}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    disabled={busy || Boolean(key.revokedAt)}
-                    onClick={() => rotateMutation.mutate(key.id)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Rotate
-                  </Button>
-                  <Button
-                    disabled={busy || Boolean(key.revokedAt)}
-                    onClick={() => revokeMutation.mutate(key.id)}
-                    size="sm"
-                    type="button"
-                    variant="destructive"
-                  >
-                    Revoke
-                  </Button>
-                </div>
-              </div>
-            ))}
-            {!keysQuery.isLoading &&
-            (keysQuery.data?.keys ?? []).length === 0 ? (
-              <p className="p-3 text-muted-foreground text-sm">
-                No backend keys yet.
-              </p>
-            ) : null}
-          </div>
+          <SecretBanner controller={controller} />
+          <ApiKeysList controller={controller} />
         </CardContent>
       </Card>
     </section>
