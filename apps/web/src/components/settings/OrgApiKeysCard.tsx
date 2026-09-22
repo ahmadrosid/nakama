@@ -13,6 +13,7 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
@@ -20,12 +21,30 @@ import { queryKeys } from "@/lib/query-keys";
 
 type SecretState = { key: ApiKeySummary; secret: string } | null;
 
+const INTEGRATION_PROMPT = `Build a full-stack AI agent app using Nakama as the backend.
+
+Read these docs before coding:
+- https://ahmadrosid.github.io/nakama/lovable.md
+- https://ahmadrosid.github.io/nakama/llms.txt
+
+Requirements:
+- Keep NAKAMA_API_KEY server-side. Never expose it in browser code, HTML, logs, or URLs.
+- Read only NAKAMA_URL and NAKAMA_API_KEY from server-side secrets.
+- Create a server-side POST /api/chat route.
+- Create one Nakama web session per browser conversation and reuse its sessionId.
+- Pass the authenticated app user's stable ID as appUserId when creating the session.
+- Omit profileId so Nakama uses the organization's default profile.
+- Send X-Nakama-App-User-Id with every request for that session.
+- Return the assistant reply to the browser. Support streaming SSE with chunk, done, and error events if streaming is enabled.
+- Do not call Nakama directly from the browser.`;
+
 function useOrgApiKeys(orgId: string) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [secretState, setSecretState] = useState<SecretState>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
+  const [promptCopyHint, setPromptCopyHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const keysQuery = useQuery({
@@ -90,6 +109,15 @@ function useOrgApiKeys(orgId: string) {
     }
   }
 
+  async function copyIntegrationPrompt() {
+    try {
+      await navigator.clipboard.writeText(INTEGRATION_PROMPT);
+      setPromptCopyHint("Prompt copied.");
+    } catch {
+      setPromptCopyHint("Copy failed — use the documentation link instead.");
+    }
+  }
+
   function createKey(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
@@ -105,6 +133,7 @@ function useOrgApiKeys(orgId: string) {
   return {
     busy,
     copyHint,
+    copyIntegrationPrompt,
     copySecret,
     createKey,
     createMutation,
@@ -112,6 +141,7 @@ function useOrgApiKeys(orgId: string) {
     error,
     keysQuery,
     name,
+    promptCopyHint,
     revokeMutation,
     rotateMutation,
     secretState,
@@ -287,6 +317,30 @@ function ApiKeysList({ controller }: { controller: OrgApiKeysController }) {
   );
 }
 
+function IntegrationPrompt({
+  controller,
+}: {
+  controller: OrgApiKeysController;
+}) {
+  const { copyIntegrationPrompt, promptCopyHint } = controller;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <Button
+        onClick={() => void copyIntegrationPrompt()}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <Copy01Icon aria-hidden className="size-3.5" />
+        Copy coding prompt
+      </Button>
+      {promptCopyHint ? (
+        <span className="text-muted-foreground">{promptCopyHint}</span>
+      ) : null}
+    </div>
+  );
+}
+
 export function OrgApiKeysCard() {
   const { activeOrg } = useAuth();
   const controller = useOrgApiKeys(
@@ -328,6 +382,7 @@ export function OrgApiKeysCard() {
               Lovable guide ↗
             </a>
           </div>
+          <IntegrationPrompt controller={controller} />
           <SecretBanner controller={controller} />
           <ApiKeysList controller={controller} />
         </CardContent>
