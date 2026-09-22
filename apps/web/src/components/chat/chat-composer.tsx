@@ -686,11 +686,15 @@ export function ChatComposer(props: ChatComposerProps) {
           onPluginOpenChange={(open) =>
             setAddDialog(open ? "add-plugin" : null)
           }
+          onSkillOpenChange={(open) => {
+            setAddDialog(open ? "add-skill" : null);
+          }}
           onToolOpenChange={(open) => {
             setAddDialog(open ? "add-tool" : null);
           }}
           pluginOpen={addDialog === "add-plugin"}
           profileId={addProfileId}
+          skillOpen={addDialog === "add-skill"}
           toolOpen={addDialog === "add-tool"}
         />
       ) : null}
