@@ -760,7 +760,8 @@ function ChatComposerTextarea({
         onAddCommand &&
         (addAction === "add-tool" ||
           addAction === "add-mcp" ||
-          addAction === "add-plugin")
+          addAction === "add-plugin" ||
+          addAction === "add-skill")
       ) {
         controller.textInput.setInput(
           `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
