@@ -230,7 +230,7 @@ describe("OpenAI provider streaming", () => {
     createOpenAIProvider({
       apiKey: "sk-test",
       baseUrl: "https://api.deepseek.com",
-      model: "deepseek-chat",
+      model: "deepseek-flash",
       providerName: "deepseek",
     });
 
@@ -345,6 +345,7 @@ describe("OpenAI provider streaming", () => {
 
   test("deepseek omits thinking body when thinking is disabled", async () => {
     mockFetchBodies((_call, body) => {
+      expect(body.model).toBe("deepseek-flash");
       expect(body.thinking).toEqual({ type: "disabled" });
       expect(body.reasoning_effort).toBeUndefined();
       return sseResponse({ content: "Hi" });

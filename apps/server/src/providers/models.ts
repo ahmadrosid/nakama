@@ -164,24 +164,34 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     outputPerMillionUsd: 12,
     provider: "gemini",
   },
-  {
+  // https://api-docs.deepseek.com/quick_start/pricing
+  // Flat estimates use peak uncached rates; off-peak is half. Cache discounts
+  // and time-of-use billing are not represented. Legacy IDs still serve V4.1.
+  ...[
+    "deepseek-flash",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+  ].map((id) => ({
     contextWindow: 1_000_000,
-    default: true,
-    id: "deepseek-v4-flash",
-    inputPerMillionUsd: 0.14,
+    default: id === "deepseek-flash",
+    id,
+    inputPerMillionUsd: 0.3,
     maxOutputTokens: 384_000,
-    name: "DeepSeek V4 Flash",
-    outputPerMillionUsd: 0.28,
-    provider: "deepseek",
+    name:
+      id === "deepseek-flash"
+        ? "DeepSeek V4.1 Flash"
+        : `DeepSeek V4.1 Flash (${id})`,
+    outputPerMillionUsd: 1.2,
+    provider: "deepseek" as const,
     supportsThinking: true,
-  },
+  })),
   {
     contextWindow: 1_000_000,
     id: "deepseek-v4-pro",
-    inputPerMillionUsd: 0.435,
+    inputPerMillionUsd: 1.32,
     maxOutputTokens: 384_000,
-    name: "DeepSeek V4 Pro",
-    outputPerMillionUsd: 0.87,
+    name: "DeepSeek V4 Pro0813",
+    outputPerMillionUsd: 3.96,
     provider: "deepseek",
     supportsThinking: true,
   },
@@ -977,7 +987,7 @@ export function getDefaultModel(
         : provider === "gemini"
           ? "gemini-2.5-flash"
           : provider === "deepseek"
-            ? "deepseek-v4-flash"
+            ? "deepseek-flash"
             : provider === "together"
               ? "openai/gpt-oss-120b"
               : provider === "xiaomi"

@@ -20,6 +20,31 @@ function createProviderInstance(
 }
 
 describe("resolveProfileProviderSelection", () => {
+  test("preserves saved DeepSeek aliases instead of falling back to the active provider", () => {
+    const deepseek = createProviderInstance({
+      id: "deepseek-1",
+      label: "DeepSeek",
+      type: "deepseek",
+    });
+    const active = createProviderInstance({
+      id: "openai-1",
+      label: "OpenAI",
+      type: "openai",
+    });
+    for (const profileModel of [
+      "deepseek-v4-flash",
+      "deepseek-1::deepseek-v4-flash",
+    ]) {
+      expect(
+        resolveProfileProviderSelection({
+          defaultProviderId: active.id,
+          profileModel,
+          providers: [active, deepseek],
+        })
+      ).toEqual({ instance: deepseek, model: "deepseek-v4-flash" });
+    }
+  });
+
   test("preserves a bare retired ChatGPT selection without making it the default", () => {
     const instance = createProviderInstance({
       id: "chatgpt-1",

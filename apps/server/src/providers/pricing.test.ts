@@ -48,6 +48,15 @@ const moonshotInstance = {
   type: "moonshot" as const,
 };
 describe("estimateUsageCostUsd", () => {
+  test("estimates direct DeepSeek usage at peak uncached rates", () => {
+    expect(
+      estimateUsageCostUsd("deepseek-flash", 2_000_000, 500_000)
+    ).toBeCloseTo(1.2);
+    expect(
+      estimateUsageCostUsd("deepseek-v4-pro", 2_000_000, 500_000)
+    ).toBeCloseTo(4.62);
+  });
+
   test("computes cost from catalog pricing", () => {
     const cost = estimateUsageCostUsd(
       "claude-sonnet-4-6",
