@@ -3,7 +3,15 @@ import { createAnthropicProvider, parseAnthropicContent } from "./index";
 
 describe("Anthropic thinking requests", () => {
   test.each([
-    ["claude-sonnet-5", true, { type: "adaptive" }, { effort: "low" }],
+    [
+      "claude-sonnet-5",
+      true,
+      { display: "summarized", type: "adaptive" },
+      { effort: "low" },
+    ],
+    ["claude-sonnet-4-6", true, { type: "adaptive" }, { effort: "low" }],
+    ["claude-sonnet-5", false, { type: "disabled" }, undefined],
+    ["claude-opus-5", undefined, { type: "disabled" }, undefined],
     [
       "claude-haiku-4-5-20251001",
       true,
@@ -35,7 +43,10 @@ describe("Anthropic thinking requests", () => {
       });
       const result = await provider.generateChat({
         messages: [{ content: "Hello", role: "user" }],
-        providerOptions: { thinking: { effort: "low", enabled } },
+        providerOptions:
+          enabled === undefined
+            ? undefined
+            : { thinking: { effort: "low", enabled } },
         system: "Be helpful.",
       });
       expect(result.content).toBe("Hello.");
@@ -43,6 +54,20 @@ describe("Anthropic thinking requests", () => {
       expect(body.thinking).toEqual(thinking);
       expect(body.output_config).toEqual(outputConfig);
       expect(body.max_tokens).toBe(4096);
+      if (model === "claude-opus-5") {
+        expect(
+          (
+            await provider.generateText({
+              format: "text",
+              prompt: "Hello",
+              system: "Be helpful.",
+            })
+          ).content
+        ).toBe("Hello.");
+        expect(body.thinking).toEqual({ type: "disabled" });
+        expect(body.output_config).toBeUndefined();
+        expect(body.max_tokens).toBe(2048);
+      }
     }
   );
 });

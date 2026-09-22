@@ -462,12 +462,14 @@ async function readAnthropicStream(
   };
 }
 
-function buildAnthropicThinkingRequest(
+export function buildAnthropicThinkingRequest(
   providerOptions: GenerateChatInput["providerOptions"],
   model: string
 ): Pick<MessageCreateParams, "thinking" | "output_config"> {
+  const thinkingByDefault =
+    model === "claude-sonnet-5" || model === "claude-opus-5";
   if (!providerOptions?.thinking?.enabled) {
-    return {};
+    return thinkingByDefault ? { thinking: { type: "disabled" } } : {};
   }
 
   if (model === "claude-haiku-4-5" || model === "claude-haiku-4-5-20251001") {
@@ -480,7 +482,9 @@ function buildAnthropicThinkingRequest(
 
   return {
     output_config: { effort },
-    thinking: { type: "adaptive" },
+    thinking: thinkingByDefault
+      ? { display: "summarized", type: "adaptive" }
+      : { type: "adaptive" },
   };
 }
 

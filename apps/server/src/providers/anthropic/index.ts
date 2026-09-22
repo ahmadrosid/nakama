@@ -9,7 +9,10 @@ import {
   type StreamChatHandlers,
 } from "@nakama/core";
 import { buildTokenUsage } from "../shared";
-import { continueAnthropicUntilDone } from "./web-search";
+import {
+  buildAnthropicThinkingRequest,
+  continueAnthropicUntilDone,
+} from "./web-search";
 
 const DEFAULT_PROVIDER_LABEL = "Anthropic";
 
@@ -103,6 +106,7 @@ export function createAnthropicProvider(
           messages: [{ content: input.prompt, role: "user" }],
           model,
           system,
+          ...buildAnthropicThinkingRequest(undefined, model),
         });
 
         const content = message.content
