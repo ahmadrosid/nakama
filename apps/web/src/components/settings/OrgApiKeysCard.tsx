@@ -335,7 +335,7 @@ function IntegrationPrompt({
         variant="outline"
       >
         <Copy01Icon aria-hidden className="size-3.5" />
-        Copy coding prompt
+        Copy prompt
       </Button>
       {promptCopyHint ? (
         <span className="text-muted-foreground">{promptCopyHint}</span>
@@ -367,7 +367,7 @@ export function OrgApiKeysCard() {
             </div>
             <CreateApiKeyDialog controller={controller} />
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <a
               className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
               href="/docs"
