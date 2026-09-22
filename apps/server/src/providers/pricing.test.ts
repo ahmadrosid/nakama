@@ -57,6 +57,27 @@ describe("estimateUsageCostUsd", () => {
     expect(cost).toBe(18);
   });
 
+  test("uses Cloudflare's published input and output rates for exact model ids", () => {
+    // https://developers.cloudflare.com/workers-ai/platform/pricing/
+    // Checked 2026-09-22. Each row guards a separately maintained catalog entry.
+    for (const [id, input, output, cost] of [
+      ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", 0.293, 2.253, 1.149_25],
+      ["@cf/meta/llama-3.1-8b-instruct", 0.282, 0.827, 0.770_75],
+      ["@cf/meta/llama-4-scout-17b-16e-instruct", 0.27, 0.85, 0.7525],
+      ["@cf/qwen/qwen2.5-coder-32b-instruct", 0.66, 1, 1.57],
+      ["@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", 0.497, 4.881, 2.214_25],
+    ] as const) {
+      expect(getExplicitModelPricing(id, { provider: "cloudflare" })).toEqual({
+        inputPerMillionUsd: input,
+        outputPerMillionUsd: output,
+      });
+      // 2M input + 250k output: unequal counts detect swapped token rates.
+      expect(
+        estimateUsageCostUsd(id, 2_000_000, 250_000, { provider: "cloudflare" })
+      ).toBeCloseTo(cost, 8);
+    }
+  });
+
   test("uses fallback pricing for unknown models", () => {
     const pricing = getModelPricing("vendor/custom-model");
     expect(pricing?.inputPerMillionUsd).toBe(1);
