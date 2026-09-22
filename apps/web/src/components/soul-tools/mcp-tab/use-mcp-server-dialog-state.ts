@@ -182,7 +182,7 @@ function buildMcpServerRequest({
   if (activeTransport === "stdio") {
     return {
       config: {
-        args: argsToArray(args),
+        args: argsToArray(args) ?? (isEdit ? [] : undefined),
         command: command.trim(),
         env: headersToRecord(env, isEdit),
       },
