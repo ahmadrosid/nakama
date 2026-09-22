@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="dark" name="color-scheme">
+    <title>Nakama transcript</title>
+    <style>
+    :root {
+      --bg: #0a0a0b;
+      --card: #18181b;
+      --muted: #a1a1aa;
+      --border: #27272a;
+      --accent: #f59e0b;
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      padding: 16px;
+      margin: 0;
+      font:
+        14px / 1.5 system-ui,
+        sans-serif;
+      color: #fafafa;
+      background: var(--bg);
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 16px;
+    }
+    #status {
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #transcript {
+      overflow-wrap: anywhere;
+    }
+    p {
+      padding: 12px 0;
+      margin: 0;
+      white-space: pre-wrap;
+      border-bottom: 1px solid var(--border);
+    }
+    strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+      color: var(--accent);
+    }
+    #empty {
+      color: var(--muted);
+    }
+    </style>
+  </head>
+  <body>
+    <h1>Nakama transcript</h1>
+    <div aria-live="polite" id="status">Waiting for a meeting…</div>
+    <section aria-label="Live transcript" id="transcript">
+      <p id="empty">Start transcription to see the transcript here.</p>
+    </section>
+    <script defer src="sidepanel.js"></script>
+  </body>
+</html>

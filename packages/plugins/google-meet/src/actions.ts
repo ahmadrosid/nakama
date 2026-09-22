@@ -210,6 +210,26 @@ export async function run(
         segments,
       };
     }
+    if (action === "caption") {
+      if (
+        typeof input.id !== "string" ||
+        typeof input.text !== "string" ||
+        typeof input.speakerName !== "string" ||
+        !input.text.trim() ||
+        !input.speakerName.trim()
+      ) {
+        throw new Error("Invalid caption");
+      }
+      store.addCaptionSegment(meeting.id, {
+        endMs: typeof input.endMs === "number" ? input.endMs : null,
+        id: input.id,
+        receivedAt: Date.now(),
+        speakerName: input.speakerName.trim(),
+        startMs: typeof input.startMs === "number" ? input.startMs : null,
+        text: input.text.trim(),
+      });
+      return { ok: true };
+    }
     throw new Error("Unknown meeting action");
   } finally {
     store.close();
