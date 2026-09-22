@@ -26,6 +26,7 @@ const INTEGRATION_PROMPT = `Integrate this existing app with Nakama as the AI ag
 Read these docs before coding:
 - https://ahmadrosid.github.io/nakama/lovable.md
 - https://ahmadrosid.github.io/nakama/llms.txt
+- Treat the Lovable guide as the source of truth for Nakama endpoints, request bodies, and response formats.
 
 Requirements:
 - Inspect the existing app and preserve its current UI, authentication, and data model.
