@@ -194,7 +194,10 @@ export async function continueAnthropicUntilDone(
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const tools = buildAnthropicTools(options.tools, options.webSearch);
-  const thinkingRequest = buildAnthropicThinkingRequest(options.thinking);
+  const thinkingRequest = buildAnthropicThinkingRequest(
+    options.thinking,
+    options.model
+  );
   const requestBase = {
     max_tokens: 4096,
     messages: apiMessages,
@@ -460,10 +463,17 @@ async function readAnthropicStream(
 }
 
 function buildAnthropicThinkingRequest(
-  providerOptions: GenerateChatInput["providerOptions"]
+  providerOptions: GenerateChatInput["providerOptions"],
+  model: string
 ): Pick<MessageCreateParams, "thinking" | "output_config"> {
   if (!providerOptions?.thinking?.enabled) {
     return {};
+  }
+
+  if (model === "claude-haiku-4-5" || model === "claude-haiku-4-5-20251001") {
+    // Haiku has no effort/adaptive support. Keep the minimum thinking budget
+    // below the 4096-token response limit, leaving room for the answer.
+    return { thinking: { budget_tokens: 1024, type: "enabled" } };
   }
 
   const effort = normalizeThinkingEffort(providerOptions.thinking.effort);

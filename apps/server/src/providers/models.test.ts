@@ -114,6 +114,33 @@ describe("resolveModel", () => {
     expect(resolveModel("openai", undefined, customModels)).toBe("gpt-4o-mini");
   });
 
+  test("exposes current Anthropic limits and prices while preserving selections", () => {
+    for (const [id, contextWindow, maxOutputTokens, input, output] of [
+      ["claude-sonnet-5", 1_000_000, 128_000, 2, 10],
+      ["claude-opus-5", 1_000_000, 128_000, 5, 25],
+      ["claude-haiku-4-5-20251001", 200_000, 64_000, 1, 5],
+      ["claude-sonnet-4-6", 1_000_000, 128_000, 3, 15],
+      ["claude-opus-4-6", 1_000_000, 128_000, 5, 25],
+    ] as const) {
+      expect(getModelById(id)).toMatchObject({
+        contextWindow,
+        inputPerMillionUsd: input,
+        maxOutputTokens,
+        outputPerMillionUsd: output,
+        provider: "anthropic",
+        supportsThinking: true,
+        supportsVision: true,
+      });
+      expect(resolveModel("anthropic", id)).toBe(id);
+    }
+    expect(getDefaultModel("anthropic")).toBe("claude-sonnet-4-6");
+    expect(
+      resolveModel("anthropic", undefined, [
+        { default: true, id: "claude-opus-4-6" },
+      ])
+    ).toBe("claude-opus-4-6");
+  });
+
   test("passes through non-catalog models for native providers", () => {
     expect(resolveModel("anthropic", "claude-haiku-4-5-20251001")).toBe(
       "claude-haiku-4-5-20251001"
