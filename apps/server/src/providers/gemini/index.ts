@@ -12,6 +12,7 @@ import type {
   ProviderClient,
   StreamChatHandlers,
 } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import {
   buildChatCompletionResult,
   extractGeminiTokenUsage,
@@ -42,6 +43,59 @@ function createGeminiClient(apiKey: string, baseUrl?: string): GoogleGenAI {
   });
 }
 
+/**
+ * Finish reasons where the model decided not to answer. Retrying sends the same
+ * prompt to the same policy, so it is a refusal to report rather than a server
+ * fault to hide behind a 500.
+ */
+const REFUSAL_FINISH_REASONS = new Set([
+  "BLOCKLIST",
+  "IMAGE_SAFETY",
+  "PROHIBITED_CONTENT",
+  "RECITATION",
+  "SAFETY",
+  "SPII",
+]);
+
+/** Marks the one empty-response shape worth a second attempt. */
+const RETRYABLE_EMPTY = Symbol("gemini.retryableEmptyResponse");
+
+function isRetryableEmptyResponse(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && RETRYABLE_EMPTY in error
+  );
+}
+
+/**
+ * An empty candidate has several causes that need different handling, and the
+ * old message collapsed them into one string. `MAX_TOKENS` means the budget ran
+ * out before a part was emitted, a refusal means the model declined, and no
+ * reason at all is the transient case that a retry actually fixes.
+ */
+function emptyResponseError(finishReason: unknown): Error {
+  const reason = typeof finishReason === "string" ? finishReason : "";
+
+  if (REFUSAL_FINISH_REASONS.has(reason)) {
+    // 422, not 500: the request reached the model and the model said no.
+    return new NakamaApiError(
+      `${PROVIDER_LABEL} declined to answer (finishReason: ${reason}). Rephrasing may help; retrying the same prompt will not.`,
+      422
+    );
+  }
+
+  const error = new Error(
+    reason
+      ? `${PROVIDER_LABEL} returned an empty response (finishReason: ${reason}).`
+      : `${PROVIDER_LABEL} returned an empty response with no finishReason.`
+  );
+
+  if (!reason) {
+    Object.defineProperty(error, RETRYABLE_EMPTY, { value: true });
+  }
+
+  return error;
+}
+
 function formatGeminiError(error: unknown): Error {
   if (error instanceof ApiError) {
     return new Error(
@@ -64,6 +118,26 @@ async function withGeminiError<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * One retry, and only for an empty response that carried no finishReason.
+ *
+ * Safe on the streaming path for the same reason it is needed there: the guard
+ * fires only when nothing was emitted, so no chunk has reached the caller and a
+ * second attempt cannot duplicate text. A reason of MAX_TOKENS or a refusal is
+ * deterministic and is left to fail on the first attempt.
+ */
+async function withEmptyResponseRetry<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isRetryableEmptyResponse(error)) {
+      throw error;
+    }
+
+    return await run();
+  }
+}
+
 function parseGenerateContentResponse(
   response: GenerateContentResponse
 ): ChatCompletionResult {
@@ -72,7 +146,7 @@ function parseGenerateContentResponse(
   const toolCalls = parseGeminiFunctionCalls(response.functionCalls);
 
   if (!content.trim() && toolCalls.length === 0 && !thinking) {
-    throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
+    throw emptyResponseError(response.candidates?.[0]?.finishReason);
   }
 
   return buildChatCompletionResult({
@@ -185,9 +259,11 @@ async function readGeminiStream(
   const providerContent: Part[] = [];
   const pending = new Map<string, PendingFunctionCall>();
   let usage: ChatCompletionResult["usage"];
+  let finishReason: unknown;
 
   for await (const chunk of stream) {
     usage = extractGeminiTokenUsage(chunk.usageMetadata) ?? usage;
+    finishReason = chunk.candidates?.[0]?.finishReason ?? finishReason;
     const parts = chunk.candidates?.[0]?.content?.parts;
     providerContent.push(...(parts ?? []));
     accumulateStreamParts(parts, state, handlers);
@@ -201,7 +277,7 @@ async function readGeminiStream(
   const thinking = state.thinking.trim() || undefined;
 
   if (!state.content.trim() && toolCalls.length === 0 && !thinking) {
-    throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
+    throw emptyResponseError(finishReason);
   }
 
   return buildChatCompletionResult({
@@ -223,18 +299,20 @@ export function createGeminiProvider(
 
   return {
     generateChat(input: GenerateChatInput) {
-      return withGeminiError(async () => {
-        const response = await client.models.generateContent({
-          config: {
-            ...buildGeminiChatConfig(input, input.system, model),
-            abortSignal: input.signal,
-          },
-          contents: await toGeminiContents(input.messages),
-          model,
-        });
+      return withEmptyResponseRetry(() =>
+        withGeminiError(async () => {
+          const response = await client.models.generateContent({
+            config: {
+              ...buildGeminiChatConfig(input, input.system, model),
+              abortSignal: input.signal,
+            },
+            contents: await toGeminiContents(input.messages),
+            model,
+          });
 
-        return parseGenerateContentResponse(response);
-      });
+          return parseGenerateContentResponse(response);
+        })
+      );
     },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
@@ -257,7 +335,7 @@ export function createGeminiProvider(
         const usage = extractGeminiTokenUsage(response.usageMetadata);
 
         if (!content) {
-          throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
+          throw emptyResponseError(response.candidates?.[0]?.finishReason);
         }
 
         return {
@@ -268,18 +346,20 @@ export function createGeminiProvider(
     },
     name: "gemini",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
-      return withGeminiError(async () => {
-        const stream = await client.models.generateContentStream({
-          config: {
-            ...buildGeminiChatConfig(input, input.system, model),
-            abortSignal: input.signal,
-          },
-          contents: await toGeminiContents(input.messages),
-          model,
-        });
+      return withEmptyResponseRetry(() =>
+        withGeminiError(async () => {
+          const stream = await client.models.generateContentStream({
+            config: {
+              ...buildGeminiChatConfig(input, input.system, model),
+              abortSignal: input.signal,
+            },
+            contents: await toGeminiContents(input.messages),
+            model,
+          });
 
-        return readGeminiStream(stream, handlers);
-      });
+          return readGeminiStream(stream, handlers);
+        })
+      );
     },
   };
 }
