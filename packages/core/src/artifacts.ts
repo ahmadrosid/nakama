@@ -33,7 +33,33 @@ import type {
 import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
 import { SOUL_FILES } from "./soul/load";
-import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
+import {
+  getAppUserSoulDir,
+  getProfileArtifactsDir,
+  getProfileSoulDir,
+} from "./soul/resolve";
+
+/**
+ * Where an artifact actually lives.
+ *
+ * A session created with an appUserId runs its file tools under that user's
+ * soul dir, so `artifacts/report.docx` lands beneath `users/<hash>/`. The read
+ * side resolved the shared profile folder regardless, which made those files
+ * invisible rather than shared. No app user keeps the old path exactly, so
+ * every existing caller is unaffected.
+ */
+function artifactsDirFor(
+  orgId: string,
+  profileId: string,
+  appUserId?: string | null
+): string {
+  const trimmed = appUserId?.trim();
+
+  return trimmed
+    ? path.join(getAppUserSoulDir(orgId, profileId, trimmed), "artifacts")
+    : getProfileArtifactsDir(orgId, profileId);
+}
+
 import { guardFilePath, PathGuardError } from "./tools/paths";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
@@ -61,7 +87,7 @@ export async function listArtifacts(
   profileId: string,
   options: ListArtifactsOptions = {}
 ): Promise<ListArtifactsResponse> {
-  const directory = getProfileArtifactsDir(orgId, profileId);
+  const directory = artifactsDirFor(orgId, profileId, options.appUserId);
 
   if (!(await pathExists(directory))) {
     return { artifacts: [], directory, profileId, total: 0 };
@@ -173,6 +199,8 @@ function artifactNotFoundOr(error: unknown, filename: string): unknown {
 }
 
 export async function readArtifactFile(input: {
+  /** Resolves the end user's own artifacts folder when the caller names one. */
+  appUserId?: string | null;
   orgId: string;
   profileId: string;
   filename: string;
@@ -182,7 +210,11 @@ export async function readArtifactFile(input: {
    */
   render?: "markdown";
 }): Promise<{ bytes: Buffer; contentType: string; filePath: string }> {
-  const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
+  const artifactsDir = artifactsDirFor(
+    input.orgId,
+    input.profileId,
+    input.appUserId
+  );
   const resolvedArtifactsDir = await realpath(artifactsDir).catch(
     (error: unknown) => {
       throw artifactNotFoundOr(error, input.filename);

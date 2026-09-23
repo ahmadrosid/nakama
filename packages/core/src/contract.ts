@@ -2305,6 +2305,8 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
+  /** Scopes the listing to one end user's artifacts, when the caller names one. */
+  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;
