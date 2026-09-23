@@ -25,11 +25,13 @@ exports, messaging channels, API-key/local-token callers, automation, or sub-age
 5. Stop at connection setup/testing for now. Direct web action requests enforce
    user and selected profile grants; there are no assignable agent tools yet.
 
-Saving requires an explicit disclosure acknowledgment: results go to the
-configured model provider and retained web chat. Grants authorize access, **not**
-redistribution to arbitrary tools or audiences. Existing chat access/retention
-rules still apply; revocation does not erase prior results, model-provider copies,
-or backups. Review profile/session audiences and other assigned tools before use.
+Direct web actions do not send results to a model or store them in chat. Saving
+currently requires an acknowledgment describing the intended future agent
+release: model-provider disclosure and retained chat results. That acknowledgment
+does not enable agent access or authorize organization-wide disclosure in this
+gated milestone. Before enabling agents, approve and enforce the session audience
+and provider policy. Grants authorize access, **not** redistribution to arbitrary
+tools or audiences; revocation cannot erase already shared results or backups.
 Database names and values are untrusted agent input; never follow instructions in
 cells, comments, or names. Tool descriptions and result cards label this boundary;
 prompt warnings cannot guarantee prevention of all model-driven exfiltration.
@@ -145,6 +147,12 @@ bun install --frozen-lockfile
 bun run --cwd packages/plugins/postgresql build
 bun test apps/server/src/services/postgres-plugin.test.ts
 ```
+
+To produce the installable package, run `npm pack --ignore-scripts` from
+`packages/plugins/postgresql` after building. This includes the manifest, bundled
+actions/UI, migrations and README. Use npm here: `bun pm pack` cannot resolve
+versions for this repository's unversioned private workspace development
+dependencies. Those type-only dependencies are not needed by the installed plugin.
 
 Disposable integration tests require PostgreSQL binaries and OpenSSL. Provide a
 private IPv4 assigned **on the test machine**, never a customer database address:
