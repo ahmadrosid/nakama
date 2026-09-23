@@ -247,6 +247,53 @@ test("workspace rename reserves managed destinations but allows ordinary folders
 let configDir: string;
 let previousConfigDir: string | undefined;
 
+test("readWorkspaceFile converts a Word file when markdown is requested", async () => {
+  await mkdir(path.join(getProfileSoulDir(ORG_ID, PROFILE_ID), "docs"), {
+    recursive: true,
+  });
+  const target = path.join(
+    getProfileSoulDir(ORG_ID, PROFILE_ID),
+    "docs",
+    "report.docx"
+  );
+  await copyFile(SAMPLE_DOCX_PATH, target);
+
+  const rendered = await readWorkspaceFile(
+    ORG_ID,
+    PROFILE_ID,
+    "docs/report.docx",
+    {
+      render: "markdown",
+    }
+  );
+
+  // A preview panel can do nothing with raw .docx zip bytes, so the conversion
+  // has to happen here rather than in the browser.
+  expect(rendered.contentType).toBe("text/markdown");
+  expect("markdown" in rendered).toBe(true);
+
+  const raw = await readWorkspaceFile(ORG_ID, PROFILE_ID, "docs/report.docx");
+
+  // Without the flag the bytes are untouched, so every existing download link
+  // keeps serving the real file.
+  expect(raw.contentType).not.toBe("text/markdown");
+  expect("markdown" in raw).toBe(false);
+});
+
+test("readWorkspaceFile leaves a non-Word file alone even when markdown is asked for", async () => {
+  await writeArtifact("notes/plain.md", "# Plain");
+
+  const result = await readWorkspaceFile(
+    ORG_ID,
+    PROFILE_ID,
+    "artifacts/notes/plain.md",
+    { render: "markdown" }
+  );
+
+  expect("markdown" in result).toBe(false);
+  expect(result.contentType).toBe("text/markdown");
+});
+
 beforeEach(async () => {
   previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   configDir = await mkdtemp(path.join(tmpdir(), "nakama-artifacts-"));

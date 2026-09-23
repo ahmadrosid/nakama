@@ -425,12 +425,29 @@ export async function getWorkspaceEntry(
 export async function readWorkspaceFile(
   orgId: string,
   profileId: string,
-  filename: string
+  filename: string,
+  options: { render?: "markdown" } = {}
 ) {
   const file = await getWorkspaceEntry(orgId, profileId, filename);
   if (file.entry.kind !== "file") {
     throw new NakamaApiError("File not found", 404);
   }
+
+  // Same Word branch the artifacts reader has. A preview panel cannot do
+  // anything with raw .docx zip bytes, so the conversion has to happen here
+  // rather than in the browser.
+  const isWordLike =
+    isDocxFile(filename, file.contentType) ||
+    isLegacyDocFile(filename, file.contentType);
+
+  if (options.render === "markdown" && isWordLike) {
+    return {
+      ...file,
+      contentType: "text/markdown",
+      markdown: await convertDocxToMarkdown(await readFile(file.filePath)),
+    };
+  }
+
   return file;
 }
 
