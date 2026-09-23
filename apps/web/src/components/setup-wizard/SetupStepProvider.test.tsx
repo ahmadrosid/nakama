@@ -1,11 +1,20 @@
 import { expect, spyOn, test } from "bun:test";
 import type {
+  CreateProviderRequest,
   CreateProviderResponse,
   ProfileDetail,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import * as providerForm from "@/components/ProviderSetupForm";
+import { AppContext } from "@/context/app-context-shared";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
+import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { client } from "@/lib/client";
 import { SetupStepProvider } from "./SetupStepProvider";
 
@@ -106,3 +115,95 @@ test.each([false, true])(
     }
   }
 );
+
+test("saving ChatGPT retains only the signed-in account's discovered models", async () => {
+  const requests: CreateProviderRequest[] = [];
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let form: ReturnType<typeof useProviderSetupForm>;
+
+  function Probe() {
+    form = useProviderSetupForm();
+    return (
+      <form onSubmit={(event) => void form.handleSubmit(event)}>
+        <output>{form.selectedModel}</output>
+        <button type="submit">Save</button>
+      </form>
+    );
+  }
+
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider
+            value={{ isAuthenticated: false } as AuthContextValue}
+          >
+            <AppContext.Provider
+              value={{
+                configureProvider: async () => {
+                  throw new Error("Not used in this test");
+                },
+                createProvider: async (request) => {
+                  requests.push(request);
+                  return result;
+                },
+                error: null,
+                health: null,
+                loading: false,
+                models: null,
+              }}
+            >
+              <Probe />
+            </AppContext.Provider>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      )
+    );
+    await act(async () => {
+      form.handleProviderSelect("chatgpt");
+      form.setChatgptOAuth({
+        accessToken: "access",
+        accountId: "acct_1",
+        expiresAt: "2026-01-01T01:00:00.000Z",
+        refreshToken: "refresh",
+      });
+      form.handleSubscriptionModelsChange([
+        { id: "gpt-6-sol", name: "GPT-6 Sol" },
+        { id: "gpt-6-luna", name: "GPT-6 Luna" },
+      ]);
+    });
+    await act(async () => form.setSelectedModel("gpt-6-luna"));
+    expect(container.querySelector("output")?.textContent).toBe("gpt-6-luna");
+    await act(async () => {
+      container
+        .querySelector("form")
+        ?.dispatchEvent(
+          new window.Event("submit", { bubbles: true, cancelable: true })
+        );
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.type).toBe("chatgpt");
+    expect(requests[0]?.customModels).toEqual([
+      {
+        default: false,
+        id: "gpt-6-sol",
+        name: "GPT-6 Sol",
+        supportsVision: true,
+      },
+      {
+        default: true,
+        id: "gpt-6-luna",
+        name: "GPT-6 Luna",
+        supportsVision: true,
+      },
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
