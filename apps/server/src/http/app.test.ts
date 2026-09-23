@@ -455,6 +455,23 @@ describe("createHonoApp", () => {
     expect(csp).not.toContain("frame-ancestors");
   });
 
+  test("serves the artifact frame with its own CSP so artifact scripts run", async () => {
+    // With a web dist the SPA fallback must not swallow the frame path.
+    const app = createHonoApp({
+      ...createServerOptions(),
+      webDistDir: resolve(import.meta.dir, "../../../web"),
+    });
+    const response = await app.fetch(
+      new Request("http://localhost:4310/artifact-frame")
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("nakama-artifact-frame-ready");
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toContain("'unsafe-inline'");
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(response.headers.get("X-Frame-Options")).toBeNull();
+  });
+
   test.each(["/docs", "/docs/"])(
     "allows the docs scripts on %s",
     async (path) => {

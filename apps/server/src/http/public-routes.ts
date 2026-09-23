@@ -1,5 +1,6 @@
 export const PUBLIC_ROUTES = new Set([
   "/health",
+  "/artifact-frame",
   "/docs",
   "/docs/",
   "/openapi.json",
