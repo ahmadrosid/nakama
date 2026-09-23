@@ -10,6 +10,8 @@ const weatherSkill: DiscoveredSkill = {
   hasTool: true,
   includeBodyOnMatch: false,
   name: "weather",
+  scriptIssues: [],
+  scriptTools: [],
   skillFilePath: "/tmp/weather/SKILL.md",
   toolPath: "/tmp/weather/tool.ts",
 };

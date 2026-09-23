@@ -1072,9 +1072,22 @@ export class SkillsService {
         .filter((item) => item.discovered.toolPath?.endsWith(".py"))
         .map((item) => loadPythonSkillTool(item.discovered))
     );
+    // Scripts named in `scripts:` each become their own tool, so a skill is no
+    // longer capped at the single tool.py slot.
+    const declaredTools = await Promise.all(
+      assigned
+        .filter((item) => !isPluginOwnedSkill(item.record))
+        .flatMap((item) =>
+          item.discovered.scriptTools.map((script) =>
+            loadPythonSkillTool(item.discovered, script)
+          )
+        )
+    );
     return [
       ...javascriptTools,
-      ...pythonTools.filter((tool): tool is ToolDefinition => tool !== null),
+      ...[...pythonTools, ...declaredTools].filter(
+        (tool): tool is ToolDefinition => tool !== null
+      ),
     ];
   }
 

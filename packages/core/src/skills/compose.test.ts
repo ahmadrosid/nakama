@@ -15,6 +15,8 @@ const baseSkill: DiscoveredSkill = {
   hasTool: true,
   includeBodyOnMatch: false,
   name: "weather",
+  scriptIssues: [],
+  scriptTools: [],
   skillFilePath: "/tmp/weather/SKILL.md",
   toolPath: "/tmp/weather/tool.ts",
 };
@@ -67,6 +69,8 @@ describe("skill instruction discovery", () => {
       body: "Read references/explainer.md before creating the animation.",
       directory: "/tmp/skills/bang-motion",
       name: "bang-motion",
+      scriptIssues: [],
+      scriptTools: [],
       skillFilePath: "/tmp/skills/bang-motion/SKILL.md",
     };
     const matched = matchSkillsForMessage(

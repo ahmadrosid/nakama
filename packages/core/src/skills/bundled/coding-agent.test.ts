@@ -19,6 +19,8 @@ describe("bundled coding-agent skill", () => {
       hasTool: false,
       includeBodyOnMatch: true,
       name: parsed.frontmatter.name,
+      scriptIssues: [],
+      scriptTools: [],
       skillFilePath: "/tmp/coding-agent/SKILL.md",
       toolPath: null,
     };

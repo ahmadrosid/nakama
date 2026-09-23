@@ -5,9 +5,12 @@ import { spawnJsonTool } from "./custom-tool-subprocess";
 import { resolvePythonBin } from "./python-tool-loader";
 
 export async function loadPythonSkillTool(
-  skill: DiscoveredSkill
+  skill: DiscoveredSkill,
+  script?: { description: string; name: string; path: string }
 ): Promise<ToolDefinition | null> {
-  const modulePath = skill.toolPath;
+  const modulePath = script?.path ?? skill.toolPath;
+  const toolName = script?.name ?? skill.name;
+  const toolDescription = script?.description ?? skill.description;
   if (!modulePath?.endsWith(".py")) {
     return null;
   }
@@ -30,8 +33,8 @@ export async function loadPythonSkillTool(
     }
 
     return {
-      description: skill.description,
-      name: skill.name,
+      description: toolDescription,
+      name: toolName,
       parameters: { additionalProperties: true, type: "object" },
       async run(input, context) {
         return spawnJsonTool({
@@ -51,8 +54,8 @@ export async function loadPythonSkillTool(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
-      description: skill.description,
-      name: skill.name,
+      description: toolDescription,
+      name: toolName,
       parameters: { additionalProperties: true, type: "object" },
       async run() {
         return { error: `Python skill tool failed to load: ${message}` };
