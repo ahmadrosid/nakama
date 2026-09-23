@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { addAbortListener } from "node:events";
 import { BlockList, isIP } from "node:net";
 import { NodeHtmlMarkdown } from "node-html-markdown";
+import robotsParser from "robots-parser";
 import { z } from "zod";
 import type { JsonSchema, ToolDefinition } from "../contract";
 import { type BunFetchInit, withDisabledFetchIdle } from "../fetch-idle";
@@ -10,6 +11,7 @@ import { MAX_IMAGE_BYTES } from "../message-content";
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
 export interface WebFetchInput {
+  imageMetadata?: boolean;
   raw?: boolean;
   url: string;
 }
@@ -18,6 +20,12 @@ const HTTP_S_URL_REGEX = /^https?:\/\/.+$/i;
 
 export const webFetchInputSchema = z
   .object({
+    imageMetadata: z
+      .boolean()
+      .optional()
+      .describe(
+        "When true, verify the fetched page's og:image URL, if suitable."
+      ),
     raw: z
       .boolean()
       .optional()
@@ -43,6 +51,7 @@ export interface WebFetchOutput {
   content: string;
   contentType: string;
   finalUrl: string;
+  imageUrl?: string | null;
   status: number;
   truncated: boolean;
   url: string;
@@ -61,6 +70,8 @@ const MAX_CONTENT_CHARS = 16_000;
 const TRUNCATION_MARKER = "\n...[truncated]";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
+const USER_AGENT =
+  "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)";
 
 const NON_PUBLIC_IPV6_RANGES = new BlockList();
 for (const [network, prefix] of [
@@ -287,8 +298,7 @@ function pinnedRequest(
     headers: {
       accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
       host: logical.host,
-      "user-agent":
-        "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
+      "user-agent": USER_AGENT,
     },
     redirect: "manual",
     signal,
@@ -419,7 +429,11 @@ function validateImageUrl(url: URL): void {
 }
 
 /** Public raster images only; shares web_fetch's DNS pinning and redirect checks. */
-export async function fetchRemoteImage(rawUrl: string, signal: AbortSignal) {
+export async function fetchRemoteImage(
+  rawUrl: string,
+  signal: AbortSignal,
+  validateRedirect?: (url: URL) => void
+) {
   const url = parseUrl(rawUrl);
   validateImageUrl(url);
   const addresses = await resolvePublicAddresses(url.hostname, signal);
@@ -427,7 +441,10 @@ export async function fetchRemoteImage(rawUrl: string, signal: AbortSignal) {
     url,
     addresses,
     signal,
-    validateImageUrl
+    (next) => {
+      validateImageUrl(next);
+      validateRedirect?.(next);
+    }
   );
   const contentType =
     response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ??
@@ -477,6 +494,7 @@ export async function convertHtmlToMarkdown(html: string): Promise<string> {
 export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
   description:
     "Fetch a single public HTTP(S) URL and return its content. HTML pages are converted to Markdown. " +
+    "Set imageMetadata=true to return imageUrl only when the page declares a same-site HTTPS og:image permitted by robots.txt and its bytes verify as a raster image; otherwise null. This does not prove what the image depicts. " +
     `Content is capped at ${MAX_CONTENT_CHARS} characters; when truncated is true the tail was dropped, ` +
     "so fetch a more specific URL rather than assuming you have the whole document. " +
     "Use for retrieving a known URL; use web_search when you need to discover sources.",
@@ -484,7 +502,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
   parallelSafe: true,
   parameters: webFetchParameters(),
   async run(input) {
-    let parsed: { url: string; raw?: boolean };
+    let parsed: WebFetchInput;
     try {
       parsed = webFetchInputSchema.parse(input);
     } catch (err) {
@@ -501,16 +519,68 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
 
     const raw = Boolean(parsed.raw);
     const url = parseUrl(parsed.url);
-    const addresses = await resolvePublicAddresses(url.hostname);
-
+    if (parsed.imageMetadata) {
+      validateImageUrl(url);
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
+      const addresses = await resolvePublicAddresses(
+        url.hostname,
+        controller.signal
+      );
+      let checkAllowed: ((candidate: URL) => void) | undefined;
+      if (parsed.imageMetadata) {
+        const robotsUrl = new URL("/robots.txt", url);
+        const { response: robotsResponse } = await fetchWithRedirects(
+          robotsUrl,
+          addresses,
+          controller.signal,
+          (next) => {
+            if (next.origin !== url.origin) {
+              throw new Error("web_fetch: robots redirect left the site.");
+            }
+          }
+        );
+        if (robotsResponse.status !== 200 && robotsResponse.status !== 404) {
+          await robotsResponse.body?.cancel();
+          throw new Error("web_fetch: robots policy is unavailable.");
+        }
+        if (
+          robotsResponse.status === 200 &&
+          !/^text\/plain\b/i.test(
+            robotsResponse.headers.get("content-type") ?? ""
+          )
+        ) {
+          await robotsResponse.body?.cancel();
+          throw new Error("web_fetch: robots policy is not plain text.");
+        }
+        const rulesText =
+          robotsResponse.status === 200
+            ? new TextDecoder().decode(
+                await readBoundedBody(robotsResponse, 512 * 1024)
+              )
+            : "";
+        if (robotsResponse.status === 404) {
+          await robotsResponse.body?.cancel();
+        }
+        const rules = robotsParser(robotsUrl.toString(), rulesText);
+        checkAllowed = (candidate) => {
+          if (
+            candidate.origin !== url.origin ||
+            rules.isAllowed(candidate.toString(), USER_AGENT) !== true
+          ) {
+            throw new Error("web_fetch: robots policy disallows this URL.");
+          }
+        };
+        checkAllowed(url);
+      }
       const { response, finalUrl } = await fetchWithRedirects(
         url,
         addresses,
-        controller.signal
+        controller.signal,
+        checkAllowed
       );
 
       if (response.status < 200 || response.status >= 300) {
@@ -524,6 +594,62 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
         await readBoundedBody(response, MAX_BODY_BYTES)
       );
       const bytes = Buffer.byteLength(body, "utf8");
+
+      let imageUrl: string | null = null;
+      const page = new URL(finalUrl);
+      if (
+        parsed.imageMetadata &&
+        contentTypeIsHtml(contentType) &&
+        page.protocol === "https:" &&
+        page.hostname === url.hostname
+      ) {
+        const declared: { value: string | null } = { value: null };
+        // Bun provides HTMLRewriter globally; Biome's default globals omit it.
+        // biome-ignore lint/correctness/noUndeclaredVariables: Bun runtime global
+        const rewriter = new HTMLRewriter().on("meta", {
+          element(element) {
+            if (
+              element.getAttribute("property")?.toLowerCase() === "og:image"
+            ) {
+              declared.value ??= element.getAttribute("content");
+            }
+          },
+        });
+        await rewriter.transform(new Response(body)).text();
+        if (declared.value) {
+          try {
+            // Bun's HTMLRewriter returns attribute entities verbatim. Decode the
+            // ampersand spellings found in image query strings; reject any other
+            // undecoded entity rather than returning a different URL.
+            const reference = declared.value.replace(
+              /&(?:amp|#0*38|#x0*26);/gi,
+              "&"
+            );
+            if (/&(?:#|[a-z]+);/i.test(reference)) {
+              throw new Error("Undecoded image URL entity");
+            }
+            const image = new URL(reference, page);
+            if (
+              image.protocol === "https:" &&
+              image.origin === page.origin &&
+              !(image.username || image.password || image.port) &&
+              /\.(?:jpe?g|png|gif|webp)$/i.test(image.pathname)
+            ) {
+              checkAllowed?.(image);
+              await fetchRemoteImage(
+                image.toString(),
+                controller.signal,
+                () => {
+                  throw new Error("og:image must be a direct image URL.");
+                }
+              );
+              imageUrl = image.toString();
+            }
+          } catch {
+            // An invalid, blocked, or unreadable image is not verified.
+          }
+        }
+      }
 
       let content = body;
       const shouldConvert =
@@ -548,6 +674,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
         content,
         contentType,
         finalUrl,
+        ...(parsed.imageMetadata ? { imageUrl } : {}),
         status: response.status,
         truncated,
         url: url.toString(),
