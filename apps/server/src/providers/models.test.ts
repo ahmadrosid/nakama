@@ -15,6 +15,10 @@ describe("isOpenRouterModelSlug", () => {
     expect(isOpenRouterModelSlug("anthropic/claude-sonnet-4-6")).toBe(true);
   });
 
+  test("accepts latest-model aliases", () => {
+    expect(isOpenRouterModelSlug("~google/gemini-flash-latest")).toBe(true);
+  });
+
   test("rejects bare model ids", () => {
     expect(isOpenRouterModelSlug("gpt-5.4")).toBe(false);
   });
