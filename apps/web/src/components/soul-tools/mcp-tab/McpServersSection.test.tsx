@@ -1,9 +1,15 @@
 import { expect, mock, spyOn, test } from "bun:test";
-import type { McpServerDetail } from "@nakama/core/contract";
+import type { McpServerDetail, McpServerResponse } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { mcpServerDetailQueryOptions } from "@/hooks/use-app-queries";
+import { McpServerAssignList } from "@/components/McpServerAssignList";
+import {
+  mcpServerDetailQueryOptions,
+  mcpServersQueryOptions,
+  useMcpServersQuery,
+} from "@/hooks/use-app-queries";
+import { client } from "@/lib/client";
 import { McpServersSection } from "./McpServersSection";
 
 test("server rows reveal tools and actions inline and respect deletion and busy guards", async () => {
@@ -149,5 +155,89 @@ test("server rows reveal tools and actions inline and respect deletion and busy 
     await act(async () => root.unmount());
     queryClient.clear();
     container.remove();
+  }
+});
+
+test("syncs an assignable server without assigning it and refreshes its tool count", async () => {
+  const server: McpServerDetail = {
+    cachedTools: [],
+    config: { url: "https://example.com/mcp" },
+    createdAt: "2026-01-01",
+    enabled: true,
+    id: "search",
+    lastError: null,
+    name: "Search server",
+    status: "connected",
+    toolCount: 0,
+    transport: "http",
+    updatedAt: "2026-01-01",
+    usesOAuth: false,
+  };
+  const refreshed = {
+    ...server,
+    cachedTools: [
+      { description: "New tool", inputSchema: {}, name: "new_tool" },
+    ],
+    toolCount: 1,
+  };
+  const request = Promise.withResolvers<McpServerResponse>();
+  const sync = spyOn(client, "syncMcpServer").mockReturnValueOnce(
+    request.promise
+  );
+  const list = spyOn(client, "listMcpServers").mockResolvedValue({
+    servers: [refreshed],
+  });
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(mcpServersQueryOptions.queryKey, [server]);
+  const onAssign = mock();
+  function Probe() {
+    const { data = [] } = useMcpServersQuery();
+    return <McpServerAssignList onAssign={onAssign} servers={data} />;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Probe />
+        </QueryClientProvider>
+      )
+    );
+    const button = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Sync tools for Search server"]'
+    )!;
+    await act(async () => {
+      button.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })
+      );
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(sync).toHaveBeenCalledWith(server.id);
+    expect(onAssign).not.toHaveBeenCalled();
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    await act(async () => {
+      request.resolve({ server: refreshed });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(container.textContent).toContain("http · 1 tool");
+    expect(button.disabled).toBe(false);
+    sync.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(button.disabled).toBe(false);
+    expect(onAssign).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    queryClient.clear();
+    container.remove();
+    sync.mockRestore();
+    list.mockRestore();
   }
 });

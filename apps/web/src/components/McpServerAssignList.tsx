@@ -9,7 +9,9 @@ import {
   CommandList,
 } from "@nakama/ui/command";
 import { cn } from "@nakama/ui/utils";
-import { Plug01Icon } from "hugeicons-react";
+import { Plug01Icon, RefreshIcon } from "hugeicons-react";
+import { useSyncMcpServerMutation } from "@/hooks/use-resource-mutations";
+import { formatError } from "@/lib/client";
 
 export function McpServerAssignList({
   className,
@@ -24,6 +26,9 @@ export function McpServerAssignList({
   onTestConnection?: (server: McpServerSummary) => void;
   servers: McpServerSummary[];
 }) {
+  const sync = useSyncMcpServerMutation();
+  const busy = disabled || sync.isPending;
+
   return (
     <Command
       className={cn(
@@ -32,6 +37,11 @@ export function McpServerAssignList({
       )}
     >
       <CommandInput placeholder="Search MCP servers…" />
+      {sync.error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formatError(sync.error)}
+        </p>
+      ) : null}
       <CommandList className="max-h-none min-h-0 flex-1 overflow-hidden rounded-md border border-border p-1">
         <CommandEmpty className="text-pretty">
           No MCP servers found.
@@ -40,7 +50,7 @@ export function McpServerAssignList({
           {servers.map((server) => (
             <CommandItem
               className="rounded-sm! py-2 [&>svg]:hidden"
-              disabled={disabled}
+              disabled={busy}
               key={server.id}
               onSelect={() => {
                 onAssign(server.id);
@@ -56,9 +66,36 @@ export function McpServerAssignList({
                   {server.toolCount === 1 ? "" : "s"}
                 </p>
               </div>
+              <Button
+                aria-busy={sync.isPending && sync.variables === server.id}
+                aria-label={`Sync tools for ${server.name}`}
+                disabled={busy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  sync.mutate(server.id);
+                }}
+                onKeyDown={(event) => event.stopPropagation()}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <RefreshIcon
+                  aria-hidden
+                  className={cn(
+                    "size-4",
+                    sync.isPending &&
+                      sync.variables === server.id &&
+                      "motion-safe:animate-spin"
+                  )}
+                />
+                {sync.isPending && sync.variables === server.id
+                  ? "Syncing…"
+                  : "Sync tools"}
+              </Button>
               {onTestConnection ? (
                 <Button
                   aria-label={`Test connection for ${server.name}`}
+                  disabled={busy}
                   onClick={(event) => {
                     event.stopPropagation();
                     onTestConnection(server);
