@@ -57,6 +57,7 @@ import {
   parseSkillMarkdown,
   patchSkillFile,
   pickPreferredSkillSourcePath,
+  readUploadedSkillBundle,
   removeProfileSkillSupportingFile,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
@@ -78,6 +79,7 @@ import {
   recordProfileChangeEvent,
   withAssignmentChange,
 } from "./profile-change-history";
+import { loadPythonSkillTool } from "./python-skill-tool-loader";
 
 export interface SkillUsageRecordingContext {
   seenCatalogSkillIds: Set<string>;
@@ -88,6 +90,56 @@ const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
 function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
   return Boolean(record.pluginId && record.pluginKey);
+}
+
+function parseSkillsAddCommand(command: string): string {
+  const tokens = command
+    .match(/"[^"]*"|'[^']*'|\S+/g)
+    ?.map((token) => token.replace(/^("|')|("|')$/g, ""));
+  if (
+    !tokens ||
+    tokens.length < 4 ||
+    tokens[0] !== "npx" ||
+    !/^skills(?:@[\w.-]+)?$/.test(tokens[1] ?? "") ||
+    tokens[2] !== "add"
+  ) {
+    throw new NakamaApiError(
+      "Use: npx skills add <github-owner>/<repo> --skill <name>.",
+      400
+    );
+  }
+
+  const source = tokens[3];
+  const skillIndex = tokens.indexOf("--skill");
+  const skillName = skillIndex >= 0 ? tokens[skillIndex + 1] : undefined;
+  if (!(source && skillName) || tokens.length !== skillIndex + 2) {
+    throw new NakamaApiError(
+      "Include one skill, for example: npx skills add vercel-labs/agent-skills --skill pdf.",
+      400
+    );
+  }
+
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(
+      source.includes("://") ? source : `https://github.com/${source}`
+    );
+  } catch {
+    throw new NakamaApiError(
+      "The npx skills add source must be a public GitHub repository.",
+      400
+    );
+  }
+  if (
+    baseUrl.hostname !== "github.com" ||
+    baseUrl.pathname.split("/").filter(Boolean).length !== 2
+  ) {
+    throw new NakamaApiError(
+      "The npx skills add source must be a public GitHub repository.",
+      400
+    );
+  }
+  return `${baseUrl.origin}${baseUrl.pathname}/tree/HEAD/${encodeURIComponent(skillName)}`;
 }
 
 export class SkillsService {
@@ -290,13 +342,17 @@ export class SkillsService {
   ): Promise<SkillResponse> {
     const profileId = request.profileId?.trim() ?? "";
     const url = request.url?.trim() ?? "";
+    const command = request.command?.trim() ?? "";
 
     if (!profileId) {
       throw new NakamaApiError("profileId is required.", 400);
     }
 
-    if (!url) {
-      throw new NakamaApiError("url is required.", 400);
+    if (!(url || command || request.zipBase64)) {
+      throw new NakamaApiError(
+        "A GitHub URL, npx skills add command, or ZIP file is required.",
+        400
+      );
     }
 
     const profile = await this.db.getProfileForOrg(profileId, orgId);
@@ -304,11 +360,20 @@ export class SkillsService {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
-    const bundle = await fetchGitHubSkillBundle(url);
+    const commandUrl = command ? parseSkillsAddCommand(command) : "";
+    const bundle = request.zipBase64
+      ? (() => {
+          const archive = Buffer.from(request.zipBase64!, "base64");
+          if (archive.length > 50 * 1024 * 1024) {
+            throw new NakamaApiError("Skill ZIP is too large.", 400);
+          }
+          return readUploadedSkillBundle(archive);
+        })()
+      : await fetchGitHubSkillBundle(url || commandUrl);
     const { content } = bundle;
 
     try {
-      parseSkillMarkdown(content, url);
+      parseSkillMarkdown(content, url || commandUrl);
     } catch (error) {
       throw new NakamaApiError(
         error instanceof Error
@@ -994,13 +1059,23 @@ export class SkillsService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    return loadSkillTools(
-      assigned
-        .filter(
-          (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
-        )
+    const skillTools = assigned.filter(
+      (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
+    );
+    const javascriptTools = await loadSkillTools(
+      skillTools
+        .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
         .map((item) => item.discovered)
     );
+    const pythonTools = await Promise.all(
+      skillTools
+        .filter((item) => item.discovered.toolPath?.endsWith(".py"))
+        .map((item) => loadPythonSkillTool(item.discovered))
+    );
+    return [
+      ...javascriptTools,
+      ...pythonTools.filter((tool): tool is ToolDefinition => tool !== null),
+    ];
   }
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {

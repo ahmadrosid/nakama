@@ -158,6 +158,51 @@ describe("POST /v1/skills/install", () => {
     expect(assigned.some((skill) => skill.id === body.skill.id)).toBe(true);
   });
 
+  test("installs a skill from an npx skills add command", async () => {
+    let requestedUrl = "";
+    globalThis.fetch = mock(async (input) => {
+      requestedUrl = String(input);
+      return new Response(
+        zipSync({
+          "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
+            VALID_SKILL.replace("github-weather", "pdf")
+          ),
+        })
+      );
+    }) as unknown as typeof fetch;
+
+    const { app, databaseAdapter } = createApp();
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "admin-command@org.com"
+    );
+    const orgId = adminSession.orgId!;
+    const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills/install`, {
+        body: JSON.stringify({
+          command: "npx skills add vercel-labs/agent-skills --skill pdf",
+          profileId,
+        }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(requestedUrl).toBe(
+      "https://codeload.github.com/vercel-labs/agent-skills/zip/HEAD"
+    );
+  });
+
   test("invalid frontmatter returns 400 and writes no skill", async () => {
     globalThis.fetch = mock(
       async () =>
@@ -327,7 +372,7 @@ describe("POST /v1/skills/install", () => {
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
-    expect(body.error).toMatch(/url is required/i);
+    expect(body.error).toMatch(/GitHub URL.*ZIP file/i);
   });
 
   test("installing the same skill onto a second profile returns 409", async () => {

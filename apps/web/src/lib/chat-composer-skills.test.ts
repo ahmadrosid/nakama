@@ -200,7 +200,7 @@ describe("filterComposerSlashSuggestions", () => {
       }).map((item) =>
         item.kind === "command" ? item.command.name : item.skill.name
       )
-    ).toEqual(["add-plugin", "add-tool", "add-mcp"]);
+    ).toEqual(["add-plugin", "add-tool", "add-mcp", "add-skill"]);
     expect(
       filterComposerSlashSuggestions([weatherSkill], "add-t", {
         enableAddCommands: true,
@@ -216,6 +216,7 @@ describe("matchComposerAddCommand", () => {
     expect(matchComposerAddCommand("  /add-tool  ")).toBe("add-tool");
     expect(matchComposerAddCommand("/add-mcp")).toBe("add-mcp");
     expect(matchComposerAddCommand("/add-plugin")).toBe("add-plugin");
+    expect(matchComposerAddCommand("/add-skill")).toBe("add-skill");
     expect(matchComposerAddCommand("/add-plugin workflows")).toBeNull();
     expect(matchComposerAddCommand("/add-tool please")).toBeNull();
   });
