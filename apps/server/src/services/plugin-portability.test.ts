@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import {
   chmod,
   copyFile,
@@ -36,6 +37,10 @@ import {
   runWithPluginExportBarrier,
   setPluginLifecycleTestHooks,
 } from "./plugin-service";
+import {
+  createPostgresPluginHost,
+  openPostgresPassword,
+} from "./postgres-plugin";
 import {
   createProfilePackExport,
   importProfilePack,
@@ -194,6 +199,266 @@ describe("plugin portability", () => {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
     await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("PostgreSQL export restores encrypted credentials and grants disabled without exporting keys", async () => {
+    const envNames = [
+      "NAKAMA_POSTGRES_KEYS",
+      "NAKAMA_POSTGRES_KEY_ID",
+      "NAKAMA_POSTGRES_NETWORK_POLICY",
+    ] as const;
+    const previousEnv = envNames.map((name) => process.env[name]);
+    const sourcePath = join(configDir, "nakama.db");
+    const source = await createSqliteDatabase(`file:${sourcePath}`);
+    const restoreRoot = await mkdtemp(
+      join(tmpdir(), "nakama-postgres-restore-")
+    );
+    let restored: Awaited<ReturnType<typeof createSqliteDatabase>> | undefined;
+    let snapshot: Database | undefined;
+    try {
+      const masterKey = randomBytes(32);
+      const keyring = JSON.stringify({ backup: masterKey.toString("base64") });
+      const password = `disposable-postgres-${randomBytes(24).toString("hex")}`;
+      process.env.NAKAMA_POSTGRES_KEYS = keyring;
+      process.env.NAKAMA_POSTGRES_KEY_ID = "backup";
+      // Saving only validates this literal address against policy; it never dials it.
+      process.env.NAKAMA_POSTGRES_NETWORK_POLICY = JSON.stringify([
+        { addresses: ["10.77.0.1"], host: "10.77.0.1", port: 5432 },
+      ]);
+      const now = new Date().toISOString();
+      await source.adapter.upsertOrganization({
+        createdAt: now,
+        id: ORG,
+        name: "Source",
+        slug: "source",
+        updatedAt: now,
+      });
+      for (const [id, role] of [
+        [ACTOR.id, "admin"],
+        ["reader", "member"],
+        ["ungranted", "member"],
+      ] as const) {
+        await source.adapter.createUser({
+          createdAt: now,
+          email: `${id}@example.test`,
+          id,
+          passwordHash: "not-a-login-hash",
+          updatedAt: now,
+        });
+        await source.adapter.upsertOrgMember({
+          createdAt: now,
+          orgId: ORG,
+          role,
+          userId: id,
+        });
+      }
+      for (const id of ["reporting-agent", "ungranted-agent"]) {
+        await source.adapter.upsertProfile({
+          createdAt: now,
+          id,
+          isDefault: false,
+          isSuper: false,
+          model: null,
+          name: id,
+          orgId: ORG,
+          systemPrompt: "",
+          updatedAt: now,
+        });
+      }
+      const officialPackagesDir = resolve(
+        import.meta.dir,
+        "../../../../packages/plugins"
+      );
+      const sourceHost = createPostgresPluginHost(source.adapter);
+      const service = new PluginService(source.adapter, configDir, {
+        officialPackagesDir,
+        onHostRequest: (request, context, signal) =>
+          sourceHost((request as { input: unknown }).input, context, signal),
+      });
+      await service.installOfficialPlugin(ORG, "postgresql", ACTOR);
+      const request = {
+        access: "ui" as const,
+        actor: ACTOR,
+        orgId: ORG,
+        pluginId: "postgresql",
+        webUserId: ACTOR.id,
+      };
+      const config = {
+        ca: "",
+        database: "reports",
+        disclosureAccepted: true,
+        host: "10.77.0.1",
+        name: "Reporting",
+        port: 5432,
+        profileIds: ["reporting-agent"],
+        relations: [{ schema: "reports", table: "orders" }],
+        userIds: ["reader"],
+        username: "restricted_reader",
+      };
+      const saved = (
+        await service.invokePluginAction({
+          ...request,
+          actionKey: "save_connection",
+          input: { config, password, revision: 0 },
+        })
+      ).result as { id: string; revision: number };
+      const installed = await source.adapter.getOrgPlugin(ORG, "postgresql");
+      expect(installed?.lifecycleState).toBe("enabled");
+      const exported = await createNakamaDataExport({
+        databasePath: sourcePath,
+        rootDir: configDir,
+      });
+      const entries = unzipSync(exported.data);
+      const pluginEntry = `orgs/${ORG}/plugins/postgresql/db/${installed!.databaseGeneration}.sqlite`;
+      expect(entries[pluginEntry]).toBeDefined();
+      // Check decompressed payloads, not compressed ZIP bytes (which hide even plaintext).
+      for (const content of Object.values(entries)) {
+        const bytes = Buffer.from(content);
+        for (const secret of [
+          Buffer.from(password),
+          masterKey,
+          Buffer.from(masterKey.toString("base64")),
+          Buffer.from(masterKey.toString("hex")),
+          Buffer.from(keyring),
+        ]) {
+          expect(bytes.includes(secret)).toBe(false);
+        }
+      }
+      delete process.env.NAKAMA_POSTGRES_KEYS;
+      delete process.env.NAKAMA_POSTGRES_KEY_ID;
+      await restoreNakamaDataImport(exported.data, {
+        confirm: true,
+        databasePath: join(restoreRoot, "nakama.db"),
+        rootDir: restoreRoot,
+      });
+      expect(process.env.NAKAMA_POSTGRES_KEYS).toBeUndefined();
+      restored = await createSqliteDatabase(
+        `file:${join(restoreRoot, "nakama.db")}`
+      );
+      const restoredHost = createPostgresPluginHost(restored.adapter);
+      const restoredService = new PluginService(restored.adapter, restoreRoot, {
+        officialPackagesDir,
+        onHostRequest: (value, context, signal) =>
+          restoredHost((value as { input: unknown }).input, context, signal),
+      });
+      const disabled = await restored.adapter.getOrgPlugin(ORG, "postgresql");
+      expect(disabled?.lifecycleState).toBe("disabled");
+      await expect(
+        restoredService.invokePluginAction({
+          ...request,
+          actionKey: "overview",
+          input: {},
+        })
+      ).rejects.toThrow();
+      snapshot = new Database(
+        getOrgPluginDatabasePath(
+          ORG,
+          "postgresql",
+          disabled!.databaseGeneration!,
+          restoreRoot
+        ),
+        { readonly: true }
+      );
+      const row = snapshot
+        .query<
+          { id: string; revision: number; config: string; secret: string },
+          []
+        >("SELECT id,revision,config,secret FROM connections")
+        .get()!;
+      expect(row.id).toBe(saved.id);
+      expect(row.revision).toBe(1);
+      expect(JSON.parse(row.config)).toEqual(config);
+      const scope = JSON.stringify([ORG, "postgresql", saved.id]);
+      expect(() => openPostgresPassword(row.secret, scope)).toThrow();
+      await restoredService.enableOrgPlugin(
+        ORG,
+        "postgresql",
+        disabled!.revision
+      );
+      const resave = {
+        ...request,
+        actionKey: "save_connection",
+        input: { config, id: saved.id, revision: 1 },
+      };
+      // Blank-password saves must decrypt the restored credential, not replace it.
+      await expect(
+        restoredService.invokePluginAction(resave)
+      ).rejects.toThrow();
+      process.env.NAKAMA_POSTGRES_KEY_ID = "backup";
+      process.env.NAKAMA_POSTGRES_KEYS = JSON.stringify({
+        backup: randomBytes(32).toString("base64"),
+      });
+      expect(() => openPostgresPassword(row.secret, scope)).toThrow();
+      await expect(
+        restoredService.invokePluginAction(resave)
+      ).rejects.toThrow();
+      expect(
+        snapshot.query("SELECT revision,secret FROM connections").get()
+      ).toEqual({ revision: 1, secret: row.secret });
+      process.env.NAKAMA_POSTGRES_KEYS = keyring;
+      expect(openPostgresPassword(row.secret, scope)).toBe(password);
+      expect((await restoredService.invokePluginAction(resave)).result).toEqual(
+        { id: saved.id, revision: 2 }
+      );
+      const resaved = snapshot
+        .query<{ revision: number; secret: string }, [string]>(
+          "SELECT revision,secret FROM connections WHERE id=?"
+        )
+        .get(saved.id)!;
+      expect(resaved.revision).toBe(2);
+      expect(openPostgresPassword(resaved.secret, scope)).toBe(password);
+      const overview = (
+        await restoredService.invokePluginAction({
+          ...request,
+          actionKey: "overview",
+          input: {},
+        })
+      ).result;
+      expect(overview).toMatchObject({
+        connections: [{ config, id: saved.id, revision: 2 }],
+      });
+      expect(JSON.stringify(overview)).not.toContain(password);
+      for (const [webUserId, expectedIds] of [
+        ["reader", [saved.id]],
+        ["ungranted", []],
+      ] as const) {
+        const result = (
+          await restoredService.invokePluginAction({
+            ...request,
+            actionKey: "overview",
+            input: {},
+            webUserId,
+          })
+        ).result as { connections: Array<{ id: string }> };
+        expect(result.connections.map((item) => item.id)).toEqual(expectedIds);
+      }
+      expect(
+        (await restored.adapter.listTools()).filter(
+          (tool) => tool.pluginId === "postgresql"
+        )
+      ).toEqual([]);
+      await expect(
+        restoredService.invokePluginAction({
+          ...request,
+          access: "tool",
+          actionKey: "overview",
+          input: {},
+          profileId: "reporting-agent",
+        })
+      ).rejects.toThrow();
+    } finally {
+      envNames.forEach((name, index) => {
+        if (previousEnv[index] === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = previousEnv[index];
+        }
+      });
+      snapshot?.close();
+      await restored?.close();
+      await source.close();
+      await rm(restoreRoot, { force: true, recursive: true });
+    }
   });
 
   test("Supermemory backup preserves namespace and restricts restored credentials", async () => {
