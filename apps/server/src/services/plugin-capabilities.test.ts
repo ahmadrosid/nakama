@@ -23,11 +23,16 @@ import {
   createInMemoryDatabaseAdapter,
   seedOrgDefaultProfile,
 } from "@nakama/db";
-import { pluginPackage } from "../testing/plugin-package-fixture";
+import {
+  closePluginPackageRegistry,
+  pluginPackage,
+} from "../testing/plugin-package-fixture";
 import { PluginHostError, PluginService } from "./plugin-service";
 import { SkillCuratorService } from "./skill-curator-service";
 import { SkillsService } from "./skills-service";
 import { resolveProfileStoredTools } from "./tool-resolver";
+
+afterEach(closePluginPackageRegistry);
 
 const ORG_ID = "org_u5";
 const OTHER_PROFILE = "profile_unassigned";

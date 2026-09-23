@@ -12,6 +12,68 @@ let transcriptTimer;
 let transcriptCursor = 0;
 let transcriptMeeting;
 let transcriptRunning = false;
+const captionRows = new WeakMap();
+let captionObserver;
+
+function sendCaption(row, speakerName, text) {
+  const state = captionRows.get(row) || {};
+  if (state.sentText === text && state.sentSpeakerName === speakerName) {
+    return;
+  }
+  clearTimeout(state.timer);
+  state.timer = setTimeout(() => {
+    if (state.text === text && state.speakerName === speakerName) {
+      state.sentText = text;
+      state.sentSpeakerName = speakerName;
+      void chrome.runtime.sendMessage({
+        caption: {
+          endMs: Date.now(),
+          id: `${captionSequence++}`,
+          speakerName,
+          startMs: state.startedAt,
+          text,
+        },
+        type: "MEET_CAPTION",
+      });
+    }
+  }, 1200);
+  if (state.text !== text || state.speakerName !== speakerName) {
+    state.startedAt = Date.now();
+  }
+  state.speakerName = speakerName;
+  state.text = text;
+  state.startedAt ||= Date.now();
+  captionRows.set(row, state);
+}
+
+let captionSequence = 0;
+function captureMeetCaptions() {
+  if (!isMeeting || captionObserver) {
+    return;
+  }
+  const scan = () => {
+    const region = document.querySelector(
+      '[role="region"][aria-label*="caption" i]'
+    );
+    if (!region) {
+      return;
+    }
+    for (const row of region.querySelectorAll(".nMcdL, [class*='nMcdL']")) {
+      const speakerName = row.querySelector(".NWpY1d")?.textContent?.trim();
+      const text = row.querySelector(".ygicle")?.textContent?.trim();
+      if (speakerName && text) {
+        sendCaption(row, speakerName, text);
+      }
+    }
+  };
+  captionObserver = new MutationObserver(scan);
+  captionObserver.observe(document.documentElement, {
+    characterData: true,
+    childList: true,
+    subtree: true,
+  });
+  setInterval(scan, 1000);
+}
 
 function createTranscriptPanel() {
   if (!isMeeting || transcriptPanel) {
@@ -72,7 +134,7 @@ async function refreshTranscript() {
       after: transcriptCursor,
       type: "MEET_TRANSCRIPT",
     });
-    if (!result || !transcriptPanel) {
+    if (!(result && transcriptPanel)) {
       hideTranscript();
       return;
     }
@@ -85,8 +147,9 @@ async function refreshTranscript() {
       transcriptList.scrollTop + transcriptList.clientHeight >=
       transcriptList.scrollHeight - 24;
     for (const segment of result.segments) {
-      transcriptList.firstElementChild?.id === "empty" &&
+      if (transcriptList.firstElementChild?.id === "empty") {
         transcriptList.firstElementChild.remove();
+      }
       const turn = document.createElement("p");
       const speaker = document.createElement("span");
       speaker.textContent = segment.speakerName || "Unknown speaker";
@@ -105,6 +168,7 @@ async function refreshTranscript() {
 }
 
 if (isMeeting) {
+  captureMeetCaptions();
   chrome.runtime
     .sendMessage({ type: "MEET_STATE" })
     .then((state) => {

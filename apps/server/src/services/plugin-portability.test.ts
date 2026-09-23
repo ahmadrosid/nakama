@@ -21,7 +21,10 @@ import {
   createSqliteDatabase,
 } from "@nakama/db";
 import { unzipSync } from "fflate";
-import { pluginPackage } from "../testing/plugin-package-fixture";
+import {
+  closePluginPackageRegistry,
+  pluginPackage,
+} from "../testing/plugin-package-fixture";
 import {
   createNakamaDataExport,
   restoreNakamaDataImport,
@@ -38,6 +41,8 @@ import {
   importProfilePack,
   previewProfilePackImport,
 } from "./profile-portability";
+
+afterEach(closePluginPackageRegistry);
 
 const ACTOR = { id: "admin_1", role: "admin" as const };
 const ORG = "org_src";

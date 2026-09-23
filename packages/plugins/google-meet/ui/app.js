@@ -441,6 +441,7 @@ function apply(ctx) {
           "start-capture",
           "leave",
           "transcript",
+          "caption",
           "show-transcript"
         ].includes(data.action)) {
           return;
