@@ -455,15 +455,20 @@ function apply(ctx) {
       role: "status"
     }, "Transcribing with Whisper… keep this page open.")));
   }
-  function UploadFileButton({
-    onError,
-    onUploaded
-  }) {
+  function Page() {
+    const [overview, setOverview] = React.useState(null);
+    const [error, setError] = React.useState("");
+    const [extensionConnected, setExtensionConnected] = React.useState(false);
+    const [busy, setBusy] = React.useState(false);
+    const [settings, setSettings] = React.useState(null);
+    const [deleting, setDeleting] = React.useState(null);
+    const [selected, setSelected] = React.useState(null);
+    const [recordingPicker, setRecordingPicker] = React.useState(false);
     const [uploading, setUploading] = React.useState(false);
     const uploadInput = React.useRef(null);
     async function upload(file) {
       setUploading(true);
-      onError("");
+      setError("");
       try {
         const markdown = /\.(md|markdown)$/i.test(file.name);
         if (!(markdown || /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(file.name))) {
@@ -479,43 +484,13 @@ function apply(ctx) {
           reader.readAsDataURL(file);
         });
         await ctx.host.call("upload", { content, filename: file.name });
-        onUploaded(await ctx.host.call("meetings"));
+        setOverview(await ctx.host.call("meetings"));
       } catch (reason) {
-        onError(message(reason));
+        setError(message(reason));
       } finally {
         setUploading(false);
       }
     }
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("input", {
-      accept: ".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm",
-      "aria-label": "Upload audio or Markdown",
-      hidden: true,
-      onChange: (event) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (file) {
-          upload(file);
-        }
-      },
-      ref: uploadInput,
-      type: "file"
-    }), /* @__PURE__ */ React.createElement(Button, {
-      disabled: uploading,
-      onClick: () => uploadInput.current?.click(),
-      size: "sm",
-      title: "Audio up to 7 MB or Markdown up to 1 MB",
-      variant: "outline"
-    }, uploading ? "Importing…" : "Upload file"));
-  }
-  function Page() {
-    const [overview, setOverview] = React.useState(null);
-    const [error, setError] = React.useState("");
-    const [extensionConnected, setExtensionConnected] = React.useState(false);
-    const [busy, setBusy] = React.useState(false);
-    const [settings, setSettings] = React.useState(null);
-    const [deleting, setDeleting] = React.useState(null);
-    const [selected, setSelected] = React.useState(null);
-    const [recordingPicker, setRecordingPicker] = React.useState(false);
     React.useEffect(() => {
       async function receive(event) {
         if (event.source !== window || event.origin !== window.location.origin) {
@@ -646,10 +621,26 @@ function apply(ctx) {
       onClick: () => setRecordingPicker(true),
       size: "sm",
       variant: "outline"
-    }, "Import recording"), /* @__PURE__ */ React.createElement(UploadFileButton, {
-      onError: setError,
-      onUploaded: setOverview
-    })))), group.meetings.length ? /* @__PURE__ */ React.createElement("ul", {
+    }, "Import recording"), /* @__PURE__ */ React.createElement("input", {
+      accept: ".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm",
+      "aria-label": "Upload audio or Markdown",
+      hidden: true,
+      onChange: (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) {
+          upload(file);
+        }
+      },
+      ref: uploadInput,
+      type: "file"
+    }), /* @__PURE__ */ React.createElement(Button, {
+      disabled: uploading,
+      onClick: () => uploadInput.current?.click(),
+      size: "sm",
+      title: "Audio up to 7 MB or Markdown up to 1 MB",
+      variant: "outline"
+    }, uploading ? "Importing…" : "Upload file")))), group.meetings.length ? /* @__PURE__ */ React.createElement("ul", {
       className: "meet-list"
     }, group.meetings.map((meeting) => /* @__PURE__ */ React.createElement(MeetingRow, {
       busy,

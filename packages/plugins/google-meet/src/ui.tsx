@@ -644,18 +644,20 @@ export function apply(ctx: Context) {
     );
   }
 
-  function UploadFileButton({
-    onError,
-    onUploaded,
-  }: {
-    onError(error: string): void;
-    onUploaded(overview: Overview): void;
-  }) {
+  function Page() {
+    const [overview, setOverview] = React.useState<Overview | null>(null);
+    const [error, setError] = React.useState("");
+    const [extensionConnected, setExtensionConnected] = React.useState(false);
+    const [busy, setBusy] = React.useState(false);
+    const [settings, setSettings] = React.useState<boolean | null>(null);
+    const [deleting, setDeleting] = React.useState<Meeting | null>(null);
+    const [selected, setSelected] = React.useState<Meeting | null>(null);
+    const [recordingPicker, setRecordingPicker] = React.useState(false);
     const [uploading, setUploading] = React.useState(false);
     const uploadInput = React.useRef<HTMLInputElement>(null);
     async function upload(file: File) {
       setUploading(true);
-      onError("");
+      setError("");
       try {
         const markdown = /\.(md|markdown)$/i.test(file.name);
         if (
@@ -675,51 +677,13 @@ export function apply(ctx: Context) {
           reader.readAsDataURL(file);
         });
         await ctx.host.call("upload", { content, filename: file.name });
-        onUploaded((await ctx.host.call("meetings")) as Overview);
+        setOverview((await ctx.host.call("meetings")) as Overview);
       } catch (reason) {
-        onError(message(reason));
+        setError(message(reason));
       } finally {
         setUploading(false);
       }
     }
-    return (
-      <>
-        <input
-          accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
-          aria-label="Upload audio or Markdown"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) {
-              void upload(file);
-            }
-          }}
-          ref={uploadInput}
-          type="file"
-        />
-        <Button
-          disabled={uploading}
-          onClick={() => uploadInput.current?.click()}
-          size="sm"
-          title="Audio up to 7 MB or Markdown up to 1 MB"
-          variant="outline"
-        >
-          {uploading ? "Importing…" : "Upload file"}
-        </Button>
-      </>
-    );
-  }
-
-  function Page() {
-    const [overview, setOverview] = React.useState<Overview | null>(null);
-    const [error, setError] = React.useState("");
-    const [extensionConnected, setExtensionConnected] = React.useState(false);
-    const [busy, setBusy] = React.useState(false);
-    const [settings, setSettings] = React.useState<boolean | null>(null);
-    const [deleting, setDeleting] = React.useState<Meeting | null>(null);
-    const [selected, setSelected] = React.useState<Meeting | null>(null);
-    const [recordingPicker, setRecordingPicker] = React.useState(false);
     React.useEffect(() => {
       async function receive(event: MessageEvent) {
         if (
@@ -897,10 +861,29 @@ export function apply(ctx: Context) {
                           >
                             Import recording
                           </Button>
-                          <UploadFileButton
-                            onError={setError}
-                            onUploaded={setOverview}
+                          <input
+                            accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
+                            aria-label="Upload audio or Markdown"
+                            hidden
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              event.target.value = "";
+                              if (file) {
+                                void upload(file);
+                              }
+                            }}
+                            ref={uploadInput}
+                            type="file"
                           />
+                          <Button
+                            disabled={uploading}
+                            onClick={() => uploadInput.current?.click()}
+                            size="sm"
+                            title="Audio up to 7 MB or Markdown up to 1 MB"
+                            variant="outline"
+                          >
+                            {uploading ? "Importing…" : "Upload file"}
+                          </Button>
                         </>
                       )}
                     </div>
