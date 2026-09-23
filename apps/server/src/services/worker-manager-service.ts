@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
   mkdir,
@@ -32,6 +32,7 @@ import {
 } from "@nakama/core/channel-config-shared";
 import { resolveDiscordApplicationId } from "@nakama/core/discord-config";
 import { parseIni, readTextOrNull, writeTextFile } from "@nakama/core/fs";
+import { getUserConfigDir } from "@nakama/core/user-config";
 import { listWhatsAppConfigOrgIds } from "@nakama/core/whatsapp-config";
 import {
   createWorkerHeartbeatStore,
@@ -205,7 +206,63 @@ export class WorkerManagerService {
       }
     }
     if (identity) {
-      await claimChannelIdentity(platform, owner, identity);
+      try {
+        await claimChannelIdentity(platform, owner, identity);
+      } catch (error) {
+        if (
+          platform !== "whatsapp" ||
+          (error as Error).message !==
+            "This channel account is already in use by another agent."
+        ) {
+          throw error;
+        }
+        const claimPath = join(
+          getUserConfigDir(),
+          "channel-claims",
+          "whatsapp",
+          createHash("sha256").update(identity).digest("hex")
+        );
+        assertChannelPath(claimPath);
+        const claimedOwner = await readTextOrNull(claimPath);
+        const owners = await listChannelOwners("whatsapp");
+        let duplicate = false;
+        for (const existingOwner of owners) {
+          if (
+            claimedOwner !==
+            JSON.stringify([existingOwner.orgId, existingOwner.profileId])
+          ) {
+            continue;
+          }
+          const authPath = join(
+            getChannelConfigDir("whatsapp", existingOwner),
+            "auth",
+            "creds.json"
+          );
+          assertChannelPath(authPath);
+          const auth = await readTextOrNull(authPath);
+          const jid = auth
+            ? (JSON.parse(auth) as { me?: { id?: string } }).me?.id
+            : undefined;
+          if (
+            jid?.replace(/:\d+@/, "@") === identity &&
+            (existingOwner.orgId !== owner.orgId ||
+              existingOwner.profileId !== owner.profileId)
+          ) {
+            duplicate = true;
+            break;
+          }
+        }
+        if (!duplicate) {
+          throw error;
+        }
+        const backup = `${source}.duplicate-${randomUUID()}`;
+        await rename(source, backup);
+        await setWorkerDesiredRunning(platform, false, scope);
+        console.info(
+          `Archived duplicate legacy WhatsApp connection at ${backup}`
+        );
+        return;
+      }
     } else if (platform !== "whatsapp") {
       throw new Error("Legacy bot account could not be validated");
     }

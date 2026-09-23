@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
+import { claimChannelIdentity } from "@nakama/core/channel-config-shared";
 import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
 import { WorkerManagerService } from "./worker-manager-service";
 
@@ -764,6 +772,87 @@ test("migration preserves an unambiguous connection and leaves ambiguous credent
     { orgId: "org_b", profileId: "agent_org_b" },
     { botToken: "111:rotated" }
   );
+});
+
+test("migration archives duplicate legacy WhatsApp credentials when the claimed agent is connected", async () => {
+  const { createInMemoryDatabaseAdapter } = await import("@nakama/db");
+  const db = createInMemoryDatabaseAdapter();
+  const now = new Date().toISOString();
+  for (const [orgId, profileId] of [
+    ["org_a", "agent_a"],
+    ["org_b", "agent_b"],
+  ]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id: orgId!,
+      name: orgId!,
+      slug: orgId!,
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: profileId!,
+      isDefault: true,
+      isSuper: false,
+      model: "test",
+      name: profileId!,
+      orgId: orgId!,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+  }
+  const legacyDir = join(configDir!, "orgs", "org_a", "whatsapp");
+  const active = { orgId: "org_b", profileId: "agent_b" };
+  const activeDir = join(
+    configDir!,
+    "orgs",
+    "org_b",
+    "channels",
+    "agent_b",
+    "whatsapp"
+  );
+  await saveWhatsAppConfig({ profileId: "agent_a" }, "org_a");
+  await saveWhatsAppConfig({}, active);
+  await mkdir(join(legacyDir, "auth"), { recursive: true });
+  await writeFile(
+    join(legacyDir, "auth", "creds.json"),
+    JSON.stringify({ me: { id: "123:4@s.whatsapp.net" } })
+  );
+  await claimChannelIdentity("whatsapp", active, "123@s.whatsapp.net");
+  await setWorkerDesiredRunning("whatsapp", true, "org_a");
+
+  const service = new WorkerManagerService(projectRoot, createMockPm2());
+  await expect(
+    service.claimLegacyChannel(
+      "whatsapp",
+      "org_a",
+      {
+        orgId: "org_a",
+        profileId: "agent_a",
+      },
+      db
+    )
+  ).rejects.toThrow();
+  expect(await Bun.file(join(legacyDir, "config.ini")).exists()).toBe(true);
+  await mkdir(join(activeDir, "auth"), { recursive: true });
+  await writeFile(
+    join(activeDir, "auth", "creds.json"),
+    JSON.stringify({ me: { id: "123:4@s.whatsapp.net" } })
+  );
+  await service.migrateAgentChannels(db);
+
+  expect(await service.legacyChannels("org_a", false)).toEqual([]);
+  const archived = (await readdir(join(configDir!, "orgs", "org_a"))).find(
+    (name) => name.startsWith("whatsapp.duplicate-")
+  );
+  expect(archived).toBeDefined();
+  expect(
+    await Bun.file(
+      join(configDir!, "orgs", "org_a", archived!, "auth", "creds.json")
+    ).exists()
+  ).toBe(true);
+  expect(await Bun.file(join(activeDir, "config.ini")).exists()).toBe(true);
+  expect((await readWorkerDesiredState("org_a")).whatsapp).toBe(false);
 });
 
 test("failed stop preserves credentials and blocks owner recovery", async () => {
