@@ -18,7 +18,11 @@ import {
   renameWorkspaceEntry,
   writeArtifactFile,
 } from "./artifacts";
-import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
+import {
+  getAppUserSoulDir,
+  getProfileArtifactsDir,
+  getProfileSoulDir,
+} from "./soul/resolve";
 
 const SAMPLE_DOCX_PATH = path.join(
   import.meta.dir,
@@ -292,6 +296,84 @@ test("readWorkspaceFile leaves a non-Word file alone even when markdown is asked
 
   expect("markdown" in result).toBe(false);
   expect(result.contentType).toBe("text/markdown");
+});
+
+async function writeAppUserArtifact(
+  appUserId: string,
+  relativePath: string,
+  content: string
+): Promise<void> {
+  const target = path.join(
+    getAppUserSoulDir(ORG_ID, PROFILE_ID, appUserId),
+    "artifacts",
+    relativePath
+  );
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, content, "utf8");
+}
+
+test("an app user reads their own artifact and not another one's", async () => {
+  await writeAppUserArtifact("user-1", "report.md", "first user");
+  await writeAppUserArtifact("user-2", "report.md", "second user");
+  await writeArtifact("report.md", "shared folder");
+
+  const first = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "report.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(first.bytes.toString("utf8")).toBe("first user");
+
+  // Same filename, different owner. Before this, both resolved the shared
+  // folder, so the name alone decided what you got.
+  const second = await readArtifactFile({
+    appUserId: "user-2",
+    filename: "report.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(second.bytes.toString("utf8")).toBe("second user");
+});
+
+test("an app user cannot reach an artifact that only another one has", async () => {
+  await writeAppUserArtifact("user-1", "private.md", "only user-1 has this");
+
+  // Not a different body, a miss. The file is outside the caller's folder.
+  await expect(
+    readArtifactFile({
+      appUserId: "user-2",
+      filename: "private.md",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toThrow();
+
+  const listed = await listArtifacts(ORG_ID, PROFILE_ID, {
+    appUserId: "user-2",
+  });
+  expect(listed.artifacts.map((entry) => entry.filename)).not.toContain(
+    "private.md"
+  );
+});
+
+test("no app user still resolves the shared profile folder", async () => {
+  await writeArtifact("shared.md", "shared folder");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const shared = await readArtifactFile({
+    filename: "shared.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(shared.bytes.toString("utf8")).toBe("shared folder");
+
+  // The dashboard and the local token send no app user, so their view must not
+  // change: an owned file is not theirs to see, and was not before either.
+  const listed = await listArtifacts(ORG_ID, PROFILE_ID);
+  const names = listed.artifacts.map((entry) => entry.filename);
+  expect(names).toContain("shared.md");
+  expect(names).not.toContain("owned.md");
 });
 
 beforeEach(async () => {

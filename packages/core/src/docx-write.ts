@@ -86,6 +86,16 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           runs.push(new TextRun({ ...inherited, break: 1, text: "" }));
           break;
         default: {
+          // A list item wraps its content in a `text` token that carries its
+          // own `tokens`, so the emphasis sits one level down. Reading `text`
+          // here handed Word the markdown source. A table cell arrives with
+          // `strong` at the top level, which is why it looked fixed already.
+          const nested = (token as { tokens?: Token[] }).tokens;
+          if (nested?.length) {
+            runs.push(...toRuns(nested, inherited));
+            break;
+          }
+
           const text =
             "text" in token
               ? String((token as { text: unknown }).text ?? "")

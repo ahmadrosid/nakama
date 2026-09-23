@@ -3691,10 +3691,11 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    options: { render?: "markdown" } = {}
+    options: { appUserId?: string | null; render?: "markdown" } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
+      appUserId: options.appUserId,
       filename,
       orgId,
       profileId,

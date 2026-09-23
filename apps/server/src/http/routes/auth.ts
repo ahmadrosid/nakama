@@ -60,6 +60,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       email: z.string(),
       id: z.string(),
       isPlatformAdmin: z.boolean().optional(),
+      mode: z.enum(["api-key", "browser-session", "local-token"]).optional(),
       name: z.string().nullable().optional(),
       orgId: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),
@@ -616,7 +617,18 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       auth.session?.id,
       auth.session?.activeOrgId
     );
-    return c.json(authBody, 200);
+    // The builder answers from the user record, which describes whoever created
+    // the credential. An API key is de-privileged whatever its owner is, and the
+    // guards already read that, so reporting the owner's flag here told an
+    // operator the opposite of what every admin route would do.
+    return c.json(
+      {
+        ...authBody,
+        isPlatformAdmin: auth.isPlatformAdmin,
+        mode: auth.mode,
+      },
+      200
+    );
   });
 
   app.openAPIRegistry.registerPath(updateMeRoute);

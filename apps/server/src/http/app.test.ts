@@ -1213,6 +1213,69 @@ describe("createHonoApp", () => {
     });
   });
 
+  test("auth/me reports what the credential may do, not what its owner may do", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const adminSession = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const admin =
+      await options.databaseAdapter.getUserByEmail("admin@example.com");
+    if (!(admin && adminSession.orgId)) {
+      throw new Error("Expected setup admin");
+    }
+    expect(admin.isPlatformAdmin).toBe(true);
+
+    const secret = `nk_live_${"c".repeat(64)}`;
+    await options.databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: admin.id,
+      environment: "live",
+      expiresAt: null,
+      id: "key_auth_me_test",
+      keyPrefix: secret.slice(0, 20),
+      lastUsedAt: null,
+      name: "auth/me test",
+      orgId: adminSession.orgId,
+      revokedAt: null,
+      secretHash: options.authService.hashToken(secret),
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "X-Org-Id": adminSession.orgId,
+        },
+      })
+    );
+    const body = (await response.json()) as {
+      isPlatformAdmin?: boolean;
+      mode?: string;
+    };
+
+    // The key was minted by a platform admin and is de-privileged anyway, which
+    // is what every admin guard already enforces. Reporting the owner's flag
+    // told an operator the opposite.
+    expect(response.status).toBe(200);
+    expect(body.isPlatformAdmin).toBe(false);
+    expect(body.mode).toBe("api-key");
+
+    // A browser session for the same admin still reports the admin it is.
+    const sessionResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        headers: adminSession.headers({}, adminSession.orgId),
+      })
+    );
+    const sessionBody = (await sessionResponse.json()) as {
+      isPlatformAdmin?: boolean;
+      mode?: string;
+    };
+    expect(sessionBody.isPlatformAdmin).toBe(true);
+    expect(sessionBody.mode).toBe("browser-session");
+  });
+
   test("API-key sessions require an app user id", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
