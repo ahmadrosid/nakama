@@ -9,7 +9,7 @@ import {
   truncate,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
 import {
   type PlatformWorkerName,
@@ -32,7 +32,6 @@ import {
 } from "@nakama/core/channel-config-shared";
 import { resolveDiscordApplicationId } from "@nakama/core/discord-config";
 import { parseIni, readTextOrNull, writeTextFile } from "@nakama/core/fs";
-import { getUserConfigDir } from "@nakama/core/user-config";
 import { listWhatsAppConfigOrgIds } from "@nakama/core/whatsapp-config";
 import {
   createWorkerHeartbeatStore,
@@ -217,7 +216,7 @@ export class WorkerManagerService {
           throw error;
         }
         const claimPath = join(
-          getUserConfigDir(),
+          dirname(getChannelConfigDir("whatsapp", null)),
           "channel-claims",
           "whatsapp",
           createHash("sha256").update(identity).digest("hex")
