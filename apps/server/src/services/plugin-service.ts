@@ -107,9 +107,11 @@ const OFFICIAL_PLUGINS = new Map<
   ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
   ["supermemory", { requiresHost: true }],
   ["google-meet", { requiresHost: false }],
+  ["postgresql", { requiresHost: true }],
 ]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
-const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
+// PATH may resolve a package-manager shim that drops inherited Windows IPC handles.
+const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? process.execPath;
 const PLUGIN_RUNNER_PATH = fileURLToPath(
   new URL("./plugin-runner.js", import.meta.url)
 );
@@ -190,6 +192,7 @@ export interface InvokePluginActionInput {
   profileId?: string;
   sessionId?: string;
   signal?: AbortSignal;
+  webUserId?: string;
 }
 
 export interface PluginInvocationResult {
@@ -602,13 +605,22 @@ export class PluginService {
     const { handle, install, manifest, releaseDir } =
       await this.admitInvocation(input.orgId, input.pluginId);
     try {
+      let webActor: PluginExecutionActor | undefined;
+      if (input.webUserId) {
+        const member = await this.db.getOrgMember(input.orgId, input.webUserId);
+        const user = await this.db.getUserById(input.webUserId);
+        if (!(member && user) || user.disabledAt || member.role === "viewer") {
+          throw new PluginHostError("forbidden");
+        }
+        webActor = { id: user.id, role: member.role };
+      }
       const action = manifest.actions.find(
         (item) => item.key === input.actionKey
       );
       if (!action) {
         throw new PluginHostError("unknown_action");
       }
-      if (!actorMayInvoke(action.access, input.actor.role)) {
+      if (!actorMayInvoke(action.access, (webActor ?? input.actor).role)) {
         throw new PluginHostError("forbidden");
       }
 
@@ -618,7 +630,7 @@ export class PluginService {
       }
 
       const context = this.buildInvocationContext({
-        actor: input.actor,
+        actor: webActor ?? input.actor,
         install,
         invocationId: handle.invocationId,
         manifest,
@@ -628,6 +640,7 @@ export class PluginService {
         sessionId: input.access === "tool" ? input.sessionId : undefined,
       });
       context.actionKey = action.key;
+      context.webActor = webActor;
       if (input.access === "tool" && !context.profileId) {
         throw new PluginHostError("invalid_input");
       }

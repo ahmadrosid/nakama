@@ -121,6 +121,48 @@ function delayedTool(
 }
 
 describe("agent chat tool loop", () => {
+  test("browser authority is per-turn for both streaming and ordinary sends", async () => {
+    const callers: Array<string | undefined> = [];
+    let calls = 0;
+    const provider: ProviderClient = {
+      async generateChat() {
+        return calls++ % 2 === 0
+          ? toolTurn([{ arguments: {}, id: `call_${calls}`, name: "identity" }])
+          : textReply("Done");
+      },
+      async generateText() {
+        return { content: "unused" };
+      },
+      name: "openai",
+      async streamChat(input, handlers) {
+        const result = await this.generateChat(input);
+        handlers.onChunk(result.content);
+        return result;
+      },
+    };
+    const session = createAgentChatSession(
+      { provider },
+      {
+        toolContext: { webUserId: "must_not_persist" },
+        tools: [
+          {
+            description: "Identity",
+            name: "identity",
+            async run(_input, context) {
+              callers.push(context.webUserId);
+              return {};
+            },
+          },
+        ],
+      }
+    );
+    await session.send("first", { webUserId: "alice" });
+    await session.send("second");
+    await session.sendStream("third", { onChunk() {} }, { webUserId: "bob" });
+    await session.sendStream("fourth", { onChunk() {} });
+    expect(callers).toEqual(["alice", undefined, "bob", undefined]);
+  });
+
   test.each([false, true])(
     "delivers read_file images after all tool results (stream: %s)",
     async (stream) => {

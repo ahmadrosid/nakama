@@ -120,6 +120,8 @@ export interface SendStreamOptions {
   onUserMessage?: () => Promise<void>;
   /** Cancels the turn: stops the tool loop and asks running tools to abort. */
   signal?: AbortSignal;
+  /** Trusted per-turn browser caller; not persisted with session history. */
+  webUserId?: string;
 }
 
 export interface ResolvePromptContextInput {
@@ -439,7 +441,7 @@ export function createAgentChatSession(
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
           signal: sendOptions?.signal,
-          toolContext,
+          toolContext: { ...toolContext, webUserId: sendOptions?.webUserId },
         }
       );
     },
@@ -464,7 +466,7 @@ export function createAgentChatSession(
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
           signal: streamOptions?.signal,
-          toolContext,
+          toolContext: { ...toolContext, webUserId: streamOptions?.webUserId },
         }
       );
     },

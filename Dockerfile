@@ -9,6 +9,7 @@ WORKDIR /app
 
 COPY package.json bun.lock ./
 COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
+COPY patches/postgres@3.4.9.patch patches/
 COPY apps apps
 COPY packages packages
 
@@ -61,6 +62,7 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
 
 COPY package.json bun.lock ./
 COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
+COPY patches/postgres@3.4.9.patch patches/
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
 COPY apps/platform/telegram apps/platform/telegram

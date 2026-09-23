@@ -223,6 +223,10 @@ async function loadPluginTool(
         profileId: trustedProfileId,
         sessionId: context.sessionId,
         signal: context.signal,
+        webUserId:
+          context.channel === "web" && !context.agentDepth
+            ? context.webUserId
+            : undefined,
       });
       return invoked.result;
     },

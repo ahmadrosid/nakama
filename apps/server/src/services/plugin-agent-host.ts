@@ -3,11 +3,13 @@ import type { PluginExecutionContext, WorkflowRunRecord } from "@nakama/core";
 import { inspectWorkflowSqlite } from "@nakama/core";
 import { type DatabaseAdapter, DatabaseWorkflowStore } from "@nakama/db";
 import type { AgentService } from "./agent-service";
+import { createPostgresPluginHost } from "./postgres-plugin";
 
 export function createPluginAgentHost(
   db: DatabaseAdapter,
   agent: AgentService
 ) {
+  const postgres = createPostgresPluginHost(db);
   return async (
     value: unknown,
     context: PluginExecutionContext,
@@ -22,6 +24,9 @@ export function createPluginAgentHost(
     }
     const request = value as Record<string, unknown>;
     const { orgId } = context;
+    if (request.op === "postgresql") {
+      return postgres(request.input, context, signal);
+    }
     if (request.op === "transcribe_audio") {
       const { data, filename } = request;
       if (

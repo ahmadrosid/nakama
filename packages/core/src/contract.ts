@@ -2764,6 +2764,8 @@ export interface ToolContext {
    */
   trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
+  /** Set per turn by authenticated browser routes, never from message input. */
+  webUserId?: string;
   workflowId?: string;
   workflowRunId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */

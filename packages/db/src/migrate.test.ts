@@ -14,6 +14,22 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+describe("migration statement lifecycle", () => {
+  test("releases a migrated database file on strict close", () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "nakama-migrate-close-"));
+    const databasePath = join(rootDir, "nakama.sqlite");
+    const db = new Database(databasePath);
+
+    try {
+      migrateDatabase(db);
+      db.close(true);
+      rmSync(databasePath);
+    } finally {
+      rmSync(rootDir, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("legacy profile id migration", () => {
   test("renames legacy default and super bot profiles and preserves references", () => {
     const db = new Database(":memory:");

@@ -63,6 +63,7 @@ import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { acquireDataRootLock } from "./services/data-root-lock";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { McpClientManager } from "./services/mcp-client-manager";
 import {
@@ -115,6 +116,7 @@ if (existingServerUrl) {
   process.exit(0);
 }
 
+const releaseDataRootLock = acquireDataRootLock();
 const { provider, userConfig } = await ensureProviderConfigured();
 const config = loadConfig();
 const database = await createDatabase(config.databaseUrl, {
@@ -387,6 +389,7 @@ const shutdownRuntime = registerRuntimeCleanup(
   database,
   mcpClientManager
 );
+process.on("exit", releaseDataRootLock);
 // Stop before recovering workers if Electron disappeared during initialization.
 if (process.env.NAKAMA_DESKTOP === "1" && !process.connected) {
   await shutdownRuntime();

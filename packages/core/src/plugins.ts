@@ -142,6 +142,8 @@ export interface PluginExecutionContext {
   pluginVersion: string;
   profileId?: string;
   sessionId?: string;
+  /** Current member authenticated by a browser route; absent for other callers. */
+  webActor?: PluginExecutionActor;
   workspaceRoot?: string;
 }
 

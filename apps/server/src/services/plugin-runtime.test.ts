@@ -163,6 +163,72 @@ describe("plugin runtime", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
+  test("browser identity is host-derived and membership is checked on every action", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    await service.installPluginPackage(
+      bundle(
+        "echoer",
+        "export function run(input, context) { return context.webActor ?? null; }"
+      )
+    );
+    await enablePlugin(db, "org_a", "echoer", "1.0.0");
+    const now = new Date().toISOString();
+    await db.createUser({
+      createdAt: now,
+      email: "web@example.test",
+      id: "web_user",
+      passwordHash: "unused",
+      updatedAt: now,
+    });
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_a",
+      name: "A",
+      slug: "a",
+      updatedAt: now,
+    });
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_a",
+      role: "member",
+      userId: "web_user",
+    });
+    const invocation = {
+      access: "ui" as const,
+      actionKey: "echo",
+      actor: { id: "stale_actor", role: "admin" as const },
+      input: { webActor: { id: "forged", role: "admin" }, webUserId: "forged" },
+      orgId: "org_a",
+      pluginId: "echoer",
+    };
+    expect((await service.invokePluginAction(invocation)).result).toBeNull();
+    expect(
+      (
+        await service.invokePluginAction({
+          ...invocation,
+          webUserId: "web_user",
+        })
+      ).result
+    ).toEqual({ id: "web_user", role: "member" });
+    await expect(
+      service.invokePluginAction({ ...invocation, webUserId: "other_org_user" })
+    ).rejects.toThrow("forbidden");
+    await db.deleteOrgMember("org_a", "web_user");
+    await expect(
+      service.invokePluginAction({ ...invocation, webUserId: "web_user" })
+    ).rejects.toThrow("forbidden");
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_a",
+      role: "viewer",
+      userId: "web_user",
+    });
+    await expect(
+      service.invokePluginAction({ ...invocation, webUserId: "web_user" })
+    ).rejects.toThrow("forbidden");
+  });
+
   test("official Supermemory retains its private dataset across reinstall and uninstall", async () => {
     const db = createInMemoryDatabaseAdapter();
     const workerManager = {

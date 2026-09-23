@@ -699,7 +699,8 @@ export function streamMessage(
   // Only tests pass these. The resolved values clamp to 60s and 5s minimums,
   // which are far too long to wait for in a suite.
   timeoutMs: number = STREAM_TIMEOUT_MS,
-  firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS
+  firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS,
+  webUserId?: string
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
@@ -770,6 +771,7 @@ export function streamMessage(
         const raced: Promise<string>[] = [
           session.sendStream(input, buildAgentStreamHandlers(send), {
             signal: turnSignal,
+            webUserId,
           }),
           failAfter(
             timeoutMs,

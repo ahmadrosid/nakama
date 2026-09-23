@@ -82,6 +82,7 @@
         "openai": "^7.5.0",
         "pacote": "^22.0.0",
         "pm2": "^7.0.4",
+        "postgres": "3.4.9",
         "tar": "^7.5.22",
         "zod": "^4.5.4",
       },
@@ -177,6 +178,15 @@
         "@types/react": "^19.3.0",
       },
     },
+    "packages/plugins/postgresql": {
+      "name": "@nakama/plugin-postgresql",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@nakama/core": "workspace:*",
+        "@nakama/ui": "workspace:*",
+        "@types/react": "^19.3.0",
+      },
+    },
     "packages/plugins/supermemory": {
       "name": "@nakama/plugin-supermemory",
       "version": "0.1.0",
@@ -233,6 +243,7 @@
   },
   "patchedDependencies": {
     "@electron/osx-sign@1.3.3": "patches/@electron%2Fosx-sign@1.3.3.patch",
+    "postgres@3.4.9": "patches/postgres@3.4.9.patch",
   },
   "overrides": {
     "libsignal": "6.0.0",
@@ -593,6 +604,8 @@
     "@nakama/discord": ["@nakama/discord@workspace:apps/platform/discord"],
 
     "@nakama/plugin-google-meet": ["@nakama/plugin-google-meet@workspace:packages/plugins/google-meet"],
+
+    "@nakama/plugin-postgresql": ["@nakama/plugin-postgresql@workspace:packages/plugins/postgresql"],
 
     "@nakama/plugin-supermemory": ["@nakama/plugin-supermemory@workspace:packages/plugins/supermemory"],
 

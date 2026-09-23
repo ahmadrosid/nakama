@@ -305,6 +305,14 @@ describe("data portability routes", () => {
       })
     );
 
+    if (process.platform === "win32") {
+      expect(response.status).toBe(409);
+      await expect(
+        readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+      ).resolves.toBe("changed");
+      return;
+    }
+
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       restoredFileCount: 1,

@@ -1,0 +1,66 @@
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+index 07f6716702ac888215c86ad6e0071aaf55ae519c..d7d4243170c091b054d4025e47d78976c2764067 100644
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -414,7 +414,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     return ending || (
+       !connection.reserved && onend(connection),
+       !connection.reserved && !initial && !query && sent.length === 0
+-        ? (terminate(), new Promise(r => socket && socket.readyState !== 'closed' ? socket.once('close', r) : r()))
++        ? terminate()
+         : ending = new Promise(r => ended = r)
+     )
+   }
+@@ -425,12 +425,17 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    const closed = socket
++      ? new Promise(resolve => socket.once('close', resolve))
++      : Promise.resolve()
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+-      socket.readyState === 'open' && socket.end(b().X().end())
++      socket.destroy()
+     }
+-    ended && (ended(), ending = ended = null)
++    return closed.then(() => {
++      ended && (ended(), ending = ended = null)
++    })
+   }
+ 
+   async function closed(hadError) {
+diff --git a/src/connection.js b/src/connection.js
+index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..544aaa0c69cb5b27a7567679eb6e3d16aa8c34d7 100644
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -414,7 +414,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     return ending || (
+       !connection.reserved && onend(connection),
+       !connection.reserved && !initial && !query && sent.length === 0
+-        ? (terminate(), new Promise(r => socket && socket.readyState !== 'closed' ? socket.once('close', r) : r()))
++        ? terminate()
+         : ending = new Promise(r => ended = r)
+     )
+   }
+@@ -425,12 +425,17 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    const closed = socket
++      ? new Promise(resolve => socket.once('close', resolve))
++      : Promise.resolve()
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+-      socket.readyState === 'open' && socket.end(b().X().end())
++      socket.destroy()
+     }
+-    ended && (ended(), ending = ended = null)
++    return closed.then(() => {
++      ended && (ended(), ending = ended = null)
++    })
+   }
+ 
+   async function closed(hadError) {
