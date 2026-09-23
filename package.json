@@ -32,6 +32,7 @@
     "knip": "knip",
     "prepare": "husky",
     "preview:docs": "bun run --cwd docs/website preview",
+    "restore:offline": "bun run apps/server/src/offline-restore.ts",
     "start": "bun run apps/server/dist/index.js",
     "test": "bun run --workspaces --if-present test",
     "view:cassettes": "bun run apps/server/src/testing/cassettes/serve.ts"

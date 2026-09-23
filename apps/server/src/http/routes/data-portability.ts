@@ -172,6 +172,10 @@ export function registerDataPortabilityRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Restore requires the server to be stopped on Windows",
+        },
         413: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -236,6 +240,13 @@ export function registerDataPortabilityRoutes(
       restoreRequestSchema
     );
     const archive = decodeArchiveRequestData(body.data);
+
+    if (process.platform === "win32" && body.confirm) {
+      return errorResponse(
+        "Stop Nakama and run restore:offline on Windows.",
+        409
+      );
+    }
 
     let restore;
     try {

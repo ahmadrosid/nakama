@@ -59,6 +59,14 @@ describe("setup import routes", () => {
       })
     );
 
+    if (process.platform === "win32") {
+      expect(restoreResponse.status).toBe(409);
+      await expect(
+        readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+      ).resolves.toBe("changed");
+      return;
+    }
+
     expect(restoreResponse.status).toBe(200);
     await expect(restoreResponse.json()).resolves.toMatchObject({
       // createApp() omits onDataRestored — client must restart.
@@ -99,6 +107,15 @@ describe("setup import routes", () => {
       })
     );
 
+    if (process.platform === "win32") {
+      expect(restoreResponse.status).toBe(409);
+      expect(restoredCalls).toBe(0);
+      await expect(
+        readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+      ).resolves.toBe("changed");
+      return;
+    }
+
     expect(restoreResponse.status).toBe(200);
     expect(restoredCalls).toBe(1);
     await expect(restoreResponse.json()).resolves.toMatchObject({
@@ -133,6 +150,14 @@ describe("setup import routes", () => {
         method: "POST",
       })
     );
+
+    if (process.platform === "win32") {
+      expect(restoreResponse.status).toBe(409);
+      await expect(
+        readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+      ).resolves.toBe("original");
+      return;
+    }
 
     expect(restoreResponse.status).toBe(200);
     await expect(restoreResponse.json()).resolves.toMatchObject({

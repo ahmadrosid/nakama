@@ -156,6 +156,13 @@ export function registerSetupImportRoutes(
     );
     const archive = decodeArchiveRequestData(body.data);
 
+    if (process.platform === "win32" && body.confirm) {
+      return errorResponse(
+        "Stop Nakama and run restore:offline on Windows.",
+        409
+      );
+    }
+
     let restore;
     try {
       restore = await restoreNakamaDataImport(archive, {
