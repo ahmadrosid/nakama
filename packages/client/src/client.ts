@@ -87,6 +87,7 @@ import type {
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
+  ListBrowserSessionsResponse,
   ListComposioToolkitsResponse,
   ListKnowledgeBaseResponse,
   ListMcpServersResponse,
@@ -151,6 +152,7 @@ import type {
   RestoreDataImportResponse,
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
+  RevokeBrowserSessionsResponse,
   RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
@@ -2823,6 +2825,29 @@ export class NakamaClient {
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`
+    );
+  }
+
+  async listBrowserSessions(): Promise<ListBrowserSessionsResponse> {
+    return this.request<ListBrowserSessionsResponse>("/v1/auth/sessions");
+  }
+
+  async revokeBrowserSession(
+    sessionId: string
+  ): Promise<RevokeBrowserSessionsResponse> {
+    return this.request<RevokeBrowserSessionsResponse>(
+      `/v1/auth/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  /** Platform admin only: ends every login session a user holds. */
+  async revokeAllBrowserSessionsForUser(
+    userId: string
+  ): Promise<RevokeBrowserSessionsResponse> {
+    return this.request<RevokeBrowserSessionsResponse>(
+      `/v1/auth/users/${encodeURIComponent(userId)}/sessions`,
+      { method: "DELETE" }
     );
   }
 

@@ -673,6 +673,28 @@ export interface UpdateOrgMemberRequest {
   role?: OrgRole;
 }
 
+/**
+ * One login session, as its owner sees it. The token hashes never leave the
+ * database: a caller revokes a session by id, and the id alone is useless
+ * without the row.
+ */
+export interface BrowserSessionSummary {
+  createdAt: string;
+  /** True for the session making the request, so the UI does not offer to log you out of the page you are on. */
+  current: boolean;
+  expiresAt: string;
+  id: string;
+  lastUsedAt: string | null;
+}
+
+export interface ListBrowserSessionsResponse {
+  sessions: BrowserSessionSummary[];
+}
+
+export interface RevokeBrowserSessionsResponse {
+  revoked: number;
+}
+
 export interface ApiKeySummary {
   createdAt: string;
   environment: "live" | "test";

@@ -12,6 +12,7 @@ export const queryKeys = {
     runs: (automationId: string) =>
       ["automations", automationId, "runs"] as const,
   },
+  browserSessions: ["browserSessions"] as const,
   cerebrasModels: ["cerebrasModels"] as const,
   composio: {
     profileToolkits: (profileId: string) =>

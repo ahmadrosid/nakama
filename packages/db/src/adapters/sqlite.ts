@@ -1817,6 +1817,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET revoked_at = ?
     WHERE session_token_hash = ? AND revoked_at IS NULL
   `);
+  const listBrowserSessionsForUserStmt = db.prepare(`
+    SELECT * FROM browser_sessions
+    WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+    ORDER BY COALESCE(last_used_at, created_at) DESC, id DESC
+  `);
+  const revokeBrowserSessionForUserStmt = db.prepare(`
+    UPDATE browser_sessions
+    SET revoked_at = ?
+    WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+  `);
   const revokeBrowserSessionsForUserStmt = db.prepare(`
     UPDATE browser_sessions
     SET revoked_at = ?
@@ -3537,6 +3547,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toAutomationRecord(row as AutomationRow));
     },
 
+    async listBrowserSessionsForUser(userId, now) {
+      const rows = listBrowserSessionsForUserStmt.all(
+        userId,
+        now
+      ) as BrowserSessionRow[];
+      return rows.map(toBrowserSessionRecord);
+    },
+
     async listComposioToolkitsForOrg(orgId) {
       return listComposioToolkitsForOrgStmt
         .all(orgId)
@@ -3960,6 +3978,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         revokedAt,
         sessionTokenHash
       );
+      return result.changes > 0;
+    },
+
+    async revokeBrowserSessionForUser(id, userId, revokedAt) {
+      const result = revokeBrowserSessionForUserStmt.run(revokedAt, id, userId);
       return result.changes > 0;
     },
 

@@ -976,6 +976,11 @@ export interface DatabaseAdapter {
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   listAutomationsForOrg(orgId: string): Promise<StoredAutomationRecord[]>;
+  /** Live sessions for one user, newest first. Revoked and expired rows are left out. */
+  listBrowserSessionsForUser(
+    userId: string,
+    now: string
+  ): Promise<StoredBrowserSessionRecord[]>;
 
   listComposioToolkitsForOrg(
     orgId: string
@@ -1114,6 +1119,16 @@ export interface DatabaseAdapter {
   revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
   revokeBrowserSessionBySessionTokenHash(
     sessionTokenHash: string,
+    revokedAt: string
+  ): Promise<boolean>;
+  /**
+   * One session, and only if it belongs to this user. The owner check is in the
+   * statement rather than the caller, so an id from another account cannot be
+   * revoked by any route that reaches this.
+   */
+  revokeBrowserSessionForUser(
+    id: string,
+    userId: string,
     revokedAt: string
   ): Promise<boolean>;
   revokeBrowserSessionsForUser(
