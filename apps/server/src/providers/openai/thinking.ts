@@ -10,7 +10,7 @@ const THINKING_DENY_PREFIXES = [
 ] as const;
 
 /** OpenAI ids that commonly support `reasoning` (checked after deny list). */
-const THINKING_ALLOW_PREFIXES = ["gpt-5", "o1", "o3", "o4"] as const;
+const THINKING_ALLOW_PREFIXES = ["gpt-5", "gpt-6", "o1", "o3", "o4"] as const;
 
 export function openAIModelSupportsThinking(
   model: string,
@@ -56,14 +56,16 @@ export function openAIModelRequiresResponsesApi(model: string): boolean {
 }
 
 /**
- * gpt-5.4+ (including gpt-5.6-luna / sol / terra) reject function tools combined
- * with non-none `reasoning_effort` on `/v1/chat/completions`. Use `/v1/responses`
- * or set `reasoning_effort` to `"none"`.
+ * gpt-5.4+ and gpt-6 reject function tools with reasoning on Chat Completions.
+ * GPT-6 Astra cannot set reasoning to none, so route tools via Responses.
  */
 export function openAIModelRejectsChatToolsWithReasoning(
   model: string
 ): boolean {
   const slug = model.trim().toLowerCase();
   // gpt-5.4 … gpt-5.9, gpt-5.10+, gpt-5.6-luna, etc.
-  return /^gpt-5\.(?:[4-9]|\d{2,})/.test(slug);
+  return (
+    /^gpt-5\.(?:[4-9]|\d{2,})/.test(slug) ||
+    (slug.startsWith("gpt-6") && !slug.startsWith("gpt-6-astra"))
+  );
 }
