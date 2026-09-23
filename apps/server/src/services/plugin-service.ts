@@ -110,7 +110,8 @@ const OFFICIAL_PLUGINS = new Map<
   ["postgresql", { requiresHost: true }],
 ]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
-const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
+// PATH may resolve a package-manager shim that drops inherited Windows IPC handles.
+const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? process.execPath;
 const PLUGIN_RUNNER_PATH = fileURLToPath(
   new URL("./plugin-runner.js", import.meta.url)
 );

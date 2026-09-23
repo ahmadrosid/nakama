@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +6,33 @@ import { orgIdFromSkillSourcePath } from "@nakama/core";
 
 const BOOTSTRAP_SCHEMA_VERSION = 1;
 
+type MigrationDatabase = Pick<Database, "exec" | "prepare" | "transaction">;
+
 export function migrateDatabase(db: Database): void {
+  const statements: { finalize(): void }[] = [];
+  const migrationDb: MigrationDatabase = {
+    exec: db.exec.bind(db),
+    prepare<Result, Params extends SQLQueryBindings | SQLQueryBindings[]>(
+      sql: string,
+      params?: Params
+    ) {
+      const statement = db.prepare<Result, Params>(sql, params);
+      statements.push(statement);
+      return statement;
+    },
+    transaction: db.transaction.bind(db),
+  };
+
+  try {
+    migrateDatabaseWithOwnedStatements(migrationDb);
+  } finally {
+    for (const statement of statements) {
+      statement.finalize();
+    }
+  }
+}
+
+function migrateDatabaseWithOwnedStatements(db: MigrationDatabase): void {
   applyBootstrapSchema(db);
 
   // Each step runs in its own transaction so a failure cannot leave one half
@@ -15,7 +41,7 @@ export function migrateDatabase(db: Database): void {
   // migrateLegacyProfileIds toggles `PRAGMA foreign_keys` and opens its own
   // BEGIN. Stopping between steps is safe because every compatibility step is
   // idempotent and runs on every open.
-  const atomic = (step: (database: Database) => void): void => {
+  const atomic = (step: (database: MigrationDatabase) => void): void => {
     db.transaction(() => step(db))();
   };
 
@@ -65,7 +91,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateFilePinsTable);
 }
 
-function migrateSessionAppUserId(db: Database): void {
+function migrateSessionAppUserId(db: MigrationDatabase): void {
   const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
     name: string;
   }>;
@@ -77,7 +103,7 @@ function migrateSessionAppUserId(db: Database): void {
   );
 }
 
-function migrateAuditEventsTable(db: Database): void {
+function migrateAuditEventsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS audit_events (
       id TEXT PRIMARY KEY NOT NULL,
@@ -111,7 +137,7 @@ function migrateAuditEventsTable(db: Database): void {
   `);
 }
 
-function applyBootstrapSchema(db: Database): void {
+function applyBootstrapSchema(db: MigrationDatabase): void {
   // Foreign-key enforcement is connection-scoped, so it must run even after
   // the bootstrap schema has already been applied.
   db.exec("PRAGMA foreign_keys = ON");
@@ -159,7 +185,7 @@ export function resolveSchemaPath(
   return candidates[0];
 }
 
-function migrateProfilesTable(db: Database): void {
+function migrateProfilesTable(db: MigrationDatabase): void {
   const columns = db.prepare("PRAGMA table_info(profiles)").all() as Array<{
     name: string;
   }>;
@@ -184,7 +210,7 @@ function migrateProfilesTable(db: Database): void {
   }
 }
 
-function migrateMcpTables(db: Database): void {
+function migrateMcpTables(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS mcp_servers (
       id TEXT PRIMARY KEY NOT NULL,
@@ -209,7 +235,7 @@ function migrateMcpTables(db: Database): void {
   `);
 }
 
-function migrateSkillsTables(db: Database): void {
+function migrateSkillsTables(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS skills (
       id TEXT PRIMARY KEY NOT NULL,
@@ -234,7 +260,7 @@ function migrateSkillsTables(db: Database): void {
   `);
 }
 
-function migrateAutomationsTable(db: Database): void {
+function migrateAutomationsTable(db: MigrationDatabase): void {
   const columns = db.prepare("PRAGMA table_info(automations)").all() as Array<{
     name: string;
     dflt_value: string | null;
@@ -268,7 +294,9 @@ function migrateAutomationsTable(db: Database): void {
   }
 }
 
-function recreateAutomationsTableWithDefaultProfile(db: Database): void {
+function recreateAutomationsTableWithDefaultProfile(
+  db: MigrationDatabase
+): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS automations_new (
       id TEXT PRIMARY KEY NOT NULL,
@@ -318,14 +346,14 @@ function normalizeSqlDefaultLiteral(
   return value.replace(/^'+|'+$/g, "");
 }
 
-function migrateDropTasksTables(db: Database): void {
+function migrateDropTasksTables(db: MigrationDatabase): void {
   db.exec(`
     DROP TABLE IF EXISTS task_runs;
     DROP TABLE IF EXISTS tasks;
   `);
 }
 
-function migrateUsersTable(db: Database): void {
+function migrateUsersTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY NOT NULL,
@@ -369,7 +397,7 @@ function migrateUsersTable(db: Database): void {
   }
 }
 
-function migrateLlmUsageModelStatsTable(db: Database): void {
+function migrateLlmUsageModelStatsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
       model_id TEXT PRIMARY KEY NOT NULL,
@@ -408,7 +436,7 @@ function migrateLlmUsageModelStatsTable(db: Database): void {
  * happened, not because anything was assigned, so a workload difference between
  * the arms is a confound the reader has to be told about.
  */
-function migrateLlmTurnUsageTable(db: Database): void {
+function migrateLlmTurnUsageTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_turn_usage (
       org_id TEXT NOT NULL,
@@ -426,7 +454,7 @@ function migrateLlmTurnUsageTable(db: Database): void {
   `);
 }
 
-function migrateToolOutputSavingsTable(db: Database): void {
+function migrateToolOutputSavingsTable(db: MigrationDatabase): void {
   // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
   // will not add one. It is a counter with no history worth keeping and it has
   // never shipped, so recreating is cheaper and clearer than an ALTER dance.
@@ -459,7 +487,7 @@ function migrateToolOutputSavingsTable(db: Database): void {
   `);
 }
 
-function migrateOrgTables(db: Database): void {
+function migrateOrgTables(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS organizations (
       id TEXT PRIMARY KEY NOT NULL,
@@ -508,7 +536,7 @@ function migrateOrgTables(db: Database): void {
   }
 }
 
-function migrateApiKeysTable(db: Database): void {
+function migrateApiKeysTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS api_keys (
       id TEXT PRIMARY KEY NOT NULL,
@@ -535,7 +563,7 @@ function migrateApiKeysTable(db: Database): void {
  * org_members (#550); copy any remaining legacy values into memberships that
  * still lack per-org context so getUserContext can stop reading users.
  */
-function migrateLegacyUserContextToOrgMembers(db: Database): void {
+function migrateLegacyUserContextToOrgMembers(db: MigrationDatabase): void {
   const usersColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{
     name: string;
   }>;
@@ -562,7 +590,7 @@ function migrateLegacyUserContextToOrgMembers(db: Database): void {
   `);
 }
 
-function migrateOrgMemoryProposalsTable(db: Database): void {
+function migrateOrgMemoryProposalsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS org_memory_proposals (
       id TEXT PRIMARY KEY NOT NULL,
@@ -593,7 +621,7 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
   }
 }
 
-function migrateSkillProposalsTable(db: Database): void {
+function migrateSkillProposalsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS skill_proposals (
       id TEXT PRIMARY KEY NOT NULL,
@@ -634,7 +662,7 @@ function migrateSkillProposalsTable(db: Database): void {
   }
 }
 
-function migrateSkillSuggestionsTable(db: Database): void {
+function migrateSkillSuggestionsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS skill_suggestions (
       id TEXT PRIMARY KEY NOT NULL,
@@ -660,7 +688,7 @@ function migrateSkillSuggestionsTable(db: Database): void {
   `);
 }
 
-function migrateSkillsWriteApprovalColumns(db: Database): void {
+function migrateSkillsWriteApprovalColumns(db: MigrationDatabase): void {
   const orgColumns = db
     .prepare("PRAGMA table_info(organizations)")
     .all() as Array<{ name: string }>;
@@ -686,7 +714,7 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
   }
 }
 
-function migrateAutomationsEnabledColumn(db: Database): void {
+function migrateAutomationsEnabledColumn(db: MigrationDatabase): void {
   const columns = db.prepare("PRAGMA table_info(profiles)").all() as Array<{
     name: string;
   }>;
@@ -699,7 +727,7 @@ function migrateAutomationsEnabledColumn(db: Database): void {
   }
 }
 
-function migrateSkillsPostTurnReviewColumns(db: Database): void {
+function migrateSkillsPostTurnReviewColumns(db: MigrationDatabase): void {
   const orgColumns = db
     .prepare("PRAGMA table_info(organizations)")
     .all() as Array<{ name: string }>;
@@ -725,7 +753,7 @@ function migrateSkillsPostTurnReviewColumns(db: Database): void {
   }
 }
 
-function migrateSkillsCuratorColumns(db: Database): void {
+function migrateSkillsCuratorColumns(db: MigrationDatabase): void {
   const orgColumns = db
     .prepare("PRAGMA table_info(organizations)")
     .all() as Array<{ name: string }>;
@@ -756,7 +784,7 @@ function migrateSkillsCuratorColumns(db: Database): void {
   }
 }
 
-function migrateSkillsCuratorConsolidateColumns(db: Database): void {
+function migrateSkillsCuratorConsolidateColumns(db: MigrationDatabase): void {
   const orgColumns = db
     .prepare("PRAGMA table_info(organizations)")
     .all() as Array<{ name: string }>;
@@ -784,7 +812,7 @@ function migrateSkillsCuratorConsolidateColumns(db: Database): void {
   }
 }
 
-function migrateLlmUsageQuotaColumns(db: Database): void {
+function migrateLlmUsageQuotaColumns(db: MigrationDatabase): void {
   const columns = db
     .prepare("PRAGMA table_info(organizations)")
     .all() as Array<{ name: string }>;
@@ -806,7 +834,7 @@ function migrateLlmUsageQuotaColumns(db: Database): void {
   }
 }
 
-function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
+function migrateOrgLlmMonthlyQuotaTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS org_llm_monthly_quota (
       org_id TEXT NOT NULL,
@@ -820,7 +848,7 @@ function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
   `);
 }
 
-function migrateOrganizationArchivedAt(db: Database): void {
+function migrateOrganizationArchivedAt(db: MigrationDatabase): void {
   const orgColumns = db
     .prepare("PRAGMA table_info(organizations)")
     .all() as Array<{ name: string }>;
@@ -831,7 +859,7 @@ function migrateOrganizationArchivedAt(db: Database): void {
   }
 }
 
-function migrateSkillUsageTables(db: Database): void {
+function migrateSkillUsageTables(db: MigrationDatabase): void {
   const skillColumns = db.prepare("PRAGMA table_info(skills)").all() as Array<{
     name: string;
   }>;
@@ -917,7 +945,7 @@ function assertProfileJoinTarget(
   }
 }
 
-function migrateTenantOrgScope(db: Database): void {
+function migrateTenantOrgScope(db: MigrationDatabase): void {
   for (const tableName of TENANT_ORG_ID_TABLES) {
     addOrgIdColumnIfMissing(db, tableName);
   }
@@ -955,7 +983,7 @@ function migrateTenantOrgScope(db: Database): void {
  * above compare NULL to NULL and never fire, which quietly retired the
  * uniqueness schema.sql still declares. These cover the rows they left behind.
  */
-function restoreGlobalNameUniqueness(db: Database): void {
+function restoreGlobalNameUniqueness(db: MigrationDatabase): void {
   for (const table of ["tools", "mcp_servers"] as const) {
     try {
       db.exec(`
@@ -974,7 +1002,7 @@ function restoreGlobalNameUniqueness(db: Database): void {
  * skills_org_source_path_unique comparing NULL against NULL and skill names
  * shared across every tenant. The owning org is recoverable from source_path.
  */
-function migrateSkillOrgIds(db: Database): void {
+function migrateSkillOrgIds(db: MigrationDatabase): void {
   const rows = db
     .prepare("SELECT id, source_path FROM skills WHERE org_id IS NULL")
     .all() as { id: string; source_path: string }[];
@@ -1008,7 +1036,7 @@ function migrateSkillOrgIds(db: Database): void {
   }
 }
 
-function migrateProfileOrgColumns(db: Database): void {
+function migrateProfileOrgColumns(db: MigrationDatabase): void {
   db.transaction(() => {
     migrateProfilesTable(db);
 
@@ -1068,7 +1096,10 @@ function migrateProfileOrgColumns(db: Database): void {
   })();
 }
 
-export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
+export function addOrgIdColumnIfMissing(
+  db: MigrationDatabase,
+  tableName: string
+): void {
   assertTenantOrgIdTable(tableName);
   const quotedTableName = quoteSqliteIdentifier(tableName);
   const columns = db
@@ -1087,7 +1118,7 @@ export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
   }
 }
 
-function migrateBrowserSessionsTable(db: Database): void {
+function migrateBrowserSessionsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS browser_sessions (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1115,7 +1146,7 @@ function migrateBrowserSessionsTable(db: Database): void {
   }
 }
 
-function migratePasswordResetTokensTable(db: Database): void {
+function migratePasswordResetTokensTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1136,7 +1167,7 @@ const LEGACY_PROFILE_ID_MAP = [
   ["profile_super_bot", "super_bot"],
 ] as const;
 
-function migrateLegacyProfileIds(db: Database): void {
+function migrateLegacyProfileIds(db: MigrationDatabase): void {
   const rows = db.prepare("SELECT id FROM profiles").all() as Array<{
     id: string;
   }>;
@@ -1178,7 +1209,7 @@ function migrateLegacyProfileIds(db: Database): void {
   }
 }
 
-export function migrateCodingDelegationSkillName(db: Database): void {
+export function migrateCodingDelegationSkillName(db: MigrationDatabase): void {
   const legacyRows = db
     .prepare("SELECT id, source_path FROM skills WHERE name = ?")
     .all("coding-delegation") as Array<{ id: string; source_path: string }>;
@@ -1235,7 +1266,7 @@ export function migrateCodingDelegationSkillName(db: Database): void {
 }
 
 function copyProfileRow(
-  db: Database,
+  db: MigrationDatabase,
   legacyId: string,
   canonicalId: string
 ): void {
@@ -1268,7 +1299,7 @@ function copyProfileRow(
 }
 
 function moveProfileReferences(
-  db: Database,
+  db: MigrationDatabase,
   legacyId: string,
   canonicalId: string
 ): void {
@@ -1304,7 +1335,7 @@ function moveProfileReferences(
 }
 
 export function moveProfileJoinReferences(
-  db: Database,
+  db: MigrationDatabase,
   tableName: "profile_tools" | "profile_mcp_servers" | "profile_skills",
   relatedColumn: "tool_id" | "server_id" | "skill_id",
   legacyId: string,
@@ -1325,7 +1356,7 @@ export function moveProfileJoinReferences(
   );
 }
 
-function migrateSessionsTable(db: Database): void {
+function migrateSessionsTable(db: MigrationDatabase): void {
   const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
     name: string;
   }>;
@@ -1385,7 +1416,7 @@ function migrateSessionsTable(db: Database): void {
   }
 }
 
-function migrateWorkspaceSettingsTable(db: Database): void {
+function migrateWorkspaceSettingsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS workspace_settings (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1449,7 +1480,7 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   }
 }
 
-function migrateAutomationRunsTable(db: Database): void {
+function migrateAutomationRunsTable(db: MigrationDatabase): void {
   const columns = db
     .prepare("PRAGMA table_info(automation_runs)")
     .all() as Array<{ name: string }>;
@@ -1468,7 +1499,7 @@ function migrateAutomationRunsTable(db: Database): void {
   }
 }
 
-function migrateAutomationRunReadStateTable(db: Database): void {
+function migrateAutomationRunReadStateTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS automation_run_read_state (
       user_id TEXT NOT NULL,
@@ -1483,7 +1514,7 @@ function migrateAutomationRunReadStateTable(db: Database): void {
   `);
 }
 
-function migrateWorkflowsTables(db: Database): void {
+function migrateWorkflowsTables(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS workflows (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1534,7 +1565,7 @@ function migrateWorkflowsTables(db: Database): void {
   `);
 }
 
-function migrateAttachmentsTable(db: Database): void {
+function migrateAttachmentsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS attachments (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1573,7 +1604,7 @@ function migrateAttachmentsTable(db: Database): void {
   `);
 }
 
-function migrateComposioUserConnections(db: Database): void {
+function migrateComposioUserConnections(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS composio_user_connections (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1708,7 +1739,7 @@ function migrateComposioUserConnections(db: Database): void {
   }
 }
 
-function migrateProfileChangeEventsTable(db: Database): void {
+function migrateProfileChangeEventsTable(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS profile_change_events (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1729,7 +1760,7 @@ function migrateProfileChangeEventsTable(db: Database): void {
   `);
 }
 
-function migratePluginTables(db: Database): void {
+function migratePluginTables(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS plugin_releases (
       plugin_id TEXT NOT NULL,
@@ -1774,7 +1805,7 @@ function migratePluginTables(db: Database): void {
 }
 
 function addNullableTextColumnIfMissing(
-  db: Database,
+  db: MigrationDatabase,
   tableName: string,
   columnName: string
 ): void {
@@ -1793,7 +1824,7 @@ function addNullableTextColumnIfMissing(
   }
 }
 
-function migrateComposioTables(db: Database): void {
+function migrateComposioTables(db: MigrationDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS composio_toolkits (
       id TEXT PRIMARY KEY NOT NULL,
@@ -1828,7 +1859,7 @@ function migrateComposioTables(db: Database): void {
   `);
 }
 
-function migrateFilePinsTable(db: Database): void {
+function migrateFilePinsTable(db: MigrationDatabase): void {
   db.exec(`
 CREATE TABLE IF NOT EXISTS file_pins (
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

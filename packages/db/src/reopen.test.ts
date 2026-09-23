@@ -14,6 +14,35 @@ describe("database reopen after restore", () => {
     }
   });
 
+  test("close finalizes retained adapter statements and releases the file", async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "nakama-db-close-"));
+    const databasePath = join(rootDir, "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const countUsers = database.adapter.countHumanUsers;
+    expect(await countUsers()).toBe(0);
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      await database.adapter.checkHealth();
+    }
+    database.close();
+    await expect(countUsers()).rejects.toThrow();
+    await rm(databasePath);
+  });
+
+  test("reopen finalizes old statements while preserving the adapter proxy", async () => {
+    const database = await createDatabase(":memory:");
+    const adapter = database.adapter;
+    const oldCountUsers = adapter.countHumanUsers;
+    expect(await oldCountUsers()).toBe(0);
+    try {
+      await database.reopen();
+      expect(database.adapter).toBe(adapter);
+      expect(await adapter.countHumanUsers()).toBe(0);
+      await expect(oldCountUsers()).rejects.toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
   // 632ms locally, but it runs migrations twice against a real sqlite file and
   // has gone past bun's 5s default on a runner building nine workspaces at once.
   // The ENOENT that follows such a timeout is afterEach removing the temp dir
