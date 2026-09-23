@@ -42,6 +42,7 @@ import {
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 import {
+  canPreviewWorkspaceEntry,
   type FilesViewMode,
   getStoredFilesViewMode,
   resolveFilesProfileId,
@@ -558,9 +559,14 @@ function WorkspaceFilePreview({
     isTextArtifactMimeType(entry.mimeType) ||
     isWordDocument ||
     artifactCodeLanguage(entry.filename) !== null;
-  const canPreview =
-    entry.sizeBytes <= 10 * 1024 * 1024 &&
-    (isImage || isVideo || isPdf || isText);
+  const canPreview = canPreviewWorkspaceEntry({
+    isImage,
+    isPdf,
+    isText,
+    isVideo,
+    isWordDocument,
+    sizeBytes: entry.sizeBytes,
+  });
   const { data, isLoading, error } = useQuery({
     enabled: canPreview,
     queryFn: async () => {
