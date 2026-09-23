@@ -774,6 +774,7 @@ async function finalizeRestoredPlugins(
   const candidates = [
     databasePath ? resolve(databasePath) : "",
     join(rootDir, "data/sqlite/nakama.sqlite"),
+    join(rootDir, "sqlite/nakama.sqlite"),
     join(rootDir, "nakama.db"),
   ].filter(Boolean);
 
@@ -796,11 +797,15 @@ async function disableRestoredOrgPlugins(databasePath: string): Promise<void> {
     return;
   }
   try {
-    const tables = db
-      .query(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'org_plugins'"
-      )
-      .all() as Array<{ name: string }>;
+    const statement = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'org_plugins'"
+    );
+    let tables: Array<{ name: string }>;
+    try {
+      tables = statement.all() as Array<{ name: string }>;
+    } finally {
+      statement.finalize();
+    }
     if (tables.length === 0) {
       return;
     }
@@ -814,7 +819,7 @@ async function disableRestoredOrgPlugins(databasePath: string): Promise<void> {
       [new Date().toISOString()]
     );
   } finally {
-    db.close();
+    db.close(true);
   }
 }
 

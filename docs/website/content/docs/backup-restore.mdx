@@ -30,13 +30,13 @@ Plan for downtime during restore. This replaces the active data root rather than
 
 On a fresh install, you can also restore during [first-time setup](/first-time-setup) before creating a new admin account.
 
-On Windows, preview the ZIP in Nakama, then stop the server and any workers before restoring. Live restore is unavailable because Windows cannot replace an open database file. Keep the ZIP **outside** the Nakama data directory. From the repository, with the same `NAKAMA_CONFIG_DIR` used by the server, run:
+On Windows, preview the ZIP in Nakama, then stop the server and any workers before restoring. Live restore is unavailable because Windows cannot replace an open database file. Keep the ZIP **outside** the Nakama data directory. From the repository, with the same `NAKAMA_CONFIG_DIR` and `DATABASE_URL` used by the server, run:
 
 ```bash
 bun run restore:offline --yes "C:\backups\nakama-export.zip"
 ```
 
-Restart Nakama after the command succeeds. The command refuses to restore while a server using that data directory holds the restore lock. Keep the ZIP until you have checked the restarted install.
+Restart Nakama after the command succeeds. The command refuses to restore while a server using that data directory holds the restore lock, or when its database is outside the backed-up data directory. Keep the ZIP until you have checked the restarted install.
 
 Restored plugins stay **disabled** until an organization admin enables them on **System → Plugins**. If a restored package no longer matches its stored hash, that release stays unavailable and must be installed again.
 

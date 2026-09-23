@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   lstat,
@@ -100,6 +101,45 @@ describe("Nakama data portability", () => {
       ]);
     } finally {
       await rm(join(outsideDb, ".."), { force: true, recursive: true });
+    }
+  });
+
+  test("restore disables plugins in Docker's SQLite path without an explicit database path", async () => {
+    const sqliteDir = join(rootDir, "sqlite");
+    await mkdir(sqliteDir);
+    const sqlitePath = join(sqliteDir, "nakama.sqlite");
+    const database = new Database(sqlitePath, { create: true });
+    database.exec(
+      "CREATE TABLE org_plugins (lifecycle_state TEXT NOT NULL, pending_operation TEXT, revision INTEGER NOT NULL, updated_at TEXT)"
+    );
+    database.run(
+      "INSERT INTO org_plugins VALUES ('enabled', NULL, 1, 'before')"
+    );
+    database.close(true);
+
+    const archive = await createNakamaDataExport({
+      databasePath: null,
+      rootDir,
+    });
+    await restoreNakamaDataImport(archive.data, {
+      confirm: true,
+      databasePath: null,
+      rootDir,
+    });
+
+    const restored = new Database(sqlitePath);
+    const statement = restored.prepare(
+      "SELECT lifecycle_state, revision FROM org_plugins"
+    );
+    try {
+      const row = statement.get() as {
+        lifecycle_state: string;
+        revision: number;
+      };
+      expect(row).toEqual({ lifecycle_state: "disabled", revision: 2 });
+    } finally {
+      statement.finalize();
+      restored.close(true);
     }
   });
 
