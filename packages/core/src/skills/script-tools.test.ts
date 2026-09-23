@@ -118,3 +118,69 @@ test("tool.py at the root stays reachable and is not reported twice", async () =
   expect(resolved.tools).toEqual([]);
   await rm(directory, { force: true, recursive: true });
 });
+
+test("a module docstring with its summary on the next line still describes the tool", async () => {
+  // PEP 257 puts the summary below the quotes on a multi line docstring, and
+  // that is how the nine modules in the skill this was tried against were
+  // written. Reading only the opening line left every one of them nameless.
+  const directory = await skillDir({
+    "SKILL.md": "---\n---\n",
+    "scripts/hitung_balok.py": `"""\nSection modulus of a rectangle.\n\nLonger prose nobody needs in a tool description.\n"""\n${BODY}${HARNESS}`,
+  });
+  const resolved = await resolveSkillScripts({
+    declared: ["scripts/hitung_balok.py"],
+    directory,
+    skillName: "calc",
+    toolPath: null,
+  });
+
+  expect(resolved.tools[0]?.description).toBe("Section modulus of a rectangle.");
+  await rm(directory, { force: true, recursive: true });
+});
+
+test("a script missing both pieces is told about both at once", async () => {
+  const directory = await skillDir({
+    "SKILL.md": "---\n---\n",
+    "scripts/hitung_balok.py": BODY,
+  });
+  const resolved = await resolveSkillScripts({
+    declared: ["scripts/hitung_balok.py"],
+    directory,
+    skillName: "calc",
+    toolPath: null,
+  });
+
+  const reason = resolved.issues[0]?.reason ?? "";
+  expect(reason).toContain("run(input, context)");
+  expect(reason).toContain("harness");
+  await rm(directory, { force: true, recursive: true });
+});
+
+test("a skill name providers would reject is slugified, and a long one is trimmed", async () => {
+  const directory = await skillDir({
+    "SKILL.md": "---\n---\n",
+    "scripts/hitung_balok.py": `"""Section modulus."""\n${BODY}${HARNESS}`,
+  });
+  const punctuated = await resolveSkillScripts({
+    declared: ["scripts/hitung_balok.py"],
+    directory,
+    skillName: "RKK v2.1",
+    toolPath: null,
+  });
+
+  expect(punctuated.tools[0]?.name).toBe("RKK_v2_1_hitung_balok");
+
+  const long = await resolveSkillScripts({
+    declared: ["scripts/hitung_balok.py"],
+    directory,
+    skillName: "a".repeat(80),
+    toolPath: null,
+  });
+  const name = long.tools[0]?.name ?? "";
+
+  expect(name.length).toBeLessThanOrEqual(64);
+  // The file half survives whole, because that is what separates two tools of
+  // the same skill from each other.
+  expect(name.endsWith("_hitung_balok")).toBe(true);
+  await rm(directory, { force: true, recursive: true });
+});

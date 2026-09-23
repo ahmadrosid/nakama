@@ -30,29 +30,65 @@ export interface SkillScriptIssue {
  * result. Checked here instead, while the skill is being discovered.
  */
 function describePythonHarnessGap(source: string): string | null {
+  // Both gaps at once. Reporting only the first costs the author a second
+  // discovery pass to learn about the second, for one edit they could have
+  // made together: a module written without this contract in mind usually has
+  // neither piece.
+  const gaps: string[] = [];
   if (!/\bdef\s+run\s*\(/.test(source)) {
-    return "defines no run(input, context) function";
+    gaps.push("defines no run(input, context) function");
   }
   const hasHarness =
     /if\s+__name__\s*==\s*["']__main__["']\s*:/.test(source) &&
     source.includes("sys.stdin") &&
     source.includes("sys.stdout");
+  if (!hasHarness) {
+    gaps.push("has no __main__ JSON stdin/stdout harness");
+  }
 
-  return hasHarness ? null : "has no __main__ JSON stdin/stdout harness";
+  return gaps.length > 0 ? gaps.join(", and ") : null;
 }
 
-/** First line of a Python module docstring, used as the tool description. */
+/** Summary line of a Python module docstring, used as the tool description. */
 function pythonDocstring(source: string): string {
-  const match = source.match(/^\s*("""|''')([^\n]*)/u);
-  const line = match?.[2] ?? "";
-  // A one line docstring closes on the same line, so drop the trailing quotes.
-  return line.replace(/("""|''')\s*$/u, "").trim();
+  const match = source.match(/^\s*("""|''')([\s\S]*?)(?:\1|$)/u);
+  const body = match?.[2] ?? "";
+  // PEP 257 puts the summary on the opening line for a one line docstring and
+  // on the line below it for a multi line one, and formatters leave both
+  // alone. Reading only the opening line gave an empty description to every
+  // module written the second way, which hands the model a tool name and
+  // nothing about what it does.
+  const summary = body
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  return summary ?? "";
+}
+
+/** Providers accept [A-Za-z0-9_-] in a function name, up to 64 characters. */
+const TOOL_NAME_LIMIT = 64;
+
+function slugify(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]+/gu, "_").replace(/^_+|_+$/gu, "");
 }
 
 function toolNameFor(skillName: string, scriptPath: string): string {
-  const stem = path.basename(scriptPath).replace(/\.[^.]+$/u, "");
-  const slug = stem.replace(/[^a-zA-Z0-9]+/gu, "_").replace(/^_+|_+$/gu, "");
-  return slug ? `${skillName}_${slug}` : skillName;
+  const stem = slugify(path.basename(scriptPath).replace(/\.[^.]+$/u, ""));
+  // The skill name is slugified too. It reached the tool name untouched
+  // before, so a skill named with a space or a dot produced a name providers
+  // reject, and the skill looked installed right up to the first call.
+  const skill = slugify(skillName);
+  const name = stem ? `${skill}_${stem}` : skill;
+  if (name.length <= TOOL_NAME_LIMIT) {
+    return name;
+  }
+  // Trim the skill half, never the file half: the file is what tells two tools
+  // of the same skill apart, and cutting it back would collide them.
+  const room = TOOL_NAME_LIMIT - stem.length - 1;
+  return room > 0
+    ? `${skill.slice(0, room).replace(/_+$/u, "")}_${stem}`
+    : stem.slice(0, TOOL_NAME_LIMIT);
 }
 
 async function listSkillScripts(directory: string): Promise<string[]> {
