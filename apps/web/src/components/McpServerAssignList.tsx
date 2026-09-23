@@ -15,7 +15,10 @@ import {
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
-import { MoreHorizontalIcon, RefreshIcon } from "hugeicons-react";
+import {
+  Loading03Icon as LoaderIcon,
+  MoreHorizontalIcon,
+} from "hugeicons-react";
 import { useSyncMcpServerMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 
@@ -100,7 +103,7 @@ export function McpServerAssignList({
                   }
                 >
                   {sync.isPending && sync.variables === server.id ? (
-                    <RefreshIcon
+                    <LoaderIcon
                       aria-hidden
                       className="size-4 motion-safe:animate-spin"
                     />
