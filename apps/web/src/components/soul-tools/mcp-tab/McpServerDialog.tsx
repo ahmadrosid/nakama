@@ -70,7 +70,7 @@ function McpServerModeTabs({
     >
       {(
         [
-          { id: "existing" as const, label: "Existing" },
+          { id: "existing" as const, label: "Registered" },
           { id: "new" as const, label: "New" },
         ] as const
       ).map((item) => (
