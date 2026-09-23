@@ -40,7 +40,6 @@ export function BrowserSessionsCard() {
   });
 
   const sessions = sessionsQuery.data?.sessions ?? [];
-  const others = sessions.filter((session) => !session.current);
 
   return (
     <Card className="w-full shadow-none">
@@ -60,21 +59,6 @@ export function BrowserSessionsCard() {
               </p>
             ) : null}
           </div>
-          {others.length > 0 ? (
-            <Button
-              disabled={revoke.isPending}
-              onClick={() => {
-                for (const session of others) {
-                  revoke.mutate(session.id);
-                }
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Sign out everywhere else
-            </Button>
-          ) : null}
         </div>
 
         {sessionsQuery.isLoading ? (
