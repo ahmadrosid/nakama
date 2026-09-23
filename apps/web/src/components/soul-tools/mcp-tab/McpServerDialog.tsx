@@ -375,7 +375,13 @@ export function McpServerDialog({
   return (
     <>
       <Dialog onOpenChange={onOpenChange} open={open}>
-        <DialogContent className="gap-6 p-6 sm:max-w-lg">
+        <DialogContent
+          className={cn(
+            "gap-6 p-6 sm:max-w-lg",
+            canAssignExisting &&
+              "top-4 -translate-y-0 sm:top-[8dvh] sm:max-h-[84dvh]"
+          )}
+        >
           <McpServerDialogHeader
             canAssignExisting={canAssignExisting}
             error={error}
