@@ -26,6 +26,12 @@ Choose **Upload file** in **Meeting history**. Import Markdown (`.md`, `.markdow
 
 Imported files appear in history with their filename until the running Google Meet worker generates a title. Title generation and live Chrome capture still use the OpenAI key in the plugin's settings.
 
+## Import a recorded Google Meet
+
+Connect **Gmail** and **Google Drive** in **Customize → Connections** with the same Nakama member account. Set the OpenAI key in **Google Meet → Settings**. In **Meeting history**, choose **Import recording**, then select a recording found in a Google Meet email. Keep the page open until the import finishes.
+
+Nakama downloads the linked Drive video on the server, extracts MP3 audio with `ffmpeg`, and sends audio parts to OpenAI `whisper-1`. The transcript appears in meeting history. This import does not use local transcription or speaker identification. The standard Docker image includes `ffmpeg`; other installations need `ffmpeg` and `ffprobe` on `PATH`. Recordings are limited to 1 GiB and two hours, and imports time out after 20 minutes. Failed imports can be retried; temporary video and audio files are removed.
+
 ## Remote workers
 
 The worker listens on loopback by default. For a remote Chrome browser, expose the WebSocket through an authenticated HTTPS proxy and set:

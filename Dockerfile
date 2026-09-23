@@ -29,7 +29,7 @@ RUN mkdir -p /runtime-deps \
 FROM oven/bun:1.4-slim AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 ARG INSTALL_MEET_DEPS=false
 RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       apt-get update && apt-get install -y --no-install-recommends \
-        chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation xvfb \
+        chromium pulseaudio pulseaudio-utils fonts-liberation xvfb \
       && rm -rf /var/lib/apt/lists/* \
       && mkdir -p /opt/nakama-meet \
       && cd /opt/nakama-meet \

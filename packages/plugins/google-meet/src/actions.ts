@@ -176,6 +176,43 @@ export async function run(
         context.profileId
       );
     }
+    if (action === "recordings") {
+      if (!context.host) {
+        throw new Error("Recording import is unavailable; update the server");
+      }
+      return context.host({ op: "meet_recordings" });
+    }
+    if (action === "import-recording") {
+      if (!context.host) {
+        throw new Error("Recording import is unavailable; update the server");
+      }
+      const { messageId, fileId } = input;
+      if (typeof messageId !== "string" || typeof fileId !== "string") {
+        throw new Error("Choose a recording to import");
+      }
+      const result = (await context.host({
+        fileId,
+        messageId,
+        op: "import_meet_recording",
+      })) as {
+        filename?: unknown;
+        text?: unknown;
+      };
+      if (
+        typeof result.filename !== "string" ||
+        !result.filename.trim() ||
+        typeof result.text !== "string" ||
+        !result.text.trim()
+      ) {
+        throw new Error("Recording transcription returned no speech");
+      }
+      return store.importFile(
+        result.filename,
+        result.text,
+        context.actor.id,
+        context.profileId
+      );
+    }
     const meeting = store.get(String(input.meetingId ?? ""));
     if (!(meeting && canAccess(meeting))) {
       throw new Error("Meeting not found");

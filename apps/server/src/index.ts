@@ -70,6 +70,7 @@ import {
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
 import { McpService } from "./services/mcp-service";
+import { cleanupInterruptedMeetImports } from "./services/meet-recording-import";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
 import {
@@ -122,6 +123,7 @@ const database = await createDatabase(config.databaseUrl, {
 });
 
 await seedDatabase(database.adapter);
+await cleanupInterruptedMeetImports();
 
 // Runs are only completed by the process that started them, so a crash or a
 // kill leaves rows claiming work nothing is doing. Settle them before serving.
@@ -274,7 +276,11 @@ orgService.beforeArchiveChannels = async (orgId) => {
 
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   officialPackagesDir: join(projectRoot, "packages/plugins"),
-  onHostRequest: createPluginAgentHost(database.adapter, agent),
+  onHostRequest: createPluginAgentHost(
+    database.adapter,
+    agent,
+    composioService
+  ),
   workerManager,
 });
 try {

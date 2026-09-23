@@ -391,19 +391,79 @@ function apply(ctx) {
       role: "status"
     }, connectionMessage);
   }
-  function Page() {
-    const [overview, setOverview] = React.useState(null);
+  function RecordingPicker({ close }) {
+    const [result, setResult] = React.useState(null);
     const [error, setError] = React.useState("");
-    const [extensionConnected, setExtensionConnected] = React.useState(false);
-    const [busy, setBusy] = React.useState(false);
-    const [settings, setSettings] = React.useState(null);
-    const [deleting, setDeleting] = React.useState(null);
-    const [selected, setSelected] = React.useState(null);
+    const [importing, setImporting] = React.useState(false);
+    React.useEffect(() => {
+      let mounted = true;
+      ctx.host.call("recordings").then((value) => {
+        if (mounted) {
+          setResult(value);
+        }
+      }, (reason) => {
+        if (mounted) {
+          setError(message(reason));
+        }
+      });
+      return () => {
+        mounted = false;
+      };
+    }, []);
+    async function importRecording(recording) {
+      setImporting(true);
+      setError("");
+      try {
+        await ctx.host.call("import-recording", {
+          fileId: recording.fileId,
+          messageId: recording.messageId
+        });
+        close();
+      } catch (reason) {
+        setError(message(reason));
+      } finally {
+        setImporting(false);
+      }
+    }
+    return /* @__PURE__ */ React.createElement(Dialog, {
+      onOpenChange: (open) => {
+        if (!(open || importing)) {
+          close();
+        }
+      },
+      open: true
+    }, /* @__PURE__ */ React.createElement(DialogContent, null, /* @__PURE__ */ React.createElement(DialogHeader, null, /* @__PURE__ */ React.createElement(DialogTitle, null, "Import recording")), error && /* @__PURE__ */ React.createElement("p", {
+      role: "alert"
+    }, error), !(result || error) && /* @__PURE__ */ React.createElement("p", {
+      role: "status"
+    }, "Finding recordings…"), result && !(result.gmailConnected && result.driveConnected) && /* @__PURE__ */ React.createElement("p", null, "Connect Gmail and Google Drive in", " ", /* @__PURE__ */ React.createElement("a", {
+      href: "/customize/connections/composio"
+    }, "Customize → Connections"), "."), result?.gmailConnected && result.driveConnected && (result.recordings.length ? /* @__PURE__ */ React.createElement("ul", {
+      className: "meet-list"
+    }, result.recordings.map((recording) => /* @__PURE__ */ React.createElement("li", {
+      className: "meet-meeting",
+      key: `${recording.messageId}:${recording.fileId}`
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "meet-meta"
+    }, /* @__PURE__ */ React.createElement("strong", null, recording.name), /* @__PURE__ */ React.createElement("span", {
+      className: "meet-status"
+    }, recording.date || `${Math.ceil(recording.size / 1024 / 1024)} MB`)), /* @__PURE__ */ React.createElement(Button, {
+      disabled: importing,
+      onClick: () => void importRecording(recording),
+      size: "sm"
+    }, importing ? "Importing…" : "Import")))) : /* @__PURE__ */ React.createElement("p", null, "No Meet recording emails found.")), importing && /* @__PURE__ */ React.createElement("p", {
+      role: "status"
+    }, "Transcribing with Whisper… keep this page open.")));
+  }
+  function UploadFileButton({
+    onError,
+    onUploaded
+  }) {
     const [uploading, setUploading] = React.useState(false);
     const uploadInput = React.useRef(null);
     async function upload(file) {
       setUploading(true);
-      setError("");
+      onError("");
       try {
         const markdown = /\.(md|markdown)$/i.test(file.name);
         if (!(markdown || /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(file.name))) {
@@ -419,13 +479,43 @@ function apply(ctx) {
           reader.readAsDataURL(file);
         });
         await ctx.host.call("upload", { content, filename: file.name });
-        setOverview(await ctx.host.call("meetings"));
+        onUploaded(await ctx.host.call("meetings"));
       } catch (reason) {
-        setError(message(reason));
+        onError(message(reason));
       } finally {
         setUploading(false);
       }
     }
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("input", {
+      accept: ".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm",
+      "aria-label": "Upload audio or Markdown",
+      hidden: true,
+      onChange: (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) {
+          upload(file);
+        }
+      },
+      ref: uploadInput,
+      type: "file"
+    }), /* @__PURE__ */ React.createElement(Button, {
+      disabled: uploading,
+      onClick: () => uploadInput.current?.click(),
+      size: "sm",
+      title: "Audio up to 7 MB or Markdown up to 1 MB",
+      variant: "outline"
+    }, uploading ? "Importing…" : "Upload file"));
+  }
+  function Page() {
+    const [overview, setOverview] = React.useState(null);
+    const [error, setError] = React.useState("");
+    const [extensionConnected, setExtensionConnected] = React.useState(false);
+    const [busy, setBusy] = React.useState(false);
+    const [settings, setSettings] = React.useState(null);
+    const [deleting, setDeleting] = React.useState(null);
+    const [selected, setSelected] = React.useState(null);
+    const [recordingPicker, setRecordingPicker] = React.useState(false);
     React.useEffect(() => {
       async function receive(event) {
         if (event.source !== window || event.origin !== window.location.origin) {
@@ -441,7 +531,6 @@ function apply(ctx) {
           "start-capture",
           "leave",
           "transcript",
-          "caption",
           "show-transcript"
         ].includes(data.action)) {
           return;
@@ -553,26 +642,14 @@ function apply(ctx) {
       className: "meet-row"
     }, /* @__PURE__ */ React.createElement("span", {
       className: "meet-status"
-    }, group.meetings.length), group.title === "Meeting history" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("input", {
-      accept: ".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm",
-      "aria-label": "Upload audio or Markdown",
-      hidden: true,
-      onChange: (event) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (file) {
-          upload(file);
-        }
-      },
-      ref: uploadInput,
-      type: "file"
-    }), /* @__PURE__ */ React.createElement(Button, {
-      disabled: uploading,
-      onClick: () => uploadInput.current?.click(),
+    }, group.meetings.length), group.title === "Meeting history" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Button, {
+      onClick: () => setRecordingPicker(true),
       size: "sm",
-      title: "Audio up to 7 MB or Markdown up to 1 MB",
       variant: "outline"
-    }, uploading ? "Importing…" : "Upload file")))), group.meetings.length ? /* @__PURE__ */ React.createElement("ul", {
+    }, "Import recording"), /* @__PURE__ */ React.createElement(UploadFileButton, {
+      onError: setError,
+      onUploaded: setOverview
+    })))), group.meetings.length ? /* @__PURE__ */ React.createElement("ul", {
       className: "meet-list"
     }, group.meetings.map((meeting) => /* @__PURE__ */ React.createElement(MeetingRow, {
       busy,
@@ -595,6 +672,8 @@ function apply(ctx) {
         } : previous);
       },
       title: "Delete meeting?"
+    }), recordingPicker && /* @__PURE__ */ React.createElement(RecordingPicker, {
+      close: () => setRecordingPicker(false)
     }), (settings ?? (overview?.canConfigure && !overview.configured)) && /* @__PURE__ */ React.createElement(Settings, {
       close: () => setSettings(false),
       configured: overview?.configured === true
