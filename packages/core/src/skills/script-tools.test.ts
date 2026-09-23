@@ -184,3 +184,43 @@ test("a skill name providers would reject is slugified, and a long one is trimme
   expect(name.endsWith("_hitung_balok")).toBe(true);
   await rm(directory, { force: true, recursive: true });
 });
+
+test("a script that needs a package Python does not ship says so at discovery", async () => {
+  const directory = await skillDir({
+    "SKILL.md": "---\n---\n",
+    "scripts/chart.py": `"""Draw a chart."""\nimport json\nimport matplotlib.pyplot as plt\nfrom reportlab.lib import colors\n${BODY}${HARNESS}`,
+  });
+  const resolved = await resolveSkillScripts({
+    declared: ["scripts/chart.py"],
+    directory,
+    skillName: "calc",
+    toolPath: null,
+  });
+
+  // Still a tool: the dependency is a warning about the runtime, not a defect
+  // in the script.
+  expect(resolved.tools).toHaveLength(1);
+  const reason = resolved.issues.find((i) => i.path === "scripts/chart.py")?.reason ?? "";
+  expect(reason).toContain("matplotlib");
+  expect(reason).toContain("reportlab");
+  // json ships with Python and must not be named.
+  expect(reason).not.toContain("json");
+  await rm(directory, { force: true, recursive: true });
+});
+
+test("a script that only uses the standard library is reported clean", async () => {
+  const directory = await skillDir({
+    "SKILL.md": "---\n---\n",
+    "scripts/plain.py": `"""Plain maths."""\nimport math\nfrom decimal import Decimal\n${BODY}${HARNESS}`,
+  });
+  const resolved = await resolveSkillScripts({
+    declared: ["scripts/plain.py"],
+    directory,
+    skillName: "calc",
+    toolPath: null,
+  });
+
+  expect(resolved.tools).toHaveLength(1);
+  expect(resolved.issues).toHaveLength(0);
+  await rm(directory, { force: true, recursive: true });
+});

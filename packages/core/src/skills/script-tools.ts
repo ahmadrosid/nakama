@@ -73,6 +73,41 @@ function slugify(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/gu, "_").replace(/^_+|_+$/gu, "");
 }
 
+/**
+ * Modules a script imports that ship with Python. Anything outside this set
+ * has to be installed in the runtime, and a script that imports it loads as a
+ * tool and then fails on its first call, which is the spot this file exists to
+ * move failures out of.
+ */
+const PYTHON_STDLIB = new Set([
+  "abc", "argparse", "ast", "asyncio", "base64", "binascii", "bisect", "calendar",
+  "cmath", "collections", "configparser", "contextlib", "copy", "csv", "ctypes",
+  "dataclasses", "datetime", "decimal", "difflib", "enum", "fnmatch", "fractions",
+  "functools", "glob", "gzip", "hashlib", "heapq", "hmac", "html", "http",
+  "importlib", "inspect", "io", "ipaddress", "itertools", "json", "logging",
+  "math", "mimetypes", "numbers", "operator", "os", "pathlib", "pickle",
+  "platform", "pprint", "queue", "random", "re", "secrets", "shlex", "shutil",
+  "signal", "sqlite3", "statistics", "string", "struct", "subprocess", "sys",
+  "tempfile", "textwrap", "threading", "time", "tomllib", "traceback", "types",
+  "typing", "unicodedata", "unittest", "urllib", "uuid", "warnings", "weakref",
+  "xml", "zipfile", "zlib",
+]);
+
+/** Top level packages a script imports that are not part of Python itself. */
+function thirdPartyImports(source: string): string[] {
+  const found = new Set<string>();
+  for (const line of source.split("\n")) {
+    const match = line.match(
+      /^\s*(?:import\s+([A-Za-z_][\w.]*)|from\s+([A-Za-z_][\w.]*)\s+import\b)/u
+    );
+    const root = (match?.[1] ?? match?.[2] ?? "").split(".")[0];
+    if (root && !PYTHON_STDLIB.has(root)) {
+      found.add(root);
+    }
+  }
+  return [...found].sort();
+}
+
 function toolNameFor(skillName: string, scriptPath: string): string {
   const stem = slugify(path.basename(scriptPath).replace(/\.[^.]+$/u, ""));
   // The skill name is slugified too. It reached the tool name untouched
@@ -157,6 +192,16 @@ export async function resolveSkillScripts(input: {
       continue;
     }
     reachable.add(full);
+    const third = thirdPartyImports(source);
+    if (third.length > 0) {
+      // Not a failure, a dependency the runtime may not carry. Said here so the
+      // author hears it at discovery rather than from inside a tool result on
+      // the first call.
+      issues.push({
+        path: relative,
+        reason: `needs ${third.join(", ")} installed in the Python runtime; nothing here checks that it is`,
+      });
+    }
     tools.push({
       description: pythonDocstring(source) || `${input.skillName}: ${relative}`,
       name: toolNameFor(input.skillName, relative),
