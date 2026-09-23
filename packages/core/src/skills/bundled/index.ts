@@ -20,7 +20,11 @@ export {
   SUPER_BOT_BUNDLED_SKILL_NAMES,
 };
 
-const bundledDir = path.join(path.dirname(fileURLToPath(import.meta.url)));
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const bundledDir =
+  path.basename(moduleDir) === "dist"
+    ? path.resolve(moduleDir, "../../../packages/core/src/skills/bundled")
+    : moduleDir;
 
 export async function readBundledSkillMarkdown(
   name: BundledSkillName
