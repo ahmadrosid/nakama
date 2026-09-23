@@ -99,6 +99,9 @@ test.each([false, true])(
               expect(updates).toEqual(["org-default", "org-super"]);
               advanced = true;
             }}
+            onSkip={() => {
+              throw new Error("Unexpected skip");
+            }}
           />
         </QueryClientProvider>
       );
@@ -202,6 +205,47 @@ test("saving ChatGPT retains only the signed-in account's discovered models", as
       },
     ]);
   } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
+
+test("the provider step can be skipped without an API key", async () => {
+  const form = spyOn(providerForm, "ProviderSetupForm").mockImplementation(
+    () => <div />
+  );
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let skipped = false;
+
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SetupStepProvider
+            onNext={() => {
+              throw new Error("Unexpected advance");
+            }}
+            onSkip={() => {
+              skipped = true;
+            }}
+          />
+        </QueryClientProvider>
+      )
+    );
+    const skip = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Set up later"
+    );
+    expect(skip).toBeDefined();
+    await act(async () => {
+      skip?.dispatchEvent(new window.Event("click", { bubbles: true }));
+    });
+    expect(skipped).toBe(true);
+  } finally {
+    form.mockRestore();
     await act(async () => root.unmount());
     container.remove();
     queryClient.clear();

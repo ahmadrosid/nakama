@@ -8,9 +8,10 @@ import { encodeModelSelection } from "@/lib/models";
 
 interface SetupStepProviderProps {
   onNext: (result: CreateProviderResponse) => void;
+  onSkip: () => void;
 }
 
-export function SetupStepProvider({ onNext }: SetupStepProviderProps) {
+export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
   const updateProfile = useUpdateProfileMutation();
   const [provider, setProvider] = useState<CreateProviderResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,12 +78,23 @@ export function SetupStepProvider({ onNext }: SetupStepProviderProps) {
           </Button>
         </div>
       ) : (
-        <ProviderSetupForm
-          density="compact"
-          onSuccess={(result) => void finishSetup(result)}
-          showHeading={false}
-          submitLabel="Continue"
-        />
+        <div className="space-y-4">
+          <ProviderSetupForm
+            density="compact"
+            onSuccess={(result) => void finishSetup(result)}
+            showHeading={false}
+            submitLabel="Continue"
+          />
+          <div className="flex justify-end border-border border-t pt-4">
+            <button
+              className="text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground"
+              onClick={onSkip}
+              type="button"
+            >
+              Set up later
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

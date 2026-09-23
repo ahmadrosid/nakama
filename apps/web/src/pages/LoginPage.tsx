@@ -13,14 +13,13 @@ import {
 import { SETUP_PATH } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
 
-function resolvePostAuthPath(
-  health: { providerConfigured?: boolean } | null,
-  from?: string
-): string {
-  if (health?.providerConfigured !== true) {
-    return SETUP_PATH;
-  }
-
+/**
+ * A missing provider is not a reason to withhold the app. Chat already carries a
+ * "Set up AI" banner and answers from offline mode, and SetupGuard sends a
+ * genuinely empty install to the wizard on its own. Forcing every provider-less
+ * login here meant an operator without an API key could never get past step 3.
+ */
+function resolvePostAuthPath(from?: string): string {
   return from ?? "/chat";
 }
 
@@ -40,7 +39,7 @@ export function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from;
 
   if (isAuthenticated) {
-    return <Navigate replace to={resolvePostAuthPath(health, from)} />;
+    return <Navigate replace to={resolvePostAuthPath(from)} />;
   }
 
   if (health?.userConfigured === false) {
@@ -54,7 +53,7 @@ export function LoginPage() {
 
     try {
       await login(email, password);
-      navigate(resolvePostAuthPath(health, from), { replace: true });
+      navigate(resolvePostAuthPath(from), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
