@@ -18,7 +18,8 @@
         "extension/content.js",
         "extension/microphone.js",
         "extension/offscreen.js",
-        "extension/popup.js"
+        "extension/popup.js",
+        "extension/sidepanel.js"
       ]
     },
     "apps/desktop": {

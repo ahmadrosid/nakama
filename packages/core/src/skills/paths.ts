@@ -3,7 +3,7 @@ import { getProfileSoulDir } from "../soul/resolve";
 import { getUserConfigDir } from "../user-config";
 
 export const SKILL_FILE_NAME = "SKILL.md";
-export const SKILL_TOOL_FILES = ["tool.ts", "tool.js"] as const;
+export const SKILL_TOOL_FILES = ["tool.ts", "tool.js", "tool.py"] as const;
 export const SKILL_ARCHIVE_DIR_NAME = ".archive";
 
 export function getGlobalSkillsDir(): string {

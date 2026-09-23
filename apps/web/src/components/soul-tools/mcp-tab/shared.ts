@@ -72,5 +72,5 @@ export function headersToRecord(
     }
   }
 
-  return Object.keys(headers).length > 0 ? headers : undefined;
+  return forUpdate || Object.keys(headers).length > 0 ? headers : undefined;
 }

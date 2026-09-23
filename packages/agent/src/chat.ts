@@ -6,10 +6,10 @@ import type {
   ChatTurnUsage,
   ChatUsage,
   CompactionResponse,
+  ImageAttachment,
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
-  ReadFileOutput,
   SendMessageInput,
   ToolCall,
   ToolContext,
@@ -851,8 +851,7 @@ async function executeToolCalls(
           toolGroupId,
         });
 
-        const { result, attachments } = await prepareReadFileResult(
-          call,
+        const { result, attachments } = await prepareVisualToolResult(
           await executeToolCall(tools, call, contextForCall(call)),
           preprocessUserContent
         );
@@ -904,8 +903,7 @@ async function executeToolCalls(
       toolGroupId,
     });
 
-    const { result, attachments } = await prepareReadFileResult(
-      call,
+    const { result, attachments } = await prepareVisualToolResult(
       await executeToolCall(tools, call, contextForCall(call)),
       preprocessUserContent
     );
@@ -931,18 +929,32 @@ async function executeToolCalls(
   }
 }
 
-async function prepareReadFileResult(
-  call: ToolCall,
+function isImageAttachment(value: unknown): value is ImageAttachment {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as ImageAttachment).data === "string" &&
+    typeof (value as ImageAttachment).mediaType === "string"
+  );
+}
+
+async function prepareVisualToolResult(
   result: unknown,
   preprocess?: AgentChatSessionOptions["preprocessUserContent"]
 ): Promise<{ result: unknown; attachments?: MessageContentPart[] }> {
-  if (call.name !== "read_file" || !result || typeof result !== "object") {
+  if (!result || typeof result !== "object") {
     return { result };
   }
-  const { images, ...metadata } = result as ReadFileOutput;
-  if (!images?.length) {
+  const images = (result as { images?: unknown }).images;
+  if (
+    !Array.isArray(images) ||
+    images.length === 0 ||
+    !images.every(isImageAttachment)
+  ) {
     return { result };
   }
+  const metadata = { ...(result as Record<string, unknown>) };
+  delete metadata.images;
   try {
     const content = normalizeUserContent("", images);
     const prepared = preprocess ? await preprocess(content) : content;

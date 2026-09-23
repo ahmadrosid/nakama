@@ -50,19 +50,15 @@ function useSavedHint() {
 function useWebSearchSettingsForm() {
   const { data: settings } = useWebSearchSettings();
   const saveMutation = useSaveWebSearchSettings();
-  const [provider, setProvider] = useState<WebSearchProvider | null>(null);
+  // undefined follows the server; null is an explicit built-in selection.
+  const [providerDraft, setProvider] = useState<
+    WebSearchProvider | null | undefined
+  >(undefined);
+  const provider =
+    providerDraft === undefined ? (settings?.provider ?? null) : providerDraft;
   const [apiKey, setApiKey] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useSavedHint();
-
-  useEffect(() => {
-    if (!settings) {
-      return;
-    }
-
-    setProvider(settings.provider);
-    setApiKey("");
-  }, [settings]);
 
   const keyAlreadySaved =
     settings?.provider === provider && Boolean(settings?.apiKeyMasked);
@@ -87,7 +83,10 @@ function useWebSearchSettingsForm() {
         { provider: null },
         {
           onError: (error) => setFormError(formatError(error)),
-          onSuccess: () => setSavedHint("Using built-in web search"),
+          onSuccess: () => {
+            setProvider(undefined);
+            setSavedHint("Using built-in web search");
+          },
         }
       );
       return;
@@ -111,6 +110,7 @@ function useWebSearchSettingsForm() {
       {
         onError: (error) => setFormError(formatError(error)),
         onSuccess: () => {
+          setProvider(undefined);
           setApiKey("");
           setSavedHint("Saved");
         },
@@ -128,7 +128,11 @@ function useWebSearchSettingsForm() {
     savedHint,
     saveKey,
     selectProvider,
-    setApiKey,
+    setApiKey: (value: string) => {
+      // Keep this key attached to the provider it was entered for.
+      setProvider(provider);
+      setApiKey(value);
+    },
     setFormError,
     setSavedHint,
   };

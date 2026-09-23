@@ -1316,9 +1316,13 @@ export class NakamaClient {
 
   async readProfileWorkspaceFile(
     profileId: string,
-    filename: string
+    filename: string,
+    options: { render?: "markdown" } = {}
   ): Promise<Blob> {
     const query = new URLSearchParams({ path: filename });
+    if (options.render) {
+      query.set("render", options.render);
+    }
     const response = await this.fetchRaw(
       `/v1/profiles/${encodeURIComponent(profileId)}/workspace/content?${query}`
     );

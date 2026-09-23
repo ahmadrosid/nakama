@@ -1,10 +1,8 @@
 # Nakama — one container: API, web dashboard, automation + task workers
 # Build & run: ./scripts/docker-build-run.sh
 
-ARG BUILDPLATFORM
-
-# --- Build web dashboard (devDependencies stay in this stage only) ---
-FROM --platform=${BUILDPLATFORM} oven/bun:1.4-slim AS web-builder
+# --- Build web dashboard and runtime bundles for the target architecture ---
+FROM oven/bun:1.4-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -13,13 +11,25 @@ COPY apps apps
 COPY packages packages
 
 RUN bun install --frozen-lockfile --ignore-scripts \
-  && bun run --filter @nakama/web build
+  && bun run --filter @nakama/web build \
+  && bun run --filter @nakama/server build \
+  && bun run --filter @nakama/automation build \
+  && bun run --filter @nakama/telegram build \
+  && bun run --filter @nakama/whatsapp build \
+  && bun run --filter @nakama/discord build
+
+RUN mkdir -p /runtime-deps \
+  && printf '{"private":true}\n' > /runtime-deps/package.json \
+  && cd /runtime-deps \
+  && bun add --exact --production --ignore-scripts \
+    pm2@7.0.4 microsandbox@0.6.17 sharp@0.35.4 \
+    @vscode/ripgrep@1.18.0 @firecrawl/anydoc@0.1.3
 
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM oven/bun:1.4-slim AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
   && rm -rf /var/lib/apt/lists/*
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
@@ -59,31 +69,7 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
       omni --version; \
     fi
 
-COPY package.json bun.lock ./
-COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
-COPY apps/server apps/server
-COPY apps/platform/automation apps/platform/automation
-COPY apps/platform/telegram apps/platform/telegram
-COPY apps/platform/whatsapp apps/platform/whatsapp
-COPY apps/platform/discord apps/platform/discord
-COPY packages packages
-# Workspace stubs keep the lockfile valid without pulling web/cli/desktop sources.
-COPY apps/web/package.json apps/web/
-COPY apps/cli/package.json apps/cli/
-COPY apps/desktop/package.json apps/desktop/
-COPY --from=web-builder /app/apps/web/dist apps/web/dist
-
-RUN bun install --frozen-lockfile --production --ignore-scripts \
-      --filter '@nakama/server' \
-      --filter '@nakama/automation' \
-      --filter '@nakama/telegram' \
-      --filter '@nakama/whatsapp' \
-      --filter '@nakama/discord' \
-  && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
-  && test -f apps/server/src/services/javascript-tool-runner.js \
-  && test -f apps/server/src/services/plugin-runner.js \
-  && rm -rf patches \
-  && mkdir -p /nakama/data \
+RUN mkdir -p /nakama/data \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \
        [ "$G" = nakama ] || groupmod -n nakama "$G"; \
@@ -94,7 +80,22 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
        U=$(getent passwd 1000 | cut -d: -f1); \
        usermod -l nakama -g nakama -d /nakama/data "$U"; \
      else useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama; fi \
-  && chown -R nakama:nakama /app /nakama
+  && chown nakama:nakama /nakama/data
+
+COPY --chown=1000:1000 package.json ./
+COPY --chown=1000:1000 apps/server apps/server
+COPY --chown=1000:1000 packages packages
+COPY --chown=1000:1000 --from=web-builder /app/apps/web/dist apps/web/dist
+COPY --chown=1000:1000 --from=web-builder /app/apps/server/dist apps/server/dist
+COPY --chown=1000:1000 --from=web-builder /app/apps/platform/automation/dist apps/platform/automation/dist
+COPY --chown=1000:1000 --from=web-builder /app/apps/platform/telegram/dist apps/platform/telegram/dist
+COPY --chown=1000:1000 --from=web-builder /app/apps/platform/whatsapp/dist apps/platform/whatsapp/dist
+COPY --chown=1000:1000 --from=web-builder /app/apps/platform/discord/dist apps/platform/discord/dist
+COPY --chown=1000:1000 --from=web-builder /runtime-deps/node_modules node_modules
+
+RUN test -f apps/server/src/services/javascript-tool-runner.js \
+  && test -f apps/server/src/services/plugin-runner.js \
+  && test -f node_modules/pm2/bin/pm2-runtime
 
 ENV NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
@@ -113,4 +114,4 @@ USER 1000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://127.0.0.1:4310/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["bun", "run", "apps/server/src/index.ts"]
+CMD ["bun", "run", "apps/server/dist/index.js"]
