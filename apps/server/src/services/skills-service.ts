@@ -223,7 +223,10 @@ export class SkillsService {
       throw new Error("Skill name is required.");
     }
 
-    if (!request.description.trim()) {
+    // Optional chaining because a create with no description used to reach
+    // .trim() on undefined and answer 500, which reads as a server fault for
+    // what is a missing field.
+    if (!request.description?.trim()) {
       throw new Error("Skill description is required.");
     }
 
@@ -235,6 +238,7 @@ export class SkillsService {
       name,
       orgId: profileId ? orgId : undefined,
       profileId,
+      scripts: request.scripts,
     });
 
     const discovered = await discoverSkillDirectory(directory);

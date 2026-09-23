@@ -2017,6 +2017,8 @@ export interface CreateSkillRequest {
   disableModelInvocation?: boolean;
   name: string;
   profileId?: string;
+  /** Scripts the skill ships that should load as tools, relative to its directory. */
+  scripts?: string[];
 }
 
 export interface InstallSkillRequest {
