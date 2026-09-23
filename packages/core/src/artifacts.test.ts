@@ -376,6 +376,51 @@ test("no app user still resolves the shared profile folder", async () => {
   expect(names).not.toContain("owned.md");
 });
 
+test("a path outside the caller's folder is a 404, not a guard error", async () => {
+  await writeArtifact("shared.md", "shared folder");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const absoluteShared = path.join(
+    getProfileArtifactsDir(ORG_ID, PROFILE_ID),
+    "shared.md"
+  );
+
+  // An absolute path into the shared folder used to pass, because allowedDirs
+  // was always that folder. Now it reads as an escape, and the guard message
+  // talks about SOUL.md, which means nothing to an API caller.
+  const failure = await readArtifactFile({
+    appUserId: "user-1",
+    filename: absoluteShared,
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  })
+    .then(() => null)
+    .catch((error: unknown) => error);
+
+  expect((failure as { status?: number }).status).toBe(404);
+  expect((failure as Error).message).not.toContain("allowed directories");
+
+  // Traversal gets the same answer, so an attempt is not told it hit a guard.
+  const traversal = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "../../../../etc/passwd",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  })
+    .then(() => null)
+    .catch((error: unknown) => error);
+  expect((traversal as { status?: number }).status).toBe(404);
+
+  // The caller's own file is untouched by the mapping.
+  const owned = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "owned.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(owned.bytes.toString("utf8")).toBe("owned");
+});
+
 beforeEach(async () => {
   previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   configDir = await mkdtemp(path.join(tmpdir(), "nakama-artifacts-"));

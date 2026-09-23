@@ -220,9 +220,14 @@ export async function readArtifactFile(input: {
       throw artifactNotFoundOr(error, input.filename);
     }
   );
+  // A path the caller may not reach and a path that is not there get the same
+  // answer. Letting the guard escape returned 500 with an internal message about
+  // SOUL.md, and told a real traversal attempt that it had hit a guard.
   const guarded = await guardFilePath(input.filename, null, undefined, {
     allowedDirs: [resolvedArtifactsDir],
     cwd: resolvedArtifactsDir,
+  }).catch(() => {
+    throw artifactNotFound(input.filename);
   });
   const filePath = guarded.resolved;
   const fileStat = await stat(filePath).catch((error: unknown) => {
