@@ -1355,14 +1355,11 @@ export function registerProfileRoutes(
         render,
       }
     );
-    const downloadName = (artifactPath.split("/").pop() ?? "artifact").replace(
-      /["\\]/g,
-      "_"
-    );
+    const downloadName = artifactPath.split("/").pop() ?? "artifact";
     const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
     return new Response(artifact.bytes, {
       headers: {
-        "Content-Disposition": `${disposition}; filename="${downloadName}"`,
+        "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
         "Content-Type": artifact.contentType,
       },
     });
