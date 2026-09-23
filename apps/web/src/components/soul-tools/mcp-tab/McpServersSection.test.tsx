@@ -206,13 +206,16 @@ test("syncs an assignable server without assigning it and refreshes its tool cou
       )
     );
     const button = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Sync tools for Search server"]'
+      '[aria-label="More actions for Search server"]'
     )!;
     await act(async () => {
-      button.dispatchEvent(
-        new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })
-      );
       button.click();
+    });
+    const syncItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((item) => item.textContent?.includes("Sync tools"))!;
+    await act(async () => {
+      syncItem.click();
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     expect(sync).toHaveBeenCalledWith(server.id);
@@ -228,11 +231,23 @@ test("syncs an assignable server without assigning it and refreshes its tool cou
     sync.mockRejectedValueOnce(new Error("offline"));
     await act(async () => {
       button.click();
+    });
+    const retryItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    ).find((item) => item.textContent?.includes("Sync tools"))!;
+    await act(async () => {
+      retryItem.click();
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(button.disabled).toBe(false);
     expect(onAssign).not.toHaveBeenCalled();
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent === "Add")!
+        .click();
+    });
+    expect(onAssign).toHaveBeenCalledWith(server.id);
   } finally {
     await act(async () => root.unmount());
     queryClient.clear();

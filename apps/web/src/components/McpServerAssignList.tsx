@@ -8,8 +8,14 @@ import {
   CommandItem,
   CommandList,
 } from "@nakama/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
-import { Plug01Icon, RefreshIcon } from "hugeicons-react";
+import { MoreHorizontalIcon, RefreshIcon } from "hugeicons-react";
 import { useSyncMcpServerMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 
@@ -36,13 +42,15 @@ export function McpServerAssignList({
         className
       )}
     >
-      <CommandInput placeholder="Search MCP servers…" />
+      {servers.length > 5 ? (
+        <CommandInput placeholder="Search MCP servers…" />
+      ) : null}
       {sync.error ? (
         <p className="text-destructive text-sm" role="alert">
           {formatError(sync.error)}
         </p>
       ) : null}
-      <CommandList className="max-h-none min-h-0 flex-1 overflow-hidden rounded-md border border-border p-1">
+      <CommandList className="max-h-72 min-h-0 overflow-y-auto rounded-md border border-border p-1">
         <CommandEmpty className="text-pretty">
           No MCP servers found.
         </CommandEmpty>
@@ -52,9 +60,6 @@ export function McpServerAssignList({
               className="rounded-sm! py-2 [&>svg]:hidden"
               disabled={busy}
               key={server.id}
-              onSelect={() => {
-                onAssign(server.id);
-              }}
               value={server.name}
             >
               <div className="min-w-0 flex-1">
@@ -67,46 +72,53 @@ export function McpServerAssignList({
                 </p>
               </div>
               <Button
-                aria-busy={sync.isPending && sync.variables === server.id}
-                aria-label={`Sync tools for ${server.name}`}
+                aria-label={`Add ${server.name}`}
                 disabled={busy}
                 onClick={(event) => {
                   event.stopPropagation();
-                  sync.mutate(server.id);
+                  onAssign(server.id);
                 }}
                 onKeyDown={(event) => event.stopPropagation()}
                 size="sm"
                 type="button"
-                variant="ghost"
               >
-                <RefreshIcon
-                  aria-hidden
-                  className={cn(
-                    "size-4",
-                    sync.isPending &&
-                      sync.variables === server.id &&
-                      "motion-safe:animate-spin"
-                  )}
-                />
-                {sync.isPending && sync.variables === server.id
-                  ? "Syncing…"
-                  : "Sync tools"}
+                Add
               </Button>
-              {onTestConnection ? (
-                <Button
-                  aria-label={`Test connection for ${server.name}`}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-busy={sync.isPending && sync.variables === server.id}
                   disabled={busy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onTestConnection(server);
-                  }}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  render={
+                    <Button
+                      aria-label={`More actions for ${server.name}`}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    />
+                  }
                 >
-                  <Plug01Icon aria-hidden className="size-4" />
-                </Button>
-              ) : null}
+                  {sync.isPending && sync.variables === server.id ? (
+                    <RefreshIcon
+                      aria-hidden
+                      className="size-4 motion-safe:animate-spin"
+                    />
+                  ) : (
+                    <MoreHorizontalIcon aria-hidden className="size-4" />
+                  )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => sync.mutate(server.id)}>
+                    Sync tools
+                  </DropdownMenuItem>
+                  {onTestConnection ? (
+                    <DropdownMenuItem onClick={() => onTestConnection(server)}>
+                      Test connection
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CommandItem>
           ))}
         </CommandGroup>

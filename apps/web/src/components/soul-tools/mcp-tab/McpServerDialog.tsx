@@ -118,7 +118,7 @@ function McpServerDialogPanels({
         aria-hidden={!assignMode}
         className={cn(
           "col-start-1 row-start-1 flex min-h-0 flex-col",
-          !assignMode && "invisible"
+          !assignMode && "hidden"
         )}
         id={`${state.idPrefix}-mode-panel-existing`}
         inert={!assignMode}
@@ -134,7 +134,7 @@ function McpServerDialogPanels({
       <McpServerDialogCreateForm
         aria-hidden={assignMode}
         busy={busy}
-        className={cn("col-start-1 row-start-1", assignMode && "invisible")}
+        className={cn("col-start-1 row-start-1", assignMode && "hidden")}
         id={`${state.idPrefix}-mode-panel-new`}
         inert={assignMode}
         nameAutoFocus={!assignMode}
