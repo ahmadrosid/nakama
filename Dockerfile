@@ -25,12 +25,30 @@ RUN mkdir -p /runtime-deps \
     pm2@7.0.4 microsandbox@0.6.17 sharp@0.35.4 \
     @vscode/ripgrep@1.18.0 @firecrawl/anydoc@0.1.3
 
+# Keep FFmpeg's video libraries out of the runtime image. These pinned static
+# binaries cover both published architectures without Debian's GUI dependencies.
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS ffmpeg-binaries
+ARG TARGETARCH
+RUN set -eu; \
+  case "$TARGETARCH" in \
+    amd64) arch=x64; ffmpeg_sha=9eac5b2b5076db5ff853a6fa0dcd6b8de7d0cac8481eadda6c47cd935825f1ee; ffprobe_sha=065d3c56926052a76e884c4e4b51b7d95248da9391ab7effdcca6b94ceab98cf ;; \
+    arm64) arch=arm64; ffmpeg_sha=6e7b1d7d1aa8c35e3fedd78a140aa0968717aeb7386ecfb0ee00773d9f0a4503; ffprobe_sha=fd2aca1456f0261cabef4514b6d97a70fa342003347f51b39c473dd364328089 ;; \
+    *) echo "no FFmpeg build for $TARGETARCH" >&2; exit 1 ;; \
+  esac; \
+  base=https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.1.2-1; \
+  wget -q -O /ffmpeg "$base/ffmpeg-linux-$arch"; \
+  wget -q -O /ffprobe "$base/ffprobe-linux-$arch"; \
+  echo "$ffmpeg_sha  /ffmpeg" | sha256sum -c -; \
+  echo "$ffprobe_sha  /ffprobe" | sha256sum -c -; \
+  chmod +x /ffmpeg /ffprobe
+
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM oven/bun:1.4-slim AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 ffmpeg \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
   && rm -rf /var/lib/apt/lists/*
+COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
 # runs as the existing non-root Nakama user.
