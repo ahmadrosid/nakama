@@ -811,3 +811,48 @@ test("workspace paths reject traversal and symlinks outside the profile", async 
   ).rejects.toMatchObject({ status: 404 });
   expect((await listWorkspaceFiles(ORG_ID, "new_profile")).entries).toEqual([]);
 });
+
+test("an app user still reads a document written before per-user folders", async () => {
+  // Every artifact the agent produced before the write side learned about app
+  // users is in the shared folder. Dropping that fallback strands them.
+  await writeArtifact("legacy.docx", "written the old way");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const legacy = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "legacy.docx",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(legacy.bytes.toString("utf8")).toBe("written the old way");
+
+  // Their own copy of a name still wins over the shared one.
+  await writeAppUserArtifact("user-1", "legacy.docx", "written for this user");
+  const owned = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "legacy.docx",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(owned.bytes.toString("utf8")).toBe("written for this user");
+});
+
+test("the shared fallback does not accept a path that reaches out of the folder", async () => {
+  await writeArtifact("shared.md", "shared folder");
+
+  for (const filename of [
+    path.join(getProfileArtifactsDir(ORG_ID, PROFILE_ID), "shared.md"),
+    "../artifacts/shared.md",
+    "../../../../etc/passwd",
+  ]) {
+    const failure = await readArtifactFile({
+      appUserId: "user-1",
+      filename,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect((failure as { status?: number } | null)?.status).toBe(404);
+  }
+});
