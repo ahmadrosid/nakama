@@ -61,7 +61,12 @@ test("official workflow install imports once, executes through IPC, isolates org
   const dir = await mkdtemp(join(tmpdir(), "official-workflows-"));
   directories.push(dir);
   const officialPackagesDir = join(dir, "official");
-  for (const pluginId of ["workflows", "supermemory", "google-meet"]) {
+  for (const pluginId of [
+    "workflows",
+    "supermemory",
+    "google-meet",
+    "postgresql",
+  ]) {
     await cp(
       resolve(import.meta.dir, "../../../../packages/plugins", pluginId),
       join(officialPackagesDir, pluginId),
