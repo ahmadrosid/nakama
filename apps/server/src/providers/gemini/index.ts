@@ -60,7 +60,7 @@ const REFUSAL_FINISH_REASONS = new Set([
 /** Marks the one empty-response shape worth a second attempt. */
 const RETRYABLE_EMPTY = Symbol("gemini.retryableEmptyResponse");
 
-export function isRetryableEmptyResponse(error: unknown): boolean {
+function isRetryableEmptyResponse(error: unknown): boolean {
   return (
     typeof error === "object" && error !== null && RETRYABLE_EMPTY in error
   );
