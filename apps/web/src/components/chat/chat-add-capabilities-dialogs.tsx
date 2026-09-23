@@ -14,6 +14,7 @@ import {
 import { Input } from "@nakama/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { SkillInstallDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { useAuth } from "@/context/use-auth";
@@ -33,6 +34,7 @@ import {
   useAssignMcpServerMutation,
   useAssignToolMutation,
   useCreateMcpServerMutation,
+  useInstallSkillMutation,
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
 
@@ -379,7 +381,9 @@ export function ChatAddCapabilitiesDialogs({
   mcpOpen,
   onMcpOpenChange,
   onToolOpenChange,
+  onSkillOpenChange,
   profileId,
+  skillOpen,
   toolOpen,
 }: {
   pluginOpen: boolean;
@@ -387,7 +391,9 @@ export function ChatAddCapabilitiesDialogs({
   mcpOpen: boolean;
   onMcpOpenChange: (open: boolean) => void;
   onToolOpenChange: (open: boolean) => void;
+  onSkillOpenChange: (open: boolean) => void;
   profileId: string;
+  skillOpen: boolean;
   toolOpen: boolean;
 }) {
   const { data: tools = [] } = useToolsQuery();
@@ -396,6 +402,7 @@ export function ChatAddCapabilitiesDialogs({
   const assignToolMutation = useAssignToolMutation();
   const assignMcpMutation = useAssignMcpServerMutation();
   const createMcpMutation = useCreateMcpServerMutation();
+  const installSkillMutation = useInstallSkillMutation();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -410,7 +417,8 @@ export function ChatAddCapabilitiesDialogs({
   const busy =
     assignToolMutation.isPending ||
     assignMcpMutation.isPending ||
-    createMcpMutation.isPending;
+    createMcpMutation.isPending ||
+    installSkillMutation.isPending;
 
   async function handleAssignTool(toolId: string) {
     setError(null);
@@ -450,6 +458,20 @@ export function ChatAddCapabilitiesDialogs({
         serverId: response.server.id,
       });
       onMcpOpenChange(false);
+    } catch (err) {
+      const message = formatError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }
+
+  async function handleInstallSkill(
+    request: Parameters<typeof installSkillMutation.mutateAsync>[0]
+  ) {
+    setError(null);
+    try {
+      await installSkillMutation.mutateAsync(request);
+      onSkillOpenChange(false);
     } catch (err) {
       const message = formatError(err);
       setError(message);
@@ -515,6 +537,13 @@ export function ChatAddCapabilitiesDialogs({
         onSubmit={handleCreateMcp}
         onTestConnection={(server) => void handleTestMcp(server)}
         open={mcpOpen}
+      />
+      <SkillInstallDialog
+        busy={installSkillMutation.isPending}
+        onOpenChange={onSkillOpenChange}
+        onSubmit={handleInstallSkill}
+        open={skillOpen}
+        profileId={profileId}
       />
     </>
   );

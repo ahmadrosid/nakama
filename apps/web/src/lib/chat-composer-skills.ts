@@ -18,7 +18,11 @@ export interface SkillTokenRange {
   start: number;
 }
 
-export type ComposerAddCommandAction = "add-mcp" | "add-tool" | "add-plugin";
+export type ComposerAddCommandAction =
+  | "add-mcp"
+  | "add-plugin"
+  | "add-skill"
+  | "add-tool";
 
 export interface ReservedSlashCommand {
   action?: ComposerAddCommandAction;
@@ -67,6 +71,11 @@ export const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
     action: "add-mcp",
     description: "Assign or add an MCP server",
     name: "add-mcp",
+  },
+  {
+    action: "add-skill",
+    description: "Add a skill from GitHub or a ZIP file",
+    name: "add-skill",
   },
 ];
 

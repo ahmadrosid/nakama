@@ -208,7 +208,7 @@ function skillBundle(files: GitHubSkillBundle["files"]): GitHubSkillBundle {
 
 function readSkillZip(
   bytes: Uint8Array,
-  directory: string
+  directory?: string
 ): GitHubSkillBundle | null {
   // fflate does not expose Unix file modes. Inspect the central directory before
   // decompressing so symlinks cannot be installed as ordinary supporting files.
@@ -243,7 +243,8 @@ function readSkillZip(
   }
   const selected = new Map<string, string>();
   const directories: string[] = [];
-  let root: string | undefined;
+  let detectedDirectory = directory;
+  let root: string | undefined = directory === undefined ? "" : undefined;
   let total = 0;
   let needsGit = false;
   for (let index = 0; index < count; index += 1) {
@@ -268,13 +269,19 @@ function readSkillZip(
     offset = next;
     assertSkillPath(name.endsWith("/") ? name.slice(0, -1) : name);
     root ??= name.split("/")[0];
-    if (!name.startsWith(`${root}/`)) {
+    if (root && !name.startsWith(`${root}/`)) {
       throw new Error("Invalid ZIP archive root.");
     }
     if (name.endsWith("/.gitmodules")) {
       needsGit = true;
     }
-    const prefix = `${root}/${directory ? `${directory}/` : ""}`;
+    if (!detectedDirectory && name.endsWith("/SKILL.md")) {
+      detectedDirectory = name.slice(
+        root ? root.length + 1 : 0,
+        -"/SKILL.md".length
+      );
+    }
+    const prefix = `${root ? `${root}/` : ""}${detectedDirectory ? `${detectedDirectory}/` : ""}`;
     if (!name.startsWith(prefix)) {
       // A symlink in place of the selected directory is also invalid.
       if (name === prefix.slice(0, -1)) {
@@ -321,6 +328,15 @@ function readSkillZip(
       path: selected.get(name)!,
     }))
   );
+}
+
+/** Read a user-uploaded ZIP containing one skill directory. */
+export function readUploadedSkillBundle(bytes: Uint8Array): GitHubSkillBundle {
+  const bundle = readSkillZip(bytes);
+  if (!bundle) {
+    throw new NakamaApiError("Could not read the uploaded skill ZIP.", 400);
+  }
+  return bundle;
 }
 
 async function downloadSkillWithGit(

@@ -5,7 +5,14 @@
   "description": "Capture Google Meet audio for a Nakama live transcript.",
   "minimum_chrome_version": "116",
   "icons": { "192": "icon.png" },
-  "permissions": ["activeTab", "alarms", "offscreen", "storage", "tabCapture"],
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "offscreen",
+    "sidePanel",
+    "storage",
+    "tabCapture"
+  ],
   "host_permissions": ["https://meet.google.com/*", "<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": {
@@ -13,6 +20,7 @@
     "default_popup": "popup.html",
     "default_title": "Nakama Meet transcription"
   },
+  "side_panel": { "default_path": "sidepanel.html" },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

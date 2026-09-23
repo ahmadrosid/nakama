@@ -16,10 +16,13 @@ import { getPluginReleaseDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   approvedPluginPackage,
+  closePluginPackageRegistry,
   pluginPackage,
   pluginTarball,
 } from "../testing/plugin-package-fixture";
 import { PluginService } from "./plugin-service";
+
+afterEach(closePluginPackageRegistry);
 
 const SIDE_EFFECT_MARKER = join(tmpdir(), "nakama-plugin-side-effect-marker");
 
