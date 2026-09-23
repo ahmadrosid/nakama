@@ -637,6 +637,7 @@ function WorkspaceFilePreview({
           downloadUrl={downloadUrl}
           entry={entry}
           error={error}
+          isMarkdown={isMarkdown}
           loading={isLoading}
           objectUrl={objectUrl}
           previewMode={previewMode}
@@ -704,6 +705,7 @@ function WorkspacePreviewBody({
   error,
   canPreview,
   downloadUrl,
+  isMarkdown,
 }: {
   entry: WorkspaceEntry;
   objectUrl: string | null;
@@ -712,6 +714,7 @@ function WorkspacePreviewBody({
   error: unknown;
   canPreview: boolean;
   downloadUrl: string;
+  isMarkdown: boolean;
   previewMode: ArtifactPreviewMode;
 }) {
   if (!canPreview) {
@@ -788,7 +791,7 @@ function WorkspacePreviewBody({
     <ArtifactAttachmentPanelBody
       {...shared}
       content={content}
-      format={isMarkdownArtifactMimeType(entry.mimeType) ? "markdown" : "plain"}
+      format={isMarkdown ? "markdown" : "plain"}
       kind="text"
       language={artifactCodeLanguage(entry.filename)}
     />

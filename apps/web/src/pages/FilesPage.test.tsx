@@ -451,3 +451,112 @@ test("artifact pagination counts visible entries and stops at the last entry", a
     container.remove();
   }
 });
+
+test("a Word preview renders as markdown, not as a plain code listing", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+  const auth: AuthContextValue = {
+    activeOrg: {
+      createdAt: "",
+      id: "org-docx",
+      name: "Docx",
+      role: "admin",
+      slug: "docx",
+      updatedAt: "",
+    },
+    archiveOrg: async () => {},
+    createOrg: async () => {},
+    isAuthenticated: true,
+    isLoading: false,
+    login: async () => {},
+    logout: async () => {},
+    orgs: [],
+    refreshSession: async () => {},
+    setup: async () => {},
+    switchOrg: async () => {},
+    updateOrg: async () => {},
+    user: { email: "admin@example.com", id: "admin", isPlatformAdmin: true },
+  };
+  const report: WorkspaceEntry = {
+    filename: "report.docx",
+    kind: "file",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    path: "report.docx",
+    sizeBytes: 2048,
+    updatedAt: "2026-09-20T00:00:00Z",
+  };
+  queryClient.setQueryData(queryKeys.profiles.all, [{ id: "profile-docx" }]);
+  queryClient.setQueryData(
+    ["workspace-files", "org-docx", "profile-docx", ""],
+    { entries: [report] }
+  );
+  // The server converts a Word file, so the preview query holds Markdown even
+  // though the entry's mime type is still the .docx one.
+  queryClient.setQueryData(
+    [
+      "workspace-preview",
+      "org-docx",
+      "profile-docx",
+      report.path,
+      report.updatedAt,
+    ],
+    { blob: new Blob(["## Findings"]), text: "## Findings" }
+  );
+  queryClient.setQueryData(["file-pins", "org-docx", "admin", "profile-docx"], {
+    entries: [],
+  });
+  spyOn(client, "listProfileFilePins").mockImplementation(async () => ({
+    entries: [],
+  }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={auth}>
+            <ThemeContext.Provider
+              value={{
+                resolvedTheme: "light",
+                setTheme: () => {},
+                theme: "light",
+                toggleTheme: () => {},
+              }}
+            >
+              <MemoryRouter>
+                <FilesPage />
+              </MemoryRouter>
+            </ThemeContext.Provider>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      )
+    );
+    const fileButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.startsWith("report.docx")
+    ) as HTMLButtonElement;
+    expect(fileButton).toBeDefined();
+    await act(async () => {
+      fileButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const panel = container.querySelector(
+      '[data-slot="attachment-detail-panel"]'
+    );
+    expect(panel).not.toBeNull();
+    // The panel's own title is an h2, so look for the heading the Markdown
+    // produced rather than the first one in the subtree.
+    const headings = [...(panel?.querySelectorAll("h2") ?? [])].map(
+      (node) => node.textContent
+    );
+    expect(headings).toContain("Findings");
+    expect(panel?.textContent).not.toContain("## Findings");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
