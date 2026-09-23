@@ -476,7 +476,13 @@ export interface AuthUserResponse {
   activeOrgId?: string | null;
   email: string;
   id: string;
+  /**
+   * What this credential may do, not what its owner may do. An API key minted
+   * by a platform admin is de-privileged, so it reports false here.
+   */
   isPlatformAdmin?: boolean;
+  /** Which credential answered, which is what explains the flag above. */
+  mode?: "api-key" | "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
   phone?: string | null;
