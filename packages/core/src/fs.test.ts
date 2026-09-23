@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathExists, readText, writeTextFile } from "./fs";
+import { readText, writeTextFile } from "./fs";
 
 const temporaryDirectories: string[] = [];
 
@@ -62,6 +62,18 @@ describe("writeTextFile atomic replace", () => {
     await writeTextFile(path, "profile_id=two\n");
 
     expect(await readText(path)).toBe("profile_id=two\n");
-    expect(await pathExists(`${path}.tmp`)).toBe(false);
+    expect(await readdir(directory)).toEqual(["cli.ini"]);
+  });
+
+  test("allows overlapping writes to the same file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "nakama-fs-atomic-"));
+    temporaryDirectories.push(directory);
+    const path = join(directory, "worker-heartbeat.json");
+    const values = Array.from({ length: 20 }, (_, index) => String(index));
+
+    await Promise.all(values.map((value) => writeTextFile(path, value)));
+
+    expect(values).toContain(await readText(path));
+    expect(await readdir(directory)).toEqual(["worker-heartbeat.json"]);
   });
 });
