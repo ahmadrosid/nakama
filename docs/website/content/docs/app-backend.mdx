@@ -7,7 +7,7 @@ Use any app frontend with Nakama as the AI agent backend. Keep the Nakama API ke
 
 ## What you need
 
-1. A reachable Nakama instance with an LLM provider configured.
+1. A reachable Nakama instance with an LLM provider and an organization default profile configured. Use HTTPS when Nakama is reached over a network.
 2. An organization backend API key.
 3. An app with a server-side function or backend route.
 
@@ -72,6 +72,9 @@ const session = await fetch(`${process.env.NAKAMA_URL}/v1/sessions`, {
   }),
 });
 
+if (!session.ok) {
+  throw new Error(`Could not create Nakama session (${session.status})`);
+}
 const { sessionId } = await session.json();
 ```
 
@@ -91,6 +94,9 @@ const reply = await fetch(
   }
 );
 
+if (!reply.ok) {
+  throw new Error(`Nakama message failed (${reply.status})`);
+}
 const { reply: answer } = await reply.json();
 ```
 

@@ -161,6 +161,7 @@ export function modelExistsOnInstance(
 
   if (
     (instance.type === "openai" ||
+      instance.type === "chatgpt" ||
       instance.type === "anthropic" ||
       instance.type === "gemini" ||
       instance.type === "deepseek" ||
@@ -266,6 +267,9 @@ export function buildProviderInstanceFromCreateRequest(
         id: createProviderInstanceId(),
         label,
         type,
+        ...(request.customModels?.length
+          ? { customModels: validateCustomModels(request.customModels) }
+          : {}),
       },
       request.chatgptOAuth
     );
@@ -659,6 +663,11 @@ export function resolveProfileProviderSelection(options: {
 
     const catalogProvider = getModelById(selectedModel)?.provider;
     const preferred =
+      (catalogProvider === "openai" &&
+      active?.type === "chatgpt" &&
+      matchingProviders.some((instance) => instance.id === active.id)
+        ? active
+        : undefined) ??
       matchingProviders.find((instance) => instance.type === catalogProvider) ??
       (active && matchingProviders.some((instance) => instance.id === active.id)
         ? active

@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.26",
+  "version": "0.4.31",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -22,6 +22,7 @@
     "dev:discord": "bun run --filter @nakama/discord dev",
     "dev:docs": "bun run --cwd docs/website dev",
     "dev:server": "bun run apps/server/src/dev.ts",
+    "dev:slack": "bun run --filter @nakama/slack dev",
     "dev:telegram": "bun run --filter @nakama/telegram dev",
     "dev:web": "bun run --filter @nakama/web dev",
     "dev:whatsapp": "bun run --filter @nakama/whatsapp dev",

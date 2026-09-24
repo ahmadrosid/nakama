@@ -76,6 +76,7 @@ export function ToolPlaygroundPage() {
 
   return (
     <ToolPlaygroundPageContent
+      key={JSON.stringify([activeOrg?.id ?? null, tool.id])}
       superBotProfileId={superBotProfileId}
       tool={tool}
     />

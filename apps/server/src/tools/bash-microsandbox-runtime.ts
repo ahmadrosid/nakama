@@ -73,7 +73,30 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     }
 
     try {
-      await builder.create();
+      console.info(`[MicroSandbox] Starting ${args.name} (${args.image})`);
+      const creation = await builder.createWithPullProgress();
+      const reported = new Map<number, number>();
+      for await (const event of creation.progress) {
+        if (
+          event.kind === "layerDownloadProgress" &&
+          event.totalBytes &&
+          event.downloadedBytes !== undefined &&
+          event.layerIndex !== undefined
+        ) {
+          const percent = Math.floor(
+            (event.downloadedBytes / event.totalBytes) * 100
+          );
+          const step = Math.floor(percent / 25) * 25;
+          if (step > (reported.get(event.layerIndex) ?? 0)) {
+            reported.set(event.layerIndex, step);
+            console.info(
+              `[MicroSandbox] ${args.image} layer ${event.layerIndex + 1}: ${step}% downloaded`
+            );
+          }
+        }
+      }
+      await creation.awaitSandbox();
+      console.info(`[MicroSandbox] ${args.name} ready`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "sandbox create failed";

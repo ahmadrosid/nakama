@@ -1,4 +1,4 @@
-import type { AgentChannel } from "@nakama/core/contract";
+import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   ConfirmDialog,
@@ -20,9 +20,10 @@ import {
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
+  Search01Icon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
@@ -50,6 +51,7 @@ import {
   SIDEBAR_PAGE_IDS,
   visibleNavGroups,
 } from "@/lib/navigation";
+import { sessionSearchQuery } from "@/lib/session-list";
 import {
   getInitialRecentsCollapsed,
   SIDEBAR_RECENTS_COLLAPSED_KEY,
@@ -124,6 +126,21 @@ export function AppSidebar({
   );
 }
 
+const SKELETON_ROW_WIDTHS = ["w-3/4", "w-1/2", "w-2/3"] as const;
+
+function SessionRowSkeletons() {
+  return (
+    <div role="status">
+      <span className="sr-only">Loading chats…</span>
+      {SKELETON_ROW_WIDTHS.map((width) => (
+        <div aria-hidden="true" className="px-2 py-2" key={width}>
+          <div className={cn("skeleton-shimmer h-4 rounded", width)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RecentChats() {
   const location = useLocation();
   const { activeOrg } = useAuth();
@@ -138,11 +155,44 @@ function RecentChats() {
       profiles,
       search: location.search,
     }) ?? "";
-  const {
-    data: sessions,
-    isLoading,
-    error,
-  } = useHistorySessionsQuery(profileId);
+  const history = useHistorySessionsQuery(profileId);
+  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  // Typing waits a moment before asking the server; clearing is immediate.
+  useEffect(() => {
+    const next = sessionSearchQuery(search);
+    if (!next) {
+      setSearchQuery("");
+      return;
+    }
+    const timer = setTimeout(() => setSearchQuery(next), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  // Idle until there is a search, then its own paged list.
+  const results = useHistorySessionsQuery(profileId, searchQuery);
+  const list = searchQuery ? results : history;
+  const { data: sessions } = history;
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
+  const [pageEnd, setPageEnd] = useState<HTMLDivElement | null>(null);
+  // Rebuilt after each page, because an observer reports only changes: a page
+  // too short to push the sentinel out of view would otherwise be the last.
+  useEffect(() => {
+    if (!(pageEnd && hasNextPage) || isFetchingNextPage) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          void fetchNextPage();
+        }
+      },
+      // The list scrolls inside its own box, so that box is the root, and the
+      // margin starts the next page a little before the end comes into view.
+      { root: pageEnd.parentElement, rootMargin: "0px 0px 200px 0px" }
+    );
+    observer.observe(pageEnd);
+    return () => observer.disconnect();
+  }, [pageEnd, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const updateSession = useUpdateSessionMutation();
   const deleteSession = useDeleteSessionMutation();
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -150,7 +200,6 @@ function RecentChats() {
     title: string;
   } | null>(null);
   const [renameTarget, setRenameTarget] = useState<{
-    channel: AgentChannel;
     id: string;
     title: string;
   } | null>(null);
@@ -185,7 +234,6 @@ function RecentChats() {
             className="size-7 text-muted-foreground"
             onClick={() =>
               setRenameTarget({
-                channel: session.channel,
                 id: session.id,
                 title,
               })
@@ -201,7 +249,6 @@ function RecentChats() {
             className="size-7 text-muted-foreground"
             onClick={() =>
               void updateSession.mutateAsync({
-                channel: session.channel,
                 input: { pinned: !session.pinned },
                 profileId,
                 sessionId: session.id,
@@ -237,15 +284,58 @@ function RecentChats() {
     );
   };
 
+  const renderList = (rows: typeof sessions, emptyText: string) => (
+    <div className="no-scrollbar min-h-0 overflow-y-auto">
+      {list.isLoading && <SessionRowSkeletons />}
+      {list.error && (
+        <p className="px-3 py-2 text-muted-foreground text-xs" role="status">
+          {searchQuery
+            ? "Couldn’t search chats."
+            : "Couldn’t load recent chats."}
+        </p>
+      )}
+      {!(list.isLoading || list.error) && list.data.length === 0 && (
+        <p className="px-3 py-2 text-muted-foreground text-xs">{emptyText}</p>
+      )}
+      {rows.map(renderSession)}
+      {isFetchingNextPage && <SessionRowSkeletons />}
+      {hasNextPage && <div aria-hidden="true" ref={setPageEnd} />}
+    </div>
+  );
+
   return (
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
-      {pinnedSessions.length > 0 ? (
+      <div className="relative mb-3 shrink-0">
+        <Search01Icon
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          aria-label="Search chats"
+          className="border-border/60 bg-muted/20 pl-8 shadow-none"
+          maxLength={MAX_SESSION_SEARCH_LENGTH}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setSearch("");
+            }
+          }}
+          placeholder="Search chats"
+          type="search"
+          value={search}
+        />
+      </div>
+      {searchQuery ? renderList(results.data, "No chats match") : null}
+      {!searchQuery && pinnedSessions.length > 0 ? (
         <div className="mb-3">
           <p className="sidebar-nav-group-label px-2 text-sm">Pinned</p>
           {pinnedSessions.map(renderSession)}
         </div>
       ) : null}
-      <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
+      <div
+        className="mb-1.5 flex shrink-0 items-center gap-1 px-2"
+        hidden={Boolean(searchQuery)}
+      >
         <button
           aria-expanded={!collapsed}
           className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
@@ -280,29 +370,9 @@ function RecentChats() {
           </Button>
         </div>
       </div>
-      {!collapsed && (
-        <div className="no-scrollbar min-h-0 overflow-y-auto">
-          {isLoading && (
-            <p className="px-3 py-2 text-muted-foreground text-xs">
-              Loading chats…
-            </p>
-          )}
-          {error && (
-            <p
-              className="px-3 py-2 text-muted-foreground text-xs"
-              role="status"
-            >
-              Couldn’t load recent chats.
-            </p>
-          )}
-          {!(isLoading || error) && sessions.length === 0 && (
-            <p className="px-3 py-2 text-muted-foreground text-xs">
-              No recent chats
-            </p>
-          )}
-          {recentSessions.map(renderSession)}
-        </div>
-      )}
+      {searchQuery || collapsed
+        ? null
+        : renderList(recentSessions, "No recent chats")}
       {renameTarget ? (
         <Dialog
           onOpenChange={(open) => {
@@ -330,7 +400,6 @@ function RecentChats() {
                   return;
                 }
                 await updateSession.mutateAsync({
-                  channel: renameTarget.channel,
                   input: { title },
                   profileId,
                   sessionId: renameTarget.id,

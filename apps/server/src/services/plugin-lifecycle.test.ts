@@ -10,7 +10,10 @@ import {
   PLUGIN_MANIFEST_API_VERSION,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { pluginPackage } from "../testing/plugin-package-fixture";
+import {
+  closePluginPackageRegistry,
+  pluginPackage,
+} from "../testing/plugin-package-fixture";
 import {
   PluginHostError,
   PluginService,
@@ -19,6 +22,8 @@ import {
   setPluginLifecycleTestHooks,
 } from "./plugin-service";
 import { WorkerManagerService } from "./worker-manager-service";
+
+afterEach(closePluginPackageRegistry);
 
 const MIGRATION_001 = `
 CREATE TABLE items (

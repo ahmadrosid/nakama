@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import {
   loadComposioSettingsPublic,
   resolveComposioApiKey,
   saveComposioConfig,
+  toComposioSettingsPublic,
 } from "./composio-config";
 
 describe("composio-config", () => {
@@ -29,8 +30,39 @@ describe("composio-config", () => {
   });
 
   test("resolveComposioApiKey reads from file config", () => {
-    expect(resolveComposioApiKey({ apiKey: "ck-file" })).toBe("ck-file");
-    expect(resolveComposioApiKey(null)).toBe("");
+    expect(resolveComposioApiKey({ apiKey: "ck-file" }, {})).toBe("ck-file");
+    expect(resolveComposioApiKey(null, {})).toBe("");
+  });
+
+  test("resolveComposioApiKey reads a mounted secret file", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-composio-secret-"));
+    const secretPath = join(configDir, "api-key");
+    await writeFile(secretPath, "  ck-mounted\n");
+
+    expect(
+      resolveComposioApiKey(
+        { apiKey: "ck-saved" },
+        { COMPOSIO_API_KEY_FILE: secretPath }
+      )
+    ).toBe("ck-mounted");
+    expect(
+      toComposioSettingsPublic(null, { COMPOSIO_API_KEY_FILE: secretPath })
+    ).toEqual({
+      apiKeyMasked: "••••••nted",
+      configured: true,
+    });
+  });
+
+  test("direct Composio API key takes priority over its file", () => {
+    expect(
+      resolveComposioApiKey(
+        { apiKey: "ck-saved" },
+        {
+          COMPOSIO_API_KEY: "ck-direct",
+          COMPOSIO_API_KEY_FILE: "/missing/secret",
+        }
+      )
+    ).toBe("ck-direct");
   });
 
   test("composioOrgUserId namespaces org id", () => {

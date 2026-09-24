@@ -11,11 +11,13 @@ export type PlatformWorkerName =
   | "telegram"
   | "whatsapp"
   | "discord"
+  | "slack"
   | "automation";
 
 export interface WorkerDesiredState {
   automation: boolean;
   discord: boolean;
+  slack: boolean;
   telegram: boolean;
   whatsapp: boolean;
 }
@@ -23,6 +25,7 @@ export interface WorkerDesiredState {
 const DEFAULT_STATE: WorkerDesiredState = {
   automation: true,
   discord: false,
+  slack: false,
   telegram: false,
   whatsapp: false,
 };
@@ -49,6 +52,7 @@ export function parseWorkerDesiredState(raw: string): WorkerDesiredState {
       automation:
         record.automation === undefined ? true : record.automation === true,
       discord: record.discord === true,
+      slack: record.slack === true,
       telegram: record.telegram === true,
       whatsapp: record.whatsapp === true,
     };
@@ -62,7 +66,12 @@ export async function readWorkerDesiredState(
 ): Promise<WorkerDesiredState> {
   if (isChannelOwner(orgId)) {
     const state = { ...DEFAULT_STATE, automation: false };
-    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
       state[platform] =
         (
           await readTextOrNull(

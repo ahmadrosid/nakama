@@ -24,12 +24,22 @@ import {
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type { SendMessageInput } from "@nakama/core/contract";
+import {
+  MAX_DOCUMENT_BYTES,
+  MAX_IMAGE_BYTES,
+  normalizeDocumentMediaType,
+  validateDocumentAttachments,
+  validateImageAttachments,
+} from "@nakama/core/message-content";
 import { pickProfileForOrg } from "@nakama/core/profiles";
 import {
   DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION,
   normalizePairingCode,
 } from "@nakama/core/whatsapp-config";
-import type { WASocket } from "@whiskeysockets/baileys";
+import {
+  downloadContentFromMessage,
+  type WASocket,
+} from "@whiskeysockets/baileys";
 import type { WhatsAppAuthStore } from "./auth-store";
 import {
   maybeSendRequestedWhatsAppArtifactAttachment,
@@ -95,7 +105,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const inbound = normalizeInboundChat(data);
     const { jid, text } = inbound;
 
-    if (!(text && text.trim())) {
+    if (!(text.trim() || inbound.media)) {
       return;
     }
 
@@ -134,7 +144,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           mentionedJids: inbound.mentionedJids,
           quotedParticipant: inbound.quotedParticipant,
           requireMention: requireGroupMention,
-          text: trimmed,
+          text: trimmed || (inbound.media ? "[attachment]" : ""),
         })
       : null;
 
@@ -271,6 +281,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      const mediaInput = inbound.media
+        ? await buildWhatsAppMediaInput(inbound.media)
+        : null;
+      if (mediaInput?.kind === "reject") {
+        await sendText(jid, mediaInput.message);
+        return;
+      }
+
       await handleChatMessage(
         conversationKey,
         jid,
@@ -279,6 +297,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             withQuotedContext(attachUserText, inbound.quotedText),
             isGroup
           ),
+          ...mediaInput?.input,
         },
         attachUserText
       );
@@ -456,7 +475,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       /^\s*(?:(?:please|tolong)\s+)?(?:collect|create|generate|save|buat(?:kan)?|rekap(?:kan)?)\b/i.test(
         attachUserText
       );
-    if (profileId && socket && !createsArtifact) {
+    if (
+      profileId &&
+      socket &&
+      !createsArtifact &&
+      !input.images?.length &&
+      !input.documents?.length
+    ) {
       const attached = await maybeSendRequestedWhatsAppArtifactAttachment({
         attachUserText,
         client,
@@ -770,6 +795,7 @@ function normalizeInboundChat(
     isGroup: data.isGroup ?? false,
     jid: data.jid,
     me: data.me,
+    media: data.media,
     mentionedJids: data.mentionedJids ?? [],
     messageId: data.messageId ?? null,
     quotedParticipant: data.quotedParticipant ?? null,
@@ -778,6 +804,90 @@ function normalizeInboundChat(
     senderJids: data.senderJids ?? [data.senderJid ?? data.jid],
     text: data.text,
   };
+}
+
+async function buildWhatsAppMediaInput(
+  media: NonNullable<WhatsAppInboundChat["media"]>
+): Promise<
+  | { kind: "input"; input: Pick<SendMessageInput, "images" | "documents"> }
+  | { kind: "reject"; message: string }
+> {
+  const filename =
+    media.kind === "document"
+      ? media.message.fileName?.trim() || "document"
+      : "";
+  const declaredType = media.message.mimetype?.trim().toLowerCase() || "";
+  const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  const imageTypeFromName = (
+    {
+      ".jpeg": "image/jpeg",
+      ".jpg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+    } as Record<string, string>
+  )[extension];
+  const imageType =
+    declaredType === "image/jpg"
+      ? "image/jpeg"
+      : declaredType && declaredType !== "application/octet-stream"
+        ? declaredType
+        : imageTypeFromName || (media.kind === "image" ? "image/jpeg" : "");
+  const isImage = media.kind === "image" || imageType.startsWith("image/");
+  const mediaType = isImage
+    ? imageType
+    : normalizeDocumentMediaType(declaredType, filename);
+  if (
+    isImage
+      ? !["image/jpeg", "image/png", "image/webp"].includes(mediaType)
+      : mediaType !== "application/pdf"
+  ) {
+    return {
+      kind: "reject",
+      message:
+        "Unsupported file type. Send a JPG, PNG, WebP, or PDF (max 5 MB).",
+    };
+  }
+
+  const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
+  if (Number(media.message.fileLength ?? 0) > maxBytes) {
+    return {
+      kind: "reject",
+      message: "File is too large. Maximum size is 5 MB.",
+    };
+  }
+
+  try {
+    const stream = await downloadContentFromMessage(media.message, media.kind);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of stream) {
+      size += chunk.length;
+      if (size > maxBytes) {
+        stream.destroy();
+        return {
+          kind: "reject",
+          message: "File is too large. Maximum size is 5 MB.",
+        };
+      }
+      chunks.push(chunk);
+    }
+
+    const data = Buffer.concat(chunks).toString("base64");
+    if (isImage) {
+      const images = [{ data, mediaType }];
+      validateImageAttachments(images);
+      return { input: { images }, kind: "input" };
+    }
+
+    const documents = [{ data, filename, mediaType }];
+    validateDocumentAttachments(documents);
+    return { input: { documents }, kind: "input" };
+  } catch {
+    return {
+      kind: "reject",
+      message: "Could not download that file. Try again.",
+    };
+  }
 }
 
 function withQuotedContext(message: string, quotedText: string | null): string {

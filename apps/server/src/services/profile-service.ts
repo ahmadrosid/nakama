@@ -456,7 +456,12 @@ export class ProfileService {
     request: MoveProfileRequest
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
-    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
       if (
         (await listChannelOwners(platform)).some(
           (owner) => owner.orgId === orgId && owner.profileId === profileId

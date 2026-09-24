@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Dirent, Mode } from "node:fs";
 import {
   access,
@@ -79,7 +80,7 @@ export async function writeTextFile(
     preserveMode = (await stat(path)).mode & 0o777;
   }
 
-  const tempPath = `${path}.tmp`;
+  const tempPath = `${path}.${randomUUID()}.tmp`;
   await writeFile(tempPath, content, {
     encoding: "utf8",
     mode: preserveMode ?? mode,

@@ -392,40 +392,9 @@ export class McpService {
     serverId: string,
     options: McpConnectOptions = {}
   ): Promise<McpServerResponse> {
-    const server = await this.requireServer(serverId);
-
-    if (!this.manager.isConnected(serverId, server.transport)) {
-      return this.connectServer(serverId, options);
-    }
-
-    try {
-      const cachedTools = await this.manager.listTools(
-        serverId,
-        server.transport
-      );
-      const updated: StoredMcpServerRecord = {
-        ...server,
-        cachedTools,
-        lastError: null,
-        status: "connected",
-        updatedAt: new Date().toISOString(),
-      };
-
-      await this.db.upsertMcpServer(updated);
-
-      return { server: toMcpServerDetail(updated) };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const updated: StoredMcpServerRecord = {
-        ...server,
-        lastError: message,
-        status: "error",
-        updatedAt: new Date().toISOString(),
-      };
-
-      await this.db.upsertMcpServer(updated);
-      throw new Error(message);
-    }
+    await this.requireServer(serverId);
+    await this.manager.disconnect(serverId);
+    return this.connectServer(serverId, options);
   }
 
   async testServer(

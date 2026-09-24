@@ -129,8 +129,13 @@ function StatusDashboard({
   canManageWorkers: boolean;
 }) {
   const services = useMemo(() => buildServiceColumns(status), [status]);
-  const { automationWorker, telegramWorker, whatsappWorker, discordWorker } =
-    status;
+  const {
+    automationWorker,
+    telegramWorker,
+    whatsappWorker,
+    discordWorker,
+    slackWorker,
+  } = status;
 
   const workerByTitle: Record<
     string,
@@ -145,6 +150,7 @@ function StatusDashboard({
   > = {
     Automation: { worker: automationWorker, workerName: "automation" },
     Discord: { worker: discordWorker, workerName: "discord" },
+    Slack: { worker: slackWorker, workerName: "slack" },
     Telegram: { worker: telegramWorker, workerName: "telegram" },
     WhatsApp: {
       footerLink:

@@ -155,6 +155,22 @@ export function SkillDetailContent({
         ) : null}
       </header>
 
+      {skill.scriptIssues.length > 0 ? (
+        <section
+          aria-label="Script issues"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm"
+        >
+          <h2 className="font-medium text-destructive">Script issues</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {skill.scriptIssues.map((issue, index) => (
+              <li key={`${issue.path}-${index}`}>
+                <code className="break-all">{issue.path}</code>: {issue.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {editing ? (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="flex shrink-0 items-center justify-between gap-2 border-border border-b px-3 py-2">

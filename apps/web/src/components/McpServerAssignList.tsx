@@ -8,8 +8,19 @@ import {
   CommandItem,
   CommandList,
 } from "@nakama/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
-import { Plug01Icon } from "hugeicons-react";
+import {
+  Loading03Icon as LoaderIcon,
+  MoreHorizontalIcon,
+} from "hugeicons-react";
+import { useSyncMcpServerMutation } from "@/hooks/use-resource-mutations";
+import { formatError } from "@/lib/client";
 
 export function McpServerAssignList({
   className,
@@ -24,6 +35,9 @@ export function McpServerAssignList({
   onTestConnection?: (server: McpServerSummary) => void;
   servers: McpServerSummary[];
 }) {
+  const sync = useSyncMcpServerMutation();
+  const busy = disabled || sync.isPending;
+
   return (
     <Command
       className={cn(
@@ -31,8 +45,15 @@ export function McpServerAssignList({
         className
       )}
     >
-      <CommandInput placeholder="Search MCP servers…" />
-      <CommandList className="max-h-none min-h-0 flex-1 overflow-hidden rounded-md border border-border p-1">
+      {servers.length > 5 ? (
+        <CommandInput placeholder="Search MCP servers…" />
+      ) : null}
+      {sync.error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formatError(sync.error)}
+        </p>
+      ) : null}
+      <CommandList className="max-h-72 min-h-0 overflow-y-auto rounded-md border border-border p-1">
         <CommandEmpty className="text-pretty">
           No MCP servers found.
         </CommandEmpty>
@@ -40,11 +61,8 @@ export function McpServerAssignList({
           {servers.map((server) => (
             <CommandItem
               className="rounded-sm! py-2 [&>svg]:hidden"
-              disabled={disabled}
+              disabled={busy}
               key={server.id}
-              onSelect={() => {
-                onAssign(server.id);
-              }}
               value={server.name}
             >
               <div className="min-w-0 flex-1">
@@ -56,20 +74,54 @@ export function McpServerAssignList({
                   {server.toolCount === 1 ? "" : "s"}
                 </p>
               </div>
-              {onTestConnection ? (
-                <Button
-                  aria-label={`Test connection for ${server.name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onTestConnection(server);
-                  }}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
+              <Button
+                aria-label={`Add ${server.name}`}
+                disabled={busy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAssign(server.id);
+                }}
+                onKeyDown={(event) => event.stopPropagation()}
+                size="sm"
+                type="button"
+              >
+                Add
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-busy={sync.isPending && sync.variables === server.id}
+                  disabled={busy}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  render={
+                    <Button
+                      aria-label={`More actions for ${server.name}`}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    />
+                  }
                 >
-                  <Plug01Icon aria-hidden className="size-4" />
-                </Button>
-              ) : null}
+                  {sync.isPending && sync.variables === server.id ? (
+                    <LoaderIcon
+                      aria-hidden
+                      className="size-4 motion-safe:animate-spin"
+                    />
+                  ) : (
+                    <MoreHorizontalIcon aria-hidden className="size-4" />
+                  )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => sync.mutate(server.id)}>
+                    Sync tools
+                  </DropdownMenuItem>
+                  {onTestConnection ? (
+                    <DropdownMenuItem onClick={() => onTestConnection(server)}>
+                      Test connection
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CommandItem>
           ))}
         </CommandGroup>

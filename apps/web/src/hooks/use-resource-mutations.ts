@@ -1,11 +1,10 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type {
-  AgentChannel,
   CreateProfileRequest,
   DocumentAttachment,
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
-  SessionSummary,
+  ListSessionsResponse,
   SoulStackFiles,
   UpdateProfileRequest,
   UpdateSessionRequest,
@@ -13,18 +12,19 @@ import type {
   WorkspaceEntry,
 } from "@nakama/core/contract";
 import {
+  type InfiniteData,
+  useInfiniteQuery,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRunningTurnsStore } from "@/context/running-turns-store";
 import { useAuth } from "@/context/use-auth";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { sessionListPollInterval } from "@/lib/session-list";
+import { sessionListPollInterval, withFirstPage } from "@/lib/session-list";
 
 const EMPTY_USER_CONTEXT: UserContextStatusResponse = {
   active: false,
@@ -112,14 +112,10 @@ export function useUpdateSessionMutation() {
       profileId: string;
       sessionId: string;
       input: UpdateSessionRequest;
-      channel?: AgentChannel;
     }) => client.updateSession(sessionId, input),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(
-          variables.profileId,
-          variables.channel ?? "web"
-        ),
+        queryKey: queryKeys.sessions(variables.profileId),
       });
     },
   });
@@ -510,51 +506,127 @@ export function useUnassignSkillMutation() {
   });
 }
 
-export function useHistorySessionsQuery(profileId: string) {
+const SESSION_PAGE_SIZE = 30;
+
+function listSessionPage(
+  profileId: string,
+  cursor: string | null,
+  search?: string
+) {
+  return client.listSessions(profileId, HISTORY_SESSION_CHANNELS, {
+    cursor,
+    limit: SESSION_PAGE_SIZE,
+    query: search || undefined,
+  });
+}
+
+/**
+ * Every history channel as one list, a page at a time, newest first. A
+ * `search` narrows it on the server to chats whose title or messages match;
+ * an empty one idles, so clearing a search does not refetch the plain list.
+ */
+export function useHistorySessionsQuery(profileId: string, search?: string) {
+  const queryClient = useQueryClient();
   const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
-  // Turns are only ever started from the web chat page, so the other channels
-  // have no reason to poll along with it.
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
+  const enabled = Boolean(profileId) && search !== "";
+  const queryKey = search
+    ? queryKeys.sessionSearch(profileId, search)
+    : queryKeys.sessions(profileId);
 
-  const results = useQueries({
-    queries: HISTORY_SESSION_CHANNELS.map((channel) => ({
-      enabled: Boolean(profileId),
-      queryFn: async () =>
-        (await client.listSessions(profileId, channel)).sessions,
-      queryKey: queryKeys.sessions(profileId, channel),
-      // A title is written after the turn returns and a turn ends without
-      // telling anyone, so the list has to look again. Gated per channel, so a
-      // quiet list makes no requests at all.
-      refetchInterval: (query: { state: { data?: SessionSummary[] } }) =>
-        sessionListPollInterval(query.state.data, {
-          localTurn: channel === "web" && localTurn,
-        }),
-    })),
+  const query = useInfiniteQuery({
+    enabled,
+    getNextPageParam: (lastPage: ListSessionsResponse) =>
+      lastPage.nextCursor ?? undefined,
+    initialPageParam: null as string | null,
+    // Typing on keeps the previous results up; a first search starts empty.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === "search" ? previous : undefined,
+    queryFn: ({ pageParam }) => listSessionPage(profileId, pageParam, search),
+    queryKey,
   });
 
-  const sessions = results
-    .flatMap((result) => result.data ?? [])
+  // A title is written after the turn returns and a turn ends without telling
+  // anyone, so the list has to look again. Both show up on the first page, with
+  // the newest chats, so a poll reads only that page and costs the same however
+  // far the list was scrolled. Gated, so a quiet list makes no requests at all.
+  const pollInterval = sessionListPollInterval(query.data?.pages[0]?.sessions, {
+    localTurn,
+  });
+  useQuery({
+    enabled: enabled && pollInterval !== false,
+    queryFn: async () => {
+      const head = await listSessionPage(profileId, null, search);
+      const data =
+        queryClient.getQueryData<
+          InfiniteData<ListSessionsResponse, string | null>
+        >(queryKey);
+      if (!data) {
+        return null;
+      }
+      const next = withFirstPage(data, head);
+      if (next) {
+        queryClient.setQueryData(queryKey, next);
+      } else {
+        await queryClient.refetchQueries({ exact: true, queryKey });
+      }
+      return null;
+    },
+    queryKey: queryKeys.sessionListHead(profileId, search),
+    refetchInterval: pollInterval,
+  });
+
+  const { fetchNextPage, refetch } = query;
+  const loadNextPage = useCallback(async () => {
+    const { data } = await fetchNextPage();
+    // Chats moved across the cursor between the two requests, so the pages
+    // no longer join up: load them again from the first one.
+    if (data?.pages.at(-1)?.stale) {
+      await refetch();
+    }
+  }, [fetchNextPage, refetch]);
+
+  const seen = new Set<string>();
+  const sessions = (query.data?.pages ?? [])
+    .flatMap((page) => page.sessions)
+    // A chat that moved between two page loads can come back on both.
+    .filter((session) => {
+      if (seen.has(session.id)) {
+        return false;
+      }
+      seen.add(session.id);
+      return true;
+    })
     // The server answers from its own registry, which this tab can be ahead of
     // for the moment between starting a turn and the list catching up.
     .map((session) =>
       session.active || !runningSessionIdSet.has(session.id)
         ? session
         : { ...session, active: true }
-    )
-    .sort(
-      (left, right) =>
-        Number(right.pinned) - Number(left.pinned) ||
-        right.updatedAt.localeCompare(left.updatedAt)
     );
 
   return {
     data: sessions,
-    error: results.find((result) => result.error)?.error ?? null,
-    isFetching: results.some((result) => result.isFetching),
-    isLoading: results.some((result) => result.isLoading),
-    refetch: () => Promise.all(results.map((result) => result.refetch())),
+    error: query.error,
+    fetchNextPage: loadNextPage,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isLoading: query.isLoading,
   };
+}
+
+/** One chat's summary, for a chat on a page the list has not loaded. */
+export function useSessionSummaryQuery(
+  profileId: string,
+  sessionId: string | null
+) {
+  return useQuery({
+    enabled: Boolean(sessionId),
+    queryFn: () => client.getSession(sessionId!),
+    queryKey: queryKeys.sessionSummary(profileId, sessionId ?? ""),
+    retry: false,
+  });
 }
 
 export function useSoulStatusQuery(profileId: string | null) {
@@ -761,14 +833,10 @@ export function useBranchSessionMutation() {
       profileId: string;
       sessionId: string;
       messageIndex: number;
-      channel?: AgentChannel;
     }) => client.branchSession(sessionId, { messageIndex }),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(
-          variables.profileId,
-          variables.channel ?? "web"
-        ),
+        queryKey: queryKeys.sessions(variables.profileId),
       });
     },
   });

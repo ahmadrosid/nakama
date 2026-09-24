@@ -551,6 +551,7 @@ export function buildCreateProviderRequest(options: {
     ([
       "openrouter",
       "xai_oauth",
+      "chatgpt",
       "cerebras",
       "fireworks",
       "ollama",

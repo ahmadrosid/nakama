@@ -1,11 +1,23 @@
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
+import { BrowserSessionsCard } from "@/components/settings/BrowserSessionsCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
+import { MfaSettingsCard } from "@/components/settings/MfaSettingsCard";
+import { PlatformMfaSettingsCard } from "@/components/settings/PlatformMfaSettingsCard";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
 import { TranscriptionSettingsCard } from "@/components/settings/TranscriptionSettingsCard";
 import { VisionSettingsCard } from "@/components/settings/VisionSettingsCard";
@@ -19,13 +31,20 @@ import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
+import { isDemoLoginHost } from "@/lib/demo-login";
 import { getBrowserTimezone } from "@/lib/timezones";
 
 export function SettingsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { user, activeOrg } = useAuth();
   const { health } = useAppContext();
+  const isDemo = isDemoLoginHost();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const isOrgAdmin = activeOrg?.role === "admin";
+  const [mfaRequiredNotice, setMfaRequiredNotice] = useState(
+    () => new URLSearchParams(location.search).get("mfa") === "required"
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const [timezone, setTimezone] = useState(() => getBrowserTimezone());
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
@@ -56,109 +75,154 @@ export function SettingsPage() {
   }, [saveTimezoneMutation, timezone]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <Card className="w-full shadow-none">
-        <CardContent className="divide-y divide-border p-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-            <p className="font-medium text-foreground text-sm">Appearance</p>
-            <ThemeToggle />
-          </div>
-
-          <UserContextSettings />
-
-          <div
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-            id="chat-usage-setting"
-          >
-            <p className="font-medium text-foreground text-sm">
-              Token usage in chat
-            </p>
-            <Switch
-              aria-label="Token usage in chat"
-              checked={chatUsage.visible}
-              onCheckedChange={chatUsage.toggle}
-            />
-          </div>
-
-          {version ? (
+    <>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setMfaRequiredNotice(false);
+            navigate("/settings", { replace: true });
+          }
+        }}
+        open={mfaRequiredNotice}
+      >
+        {mfaRequiredNotice ? (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Multi-factor authentication required</DialogTitle>
+              <DialogDescription>
+                Your platform requires multi-factor authentication. Set up an
+                authenticator app below to continue using Nakama.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  setMfaRequiredNotice(false);
+                  navigate("/settings", { replace: true });
+                }}
+                type="button"
+              >
+                Set up authentication
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        ) : null}
+      </Dialog>
+      <div className="mx-auto max-w-3xl space-y-8">
+        <Card className="w-full shadow-none">
+          <CardContent className="divide-y divide-border p-0">
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <p className="font-medium text-foreground text-sm">Version</p>
-              <p className="font-mono text-muted-foreground text-sm tabular-nums">
-                {version}
+              <p className="font-medium text-foreground text-sm">Appearance</p>
+              <ThemeToggle />
+            </div>
+
+            <UserContextSettings />
+
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+              id="chat-usage-setting"
+            >
+              <p className="font-medium text-foreground text-sm">
+                Token usage in chat
               </p>
+              <Switch
+                aria-label="Token usage in chat"
+                checked={chatUsage.visible}
+                onCheckedChange={chatUsage.toggle}
+              />
             </div>
-          ) : null}
 
-          {isPlatformAdmin ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="font-medium text-foreground text-sm">Timezone</p>
-                {timezoneHint ? (
-                  <p
-                    className="text-emerald-700 text-xs dark:text-emerald-300"
-                    role="status"
-                  >
-                    {timezoneHint}
+            {version ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <p className="font-medium text-foreground text-sm">Version</p>
+                <p className="font-mono text-muted-foreground text-sm tabular-nums">
+                  {version}
+                </p>
+              </div>
+            ) : null}
+
+            {isPlatformAdmin ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="font-medium text-foreground text-sm">
+                    Timezone
                   </p>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <TimezoneSelect
-                  className="w-44 min-w-0 sm:w-52"
-                  disabled={saveTimezoneMutation.isPending}
-                  emptyLabel="Select timezone"
-                  id="timezone"
-                  onValueChange={(nextTimezone) => {
-                    if (nextTimezone) {
-                      setTimezone(nextTimezone);
-                      setTimezoneHint(null);
+                  {timezoneHint ? (
+                    <p
+                      className="text-emerald-700 text-xs dark:text-emerald-300"
+                      role="status"
+                    >
+                      {timezoneHint}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  <TimezoneSelect
+                    className="w-44 min-w-0 sm:w-52"
+                    disabled={saveTimezoneMutation.isPending}
+                    emptyLabel="Select timezone"
+                    id="timezone"
+                    onValueChange={(nextTimezone) => {
+                      if (nextTimezone) {
+                        setTimezone(nextTimezone);
+                        setTimezoneHint(null);
+                      }
+                    }}
+                    value={timezone}
+                  />
+                  <Button
+                    disabled={
+                      saveTimezoneMutation.isPending || !timezone.trim()
                     }
-                  }}
-                  value={timezone}
-                />
-                <Button
-                  disabled={saveTimezoneMutation.isPending || !timezone.trim()}
-                  onClick={handleSaveTimezone}
-                  size="sm"
-                  type="button"
-                >
-                  {saveTimezoneMutation.isPending ? (
-                    <>
-                      <Spinner className="mr-2" />
-                      Saving…
-                    </>
-                  ) : (
-                    "Save"
-                  )}
-                </Button>
+                    onClick={handleSaveTimezone}
+                    size="sm"
+                    type="button"
+                  >
+                    {saveTimezoneMutation.isPending ? (
+                      <>
+                        <Spinner className="mr-2" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {isOrgAdmin ? <WebPublicUrlSettingsRow /> : null}
-        </CardContent>
-      </Card>
-
-      {formError ? (
-        <p className="text-destructive text-sm" role="alert">
-          {formError}
-        </p>
-      ) : null}
-
-      {isOrgAdmin ? (
-        <section id="local-token">
-          <LocalAuthTokenCard />
-        </section>
-      ) : null}
-
-      {isPlatformAdmin ? (
-        <Card className="w-full overflow-hidden shadow-none">
-          <CardContent className="p-0">
-            <DataPortabilityPanel />
+            {isOrgAdmin ? <WebPublicUrlSettingsRow /> : null}
           </CardContent>
         </Card>
-      ) : null}
-    </div>
+
+        {formError ? (
+          <p className="text-destructive text-sm" role="alert">
+            {formError}
+          </p>
+        ) : null}
+
+        <section id="sessions">
+          <BrowserSessionsCard />
+        </section>
+
+        {isOrgAdmin ? (
+          <section id="local-token">
+            <LocalAuthTokenCard />
+          </section>
+        ) : null}
+
+        <MfaSettingsCard />
+        {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
+
+        {isPlatformAdmin ? (
+          <Card className="w-full overflow-hidden shadow-none">
+            <CardContent className="p-0">
+              <DataPortabilityPanel />
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+    </>
   );
 }
 

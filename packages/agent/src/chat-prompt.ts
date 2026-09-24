@@ -20,6 +20,14 @@ const MESSAGING_CHANNEL_PROMPT = {
     label: "Discord",
     supportsGroupAudience: true,
   },
+  slack: {
+    format: [
+      "Write in normal Markdown; Slack renders **bold**, *italic*, ~~strikethrough~~, links, lists, inline code, and fenced code blocks.",
+      "Avoid tables and very long code blocks; keep messages compact for chat.",
+    ],
+    label: "Slack",
+    supportsGroupAudience: true,
+  },
   subagent: null,
   task: null,
   telegram: {

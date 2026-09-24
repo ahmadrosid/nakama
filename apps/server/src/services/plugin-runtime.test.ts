@@ -12,13 +12,18 @@ import {
   PLUGIN_MANIFEST_API_VERSION,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { pluginPackage } from "../testing/plugin-package-fixture";
+import {
+  closePluginPackageRegistry,
+  pluginPackage,
+} from "../testing/plugin-package-fixture";
 import {
   PluginHostError,
   PluginService,
   resetPluginAdmissionForTests,
   vacuumPluginDatabaseInto,
 } from "./plugin-service";
+
+afterEach(closePluginPackageRegistry);
 
 const echoJs = `
 export async function run(input, context) {

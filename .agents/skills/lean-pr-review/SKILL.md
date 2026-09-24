@@ -1,17 +1,15 @@
 ---
 name: lean-pr-review
 description: >-
-  Review a GitHub PR for unnecessary complexity. For PRs authored by someone
-  else, post short human-sounding inline review comments via gh. For PRs
-  authored by the authenticated gh user ("me"), apply the cuts on the PR branch
-  and push — do not post review comments. Use when the user asks for a lean PR
-  review, /lean-pr-review, /lean-review, or wants over-engineering feedback on a
-  PR.
+  Review a GitHub PR for major issues first, then unnecessary complexity.
+  Comment on someone else's PR; fix and push findings on your own PR.
+  Use for a lean PR review, /lean-pr-review, /lean-review, or over-engineering
+  feedback on a PR.
 ---
 
 # Lean PR review
 
-Review a GitHub PR for over-engineering. Never mention internal frameworks,
+Review a GitHub PR for major issues, then over-engineering. Never mention internal frameworks,
 scoring tags, or this skill by name in comments or commit messages.
 
 ## Input
@@ -36,16 +34,20 @@ If the user explicitly says “comment only” or “apply”, that overrides th
 
 ## Steps
 
-1. Fetch the PR with `gh` (REST preferred; always outside the sandbox —
-   `required_permissions: ["all"]`):
+1. Fetch the PR with `gh` (REST preferred):
    - Metadata: title, body, base/head, author login, additions/deletions, changed files
    - Full diff for every changed file
    - Head SHA (needed to attach inline comments, or to verify before/after apply)
    - Decide mode (comment vs apply) from **Mode** above
 
-2. Review **only** for unnecessary complexity. Out of scope: correctness bugs,
-   security, performance, style nits, missing tests as a quality complaint.
-   A single smoke / assert-based self-check is fine — never ask to delete it.
+2. First trace the changed behavior and its callers. Find concrete major issues:
+   broken behavior, security or data exposure, data loss, or serious performance
+   regressions. Report only issues supported by a clear failure scenario. Do not
+   invent risks or flag style nits and minor test gaps. Fix or comment on these
+   findings before any complexity findings.
+
+3. Then review for unnecessary complexity. A single smoke / assert-based
+   self-check is fine — never ask to delete it.
 
    Ask: what can get shorter or go away without losing behavior?
 
@@ -57,22 +59,23 @@ If the user explicitly says “comment only” or “apply”, that overrides th
    - Tests that re-prove the same property twice (e.g. two phases inside one
      try/finally when one hang + one failure already covers the lock)
 
-   If nothing to cut:
+   If neither pass finds anything:
    - **Comment mode:** post “LGTM” as a review comment and return “LGTM” with the review URL in chat.
-   - **Apply mode:** reply “LGTM — nothing to cut.” in chat only. Do not post on the PR.
+   - **Apply mode:** reply “LGTM — no major issues or lean cuts.” in chat only. Do not post on the PR.
    - Stop. Do not invent nits.
 
-3. Draft findings privately as:
-   `file:Lline: what to cut. what replaces it.`
+4. Draft findings privately as `file:Lline: problem, impact, and concrete fix`
+   for major issues, or `file:Lline: what to cut. what replaces it.` for lean cuts.
 
-4. **Branch on mode:**
+5. **Branch on mode:**
 
 ### Comment mode (not my PR)
 
 Rewrite each finding as a normal human review comment:
 - Direct, concrete, kind
 - Point at the specific code
-- Say what to drop / inline and why the remaining coverage is enough
+- For major issues, describe the failure and the fix. For lean cuts, say what
+  to drop / inline and why the remaining coverage is enough.
 - No jargon labels (`yagni:`, `delete:`, `shrink:`), no scoring, no
   “net: -N lines”
 - No corporate filler, no “have you considered…”, no praise sandwiches
@@ -89,7 +92,7 @@ gh api repos/OWNER/REPO/pulls/N/reviews --method POST --input review.json
 {
   "commit_id": "<head_sha>",
   "event": "COMMENT",
-  "body": "<1–2 sentence overall: vibe + that the core change is fine if it is>",
+  "body": "<1–2 sentence overall summary of the findings>",
   "comments": [
     {
       "path": "path/to/file.ts",
@@ -102,24 +105,25 @@ gh api repos/OWNER/REPO/pulls/N/reviews --method POST --input review.json
 ```
 
 - Use `side: "RIGHT"` for lines in the new version of the file.
-- Prefer 1–3 inline comments. Merge related points onto one anchor line.
+- Prefer 1–3 inline comments. Prioritize major issues, then lean cuts. Merge
+  related points onto one anchor line.
 - Overall body stays short. Put the actionable detail on the lines.
 - Use `event: "COMMENT"` unless the user asked for approve / request changes.
-- After posting findings, return only the review URL. If there is nothing to cut, return “LGTM” with the review URL.
+- After posting findings, return only the review URL. If neither pass finds
+  anything, return “LGTM” with the review URL.
 
 ### Apply mode (my PR)
 
 Do **not** post a GitHub review or inline comments.
 
-1. Check out the PR head in an isolated worktree when practical (see
-   `ce-worktree` / repo worktree conventions): fetch
+1. Check out the PR head in an isolated worktree when practical: fetch
    `origin pull/N/head:pr-N` (or use the PR head branch) and work there so the
    user’s other checkout stays untouched.
-2. Apply each finding as a minimal code edit — same cuts you would have asked
-   for in comments. No drive-by refactors beyond the findings.
+2. Fix verified major issues first, then apply lean cuts as minimal code edits.
+   No drive-by refactors beyond the findings.
 3. Run the smallest relevant tests for the touched files.
-4. Commit on the PR branch (clear message focused on why — e.g. flatten /
-   drop redundant X from lean pass). Follow the user’s git commit rules.
+4. Commit on the PR branch with a clear message focused on the fixes. Follow
+   the user’s git commit rules.
 5. Push to the PR head branch (`git push origin HEAD:<head_ref>` or
    equivalent).
 6. Return a short chat summary: what changed + PR URL. No review comments on
@@ -148,7 +152,8 @@ Bad:
 ## Boundaries
 
 - **Comment mode:** do not apply code fixes unless the user asks.
-- **Apply mode:** apply only the lean cuts; do not post review comments.
+- **Apply mode:** apply only verified major fixes and lean cuts; do not post
+  review comments.
 - Do not rewrite the PR description.
 - Do not mention internal review frameworks, skills, or scoring in comments
   or commit messages.

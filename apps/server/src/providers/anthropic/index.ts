@@ -101,13 +101,22 @@ export function createAnthropicProvider(
         : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
 
       return withAnthropicError(async () => {
-        const message = await client.messages.create({
-          max_tokens: 2048,
-          messages: [{ content: input.prompt, role: "user" }],
-          model,
-          system,
-          ...buildAnthropicThinkingRequest(undefined, model),
-        });
+        const message = await client.messages.create(
+          {
+            max_tokens: 2048,
+            messages: [{ content: input.prompt, role: "user" }],
+            model,
+            system,
+            ...buildAnthropicThinkingRequest(undefined, model),
+          },
+          model === "claude-opus-5-5"
+            ? {
+                headers: {
+                  "anthropic-beta": "thinking-binding-controls-2026-08-01",
+                },
+              }
+            : undefined
+        );
 
         const content = message.content
           .filter((block) => block.type === "text")

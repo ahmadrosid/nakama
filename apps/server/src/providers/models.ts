@@ -101,6 +101,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
   },
   {
+    contextWindow: 1_000_000,
+    id: "claude-opus-5-5",
+    inputPerMillionUsd: 4,
+    maxOutputTokens: 128_000,
+    name: "Opus 5.5",
+    outputPerMillionUsd: 20,
+    provider: "anthropic",
+    supportsThinking: true,
+  },
+  {
     contextWindow: 200_000,
     id: "claude-haiku-4-5-20251001",
     inputPerMillionUsd: 1,
@@ -111,7 +121,37 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
   },
   // OpenAI API limits and base text prices: https://developers.openai.com/api/docs/models
-  // Luna, GPT-5.5 and GPT-5.4 charge more above 272k input tokens.
+  // GPT-6, Luna, GPT-5.5 and GPT-5.4 charge more above 272k input tokens.
+  {
+    contextWindow: 1_050_000,
+    id: "gpt-6-sol",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "GPT-6 Sol",
+    outputPerMillionUsd: 10,
+    provider: "openai",
+    supportsThinking: true,
+  },
+  {
+    contextWindow: 1_050_000,
+    id: "gpt-6-luna",
+    inputPerMillionUsd: 0.1,
+    maxOutputTokens: 128_000,
+    name: "GPT-6 Luna",
+    outputPerMillionUsd: 0.5,
+    provider: "openai",
+    supportsThinking: true,
+  },
+  {
+    contextWindow: 1_050_000,
+    id: "gpt-6-astra",
+    inputPerMillionUsd: 10,
+    maxOutputTokens: 128_000,
+    name: "GPT-6 Astra",
+    outputPerMillionUsd: 50,
+    provider: "openai",
+    supportsThinking: true,
+  },
   {
     contextWindow: 1_050_000,
     id: "gpt-5.6-luna",

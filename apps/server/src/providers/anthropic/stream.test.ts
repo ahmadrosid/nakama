@@ -22,6 +22,35 @@ function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe("Anthropic provider streaming", () => {
+  test("sends Opus 5.5 binding controls on streamed requests", async () => {
+    const provider = createAnthropicProvider({
+      apiKey: "sk-ant-test",
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new Headers(init?.headers).get("anthropic-beta")).toBe(
+          "thinking-binding-controls-2026-08-01"
+        );
+        expect(JSON.parse(String(init?.body)).thinking).toEqual({
+          block_binding: { prefix_mismatch_behavior: "drop_block" },
+          type: "adaptive",
+        });
+        return new Response(
+          streamFromChunks([
+            'event: message_start\r\ndata:{"type":"message_start","message":{"usage":{"input_tokens":4}}}\r\n\r\n',
+            'event: content_block_start\r\ndata:{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"OK"}}\r\n\r\n',
+            'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}\r\n\r\n',
+          ]),
+          { headers: { "Content-Type": "text/event-stream" } }
+        );
+      }) as typeof fetch,
+      model: "claude-opus-5-5",
+    });
+    const result = await provider.streamChat(
+      { messages: [{ content: "Hello", role: "user" }], system: "Be helpful." },
+      { onChunk: () => undefined }
+    );
+    expect(result.content).toBe("OK");
+  });
+
   test("streams text deltas", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe("https://api.anthropic.com/v1/messages");

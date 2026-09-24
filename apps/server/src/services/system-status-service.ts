@@ -17,6 +17,7 @@ import {
   type ChannelConfigScope,
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
+import { getSlackWorkerStatus } from "@nakama/core/slack-worker";
 import type { DatabaseAdapter } from "@nakama/db";
 import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
@@ -52,6 +53,15 @@ export class SystemStatusService {
       this.resolveWorkerStatus("whatsapp", statuses.whatsapp, orgId),
       this.resolveWorkerStatus("discord", statuses.discord, orgId),
     ]);
+    // Typed on its own so SlackWorkerStatus stays exact; the shared helper
+    // returns a union of every channel's status shape.
+    const slackProcess = statuses.slack;
+    const slackStatus = {
+      ...(await getSlackWorkerStatus(orgId)),
+      ...(isChannelOwner(orgId) && slackProcess?.managed
+        ? { process: slackProcess, running: slackProcess.status === "online" }
+        : {}),
+    };
 
     return {
       automationWorker: {
@@ -77,6 +87,7 @@ export class SystemStatusService {
         ? await this.mcpService.getStatusSummary()
         : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
       server: await this.getServerStatus(),
+      slackWorker: slackStatus,
       telegramWorker: telegramStatus,
       whatsappWorker: whatsappStatus,
     };

@@ -18,6 +18,7 @@
     "telegram",
     "whatsapp",
     "discord",
+    "slack",
     "---Concepts---",
     "multi-tenancy",
     "org-memory",

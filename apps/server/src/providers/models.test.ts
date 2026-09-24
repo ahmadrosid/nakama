@@ -15,6 +15,10 @@ describe("isOpenRouterModelSlug", () => {
     expect(isOpenRouterModelSlug("anthropic/claude-sonnet-4-6")).toBe(true);
   });
 
+  test("accepts latest-model aliases", () => {
+    expect(isOpenRouterModelSlug("~google/gemini-flash-latest")).toBe(true);
+  });
+
   test("rejects bare model ids", () => {
     expect(isOpenRouterModelSlug("gpt-5.4")).toBe(false);
   });
@@ -87,6 +91,9 @@ describe("resolveModel", () => {
     // Official model pages: https://developers.openai.com/api/docs/models/<id>
     // Cost expectations use 100k input + 20k output, below long-context tiers.
     for (const [id, context, output, inputPrice, outputPrice, cost] of [
+      ["gpt-6-sol", 1_050_000, 128_000, 2, 10, 0.4],
+      ["gpt-6-luna", 1_050_000, 128_000, 0.1, 0.5, 0.02],
+      ["gpt-6-astra", 1_050_000, 128_000, 10, 50, 2],
       ["gpt-5.6-luna", 1_050_000, 128_000, 0.2, 1.2, 0.044],
       ["gpt-5.5", 1_050_000, 128_000, 5, 30, 1.1],
       ["gpt-5.4", 1_050_000, 128_000, 2.5, 15, 0.55],
@@ -146,6 +153,7 @@ describe("resolveModel", () => {
     for (const [id, contextWindow, maxOutputTokens, input, output] of [
       ["claude-sonnet-5", 1_000_000, 128_000, 2, 10],
       ["claude-opus-5", 1_000_000, 128_000, 5, 25],
+      ["claude-opus-5-5", 1_000_000, 128_000, 4, 20],
       ["claude-haiku-4-5-20251001", 200_000, 64_000, 1, 5],
       ["claude-sonnet-4-6", 1_000_000, 128_000, 3, 15],
       ["claude-opus-4-6", 1_000_000, 128_000, 5, 25],

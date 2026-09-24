@@ -167,6 +167,8 @@ export interface StoredSessionSummaryRecord {
   messageCount: number;
   orgId?: string | null;
   pinned: boolean;
+  /** 1-based place in the list the query returned the row from. */
+  position: number;
   preview: string | null;
   profileId: string;
   title: string | null;
@@ -407,10 +409,22 @@ export interface StoredUserRecord {
   email: string;
   id: string;
   isPlatformAdmin?: boolean;
+  mfaEnabled?: boolean;
+  mfaTotpLastStep?: number | null;
+  mfaTotpPendingSecretEnc?: string | null;
+  mfaTotpSecretEnc?: string | null;
   name?: string | null;
   passwordHash: string;
   phone?: string | null;
   updatedAt: string;
+}
+
+export interface StoredMfaBackupCode {
+  codeHash: string;
+  createdAt: string;
+  id: string;
+  usedAt: string | null;
+  userId: string;
 }
 
 export type { OrgPluginLifecycleState } from "@nakama/core";
@@ -677,6 +691,12 @@ export interface StoredAuditEvent {
 }
 
 export interface DatabaseAdapter {
+  activateUserMfa(
+    id: string,
+    totpSecretEnc: string,
+    lastStep: number,
+    updatedAt: string
+  ): Promise<boolean>;
   appendMessagesForSession(
     sessionId: string,
     messages: StoredSessionMessageRecord[]
@@ -699,6 +719,12 @@ export interface DatabaseAdapter {
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  consumeMfaBackupCode(
+    userId: string,
+    codeHash: string,
+    usedAt: string
+  ): Promise<boolean>;
+  consumeMfaTotpStep(userId: string, step: number): Promise<boolean>;
   consumePasswordResetToken(
     tokenHash: string,
     passwordHash: string,
@@ -727,6 +753,7 @@ export interface DatabaseAdapter {
   createAuditEvent(record: StoredAuditEvent): Promise<void>;
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;
+  createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
 
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
 
@@ -751,6 +778,7 @@ export interface DatabaseAdapter {
   deleteComposioUserConnection(id: string): Promise<boolean>;
   deleteMcpServer(id: string): Promise<boolean>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
+  deleteMfaBackupCodes(userId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
   deleteOrganization(id: string): Promise<boolean>;
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
@@ -976,6 +1004,11 @@ export interface DatabaseAdapter {
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   listAutomationsForOrg(orgId: string): Promise<StoredAutomationRecord[]>;
+  /** Live sessions for one user, newest first. Revoked and expired rows are left out. */
+  listBrowserSessionsForUser(
+    userId: string,
+    now: string
+  ): Promise<StoredBrowserSessionRecord[]>;
 
   listComposioToolkitsForOrg(
     orgId: string
@@ -1030,10 +1063,24 @@ export interface DatabaseAdapter {
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForMcpServer(serverId: string): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
+  /**
+   * Newest first, pinned ahead. `after` is the last row of the previous page;
+   * `sessionId` narrows the list to that one session.
+   */
   listSessionSummaries(
     profileId: string,
-    channel: string,
-    appUserId?: string
+    channels: readonly string[],
+    options?: {
+      after?: Pick<
+        StoredSessionSummaryRecord,
+        "createdAt" | "id" | "pinned" | "updatedAt"
+      >;
+      appUserId?: string;
+      limit?: number;
+      /** Keeps the sessions whose title or user/assistant text contains it. */
+      query?: string;
+      sessionId?: string;
+    }
   ): Promise<StoredSessionSummaryRecord[]>;
 
   listSessions(): Promise<StoredSessionRecord[]>;
@@ -1116,6 +1163,16 @@ export interface DatabaseAdapter {
     sessionTokenHash: string,
     revokedAt: string
   ): Promise<boolean>;
+  /**
+   * One session, and only if it belongs to this user. The owner check is in the
+   * statement rather than the caller, so an id from another account cannot be
+   * revoked by any route that reaches this.
+   */
+  revokeBrowserSessionForUser(
+    id: string,
+    userId: string,
+    revokedAt: string
+  ): Promise<boolean>;
   revokeBrowserSessionsForUser(
     userId: string,
     revokedAt: string
@@ -1126,6 +1183,11 @@ export interface DatabaseAdapter {
     profileId: string,
     path: string,
     pinned: boolean
+  ): Promise<void>;
+  setPendingMfaSecret(
+    id: string,
+    pendingTotpSecretEnc: string,
+    updatedAt: string
   ): Promise<void>;
   setUserContext(
     orgId: string,
@@ -1202,6 +1264,16 @@ export interface DatabaseAdapter {
       reviewedAt: string;
     }
   ): Promise<boolean>;
+  updateUserMfa(
+    id: string,
+    mfa: {
+      enabled: boolean;
+      mfaTotpLastStep: number | null;
+      pendingTotpSecretEnc: string | null;
+      totpSecretEnc: string | null;
+    },
+    updatedAt: string
+  ): Promise<void>;
   updateUserPassword(
     id: string,
     passwordHash: string,

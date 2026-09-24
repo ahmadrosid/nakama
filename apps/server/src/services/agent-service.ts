@@ -69,6 +69,7 @@ import type {
   SaveInlineAttachment,
   SendEmailTestResponse,
   SendErrorTrackingTestResponse,
+  SessionSummary,
   SkillResponse,
   SoulStackResponse,
   SoulStatusResponse,
@@ -211,6 +212,7 @@ import {
   mergeWorkspaceSettings,
   type StoredProfileRecord,
   type StoredSessionRecord,
+  type StoredSessionSummaryRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import {
@@ -2244,35 +2246,62 @@ export class AgentService {
   async listSessions(
     orgId: string,
     profileId: string,
-    channel: AgentChannel,
+    channels: AgentChannel | readonly AgentChannel[],
     access: ChatProfileAccess,
-    appUserId?: string
+    appUserId?: string,
+    page?: { cursor?: string; limit: number },
+    query?: string
   ): Promise<ListSessionsResponse> {
     this.assertChatProfileAccess(
       await this.requireProfile(orgId, profileId),
       access
     );
 
-    const sessions = await this.db.listSessionSummaries(
+    const cursor = page?.cursor ? decodeSessionCursor(page.cursor) : undefined;
+    const rows = await this.db.listSessionSummaries(
       profileId,
-      channel,
-      appUserId
+      typeof channels === "string" ? [channels] : channels,
+      {
+        after: cursor,
+        appUserId,
+        // One row past the page tells whether another page follows.
+        limit: page ? page.limit + 1 : undefined,
+        query,
+      }
     );
 
+    if (!page) {
+      return { sessions: rows.map(toSessionSummary) };
+    }
+
+    const sessions = rows.slice(0, page.limit);
+    const last = sessions.at(-1);
     return {
-      sessions: sessions.map((session) => ({
-        active: sessionTurnRegistry.isActive(session.id),
-        channel: parseAgentChannel(session.channel) ?? channel,
-        createdAt: session.createdAt,
-        id: session.id,
-        messageCount: session.messageCount,
-        pinned: session.pinned,
-        preview: session.preview,
-        profileId: session.profileId,
-        title: session.title,
-        updatedAt: session.updatedAt,
-      })),
+      nextCursor:
+        rows.length > page.limit && last ? encodeSessionCursor(last) : null,
+      sessions: sessions.map(toSessionSummary),
+      // A cursor is issued only with a row after it, and the rows above it keep
+      // their count while none cross it. Anything else means chats moved across
+      // it since the previous page, which then no longer joins this one.
+      stale: cursor ? sessions[0]?.position !== cursor.position + 1 : false,
     };
+  }
+
+  async getSessionSummary(
+    sessionId: string,
+    orgId: string
+  ): Promise<SessionSummary | null> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (!record) {
+      return null;
+    }
+
+    const [session] = await this.db.listSessionSummaries(
+      record.profileId,
+      [record.channel],
+      { sessionId }
+    );
+    return session ? toSessionSummary(session) : null;
   }
 
   scheduleSessionTitleGeneration(sessionId: string): void {
@@ -3691,10 +3720,11 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    options: { render?: "markdown" } = {}
+    options: { appUserId?: string | null; render?: "markdown" } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
+      appUserId: options.appUserId,
       filename,
       orgId,
       profileId,
@@ -4086,7 +4116,10 @@ export class AgentService {
     const includeSkillManageTools =
       !(cognito || appUserId) && SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
-      channel === "telegram" || channel === "whatsapp" || channel === "discord"
+      channel === "telegram" ||
+      channel === "whatsapp" ||
+      channel === "discord" ||
+      channel === "slack"
         ? "member"
         : orgRole;
     let tools = await this.resolveProfileTools(profile, {
@@ -4701,4 +4734,58 @@ function clampSubAgentTimeout(timeoutMs: number | undefined): number {
   }
 
   return Math.min(Math.floor(timeoutMs), MAX_SUB_AGENT_TIMEOUT_MS);
+}
+
+function toSessionSummary(session: StoredSessionSummaryRecord): SessionSummary {
+  return {
+    active: sessionTurnRegistry.isActive(session.id),
+    // The query returns only the channels it was asked for, all of them valid.
+    channel: parseAgentChannel(session.channel) ?? "web",
+    createdAt: session.createdAt,
+    id: session.id,
+    messageCount: session.messageCount,
+    pinned: session.pinned,
+    preview: session.preview,
+    profileId: session.profileId,
+    title: session.title,
+    updatedAt: session.updatedAt,
+  };
+}
+
+type SessionCursor = Pick<
+  StoredSessionSummaryRecord,
+  "createdAt" | "id" | "pinned" | "position" | "updatedAt"
+>;
+
+/** Opaque to clients: the sort key and place of the last row on a page. */
+function encodeSessionCursor(session: SessionCursor): string {
+  return Buffer.from(
+    JSON.stringify([
+      session.pinned,
+      session.updatedAt,
+      session.createdAt,
+      session.id,
+      session.position,
+    ])
+  ).toString("base64url");
+}
+
+function decodeSessionCursor(cursor: string): SessionCursor {
+  try {
+    const [pinned, updatedAt, createdAt, id, position] = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8")
+    );
+    if (
+      typeof pinned === "boolean" &&
+      typeof updatedAt === "string" &&
+      typeof createdAt === "string" &&
+      typeof id === "string" &&
+      Number.isInteger(position)
+    ) {
+      return { createdAt, id, pinned, position, updatedAt };
+    }
+  } catch {
+    // Not base64url JSON, so it is not one of ours either.
+  }
+  throw new NakamaApiError("Invalid cursor.", 400);
 }

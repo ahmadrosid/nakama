@@ -86,6 +86,16 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           runs.push(new TextRun({ ...inherited, break: 1, text: "" }));
           break;
         default: {
+          // A list item wraps its content in a `text` token that carries its
+          // own `tokens`, so the emphasis sits one level down. Reading `text`
+          // here handed Word the markdown source. A table cell arrives with
+          // `strong` at the top level, which is why it looked fixed already.
+          const nested = (token as { tokens?: Token[] }).tokens;
+          if (nested?.length) {
+            runs.push(...toRuns(nested, inherited));
+            break;
+          }
+
           const text =
             "text" in token
               ? String((token as { text: unknown }).text ?? "")
@@ -111,11 +121,20 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     });
   }
 
-  function tableCell(text: string, header: boolean) {
+  function tableCell(cell: Tokens.TableCell, header: boolean) {
+    // Cells carry the same inline tokens as any paragraph, so they go through
+    // toRuns for the same reason: taking `cell.text` hands the model's own
+    // asterisks to Word as literal characters. `bold` rides in as inherited
+    // state, which is how a header stays bold through nested emphasis.
+    const runs = toRuns(cell.tokens, header ? { bold: true } : {});
+
     return new TableCell({
       children: [
         new Paragraph({
-          children: [new TextRun({ bold: header, text })],
+          children:
+            runs.length > 0
+              ? runs
+              : [new TextRun({ bold: header, text: cell.text })],
         }),
       ],
     });
@@ -169,14 +188,12 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
             new Table({
               rows: [
                 new TableRow({
-                  children: table.header.map((cell) =>
-                    tableCell(cell.text, true)
-                  ),
+                  children: table.header.map((cell) => tableCell(cell, true)),
                 }),
                 ...table.rows.map(
                   (row) =>
                     new TableRow({
-                      children: row.map((cell) => tableCell(cell.text, false)),
+                      children: row.map((cell) => tableCell(cell, false)),
                     })
                 ),
               ],

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { resolve } from "node:path";
 import type { OrgRole } from "@nakama/core";
 import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
@@ -11,6 +11,7 @@ import { PluginService } from "../../services/plugin-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
   approvedPluginPackage,
+  closePluginPackageRegistry,
   pluginPackage,
 } from "../../testing/plugin-package-fixture";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -20,6 +21,8 @@ import {
   setupFreshInstallSession,
   type TestBrowserSession,
 } from "../test-session-helpers";
+
+afterEach(closePluginPackageRegistry);
 
 setupTestConfigDir("nakama-plugins-http-");
 

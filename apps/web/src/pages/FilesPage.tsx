@@ -35,11 +35,14 @@ import {
 } from "@/hooks/use-resource-mutations";
 import {
   artifactCodeLanguage,
+  isDocxFile,
+  isLegacyDocFile,
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 import {
+  canPreviewWorkspaceEntry,
   type FilesViewMode,
   getStoredFilesViewMode,
   resolveFilesProfileId,
@@ -541,21 +544,39 @@ function WorkspaceFilePreview({
   const [copied, setCopied] = useState(false);
   const [previewMode, setPreviewMode] =
     useState<ArtifactPreviewMode>("preview");
-  const isMarkdown = isMarkdownArtifactMimeType(entry.mimeType);
+  // A Word file has no text of its own to show, so the server converts it and
+  // it is previewed as the markdown it comes back as.
+  const isWordDocument =
+    isDocxFile(entry.filename, entry.mimeType) ||
+    isLegacyDocFile(entry.filename, entry.mimeType);
+  const isMarkdown =
+    isMarkdownArtifactMimeType(entry.mimeType) || isWordDocument;
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const isImage = entry.mimeType.startsWith("image/");
   const isVideo = entry.mimeType.startsWith("video/");
   const isPdf = entry.mimeType === "application/pdf";
   const isText =
     isTextArtifactMimeType(entry.mimeType) ||
+    isWordDocument ||
     artifactCodeLanguage(entry.filename) !== null;
-  const canPreview =
-    entry.sizeBytes <= 10 * 1024 * 1024 &&
-    (isImage || isVideo || isPdf || isText);
+  const canPreview = canPreviewWorkspaceEntry({
+    isImage,
+    isPdf,
+    isText,
+    isVideo,
+    isWordDocument,
+    sizeBytes: entry.sizeBytes,
+  });
   const { data, isLoading, error } = useQuery({
     enabled: canPreview,
     queryFn: async () => {
-      const blob = await client.readProfileWorkspaceFile(profileId, entry.path);
+      const blob = await client.readProfileWorkspaceFile(
+        profileId,
+        entry.path,
+        {
+          render: isWordDocument ? "markdown" : undefined,
+        }
+      );
       return { blob, text: isText ? await blob.text() : null };
     },
     queryKey: [
@@ -616,6 +637,7 @@ function WorkspaceFilePreview({
           downloadUrl={downloadUrl}
           entry={entry}
           error={error}
+          isMarkdown={isMarkdown}
           loading={isLoading}
           objectUrl={objectUrl}
           previewMode={previewMode}
@@ -683,6 +705,7 @@ function WorkspacePreviewBody({
   error,
   canPreview,
   downloadUrl,
+  isMarkdown,
 }: {
   entry: WorkspaceEntry;
   objectUrl: string | null;
@@ -691,6 +714,7 @@ function WorkspacePreviewBody({
   error: unknown;
   canPreview: boolean;
   downloadUrl: string;
+  isMarkdown: boolean;
   previewMode: ArtifactPreviewMode;
 }) {
   if (!canPreview) {
@@ -767,7 +791,7 @@ function WorkspacePreviewBody({
     <ArtifactAttachmentPanelBody
       {...shared}
       content={content}
-      format={isMarkdownArtifactMimeType(entry.mimeType) ? "markdown" : "plain"}
+      format={isMarkdown ? "markdown" : "plain"}
       kind="text"
       language={artifactCodeLanguage(entry.filename)}
     />

@@ -183,6 +183,32 @@ describe("OpenAI-compatible provider", () => {
     expect(result.content).toBe("Answer");
   });
 
+  test("does not send Astra tools or reasoning_effort none to a chat-only endpoint", async () => {
+    const fetchMock = mock(async () => Response.json({}));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://api.example.com/v1",
+      displayName: "Proxy",
+      model: "gpt-6-astra",
+      supportsThinking: true,
+    });
+    await expect(
+      provider.generateChat({
+        messages: [{ content: "Search", role: "user" }],
+        system: "Be helpful.",
+        tools: [
+          {
+            description: "Search",
+            name: "search",
+            parameters: { properties: {}, type: "object" },
+          },
+        ],
+      })
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("keeps reasoning_effort for non-OpenAI models with tools", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {

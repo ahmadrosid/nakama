@@ -8,6 +8,7 @@ const API_PREFIXES = [
   "/metrics",
   "/docs",
   "/openapi.json",
+  "/artifact-frame",
 ] as const;
 
 const CONTENT_TYPES: Record<string, string> = {

@@ -40,7 +40,7 @@ test("channel setup stays on the agent page and Connect apps excludes messaging 
     createOrg: async () => {},
     isAuthenticated: true,
     isLoading: false,
-    login: async () => {},
+    login: async () => ({ email: "admin@example.com", id: "admin" }),
     logout: async () => {},
     orgs: [],
     refreshSession: async () => {},
@@ -166,6 +166,12 @@ test("channel setup stays on the agent page and Connect apps excludes messaging 
           process: { managed: true },
           running: false,
         },
+        slackWorker: {
+          configured: false,
+          connected: false,
+          paired: false,
+          running: false,
+        },
         telegramWorker: { configured: true, paired: true, running: true },
         whatsappWorker: {
           configured: true,
@@ -199,7 +205,10 @@ test("channel setup stays on the agent page and Connect apps excludes messaging 
         </QueryClientProvider>
       )
     );
-    expect(container.querySelectorAll("img")).toHaveLength(3);
+    expect(container.querySelectorAll("img")).toHaveLength(4);
+    expect(
+      container.querySelector('[aria-label="Connect Slack"]')
+    ).not.toBeNull();
     expect(
       container.querySelector('[aria-label="Settings Telegram"]')
     ).not.toBeNull();

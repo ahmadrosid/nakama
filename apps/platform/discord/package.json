@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "build": "bun build ./src/index.ts --outdir dist --target bun --external @firecrawl/anydoc",
     "dev": "bun run src/index.ts",
     "start": "NODE_ENV=production bun run src/index.ts",
     "test": "bun test"

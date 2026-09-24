@@ -1277,11 +1277,18 @@ export function registerProfileRoutes(
     if (!filename) {
       return json({ error: "path is required" }, 400);
     }
-    const file = await readWorkspaceFile(orgId, profileId, filename);
-    return new Response(Bun.file(file.filePath), {
+    const render =
+      c.req.query("render") === "markdown" ? ("markdown" as const) : undefined;
+    const file = await readWorkspaceFile(orgId, profileId, filename, {
+      render,
+    });
+    // Default stays `attachment`, so every existing download link is untouched.
+    const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
+    const body = "markdown" in file ? file.markdown : Bun.file(file.filePath);
+    return new Response(body, {
       headers: {
         "Content-Type": file.contentType,
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename.split("/").pop() ?? "file")}`,
+        "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(filename.split("/").pop() ?? "file")}`,
         "Content-Security-Policy": "sandbox",
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
@@ -1318,6 +1325,9 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
+        // Same header the session routes take. Absent, this is the shared
+        // profile folder and today's behaviour exactly.
+        appUserId: c.req.header("X-Nakama-App-User-Id")?.trim() || undefined,
         folder: c.req.query("folder"),
         limit,
         offset,
@@ -1340,16 +1350,16 @@ export function registerProfileRoutes(
       orgId,
       profileId,
       artifactPath,
-      { render }
+      {
+        appUserId: c.req.header("X-Nakama-App-User-Id")?.trim() || undefined,
+        render,
+      }
     );
-    const downloadName = (artifactPath.split("/").pop() ?? "artifact").replace(
-      /["\\]/g,
-      "_"
-    );
+    const downloadName = artifactPath.split("/").pop() ?? "artifact";
     const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
     return new Response(artifact.bytes, {
       headers: {
-        "Content-Disposition": `${disposition}; filename="${downloadName}"`,
+        "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
         "Content-Type": artifact.contentType,
       },
     });

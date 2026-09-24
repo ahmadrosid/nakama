@@ -238,10 +238,6 @@ export function useProviderInstanceCard({
     }
   };
 
-  const editManageModels = manageModels.length
-    ? manageModels
-    : seedManageModelRows(instance.customModels, instanceModels);
-
   return {
     apiKey,
     busy,
@@ -251,7 +247,7 @@ export function useProviderInstanceCard({
     dialogError,
     editBaseUrl,
     editLabel,
-    editManageModels,
+    editManageModels: manageModels,
     editOpen,
     editWireApi,
     handleDelete,

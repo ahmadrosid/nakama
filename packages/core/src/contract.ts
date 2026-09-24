@@ -5,6 +5,7 @@ import type {
   PluginActionEffect,
   PluginManifest,
 } from "./plugins";
+import type { SkillScriptIssue } from "./skills/script-tools";
 
 export type AutomationTrigger =
   | { type: "manual" }
@@ -87,6 +88,7 @@ export const AGENT_CHANNELS = [
   "telegram",
   "whatsapp",
   "discord",
+  "slack",
   "automation",
   "task",
   "subagent",
@@ -161,6 +163,15 @@ export interface TelegramWorkerStatus {
 }
 
 export interface DiscordWorkerStatus {
+  configured: boolean;
+  connected: boolean;
+  ok: boolean;
+  paired: boolean;
+  process?: WorkerProcessInfo;
+  running: boolean;
+}
+
+export interface SlackWorkerStatus {
   configured: boolean;
   connected: boolean;
   ok: boolean;
@@ -329,6 +340,7 @@ export interface SystemStatusResponse {
   llmUsage: LlmUsageStatus;
   mcp: McpStatus;
   server: HealthResponse;
+  slackWorker: SlackWorkerStatus;
   telegramWorker: TelegramWorkerStatus;
   whatsappWorker: WhatsAppWorkerStatus;
 }
@@ -476,12 +488,37 @@ export interface AuthUserResponse {
   activeOrgId?: string | null;
   email: string;
   id: string;
+  /**
+   * What this credential may do, not what its owner may do. An API key minted
+   * by a platform admin is de-privileged, so it reports false here.
+   */
   isPlatformAdmin?: boolean;
+  mfaEnabled?: boolean;
+  mfaEnrolled?: boolean;
+  mfaRequired?: boolean;
+  /** Which credential answered, which is what explains the flag above. */
+  mode?: "api-key" | "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
   phone?: string | null;
 }
 
+export interface MfaPolicyResponse {
+  enabled: boolean;
+  enforcedRoles: OrgRole[];
+  keyConfigured: boolean;
+  required: boolean;
+}
+
+export interface MfaTotpStartResponse {
+  secret: string;
+  uri: string;
+}
+
+export interface MfaTotpVerifyResponse {
+  backupCodes: string[];
+  enabled: boolean;
+}
 export interface UpdateAuthProfileRequest {
   currentPassword?: string;
   email?: string;
@@ -665,6 +702,28 @@ export interface UpdateOrgMemberRequest {
   name?: string | null;
   phone?: string | null;
   role?: OrgRole;
+}
+
+/**
+ * One login session, as its owner sees it. The token hashes never leave the
+ * database: a caller revokes a session by id, and the id alone is useless
+ * without the row.
+ */
+export interface BrowserSessionSummary {
+  createdAt: string;
+  /** True for the session making the request, so the UI does not offer to log you out of the page you are on. */
+  current: boolean;
+  expiresAt: string;
+  id: string;
+  lastUsedAt: string | null;
+}
+
+export interface ListBrowserSessionsResponse {
+  sessions: BrowserSessionSummary[];
+}
+
+export interface RevokeBrowserSessionsResponse {
+  revoked: number;
 }
 
 export interface ApiKeySummary {
@@ -1087,8 +1146,22 @@ export interface SessionSummary {
   updatedAt: string;
 }
 
+/**
+ * Longest `q` that `GET /v1/sessions` accepts, after trimming. The web search
+ * field stops at the same length, so typing on cannot turn into a 400.
+ */
+export const MAX_SESSION_SEARCH_LENGTH = 200;
+
 export interface ListSessionsResponse {
+  /** Set only when a `limit` was asked for; `null` on the last page. */
+  nextCursor?: string | null;
   sessions: SessionSummary[];
+  /**
+   * Set only when a `limit` was asked for. `true` when chats moved across
+   * `cursor` since it was issued, so the pages loaded before no longer join
+   * this one and paging has to start again from the first page.
+   */
+  stale?: boolean;
 }
 
 export interface CompactSessionRequest {
@@ -1566,6 +1639,51 @@ export interface UpdateDiscordSettingsRequest {
   profileId?: string;
 }
 
+export interface SlackSettingsResponse {
+  allowedUserIds: string[];
+  allowWorkspace: boolean;
+  appTokenMasked: string | null;
+  botTokenMasked: string | null;
+  configured: boolean;
+  handshakeCode: string | null;
+  pairedUserIds: string[];
+  profileId: string;
+}
+
+/**
+ * Splits typed or pasted Slack member IDs (commas, spaces or new lines) into
+ * valid IDs and the pieces that are not IDs. Shared by the dashboard input
+ * and the server so both accept exactly the same values.
+ */
+export function parseSlackMemberIdInput(raw: string): {
+  ids: string[];
+  invalid: string[];
+} {
+  const ids = new Set<string>();
+  const invalid: string[] = [];
+
+  for (const part of raw.split(/[\s,]+/)) {
+    const id = part.trim().toUpperCase();
+    if (!id) {
+      continue;
+    }
+    if (/^[UW][A-Z0-9]{6,}$/.test(id)) {
+      ids.add(id);
+    } else {
+      invalid.push(part.trim());
+    }
+  }
+
+  return { ids: [...ids], invalid };
+}
+
+export interface UpdateSlackSettingsRequest {
+  allowedUserIds?: string;
+  allowWorkspace?: boolean;
+  appToken?: string;
+  botToken?: string;
+}
+
 export interface ComposioSettingsResponse {
   apiKeyMasked: string | null;
   composioReachable: boolean;
@@ -1946,6 +2064,7 @@ export interface SkillSummary {
 
 export interface SkillDetail extends SkillSummary {
   body: string;
+  scriptIssues: SkillScriptIssue[];
 }
 
 export interface ListSkillsResponse {
@@ -1989,11 +2108,15 @@ export interface CreateSkillRequest {
   disableModelInvocation?: boolean;
   name: string;
   profileId?: string;
+  /** Scripts the skill ships that should load as tools, relative to its directory. */
+  scripts?: string[];
 }
 
 export interface InstallSkillRequest {
+  command?: string;
   profileId: string;
-  url: string;
+  url?: string;
+  zipBase64?: string;
 }
 
 export interface PatchSkillRequest {
@@ -2303,6 +2426,8 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
+  /** Scopes the listing to one end user's artifacts, when the caller names one. */
+  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;

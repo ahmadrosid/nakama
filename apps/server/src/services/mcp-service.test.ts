@@ -28,6 +28,37 @@ async function seedProfile(
 }
 
 describe("McpService", () => {
+  test("refreshes tools from a new MCP connection", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const calls: string[] = [];
+    const manager = {
+      async connect() {
+        calls.push("connect");
+        return [{ description: "New tool", inputSchema: {}, name: "new_tool" }];
+      },
+      async disconnect() {
+        calls.push("disconnect");
+      },
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { url: "https://example.com/mcp" },
+      connect: false,
+      name: "demo",
+      transport: "http",
+    });
+
+    const refreshed = await service.syncServer(created.server.id);
+
+    expect(calls).toEqual(["disconnect", "connect"]);
+    expect(refreshed.server.cachedTools.map((tool) => tool.name)).toEqual([
+      "new_tool",
+    ]);
+    expect((await db.getMcpServer(created.server.id))?.cachedTools).toEqual([
+      { description: "New tool", inputSchema: {}, name: "new_tool" },
+    ]);
+  });
+
   test("creates and lists MCP servers", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new McpService(db, new McpClientManager());

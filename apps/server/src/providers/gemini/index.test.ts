@@ -57,6 +57,98 @@ function streamFromEvents(events: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+function emptyCandidate(finishReason?: string): string {
+  return JSON.stringify({
+    candidates: [
+      {
+        content: { parts: [], role: "model" },
+        ...(finishReason ? { finishReason } : {}),
+      },
+    ],
+  });
+}
+
+describe("Gemini empty responses", () => {
+  const input = { messages: [{ content: "hi", role: "user" as const }] };
+
+  function countingFetch(bodies: string[]) {
+    let calls = 0;
+    const fetchMock = ((_url: string, _init?: RequestInit) => {
+      const body = bodies[Math.min(calls, bodies.length - 1)] ?? "";
+      calls += 1;
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        })
+      );
+    }) as unknown as typeof fetch;
+    return { calls: () => calls, fetchMock };
+  }
+
+  test("retries once when no finishReason came back", async () => {
+    const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+    const { fetchMock, calls } = countingFetch([
+      emptyCandidate(),
+      generateContentResponse({ text: "second time" }),
+    ]);
+
+    await withMockFetch(fetchMock, async () => {
+      const result = await provider.generateChat(input);
+      expect(result.content).toBe("second time");
+    });
+
+    // The turn survives, which is the whole point of the report.
+    expect(calls()).toBe(2);
+  });
+
+  test("gives up after one retry rather than looping", async () => {
+    const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+    const { fetchMock, calls } = countingFetch([emptyCandidate()]);
+
+    await withMockFetch(fetchMock, async () => {
+      await expect(provider.generateChat(input)).rejects.toThrow(
+        "no finishReason"
+      );
+    });
+
+    expect(calls()).toBe(2);
+  });
+
+  test("MAX_TOKENS is reported and not retried", async () => {
+    const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+    const { fetchMock, calls } = countingFetch([emptyCandidate("MAX_TOKENS")]);
+
+    await withMockFetch(fetchMock, async () => {
+      // The operator needs to tell this apart from a transient blank in the log.
+      await expect(provider.generateChat(input)).rejects.toThrow(
+        "finishReason: MAX_TOKENS"
+      );
+    });
+
+    expect(calls()).toBe(1);
+  });
+
+  test("a refusal is a 422, not a 500", async () => {
+    const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+    const { fetchMock, calls } = countingFetch([emptyCandidate("SAFETY")]);
+
+    await withMockFetch(fetchMock, async () => {
+      const failure = await provider
+        .generateChat(input)
+        .then(() => null)
+        .catch((error: unknown) => error);
+
+      // The request reached the model and the model said no. Serving that as a
+      // server fault sends the operator looking for a bug that is not there.
+      expect((failure as { status?: number }).status).toBe(422);
+      expect((failure as Error).message).toContain("SAFETY");
+    });
+
+    expect(calls()).toBe(1);
+  });
+});
+
 describe("createGeminiProvider", () => {
   test("replays signed model parts unchanged after a tool result and history reload", async () => {
     const parts = [

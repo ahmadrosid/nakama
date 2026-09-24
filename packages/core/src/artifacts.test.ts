@@ -18,7 +18,11 @@ import {
   renameWorkspaceEntry,
   writeArtifactFile,
 } from "./artifacts";
-import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
+import {
+  getAppUserSoulDir,
+  getProfileArtifactsDir,
+  getProfileSoulDir,
+} from "./soul/resolve";
 
 const SAMPLE_DOCX_PATH = path.join(
   import.meta.dir,
@@ -246,6 +250,176 @@ test("workspace rename reserves managed destinations but allows ordinary folders
 
 let configDir: string;
 let previousConfigDir: string | undefined;
+
+test("readWorkspaceFile converts a Word file when markdown is requested", async () => {
+  await mkdir(path.join(getProfileSoulDir(ORG_ID, PROFILE_ID), "docs"), {
+    recursive: true,
+  });
+  const target = path.join(
+    getProfileSoulDir(ORG_ID, PROFILE_ID),
+    "docs",
+    "report.docx"
+  );
+  await copyFile(SAMPLE_DOCX_PATH, target);
+
+  const rendered = await readWorkspaceFile(
+    ORG_ID,
+    PROFILE_ID,
+    "docs/report.docx",
+    {
+      render: "markdown",
+    }
+  );
+
+  // A preview panel can do nothing with raw .docx zip bytes, so the conversion
+  // has to happen here rather than in the browser.
+  expect(rendered.contentType).toBe("text/markdown");
+  expect("markdown" in rendered).toBe(true);
+
+  const raw = await readWorkspaceFile(ORG_ID, PROFILE_ID, "docs/report.docx");
+
+  // Without the flag the bytes are untouched, so every existing download link
+  // keeps serving the real file.
+  expect(raw.contentType).not.toBe("text/markdown");
+  expect("markdown" in raw).toBe(false);
+});
+
+test("readWorkspaceFile leaves a non-Word file alone even when markdown is asked for", async () => {
+  await writeArtifact("notes/plain.md", "# Plain");
+
+  const result = await readWorkspaceFile(
+    ORG_ID,
+    PROFILE_ID,
+    "artifacts/notes/plain.md",
+    { render: "markdown" }
+  );
+
+  expect("markdown" in result).toBe(false);
+  expect(result.contentType).toBe("text/markdown");
+});
+
+async function writeAppUserArtifact(
+  appUserId: string,
+  relativePath: string,
+  content: string
+): Promise<void> {
+  const target = path.join(
+    getAppUserSoulDir(ORG_ID, PROFILE_ID, appUserId),
+    "artifacts",
+    relativePath
+  );
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, content, "utf8");
+}
+
+test("an app user reads their own artifact and not another one's", async () => {
+  await writeAppUserArtifact("user-1", "report.md", "first user");
+  await writeAppUserArtifact("user-2", "report.md", "second user");
+  await writeArtifact("report.md", "shared folder");
+
+  const first = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "report.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(first.bytes.toString("utf8")).toBe("first user");
+
+  // Same filename, different owner. Before this, both resolved the shared
+  // folder, so the name alone decided what you got.
+  const second = await readArtifactFile({
+    appUserId: "user-2",
+    filename: "report.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(second.bytes.toString("utf8")).toBe("second user");
+});
+
+test("an app user cannot reach an artifact that only another one has", async () => {
+  await writeAppUserArtifact("user-1", "private.md", "only user-1 has this");
+
+  // Not a different body, a miss. The file is outside the caller's folder.
+  await expect(
+    readArtifactFile({
+      appUserId: "user-2",
+      filename: "private.md",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toThrow();
+
+  const listed = await listArtifacts(ORG_ID, PROFILE_ID, {
+    appUserId: "user-2",
+  });
+  expect(listed.artifacts.map((entry) => entry.filename)).not.toContain(
+    "private.md"
+  );
+});
+
+test("no app user still resolves the shared profile folder", async () => {
+  await writeArtifact("shared.md", "shared folder");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const shared = await readArtifactFile({
+    filename: "shared.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(shared.bytes.toString("utf8")).toBe("shared folder");
+
+  // The dashboard and the local token send no app user, so their view must not
+  // change: an owned file is not theirs to see, and was not before either.
+  const listed = await listArtifacts(ORG_ID, PROFILE_ID);
+  const names = listed.artifacts.map((entry) => entry.filename);
+  expect(names).toContain("shared.md");
+  expect(names).not.toContain("owned.md");
+});
+
+test("a path outside the caller's folder is a 404, not a guard error", async () => {
+  await writeArtifact("shared.md", "shared folder");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const absoluteShared = path.join(
+    getProfileArtifactsDir(ORG_ID, PROFILE_ID),
+    "shared.md"
+  );
+
+  // An absolute path into the shared folder used to pass, because allowedDirs
+  // was always that folder. Now it reads as an escape, and the guard message
+  // talks about SOUL.md, which means nothing to an API caller.
+  const failure = await readArtifactFile({
+    appUserId: "user-1",
+    filename: absoluteShared,
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  })
+    .then(() => null)
+    .catch((error: unknown) => error);
+
+  expect((failure as { status?: number }).status).toBe(404);
+  expect((failure as Error).message).not.toContain("allowed directories");
+
+  // Traversal gets the same answer, so an attempt is not told it hit a guard.
+  const traversal = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "../../../../etc/passwd",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  })
+    .then(() => null)
+    .catch((error: unknown) => error);
+  expect((traversal as { status?: number }).status).toBe(404);
+
+  // The caller's own file is untouched by the mapping.
+  const owned = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "owned.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(owned.bytes.toString("utf8")).toBe("owned");
+});
 
 beforeEach(async () => {
   previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -636,4 +810,49 @@ test("workspace paths reject traversal and symlinks outside the profile", async 
     readWorkspaceFile(ORG_ID, PROFILE_ID, "artifacts")
   ).rejects.toMatchObject({ status: 404 });
   expect((await listWorkspaceFiles(ORG_ID, "new_profile")).entries).toEqual([]);
+});
+
+test("an app user still reads a document written before per-user folders", async () => {
+  // Every artifact the agent produced before the write side learned about app
+  // users is in the shared folder. Dropping that fallback strands them.
+  await writeArtifact("legacy.docx", "written the old way");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const legacy = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "legacy.docx",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(legacy.bytes.toString("utf8")).toBe("written the old way");
+
+  // Their own copy of a name still wins over the shared one.
+  await writeAppUserArtifact("user-1", "legacy.docx", "written for this user");
+  const owned = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "legacy.docx",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(owned.bytes.toString("utf8")).toBe("written for this user");
+});
+
+test("the shared fallback does not accept a path that reaches out of the folder", async () => {
+  await writeArtifact("shared.md", "shared folder");
+
+  for (const filename of [
+    path.join(getProfileArtifactsDir(ORG_ID, PROFILE_ID), "shared.md"),
+    "../artifacts/shared.md",
+    "../../../../etc/passwd",
+  ]) {
+    const failure = await readArtifactFile({
+      appUserId: "user-1",
+      filename,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect((failure as { status?: number } | null)?.status).toBe(404);
+  }
 });

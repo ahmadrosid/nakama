@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolSourceResponse } from "@nakama/core";
@@ -8,14 +7,12 @@ import type { StoredToolRecord } from "@nakama/db";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
 
-const require = createRequire(import.meta.url);
-const corePackageRoot = path.dirname(
-  require.resolve("@nakama/core/package.json")
-);
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const serverSrcDir = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  ".."
+  moduleDir,
+  path.basename(moduleDir) === "dist" ? "../src" : ".."
 );
+const corePackageRoot = path.resolve(serverSrcDir, "../../../packages/core");
 
 const BUILTIN_SOURCE_BY_NAME: Record<
   string,

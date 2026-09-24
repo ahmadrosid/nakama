@@ -49,6 +49,13 @@ const healthyStatus: SystemStatusResponse = {
     userConfigured: true,
     version: "0.4.10",
   },
+  slackWorker: {
+    configured: false,
+    connected: false,
+    ok: true,
+    paired: false,
+    running: false,
+  },
   telegramWorker: { configured: true, ok: true, paired: true, running: true },
   whatsappWorker: {
     configured: true,

@@ -70,7 +70,7 @@ function McpServerModeTabs({
     >
       {(
         [
-          { id: "existing" as const, label: "Existing" },
+          { id: "existing" as const, label: "Registered" },
           { id: "new" as const, label: "New" },
         ] as const
       ).map((item) => (
@@ -118,7 +118,7 @@ function McpServerDialogPanels({
         aria-hidden={!assignMode}
         className={cn(
           "col-start-1 row-start-1 flex min-h-0 flex-col",
-          !assignMode && "invisible"
+          !assignMode && "hidden"
         )}
         id={`${state.idPrefix}-mode-panel-existing`}
         inert={!assignMode}
@@ -134,7 +134,7 @@ function McpServerDialogPanels({
       <McpServerDialogCreateForm
         aria-hidden={assignMode}
         busy={busy}
-        className={cn("col-start-1 row-start-1", assignMode && "invisible")}
+        className={cn("col-start-1 row-start-1", assignMode && "hidden")}
         id={`${state.idPrefix}-mode-panel-new`}
         inert={assignMode}
         nameAutoFocus={!assignMode}
@@ -375,7 +375,13 @@ export function McpServerDialog({
   return (
     <>
       <Dialog onOpenChange={onOpenChange} open={open}>
-        <DialogContent className="gap-6 p-6 sm:max-w-lg">
+        <DialogContent
+          className={cn(
+            "gap-6 p-6 sm:max-w-lg",
+            canAssignExisting &&
+              "top-4 -translate-y-0 sm:top-[8dvh] sm:max-h-[84dvh]"
+          )}
+        >
           <McpServerDialogHeader
             canAssignExisting={canAssignExisting}
             error={error}

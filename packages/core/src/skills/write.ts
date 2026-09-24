@@ -40,6 +40,7 @@ export interface CreateSkillFileOptions {
   name: string;
   orgId?: string;
   profileId?: string;
+  scripts?: string[];
 }
 
 export function composeSkillMarkdown(options: {
@@ -47,6 +48,7 @@ export function composeSkillMarkdown(options: {
   description: string;
   body?: string;
   disableModelInvocation?: boolean;
+  scripts?: string[];
 }): string {
   const lines = [
     "---",
@@ -56,6 +58,16 @@ export function composeSkillMarkdown(options: {
 
   if (options.disableModelInvocation) {
     lines.push("disable-model-invocation: true");
+  }
+
+  // Carried because it decides behaviour: a dropped `scripts:` line leaves the
+  // skill looking installed with none of its scripts loaded as tools, and
+  // nothing says so. Comma separated, matching what parseListField reads.
+  const scripts = (options.scripts ?? [])
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (scripts.length > 0) {
+    lines.push(`scripts: ${scripts.join(", ")}`);
   }
 
   lines.push("---", "", options.body?.trim() ?? "");
@@ -327,6 +339,7 @@ export async function createSkillFile(
     description,
     disableModelInvocation: options.disableModelInvocation,
     name,
+    scripts: options.scripts,
   });
 
   parseSkillMarkdown(content, skillFilePath);

@@ -5,6 +5,7 @@
   "exports": {
     "./supermemory-client": "./src/supermemory-client.ts",
     ".": "./src/index.ts",
+    "./demo-login": "./src/demo-login.ts",
     "./agent-questionnaire": "./src/agent-questionnaire.ts",
     "./artifact-mime": "./src/artifact-mime.ts",
     "./agent-todo": "./src/agent-todo.ts",
@@ -48,6 +49,8 @@
     "./discord-config": "./src/discord-config.ts",
     "./discord-attachment": "./src/discord-attachment.ts",
     "./discord-worker": "./src/discord-worker.ts",
+    "./slack-config": "./src/slack-config.ts",
+    "./slack-worker": "./src/slack-worker.ts",
     "./whatsapp-config": "./src/whatsapp-config.ts",
     "./whatsapp-phones": "./src/whatsapp-phones.ts",
     "./whatsapp-worker": "./src/whatsapp-worker.ts",
@@ -77,6 +80,7 @@
     "marked": "^18.0.13",
     "node-html-markdown": "^1.3.0",
     "nodemailer": "^9.1.0",
+    "robots-parser": "3.0.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {

@@ -28,6 +28,7 @@ flowchart TB
     routes["Routes"]
     workers["WorkerManagerService"]
     notif["Notification services"]
+    plugins["PluginService"]
   end
 
   subgraph runtime ["Runtime services"]
@@ -51,6 +52,7 @@ flowchart TB
     telegram["telegram worker"]
     whatsapp["whatsapp worker"]
     discord["discord worker"]
+    pluginworkers["plugin workers"]
   end
 
   clients --> client
@@ -61,10 +63,12 @@ flowchart TB
   routes --> agent
   routes --> workers
   routes --> notif
+  routes --> plugins
   agent --> harness
   agent --> tools
   agent --> providers
   agent --> mcp
+  agent --> plugins
   agent --> persist
   harness --> db
   persist --> db
@@ -77,6 +81,7 @@ flowchart TB
   workers --> telegram
   workers --> whatsapp
   workers --> discord
+  workers --> pluginworkers
 ```
 
 Apps can import from `packages/*`. Packages must not import from `apps/*`.
@@ -94,7 +99,10 @@ nakama/
 │   ├── agent/                  # Prompt assembly, tool loop, chat session
 │   ├── core/                   # Contracts, soul, config, builtin tools
 │   ├── db/                     # SQLite schema, adapters, migrations
-│   └── client/                 # Shared HTTP/SSE client
+│   ├── client/                 # Shared HTTP/SSE client
+│   ├── plugins/                # Bundled plugins, including workflows
+│   ├── telegram-manager/      # Telegram manager client and store
+│   └── ui/                    # Shared UI components
 └── docs/website/
 ```
 
@@ -107,6 +115,7 @@ nakama/
 | `packages/agent` | This package owns prompts, the tool loop, compaction, and `AgentChatSession`. |
 | `packages/core` | This package owns contracts, soul compose, builtins, channel helpers, and config. |
 | `packages/db` | This package owns the schema and adapters for persisted entities. |
+| `packages/plugins` | Bundled plugins add capabilities such as workflows. `PluginService` manages releases and org installations. |
 
 ## HTTP
 
@@ -116,18 +125,18 @@ The HTTP app does these steps in this order:
 
 1. The app serves static web assets if `webDistDir` is set.
 2. The app applies auth and CSRF middleware.
-3. Internal routes for automation, curator, notification webhooks, and Composio OAuth run before org middleware.
-4. Org middleware reads `X-Org-Id` or `active_org_id`. The middleware sets membership and `orgRole`.
+3. Internal routes for automation, curator, notification webhooks, Composio OAuth, and MCP OAuth run before org middleware.
+4. Org middleware resolves the active org and checks membership. Audit logging runs after it when the database is available.
 5. Routes call services.
 6. The same Hono registration produces `/openapi.json`.
 
-These route groups run before org middleware: `internal-automations`, `internal-curator`, `notification-webhooks`, Composio OAuth.
+These route groups run before org middleware: `internal-automations`, `internal-curator`, `notification-webhooks`, Composio OAuth, MCP OAuth.
 
-These route groups run after org middleware: `system`, `auth`, `setup-import`, `workers`, `models`, `user-context`, `sessions`, `profiles`, `profile-portability`, `artifact-shares`, `mcp`, `skills`, `tools`, `automations`, `notification-destinations`, `token-optimization`, `coding-harnesses`, `composio`, `platform-orgs`, `data-portability`, `org-members`, `org-memory`, `org-curator`, `skill-proposals`, `skill-suggestions`.
+These route groups run after org middleware: `system`, `audit-events`, `auth`, `setup-import`, `workers`, `models`, `user-context`, `sessions`, `profiles`, `profile-portability`, `artifact-shares`, `mcp`, `skills`, `tools`, `plugins`, `automations`, `notification-destinations`, `token-optimization`, `automation-worker-settings`, `coding-harnesses`, `composio`, `platform-orgs`, `data-portability`, `org-members`, `org-memory`, `org-curator`, `skill-proposals`, `skill-suggestions`.
 
 ## Multi-tenancy
 
-Each authenticated request that is not a platform request needs an active org. The client sends `X-Org-Id` or the cookie `active_org_id`.
+Org-scoped authenticated requests need an active org. The middleware resolves it from `X-Org-Id`, the plugin UI path, or the active org in the auth context or session. Local-token requests can fall back to the user's first org. Auth and platform routes skip this check.
 
 Org roles are `admin`, `member`, and `viewer`. A platform admin uses `/v1/platform/*`.
 
@@ -139,7 +148,7 @@ Org roles are `admin`, `member`, and `viewer`. A platform admin uses `/v1/platfo
 
 `AgentService` in [`agent-service.ts`](./apps/server/src/services/agent-service.ts) assembles the agent runtime.
 
-The service loads the profile, the soul, the provider, and the model. The service attaches builtin tools, custom JS tools, custom Python tools, and MCP tools. The service attaches Composio tools and org-memory tools when they apply. Super Bot gets extra tools when the profile permits them. The service also attaches questionnaire, todo, and attachments. Discord sessions get Discord artifact tools.
+The service loads the profile, the soul, the provider, and the model. The service attaches builtin tools, custom JS tools, custom Python tools, MCP tools, and enabled plugin tools. The service attaches Composio tools and org-memory tools when they apply. Super Bot gets extra tools when the profile permits them. The service also attaches questionnaire, todo, and attachments. Discord sessions get Discord artifact tools.
 
 Prompt layers:
 
@@ -155,6 +164,7 @@ Per-turn context can include todos, matched skills, and Composio connections. A 
 
 - Live state is the in-memory `AgentChatSession`.
 - Durable history is SQLite `session_messages` through [`session-persistence.ts`](./apps/server/src/services/session-persistence.ts).
+- Cognito sessions are intentionally ephemeral: their history stays in memory and has no `sessions` or `session_messages` row.
 - Questionnaire and todo are on `sessions` metadata.
 - The tables are `sessions`, `session_messages`, and `attachments`.
 
@@ -168,8 +178,9 @@ Per-turn context can include todos, matched skills, and Composio connections. A 
 | Custom Python | `python-tool-loader.ts` |
 | MCP | `mcp-tool-bridge.ts` |
 | Composio | `composio-tool-bridge.ts` |
+| Plugins | `plugin-service.ts` |
 
-Tools are profile-scoped. Super Bot can get extra runtime tools when the profile permits them.
+Tool definitions are shared; `profile_tools` controls which custom tools a profile can use. Super Bot can get extra runtime tools when the profile permits them.
 
 ## Workers and automations
 
@@ -177,6 +188,7 @@ The server starts workers with PM2 through [`worker-manager-service.ts`](./apps/
 
 - `apps/platform/automation` does scheduled work and skill-curator ticks.
 - `apps/platform/telegram`, `whatsapp`, and `discord` are channel bridges.
+- Installed plugins can contribute their own workers.
 
 The database stores automations in `automations` and `automation_runs`.
 
@@ -193,11 +205,10 @@ Attachments have SQLite records and files on disk. The server adds them to provi
 | File | Purpose |
 |---|---|
 | `terminal-renderer.ts` | Composer, transcript, stream, and status rules |
-| `terminal-layout.ts` | Viewport, pinned input, stream buffer, and frame diff |
+| `terminal-layout.ts` | Viewport, pinned input, stream buffer, frame component, and cursor |
 | `virtual-message-list.ts` | Transcript wrap and spacing |
-| `terminal-frame.ts` | Frame diff and cursor |
 
-`PersistentPrompt` calls `TerminalRenderer.buildComposerLines()`. `TerminalLayout` reserves composer rows. The transcript uses `beginMessage`, `writelnScroll`, and `endMessage`. The stream writes to `streamBuffer`. `endStream()` seals the stream.
+`PersistentPrompt` sends composer state to `TerminalRenderer`, which calls `buildComposerLines()`. `TerminalLayout` reserves composer rows. The transcript uses `beginMessage`, `writelnScroll`, and `endMessage`. The stream writes to `streamBuffer`. `endStream()` seals the stream.
 
 Spacing has layers. User-bubble padding, composer padding, and inter-message gaps are different. `shouldInsertLeadingGap` adds a gap before a message. `endStream()` adds a gap after the stream.
 
@@ -207,13 +218,15 @@ The schema is [`packages/db/sql/schema.sql`](./packages/db/sql/schema.sql).
 
 | Area | Tables |
 |---|---|
-| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings` |
+| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `api_keys`, `password_reset_tokens` |
 | Agent config | `profiles`, `tools`, `profile_tools`, `skills`, `profile_skills`, `profile_skill_usage`, `mcp_servers`, `profile_mcp_servers` |
 | Runtime | `sessions`, `session_messages`, `attachments`, `artifact_shares` |
-| Execution | `automations`, `automation_runs`, `automation_run_read_state` |
+| Execution | `automations`, `automation_runs`, `automation_run_read_state`, `workflows`, `workflow_runs`, `workflow_run_steps` |
 | Approvals | `org_memory_proposals`, `skill_proposals`, `skill_suggestions` |
 | Composio | `composio_toolkits`, `profile_composio_toolkits`, `composio_user_connections` |
 | Notifications | `notification_destinations` |
+| Plugins | `plugin_releases`, `org_plugins` |
+| Audit / files | `audit_events`, `profile_change_events`, `file_pins` |
 | Analytics / config | `llm_usage_stats`, `llm_usage_model_stats`, `workspace_settings` |
 
 Org memory is also on disk at `~/.nakama/orgs/{orgId}/MEMORY.md`.
@@ -223,7 +236,7 @@ Org memory is also on disk at `~/.nakama/orgs/{orgId}/MEMORY.md`.
 - Packages must not import from `apps/*`.
 - The server examines org membership before org-scoped routes.
 - Profiles control behavior and tool availability.
-- Message history is durable. History is not only in process memory.
+- Message history is durable except for intentionally ephemeral Cognito sessions.
 - The same Hono app produces OpenAPI and serves runtime requests.
 - Channel apps are transport bridges. They are not separate agent runtimes.
 - PM2 is optional. PM2 is the intended path to start workers.

@@ -1,7 +1,6 @@
 import type { McpHttpConfig, McpStdioConfig, McpTransport } from "../contract";
 
 export const PREINSTALLED_MCP_SERVER_IDS = {
-  currency_conversion: "mcp_currency_conversion",
   exa: "mcp_exa",
   firecrawl: "mcp_firecrawl",
 } as const;
@@ -20,14 +19,6 @@ export const preinstalledMcpServers: PreinstalledMcpServerDefinition[] = [
     },
     id: PREINSTALLED_MCP_SERVER_IDS.exa,
     name: "exa",
-    transport: "http",
-  },
-  {
-    config: {
-      url: "https://currency-mcp.wesbos.com/mcp",
-    },
-    id: PREINSTALLED_MCP_SERVER_IDS.currency_conversion,
-    name: "currency-conversion",
     transport: "http",
   },
   {

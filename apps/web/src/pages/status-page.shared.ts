@@ -3,14 +3,20 @@ import {
   Clock01Icon,
   HashtagIcon,
   Message01Icon,
+  SlackIcon,
   SmartPhone01Icon,
 } from "hugeicons-react";
 
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
 
 export function buildServiceColumns(status: SystemStatusResponse) {
-  const { automationWorker, telegramWorker, whatsappWorker, discordWorker } =
-    status;
+  const {
+    automationWorker,
+    telegramWorker,
+    whatsappWorker,
+    discordWorker,
+    slackWorker,
+  } = status;
 
   return [
     {
@@ -32,6 +38,12 @@ export function buildServiceColumns(status: SystemStatusResponse) {
       icon: HashtagIcon,
       title: "Discord",
       ...discordServiceStatus(discordWorker),
+    },
+    {
+      icon: SlackIcon,
+      title: "Slack",
+      // Same configured / running / paired shape as the Discord bridge.
+      ...discordServiceStatus(slackWorker),
     },
   ] satisfies Array<{
     icon: typeof Clock01Icon;

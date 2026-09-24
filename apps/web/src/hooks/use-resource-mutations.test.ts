@@ -113,7 +113,7 @@ describe("artifact share controls with a stale share ID", () => {
     createOrg: unusedAuthAction,
     isAuthenticated: true,
     isLoading: false,
-    login: unusedAuthAction,
+    login: async () => ({ email: "admin@example.com", id: "admin" }),
     logout: unusedAuthAction,
     orgs: [],
     refreshSession: unusedAuthAction,

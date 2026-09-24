@@ -367,6 +367,39 @@ function migrateUsersTable(db: Database): void {
   if (!columnNames.has("disabled_at")) {
     db.exec("ALTER TABLE users ADD COLUMN disabled_at TEXT;");
   }
+
+  if (!columnNames.has("mfa_enabled")) {
+    db.exec(
+      "ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0 NOT NULL;"
+    );
+  }
+
+  if (!columnNames.has("mfa_totp_secret_enc")) {
+    db.exec("ALTER TABLE users ADD COLUMN mfa_totp_secret_enc TEXT;");
+  }
+
+  if (!columnNames.has("mfa_totp_pending_secret_enc")) {
+    db.exec("ALTER TABLE users ADD COLUMN mfa_totp_pending_secret_enc TEXT;");
+  }
+
+  if (!columnNames.has("mfa_totp_last_step")) {
+    db.exec("ALTER TABLE users ADD COLUMN mfa_totp_last_step INTEGER;");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_mfa_backup_codes (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS user_mfa_backup_codes_hash_unique
+      ON user_mfa_backup_codes (code_hash);
+    CREATE INDEX IF NOT EXISTS user_mfa_backup_codes_user_idx
+      ON user_mfa_backup_codes (user_id, used_at);
+  `);
 }
 
 function migrateLlmUsageModelStatsTable(db: Database): void {

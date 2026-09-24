@@ -56,6 +56,7 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
+import { loadMfaPolicy } from "./mfa-config";
 
 const LAST_MEMBERSHIP_MESSAGE =
   "Cannot archive your last remaining organization.";
@@ -162,7 +163,12 @@ export class OrgService {
       );
     }
 
-    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (owner.orgId === orgId) {
           await removeChannelConnection(platform, owner);
@@ -413,12 +419,23 @@ export class OrgService {
       sessionId,
       requestedOrgId
     );
-
+    const activeMember = activeOrgId
+      ? await this.databaseAdapter.getOrgMember(activeOrgId, user.id)
+      : null;
+    const mfaPolicy = await loadMfaPolicy();
     return {
       activeOrgId,
       email: user.email,
       id: user.id,
       isPlatformAdmin: Boolean(user.isPlatformAdmin),
+      mfaEnabled: Boolean(user.mfaEnabled),
+      mfaEnrolled: Boolean(user.mfaEnabled && user.mfaTotpSecretEnc),
+      mfaRequired:
+        mfaPolicy.enabled &&
+        mfaPolicy.required &&
+        (activeMember
+          ? mfaPolicy.enforcedRoles.includes(activeMember.role)
+          : false),
       name: user.name ?? null,
       orgId: activeOrgId,
       phone: user.phone ?? null,

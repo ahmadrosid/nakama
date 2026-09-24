@@ -24,6 +24,8 @@ function normalizeSystemStatus(
   return {
     ...status,
     discordWorker: status.discordWorker ?? DEFAULT_DISCORD_WORKER_STATUS,
+    // An older server has no Slack bridge; show it as not connected.
+    slackWorker: status.slackWorker ?? DEFAULT_DISCORD_WORKER_STATUS,
   };
 }
 

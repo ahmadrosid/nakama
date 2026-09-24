@@ -311,6 +311,34 @@ function buildFileGuardOptions(
   };
 }
 
+/**
+ * Where `artifacts/...` resolves to. A session created for an app user runs with
+ * that user's soul dir as its workspace root, and the artifact read side looks
+ * for the file under `users/<hash>/artifacts`. Resolving the write against the
+ * profile root instead put every generated document where the read never looks.
+ *
+ * Only artifact paths follow the app user. The rest of the soul stack, the
+ * knowledge base and the skills live on the profile, and an app-user session
+ * still has to read them.
+ */
+function artifactWriteRoot(
+  context: ToolContext,
+  options: FileToolRunOptions,
+  targetPath: string
+): string {
+  const profileRoot = fileToolWorkspaceRoot(context, options);
+
+  if (options.workspaceRoot || !isArtifactPath(targetPath)) {
+    return profileRoot;
+  }
+
+  const sessionRoot = context.workspaceRoot?.trim();
+
+  return sessionRoot && path.isAbsolute(sessionRoot)
+    ? sessionRoot
+    : profileRoot;
+}
+
 function assertAbsoluteWorkspaceRoot(workspaceRoot: string): void {
   if (!path.isAbsolute(workspaceRoot)) {
     throw new Error(
@@ -359,12 +387,13 @@ export async function runWriteFile(
   refuseWordExtension(parsed.path);
   const contentBytes = Buffer.byteLength(parsed.content, "utf8");
   const guardOptions = buildFileGuardOptions(context, options);
+  const artifactRoot = artifactWriteRoot(context, options, parsed.path);
 
   const guarded = await guardFilePath(
     parsed.path,
     parsed.cwd ?? null,
     contentBytes,
-    guardOptions
+    { ...guardOptions, cwd: artifactRoot }
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -373,9 +402,7 @@ export async function runWriteFile(
     fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
-  const { orgId, profileId } = requireProfileScope(context);
-  const workspaceRoot =
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+  const workspaceRoot = artifactRoot;
   let filePath = guarded.resolved;
   const normalizedPath = normalizeArtifactPath(parsed.path);
 
@@ -440,7 +467,10 @@ export async function runWriteDocx(
     parsed.path,
     parsed.cwd ?? null,
     bytes.length,
-    guardOptions
+    {
+      ...guardOptions,
+      cwd: artifactWriteRoot(context, options, parsed.path),
+    }
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(

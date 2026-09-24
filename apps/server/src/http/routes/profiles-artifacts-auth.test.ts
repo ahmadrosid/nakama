@@ -301,6 +301,33 @@ describe("profile artifact content auth", () => {
     expect(await response.text()).toBe("# Report");
   });
 
+  test("serves artifact content with a Unicode filename", async () => {
+    const { app, databaseAdapter } = createApp();
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "unicode@example.com",
+      "member"
+    );
+    const filename = "Pastry Box Claims Review — Synthetic Demo.md";
+    const url = new URL(
+      "http://localhost:4310/v1/profiles/profile_1/artifacts/content"
+    );
+    url.searchParams.set("path", filename);
+    url.searchParams.set("inline", "1");
+
+    const response = await app.fetch(
+      new Request(url, {
+        headers: memberSession.headers({}, memberSession.orgId),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Disposition")).toBe(
+      `inline; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+  });
+
   test("org viewer can read artifact content", async () => {
     const { app, databaseAdapter } = createApp();
     const viewerSession = await setupFreshInstallSession(

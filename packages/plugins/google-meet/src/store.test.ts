@@ -175,7 +175,7 @@ test("history limits apply after actor and profile access filters", () => {
   expect(store.list("me", "theirs")).toEqual([]);
   expect(store.list(null, "mine").map((row) => row.id)).toEqual([own.id]);
   expect(store.list()).toHaveLength(100);
-});
+}, 15_000);
 
 test("upgrades existing meeting databases without losing transcripts", () => {
   const meeting = store.create(meetingUrl, "me", undefined, 1);
@@ -242,4 +242,30 @@ test("speaker turns survive reopen and recording remains an exclusive active sta
     store.close();
     rmSync(directory, { force: true, recursive: true });
   }
+});
+
+test("caption names enrich matching audio turns without duplicating them", () => {
+  const meeting = store.create(meetingUrl, "me", undefined, 1);
+  store.addSegment(meeting.id, {
+    id: "0-0",
+    receivedAt: 1,
+    speakerName: "Speaker 1",
+    text: "Hello everyone",
+  });
+  store.addCaptionSegment(meeting.id, {
+    id: "caption-1",
+    receivedAt: 2,
+    speakerName: "Alice",
+    text: "Hello everyone",
+  });
+  expect(store.transcript(meeting.id)).toMatchObject([
+    { speakerName: "Alice", text: "Hello everyone" },
+  ]);
+  store.addCaptionSegment(meeting.id, {
+    id: "caption-2",
+    receivedAt: 3,
+    speakerName: "Bob",
+    text: "A new sentence",
+  });
+  expect(store.transcript(meeting.id)).toHaveLength(2);
 });
