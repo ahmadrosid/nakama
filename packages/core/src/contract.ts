@@ -1135,6 +1135,8 @@ export interface SessionSummary {
 }
 
 export interface ListSessionsResponse {
+  /** Set only when a `limit` was asked for; `null` on the last page. */
+  nextCursor?: string | null;
   sessions: SessionSummary[];
 }
 
