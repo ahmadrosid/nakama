@@ -159,14 +159,17 @@ const PYTHON_STDLIB = new Set([
 ]);
 
 /** Top level packages a script imports that are not part of Python itself. */
-function thirdPartyImports(source: string): string[] {
+function thirdPartyImports(
+  source: string,
+  localModules: ReadonlySet<string>
+): string[] {
   const found = new Set<string>();
   for (const line of source.split("\n")) {
     const match = line.match(
       /^\s*(?:import\s+([A-Za-z_][\w.]*)|from\s+([A-Za-z_][\w.]*)\s+import\b)/u
     );
     const root = (match?.[1] ?? match?.[2] ?? "").split(".")[0];
-    if (root && !PYTHON_STDLIB.has(root)) {
+    if (root && !(PYTHON_STDLIB.has(root) || localModules.has(root))) {
       found.add(root);
     }
   }
@@ -228,6 +231,15 @@ export async function resolveSkillScripts(input: {
   const issues: SkillScriptIssue[] = [];
   const tools: SkillScriptTool[] = [];
   const reachable = new Set<string>(input.toolPath ? [input.toolPath] : []);
+  const present = await listSkillScripts(input.directory);
+  // A skill split across several files imports its own modules by bare name,
+  // because Python puts the running script's directory first on sys.path.
+  // Without this they read as missing third-party packages.
+  const localModules = new Set(
+    present
+      .filter((script) => script.endsWith(".py"))
+      .map((script) => path.basename(script, ".py"))
+  );
 
   for (const relative of input.declared) {
     const segments = relative.split(/[/\\]+/u).filter(Boolean);
@@ -257,7 +269,7 @@ export async function resolveSkillScripts(input: {
       continue;
     }
     reachable.add(full);
-    const third = thirdPartyImports(source);
+    const third = thirdPartyImports(source, localModules);
     if (third.length > 0) {
       // Not a failure, a dependency the runtime may not carry. Said here so the
       // author hears it at discovery rather than from inside a tool result on
@@ -274,7 +286,7 @@ export async function resolveSkillScripts(input: {
     });
   }
 
-  for (const script of await listSkillScripts(input.directory)) {
+  for (const script of present) {
     if (reachable.has(script)) {
       continue;
     }
