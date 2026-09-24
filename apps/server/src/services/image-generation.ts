@@ -1,6 +1,7 @@
 import {
   findProviderInstance,
   NakamaApiError,
+  normalizeBaseUrl,
   type ProviderInstance,
   type UserConfig,
 } from "@nakama/core";
@@ -26,8 +27,8 @@ export type ImageGenerationSize = (typeof IMAGE_GENERATION_SIZES)[number];
 
 export const DEFAULT_IMAGE_GENERATION_SIZE: ImageGenerationSize = "1024x1024";
 
-const OPENAI_IMAGES_GENERATIONS_URL =
-  "https://api.openai.com/v1/images/generations";
+const OPENAI_IMAGES_GENERATIONS_PATH = "/images/generations";
+const DEFAULT_OPENAI_IMAGES_BASE_URL = "https://api.openai.com/v1";
 
 /**
  * Generation usually lands in 25-80s. A provider that trickles its response
@@ -37,6 +38,7 @@ const IMAGE_GENERATION_TIMEOUT_MS = 180_000;
 
 export interface ResolvedImageGenerationSelection {
   apiKey: string;
+  baseUrl: string;
   instance: ProviderInstance;
   model: typeof IMAGE_GENERATION_MODEL_ID;
   selection: typeof IMAGE_GENERATION_SELECTION;
@@ -58,6 +60,8 @@ export interface GenerateImageResult {
 
 export interface GenerateImageInput {
   apiKey: string;
+  /** Override OpenAI Images base URL (e.g. self-hosted compatible backend). Defaults to api.openai.com/v1. */
+  baseUrl?: string;
   model?: string;
   prompt: string;
   /** The turn's cancel signal, so a stopped chat stops the download too. */
@@ -137,9 +141,21 @@ export function resolveImageGenerationSelection(
     );
   }
 
-  const openaiInstances = (userConfig?.providers ?? []).filter(
-    (provider) => provider.type === "openai"
-  );
+  const prefix = imageModel.slice(0, imageModel.indexOf("::"));
+
+  const openaiInstances = (userConfig?.providers ?? []).filter((provider) => {
+    if (provider.type === "openai") {
+      return prefix === "openai";
+    }
+    // Self-hosted backends that speak the OpenAI Images API surface as
+    // openai_compatible with a baseUrl (e.g. a local OpenAI-compatible
+    // wrapper). They carry an apiKey and must resolve a real baseUrl.
+    return (
+      prefix === "openai_compatible" &&
+      provider.type === "openai_compatible" &&
+      Boolean(provider.baseUrl?.trim())
+    );
+  });
   const preferredId = userConfig?.defaultProviderId?.trim();
   const preferred =
     preferredId &&
@@ -151,7 +167,7 @@ export function resolveImageGenerationSelection(
       : null;
   const instance = preferred ?? openaiInstances[0] ?? null;
 
-  if (!instance || instance.type !== "openai") {
+  if (!instance) {
     throw new NakamaApiError(
       "Image generation requires an OpenAI provider. Add one in Settings.",
       400
@@ -174,8 +190,13 @@ export function resolveImageGenerationSelection(
     );
   }
 
+  const baseUrl = normalizeBaseUrl(
+    instance.baseUrl?.trim() || DEFAULT_OPENAI_IMAGES_BASE_URL
+  );
+
   return {
     apiKey,
+    baseUrl,
     instance,
     model: IMAGE_GENERATION_MODEL_ID,
     selection: IMAGE_GENERATION_SELECTION,
@@ -221,22 +242,25 @@ export async function generateImageWithOpenAI(
     throw error;
   };
 
-  const response = await fetch(OPENAI_IMAGES_GENERATIONS_URL, {
-    body: JSON.stringify({
-      model,
-      n: 1,
-      // gpt-image models return b64_json; request explicitly for clarity.
-      output_format: "png",
-      prompt,
-      size,
-    }),
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    signal: input.signal ? AbortSignal.any([input.signal, deadline]) : deadline,
-  }).catch(rethrowTimeout);
+  const response = await fetch(
+    `${normalizeBaseUrl(input.baseUrl ?? DEFAULT_OPENAI_IMAGES_BASE_URL)}${OPENAI_IMAGES_GENERATIONS_PATH}`,
+    {
+      body: JSON.stringify({
+        model,
+        n: 1,
+        // gpt-image models return b64_json; request explicitly for clarity.
+        output_format: "png",
+        prompt,
+        size,
+      }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: input.signal ? AbortSignal.any([input.signal, deadline]) : deadline,
+    }
+  ).catch(rethrowTimeout);
 
   if (!response.ok) {
     const body = await response.text().catch(rethrowTimeout);
