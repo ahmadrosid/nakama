@@ -421,7 +421,6 @@ export function useChatPage() {
       const updatedSessionId = session.id;
       void updateSessionMutation
         .mutateAsync({
-          channel: sessionChannel,
           input: { model: selection },
           profileId,
           sessionId: updatedSessionId,
@@ -440,7 +439,6 @@ export function useChatPage() {
       profileId,
       readOnlySession,
       session,
-      sessionChannel,
       sessionModel,
       updateSessionMutation,
     ]
@@ -707,7 +705,6 @@ export function useChatPage() {
       setError(null);
       try {
         const result = await branchSessionMutation.mutateAsync({
-          channel: "web",
           messageIndex: message.historyIndex,
           profileId,
           sessionId: session.id,
@@ -979,7 +976,7 @@ export function useChatPage() {
           if (!cognitoRef.current) {
             syncChatUrl(profileId, activeSession.id);
             void queryClient.invalidateQueries({
-              queryKey: queryKeys.sessions(profileId, "web"),
+              queryKey: queryKeys.sessions(profileId),
             });
           }
         }
@@ -1132,7 +1129,7 @@ export function useChatPage() {
         // else here belongs to a detached turn: the page has moved on and
         // releaseActiveStream already cleared the flags and the queue.
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions(profileId, "web"),
+          queryKey: queryKeys.sessions(profileId),
         });
 
         if (!detached) {
@@ -1251,7 +1248,6 @@ export function useChatPage() {
 
         if (plan && session) {
           const result = await branchSessionMutation.mutateAsync({
-            channel: "web",
             messageIndex: plan.messageIndex,
             profileId,
             sessionId: session.id,

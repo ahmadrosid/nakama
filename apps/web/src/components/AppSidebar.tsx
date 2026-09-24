@@ -1,4 +1,3 @@
-import type { AgentChannel } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   ConfirmDialog,
@@ -150,7 +149,6 @@ function RecentChats() {
     title: string;
   } | null>(null);
   const [renameTarget, setRenameTarget] = useState<{
-    channel: AgentChannel;
     id: string;
     title: string;
   } | null>(null);
@@ -185,7 +183,6 @@ function RecentChats() {
             className="size-7 text-muted-foreground"
             onClick={() =>
               setRenameTarget({
-                channel: session.channel,
                 id: session.id,
                 title,
               })
@@ -201,7 +198,6 @@ function RecentChats() {
             className="size-7 text-muted-foreground"
             onClick={() =>
               void updateSession.mutateAsync({
-                channel: session.channel,
                 input: { pinned: !session.pinned },
                 profileId,
                 sessionId: session.id,
@@ -330,7 +326,6 @@ function RecentChats() {
                   return;
                 }
                 await updateSession.mutateAsync({
-                  channel: renameTarget.channel,
                   input: { title },
                   profileId,
                   sessionId: renameTarget.id,

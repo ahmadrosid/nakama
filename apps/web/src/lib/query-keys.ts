@@ -75,8 +75,7 @@ export const queryKeys = {
     hostMode?: string;
     apiKey?: string;
   }) => ["remoteModelDiscovery", options] as const,
-  sessions: (profileId: string, channel: string) =>
-    ["sessions", profileId, channel] as const,
+  sessions: (profileId: string) => ["sessions", profileId] as const,
   skillProposals: (orgId: string, status?: string, profileId?: string) =>
     ["skillProposals", orgId, status ?? "all", profileId ?? "all"] as const,
   skillSuggestions: (

@@ -1,11 +1,10 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type {
-  AgentChannel,
   CreateProfileRequest,
   DocumentAttachment,
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
-  SessionSummary,
+  ListSessionsResponse,
   SoulStackFiles,
   UpdateProfileRequest,
   UpdateSessionRequest,
@@ -13,8 +12,8 @@ import type {
   WorkspaceEntry,
 } from "@nakama/core/contract";
 import {
+  useInfiniteQuery,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -112,14 +111,10 @@ export function useUpdateSessionMutation() {
       profileId: string;
       sessionId: string;
       input: UpdateSessionRequest;
-      channel?: AgentChannel;
     }) => client.updateSession(sessionId, input),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(
-          variables.profileId,
-          variables.channel ?? "web"
-        ),
+        queryKey: queryKeys.sessions(variables.profileId),
       });
     },
   });
@@ -510,50 +505,61 @@ export function useUnassignSkillMutation() {
   });
 }
 
+const SESSION_PAGE_SIZE = 30;
+
+/** Every history channel as one list, a page at a time, newest first. */
 export function useHistorySessionsQuery(profileId: string) {
   const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
-  // Turns are only ever started from the web chat page, so the other channels
-  // have no reason to poll along with it.
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
 
-  const results = useQueries({
-    queries: HISTORY_SESSION_CHANNELS.map((channel) => ({
-      enabled: Boolean(profileId),
-      queryFn: async () =>
-        (await client.listSessions(profileId, channel)).sessions,
-      queryKey: queryKeys.sessions(profileId, channel),
-      // A title is written after the turn returns and a turn ends without
-      // telling anyone, so the list has to look again. Gated per channel, so a
-      // quiet list makes no requests at all.
-      refetchInterval: (query: { state: { data?: SessionSummary[] } }) =>
-        sessionListPollInterval(query.state.data, {
-          localTurn: channel === "web" && localTurn,
-        }),
-    })),
+  const query = useInfiniteQuery({
+    enabled: Boolean(profileId),
+    getNextPageParam: (lastPage: ListSessionsResponse) =>
+      lastPage.nextCursor ?? undefined,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      client.listSessions(profileId, HISTORY_SESSION_CHANNELS, {
+        cursor: pageParam,
+        limit: SESSION_PAGE_SIZE,
+      }),
+    queryKey: queryKeys.sessions(profileId),
+    // A title is written after the turn returns and a turn ends without
+    // telling anyone, so the list has to look again. Gated, so a quiet list
+    // makes no requests at all.
+    refetchInterval: (query) =>
+      sessionListPollInterval(
+        query.state.data?.pages.flatMap((page) => page.sessions),
+        { localTurn }
+      ),
   });
 
-  const sessions = results
-    .flatMap((result) => result.data ?? [])
+  const seen = new Set<string>();
+  const sessions = (query.data?.pages ?? [])
+    .flatMap((page) => page.sessions)
+    // A chat that moved between two page loads can come back on both.
+    .filter((session) => {
+      if (seen.has(session.id)) {
+        return false;
+      }
+      seen.add(session.id);
+      return true;
+    })
     // The server answers from its own registry, which this tab can be ahead of
     // for the moment between starting a turn and the list catching up.
     .map((session) =>
       session.active || !runningSessionIdSet.has(session.id)
         ? session
         : { ...session, active: true }
-    )
-    .sort(
-      (left, right) =>
-        Number(right.pinned) - Number(left.pinned) ||
-        right.updatedAt.localeCompare(left.updatedAt)
     );
 
   return {
     data: sessions,
-    error: results.find((result) => result.error)?.error ?? null,
-    isFetching: results.some((result) => result.isFetching),
-    isLoading: results.some((result) => result.isLoading),
-    refetch: () => Promise.all(results.map((result) => result.refetch())),
+    error: query.error,
+    fetchNextPage: query.fetchNextPage,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isLoading: query.isLoading,
   };
 }
 
@@ -761,14 +767,10 @@ export function useBranchSessionMutation() {
       profileId: string;
       sessionId: string;
       messageIndex: number;
-      channel?: AgentChannel;
     }) => client.branchSession(sessionId, { messageIndex }),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(
-          variables.profileId,
-          variables.channel ?? "web"
-        ),
+        queryKey: queryKeys.sessions(variables.profileId),
       });
     },
   });
