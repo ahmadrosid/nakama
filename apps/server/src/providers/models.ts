@@ -1165,6 +1165,13 @@ export function modelSupportsTranscription(
   modelId: string,
   provider: ProviderName
 ): boolean {
+  // openai_compatible instances are self-hosted Whisper-style endpoints whose
+  // model id is user-defined; any non-empty id is accepted. First-party
+  // openai stays restricted to the allowlist.
+  if (provider === "openai_compatible") {
+    return Boolean(modelId.trim());
+  }
+
   if (provider !== "openai") {
     return false;
   }
@@ -1184,6 +1191,12 @@ export function modelSupportsImageGeneration(
   modelId: string,
   provider: ProviderName
 ): boolean {
+  // openai_compatible instances route through the OpenAI Images API against
+  // the configured baseUrl; the model allowlist check still applies upstream.
+  if (provider === "openai_compatible") {
+    return IMAGE_GENERATION_MODEL_IDS.has(modelId.trim());
+  }
+
   if (provider !== "openai") {
     return false;
   }
@@ -1194,5 +1207,11 @@ export function modelSupportsImageGeneration(
 export function isAllowedImageGenerationSelection(
   value: string | null | undefined
 ): boolean {
-  return value?.trim() === IMAGE_GENERATION_SELECTION;
+  const trimmed = value?.trim();
+  if (trimmed === IMAGE_GENERATION_SELECTION) {
+    return true;
+  }
+  // Self-hosted OpenAI-compatible backends carry a baseUrl and reuse the same
+  // Images API + model allowlist, selected via `openai_compatible::gpt-image-2`.
+  return trimmed === `openai_compatible::${IMAGE_GENERATION_MODEL_ID}`;
 }

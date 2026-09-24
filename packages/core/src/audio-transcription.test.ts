@@ -1,6 +1,49 @@
 import { expect, spyOn, test } from "bun:test";
 import { transcribeAudio } from "./audio-transcription";
 
+test("openai_compatible provider with a baseUrl is allowed", async () => {
+  const request = spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+    expect(String(url)).toBe("http://100.64.0.1:8000/v1/audio/transcriptions");
+    return Response.json({ text: "Local transcript" });
+  });
+  try {
+    expect(
+      await transcribeAudio({
+        audio: {
+          bytes: new TextEncoder().encode("audio"),
+          filename: "meeting.wav",
+          mediaType: "audio/wav",
+        },
+        model: "whisper-large-v3",
+        provider: {
+          apiKey: "local-key",
+          baseUrl: "http://100.64.0.1:8000/v1",
+          type: "openai_compatible" as const,
+        },
+      })
+    ).toBe("Local transcript");
+  } finally {
+    request.mockRestore();
+  }
+});
+
+test("openai_compatible provider without a baseUrl is rejected", async () => {
+  await expect(
+    transcribeAudio({
+      audio: {
+        bytes: new TextEncoder().encode("audio"),
+        filename: "meeting.wav",
+        mediaType: "audio/wav",
+      },
+      model: "whisper-large-v3",
+      provider: {
+        apiKey: "local-key",
+        type: "openai_compatible" as const,
+      },
+    })
+  ).rejects.toMatchObject({ status: 400 });
+});
+
 test("transcription uses the configured provider endpoint, model, file, and cancellation", async () => {
   const signal = new AbortController().signal;
   const request = spyOn(globalThis, "fetch").mockImplementation(
