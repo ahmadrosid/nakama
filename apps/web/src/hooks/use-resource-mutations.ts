@@ -17,7 +17,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRunningTurnsStore } from "@/context/running-turns-store";
 import { useAuth } from "@/context/use-auth";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
@@ -534,6 +534,16 @@ export function useHistorySessionsQuery(profileId: string) {
       ),
   });
 
+  const { fetchNextPage, refetch } = query;
+  const loadNextPage = useCallback(async () => {
+    const { data } = await fetchNextPage();
+    // Chats moved across the cursor between the two requests, so the pages
+    // no longer join up: load them again from the first one.
+    if (data?.pages.at(-1)?.stale) {
+      await refetch();
+    }
+  }, [fetchNextPage, refetch]);
+
   const seen = new Set<string>();
   const sessions = (query.data?.pages ?? [])
     .flatMap((page) => page.sessions)
@@ -556,7 +566,7 @@ export function useHistorySessionsQuery(profileId: string) {
   return {
     data: sessions,
     error: query.error,
-    fetchNextPage: query.fetchNextPage,
+    fetchNextPage: loadNextPage,
     hasNextPage: query.hasNextPage,
     isFetchingNextPage: query.isFetchingNextPage,
     isLoading: query.isLoading,
