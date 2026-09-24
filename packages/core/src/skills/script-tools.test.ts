@@ -78,7 +78,7 @@ test("a declared script missing the harness is reported before the agent calls i
 
   expect(resolved.tools).toEqual([]);
   expect(resolved.issues[0]?.reason).toBe(
-    "has no __main__ JSON stdin/stdout harness"
+    "has no __main__ block reading sys.stdin"
   );
   await rm(directory, { force: true, recursive: true });
 });
@@ -154,7 +154,7 @@ test("a script missing both pieces is told about both at once", async () => {
 
   const reason = resolved.issues[0]?.reason ?? "";
   expect(reason).toContain("run(input, context)");
-  expect(reason).toContain("harness");
+  expect(reason).toContain("sys.stdin");
   await rm(directory, { force: true, recursive: true });
 });
 
@@ -225,5 +225,28 @@ test("a script that only uses the standard library is reported clean", async () 
 
   expect(resolved.tools).toHaveLength(1);
   expect(resolved.issues).toHaveLength(0);
+  await rm(directory, { force: true, recursive: true });
+});
+
+test("a script that prints its result is accepted, not read as missing a harness", async () => {
+  // print(json.dumps(...)) is how most Python reaches stdout. Requiring the
+  // literal string sys.stdout refused working scripts and told their author
+  // the harness was missing from a file that had one.
+  const directory = await skillDir({
+    "SKILL.md": "---\n---\n",
+    "scripts/printed.py":
+      `"""Printed result."""\n${BODY}\ndef run(input, context):\n    return {"w": hitung(input["b"], input["h"])}\n\n` +
+      'if __name__ == "__main__":\n    import sys, json\n' +
+      "    print(json.dumps(run(json.loads(sys.stdin.read() or '{}'), {})))\n",
+  });
+  const resolved = await resolveSkillScripts({
+    declared: ["scripts/printed.py"],
+    directory,
+    skillName: "calc",
+    toolPath: null,
+  });
+
+  expect(resolved.issues).toEqual([]);
+  expect(resolved.tools).toHaveLength(1);
   await rm(directory, { force: true, recursive: true });
 });

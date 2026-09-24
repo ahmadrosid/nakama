@@ -120,13 +120,15 @@ export async function validatePythonToolModule(
     throw new Error("Tool module must define a run(input, context) function.");
   }
 
+  // Nothing is asserted about how the result is written. `print(json.dumps(...))`
+  // reaches stdout without naming it, and spawnJsonTool already reports a tool
+  // that writes nothing, accurately, when it happens.
   const hasHarness =
     /if\s+__name__\s*==\s*["']__main__["']\s*:/.test(source) &&
-    source.includes("sys.stdin") &&
-    source.includes("sys.stdout");
+    source.includes("sys.stdin");
   if (!hasHarness) {
     throw new Error(
-      'Python tools must include an if __name__ == "__main__" harness that reads JSON from sys.stdin and writes JSON to sys.stdout.'
+      'Python tools must include an if __name__ == "__main__" harness that reads JSON from sys.stdin.'
     );
   }
 }

@@ -38,12 +38,14 @@ function describePythonHarnessGap(source: string): string | null {
   if (!/\bdef\s+run\s*\(/.test(source)) {
     gaps.push("defines no run(input, context) function");
   }
+  // Only the input half is checked. `print(json.dumps(...))` writes to stdout
+  // without naming it, so requiring the string `sys.stdout` rejected working
+  // scripts, and the runner reports a silent tool accurately on its own.
   const hasHarness =
     /if\s+__name__\s*==\s*["']__main__["']\s*:/.test(source) &&
-    source.includes("sys.stdin") &&
-    source.includes("sys.stdout");
+    source.includes("sys.stdin");
   if (!hasHarness) {
-    gaps.push("has no __main__ JSON stdin/stdout harness");
+    gaps.push("has no __main__ block reading sys.stdin");
   }
 
   return gaps.length > 0 ? gaps.join(", and ") : null;
