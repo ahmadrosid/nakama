@@ -563,6 +563,19 @@ export function useHistorySessionsQuery(profileId: string) {
   };
 }
 
+/** One chat's summary, for a chat on a page the list has not loaded. */
+export function useSessionSummaryQuery(
+  profileId: string,
+  sessionId: string | null
+) {
+  return useQuery({
+    enabled: Boolean(sessionId),
+    queryFn: () => client.getSession(sessionId!),
+    queryKey: queryKeys.sessionSummary(profileId, sessionId ?? ""),
+    retry: false,
+  });
+}
+
 export function useSoulStatusQuery(profileId: string | null) {
   return useQuery({
     enabled: Boolean(profileId),
