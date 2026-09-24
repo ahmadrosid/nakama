@@ -1,6 +1,7 @@
-import type {
-  ListSessionsResponse,
-  SessionSummary,
+import {
+  type ListSessionsResponse,
+  MAX_SESSION_SEARCH_LENGTH,
+  type SessionSummary,
 } from "@nakama/core/contract";
 import type { InfiniteData } from "@tanstack/react-query";
 
@@ -54,4 +55,13 @@ export function withFirstPage(
     return null;
   }
   return { ...data, pages: [head, ...data.pages.slice(1)] };
+}
+
+/**
+ * The `q` to send for what is in the search field: trimmed, and cut at the
+ * length the server accepts, so a paste that got past `maxLength` still
+ * searches instead of answering 400.
+ */
+export function sessionSearchQuery(input: string): string {
+  return input.trim().slice(0, MAX_SESSION_SEARCH_LENGTH).trimEnd();
 }

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionSummary } from "@nakama/core/contract";
-import { sessionListPollInterval, withFirstPage } from "@/lib/session-list";
+import {
+  sessionListPollInterval,
+  sessionSearchQuery,
+  withFirstPage,
+} from "@/lib/session-list";
 
 const NOW = Date.parse("2026-09-21T12:00:00.000Z");
 
@@ -105,5 +109,20 @@ describe("withFirstPage", () => {
     const head = { nextCursor: "cursor_b", sessions: [session()] };
     const single = { pageParams: [null], pages: [loaded.pages[0]] };
     expect(withFirstPage(single, head)?.pages).toEqual([head]);
+  });
+});
+
+describe("sessionSearchQuery", () => {
+  test("keeps 200 characters and cuts the 201st", () => {
+    expect(sessionSearchQuery("x".repeat(200))).toBe("x".repeat(200));
+    expect(sessionSearchQuery("x".repeat(201))).toBe("x".repeat(200));
+  });
+
+  test("trims before it counts, and after it cuts", () => {
+    expect(sessionSearchQuery(`   ${"x".repeat(200)}   `)).toBe(
+      "x".repeat(200)
+    );
+    expect(sessionSearchQuery(`${"x".repeat(199)} y`)).toBe("x".repeat(199));
+    expect(sessionSearchQuery("   ")).toBe("");
   });
 });

@@ -1,3 +1,4 @@
+import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   ConfirmDialog,
@@ -50,6 +51,7 @@ import {
   SIDEBAR_PAGE_IDS,
   visibleNavGroups,
 } from "@/lib/navigation";
+import { sessionSearchQuery } from "@/lib/session-list";
 import {
   getInitialRecentsCollapsed,
   SIDEBAR_RECENTS_COLLAPSED_KEY,
@@ -158,7 +160,7 @@ function RecentChats() {
   const [searchQuery, setSearchQuery] = useState("");
   // Typing waits a moment before asking the server; clearing is immediate.
   useEffect(() => {
-    const next = search.trim();
+    const next = sessionSearchQuery(search);
     if (!next) {
       setSearchQuery("");
       return;
@@ -311,6 +313,7 @@ function RecentChats() {
         <Input
           aria-label="Search chats"
           className="border-border/60 bg-muted/20 pl-8 shadow-none"
+          maxLength={MAX_SESSION_SEARCH_LENGTH}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
