@@ -167,6 +167,8 @@ export interface StoredSessionSummaryRecord {
   messageCount: number;
   orgId?: string | null;
   pinned: boolean;
+  /** 1-based place in the list the query returned the row from. */
+  position: number;
   preview: string | null;
   profileId: string;
   title: string | null;
