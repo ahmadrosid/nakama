@@ -310,6 +310,33 @@ describe("listSessions searches titles and message text", () => {
     expect(await search("total is ready")).toEqual([ids.array]);
   });
 
+  test("ignores case for ASCII letters only", async () => {
+    const { db, service } = await createService();
+    const id = await seedChat(
+      db,
+      service,
+      "web",
+      [{ content: "notes", role: "user" }],
+      "École d'été"
+    );
+    const search = async (query: string) =>
+      (
+        await service.listSessions(
+          ORG_ID,
+          "profile_default",
+          CHANNELS,
+          ACCESS,
+          undefined,
+          undefined,
+          query
+        )
+      ).sessions.map((session) => session.id);
+    expect(await search("ÉCOLE")).toEqual([id]);
+    expect(await search("D'été")).toEqual([id]);
+    // SQLite folds ASCII only: a non-ASCII letter matches in its own case.
+    expect(await search("école")).toEqual([]);
+  });
+
   test("does not match the raw message JSON", async () => {
     const { search } = await seedSearchable();
     expect(await search("role")).toEqual([]);

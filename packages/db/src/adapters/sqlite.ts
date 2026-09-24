@@ -1117,6 +1117,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         AND (?9 IS NULL OR s.app_user_id = ?9)
         -- Only message text is searched: content is a string or an array of
         -- parts, and matching the raw JSON would let "role" hit every chat.
+        -- LIKE ignores case for ASCII letters only, so "école" does not find
+        -- "École": SQLite has no Unicode case folding and bun:sqlite cannot
+        -- register one. That needs a folded copy of the text or an FTS5 index.
         AND (
           ?10 IS NULL
           OR s.title LIKE ?10 ESCAPE '\\'
