@@ -80,6 +80,7 @@ const CROSS_ORG_ROUTES: Array<{
   method: string;
   path: (sessionId: string) => string;
 }> = [
+  { method: "GET", path: (id) => `/v1/sessions/${id}` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/messages` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/status` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/stream` },
@@ -282,6 +283,29 @@ describe("session routes are scoped to the caller's active org", () => {
       messages: Array<{ content: string }>;
     };
     expect(body.messages[0]?.content).toBe("victim org secret");
+  });
+
+  test("the owning org reads one session's summary", async () => {
+    const { app, victimSessionId } = await createScenario();
+    const victim = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const response = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${victimSessionId}`, {
+        headers: victim.headers(),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      channel: "web",
+      id: victimSessionId,
+      profileId: "profile_victim",
+    });
   });
 
   test("the owning org can set a chat-only model", async () => {

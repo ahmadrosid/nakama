@@ -178,4 +178,12 @@ describe("listSessions pages the merged history", () => {
       )
     ).rejects.toMatchObject({ status: 400 });
   });
+
+  test("getSessionSummary finds one session and misses an unknown one", async () => {
+    const { ids, service } = await seedHistory();
+    const telegramId = ids[1] as string;
+    const summary = await service.getSessionSummary(telegramId, ORG_ID);
+    expect(summary).toMatchObject({ channel: "telegram", id: telegramId });
+    expect(await service.getSessionSummary("missing", ORG_ID)).toBeNull();
+  });
 });

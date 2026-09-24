@@ -2280,6 +2280,23 @@ export class AgentService {
     };
   }
 
+  async getSessionSummary(
+    sessionId: string,
+    orgId: string
+  ): Promise<SessionSummary | null> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (!record) {
+      return null;
+    }
+
+    const [session] = await this.db.listSessionSummaries(
+      record.profileId,
+      [record.channel],
+      { sessionId }
+    );
+    return session ? toSessionSummary(session) : null;
+  }
+
   scheduleSessionTitleGeneration(sessionId: string): void {
     // A cognito session has no row to title, and generating one would spend a
     // turn summarising a conversation that is meant to leave no trace.

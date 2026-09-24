@@ -13,6 +13,7 @@ import type {
   SendMessageResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
+  SessionSummary,
   UpdateSessionRequest,
 } from "@nakama/core";
 import {
@@ -389,6 +390,26 @@ export function registerSessionRoutes(
   );
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "get",
+      operationId: "getSession",
+      path: "/v1/sessions/{sessionId}",
+      request: { params: sessionIdParamSchema },
+      responses: {
+        200: {
+          content: { "application/json": { schema: sessionSummarySchema } },
+          description: "Session",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get one chat session",
+      tags: ["Chat"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "patch",
       operationId: "updateSession",
       path: "/v1/sessions/{sessionId}",
@@ -685,6 +706,17 @@ export function registerSessionRoutes(
           : { cursor: c.req.query("cursor"), limit }
       )
     );
+  });
+
+  app.get("/v1/sessions/:sessionId", async (c) => {
+    const { orgId, sessionId } = await requireSessionAccess(c);
+    const session = await agent.getSessionSummary(sessionId, orgId);
+
+    if (!session) {
+      return errorResponse("Session not found", 404);
+    }
+
+    return json<SessionSummary>(session);
   });
 
   app.delete("/v1/sessions/:sessionId", async (c) => {
