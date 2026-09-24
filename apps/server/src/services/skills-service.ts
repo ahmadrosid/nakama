@@ -306,6 +306,10 @@ export class SkillsService {
       description,
       disableModelInvocation,
       name: parsed.frontmatter.name,
+      // Carried from what is on disk. A patch edits prose; it has no opinion
+      // about which scripts the skill ships, and dropping the key here leaves
+      // the skill installed with none of its scripts loaded as tools.
+      scripts: parsed.frontmatter.scripts,
     });
 
     parseSkillMarkdown(content, skillFilePath);
