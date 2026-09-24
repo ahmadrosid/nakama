@@ -4,6 +4,9 @@ Nakama is an agent platform for teams. The platform does not replace the team. O
 
 The org is the isolation boundary. Profiles, sessions, tools, MCP, skills, automations, attachments, and usage are org-scoped unless they are platform-level.
 
+Security trust boundaries, STRIDE analysis, and residual risks are maintained in
+[`THREAT_MODEL.md`](./THREAT_MODEL.md).
+
 ## System overview
 
 ```mermaid

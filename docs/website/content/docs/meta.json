@@ -10,6 +10,8 @@
     "docker",
     "coolify",
     "tailscale",
+    "deployment-hardening",
+    "outbound-connections",
     "backup-restore",
     "error-tracking",
     "---Channels---",
