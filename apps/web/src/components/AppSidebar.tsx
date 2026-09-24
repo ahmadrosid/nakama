@@ -19,6 +19,7 @@ import {
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
+  Search01Icon,
 } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useEffect, useState } from "react";
@@ -152,14 +153,24 @@ function RecentChats() {
       profiles,
       search: location.search,
     }) ?? "";
-  const {
-    data: sessions,
-    isLoading,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useHistorySessionsQuery(profileId);
+  const history = useHistorySessionsQuery(profileId);
+  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  // Typing waits a moment before asking the server; clearing is immediate.
+  useEffect(() => {
+    const next = search.trim();
+    if (!next) {
+      setSearchQuery("");
+      return;
+    }
+    const timer = setTimeout(() => setSearchQuery(next), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  // Idle until there is a search, then its own paged list.
+  const results = useHistorySessionsQuery(profileId, searchQuery);
+  const list = searchQuery ? results : history;
+  const { data: sessions } = history;
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
   const [pageEnd, setPageEnd] = useState<HTMLDivElement | null>(null);
   // Rebuilt after each page, because an observer reports only changes: a page
   // too short to push the sentinel out of view would otherwise be the last.
@@ -271,15 +282,57 @@ function RecentChats() {
     );
   };
 
+  const renderList = (rows: typeof sessions, emptyText: string) => (
+    <div className="no-scrollbar min-h-0 overflow-y-auto">
+      {list.isLoading && <SessionRowSkeletons />}
+      {list.error && (
+        <p className="px-3 py-2 text-muted-foreground text-xs" role="status">
+          {searchQuery
+            ? "Couldn’t search chats."
+            : "Couldn’t load recent chats."}
+        </p>
+      )}
+      {!(list.isLoading || list.error) && list.data.length === 0 && (
+        <p className="px-3 py-2 text-muted-foreground text-xs">{emptyText}</p>
+      )}
+      {rows.map(renderSession)}
+      {isFetchingNextPage && <SessionRowSkeletons />}
+      {hasNextPage && <div aria-hidden="true" ref={setPageEnd} />}
+    </div>
+  );
+
   return (
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
-      {pinnedSessions.length > 0 ? (
+      <div className="relative mb-3 shrink-0">
+        <Search01Icon
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          aria-label="Search chats"
+          className="border-border/60 bg-muted/20 pl-8 shadow-none"
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setSearch("");
+            }
+          }}
+          placeholder="Search chats"
+          type="search"
+          value={search}
+        />
+      </div>
+      {searchQuery ? renderList(results.data, "No chats match") : null}
+      {!searchQuery && pinnedSessions.length > 0 ? (
         <div className="mb-3">
           <p className="sidebar-nav-group-label px-2 text-sm">Pinned</p>
           {pinnedSessions.map(renderSession)}
         </div>
       ) : null}
-      <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
+      <div
+        className="mb-1.5 flex shrink-0 items-center gap-1 px-2"
+        hidden={Boolean(searchQuery)}
+      >
         <button
           aria-expanded={!collapsed}
           className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
@@ -314,27 +367,9 @@ function RecentChats() {
           </Button>
         </div>
       </div>
-      {!collapsed && (
-        <div className="no-scrollbar min-h-0 overflow-y-auto">
-          {isLoading && <SessionRowSkeletons />}
-          {error && (
-            <p
-              className="px-3 py-2 text-muted-foreground text-xs"
-              role="status"
-            >
-              Couldn’t load recent chats.
-            </p>
-          )}
-          {!(isLoading || error) && sessions.length === 0 && (
-            <p className="px-3 py-2 text-muted-foreground text-xs">
-              No recent chats
-            </p>
-          )}
-          {recentSessions.map(renderSession)}
-          {isFetchingNextPage && <SessionRowSkeletons />}
-          {hasNextPage && <div aria-hidden="true" ref={setPageEnd} />}
-        </div>
-      )}
+      {searchQuery || collapsed
+        ? null
+        : renderList(recentSessions, "No recent chats")}
       {renameTarget ? (
         <Dialog
           onOpenChange={(open) => {
