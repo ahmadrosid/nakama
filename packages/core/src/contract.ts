@@ -1145,6 +1145,12 @@ export interface SessionSummary {
   updatedAt: string;
 }
 
+/**
+ * Longest `q` that `GET /v1/sessions` accepts, after trimming. The web search
+ * field stops at the same length, so typing on cannot turn into a 400.
+ */
+export const MAX_SESSION_SEARCH_LENGTH = 200;
+
 export interface ListSessionsResponse {
   /** Set only when a `limit` was asked for; `null` on the last page. */
   nextCursor?: string | null;

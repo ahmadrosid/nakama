@@ -20,6 +20,7 @@ import {
   AGENT_CHANNELS,
   fetchRemoteImage,
   formatServerError,
+  MAX_SESSION_SEARCH_LENGTH,
   NakamaApiError,
   reportError,
 } from "@nakama/core";
@@ -43,7 +44,6 @@ import {
 import type { HonoApp } from "../types";
 
 const MAX_SESSION_PAGE_SIZE = 100;
-const MAX_SESSION_QUERY_LENGTH = 200;
 
 export function registerSessionRoutes(
   app: HonoApp,
@@ -297,7 +297,7 @@ export function registerSessionRoutes(
       .string()
       .optional()
       .openapi({
-        description: `Keeps the sessions whose title or message text contains it, up to ${MAX_SESSION_QUERY_LENGTH} characters.`,
+        description: `Keeps the sessions whose title or message text contains it, up to ${MAX_SESSION_SEARCH_LENGTH} characters.`,
       }),
   });
   const streamQuerySchema = z.object({
@@ -702,9 +702,9 @@ export function registerSessionRoutes(
         400
       );
     }
-    if (query && query.length > MAX_SESSION_QUERY_LENGTH) {
+    if (query && query.length > MAX_SESSION_SEARCH_LENGTH) {
       return errorResponse(
-        `q must be at most ${MAX_SESSION_QUERY_LENGTH} characters.`,
+        `q must be at most ${MAX_SESSION_SEARCH_LENGTH} characters.`,
         400
       );
     }
