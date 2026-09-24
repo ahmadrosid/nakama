@@ -278,10 +278,6 @@ export async function resolveSkillScripts(input: {
     if (reachable.has(script)) {
       continue;
     }
-    const base = path.basename(script);
-    if (base === SKILL_FILE_NAME) {
-      continue;
-    }
     issues.push({
       path: path.relative(input.directory, script),
       reason: `not runnable: name it one of ${SKILL_TOOL_FILES.join(", ")} at the skill root, or list it under "scripts:" in ${SKILL_FILE_NAME}`,
