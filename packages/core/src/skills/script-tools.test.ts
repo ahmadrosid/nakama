@@ -134,7 +134,9 @@ test("a module docstring with its summary on the next line still describes the t
     toolPath: null,
   });
 
-  expect(resolved.tools[0]?.description).toBe("Section modulus of a rectangle.");
+  expect(resolved.tools[0]?.description).toBe(
+    "Section modulus of a rectangle."
+  );
   await rm(directory, { force: true, recursive: true });
 });
 
@@ -200,7 +202,8 @@ test("a script that needs a package Python does not ship says so at discovery", 
   // Still a tool: the dependency is a warning about the runtime, not a defect
   // in the script.
   expect(resolved.tools).toHaveLength(1);
-  const reason = resolved.issues.find((i) => i.path === "scripts/chart.py")?.reason ?? "";
+  const reason =
+    resolved.issues.find((i) => i.path === "scripts/chart.py")?.reason ?? "";
   expect(reason).toContain("matplotlib");
   expect(reason).toContain("reportlab");
   // json ships with Python and must not be named.
