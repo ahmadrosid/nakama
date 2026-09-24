@@ -2249,7 +2249,8 @@ export class AgentService {
     channels: AgentChannel | readonly AgentChannel[],
     access: ChatProfileAccess,
     appUserId?: string,
-    page?: { cursor?: string; limit: number }
+    page?: { cursor?: string; limit: number },
+    query?: string
   ): Promise<ListSessionsResponse> {
     this.assertChatProfileAccess(
       await this.requireProfile(orgId, profileId),
@@ -2265,6 +2266,7 @@ export class AgentService {
         appUserId,
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
+        query,
       }
     );
 
