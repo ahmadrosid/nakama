@@ -1,6 +1,7 @@
 node_modules
 **/node_modules
 **/dist
+build-assets
 .git
 .github
 .cursor
