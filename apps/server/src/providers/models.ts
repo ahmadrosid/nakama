@@ -1192,12 +1192,8 @@ export function modelSupportsImageGeneration(
   provider: ProviderName
 ): boolean {
   // openai_compatible instances route through the OpenAI Images API against
-  // the configured baseUrl; the model allowlist check still applies upstream.
-  if (provider === "openai_compatible") {
-    return IMAGE_GENERATION_MODEL_IDS.has(modelId.trim());
-  }
-
-  if (provider !== "openai") {
+  // the configured baseUrl; both flavors use the same model allowlist.
+  if (provider !== "openai" && provider !== "openai_compatible") {
     return false;
   }
 
