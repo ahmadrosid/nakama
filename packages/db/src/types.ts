@@ -1077,6 +1077,8 @@ export interface DatabaseAdapter {
       >;
       appUserId?: string;
       limit?: number;
+      /** Keeps the sessions whose title or user/assistant text contains it. */
+      query?: string;
       sessionId?: string;
     }
   ): Promise<StoredSessionSummaryRecord[]>;

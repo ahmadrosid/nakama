@@ -1115,6 +1115,33 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         AND s.channel IN (SELECT value FROM json_each(?2))
         AND (?8 IS NULL OR s.id = ?8)
         AND (?9 IS NULL OR s.app_user_id = ?9)
+        -- Only message text is searched: content is a string or an array of
+        -- parts, and matching the raw JSON would let "role" hit every chat.
+        AND (
+          ?10 IS NULL
+          OR s.title LIKE ?10 ESCAPE '\\'
+          OR EXISTS (
+            SELECT 1
+            FROM session_messages sm
+            WHERE sm.session_id = s.id
+              AND json_extract(sm.payload, '$.role') IN ('user', 'assistant')
+              AND (
+                (
+                  json_type(sm.payload, '$.content') = 'text'
+                  AND json_extract(sm.payload, '$.content') LIKE ?10 ESCAPE '\\'
+                )
+                OR (
+                  json_type(sm.payload, '$.content') = 'array'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM json_each(sm.payload, '$.content') AS part
+                    WHERE json_extract(part.value, '$.type') = 'text'
+                      AND json_extract(part.value, '$.text') LIKE ?10 ESCAPE '\\'
+                  )
+                )
+              )
+          )
+        )
       GROUP BY s.id
       HAVING COUNT(m.id) > 0
     ),
@@ -3857,7 +3884,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {
-      const { after, appUserId, limit, sessionId } = options;
+      const { after, appUserId, limit, query, sessionId } = options;
       return listSessionSummariesStmt
         .all(
           profileId,
@@ -3869,7 +3896,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           // SQLite reads a negative LIMIT as no limit.
           limit ?? -1,
           sessionId ?? null,
-          appUserId ?? null
+          appUserId ?? null,
+          query ? likeContains(query) : null
         )
         .map((row) => toSessionSummaryRecord(row as SessionSummaryRow));
     },
@@ -4864,6 +4892,11 @@ function toAttachmentRecord(row: AttachmentRow): StoredAttachmentRecord {
     sizeBytes: row.size_bytes,
     storagePath: row.storage_path,
   };
+}
+
+/** A LIKE pattern that matches `text` anywhere, with its wildcards taken literally. */
+function likeContains(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }
 
 function previewFromFirstUserPayload(
