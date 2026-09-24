@@ -41,6 +41,8 @@ import {
 } from "../shared";
 import type { HonoApp } from "../types";
 
+const MAX_SESSION_PAGE_SIZE = 100;
+
 export function registerSessionRoutes(
   app: HonoApp,
   options: ServerOptions
@@ -104,6 +106,7 @@ export function registerSessionRoutes(
     .openapi("SessionSummary");
   const listSessionsResponseSchema = z
     .object({
+      nextCursor: z.string().nullable().optional(),
       sessions: z.array(sessionSummarySchema),
     })
     .openapi("ListSessionsResponse");
@@ -274,6 +277,18 @@ export function registerSessionRoutes(
   });
   const sessionListQuerySchema = z.object({
     channel: agentChannelSchema.optional(),
+    channels: z.string().optional().openapi({
+      description: "Comma-separated channels, listed as one merged list.",
+    }),
+    cursor: z.string().optional().openapi({
+      description: "`nextCursor` from the previous page.",
+    }),
+    limit: z
+      .string()
+      .optional()
+      .openapi({
+        description: `Page size, 1 to ${MAX_SESSION_PAGE_SIZE}. Without it every session is returned.`,
+      }),
     profileId: z.string().optional(),
   });
   const streamQuerySchema = z.object({
@@ -637,14 +652,38 @@ export function registerSessionRoutes(
       );
     }
     const profileId = c.req.query("profileId")?.trim();
-    const channel = parseChannel(c.req.query("channel"));
+    const channelsParam = c.req.query("channels");
+    const channels =
+      channelsParam === undefined
+        ? parseChannel(c.req.query("channel"))
+        : channelsParam.split(",").map((channel) => parseChannel(channel));
+    const limitParam = c.req.query("limit");
+    const limit = limitParam === undefined ? undefined : Number(limitParam);
 
     if (!profileId) {
       return errorResponse("profileId is required.", 400);
     }
+    if (
+      limit !== undefined &&
+      !(Number.isInteger(limit) && limit >= 1 && limit <= MAX_SESSION_PAGE_SIZE)
+    ) {
+      return errorResponse(
+        `limit must be an integer from 1 to ${MAX_SESSION_PAGE_SIZE}.`,
+        400
+      );
+    }
 
     return json<ListSessionsResponse>(
-      await agent.listSessions(orgId, profileId, channel, auth, appUserId)
+      await agent.listSessions(
+        orgId,
+        profileId,
+        channels,
+        auth,
+        appUserId,
+        limit === undefined
+          ? undefined
+          : { cursor: c.req.query("cursor"), limit }
+      )
     );
   });
 

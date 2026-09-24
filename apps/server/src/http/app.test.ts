@@ -1399,6 +1399,51 @@ describe("createHonoApp", () => {
     expect(listCalls).toEqual([]);
   });
 
+  test("GET /v1/sessions reads channels, limit and cursor", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const listCalls: unknown[][] = [];
+    options.agent.listSessions = async (...args: unknown[]) => {
+      // Everything after orgId and profileId: channels, auth, appUserId, page.
+      listCalls.push(args.slice(2));
+      return { nextCursor: null, sessions: [] };
+    };
+    const list = (query: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/sessions?profileId=default&${query}`,
+          { headers: session.headers() }
+        )
+      );
+
+    expect(
+      (await list("channels=web,telegram&limit=30&cursor=abc")).status
+    ).toBe(200);
+    expect((await list("channel=web")).status).toBe(200);
+    for (const invalid of [
+      "channels=web,not-a-channel",
+      "channel=web&limit=0",
+      "channel=web&limit=101",
+      "channel=web&limit=ten",
+    ]) {
+      expect((await list(invalid)).status).toBe(400);
+    }
+
+    expect(listCalls).toEqual([
+      [
+        ["web", "telegram"],
+        expect.anything(),
+        undefined,
+        { cursor: "abc", limit: 30 },
+      ],
+      ["web", expect.anything(), undefined, undefined],
+    ]);
+  });
+
   describe("org context middleware", () => {
     test("setup stores active org on the session", async () => {
       const options = createServerOptions();
