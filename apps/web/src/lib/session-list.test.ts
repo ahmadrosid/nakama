@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionSummary } from "@nakama/core/contract";
-import { sessionListPollInterval } from "@/lib/session-list";
+import { sessionListPollInterval, withFirstPage } from "@/lib/session-list";
 
 const NOW = Date.parse("2026-09-21T12:00:00.000Z");
 
@@ -76,5 +76,34 @@ describe("sessionListPollInterval", () => {
     expect(
       sessionListPollInterval([session()], { localTurn: true, now: NOW })
     ).toBe(2000);
+  });
+});
+
+describe("withFirstPage", () => {
+  const loaded = {
+    pageParams: [null, "cursor_a"],
+    pages: [
+      { nextCursor: "cursor_a", sessions: [session({ title: null })] },
+      { nextCursor: null, sessions: [session({ id: "session_2" })] },
+    ],
+  };
+
+  test("swaps in a first page that still ends where the second one starts", () => {
+    const head = { nextCursor: "cursor_a", sessions: [session()] };
+    expect(withFirstPage(loaded, head)).toEqual({
+      pageParams: loaded.pageParams,
+      pages: [head, loaded.pages[1]],
+    });
+  });
+
+  test("gives up when a chat crossed the end of the first page", () => {
+    const head = { nextCursor: "cursor_b", sessions: [session()] };
+    expect(withFirstPage(loaded, head)).toBeNull();
+  });
+
+  test("a single loaded page has nothing to line up with", () => {
+    const head = { nextCursor: "cursor_b", sessions: [session()] };
+    const single = { pageParams: [null], pages: [loaded.pages[0]] };
+    expect(withFirstPage(single, head)?.pages).toEqual([head]);
   });
 });

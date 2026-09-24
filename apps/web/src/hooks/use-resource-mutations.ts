@@ -12,6 +12,7 @@ import type {
   WorkspaceEntry,
 } from "@nakama/core/contract";
 import {
+  type InfiniteData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -23,7 +24,7 @@ import { useAuth } from "@/context/use-auth";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { sessionListPollInterval } from "@/lib/session-list";
+import { sessionListPollInterval, withFirstPage } from "@/lib/session-list";
 
 const EMPTY_USER_CONTEXT: UserContextStatusResponse = {
   active: false,
@@ -507,31 +508,58 @@ export function useUnassignSkillMutation() {
 
 const SESSION_PAGE_SIZE = 30;
 
+function listSessionPage(profileId: string, cursor: string | null) {
+  return client.listSessions(profileId, HISTORY_SESSION_CHANNELS, {
+    cursor,
+    limit: SESSION_PAGE_SIZE,
+  });
+}
+
 /** Every history channel as one list, a page at a time, newest first. */
 export function useHistorySessionsQuery(profileId: string) {
+  const queryClient = useQueryClient();
   const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
+  const queryKey = queryKeys.sessions(profileId);
 
   const query = useInfiniteQuery({
     enabled: Boolean(profileId),
     getNextPageParam: (lastPage: ListSessionsResponse) =>
       lastPage.nextCursor ?? undefined,
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) =>
-      client.listSessions(profileId, HISTORY_SESSION_CHANNELS, {
-        cursor: pageParam,
-        limit: SESSION_PAGE_SIZE,
-      }),
-    queryKey: queryKeys.sessions(profileId),
-    // A title is written after the turn returns and a turn ends without
-    // telling anyone, so the list has to look again. Gated, so a quiet list
-    // makes no requests at all.
-    refetchInterval: (query) =>
-      sessionListPollInterval(
-        query.state.data?.pages.flatMap((page) => page.sessions),
-        { localTurn }
-      ),
+    queryFn: ({ pageParam }) => listSessionPage(profileId, pageParam),
+    queryKey,
+  });
+
+  // A title is written after the turn returns and a turn ends without telling
+  // anyone, so the list has to look again. Both show up on the first page, with
+  // the newest chats, so a poll reads only that page and costs the same however
+  // far the list was scrolled. Gated, so a quiet list makes no requests at all.
+  const pollInterval = sessionListPollInterval(query.data?.pages[0]?.sessions, {
+    localTurn,
+  });
+  useQuery({
+    enabled: Boolean(profileId) && pollInterval !== false,
+    queryFn: async () => {
+      const head = await listSessionPage(profileId, null);
+      const data =
+        queryClient.getQueryData<
+          InfiniteData<ListSessionsResponse, string | null>
+        >(queryKey);
+      if (!data) {
+        return null;
+      }
+      const next = withFirstPage(data, head);
+      if (next) {
+        queryClient.setQueryData(queryKey, next);
+      } else {
+        await queryClient.refetchQueries({ exact: true, queryKey });
+      }
+      return null;
+    },
+    queryKey: queryKeys.sessionListHead(profileId),
+    refetchInterval: pollInterval,
   });
 
   const { fetchNextPage, refetch } = query;

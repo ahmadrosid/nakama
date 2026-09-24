@@ -1,4 +1,8 @@
-import type { SessionSummary } from "@nakama/core/contract";
+import type {
+  ListSessionsResponse,
+  SessionSummary,
+} from "@nakama/core/contract";
+import type { InfiniteData } from "@tanstack/react-query";
 
 const POLL_MS = 2000;
 /**
@@ -35,4 +39,19 @@ export function sessionListPollInterval(
   );
 
   return waiting ? POLL_MS : false;
+}
+
+/**
+ * The loaded list with `head`, a fresh first page, in place of the first page,
+ * or `null` when a chat crossed the end of the first page since the second page
+ * was asked for: the pages after it then no longer follow on from it.
+ */
+export function withFirstPage(
+  data: InfiniteData<ListSessionsResponse, string | null>,
+  head: ListSessionsResponse
+): InfiniteData<ListSessionsResponse, string | null> | null {
+  if (data.pages.length > 1 && data.pageParams[1] !== head.nextCursor) {
+    return null;
+  }
+  return { ...data, pages: [head, ...data.pages.slice(1)] };
 }

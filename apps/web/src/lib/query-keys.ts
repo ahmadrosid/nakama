@@ -75,6 +75,9 @@ export const queryKeys = {
     hostMode?: string;
     apiKey?: string;
   }) => ["remoteModelDiscovery", options] as const,
+  // Outside "sessions", so invalidating the list does not also re-run its poll.
+  sessionListHead: (profileId: string) =>
+    ["sessionListHead", profileId] as const,
   sessionSummary: (profileId: string, sessionId: string) =>
     ["sessions", profileId, sessionId] as const,
   sessions: (profileId: string) => ["sessions", profileId] as const,
