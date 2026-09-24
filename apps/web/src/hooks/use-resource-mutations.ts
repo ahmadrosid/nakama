@@ -508,27 +508,42 @@ export function useUnassignSkillMutation() {
 
 const SESSION_PAGE_SIZE = 30;
 
-function listSessionPage(profileId: string, cursor: string | null) {
+function listSessionPage(
+  profileId: string,
+  cursor: string | null,
+  search?: string
+) {
   return client.listSessions(profileId, HISTORY_SESSION_CHANNELS, {
     cursor,
     limit: SESSION_PAGE_SIZE,
+    query: search || undefined,
   });
 }
 
-/** Every history channel as one list, a page at a time, newest first. */
-export function useHistorySessionsQuery(profileId: string) {
+/**
+ * Every history channel as one list, a page at a time, newest first. A
+ * `search` narrows it on the server to chats whose title or messages match;
+ * an empty one idles, so clearing a search does not refetch the plain list.
+ */
+export function useHistorySessionsQuery(profileId: string, search?: string) {
   const queryClient = useQueryClient();
   const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
-  const queryKey = queryKeys.sessions(profileId);
+  const enabled = Boolean(profileId) && search !== "";
+  const queryKey = search
+    ? queryKeys.sessionSearch(profileId, search)
+    : queryKeys.sessions(profileId);
 
   const query = useInfiniteQuery({
-    enabled: Boolean(profileId),
+    enabled,
     getNextPageParam: (lastPage: ListSessionsResponse) =>
       lastPage.nextCursor ?? undefined,
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => listSessionPage(profileId, pageParam),
+    // Typing on keeps the previous results up; a first search starts empty.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === "search" ? previous : undefined,
+    queryFn: ({ pageParam }) => listSessionPage(profileId, pageParam, search),
     queryKey,
   });
 
@@ -540,9 +555,9 @@ export function useHistorySessionsQuery(profileId: string) {
     localTurn,
   });
   useQuery({
-    enabled: Boolean(profileId) && pollInterval !== false,
+    enabled: enabled && pollInterval !== false,
     queryFn: async () => {
-      const head = await listSessionPage(profileId, null);
+      const head = await listSessionPage(profileId, null, search);
       const data =
         queryClient.getQueryData<
           InfiniteData<ListSessionsResponse, string | null>
@@ -558,7 +573,7 @@ export function useHistorySessionsQuery(profileId: string) {
       }
       return null;
     },
-    queryKey: queryKeys.sessionListHead(profileId),
+    queryKey: queryKeys.sessionListHead(profileId, search),
     refetchInterval: pollInterval,
   });
 
