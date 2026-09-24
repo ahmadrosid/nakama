@@ -84,3 +84,52 @@ describe("skill instruction discovery", () => {
     expect(prompt).not.toContain(skill.body);
   });
 });
+
+describe("skills that ship code nothing can run", () => {
+  const stranded: DiscoveredSkill = {
+    ...baseSkill,
+    hasTool: false,
+    name: "order-pricing",
+    scriptIssues: [
+      { path: "scripts/pricing.py", reason: "not runnable: name it tool.py" },
+    ],
+    toolPath: null,
+  };
+
+  test("the catalog says the scripts cannot run", () => {
+    const line = composeSkillsCatalog([stranded]);
+
+    expect(line).toContain("ships 1 script that cannot run here");
+    expect(line).toContain("do not answer from their source");
+  });
+
+  test("more than one is counted, not listed", () => {
+    const line = composeSkillsCatalog([
+      {
+        ...stranded,
+        scriptIssues: [
+          ...stranded.scriptIssues,
+          {
+            path: "scripts/report.py",
+            reason: "not runnable: name it tool.py",
+          },
+        ],
+      },
+    ]);
+
+    expect(line).toContain("ships 2 scripts that cannot run here");
+  });
+
+  test("a skill with a working tool is unchanged", () => {
+    expect(composeSkillsCatalog([baseSkill])).toContain("(includes tool)");
+    expect(composeSkillsCatalog([baseSkill])).not.toContain("cannot run here");
+  });
+
+  test("a prose-only skill with no scripts stays silent", () => {
+    const prose = { ...baseSkill, hasTool: false, toolPath: null };
+    const line = composeSkillsCatalog([prose]);
+
+    expect(line).not.toContain("cannot run here");
+    expect(line).not.toContain("(includes tool)");
+  });
+});
