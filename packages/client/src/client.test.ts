@@ -626,3 +626,25 @@ test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
     path: "report.md",
   });
 });
+
+test("listSessions asks for several channels and a page in one request", async () => {
+  const urls: string[] = [];
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: (async (input, init) => {
+      urls.push(new Request(input, init).url);
+      return Response.json({ sessions: [] });
+    }) as typeof fetch,
+  });
+  await client.listSessions("agent-a");
+  await client.listSessions("agent-a", ["web", "telegram"], {
+    cursor: null,
+    limit: 30,
+  });
+  await client.listSessions("agent-a", ["web"], { cursor: "next", limit: 30 });
+  expect(urls.map((url) => new URL(url).search)).toEqual([
+    "?channel=web&profileId=agent-a",
+    "?channels=web%2Ctelegram&profileId=agent-a&limit=30",
+    "?channels=web&profileId=agent-a&limit=30&cursor=next",
+  ]);
+});
