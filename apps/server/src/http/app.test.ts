@@ -1408,7 +1408,8 @@ describe("createHonoApp", () => {
     );
     const listCalls: unknown[][] = [];
     options.agent.listSessions = async (...args: unknown[]) => {
-      // Everything after orgId and profileId: channels, auth, appUserId, page.
+      // Everything after orgId and profileId: channels, auth, appUserId, page,
+      // query.
       listCalls.push(args.slice(2));
       return { nextCursor: null, sessions: [] };
     };
@@ -1439,9 +1440,38 @@ describe("createHonoApp", () => {
         expect.anything(),
         undefined,
         { cursor: "abc", limit: 30 },
+        undefined,
       ],
-      ["web", expect.anything(), undefined, undefined],
+      ["web", expect.anything(), undefined, undefined, undefined],
     ]);
+  });
+
+  test("GET /v1/sessions passes a trimmed q of up to 200 characters", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const queries: unknown[] = [];
+    options.agent.listSessions = async (...args: unknown[]) => {
+      queries.push(args[6]);
+      return { nextCursor: null, sessions: [] };
+    };
+    const list = (q: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/sessions?profileId=default&channel=web&q=${encodeURIComponent(q)}`,
+          { headers: session.headers() }
+        )
+      );
+
+    expect((await list("  budget plan ")).status).toBe(200);
+    expect((await list("   ")).status).toBe(200);
+    expect((await list("x".repeat(200))).status).toBe(200);
+    expect((await list("x".repeat(201))).status).toBe(400);
+
+    expect(queries).toEqual(["budget plan", undefined, "x".repeat(200)]);
   });
 
   describe("org context middleware", () => {

@@ -43,6 +43,7 @@ import {
 import type { HonoApp } from "../types";
 
 const MAX_SESSION_PAGE_SIZE = 100;
+const MAX_SESSION_QUERY_LENGTH = 200;
 
 export function registerSessionRoutes(
   app: HonoApp,
@@ -292,6 +293,12 @@ export function registerSessionRoutes(
         description: `Page size, 1 to ${MAX_SESSION_PAGE_SIZE}. Without it every session is returned.`,
       }),
     profileId: z.string().optional(),
+    q: z
+      .string()
+      .optional()
+      .openapi({
+        description: `Keeps the sessions whose title or message text contains it, up to ${MAX_SESSION_QUERY_LENGTH} characters.`,
+      }),
   });
   const streamQuerySchema = z.object({
     stream: z.enum(["true", "false"]).optional(),
@@ -681,6 +688,7 @@ export function registerSessionRoutes(
         : channelsParam.split(",").map((channel) => parseChannel(channel));
     const limitParam = c.req.query("limit");
     const limit = limitParam === undefined ? undefined : Number(limitParam);
+    const query = c.req.query("q")?.trim() || undefined;
 
     if (!profileId) {
       return errorResponse("profileId is required.", 400);
@@ -694,6 +702,12 @@ export function registerSessionRoutes(
         400
       );
     }
+    if (query && query.length > MAX_SESSION_QUERY_LENGTH) {
+      return errorResponse(
+        `q must be at most ${MAX_SESSION_QUERY_LENGTH} characters.`,
+        400
+      );
+    }
 
     return json<ListSessionsResponse>(
       await agent.listSessions(
@@ -704,7 +718,8 @@ export function registerSessionRoutes(
         appUserId,
         limit === undefined
           ? undefined
-          : { cursor: c.req.query("cursor"), limit }
+          : { cursor: c.req.query("cursor"), limit },
+        query
       )
     );
   });
