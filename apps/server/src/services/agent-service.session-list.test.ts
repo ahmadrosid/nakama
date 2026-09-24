@@ -116,7 +116,7 @@ describe("listSessions pages the merged history", () => {
     }
     // Pinned sorts first, so the cursor has to carry it across pages too.
     await service.updateSessionPinned(ids[0] as string, ORG_ID, true);
-    return { ids, service };
+    return { db, ids, service };
   }
 
   test("following nextCursor returns every session once, in list order", async () => {
@@ -144,11 +144,48 @@ describe("listSessions pages the merged history", () => {
       );
       paged.push(...page.sessions.map((session) => session.id));
       sizes.push(page.sessions.length);
+      expect(page.stale).toBe(false);
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
 
     expect(sizes).toEqual([2, 2, 1]);
     expect(paged).toEqual(all.sessions.map((session) => session.id));
+  });
+
+  test("a page asked for after a chat moved across its cursor is stale", async () => {
+    const { db, service } = await seedHistory();
+    const listPage = (cursor?: string) =>
+      service.listSessions(
+        ORG_ID,
+        "profile_default",
+        CHANNELS,
+        ACCESS,
+        undefined,
+        { cursor, limit: 2 }
+      );
+    const first = await listPage();
+    const all = await service.listSessions(
+      ORG_ID,
+      "profile_default",
+      CHANNELS,
+      ACCESS
+    );
+    // The oldest chat gets a new message, which lifts it above the cursor
+    // before the second page is asked for.
+    const oldest = all.sessions.at(-1)?.id as string;
+    await db.appendMessagesForSession(oldest, [
+      {
+        createdAt: new Date(Date.now() + 60_000).toISOString(),
+        id: `msg_${oldest}_later`,
+        payload: { content: "later", role: "user" },
+        seq: 1,
+        sessionId: oldest,
+      },
+    ]);
+
+    const second = await listPage(first.nextCursor ?? undefined);
+    expect(second.stale).toBe(true);
+    expect(second.sessions.map((session) => session.id)).not.toContain(oldest);
   });
 
   test("a page that ends exactly at the last session has no next page", async () => {

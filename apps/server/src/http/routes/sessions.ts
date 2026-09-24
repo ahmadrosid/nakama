@@ -109,6 +109,7 @@ export function registerSessionRoutes(
     .object({
       nextCursor: z.string().nullable().optional(),
       sessions: z.array(sessionSummarySchema),
+      stale: z.boolean().optional(),
     })
     .openapi("ListSessionsResponse");
   const compactSessionRequestSchema = z

@@ -2256,11 +2256,12 @@ export class AgentService {
       access
     );
 
+    const cursor = page?.cursor ? decodeSessionCursor(page.cursor) : undefined;
     const rows = await this.db.listSessionSummaries(
       profileId,
       typeof channels === "string" ? [channels] : channels,
       {
-        after: page?.cursor ? decodeSessionCursor(page.cursor) : undefined,
+        after: cursor,
         appUserId,
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
@@ -2277,6 +2278,10 @@ export class AgentService {
       nextCursor:
         rows.length > page.limit && last ? encodeSessionCursor(last) : null,
       sessions: sessions.map(toSessionSummary),
+      // A cursor is issued only with a row after it, and the rows above it keep
+      // their count while none cross it. Anything else means chats moved across
+      // it since the previous page, which then no longer joins this one.
+      stale: cursor ? sessions[0]?.position !== cursor.position + 1 : false,
     };
   }
 
@@ -4744,10 +4749,10 @@ function toSessionSummary(session: StoredSessionSummaryRecord): SessionSummary {
 
 type SessionCursor = Pick<
   StoredSessionSummaryRecord,
-  "createdAt" | "id" | "pinned" | "updatedAt"
+  "createdAt" | "id" | "pinned" | "position" | "updatedAt"
 >;
 
-/** Opaque to clients: the sort key of the last row on a page. */
+/** Opaque to clients: the sort key and place of the last row on a page. */
 function encodeSessionCursor(session: SessionCursor): string {
   return Buffer.from(
     JSON.stringify([
@@ -4755,22 +4760,24 @@ function encodeSessionCursor(session: SessionCursor): string {
       session.updatedAt,
       session.createdAt,
       session.id,
+      session.position,
     ])
   ).toString("base64url");
 }
 
 function decodeSessionCursor(cursor: string): SessionCursor {
   try {
-    const [pinned, updatedAt, createdAt, id] = JSON.parse(
+    const [pinned, updatedAt, createdAt, id, position] = JSON.parse(
       Buffer.from(cursor, "base64url").toString("utf8")
     );
     if (
       typeof pinned === "boolean" &&
       typeof updatedAt === "string" &&
       typeof createdAt === "string" &&
-      typeof id === "string"
+      typeof id === "string" &&
+      Number.isInteger(position)
     ) {
-      return { createdAt, id, pinned, updatedAt };
+      return { createdAt, id, pinned, position, updatedAt };
     }
   } catch {
     // Not base64url JSON, so it is not one of ours either.
