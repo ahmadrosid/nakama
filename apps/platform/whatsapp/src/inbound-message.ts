@@ -27,6 +27,9 @@ export interface WhatsAppInboundChat {
   isGroup: boolean;
   jid: string;
   me?: WhatsAppAccount;
+  media?:
+    | { kind: "image"; message: proto.Message.IImageMessage }
+    | { kind: "document"; message: proto.Message.IDocumentMessage };
   mentionedJids: string[];
   messageId: string | null;
   quotedParticipant: string | null;
@@ -171,8 +174,16 @@ export function parseInboundWhatsAppMessage(
 ): WhatsAppInboundChat | null {
   const remoteJid = msg.key.remoteJid;
   const text = extractInboundText(msg.message);
+  const content = msg.message
+    ? (extractMessageContent(msg.message) ?? msg.message)
+    : null;
+  const media = content?.imageMessage
+    ? { kind: "image" as const, message: content.imageMessage }
+    : content?.documentMessage
+      ? { kind: "document" as const, message: content.documentMessage }
+      : undefined;
 
-  if (!(remoteJid && text)) {
+  if (!(remoteJid && (text || media))) {
     return null;
   }
 
@@ -188,7 +199,7 @@ export function parseInboundWhatsAppMessage(
       mentionedJids,
       quotedParticipant,
       requireMention: options?.requireGroupMention,
-      text,
+      text: text || (media ? "[attachment]" : ""),
     });
 
     if (!decision.shouldHandle) {
@@ -212,6 +223,7 @@ export function parseInboundWhatsAppMessage(
     isGroup,
     jid: remoteJid,
     me,
+    ...(media ? { media } : {}),
     mentionedJids,
     messageId: msg.key.id?.trim() || null,
     quotedParticipant,
@@ -293,6 +305,7 @@ function readTextContent(
     message?.conversation ??
     message?.extendedTextMessage?.text ??
     message?.imageMessage?.caption ??
+    message?.documentMessage?.caption ??
     message?.videoMessage?.caption ??
     ""
   ).trim();

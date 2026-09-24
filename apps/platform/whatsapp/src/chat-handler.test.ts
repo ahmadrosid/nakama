@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import path from "node:path";
+import { Readable } from "node:stream";
 import {
   hasActiveStreams,
   resetActiveStreamsForTests,
@@ -10,6 +11,7 @@ import {
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
 } from "@nakama/core/whatsapp-config";
+import * as baileys from "@whiskeysockets/baileys";
 import { WhatsAppAuthStore } from "./auth-store";
 import {
   createChatHandler,
@@ -67,6 +69,149 @@ beforeEach(() => {
 });
 
 describe("createChatHandler", () => {
+  test("passes photos, image documents, and PDFs to the agent and reports media errors", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket, sent } = createMockSocket();
+      const handle = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+      const download = spyOn(
+        baileys,
+        "downloadContentFromMessage"
+      ).mockImplementation(
+        async () => Readable.from([Buffer.from("file bytes")]) as any
+      );
+
+      try {
+        await handle({
+          jid: PAIRED_JID,
+          media: { kind: "image", message: { mimetype: "image/jpeg" } },
+          text: "",
+        });
+        await handle({
+          jid: PAIRED_JID,
+          media: { kind: "image", message: { mimetype: "image/jpeg" } },
+          text: "check this",
+        });
+        await handle({
+          jid: PAIRED_JID,
+          media: {
+            kind: "document",
+            message: {
+              fileName: "receipt.png",
+              mimetype: "application/octet-stream",
+            },
+          },
+          text: "",
+        });
+        await handle({
+          jid: PAIRED_JID,
+          media: {
+            kind: "document",
+            message: { fileName: "receipt.pdf", mimetype: "application/pdf" },
+          },
+          text: "import this",
+        });
+
+        expect(calls.streamInputs).toEqual([
+          {
+            images: [
+              {
+                data: Buffer.from("file bytes").toString("base64"),
+                mediaType: "image/jpeg",
+              },
+            ],
+            message: "",
+          },
+          {
+            images: [
+              {
+                data: Buffer.from("file bytes").toString("base64"),
+                mediaType: "image/jpeg",
+              },
+            ],
+            message: "check this",
+          },
+          {
+            images: [
+              {
+                data: Buffer.from("file bytes").toString("base64"),
+                mediaType: "image/png",
+              },
+            ],
+            message: "",
+          },
+          {
+            documents: [
+              {
+                data: Buffer.from("file bytes").toString("base64"),
+                filename: "receipt.pdf",
+                mediaType: "application/pdf",
+              },
+            ],
+            message: "import this",
+          },
+        ]);
+
+        await handle({
+          jid: PAIRED_JID,
+          media: {
+            kind: "document",
+            message: { fileName: "bad.zip", mimetype: "application/zip" },
+          },
+          text: "",
+        });
+        await handle({
+          jid: PAIRED_JID,
+          media: { kind: "image", message: { fileLength: 6 * 1024 * 1024 } },
+          text: "",
+        });
+        expect(sent.at(-2)?.text).toContain("Unsupported file type");
+        expect(sent.at(-1)?.text).toContain("too large");
+
+        download.mockImplementation(
+          async () => Readable.from([Buffer.alloc(6 * 1024 * 1024)]) as any
+        );
+        await handle({
+          jid: PAIRED_JID,
+          media: { kind: "image", message: { mimetype: "image/jpeg" } },
+          text: "",
+        });
+        expect(sent.at(-1)?.text).toContain("too large");
+
+        download.mockImplementation(async () => {
+          throw new Error("network");
+        });
+        await handle({
+          jid: PAIRED_JID,
+          media: { kind: "image", message: { mimetype: "image/jpeg" } },
+          text: "",
+        });
+        expect(sent.at(-1)?.text).toContain("Could not download");
+        expect(calls.sendStream).toBe(4);
+      } finally {
+        download.mockRestore();
+      }
+    });
+  });
+
   test("pins an organization's number even when a sender requests another org", async () => {
     await withTempHome(async (homeDir) => {
       await saveWhatsAppConfig({}, "org_a");

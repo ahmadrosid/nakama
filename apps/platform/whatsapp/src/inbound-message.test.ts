@@ -99,6 +99,52 @@ describe("inbound message routing", () => {
     ).toBe("hello from wrapper");
   });
 
+  test("accepts captionless photos and document captions", () => {
+    const key = { id: "photo-1", remoteJid: "9999999999@s.whatsapp.net" };
+    const photo = { mimetype: "image/jpeg" };
+    expect(
+      parseInboundWhatsAppMessage({ key, message: { imageMessage: photo } }, ME)
+    ).toMatchObject({
+      media: { kind: "image", message: photo },
+      messageId: "photo-1",
+      text: "",
+    });
+    expect(
+      parseInboundWhatsAppMessage(
+        {
+          key,
+          message: {
+            documentMessage: {
+              caption: "receipt",
+              mimetype: "application/pdf",
+            },
+          },
+        },
+        ME
+      )
+    ).toMatchObject({ media: { kind: "document" }, text: "receipt" });
+
+    const groupPhoto = {
+      key: { participant: key.remoteJid, remoteJid: "120363@g.us" },
+      message: {
+        imageMessage: {
+          contextInfo: { mentionedJid: [ME.id] },
+          mimetype: "image/jpeg",
+        },
+      },
+    };
+    expect(shouldHandleInboundMessage(groupPhoto, ME)).toBe(true);
+    expect(
+      shouldHandleInboundMessage(
+        {
+          ...groupPhoto,
+          message: { imageMessage: { mimetype: "image/jpeg" } },
+        },
+        ME
+      )
+    ).toBe(false);
+  });
+
   test("extracts text from protobuf-like messages that only expose text via JSON", () => {
     const payload = {
       extendedTextMessage: {
