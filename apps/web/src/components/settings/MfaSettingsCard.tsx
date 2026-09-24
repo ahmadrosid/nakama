@@ -17,6 +17,160 @@ import { MfaCodeInput } from "@/components/MfaCodeInput";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
+function DisableMfaDialogs({
+  busy,
+  disableBackupCode,
+  disableCode,
+  disableConfirmOpen,
+  disableMethod,
+  disableMfa,
+  disableVerifyOpen,
+  error,
+  setDisableBackupCode,
+  setDisableCode,
+  setDisableConfirmOpen,
+  setDisableMethod,
+  setDisableVerifyOpen,
+  setError,
+}: {
+  busy: boolean;
+  disableBackupCode: string;
+  disableCode: string;
+  disableConfirmOpen: boolean;
+  disableMethod: "totp" | "backup";
+  disableMfa: () => Promise<void>;
+  disableVerifyOpen: boolean;
+  error: string | null;
+  setDisableBackupCode: (value: string) => void;
+  setDisableCode: (value: string) => void;
+  setDisableConfirmOpen: (value: boolean) => void;
+  setDisableMethod: (value: "totp" | "backup") => void;
+  setDisableVerifyOpen: (value: boolean) => void;
+  setError: (value: string | null) => void;
+}) {
+  return (
+    <>
+      {disableConfirmOpen ? (
+        <ConfirmDialog
+          confirmLabel="Continue"
+          description="Disabling multi-factor authentication removes the extra sign-in protection from this account. You will need to set it up again before using an authenticator. Continue?"
+          onClose={() => setDisableConfirmOpen(false)}
+          onConfirm={async () => {
+            setError(null);
+            setDisableVerifyOpen(true);
+          }}
+          title="Disable multi-factor authentication?"
+        />
+      ) : null}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || busy)) {
+            setDisableVerifyOpen(false);
+            setDisableCode("");
+            setDisableBackupCode("");
+            setDisableMethod("totp");
+            setError(null);
+          }
+        }}
+        open={disableVerifyOpen}
+      >
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Verify your identity</DialogTitle>
+            <DialogDescription>
+              {disableMethod === "totp"
+                ? "Enter the 6-digit code from your authenticator app to confirm disabling multi-factor authentication."
+                : "Enter an unused backup code to confirm disabling multi-factor authentication. The code will be consumed if it is valid."}
+            </DialogDescription>
+          </DialogHeader>
+          {error ? (
+            <p className="text-destructive text-sm" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {disableMethod === "totp" ? (
+            <>
+              <label
+                className="block font-medium text-sm"
+                htmlFor="disable-mfa-code"
+              >
+                Authenticator code
+              </label>
+              <MfaCodeInput
+                id="disable-mfa-code"
+                onChange={setDisableCode}
+                value={disableCode}
+              />
+            </>
+          ) : (
+            <>
+              <label
+                className="block font-medium text-sm"
+                htmlFor="disable-mfa-backup-code"
+              >
+                Backup code
+              </label>
+              <Input
+                autoComplete="off"
+                id="disable-mfa-backup-code"
+                onChange={(event) => setDisableBackupCode(event.target.value)}
+                placeholder="Enter a backup code"
+                value={disableBackupCode}
+              />
+            </>
+          )}
+          <Button
+            className="w-fit px-0"
+            disabled={busy}
+            onClick={() => {
+              setDisableMethod(disableMethod === "totp" ? "backup" : "totp");
+              setDisableCode("");
+              setDisableBackupCode("");
+              setError(null);
+            }}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            {disableMethod === "totp"
+              ? "Use a backup code instead"
+              : "Use an authenticator code instead"}
+          </Button>
+          <DialogFooter>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setDisableVerifyOpen(false);
+                setDisableCode("");
+                setDisableBackupCode("");
+                setDisableMethod("totp");
+                setError(null);
+              }}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                busy ||
+                (disableMethod === "totp"
+                  ? disableCode.trim().length < 6
+                  : disableBackupCode.trim().length === 0)
+              }
+              onClick={() => void disableMfa()}
+              type="button"
+              variant="destructive"
+            >
+              Disable MFA
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function MfaSettingsCard() {
   const { user, refreshSession } = useAuth();
   const [totpUri, setTotpUri] = useState<string | null>(null);
@@ -212,123 +366,22 @@ export function MfaSettingsCard() {
           </div>
         </div>
       </CardContent>
-      {disableConfirmOpen ? (
-        <ConfirmDialog
-          confirmLabel="Continue"
-          description="Disabling multi-factor authentication removes the extra sign-in protection from this account. You will need to set it up again before using an authenticator. Continue?"
-          onClose={() => setDisableConfirmOpen(false)}
-          onConfirm={async () => {
-            setError(null);
-            setDisableVerifyOpen(true);
-          }}
-          title="Disable multi-factor authentication?"
-        />
-      ) : null}
-      <Dialog
-        onOpenChange={(open) => {
-          if (!(open || busy)) {
-            setDisableVerifyOpen(false);
-            setDisableCode("");
-            setDisableBackupCode("");
-            setDisableMethod("totp");
-            setError(null);
-          }
-        }}
-        open={disableVerifyOpen}
-      >
-        <DialogContent showCloseButton={!busy}>
-          <DialogHeader>
-            <DialogTitle>Verify your identity</DialogTitle>
-            <DialogDescription>
-              {disableMethod === "totp"
-                ? "Enter the 6-digit code from your authenticator app to confirm disabling multi-factor authentication."
-                : "Enter an unused backup code to confirm disabling multi-factor authentication. The code will be consumed if it is valid."}
-            </DialogDescription>
-          </DialogHeader>
-          {error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {disableMethod === "totp" ? (
-            <>
-              <label
-                className="block font-medium text-sm"
-                htmlFor="disable-mfa-code"
-              >
-                Authenticator code
-              </label>
-              <MfaCodeInput
-                id="disable-mfa-code"
-                onChange={setDisableCode}
-                value={disableCode}
-              />
-            </>
-          ) : (
-            <>
-              <label
-                className="block font-medium text-sm"
-                htmlFor="disable-mfa-backup-code"
-              >
-                Backup code
-              </label>
-              <Input
-                autoComplete="off"
-                id="disable-mfa-backup-code"
-                onChange={(event) => setDisableBackupCode(event.target.value)}
-                placeholder="Enter a backup code"
-                value={disableBackupCode}
-              />
-            </>
-          )}
-          <Button
-            className="w-fit px-0"
-            disabled={busy}
-            onClick={() => {
-              setDisableMethod(disableMethod === "totp" ? "backup" : "totp");
-              setDisableCode("");
-              setDisableBackupCode("");
-              setError(null);
-            }}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {disableMethod === "totp"
-              ? "Use a backup code instead"
-              : "Use an authenticator code instead"}
-          </Button>
-          <DialogFooter>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setDisableVerifyOpen(false);
-                setDisableCode("");
-                setDisableBackupCode("");
-                setDisableMethod("totp");
-                setError(null);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                busy ||
-                (disableMethod === "totp"
-                  ? disableCode.trim().length < 6
-                  : disableBackupCode.trim().length === 0)
-              }
-              onClick={() => void disableMfa()}
-              type="button"
-              variant="destructive"
-            >
-              Disable MFA
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DisableMfaDialogs
+        busy={busy}
+        disableBackupCode={disableBackupCode}
+        disableCode={disableCode}
+        disableConfirmOpen={disableConfirmOpen}
+        disableMethod={disableMethod}
+        disableMfa={disableMfa}
+        disableVerifyOpen={disableVerifyOpen}
+        error={error}
+        setDisableBackupCode={setDisableBackupCode}
+        setDisableCode={setDisableCode}
+        setDisableConfirmOpen={setDisableConfirmOpen}
+        setDisableMethod={setDisableMethod}
+        setDisableVerifyOpen={setDisableVerifyOpen}
+        setError={setError}
+      />
     </Card>
   );
 }

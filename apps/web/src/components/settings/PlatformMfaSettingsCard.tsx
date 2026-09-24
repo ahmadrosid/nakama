@@ -68,8 +68,9 @@ export function PlatformMfaSettingsCard() {
     }
   }
 
+  const selectedRoles = new Set(draftRoles);
   const selectedRoleLabels = roles
-    .filter(({ value }) => draftRoles.includes(value))
+    .filter(({ value }) => selectedRoles.has(value))
     .map(({ label }) => label)
     .join(", ");
   const allRolesSelected = draftRoles.length === roles.length;
@@ -143,7 +144,7 @@ export function PlatformMfaSettingsCard() {
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-64">
                 {roles.map(({ label, value }) => {
-                  const selected = draftRoles.includes(value);
+                  const selected = selectedRoles.has(value);
                   return (
                     <DropdownMenuItem
                       key={value}

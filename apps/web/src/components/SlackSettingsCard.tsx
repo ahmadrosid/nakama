@@ -137,6 +137,7 @@ function MemberIdsInput({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pairedIdSet = new Set(pairedIds);
 
   function commit(raw: string) {
     const { ids, invalid } = parseSlackMemberIdInput(raw);
@@ -175,7 +176,7 @@ function MemberIdsInput({
             key={id}
           >
             {id}
-            {pairedIds.includes(id) ? (
+            {pairedIdSet.has(id) ? (
               <span className="font-sans text-muted-foreground">paired</span>
             ) : null}
             <button
@@ -334,6 +335,192 @@ function statusBadge(state: {
   return state.linked ? "Paired" : "Awaiting link";
 }
 
+function SlackStatusHeader({
+  configured,
+  connected,
+  embedded,
+  linked,
+  running,
+}: {
+  configured: boolean;
+  connected: boolean;
+  embedded: boolean;
+  linked: boolean;
+  running: boolean;
+}) {
+  if (embedded) {
+    return null;
+  }
+  return (
+    <IntegrationStatusHeader
+      configured={configured}
+      connected={linked && running && connected}
+      statusBadge={statusBadge({ configured, connected, linked, running })}
+      title="Slack"
+    />
+  );
+}
+
+function SlackSettingsFooter({
+  appToken,
+  botToken,
+  configured,
+  formError,
+  hint,
+  loadError,
+  onSave,
+  savePending,
+}: {
+  appToken: string;
+  botToken: string;
+  configured: boolean;
+  formError: string | null;
+  hint: string | null;
+  loadError: ReturnType<typeof useSlackSettings>["error"];
+  onSave: () => void;
+  savePending: boolean;
+}) {
+  return (
+    <IntegrationSettingsFooter
+      canSave={configured || Boolean(botToken.trim() && appToken.trim())}
+      formError={formError}
+      loadError={loadError}
+      onSave={onSave}
+      savePending={savePending}
+      statusLine={
+        hint ?? formError ?? (loadError ? formatError(loadError) : null)
+      }
+      submitLabel="Save"
+    />
+  );
+}
+
+function ConfiguredSlackSettings({
+  allowWorkspace,
+  allowedUserIds,
+  connected,
+  copy,
+  handleRegenerate,
+  linked,
+  onAllowedUserIdsChange,
+  onAllowWorkspaceChange,
+  pairedUserIds,
+  pairingCode,
+  pending,
+  pm2Managed,
+  regeneratePending,
+  running,
+}: {
+  allowWorkspace: boolean;
+  allowedUserIds: string[];
+  connected: boolean;
+  copy: (text: string, done: string) => Promise<void>;
+  handleRegenerate: () => void;
+  linked: boolean;
+  onAllowedUserIdsChange: (ids: string[]) => void;
+  onAllowWorkspaceChange: (checked: boolean) => void;
+  pairedUserIds: string[];
+  pairingCode: string | null;
+  pending: boolean;
+  pm2Managed: boolean;
+  regeneratePending: boolean;
+  running: boolean;
+}) {
+  return (
+    <>
+      <div>
+        <SettingsRow
+          description={
+            pairingCode
+              ? "Links one Slack member. Steps below."
+              : "Click New code to link a Slack member."
+          }
+          label="Pairing code"
+        >
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {pairingCode ? (
+              <>
+                <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
+                  {pairingCode}
+                </code>
+                <Button
+                  onClick={() => void copy(pairingCode, "Code copied.")}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Copy
+                </Button>
+              </>
+            ) : null}
+            <Button
+              disabled={pending}
+              onClick={handleRegenerate}
+              size="sm"
+              type="button"
+              variant={pairingCode || linked ? "outline" : "default"}
+            >
+              {regeneratePending ? <Spinner /> : "New code"}
+            </Button>
+          </div>
+        </SettingsRow>
+        {pairingCode ? <PairingGuide code={pairingCode} /> : null}
+      </div>
+
+      <div>
+        <SettingsRow
+          description="Full members chat without a pairing code."
+          label="Everyone in the workspace"
+        >
+          <Switch
+            aria-label="Everyone in the workspace"
+            checked={allowWorkspace}
+            disabled={pending}
+            id="slack-allow-workspace"
+            onCheckedChange={onAllowWorkspaceChange}
+          />
+        </SettingsRow>
+        {allowWorkspace ? <WorkspaceGuide /> : null}
+      </div>
+
+      <SettingsRow
+        description={
+          allowWorkspace
+            ? "Only needed for guests and people from other organizations. Press Enter after each member ID."
+            : "Press Enter after each member ID. In Slack: open the profile, click ⋯, Copy member ID."
+        }
+        label="Allowed users"
+      >
+        <MemberIdsInput
+          disabled={pending}
+          onChange={onAllowedUserIdsChange}
+          pairedIds={pairedUserIds}
+          value={allowedUserIds}
+        />
+      </SettingsRow>
+
+      <SettingsRow
+        description={
+          running
+            ? connected
+              ? "Running"
+              : "Running, not connected to Slack"
+            : "Stopped"
+        }
+        label="Bridge worker"
+      >
+        <WorkerActionBar
+          pm2Managed={pm2Managed}
+          running={running}
+          workerName="slack"
+        />
+      </SettingsRow>
+
+      <UsageGuide />
+    </>
+  );
+}
+
 export function SlackSettingsCard({
   embedded = false,
 }: {
@@ -349,7 +536,6 @@ export function SlackSettingsCard({
   const { data: status } = useSystemStatusQuery();
   const saveMutation = useSaveSlackSettings();
   const regenerateMutation = useRegenerateSlackHandshake();
-
   const [botToken, setBotToken] = useState("");
   const [appToken, setAppToken] = useState("");
   const [allowedUserIds, setAllowedUserIds] = useState<string[]>([]);
@@ -381,8 +567,9 @@ export function SlackSettingsCard({
       return;
     }
     // Unsaved edits win; a refresh only adds members who paired since.
+    const seenPaired = new Set(seenPairedRef.current);
     const newlyPaired = settings.pairedUserIds.filter(
-      (id) => !seenPairedRef.current.includes(id)
+      (id) => !seenPaired.has(id)
     );
     seenPairedRef.current = settings.pairedUserIds;
     if (newlyPaired.length > 0) {
@@ -486,14 +673,13 @@ export function SlackSettingsCard({
       }
       id="slack-settings-card"
     >
-      {embedded ? null : (
-        <IntegrationStatusHeader
-          configured={configured}
-          connected={linked && running && connected}
-          statusBadge={statusBadge({ configured, connected, linked, running })}
-          title="Slack"
-        />
-      )}
+      <SlackStatusHeader
+        configured={configured}
+        connected={connected}
+        embedded={embedded}
+        linked={linked}
+        running={running}
+      />
 
       <div className="space-y-3 px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -575,115 +761,39 @@ export function SlackSettingsCard({
       </SettingsRow>
 
       {configured ? (
-        <>
-          <div>
-            <SettingsRow
-              description={
-                pairingCode
-                  ? "Links one Slack member. Steps below."
-                  : "Click New code to link a Slack member."
-              }
-              label="Pairing code"
-            >
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {pairingCode ? (
-                  <>
-                    <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
-                      {pairingCode}
-                    </code>
-                    <Button
-                      onClick={() => void copy(pairingCode, "Code copied.")}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      Copy
-                    </Button>
-                  </>
-                ) : null}
-                <Button
-                  disabled={pending}
-                  onClick={handleRegenerate}
-                  size="sm"
-                  type="button"
-                  variant={pairingCode || linked ? "outline" : "default"}
-                >
-                  {regenerateMutation.isPending ? <Spinner /> : "New code"}
-                </Button>
-              </div>
-            </SettingsRow>
-            {pairingCode ? <PairingGuide code={pairingCode} /> : null}
-          </div>
-
-          <div>
-            <SettingsRow
-              description="Full members chat without a pairing code."
-              label="Everyone in the workspace"
-            >
-              <Switch
-                aria-label="Everyone in the workspace"
-                checked={allowWorkspace}
-                disabled={pending}
-                id="slack-allow-workspace"
-                onCheckedChange={(checked) => {
-                  setAllowWorkspace(checked);
-                  dirtyRef.current = true;
-                }}
-              />
-            </SettingsRow>
-            {allowWorkspace ? <WorkspaceGuide /> : null}
-          </div>
-
-          <SettingsRow
-            description={
-              allowWorkspace
-                ? "Only needed for guests and people from other organizations. Press Enter after each member ID."
-                : "Press Enter after each member ID. In Slack: open the profile, click ⋯, Copy member ID."
-            }
-            label="Allowed users"
-          >
-            <MemberIdsInput
-              disabled={pending}
-              onChange={(ids) => {
-                setAllowedUserIds(ids);
-                dirtyRef.current = true;
-              }}
-              pairedIds={settings?.pairedUserIds ?? []}
-              value={allowedUserIds}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            description={
-              running
-                ? connected
-                  ? "Running"
-                  : "Running, not connected to Slack"
-                : "Stopped"
-            }
-            label="Bridge worker"
-          >
-            <WorkerActionBar
-              pm2Managed={worker?.process?.managed ?? false}
-              running={running}
-              workerName="slack"
-            />
-          </SettingsRow>
-
-          <UsageGuide />
-        </>
+        <ConfiguredSlackSettings
+          allowedUserIds={allowedUserIds}
+          allowWorkspace={allowWorkspace}
+          connected={connected}
+          copy={copy}
+          handleRegenerate={handleRegenerate}
+          linked={linked}
+          onAllowedUserIdsChange={(ids) => {
+            setAllowedUserIds(ids);
+            dirtyRef.current = true;
+          }}
+          onAllowWorkspaceChange={(checked) => {
+            setAllowWorkspace(checked);
+            dirtyRef.current = true;
+          }}
+          pairedUserIds={settings?.pairedUserIds ?? []}
+          pairingCode={pairingCode}
+          pending={pending}
+          pm2Managed={worker?.process?.managed ?? false}
+          regeneratePending={regenerateMutation.isPending}
+          running={running}
+        />
       ) : null}
 
-      <IntegrationSettingsFooter
-        canSave={configured || Boolean(botToken.trim() && appToken.trim())}
+      <SlackSettingsFooter
+        appToken={appToken}
+        botToken={botToken}
+        configured={configured}
         formError={formError}
+        hint={hint}
         loadError={loadError}
         onSave={handleSave}
         savePending={saveMutation.isPending}
-        statusLine={
-          hint ?? formError ?? (loadError ? formatError(loadError) : null)
-        }
-        submitLabel="Save"
       />
     </div>
   );
