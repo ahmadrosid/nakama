@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { streamFromChunks } from "../test-helpers";
 import { createChatgptProvider } from "./index";
 import { CHATGPT_CODEX_BASE_URL } from "./oauth";
 
@@ -15,20 +16,6 @@ function validOauth() {
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     refreshToken: "refresh-token",
   };
-}
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-
-      controller.close();
-    },
-  });
 }
 
 function textStreamResponse(text: string) {

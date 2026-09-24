@@ -1,43 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import type { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
 import { AutomationService } from "./automation-service";
 import {
+  createAutomationTestDb as createTestDb,
+  ORG_ID,
+  PROFILE_ID,
+} from "./automation-test-fixtures";
+import {
   createMcpAwareEmailOutboundAdapter,
   hasAutomationEmailDeliveryPath,
 } from "./mcp-email-delivery";
-
-const ORG_ID = "org_test";
-const PROFILE_ID = "profile_default";
-
-async function createTestDb() {
-  const db = createInMemoryDatabaseAdapter();
-  const now = new Date().toISOString();
-
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    slug: "test-org",
-    updatedAt: now,
-  });
-
-  await db.upsertProfile({
-    createdAt: now,
-    id: PROFILE_ID,
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default Bot",
-    orgId: ORG_ID,
-    systemPrompt: "",
-    updatedAt: now,
-  });
-
-  return db;
-}
 
 async function assignComposeioGmailSender(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,

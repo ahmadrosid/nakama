@@ -25,6 +25,7 @@ import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
@@ -34,21 +35,6 @@ const TEST_ORG_ID = "org_test";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
-
-function createDefaultProfile(): StoredProfileRecord {
-  const now = new Date().toISOString();
-  return {
-    createdAt: now,
-    id: "profile_default",
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default",
-    orgId: ORG_ID,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
-  };
-}
 
 describe("Super Bot provider inheritance", () => {
   setupTestConfigDir("nakama-inherited-provider-");

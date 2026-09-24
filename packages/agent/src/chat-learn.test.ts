@@ -1,34 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  ChatCompletionResult,
-  GenerateChatInput,
-  ProviderClient,
-} from "@nakama/core";
 import { createAgentChatSession } from "./index";
 import { expandLearnInLastUserMessage } from "./learn-prompt";
-
-function createCapturingProvider(
-  response: ChatCompletionResult
-): ProviderClient & { lastInput?: GenerateChatInput } {
-  const provider: ProviderClient & { lastInput?: GenerateChatInput } = {
-    generateChat(input) {
-      provider.lastInput = input;
-      return Promise.resolve(response);
-    },
-    generateText() {
-      return Promise.resolve({ content: "{}" });
-    },
-    name: "anthropic",
-    streamChat(input, handlers) {
-      provider.lastInput = input;
-      if (response.content) {
-        handlers.onChunk(response.content);
-      }
-      return Promise.resolve(response);
-    },
-  };
-  return provider;
-}
+import { createCapturingProvider } from "./test-helpers";
 
 describe("/learn provider expansion", () => {
   test("sends expanded /learn to the provider while history stays raw", async () => {

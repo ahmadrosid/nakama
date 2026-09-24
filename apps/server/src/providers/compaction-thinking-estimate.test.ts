@@ -8,6 +8,7 @@ import {
 } from "../../../../packages/agent/src/history-compaction";
 import { createGeminiProvider, toGeminiContents } from "./gemini";
 import { createOpenAIProvider, toOpenAIMessages } from "./openai";
+import { streamFromChunks } from "./test-helpers";
 
 const j = (value: unknown) => JSON.stringify(value);
 
@@ -18,20 +19,10 @@ const REASONING = "The user wants last quarter invoices. ".repeat(20);
 const USER: ChatMessage = { content: "invoices last quarter", role: "user" };
 
 function eventStream(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-
-        controller.close();
-      },
-    }),
-    { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-  );
+  return new Response(streamFromChunks(chunks), {
+    headers: { "Content-Type": "text/event-stream" },
+    status: 200,
+  });
 }
 
 const chunk = (delta: Record<string, unknown>) =>

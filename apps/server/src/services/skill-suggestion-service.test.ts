@@ -6,13 +6,14 @@ import { NakamaApiError } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
-  seedOrgDefaultProfile,
 } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillSuggestionService } from "./skill-suggestion-service";
 import { SkillsService } from "./skills-service";
-
-const ORG_ID = "org_test";
+import {
+  ORG_ID,
+  seedSkillOrg as seedOrg,
+} from "./skills-service-test-fixtures";
 
 const sampleSkillMarkdown = `---
 name: deploy-notes
@@ -21,33 +22,6 @@ description: Notes about deploy process.
 
 Run the deploy checklist before shipping.
 `;
-
-async function seedOrg(
-  db: DatabaseAdapter,
-  options: {
-    orgSkillsWriteApproval?: boolean;
-    profileSkillsWriteApproval?: boolean | null;
-  } = {}
-) {
-  const now = new Date().toISOString();
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    skillsWriteApproval: options.orgSkillsWriteApproval ?? false,
-    slug: "test-org",
-    updatedAt: now,
-  });
-  const profile = await seedOrgDefaultProfile(db, ORG_ID);
-  if (options.profileSkillsWriteApproval !== undefined) {
-    await db.upsertProfile({
-      ...profile,
-      skillsWriteApproval: options.profileSkillsWriteApproval,
-      updatedAt: now,
-    });
-  }
-  return profile;
-}
 
 function buildServices(db: DatabaseAdapter) {
   const skills = new SkillsService(db);

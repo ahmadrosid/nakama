@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { streamFromChunks } from "../test-helpers";
 import { createOpenRouterProvider } from "./index";
 
 function chatCompletionResponse(
@@ -23,20 +24,6 @@ function chatCompletionResponse(
     model: "anthropic/claude-sonnet-4-6",
     object: "chat.completion",
     system_fingerprint: null,
-  });
-}
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-
-      controller.close();
-    },
   });
 }
 
