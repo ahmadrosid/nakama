@@ -642,9 +642,14 @@ test("listSessions asks for several channels and a page in one request", async (
     limit: 30,
   });
   await client.listSessions("agent-a", ["web"], { cursor: "next", limit: 30 });
+  await client.listSessions("agent-a", ["web"], {
+    limit: 30,
+    query: "budget plan",
+  });
   expect(urls.map((url) => new URL(url).search)).toEqual([
     "?channel=web&profileId=agent-a",
     "?channels=web%2Ctelegram&profileId=agent-a&limit=30",
     "?channels=web&profileId=agent-a&limit=30&cursor=next",
+    "?channels=web&profileId=agent-a&limit=30&q=budget+plan",
   ]);
 });

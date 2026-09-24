@@ -849,18 +849,21 @@ export class NakamaClient {
   async listSessions(
     profileId: string,
     channel: AgentChannel | readonly AgentChannel[] = "web",
-    page?: { cursor?: string | null; limit: number }
+    options: { cursor?: string | null; limit?: number; query?: string } = {}
   ): Promise<ListSessionsResponse> {
     const query = new URLSearchParams(
       typeof channel === "string"
         ? { channel, profileId }
         : { channels: channel.join(","), profileId }
     );
-    if (page) {
-      query.set("limit", String(page.limit));
-      if (page.cursor) {
-        query.set("cursor", page.cursor);
-      }
+    if (options.limit !== undefined) {
+      query.set("limit", String(options.limit));
+    }
+    if (options.cursor) {
+      query.set("cursor", options.cursor);
+    }
+    if (options.query) {
+      query.set("q", options.query);
     }
     return this.request<ListSessionsResponse>(
       `/v1/sessions?${query.toString()}`
