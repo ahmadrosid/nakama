@@ -2253,11 +2253,9 @@ export class AgentService {
       access
     );
 
-    const sessions = await this.db.listSessionSummaries(
-      profileId,
-      channel,
-      appUserId
-    );
+    const sessions = await this.db.listSessionSummaries(profileId, [channel], {
+      appUserId,
+    });
 
     return {
       sessions: sessions.map((session) => ({

@@ -1061,10 +1061,22 @@ export interface DatabaseAdapter {
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForMcpServer(serverId: string): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
+  /**
+   * Newest first, pinned ahead. `after` is the last row of the previous page;
+   * `sessionId` narrows the list to that one session.
+   */
   listSessionSummaries(
     profileId: string,
-    channel: string,
-    appUserId?: string
+    channels: readonly string[],
+    options?: {
+      after?: Pick<
+        StoredSessionSummaryRecord,
+        "createdAt" | "id" | "pinned" | "updatedAt"
+      >;
+      appUserId?: string;
+      limit?: number;
+      sessionId?: string;
+    }
   ): Promise<StoredSessionSummaryRecord[]>;
 
   listSessions(): Promise<StoredSessionRecord[]>;

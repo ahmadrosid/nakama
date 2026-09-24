@@ -1089,35 +1089,52 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteAttachmentStmt = db.prepare(
     "DELETE FROM attachments WHERE id = ?"
   );
+  // Keyset paging on the sort columns, so a chat that moves to the top between
+  // two pages is neither repeated nor skipped. The preview is read only for the
+  // rows of the page, after the LIMIT, because it parses message JSON.
   const listSessionSummariesStmt = db.prepare(`
+    WITH summaries AS (
+      SELECT
+        s.id,
+        s.app_user_id,
+        s.profile_id,
+        s.channel,
+        s.created_at,
+        s.title,
+        s.pinned,
+        COUNT(m.id) AS message_count,
+        max(
+          COALESCE(MAX(m.created_at), s.created_at),
+          COALESCE(s.updated_at, s.created_at)
+        ) AS updated_at
+      FROM sessions s
+      LEFT JOIN session_messages m ON m.session_id = s.id
+      WHERE s.profile_id = ?1
+        AND s.channel IN (SELECT value FROM json_each(?2))
+        AND (?8 IS NULL OR s.id = ?8)
+        AND (?9 IS NULL OR s.app_user_id = ?9)
+      GROUP BY s.id
+      HAVING COUNT(m.id) > 0
+    ),
+    page AS (
+      SELECT * FROM summaries
+      WHERE ?6 IS NULL
+        OR (pinned, updated_at, created_at, id) < (?3, ?4, ?5, ?6)
+      ORDER BY pinned DESC, updated_at DESC, created_at DESC, id DESC
+      LIMIT ?7
+    )
     SELECT
-      s.id,
-      s.app_user_id,
-      s.profile_id,
-      s.channel,
-      s.created_at,
-      s.title,
-      s.pinned,
-      COUNT(m.id) AS message_count,
-      max(
-        COALESCE(MAX(m.created_at), s.created_at),
-        COALESCE(s.updated_at, s.created_at)
-      ) AS updated_at,
+      page.*,
       (
         SELECT payload
         FROM session_messages
-        WHERE session_id = s.id
+        WHERE session_id = page.id
           AND json_extract(payload, '$.role') = 'user'
         ORDER BY seq ASC
         LIMIT 1
       ) AS first_user_payload
-    FROM sessions s
-    LEFT JOIN session_messages m ON m.session_id = s.id
-    WHERE s.profile_id = ? AND s.channel = ?
-      AND (? IS NULL OR s.app_user_id = ?)
-    GROUP BY s.id
-    HAVING COUNT(m.id) > 0
-    ORDER BY s.pinned DESC, updated_at DESC, s.created_at DESC
+    FROM page
+    ORDER BY pinned DESC, updated_at DESC, created_at DESC, id DESC
   `);
 
   const getLlmUsageStatsStmt = db.prepare(
@@ -3829,9 +3846,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toProfileRecord(row as ProfileRow));
     },
 
-    async listSessionSummaries(profileId, channel, appUserId) {
+    async listSessionSummaries(profileId, channels, options = {}) {
+      const { after, appUserId, limit, sessionId } = options;
       return listSessionSummariesStmt
-        .all(profileId, channel, appUserId ?? null, appUserId ?? null)
+        .all(
+          profileId,
+          JSON.stringify(channels),
+          after ? Number(after.pinned) : null,
+          after?.updatedAt ?? null,
+          after?.createdAt ?? null,
+          after?.id ?? null,
+          // SQLite reads a negative LIMIT as no limit.
+          limit ?? -1,
+          sessionId ?? null,
+          appUserId ?? null
+        )
         .map((row) => toSessionSummaryRecord(row as SessionSummaryRow));
     },
 

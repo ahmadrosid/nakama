@@ -55,7 +55,7 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
 
       const summaries = await database.adapter.listSessionSummaries(
         "profile_test",
-        "web"
+        ["web"]
       );
       expect(summaries).toHaveLength(1);
       expect(summaries[0]!.updatedAt > stale).toBe(true);
@@ -82,7 +82,7 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
       ]);
 
       const afterReplace = (
-        await database.adapter.listSessionSummaries("profile_test", "web")
+        await database.adapter.listSessionSummaries("profile_test", ["web"])
       )[0]!.updatedAt;
 
       await database.adapter.appendMessagesForSession("session_test", [
@@ -96,7 +96,7 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
       ]);
 
       const afterAppend = (
-        await database.adapter.listSessionSummaries("profile_test", "web")
+        await database.adapter.listSessionSummaries("profile_test", ["web"])
       )[0]!.updatedAt;
 
       expect(afterAppend).toBe(afterReplace);
