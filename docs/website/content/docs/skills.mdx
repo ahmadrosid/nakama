@@ -111,8 +111,8 @@ This is useful when the workflow needs both:
 `tool.ts` and `tool.js` are imported into the server process. `tool.py` runs as
 a separate process instead: Nakama spawns `python3 <file>`, writes the call
 arguments to stdin as JSON, and reads one JSON value back from stdout. It gets a
-trimmed environment (`PATH`, `NAKAMA_CONFIG_DIR`, `NAKAMA_WORKSPACE_ROOT`) and
-30 seconds to answer.
+trimmed environment (`PATH` and `NAKAMA_WORKSPACE_ROOT` only — the deployment
+config dir and every provider key stay out of reach) and 30 seconds to answer.
 
 ```python
 # tool.py
@@ -151,6 +151,14 @@ runnable rather than silently ignored.
 A script can import its siblings by bare name. Python puts the running script's
 own directory first on `sys.path`, so `scripts/invoice.py` can `import pricing`
 with no packaging.
+
+### Python in a profile pack
+
+Because a skill's Python runs on the server host, importing a profile pack only
+installs `.py` files when a **platform admin** approves it. An org-admin import
+lists every packed `tool.py` and declared `scripts/*.py` in the preview as
+skipped and never writes them to the workspace, so the imported skill lands as
+instructions only. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
 
 ### What Python is available
 

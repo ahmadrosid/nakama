@@ -2,8 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getCustomToolsDir } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  discoverSkillDirectory,
+  getCustomToolsDir,
+  pathExists,
+} from "@nakama/core";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+} from "@nakama/db";
 import {
   createNakamaDataExport,
   previewNakamaDataImport,
@@ -76,6 +83,114 @@ describe("profile portability", () => {
     });
     await db.assignSkillToProfile(profileId, id);
   }
+
+  async function writePythonSkill(
+    db: DatabaseAdapter,
+    orgId: string,
+    profileId: string
+  ) {
+    const name = "python-skill";
+    const dir = path.join(soul(orgId, profileId), "skills", name);
+    await mkdir(path.join(dir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(dir, "SKILL.md"),
+      `---\nname: ${name}\ndescription: ${name}.\nscripts: scripts/extra.py\n---\n\nBody.\n`,
+      "utf8"
+    );
+    const source = [
+      "import json",
+      "import sys",
+      "",
+      "",
+      "def run(payload, context):",
+      "    return payload",
+      "",
+      "",
+      'if __name__ == "__main__":',
+      '    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))',
+      "",
+    ].join("\n");
+    await writeFile(path.join(dir, "tool.py"), source, "utf8");
+    await writeFile(path.join(dir, "scripts", "extra.py"), source, "utf8");
+    const id = `skill_${name}`;
+    await db.upsertSkill({
+      createdAt: now(),
+      createdBy: "human",
+      description: `${name}.`,
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: true,
+      id,
+      name,
+      orgId,
+      sourcePath: dir,
+      updatedAt: now(),
+    });
+    await db.assignSkillToProfile(profileId, id);
+    return name;
+  }
+
+  // A packed skill's Python runs as a subprocess on the host, so only a
+  // platform admin may install it, exactly like custom tool source.
+  test("packed python skill scripts install only with platform admin approval", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Python Bot",
+    });
+    const name = await writePythonSkill(db, ORG, profile.id);
+
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+
+    const orgAdminDb = createInMemoryDatabaseAdapter();
+    const preview = await previewProfilePackImport(
+      orgAdminDb,
+      DEST,
+      exported.data
+    );
+    const blocked = preview.skippedAssignments
+      .filter((item) => item.reason.includes("platform admin"))
+      .map((item) => item.path);
+    expect(blocked).toContain(`skills/${name}/tool.py`);
+    expect(blocked).toContain(`skills/${name}/scripts/extra.py`);
+
+    const orgAdminImport = await importProfilePack(
+      orgAdminDb,
+      DEST,
+      exported.data,
+      { confirm: true }
+    );
+    const orgAdminDir = path.join(
+      soul(DEST, orgAdminImport.profileId),
+      "skills",
+      name
+    );
+    expect(await pathExists(path.join(orgAdminDir, "tool.py"))).toBe(false);
+    const orgAdminSkill = await discoverSkillDirectory(orgAdminDir);
+    expect(orgAdminSkill?.hasTool).toBe(false);
+    expect(orgAdminSkill?.scriptTools).toEqual([]);
+    expect(
+      (await orgAdminDb.listSkillsForProfile(orgAdminImport.profileId)).map(
+        (skill) => skill.name
+      )
+    ).toContain(name);
+
+    const platformDb = createInMemoryDatabaseAdapter();
+    const platformImport = await importProfilePack(
+      platformDb,
+      DEST,
+      exported.data,
+      { allowPythonSkillTools: true, confirm: true }
+    );
+    const platformDir = path.join(
+      soul(DEST, platformImport.profileId),
+      "skills",
+      name
+    );
+    expect(await pathExists(path.join(platformDir, "tool.py"))).toBe(true);
+    const platformSkill = await discoverSkillDirectory(platformDir);
+    expect(platformSkill?.hasTool).toBe(true);
+    expect(platformSkill?.scriptTools).toHaveLength(1);
+  });
 
   test("export packs soul content and skips secrets, artifacts, and archives", async () => {
     const { db, service } = await setup();
