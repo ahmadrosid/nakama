@@ -1,0 +1,8 @@
+{
+  "name": "nakama-meet-deps",
+  "private": true,
+  "description": "Optional Google Meet capture dependencies installed into /opt/nakama-meet when the image is built with INSTALL_MEET_DEPS=true. Installed from the committed bun.lock so the optional build path resolves the same bytes as the default one.",
+  "dependencies": {
+    "betterwright": "2.8.1"
+  }
+}

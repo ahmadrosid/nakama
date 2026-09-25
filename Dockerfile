@@ -28,13 +28,14 @@ COPY --from=web-builder /app/apps/platform/whatsapp/dist /app/apps/platform/what
 COPY --from=web-builder /app/apps/platform/discord/dist /app/apps/platform/discord/dist
 COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/dist
 
+# Production runtime dependencies are installed from a committed manifest and
+# lockfile. Re-resolving version ranges at image build time let two builds of
+# the same commit ship different transitive bytes, so the lockfile is the input.
 FROM oven/bun:1.4-slim AS runtime-deps
-RUN mkdir -p /runtime-deps \
-  && printf '{"private":true}\n' > /runtime-deps/package.json \
-  && cd /runtime-deps \
-  && bun add --exact --production --ignore-scripts \
-    pm2@7.0.4 microsandbox@0.6.17 sharp@0.35.4 \
-    @vscode/ripgrep@1.18.0 @firecrawl/anydoc@0.1.3
+WORKDIR /runtime-deps
+
+COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
+RUN bun install --frozen-lockfile --production --ignore-scripts
 
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM oven/bun:1.4-slim AS runtime
@@ -44,15 +45,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
   && rm -rf /var/lib/apt/lists/*
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
-# runs as the existing non-root Nakama user.
+# runs as the existing non-root Nakama user. The manifest and lockfile are
+# copied unconditionally (two small files) so the install below can be
+# frozen; the packages themselves only land when the build arg is true.
 ARG INSTALL_MEET_DEPS=false
+COPY .docker/meet-deps/package.json .docker/meet-deps/bun.lock /opt/nakama-meet/
 RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       apt-get update && apt-get install -y --no-install-recommends \
         chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation xvfb \
       && rm -rf /var/lib/apt/lists/* \
-      && mkdir -p /opt/nakama-meet \
       && cd /opt/nakama-meet \
-      && bun add --exact --production --ignore-scripts betterwright@2.8.1; \
+      && bun install --frozen-lockfile --production --ignore-scripts; \
     fi
 
 # Tool-output optimiser, on by default so the dashboard toggle works on a fresh
