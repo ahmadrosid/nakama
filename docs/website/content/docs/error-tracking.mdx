@@ -13,7 +13,8 @@ Nakama only sends. It stores no errors, and there is no error page inside Nakama
 
 - A project on **Sentry**, **GlitchTip**, **Bugsink**, or a **self-hosted Sentry**. They all speak the same protocol, so one field covers all four.
 - The **DSN** for that project. It looks like `https://<key>@sentry.example.com/42`.
-- The **org admin** role in Nakama.
+- The **platform admin** role in Nakama. Organization admins cannot configure
+  error tracking.
 - Nothing at all if you would rather not do this. Error tracking is off until you paste a DSN, and off means nothing is sent and nothing is written to disk.
 
 ## Setup
@@ -22,13 +23,16 @@ Nakama only sends. It stores no errors, and there is no error page inside Nakama
 
 GlitchTip also shows a second address under the same page, ending in `/security/?glitchtip_key=...`. That one is the browser CSP report endpoint and it will not accept error events. The DSN is the one you want.
 
-**2. Paste it into Nakama.** Open **Integrations**, then **Error tracking**, paste the DSN, and press **Save**.
+**2. Paste it into Nakama.** As a platform admin, open **Integrations**, then
+**Error tracking**, paste the DSN, and press **Save**.
 
 ![The Error tracking page in Nakama before a DSN is saved, showing the badge reading Off](/screenshots/error-tracking-empty.png)
 
 Nakama checks the shape of what you pasted and refuses anything that is not a DSN, so a typo fails on the spot rather than going quiet for a week. It takes effect immediately: there is nothing to restart.
 
-**3. Press Send test event.** The badge turns to **Sending** once a DSN is saved, and the button tells you whether the event actually arrived.
+**3. Press Send test event.** A platform admin can send the test. The badge
+turns to **Sending** once a DSN is saved, and the button tells you whether the
+event actually arrived.
 
 ![The Error tracking page with a saved DSN, the badge reading Sending, and the message confirming the test event was delivered](/screenshots/error-tracking-test-event.png)
 
@@ -82,10 +86,12 @@ To force it off for a whole deployment regardless of what is saved, set `DO_NOT_
 | --- | --- |
 | See whether error tracking is on | Any member |
 | See the DSN in full | Nobody. The dashboard and the API only ever show it masked |
-| Save or clear the DSN | Org admin, or platform admin |
-| Send a test event | Org admin, or platform admin |
+| Save or clear the DSN | Platform admin only |
+| Send a test event | Platform admin only |
 
-The DSN applies to the whole installation, not to one organisation. There is no per-org error tracking, because a crashed process does not belong to an organisation.
+The DSN applies to the whole installation, not to one organisation. Only a
+platform admin can change or test it. There is no per-org error tracking,
+because a crashed process does not belong to an organisation.
 
 ## How it works underneath
 
