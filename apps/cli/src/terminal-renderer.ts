@@ -53,9 +53,8 @@ export function buildComposerLines(
     width
   ).map((line) => styledLine(line, { dim: true }));
   const display = normalizePastedText(state.composer.value);
-  const inputWidth = state.composer.cursorVisible
-    ? Math.max(1, composerWidth - 1)
-    : composerWidth;
+  // Reserve cursor space during both blink phases so input never reflows.
+  const inputWidth = Math.max(1, composerWidth - 1);
   const inputLines = splitInputDisplayLines(
     display,
     state.composer.prefix.length,
