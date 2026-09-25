@@ -1,13 +1,13 @@
 ---
 title: "WhatsApp"
-description: "Set up Nakama on WhatsApp with linking, commands, and troubleshooting."
+description: "Set up Nakama on WhatsApp with QR device linking, commands, and troubleshooting."
 ---
 
 Use WhatsApp when you want the same Nakama agent available from your phone in a direct chat or group.
 
 The WhatsApp bridge talks to the same Nakama server as the web app and CLI. It is a chat channel, not a separate agent system.
 
-Each agent can connect its own WhatsApp account. Starting, stopping, or reconnecting one agent’s worker does not interrupt another. The account can belong to only one agent across the installation.
+Each profile can connect its own WhatsApp account. Starting, stopping, or reconnecting one profile's worker does not interrupt another. The account can belong to only one profile across the installation.
 
 ## Good use cases
 
@@ -30,7 +30,7 @@ With WhatsApp enabled, users can:
 
 ## Reply formatting
 
-Agents can still write normal Markdown-style replies, but Nakama simplifies them for WhatsApp.
+Profiles can still write normal Markdown-style replies, but Nakama simplifies them for WhatsApp.
 
 In practice:
 
@@ -46,51 +46,43 @@ This keeps replies readable in WhatsApp without depending on web-style Markdown 
 ### 1. Enable WhatsApp in Nakama
 
 1. Sign in as an organization admin or platform admin
-2. Select the organization, then open **Agents → your agent → Connections → WhatsApp**
-3. Check that you opened the agent you want to connect
+2. Select the organization, then open **Agent → profile → Channels → WhatsApp**
+3. Check that you opened the profile you want to connect
 4. Click **Connect WhatsApp**
+
+The channel settings are scoped to that profile. The connection is stored under its profile and worker controls belong to that profile only.
 
 ### 2. Start the bridge
 
-Use the bridge's **Start** control in **Agents → your agent → Connections → WhatsApp**. Repeat these steps for another agent with a different WhatsApp account.
+Use the bridge's **Start** control in **Agent → profile → Channels → WhatsApp**. Repeat these steps for another profile with a different WhatsApp account.
 
-### 3. Link your WhatsApp account
+### 3. Link your WhatsApp account with a QR code
 
-Nakama supports two ways to link:
-
-#### Option A: pairing code
-
-1. In **Agents → your agent → Connections → WhatsApp**, generate or copy the pairing code
-2. Open WhatsApp on your phone
-3. Go to **Settings → Linked Devices**
-4. Choose **Link with phone number**
-5. Enter the pairing code
-
-#### Option B: QR code
+WhatsApp linking uses **Linked Devices**, not a phone-number pairing code.
 
 1. Start the WhatsApp bridge
-2. Wait for the QR code to appear in **Agents → your agent → Connections → WhatsApp**
+2. Wait for the QR code to appear in **Agent → profile → Channels → WhatsApp**
 3. Open WhatsApp on your phone
 4. Go to **Settings → Linked Devices**
 5. Tap **Link a Device** and scan the QR code
 
-After linking succeeds, Nakama shows the linked account and the bridge can receive messages.
+After linking succeeds, Nakama shows the linked account and the bridge can receive messages. The connected owner is automatically paired with that WhatsApp account, so the owner can use the private chat without copying a pairing code. Additional users can still pair in a private chat or be added to **Allowed numbers**.
 
 ## Chat behavior
 
 WhatsApp works in **private chats** and **groups**.
 
-- direct chats send every message to the agent
-- group chats reply to a mention of the linked number, a reply to a Nakama message, or a `/command`. Turn off **Require @mention in groups** in **Agents → your agent → Connections → WhatsApp** if anyone in the group should talk without tagging the bot
+- direct chats send every message to the profile
+- group chats reply to a mention of the linked number, a reply to a Nakama message, or a `/command`
+- turn off **Require @mention in groups** in **Agent → profile → Channels → WhatsApp** if any authorized group member should be able to trigger the bot without tagging it
 - each private chat and each group keeps its own Nakama session
 - an organization-owned number stays in its owning organization; `/org` cannot switch it to another organization
-- pairing still happens in a private chat first
-- extra numbers in **Agents → your agent → Connections → WhatsApp → Allowed numbers** can also talk to the agent
-- reply to another group message while mentioning Nakama includes that quoted text in the agent turn
+- extra numbers in **Agent → profile → Channels → WhatsApp → Allowed numbers** can also talk to the profile
+- reply to another group message while mentioning Nakama includes that quoted text in the profile turn
 
-This keeps group chats usable without making Nakama answer every message.
+Turning off **Require @mention in groups** changes only the trigger. It does **not** authorize every group sender. Every sender must still be paired or listed under **Allowed numbers**. This keeps open-listen behavior separate from sender authorization.
 
-The connection always replies as its owning agent. `/new` starts a fresh conversation with that same agent.
+The connection always replies as its owning profile. `/new` starts a fresh conversation with that same profile.
 
 ## Commands
 
@@ -109,13 +101,13 @@ Useful WhatsApp commands:
 
 ## Saved artifacts and share links
 
-When your agent saves a file for you with the `save-artifact` skill, Nakama posts a **Publish-style share link** after the reply in WhatsApp.
+When your profile saves a file for you with the `save-artifact` skill, Nakama posts a **Publish-style share link** after the reply in WhatsApp.
 
 Opening that link does not require a Nakama login. Anyone who can read the WhatsApp message can open the file until the share is revoked from the dashboard.
 
-To receive the file itself in WhatsApp, ask in plain language — for example, “send the file” or “attach it” — or type `/attach`. Nakama sends a native WhatsApp document when the file is within the attach size limit. If the file is too large, use the share link instead.
+To receive the file itself in WhatsApp, ask in plain language — for example, "send the file" or "attach it" — or type `/attach`. Nakama sends a native WhatsApp document when the file is within the attach size limit. If the file is too large, use the share link instead.
 
-In a WhatsApp **group**, both the share link and a requested document go to the whole group (same visibility as the bot’s other replies).
+In a WhatsApp **group**, both the share link and a requested document go to the whole group (same visibility as the bot's other replies).
 
 Only successful artifact saves produce share links or attachments.
 
@@ -126,27 +118,17 @@ Only successful artifact saves produce share links or attachments.
 Check:
 
 1. the Nakama server is running
-2. the WhatsApp bridge is running in the selected organization's **Agents → your agent → Connections → WhatsApp**
-3. the WhatsApp account is linked
-4. the linked number shown in **Agents → your agent → Connections → WhatsApp** is the one you are messaging from
-
-### Pairing code does not work
-
-Check these first:
-
-1. generate a fresh pairing code from **Agents → your agent → Connections → WhatsApp**
-2. open **Settings → Linked Devices → Link with phone number**
-3. paste the latest code exactly as shown
-
-If a code was already used or expired, generate a new one.
+2. the WhatsApp bridge is running in the selected profile's **Agent → profile → Channels → WhatsApp** page
+3. the WhatsApp account is linked with a QR code under **Linked Devices**
+4. the linked number shown in **Agent → profile → Channels → WhatsApp** is the one you are messaging from
 
 ### QR linking is stuck
 
 If QR linking does not finish:
 
-1. use **Reconnect with QR** in **Agents → your agent → Connections → WhatsApp**
+1. use **Reconnect with QR** in **Agent → profile → Channels → WhatsApp**
 2. wait for a fresh QR code
-3. scan it again from WhatsApp
+3. scan it again from **Settings → Linked Devices**
 
 ### The bot does not reply in a group
 
@@ -156,17 +138,31 @@ By default, Nakama only answers in a group when someone:
 2. replies to a Nakama message
 3. sends a `/command`
 
-Turn off **Require @mention in groups** in **Agents → your agent → Connections → WhatsApp** to answer every group message without tagging the bot.
+Turn off **Require @mention in groups** in **Agent → profile → Channels → WhatsApp** to make every message an eligible trigger without tagging the bot. The sender must still be paired or listed under **Allowed numbers**; turning off the mention requirement does not bypass authorization.
 
-The sender must be the linked WhatsApp number, or a number listed under **Agents → your agent → Connections → WhatsApp → Allowed numbers**. Add country code, like `+62812…`. Reply to another person's message while mentioning Nakama if the agent should see that text.
+Reply to another person's message while mentioning Nakama if the profile should see that text.
 
-### Check connection ownership
-
-Open the agent’s **Connections → WhatsApp** settings. Conversations always belong to this agent. **Stop** keeps its linked account. **Disconnect** removes credentials and pairings but keeps chat history. Disconnect before moving the agent to another organization. Cloning or exporting an agent does not copy its connection.
+Open the profile's **Agent → profile → Channels → WhatsApp** settings. Conversations always belong to this profile. **Stop** keeps its linked account. **Disconnect** removes credentials, pairings, and the channel directory's session/thread data. Disconnect before moving the profile to another organization. Cloning or exporting a profile does not copy its connection.
 
 ## Existing installations
 
-Nakama preserves a linked account when its existing settings identify one owner. Ambiguous connections stay stopped. Open **Integrations → WhatsApp**, select an agent, and claim the connection. Installation-wide connections require a platform admin. Stop manually launched workers before claiming them.
+Nakama preserves a linked account when its existing settings identify one owner. Ambiguous connections stay stopped. Open **Agent → profile → Channels → WhatsApp**, select the profile, and claim the connection. Installation-wide connections require a platform admin. Stop manually launched workers before claiming them.
+
+## Rotating the linked account or worker settings
+
+After changing the WhatsApp account configuration, restart the profile's WhatsApp worker. Long-lived workers keep the account state they loaded at startup, so a token or credential rotation is not picked up until restart. A QR reconnect uses **Reconnect with QR** and the worker must be running to show a fresh code.
+
+## Running the worker directly
+
+A direct run must carry the organization and profile scope so the worker reads the correct profile-scoped config:
+
+```bash
+NAKAMA_CHANNEL_ORG_ID="org_your_org" \
+NAKAMA_CHANNEL_PROFILE_ID="your-profile" \
+bun run dev:whatsapp
+```
+
+Save the WhatsApp connection in the same Nakama config directory first. Set `NAKAMA_SERVER_URL` and `NAKAMA_CONFIG_DIR` as needed for a separate server or non-default config root.
 
 ## Next steps
 
