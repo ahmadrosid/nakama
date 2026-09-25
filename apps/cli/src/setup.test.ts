@@ -180,7 +180,16 @@ test("login stores only tokens; restored sessions authenticate and logout revoke
   expect(saved).toBeNull();
   const user = await connection.login("admin@example.com", "password123");
   const tokens = JSON.parse(saved!);
-  expect(Object.keys(tokens).sort()).toEqual(["csrf", "session"]);
+  expect(Object.keys(tokens).sort()).toEqual([
+    "cookieNames",
+    "csrf",
+    "session",
+  ]);
+  // HTTPS servers only accept the host-bound cookie pair (#1345).
+  expect(tokens.cookieNames).toEqual({
+    csrf: "__Host-nakama_csrf",
+    session: "__Host-nakama_session",
+  });
   const restored = await createRemoteConnection("https://example.com", options);
   expect((await restored.client.getMe()).id).toBe(user.id);
   expect((await restored.client.listUserOrgs()).orgs.length).toBe(1);

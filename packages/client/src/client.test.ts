@@ -158,6 +158,45 @@ test("chat stream request includes cookie CSRF protection", async () => {
   }
 });
 
+test("CSRF header prefers the host-bound cookie a sibling host cannot set", async () => {
+  const originalDocument = (
+    globalThis as typeof globalThis & { document?: { cookie: string } }
+  ).document;
+  // An attacker-planted parent-domain cookie is still readable from JS, so the
+  // client must send the host-bound one the server actually trusts.
+  (
+    globalThis as typeof globalThis & { document?: { cookie: string } }
+  ).document = {
+    cookie: "nakama_csrf=planted; __Host-nakama_csrf=host-bound",
+  };
+
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = new NakamaClient({
+    baseUrl: "https://nakama.example.com",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return new Response('data: {"type":"done","reply":"ok"}\n\n', {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    },
+  });
+
+  try {
+    await client
+      .createChatSession("session-1", "web")
+      .sendStream("hi", () => {});
+
+    expect(new Headers(fetchCalls[0]!.init?.headers).get("X-CSRF-Token")).toBe(
+      "host-bound"
+    );
+  } finally {
+    (
+      globalThis as typeof globalThis & { document?: { cookie: string } }
+    ).document = originalDocument;
+  }
+});
+
 test("automation run requests disable Bun fetch idle timeout", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];

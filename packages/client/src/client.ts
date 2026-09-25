@@ -4,6 +4,10 @@ import {
   readApiErrorDetails,
   readApiErrorMessage,
 } from "@nakama/core/api-error";
+import {
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
+} from "@nakama/core/browser-session-cookies";
 import type {
   AcceptOrgInviteRequest,
   AcceptOrgInviteResponse,
@@ -3484,7 +3488,12 @@ export class NakamaClient {
     }
 
     if (isMutatingMethod(method)) {
-      const csrfToken = readCookie("nakama_csrf");
+      // HTTPS deployments issue the host-bound cookie; plain HTTP uses the
+      // unprefixed one. A cookie planted by a sibling host is never read on
+      // HTTPS because the server only trusts the prefixed name there.
+      const csrfToken =
+        readCookie(HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.csrf) ??
+        readCookie(PLAIN_BROWSER_SESSION_COOKIE_NAMES.csrf);
       if (csrfToken) {
         merged["X-CSRF-Token"] = csrfToken;
       }

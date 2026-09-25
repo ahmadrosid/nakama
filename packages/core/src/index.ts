@@ -13,6 +13,7 @@ export * from "./automation-scheduler";
 export * from "./automation-validate";
 export * from "./automation-worker";
 export * from "./bridge-api";
+export * from "./browser-session-cookies";
 export * from "./channel-artifact-delivery";
 export * from "./channel-artifacts";
 export * from "./channel-org";
