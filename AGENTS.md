@@ -84,6 +84,15 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 ./scripts/docker-build-run.sh
 ```
 
+Runtime dependencies are baked into the image from committed lockfiles, not resolved
+at build time. To change them, edit the manifest, regenerate the lockfile for both
+image architectures, and commit both files:
+
+```bash
+cd .docker/runtime-deps   # or .docker/meet-deps for the optional Meet build
+bun install --lockfile-only --os=linux --cpu='*'
+```
+
 ## Multi-tenancy
 
 Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).

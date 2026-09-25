@@ -1,0 +1,12 @@
+{
+  "name": "nakama-runtime-deps",
+  "private": true,
+  "description": "Production runtime dependencies baked into the Nakama container image. Installed from the committed bun.lock so the image resolves the same bytes on every build.",
+  "dependencies": {
+    "@firecrawl/anydoc": "0.1.3",
+    "@vscode/ripgrep": "1.18.0",
+    "microsandbox": "0.6.17",
+    "pm2": "7.0.4",
+    "sharp": "0.35.4"
+  }
+}
