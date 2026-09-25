@@ -29,6 +29,15 @@ describe("readStreamEvents", () => {
     ).resolves.toBe("ok");
   });
 
+  test("accepts an empty terminal done reply", async () => {
+    await expect(
+      readStreamEvents(
+        streamFromChunks(['data: {"type":"done","reply":""}\n\n']),
+        { onChunk: () => {} }
+      )
+    ).resolves.toBe("");
+  });
+
   test("throws a helpful error when only keepalive comments arrive", async () => {
     await expect(
       readStreamEvents(streamFromChunks([": ping\n\n", ": ping\n\n"]), {

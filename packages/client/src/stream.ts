@@ -78,6 +78,7 @@ export async function readStreamEvents(
 ): Promise<string> {
   let reply = "";
   let sawDataEvent = false;
+  let sawDoneEvent = false;
 
   const doneReply = await consumeSseEvents<StreamEvent, string>(
     body,
@@ -139,6 +140,7 @@ export async function readStreamEvents(
       }
 
       if (payload.type === "done") {
+        sawDoneEvent = true;
         if (payload.contextUsage) {
           handlers.onContextUsage?.(payload.contextUsage);
         }
@@ -156,8 +158,8 @@ export async function readStreamEvents(
     }
   );
 
-  if (doneReply) {
-    return doneReply;
+  if (sawDoneEvent) {
+    return doneReply ?? "";
   }
 
   throwIfAborted(signal);
