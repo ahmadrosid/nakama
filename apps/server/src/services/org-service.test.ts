@@ -1,16 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type EmailOutboundAdapter,
   getOrgConfigDir,
   getProfileSoulDir,
+  getUserConfigDir,
+  getUserConfigPath,
   NakamaApiError,
+  type ToolSetupPlan,
+  writeParsedConfigIni,
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AuthService } from "./auth-service";
+import {
+  loadToolApiKey,
+  loadToolSetup,
+  saveToolApiKey,
+  saveToolSetup,
+} from "./custom-tool-shared";
 import { OrgService } from "./org-service";
 
 setupTestConfigDir("nakama-org-service-test-");
@@ -1125,6 +1135,106 @@ describe("OrgService", () => {
       )
     ).toMatchObject({ activeOrgId: null });
     await expect(access(orgDir)).rejects.toThrow();
+  });
+
+  test("permanent deletion removes tool secrets from the global config", async () => {
+    const { orgService, authService } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-tool-secret-delete" },
+    });
+    const kept = await orgService.createOrganization(
+      { name: "Beta", slug: "beta-tool-secret-delete" },
+      bootstrapped.user.id
+    );
+    // Unrelated sections share the file; the purge must leave them alone.
+    await writeParsedConfigIni(
+      { web_public_url: "https://acme.example.com" },
+      {
+        "provider.keep-me": {
+          api_key: "sk-keep-provider",
+          label: "Keep",
+          type: "openai",
+        },
+        "tool-key.not-an-encoded-section": { api_key: "sk-foreign-shape" },
+      }
+    );
+
+    const deletedPlan: ToolSetupPlan = {
+      description: "Connect the Acme tool",
+      id: "setup_deleted_org",
+      name: "Acme tool",
+      plan: "paste the api key",
+      requiresApiKey: true,
+      sessionId: "session_deleted_org",
+      status: "pending",
+    };
+    await saveToolApiKey(
+      bootstrapped.organization.id,
+      "tool_deleted_org",
+      "sk-deleted-org-secret"
+    );
+    await saveToolSetup(bootstrapped.organization.id, deletedPlan);
+    await saveToolApiKey(
+      kept.organization.id,
+      "tool_kept_org",
+      "sk-kept-org-secret"
+    );
+    await saveToolSetup(kept.organization.id, {
+      ...deletedPlan,
+      id: "setup_kept_org",
+      name: "Beta tool",
+      sessionId: "session_kept_org",
+    });
+
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+    await orgService.permanentlyDeleteOrganization(
+      bootstrapped.organization.id
+    );
+
+    expect(
+      await loadToolApiKey(bootstrapped.organization.id, "tool_deleted_org")
+    ).toBeUndefined();
+    await expect(
+      loadToolSetup(bootstrapped.organization.id, "setup_deleted_org")
+    ).rejects.toMatchObject({ status: 404 });
+
+    const raw = await readFile(getUserConfigPath(), "utf8");
+    expect(raw).not.toContain("sk-deleted-org-secret");
+    expect(raw).toContain("sk-kept-org-secret");
+    expect(raw).toContain("sk-keep-provider");
+    expect(raw).toContain("sk-foreign-shape");
+    expect(raw).toContain("web_public_url=https://acme.example.com");
+    expect(await loadToolApiKey(kept.organization.id, "tool_kept_org")).toBe(
+      "sk-kept-org-secret"
+    );
+    expect(
+      (await loadToolSetup(kept.organization.id, "setup_kept_org")).id
+    ).toBe("setup_kept_org");
+
+    // Retention: the purge rewrites in place and keeps no shadow copy of the
+    // secret anywhere under the config directory.
+    const files = await readdir(getUserConfigDir(), {
+      encoding: "utf8",
+      recursive: true,
+    });
+    for (const file of files) {
+      let content: string;
+      try {
+        content = await readFile(join(getUserConfigDir(), file), "utf8");
+      } catch {
+        continue;
+      }
+      expect(content).not.toContain("sk-deleted-org-secret");
+    }
   });
 
   test("refuses to permanently delete an active org", async () => {

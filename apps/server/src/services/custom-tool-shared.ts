@@ -16,8 +16,42 @@ import {
 } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 
+const CREDENTIAL_SECTION_PREFIX = "tool-key.";
+const SETUP_SECTION_PREFIX = "tool-setup.";
+
+/**
+ * Section names encode `[orgId, id]` as base64url so every entry belonging to
+ * one organization can be enumerated and purged from the shared config file.
+ */
+function encodeOrgScopedSection(
+  prefix: string,
+  orgId: string,
+  id: string
+): string {
+  return `${prefix}${Buffer.from(JSON.stringify([orgId, id])).toString("base64url")}`;
+}
+
 function credentialSection(orgId: string, toolId: string): string {
-  return `tool-key.${Buffer.from(JSON.stringify([orgId, toolId])).toString("base64url")}`;
+  return encodeOrgScopedSection(CREDENTIAL_SECTION_PREFIX, orgId, toolId);
+}
+
+function belongsToOrgSection(
+  prefix: string,
+  section: string,
+  orgId: string
+): boolean {
+  if (!section.startsWith(prefix)) {
+    return false;
+  }
+  try {
+    const decoded: unknown = JSON.parse(
+      Buffer.from(section.slice(prefix.length), "base64url").toString("utf8")
+    );
+    return Array.isArray(decoded) && decoded[0] === orgId;
+  } catch {
+    // Not one of our encoded sections, so it is not this org's entry.
+    return false;
+  }
 }
 
 async function readConfig() {
@@ -69,7 +103,7 @@ export function saveToolApiKey(
 }
 
 function setupSection(orgId: string, setupId: string): string {
-  return `tool-setup.${Buffer.from(JSON.stringify([orgId, setupId])).toString("base64url")}`;
+  return encodeOrgScopedSection(SETUP_SECTION_PREFIX, orgId, setupId);
 }
 
 export async function loadToolSetup(
@@ -157,6 +191,34 @@ export function completeToolSetup(
     parsed.sections[setupSection(orgId, plan.id)] = {
       plan: JSON.stringify({ ...plan, status: "ready", toolId }),
     };
+    await writeParsedConfigIni(parsed.global, parsed.sections);
+  });
+  credentialWrite = write.catch(() => undefined);
+  return write;
+}
+
+/**
+ * Purge every org-scoped tool API key and setup plan. The config file is
+ * rewritten in place and Nakama keeps no history of it, so a purge leaves no
+ * shadow copy holding the secret; pre-deletion operator backups remain under
+ * the operator's own retention policy.
+ */
+export function deleteOrgToolCredentials(orgId: string): Promise<void> {
+  const write = credentialWrite.then(async () => {
+    const parsed = await readConfig();
+    let removed = false;
+    for (const prefix of [CREDENTIAL_SECTION_PREFIX, SETUP_SECTION_PREFIX]) {
+      for (const section of Object.keys(parsed.sections)) {
+        if (!belongsToOrgSection(prefix, section, orgId)) {
+          continue;
+        }
+        delete parsed.sections[section];
+        removed = true;
+      }
+    }
+    if (!removed) {
+      return;
+    }
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
   credentialWrite = write.catch(() => undefined);

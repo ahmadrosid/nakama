@@ -56,6 +56,7 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
+import { deleteOrgToolCredentials } from "./custom-tool-shared";
 import { loadMfaPolicy } from "./mfa-config";
 
 const LAST_MEMBERSHIP_MESSAGE =
@@ -177,6 +178,7 @@ export class OrgService {
     }
     // Keep the database row available for a safe retry if disk cleanup fails.
     await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
+    await deleteOrgToolCredentials(orgId);
     const deleted = await this.databaseAdapter.deleteOrganization(orgId);
     if (!deleted) {
       throw new NakamaApiError("Not found", 404);
