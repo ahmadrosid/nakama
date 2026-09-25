@@ -9,6 +9,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
@@ -18,6 +24,7 @@ import {
   ArrowRight01Icon,
   Cancel01Icon,
   Delete02Icon,
+  MoreHorizontalIcon,
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
@@ -295,7 +302,7 @@ function RecentChats() {
       >
         <Link
           aria-current={location.pathname === href ? "page" : undefined}
-          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 transition-[padding] group-focus-within:pr-24 group-hover:pr-24"
+          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 transition-[padding] group-focus-within:pr-20 group-hover:pr-20"
           data-active={location.pathname === href || undefined}
           title={session.active ? `${title} (still responding)` : title}
           to={href}
@@ -304,22 +311,7 @@ function RecentChats() {
             {title}
           </span>
         </Link>
-        <div className="absolute right-1 flex translate-x-2 items-center opacity-0 transition-[opacity,transform] group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:opacity-100">
-          <Button
-            aria-label={`Rename ${title}`}
-            className="size-7 text-muted-foreground"
-            onClick={() =>
-              setRenameTarget({
-                id: session.id,
-                title,
-              })
-            }
-            size="icon-sm"
-            title="Rename"
-            variant="ghost"
-          >
-            <PencilEdit02Icon aria-hidden="true" className="size-4" />
-          </Button>
+        <div className="absolute right-1 flex translate-x-2 items-center rounded-md bg-muted opacity-0 transition-[opacity,transform] group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:opacity-100">
           <Button
             aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
             className="size-7 text-muted-foreground"
@@ -340,21 +332,36 @@ function RecentChats() {
               <PinIcon aria-hidden="true" className="size-4" />
             )}
           </Button>
-          <Button
-            aria-label={`Delete ${title}`}
-            className="size-7 text-destructive"
-            onClick={() =>
-              setDeleteTarget({
-                id: session.id,
-                title,
-              })
-            }
-            size="icon-sm"
-            title="Delete"
-            variant="ghost"
-          >
-            <Delete02Icon aria-hidden="true" className="size-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={`More actions for ${title}`}
+                  className="size-7 text-muted-foreground"
+                  size="icon-sm"
+                  title="More actions"
+                  variant="ghost"
+                />
+              }
+            >
+              <MoreHorizontalIcon aria-hidden="true" className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => setRenameTarget({ id: session.id, title })}
+              >
+                <PencilEdit02Icon aria-hidden="true" className="size-4" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => setDeleteTarget({ id: session.id, title })}
+              >
+                <Delete02Icon aria-hidden="true" className="size-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     );
