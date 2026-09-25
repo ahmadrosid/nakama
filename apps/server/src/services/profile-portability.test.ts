@@ -3,7 +3,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getCustomToolsDir } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+  type StoredProfileRecord,
+} from "@nakama/db";
 import {
   createNakamaDataExport,
   previewNakamaDataImport,
@@ -19,6 +23,46 @@ import { ProfileService } from "./profile-service";
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 const ORG = "org_test";
 const DEST = "org_dest";
+const OTHER = "org_other";
+const OTHER_DEST = "org_other_dest";
+
+const CONTESTED_NAME = "Contested Bot";
+
+/**
+ * Parks the first attempt to claim `id` until a second attempt has already
+ * claimed one, so concurrent imports deterministically collide on the same
+ * slug instead of depending on timing.
+ */
+function holdFirstClaimOf(db: DatabaseAdapter, id: string): DatabaseAdapter {
+  let claims = 0;
+  let releaseFirst: () => void = () => {};
+  const firstMayClaim = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+
+  return new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "createProfileIfAbsent") {
+        return async (record: StoredProfileRecord) => {
+          if (record.id !== id) {
+            return target.createProfileIfAbsent(record);
+          }
+          claims += 1;
+          if (claims === 1) {
+            await firstMayClaim;
+            return target.createProfileIfAbsent(record);
+          }
+          const created = await target.createProfileIfAbsent(record);
+          releaseFirst();
+          return created;
+        };
+      }
+
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
 
 describe("profile portability", () => {
   let root = "";
@@ -495,5 +539,77 @@ describe("profile portability", () => {
         p.name.includes("Rollback")
       )
     ).toBe(false);
+  });
+
+  test("concurrent imports of the same name never take over each other's row", async () => {
+    const { db, service } = await setup();
+    const sourceA = await service.createProfile(ORG, {
+      id: "source-a-bot",
+      name: CONTESTED_NAME,
+      systemPrompt: "prompt A",
+    });
+    const sourceB = await service.createProfile(OTHER, {
+      id: "source-b-bot",
+      name: CONTESTED_NAME,
+      systemPrompt: "prompt B",
+    });
+    const packA = await createProfilePackExport(db, ORG, sourceA.profile.id);
+    const packB = await createProfilePackExport(db, OTHER, sourceB.profile.id);
+
+    const gated = holdFirstClaimOf(db, "contested-bot");
+    const [first, second] = await Promise.all([
+      importProfilePack(gated, DEST, packA.data, { confirm: true }),
+      importProfilePack(gated, OTHER_DEST, packB.data, { confirm: true }),
+    ]);
+
+    expect(first.profileId).not.toBe(second.profileId);
+    // Neither import may rewrite the other's row, settings included.
+    const [rowA, rowB] = await Promise.all([
+      db.getProfileForOrg(first.profileId, DEST),
+      db.getProfileForOrg(second.profileId, OTHER_DEST),
+    ]);
+    expect(rowA?.systemPrompt).toBe("prompt A");
+    expect(rowB?.systemPrompt).toBe("prompt B");
+    expect(await db.listProfilesForOrg(DEST)).toHaveLength(1);
+    expect(await db.listProfilesForOrg(OTHER_DEST)).toHaveLength(1);
+  });
+
+  test("failed import rollback spares a profile that left the importing org", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Handoff Rollback Bot",
+    });
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Boom",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_handoff_boom",
+      name: "handoff-boom-tool",
+      updatedAt: now(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_handoff_boom");
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+
+    let handedOff = "";
+    const assignTool = db.assignToolToProfile.bind(db);
+    // An admin hands the freshly allocated profile to another org while the
+    // import is still in flight; rollback must not delete it.
+    db.assignToolToProfile = async (profileId: string) => {
+      handedOff = profileId;
+      const current = await db.getProfile(profileId);
+      if (current) {
+        await db.upsertProfile({ ...current, orgId: OTHER });
+      }
+      throw new Error("forced assignment failure");
+    };
+
+    await expect(
+      importProfilePack(db, DEST, exported.data, { confirm: true })
+    ).rejects.toThrow("forced assignment failure");
+    db.assignToolToProfile = assignTool;
+
+    expect((await db.getProfileForOrg(handedOff, OTHER))?.id).toBe(handedOff);
+    expect(await db.listProfilesForOrg(DEST)).toEqual([]);
   });
 });

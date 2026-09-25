@@ -781,36 +781,58 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
       updated_at = excluded.updated_at
   `);
+  const insertProfileIfAbsentStmt = db.prepare(`
+    INSERT INTO profiles (
+      id,
+      name,
+      system_prompt,
+      model,
+      thinking_enabled,
+      thinking_effort,
+      is_super,
+      org_id,
+      is_default,
+      automations_enabled,
+      skills_write_approval,
+      skills_post_turn_review,
+      skills_curator_consolidate_enabled,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO NOTHING
+  `);
+  const profileInsertArgs = (record: StoredProfileRecord) => [
+    record.id,
+    record.name,
+    record.systemPrompt,
+    record.model,
+    record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
+    record.thinkingEffort ?? null,
+    record.isSuper ? 1 : 0,
+    record.orgId ?? null,
+    record.isDefault ? 1 : 0,
+    record.automationsEnabled === false ? 0 : 1,
+    record.skillsWriteApproval == null
+      ? null
+      : record.skillsWriteApproval
+        ? 1
+        : 0,
+    record.skillsPostTurnReview == null
+      ? null
+      : record.skillsPostTurnReview
+        ? 1
+        : 0,
+    record.skillsCuratorConsolidateEnabled == null
+      ? null
+      : record.skillsCuratorConsolidateEnabled
+        ? 1
+        : 0,
+    record.createdAt,
+    record.updatedAt ?? record.createdAt,
+  ];
   const runUpsertProfileStmt = (record: StoredProfileRecord) => {
-    upsertProfileStmt.run(
-      record.id,
-      record.name,
-      record.systemPrompt,
-      record.model,
-      record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
-      record.thinkingEffort ?? null,
-      record.isSuper ? 1 : 0,
-      record.orgId ?? null,
-      record.isDefault ? 1 : 0,
-      record.automationsEnabled === false ? 0 : 1,
-      record.skillsWriteApproval == null
-        ? null
-        : record.skillsWriteApproval
-          ? 1
-          : 0,
-      record.skillsPostTurnReview == null
-        ? null
-        : record.skillsPostTurnReview
-          ? 1
-          : 0,
-      record.skillsCuratorConsolidateEnabled == null
-        ? null
-        : record.skillsCuratorConsolidateEnabled
-          ? 1
-          : 0,
-      record.createdAt,
-      record.updatedAt ?? record.createdAt
-    );
+    upsertProfileStmt.run(...profileInsertArgs(record));
   };
   const upsertDefaultProfileTransaction = db.transaction(
     (record: StoredProfileRecord) => {
@@ -959,6 +981,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
 
   const deleteProfileStmt = db.prepare("DELETE FROM profiles WHERE id = ?");
+  const deleteProfileForOrgStmt = db.prepare(
+    "DELETE FROM profiles WHERE id = ? AND org_id = ?"
+  );
 
   const listToolsStmt = db.prepare("SELECT * FROM tools");
   const getToolStmt = db.prepare("SELECT * FROM tools WHERE id = ?");
@@ -3070,6 +3095,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createProfileIfAbsent(record) {
+      const result = insertProfileIfAbsentStmt.run(
+        ...profileInsertArgs(record)
+      );
+      return result.changes > 0;
+    },
+
     async createSkillProposal(record) {
       createSkillProposalStmt.run(
         record.id,
@@ -3202,6 +3234,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteProfile(id) {
       const result = deleteProfileStmt.run(id);
+      return result.changes > 0;
+    },
+
+    async deleteProfileForOrg(id, orgId) {
+      const result = deleteProfileForOrgStmt.run(id, orgId);
       return result.changes > 0;
     },
 

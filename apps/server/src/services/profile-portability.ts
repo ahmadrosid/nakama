@@ -288,28 +288,10 @@ export async function importProfilePack(
   const entries = readProfilePackZip(archive);
   const manifest = readProfilePackManifest(entries);
   const name = options.name?.trim() || manifest.meta.name || "Imported profile";
-  const profileId = await resolveImportedProfileId(db, name);
   const now = (options.now ?? new Date()).toISOString();
-
-  const profile: StoredProfileRecord = {
-    createdAt: now,
-    id: profileId,
-    isDefault: false,
-    isSuper: false,
-    model: manifest.meta.model,
-    name,
-    orgId,
-    skillsCuratorConsolidateEnabled:
-      manifest.meta.skillsCuratorConsolidateEnabled,
-    skillsPostTurnReview: manifest.meta.skillsPostTurnReview,
-    skillsWriteApproval: manifest.meta.skillsWriteApproval,
-    systemPrompt: manifest.meta.systemPrompt,
-    thinkingEffort: manifest.meta.thinkingEffort,
-    thinkingEnabled: manifest.meta.thinkingEnabled,
-    updatedAt: now,
-  };
-
-  await db.upsertProfile(profile);
+  // Allocation and insertion are one atomic statement: a concurrent import may
+  // win the id, and we retry the next suffix instead of overwriting its row.
+  const profileId = await createImportedProfile(db, orgId, name, manifest, now);
 
   let createdSkillIds: string[] = [];
   const createdCustomTools: CreatedCustomTool[] = [];
@@ -1170,7 +1152,7 @@ async function rollbackFailedImport(
   }
 
   try {
-    await db.deleteProfile(profileId);
+    await db.deleteProfileForOrg(profileId, orgId);
   } catch {
     // Best-effort cleanup only; the original error is what matters.
   }
@@ -1185,17 +1167,37 @@ async function rollbackFailedImport(
   }
 }
 
-async function resolveImportedProfileId(
+async function createImportedProfile(
   db: DatabaseAdapter,
-  name: string
+  orgId: string,
+  name: string,
+  manifest: ProfilePackManifest,
+  now: string
 ): Promise<string> {
   const base = slugifyProfileName(name);
 
   for (let suffix = 1; suffix <= PROFILE_ID_ATTEMPTS; suffix++) {
-    const candidate = suffix === 1 ? base : `${base}-${suffix}`;
+    const id = suffix === 1 ? base : `${base}-${suffix}`;
+    const created = await db.createProfileIfAbsent({
+      createdAt: now,
+      id,
+      isDefault: false,
+      isSuper: false,
+      model: manifest.meta.model,
+      name,
+      orgId,
+      skillsCuratorConsolidateEnabled:
+        manifest.meta.skillsCuratorConsolidateEnabled,
+      skillsPostTurnReview: manifest.meta.skillsPostTurnReview,
+      skillsWriteApproval: manifest.meta.skillsWriteApproval,
+      systemPrompt: manifest.meta.systemPrompt,
+      thinkingEffort: manifest.meta.thinkingEffort,
+      thinkingEnabled: manifest.meta.thinkingEnabled,
+      updatedAt: now,
+    });
 
-    if (!(await db.getProfile(candidate))) {
-      return candidate;
+    if (created) {
+      return id;
     }
   }
 
