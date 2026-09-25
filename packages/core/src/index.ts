@@ -40,6 +40,7 @@ export {
   buildDiscordInviteUrl,
   DEFAULT_DISCORD_PROFILE_ID,
   DISCORD_API_BASE_URL,
+  DISCORD_USER_AGENT,
   type DiscordConfigFile,
   type DiscordSettingsPublic,
   getDiscordConfigDir,

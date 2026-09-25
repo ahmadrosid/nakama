@@ -1,6 +1,6 @@
 import { NakamaApiError } from "./api-error";
 import type { OrgRole } from "./contract";
-import { DISCORD_API_BASE_URL } from "./discord-config";
+import { DISCORD_API_BASE_URL, DISCORD_USER_AGENT } from "./discord-config";
 import { isTelegramUserAuthorized } from "./telegram-config";
 
 /**
@@ -99,7 +99,7 @@ async function resolveDiscordBotId(
   const response = await fetchImpl(`${DISCORD_API_BASE_URL}/users/@me`, {
     headers: {
       Authorization: `Bot ${botToken}`,
-      "User-Agent": "DiscordBot (https://github.com/ahmadrosid/nakama, 1.0)",
+      "User-Agent": DISCORD_USER_AGENT,
     },
   });
 
@@ -137,7 +137,7 @@ export async function assertDiscordBotCanPostToChannel(options: {
     {
       headers: {
         Authorization: `Bot ${options.botToken}`,
-        "User-Agent": "DiscordBot (https://github.com/ahmadrosid/nakama, 1.0)",
+        "User-Agent": DISCORD_USER_AGENT,
       },
     }
   );
@@ -172,7 +172,12 @@ function hasDiscordPermission(granted: number, permission: number): boolean {
 }
 
 function toPermissionBits(value: unknown): number | null {
-  const bits = typeof value === "string" ? Number(value.trim()) : value;
+  const bits =
+    typeof value === "string"
+      ? /^\d+$/.test(value.trim())
+        ? Number(value.trim())
+        : Number.NaN
+      : value;
 
   return typeof bits === "number" && Number.isSafeInteger(bits) && bits >= 0
     ? bits

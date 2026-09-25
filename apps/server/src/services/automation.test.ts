@@ -9,6 +9,7 @@ import {
   getTelegramConfigPath,
   NakamaApiError,
 } from "@nakama/core";
+import type { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
 import { AutomationService } from "./automation-service";

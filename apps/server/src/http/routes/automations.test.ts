@@ -16,13 +16,13 @@ import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
 import { createHonoApp } from "../app";
+import type { ServerOptions } from "../context";
 import { seedOrgForUser } from "../test-org-helpers";
 import {
   type AppFetch,
   loginUserSession,
   setupFreshInstallSession,
 } from "../test-session-helpers";
-import type { ServerOptions } from "../types";
 
 const PROFILE_ID = "profile_default";
 const MEMBER_EMAIL = "member@example.com";

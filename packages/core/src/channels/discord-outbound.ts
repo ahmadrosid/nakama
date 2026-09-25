@@ -1,10 +1,12 @@
-import { DISCORD_API_BASE_URL, loadDiscordConfigFile } from "../discord-config";
+import {
+  DISCORD_API_BASE_URL,
+  DISCORD_USER_AGENT,
+  loadDiscordConfigFile,
+} from "../discord-config";
 import { splitTelegramChunks } from "./message-format";
 import type { ChannelSendResult, DiscordOutboundAdapter } from "./types";
 
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
-const DISCORD_USER_AGENT =
-  "DiscordBot (https://github.com/ahmadrosid/nakama, 1.0)";
 const DISCORD_ALLOWED_MENTIONS = { parse: [] as string[] };
 
 export interface DiscordOutboundOptions {
