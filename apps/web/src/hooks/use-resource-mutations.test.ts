@@ -10,7 +10,8 @@ import {
 } from "bun:test";
 import { NakamaApiError } from "@nakama/core/api-error";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
 import {
@@ -21,6 +22,7 @@ import { artifactShareStorageKey } from "@/lib/artifact-share-storage";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  useArtifactsExist,
   useAssignToolMutation,
   useRevokeArtifactShareMutation,
   useUnassignToolMutation,
@@ -300,3 +302,55 @@ test.each(["assign", "unassign"])(
     }
   }
 );
+
+test("useArtifactsExist hides only the artifacts the server reports missing", async () => {
+  const exists = spyOn(client, "hasProfileArtifact").mockImplementation(
+    async (_profileId, path) => {
+      if (path === "gone.md") {
+        return false;
+      }
+      if (path === "flaky.md") {
+        throw new NakamaApiError("Bad gateway", 502);
+      }
+      return true;
+    }
+  );
+  const existsClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  let result: boolean[] = [];
+  function Probe() {
+    result = useArtifactsExist(
+      [
+        { path: "kept.md" },
+        { path: "gone.md" },
+        { path: "flaky.md" },
+        { ownerProfileId: "other", path: "shared.md" },
+      ],
+      "profile",
+      true
+    );
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: existsClient },
+          createElement(Probe)
+        )
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(result).toEqual([true, false, true, true]);
+    expect(exists.mock.calls).toContainEqual(["other", "shared.md"]);
+  } finally {
+    act(() => root.unmount());
+    exists.mockRestore();
+  }
+});
