@@ -868,7 +868,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const authBody = await orgService.buildAuthUserResponse(
       user,
       auth.session?.id,
-      auth.session?.activeOrgId
+      auth.session?.activeOrgId ?? auth.activeOrgId
     );
     // The builder answers from the user record, which describes whoever created
     // the credential. An API key is de-privileged whatever its owner is, and the
@@ -1064,7 +1064,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
-    const orgs = await orgService.listUserOrgs(auth.user.id);
+    const orgs = await orgService.listUserOrgs(
+      auth.user.id,
+      auth.mode === "api-key" ? (auth.activeOrgId ?? null) : undefined
+    );
     return json<ListUserOrgsResponse>(orgs);
   });
 
