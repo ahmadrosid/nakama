@@ -302,42 +302,29 @@ function RecentChats() {
       >
         <Link
           aria-current={location.pathname === href ? "page" : undefined}
-          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 transition-[padding] group-focus-within:pr-20 group-hover:pr-20"
+          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]"
           data-active={location.pathname === href || undefined}
           title={session.active ? `${title} (still responding)` : title}
           to={href}
         >
-          <span className={cn("truncate", session.active && "ai-rainbow-text")}>
-            {title}
+          <span className="sidebar-chat-title-clip min-w-0 flex-1 overflow-hidden">
+            <span
+              className={cn(
+                "sidebar-chat-title block w-max whitespace-nowrap",
+                session.active && "ai-rainbow-text"
+              )}
+            >
+              {title}
+            </span>
           </span>
         </Link>
-        <div className="absolute right-1 flex translate-x-2 items-center rounded-md bg-muted opacity-0 transition-[opacity,transform] group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:opacity-100">
-          <Button
-            aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
-            className="size-7 text-muted-foreground"
-            onClick={() =>
-              void updateSession.mutateAsync({
-                input: { pinned: !session.pinned },
-                profileId,
-                sessionId: session.id,
-              })
-            }
-            size="icon-sm"
-            title={session.pinned ? "Unpin" : "Pin"}
-            variant="ghost"
-          >
-            {session.pinned ? (
-              <PinOffIcon aria-hidden="true" className="size-4" />
-            ) : (
-              <PinIcon aria-hidden="true" className="size-4" />
-            )}
-          </Button>
+        <div className="absolute right-1 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
                   aria-label={`More actions for ${title}`}
-                  className="size-7 text-muted-foreground"
+                  className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
                   size="icon-sm"
                   title="More actions"
                   variant="ghost"
@@ -362,6 +349,26 @@ function RecentChats() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
+            className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
+            onClick={() =>
+              void updateSession.mutateAsync({
+                input: { pinned: !session.pinned },
+                profileId,
+                sessionId: session.id,
+              })
+            }
+            size="icon-sm"
+            title={session.pinned ? "Unpin" : "Pin"}
+            variant="ghost"
+          >
+            {session.pinned ? (
+              <PinOffIcon aria-hidden="true" className="size-4" />
+            ) : (
+              <PinIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button>
         </div>
       </div>
     );
