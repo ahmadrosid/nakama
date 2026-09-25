@@ -16,6 +16,7 @@ import {
   ViewOffIcon,
 } from "hugeicons-react";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useCreateNotificationDestination,
@@ -187,13 +188,20 @@ function LatestSecret({
 }
 
 export function NotificationDestinationsCard() {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+
+  return <NotificationDestinationsCardForOrg key={orgId} orgId={orgId} />;
+}
+
+function NotificationDestinationsCardForOrg({ orgId }: { orgId: string }) {
   const { data: profiles = [] } = useProfilesQuery();
   const [profileId, setProfileId] = useState("");
-  const { data, isLoading, error } = useNotificationDestinations();
-  const createMutation = useCreateNotificationDestination();
-  const rotateMutation = useRegenerateNotificationDestinationKey();
-  const deleteMutation = useDeleteNotificationDestination();
-  const updateMutation = useUpdateNotificationDestination();
+  const { data, isLoading, error } = useNotificationDestinations(orgId);
+  const createMutation = useCreateNotificationDestination(orgId);
+  const rotateMutation = useRegenerateNotificationDestinationKey(orgId);
+  const deleteMutation = useDeleteNotificationDestination(orgId);
+  const updateMutation = useUpdateNotificationDestination(orgId);
   const [deleteTarget, setDeleteTarget] =
     useState<NotificationDestinationSummary | null>(null);
 
