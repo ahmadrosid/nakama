@@ -957,9 +957,8 @@ describe("createHonoApp", () => {
       app,
       options.databaseAdapter
     );
-    const admin = await options.databaseAdapter.getUserByEmail(
-      "admin@example.com"
-    );
+    const admin =
+      await options.databaseAdapter.getUserByEmail("admin@example.com");
     const invite = await options.orgService.createInvite({
       email: "invitee@example.com",
       invitedByUserId: admin!.id,
