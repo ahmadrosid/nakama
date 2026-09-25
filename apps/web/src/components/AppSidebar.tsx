@@ -128,6 +128,80 @@ export function AppSidebar({
 
 const SKELETON_ROW_WIDTHS = ["w-3/4", "w-1/2", "w-2/3"] as const;
 
+type SessionTarget = { id: string; title: string };
+
+function RecentChatsDialogs({
+  deleteTarget,
+  onDelete,
+  onRename,
+  onRenameTitleChange,
+  renameTarget,
+  setDeleteTarget,
+  setRenameTarget,
+}: {
+  deleteTarget: SessionTarget | null;
+  onDelete: () => Promise<void>;
+  onRename: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  onRenameTitleChange: (title: string) => void;
+  renameTarget: SessionTarget | null;
+  setDeleteTarget: (target: SessionTarget | null) => void;
+  setRenameTarget: (target: SessionTarget | null) => void;
+}) {
+  return (
+    <>
+      {renameTarget ? (
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              setRenameTarget(null);
+            }
+          }}
+          open
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename chat</DialogTitle>
+              <DialogDescription>
+                Choose a name that helps you find this chat later.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(event) => void onRename(event)}>
+              <Input
+                autoFocus
+                onChange={(event) => onRenameTitleChange(event.target.value)}
+                value={renameTarget.title}
+              />
+              <DialogFooter className="mt-4">
+                <Button
+                  onClick={() => setRenameTarget(null)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button disabled={!renameTarget.title.trim()} type="submit">
+                  Save
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmDialog
+          confirmLabel="Delete"
+          description={`Delete "${deleteTarget.title}" permanently? This cannot be undone.`}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            await onDelete();
+          }}
+          title="Delete chat?"
+        />
+      ) : null}
+    </>
+  );
+}
+
 function SessionRowSkeletons() {
   return (
     <div role="status">
@@ -195,14 +269,8 @@ function RecentChats() {
   }, [pageEnd, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const updateSession = useUpdateSessionMutation();
   const deleteSession = useDeleteSessionMutation();
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
-  const [renameTarget, setRenameTarget] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
+  const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
   const { collapsed, toggle } = useLocalStorageFlag(
     SIDEBAR_RECENTS_COLLAPSED_KEY,
     getInitialRecentsCollapsed
@@ -373,79 +441,40 @@ function RecentChats() {
       {searchQuery || collapsed
         ? null
         : renderList(recentSessions, "No recent chats")}
-      {renameTarget ? (
-        <Dialog
-          onOpenChange={(open) => {
-            if (!open) {
-              setRenameTarget(null);
-            }
-          }}
-          open
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Rename chat</DialogTitle>
-              <DialogDescription>
-                Choose a name that helps you find this chat later.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={async (event) => {
-                event.preventDefault();
-                if (updateSession.isPending) {
-                  return;
-                }
-                const title = renameTarget.title.trim();
-                if (!title) {
-                  return;
-                }
-                await updateSession.mutateAsync({
-                  input: { title },
-                  profileId,
-                  sessionId: renameTarget.id,
-                });
-                setRenameTarget(null);
-              }}
-            >
-              <Input
-                autoFocus
-                onChange={(event) =>
-                  setRenameTarget((current) =>
-                    current
-                      ? { ...current, title: event.target.value }
-                      : current
-                  )
-                }
-                value={renameTarget.title}
-              />
-              <DialogFooter className="mt-4">
-                <Button
-                  onClick={() => setRenameTarget(null)}
-                  type="button"
-                  variant="outline"
-                >
-                  Cancel
-                </Button>
-                <Button disabled={!renameTarget.title.trim()} type="submit">
-                  Save
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-      {deleteTarget ? (
-        <ConfirmDialog
-          confirmLabel="Delete"
-          description={`Delete "${deleteTarget.title}" permanently? This cannot be undone.`}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={async () => {
-            await deleteSession.mutateAsync(deleteTarget.id);
-            setDeleteTarget(null);
-          }}
-          title="Delete chat?"
-        />
-      ) : null}
+      <RecentChatsDialogs
+        deleteTarget={deleteTarget}
+        onDelete={async () => {
+          if (!deleteTarget) {
+            return;
+          }
+          await deleteSession.mutateAsync(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        onRename={async (event) => {
+          event.preventDefault();
+          if (!renameTarget || updateSession.isPending) {
+            return;
+          }
+          const title = renameTarget.title.trim();
+          if (!title) {
+            return;
+          }
+          await updateSession.mutateAsync({
+            input: { title },
+            profileId,
+            sessionId: renameTarget.id,
+          });
+          setRenameTarget(null);
+        }}
+        onRenameTitleChange={(title) =>
+          setRenameTarget((current) =>
+            current ? { ...current, title } : current
+          )
+        }
+        renameTarget={renameTarget}
+        setDeleteTarget={setDeleteTarget}
+        setRenameTarget={setRenameTarget}
+      />
     </div>
   );
 }

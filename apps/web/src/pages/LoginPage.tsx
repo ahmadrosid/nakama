@@ -149,6 +149,181 @@ function LoginHeader({
   );
 }
 
+function LoginFormFields({
+  backupCode,
+  email,
+  mfaCode,
+  mfaRequired,
+  onBackFromMfa,
+  onBackFromPasskey,
+  onBackupCodeChange,
+  onEmailChange,
+  onMfaCodeChange,
+  onPasswordChange,
+  onToggleMfaMethod,
+  onUseMfaFallback,
+  passkeyFallbackAvailable,
+  passkeyRequired,
+  passkeyTotpEnabled,
+  password,
+  totpEnabled,
+  useBackupCode,
+}: {
+  backupCode: string;
+  email: string;
+  mfaCode: string;
+  mfaRequired: boolean;
+  onBackFromMfa: () => void;
+  onBackFromPasskey: () => void;
+  onBackupCodeChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
+  onMfaCodeChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onToggleMfaMethod: () => void;
+  onUseMfaFallback: () => void;
+  passkeyFallbackAvailable: boolean;
+  passkeyRequired: boolean;
+  passkeyTotpEnabled: boolean;
+  password: string;
+  totpEnabled: boolean;
+  useBackupCode: boolean;
+}) {
+  return (
+    <>
+      {mfaRequired || passkeyRequired ? null : (
+        <>
+          <div>
+            <label className="mb-1 block font-medium text-sm" htmlFor="email">
+              Email
+            </label>
+            <Input
+              id="email"
+              onChange={(event) => onEmailChange(event.target.value)}
+              placeholder="admin@example.com"
+              required
+              type="email"
+              value={email}
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="password"
+            >
+              Password
+            </label>
+            <Input
+              id="password"
+              onChange={(event) => onPasswordChange(event.target.value)}
+              placeholder="••••••••"
+              required
+              type="password"
+              value={password}
+            />
+          </div>
+        </>
+      )}
+      {mfaRequired ? (
+        <LoginMfaFields
+          backupCode={backupCode}
+          email={email}
+          mfaCode={mfaCode}
+          onBack={onBackFromMfa}
+          onBackupCodeChange={onBackupCodeChange}
+          onMfaCodeChange={onMfaCodeChange}
+          onToggleMethod={onToggleMfaMethod}
+          totpEnabled={totpEnabled}
+          useBackupCode={useBackupCode}
+        />
+      ) : passkeyRequired ? (
+        <div className="space-y-3 p-0">
+          <div className="relative flex items-center">
+            <Button
+              aria-label="Back to sign in"
+              className="absolute -left-8"
+              onClick={onBackFromPasskey}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <ArrowLeft02Icon aria-hidden className="size-4" />
+            </Button>
+            <span className="font-medium text-sm">Passkey</span>
+          </div>
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-sm">
+              Approve the passkey prompt to continue.
+            </p>
+            {passkeyFallbackAvailable ? (
+              <Button onClick={onUseMfaFallback} type="button" variant="link">
+                {passkeyTotpEnabled
+                  ? "Use authenticator instead"
+                  : "Use a recovery code"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function LoginFormActions({
+  demoLogin,
+  error,
+  isSubmitting,
+  mfaRequired,
+  onPasskeyLogin,
+  passkeyRequired,
+}: {
+  demoLogin: boolean;
+  error: string | null;
+  isSubmitting: boolean;
+  mfaRequired: boolean;
+  onPasskeyLogin: () => void;
+  passkeyRequired: boolean;
+}) {
+  return (
+    <>
+      {error ? (
+        <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
+          {error}
+        </div>
+      ) : null}
+      {passkeyRequired ? null : (
+        <Button className="w-full" disabled={isSubmitting} type="submit">
+          {isSubmitting ? "Verifying..." : mfaRequired ? "Verify" : "Sign in"}
+        </Button>
+      )}
+      {mfaRequired || passkeyRequired || demoLogin ? null : (
+        <>
+          <div className="flex items-center gap-3 text-muted-foreground text-xs uppercase">
+            <span className="h-px flex-1 bg-border" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <Button
+            className="w-full"
+            onClick={onPasskeyLogin}
+            type="button"
+            variant="outline"
+          >
+            Sign in with a passkey
+          </Button>
+        </>
+      )}
+      {mfaRequired || passkeyRequired || demoLogin ? null : (
+        <Link
+          className="block text-center font-medium text-primary text-sm hover:underline"
+          to="/reset-password"
+        >
+          Forgot password?
+        </Link>
+      )}
+    </>
+  );
+}
+
 export function LoginPage() {
   const demoLogin = isDemoLoginHost();
   const [email, setEmail] = useState(demoLogin ? DEMO_LOGIN_EMAIL : "");
@@ -263,148 +438,56 @@ export function LoginPage() {
           resolvedTheme={resolvedTheme}
         />
         <form className="space-y-4" onSubmit={handleSubmit}>
-          {mfaRequired || passkeyRequired ? null : (
-            <>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="email"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  required
-                  type="email"
-                  value={email}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="password"
-                >
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  type="password"
-                  value={password}
-                />
-              </div>
-            </>
-          )}
-          {mfaRequired ? (
-            <LoginMfaFields
-              backupCode={backupCode}
-              email={email}
-              mfaCode={mfaCode}
-              onBack={() => {
-                setMfaRequired(false);
-                setUseBackupCode(false);
-                setMfaCode("");
-                setBackupCode("");
-                setError(null);
-              }}
-              onBackupCodeChange={setBackupCode}
-              onMfaCodeChange={setMfaCode}
-              onToggleMethod={() => {
-                setUseBackupCode((current) => !current);
-                setMfaCode("");
-                setBackupCode("");
-              }}
-              totpEnabled={passkeyFallbackAvailable ? passkeyTotpEnabled : true}
-              useBackupCode={useBackupCode}
-            />
-          ) : passkeyRequired ? (
-            <div className="space-y-3 p-0">
-              <div className="relative flex items-center">
-                <Button
-                  aria-label="Back to sign in"
-                  className="absolute -left-8"
-                  onClick={() => {
-                    setPasskeyRequired(false);
-                    setPasskeyFallbackAvailable(false);
-                    setUseBackupCode(false);
-                    setMfaCode("");
-                    setBackupCode("");
-                    setError(null);
-                  }}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <ArrowLeft02Icon aria-hidden className="size-4" />
-                </Button>
-                <span className="font-medium text-sm">Passkey</span>
-              </div>
-              <div className="space-y-3">
-                <p className="text-muted-foreground text-sm">
-                  Approve the passkey prompt to continue.
-                </p>
-                {passkeyFallbackAvailable ? (
-                  <Button
-                    onClick={() => {
-                      setPasskeyRequired(false);
-                      setMfaRequired(true);
-                      setUseBackupCode(!passkeyTotpEnabled);
-                      setError(null);
-                    }}
-                    type="button"
-                    variant="link"
-                  >
-                    {passkeyTotpEnabled
-                      ? "Use authenticator instead"
-                      : "Use a recovery code"}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-          {error && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
-              {error}
-            </div>
-          )}
-          {passkeyRequired ? null : (
-            <Button className="w-full" disabled={isSubmitting} type="submit">
-              {isSubmitting
-                ? "Verifying..."
-                : mfaRequired
-                  ? "Verify"
-                  : "Sign in"}
-            </Button>
-          )}
-          {mfaRequired || passkeyRequired || demoLogin ? null : (
-            <>
-              <div className="flex items-center gap-3 text-muted-foreground text-xs uppercase">
-                <span className="h-px flex-1 bg-border" />
-                <span>or</span>
-                <span className="h-px flex-1 bg-border" />
-              </div>
-              <Button
-                className="w-full"
-                onClick={() => void handlePasskeyLogin()}
-                type="button"
-                variant="outline"
-              >
-                Sign in with a passkey
-              </Button>
-            </>
-          )}
-          {mfaRequired || passkeyRequired || demoLogin ? null : (
-            <Link
-              className="block text-center font-medium text-primary text-sm hover:underline"
-              to="/reset-password"
-            >
-              Forgot password?
-            </Link>
-          )}
+          <LoginFormFields
+            backupCode={backupCode}
+            email={email}
+            mfaCode={mfaCode}
+            mfaRequired={mfaRequired}
+            onBackFromMfa={() => {
+              setMfaRequired(false);
+              setUseBackupCode(false);
+              setMfaCode("");
+              setBackupCode("");
+              setError(null);
+            }}
+            onBackFromPasskey={() => {
+              setPasskeyRequired(false);
+              setPasskeyFallbackAvailable(false);
+              setUseBackupCode(false);
+              setMfaCode("");
+              setBackupCode("");
+              setError(null);
+            }}
+            onBackupCodeChange={setBackupCode}
+            onEmailChange={setEmail}
+            onMfaCodeChange={setMfaCode}
+            onPasswordChange={setPassword}
+            onToggleMfaMethod={() => {
+              setUseBackupCode((current) => !current);
+              setMfaCode("");
+              setBackupCode("");
+            }}
+            onUseMfaFallback={() => {
+              setPasskeyRequired(false);
+              setMfaRequired(true);
+              setUseBackupCode(!passkeyTotpEnabled);
+              setError(null);
+            }}
+            passkeyFallbackAvailable={passkeyFallbackAvailable}
+            passkeyRequired={passkeyRequired}
+            passkeyTotpEnabled={passkeyTotpEnabled}
+            password={password}
+            totpEnabled={passkeyFallbackAvailable ? passkeyTotpEnabled : true}
+            useBackupCode={useBackupCode}
+          />
+          <LoginFormActions
+            demoLogin={demoLogin}
+            error={error}
+            isSubmitting={isSubmitting}
+            mfaRequired={mfaRequired}
+            onPasskeyLogin={() => void handlePasskeyLogin()}
+            passkeyRequired={passkeyRequired}
+          />
         </form>
       </div>
     </div>
