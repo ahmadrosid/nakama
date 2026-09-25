@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
 TEMP_CONFIG="/tmp/nakama-docs-mcp-screenshots-$$"
 COOKIE_JAR="/tmp/nakama-docs-mcp-cookies-$$.txt"
@@ -31,6 +32,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SCREENSHOT_DIR" "$TEMP_CONFIG"
+ensure_current_web_build "$ROOT"
 
 NAKAMA_CONFIG_DIR="$TEMP_CONFIG" NAKAMA_PORT="$PORT" \
   bun run "$ROOT/apps/server/src/index.ts" > /tmp/nakama-docs-mcp-screenshot-server.log 2>&1 &

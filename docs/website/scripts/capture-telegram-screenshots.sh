@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
 TEMP_CONFIG="/tmp/nakama-docs-telegram-screenshots-$$"
 COOKIE_JAR="/tmp/nakama-docs-telegram-cookies-$$.txt"
@@ -36,6 +37,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SCREENSHOT_DIR" "$TEMP_CONFIG"
+ensure_current_web_build "$ROOT"
 
 # Isolate the PM2 daemon so the screenshot worker does not collide with any
 # real "telegram" PM2 process already running on this machine. PM2 namespaces
@@ -73,6 +75,10 @@ curl --fail-with-body -sS -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
   -d '{"type":"openai","apiKey":"sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","model":"gpt-4o-mini"}' >/dev/null
 
+PROFILE_ID=$(curl --fail-with-body -sS -b "$COOKIE_JAR" \
+  -H "X-Org-Id: ${ORG_ID}" "${BASE_URL}/v1/profiles" | \
+  bun -e 'const j=JSON.parse(await Bun.stdin.text()); const p=j.profiles.find((profile) => profile.name === "Default Bot") ?? j.profiles[0]; process.stdout.write(p.id);')
+
 $AB --session "$SESSION" close 2>/dev/null || true
 $AB --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
@@ -80,9 +86,9 @@ $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
   --url "${BASE_URL}/" --sameSite Lax
 
 # ---------------------------------------------------------------------------
-# Step 2: Integrations -> Telegram, bot token entry (not yet saved).
+# Step 2: Agent -> Connections -> Telegram, bot token entry (not yet saved).
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/integrations"
+$AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 560
 $AB --session "$SESSION" set media light
@@ -96,19 +102,23 @@ $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-bot-token.png"
 # ---------------------------------------------------------------------------
 # Seed only the isolated demo config: saving through HTTP validates the fake
 # token against Telegram and correctly rejects it.
-(cd "$ROOT" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" DOCS_ORG_ID="$ORG_ID" bun -e '
+(cd "$ROOT" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" DOCS_ORG_ID="$ORG_ID" DOCS_PROFILE_ID="$PROFILE_ID" bun -e '
   const { saveTelegramConfig } = await import("./packages/core/src/telegram-config.ts");
-  await saveTelegramConfig(process.env.DOCS_ORG_ID, {
+  await saveTelegramConfig({
+    orgId: process.env.DOCS_ORG_ID,
+    profileId: process.env.DOCS_PROFILE_ID,
+  }, {
     botToken: "123456789:AAH-example-token-from-botfather",
   });
 ')
 
 # Start the bridge worker against the fake token so it emits real 401 errors
 # into its stderr log — exactly what a misconfigured bot looks like in prod.
-curl --fail-with-body -sS -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/workers/telegram/start" \
+curl --fail-with-body -sS -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/workers/telegram/start?profileId=${PROFILE_ID}" \
+  -H "X-Org-Id: ${ORG_ID}" \
   -H "X-CSRF-Token: ${CSRF_VAL}" >/dev/null
 
-$AB --session "$SESSION" open "${BASE_URL}/integrations"
+$AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 1100
 $AB --session "$SESSION" set media light
@@ -146,7 +156,7 @@ $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-audio-transcriptio
 # ---------------------------------------------------------------------------
 # Outbound notifications: Integrations -> Notifications destination form.
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/integrations?section=notifications"
+$AB --session "$SESSION" open "${BASE_URL}/customize/connections/notifications"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 760
 $AB --session "$SESSION" set media light
