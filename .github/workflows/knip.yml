@@ -41,7 +41,11 @@ jobs:
 
       - name: Install dependencies
         if: github.event_name == 'pull_request'
-        run: bun install --frozen-lockfile --ignore-scripts
+        # The root postinstall is skipped here, and knip resolves the docs
+        # workspace imports against its own lockfile.
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun run docs:install
 
       - name: Run knip
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
