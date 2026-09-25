@@ -383,7 +383,7 @@ function RecentChats() {
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
       {pinnedSessions.length > 0 ? (
         <div className="mb-3">
-          <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
+          <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
             <button
               aria-expanded={!pinnedCollapsed}
               className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
@@ -394,7 +394,7 @@ function RecentChats() {
               <ArrowDown01Icon
                 aria-hidden="true"
                 className={cn(
-                  "sidebar-nav-group-chevron size-3.5",
+                  "sidebar-nav-group-chevron size-3.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100",
                   pinnedCollapsed && "-rotate-90"
                 )}
                 strokeWidth={1.75}
