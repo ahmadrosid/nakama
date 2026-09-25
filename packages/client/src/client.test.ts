@@ -359,6 +359,29 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
   expect(new TextDecoder().decode(result.data)).toBe("# Report");
 });
 
+test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", async () => {
+  const methods: Array<string | undefined> = [];
+  let status = 200;
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (_input, init) => {
+      methods.push(init?.method);
+      return new Response(null, { status });
+    },
+    orgId: "org_test",
+  });
+
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(true);
+  status = 404;
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(false);
+  status = 500;
+  await expect(
+    client.hasProfileArtifact("profile_1", "report.md")
+  ).rejects.toMatchObject({ status: 500 });
+  expect(methods).toEqual(["HEAD", "HEAD", "HEAD"]);
+});
+
 test("data import helpers upload base64 archive data", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];

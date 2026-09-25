@@ -1475,6 +1475,32 @@ export class NakamaClient {
     };
   }
 
+  /**
+   * False once the file is gone, e.g. removed by a later tool call. Any other
+   * failure throws, so a flaky request never reads as a deleted artifact.
+   * ponytail: HEAD runs the GET handler, which reads the whole file; add a
+   * stat-only route if large artifacts make chat chips slow to settle.
+   */
+  async hasProfileArtifact(
+    profileId: string,
+    artifactPath: string
+  ): Promise<boolean> {
+    const query = new URLSearchParams({ path: artifactPath });
+
+    try {
+      await this.fetchRaw(
+        `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+        { method: "HEAD" }
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof NakamaApiError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   async writeProfileArtifactContent(
     profileId: string,
     artifactPath: string,
