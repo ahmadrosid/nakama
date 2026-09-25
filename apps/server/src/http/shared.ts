@@ -153,6 +153,26 @@ export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
   return auth;
 }
 
+export function getRequestAppUserScope(c: Context<AppEnv>): {
+  appUserId?: string;
+  auth: RequestAuthContext;
+} {
+  const auth = getRequestAuth(c);
+  const header = c.req.header("X-Nakama-App-User-Id");
+
+  if (auth.mode !== "api-key") {
+    if (header !== undefined) {
+      throw new NakamaApiError(
+        "X-Nakama-App-User-Id is only available to API-key requests.",
+        400
+      );
+    }
+    return { auth };
+  }
+
+  return { appUserId: header?.trim() || undefined, auth };
+}
+
 export function isPendingMfaAllowedRequest(
   method: string,
   pathname: string
