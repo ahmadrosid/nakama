@@ -1948,6 +1948,8 @@ export interface ProviderModelOption {
 }
 
 export interface ProviderInstanceSummary {
+  accountStatus?: "ready" | "rate_limited" | "reauth_required";
+  accountStatusUntil?: number;
   baseUrl?: string | null;
   createdAt: string;
   customModels?: CustomModelEntry[];
@@ -2743,6 +2745,8 @@ export interface ChatUsage {
   /** The model that served this call, so a turn spanning two can be split. */
   modelId?: string;
   outputTokens: number;
+  /** Connected provider instance that served this call. */
+  providerInstanceId?: string;
   totalTokens: number;
 }
 
@@ -2778,6 +2782,7 @@ export interface GenerateTextResult {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    providerInstanceId?: string;
   };
 }
 

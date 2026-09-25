@@ -11,12 +11,39 @@ import {
   chatgptOAuthNeedsRefresh,
 } from "@nakama/core";
 import { generateOpenAIResponsesChat } from "../openai/responses";
+import { ProviderHttpError } from "../shared";
 import { CHATGPT_CODEX_BASE_URL, refreshChatgptOAuthToken } from "./oauth";
 
 export interface ChatgptProviderOptions {
+  fallbacks?: ChatgptProviderOptions[];
   getOAuth: () => ChatgptOAuthCredentials | null;
+  instanceId?: string;
+  label?: string;
   model: string;
   onTokenRefresh?: (oauth: ChatgptOAuthCredentials) => Promise<void>;
+}
+
+const accountCooldowns = new Map<string, number>();
+const accountsNeedingReauth = new Set<string>();
+const ACCOUNT_COOLDOWN_MS = 60_000;
+
+export function getChatgptAccountCooldowns(): Record<string, number> {
+  const now = Date.now();
+  for (const [id, until] of accountCooldowns) {
+    if (until <= now) {
+      accountCooldowns.delete(id);
+    }
+  }
+  return Object.fromEntries(accountCooldowns);
+}
+
+export function chatgptAccountNeedsReauth(instanceId: string): boolean {
+  return accountsNeedingReauth.has(instanceId);
+}
+
+export function clearChatgptAccountStatus(instanceId: string): void {
+  accountCooldowns.delete(instanceId);
+  accountsNeedingReauth.delete(instanceId);
 }
 
 async function resolveAccessToken(
@@ -48,25 +75,100 @@ export function createChatgptProvider(
     input: GenerateChatInput,
     handlers?: StreamChatHandlers
   ): Promise<ChatCompletionResult> {
-    const oauth = await resolveAccessToken(options);
+    const candidates = [options, ...(options.fallbacks ?? [])];
+    const unavailable: string[] = [];
+    let lastError: unknown;
 
-    return generateOpenAIResponsesChat({
-      apiKey: oauth.accessToken,
-      baseUrl: CHATGPT_CODEX_BASE_URL,
-      extraHeaders: {
-        "ChatGPT-Account-ID": oauth.accountId,
-        "OpenAI-Beta": "responses=v1",
-        originator: "nakama",
-        version: "1.0.0",
-      },
-      input,
-      label: "ChatGPT",
-      model,
-      // Codex rejects non-streaming /responses calls.
-      stream: true,
-      ...(handlers ? { handlers } : {}),
-      supportsThinking: true,
-    });
+    for (const account of candidates) {
+      const id = account.instanceId;
+      if (id && (accountCooldowns.get(id) ?? 0) > Date.now()) {
+        unavailable.push(account.label ?? "ChatGPT account");
+        continue;
+      }
+
+      try {
+        let oauth = await resolveAccessToken(account);
+        const send = () =>
+          generateOpenAIResponsesChat({
+            apiKey: oauth.accessToken,
+            baseUrl: CHATGPT_CODEX_BASE_URL,
+            extraHeaders: {
+              "ChatGPT-Account-ID": oauth.accountId,
+              "OpenAI-Beta": "responses=v1",
+              originator: "nakama",
+              version: "1.0.0",
+            },
+            input,
+            label: "ChatGPT",
+            model,
+            stream: true,
+            ...(handlers ? { handlers } : {}),
+            supportsThinking: true,
+          });
+        let result: ChatCompletionResult;
+        try {
+          result = await send();
+        } catch (error) {
+          if (!(error instanceof ProviderHttpError) || error.status !== 401) {
+            throw error;
+          }
+          try {
+            oauth = await refreshChatgptOAuthToken(oauth.refreshToken);
+            await account.onTokenRefresh?.(oauth);
+          } catch (refreshError) {
+            lastError = refreshError;
+            if (id) {
+              accountsNeedingReauth.add(id);
+            }
+            unavailable.push(account.label ?? "ChatGPT account");
+            continue;
+          }
+          result = await send();
+        }
+        if (id) {
+          accountCooldowns.delete(id);
+          accountsNeedingReauth.delete(id);
+        }
+        return {
+          ...result,
+          ...(result.usage && id
+            ? { usage: { ...result.usage, providerInstanceId: id } }
+            : {}),
+        };
+      } catch (error) {
+        lastError = error;
+        if (error instanceof ProviderHttpError && error.status === 401) {
+          if (id) {
+            accountsNeedingReauth.add(id);
+          }
+          unavailable.push(account.label ?? "ChatGPT account");
+          continue;
+        }
+        const retryable =
+          error instanceof ProviderHttpError &&
+          (error.status === 429 || error.code === "usage_limit_exceeded");
+        if (!retryable || error.partialOutput) {
+          throw error;
+        }
+        if (id) {
+          const cooldownMs = error.retryAfterMs ?? ACCOUNT_COOLDOWN_MS;
+          accountCooldowns.set(
+            id,
+            Date.now() + Math.min(Math.max(cooldownMs, 1000), 60 * 60_000)
+          );
+        }
+        unavailable.push(account.label ?? "ChatGPT account");
+      }
+    }
+
+    if (unavailable.length === candidates.length) {
+      throw new Error(
+        `All connected ChatGPT accounts are temporarily unavailable: ${unavailable.join(", ")}.`
+      );
+    }
+    throw (
+      lastError ?? new Error("No ChatGPT account is available for this model.")
+    );
   }
 
   return {
@@ -91,7 +193,16 @@ export function createChatgptProvider(
 
       return {
         content,
-        ...(result.usage ? { usage: result.usage } : {}),
+        ...(result.usage
+          ? {
+              usage: {
+                ...result.usage,
+                ...(result.usage.providerInstanceId
+                  ? { providerInstanceId: result.usage.providerInstanceId }
+                  : {}),
+              },
+            }
+          : {}),
       };
     },
     name: "chatgpt",

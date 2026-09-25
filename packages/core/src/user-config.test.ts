@@ -148,7 +148,7 @@ describe("user config multi-provider", () => {
       providers: [
         {
           apiKey: "sk-test",
-          createdAt: "2026-06-07T10:00:00.000Z",
+          createdAt: "2026-06-07T11:00:00.000Z",
           id: openaiId,
           label: "Work OpenAI",
           type: "openai",
@@ -156,7 +156,7 @@ describe("user config multi-provider", () => {
         {
           apiKey: "",
           baseUrl: "http://localhost:11434/v1",
-          createdAt: "2026-06-07T11:00:00.000Z",
+          createdAt: "2026-06-07T10:00:00.000Z",
           customModels: [
             {
               default: true,

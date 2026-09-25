@@ -609,6 +609,15 @@ export function useUpdateProviderMutation() {
   });
 }
 
+export function useReorderChatgptAccountsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (providerIds: string[]) =>
+      client.reorderChatgptAccounts(providerIds),
+    onSuccess: async () => invalidateProviderQueries(queryClient),
+  });
+}
+
 export function useDeleteProviderMutation() {
   const queryClient = useQueryClient();
 
