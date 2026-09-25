@@ -9,6 +9,9 @@ import type { ToolContext } from "@nakama/core";
 const SIGKILL_GRACE_MS = 5000;
 const MAX_OUTPUT_CHARS = 1_000_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
+// Keep in sync with TOOL_RETRYABLE_EXIT_CODE in custom-tool-handlers.ts
+// (sysexits EX_TEMPFAIL). Avoid importing that module — loaders import us.
+const RETRYABLE_EXIT_CODE = 75;
 
 function resolveCustomToolTimeoutMs(): number {
   const configured = Number(process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS);
@@ -217,7 +220,16 @@ export async function spawnJsonTool(
           return;
         }
 
-        reject(new Error(`${label} exit code ${exitCode ?? "null"}: ${tail}`));
+        // Exit 75 (EX_TEMPFAIL) is the only non-zero code that opts into
+        // retries — the tool author asserts the attempt was side-effect-free.
+        const message = `${label} exit code ${exitCode ?? "null"}: ${tail}`;
+        if (exitCode === RETRYABLE_EXIT_CODE) {
+          reject(
+            Object.assign(new Error(message), { retryable: true as const })
+          );
+          return;
+        }
+        reject(new Error(message));
       });
 
       // Write the input payload and close stdin so the child can finish
