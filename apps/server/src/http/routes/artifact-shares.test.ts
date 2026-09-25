@@ -446,7 +446,10 @@ describe("artifact share routes", () => {
     const writeSpy = spyOn(
       core,
       "writeArtifactShareSnapshot"
-    ).mockImplementation(async () => {
+    ).mockImplementation(async (input) => {
+      expect(input.filename).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-report\.md$/i
+      );
       throw new Error("simulated snapshot write failure");
     });
 

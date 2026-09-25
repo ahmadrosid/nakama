@@ -145,11 +145,12 @@ export class ArtifactShareService {
       orgId: string;
     }
   ): Promise<StoredArtifactShareRecord> {
-    // Write + DB first so a failed replacement leaves the public share intact.
+    // Write a unique path + DB first so a failed replacement never clobbers the
+    // live public file (same display filename would otherwise overwrite in place).
     const previousStoragePath = existing.storagePath;
     const storagePath = await writeArtifactShareSnapshot({
       bytes: input.bytes,
-      filename: input.filename,
+      filename: `${crypto.randomUUID()}-${input.filename}`,
       orgId: input.orgId,
       shareId: existing.id,
     });
