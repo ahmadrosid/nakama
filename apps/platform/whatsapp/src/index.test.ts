@@ -3,10 +3,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const lifecycleModuleUrl = new URL(
-  "./process-lifecycle.ts",
-  import.meta.url
-).href;
+const lifecycleModuleUrl = new URL("./process-lifecycle.ts", import.meta.url)
+  .href;
 
 test("uncaught exception exits nonzero after cleanup", async () => {
   const tempDir = await mkdtemp(join(tmpdir(), "nakama-whatsapp-lifecycle-"));

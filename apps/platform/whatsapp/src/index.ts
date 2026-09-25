@@ -220,4 +220,3 @@ try {
   stopSpawnedServer(spawnedChild);
   process.exit(1);
 }
-
