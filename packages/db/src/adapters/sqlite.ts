@@ -1538,6 +1538,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteNotificationDestinationStmt = db.prepare(`
     DELETE FROM notification_destinations WHERE id = ?
   `);
+  const claimNotificationWebhookDeliveryStmt = db.prepare(`
+    INSERT OR IGNORE INTO notification_webhook_deliveries (
+      destination_id,
+      event_id,
+      created_at
+    )
+    VALUES (?, ?, ?)
+  `);
+  const releaseNotificationWebhookDeliveryStmt = db.prepare(`
+    DELETE FROM notification_webhook_deliveries
+    WHERE destination_id = ? AND event_id = ?
+  `);
   const listComposioToolkitsForOrgStmt = db.prepare(`
     SELECT
       id,
@@ -2847,6 +2859,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       // Prepare afresh: cached statements can outlive SQLite's closed handle.
       using statement = db.prepare("SELECT 1 FROM users LIMIT 1");
       statement.get();
+    },
+
+    async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
+      return (
+        claimNotificationWebhookDeliveryStmt.run(
+          destinationId,
+          eventId,
+          createdAt
+        ).changes > 0
+      );
     },
 
     async compareAndSetOrgPluginState(input) {
@@ -4201,6 +4223,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
+    },
+
+    async releaseNotificationWebhookDelivery(destinationId, eventId) {
+      releaseNotificationWebhookDeliveryStmt.run(destinationId, eventId);
     },
 
     async renameFilePins(orgId, profileId, oldPath, newPath) {

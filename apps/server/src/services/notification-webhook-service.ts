@@ -8,6 +8,9 @@ import {
 import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 
+/** Max length for the required Idempotency-Key header value. */
+const NOTIFICATION_WEBHOOK_IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+
 function levelPrefix(level: NotificationWebhookRequest["level"]): string {
   switch (level) {
     case "success":
@@ -35,6 +38,23 @@ function formatNotificationMessage(
   return `${prefix} ${payload.body}`;
 }
 
+function normalizeIdempotencyKey(value: string | null): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    throw new NakamaApiError(
+      "Idempotency-Key header is required for notification webhooks.",
+      400
+    );
+  }
+  if (trimmed.length > NOTIFICATION_WEBHOOK_IDEMPOTENCY_KEY_MAX_LENGTH) {
+    throw new NakamaApiError(
+      `Idempotency-Key must be at most ${NOTIFICATION_WEBHOOK_IDEMPOTENCY_KEY_MAX_LENGTH} characters.`,
+      400
+    );
+  }
+  return trimmed;
+}
+
 export class NotificationWebhookService {
   private readonly telegram: TelegramOutboundAdapter;
 
@@ -49,7 +69,12 @@ export class NotificationWebhookService {
   async deliver(
     destinationId: string,
     apiKey: string | null,
-    payload: unknown
+    payload: unknown,
+    /**
+     * Required Idempotency-Key header value. Claimed in SQLite before any
+     * Telegram send so replays and concurrent duplicates never double-deliver.
+     */
+    idempotencyKey: string | null
   ): Promise<void> {
     const destination =
       await this.databaseAdapter.getNotificationDestination(destinationId);
@@ -67,6 +92,7 @@ export class NotificationWebhookService {
       throw new NakamaApiError("Not found", 404);
     }
 
+    const eventId = normalizeIdempotencyKey(idempotencyKey);
     const normalized = normalizeNotificationWebhookRequest(payload);
     if (
       !(
@@ -81,22 +107,40 @@ export class NotificationWebhookService {
         409
       );
     }
-    const result = await this.telegram.send({
-      chatIds: [destination.config.chatId],
-      orgId: destination.orgId,
-      parseMode: "HTML",
-      profileId: destination.config.profileId,
-      text: formatNotificationMessage(normalized),
-      ...(destination.config.topicId
-        ? { topicId: destination.config.topicId }
-        : {}),
-    });
 
-    if (!result.ok) {
-      throw new NakamaApiError(
-        result.error ?? "Notification delivery failed.",
-        502
+    const claimed = await this.databaseAdapter.claimNotificationWebhookDelivery(
+      destinationId,
+      eventId,
+      new Date().toISOString()
+    );
+    if (!claimed) {
+      throw new NakamaApiError("Duplicate notification delivery.", 409);
+    }
+
+    try {
+      const result = await this.telegram.send({
+        chatIds: [destination.config.chatId],
+        orgId: destination.orgId,
+        parseMode: "HTML",
+        profileId: destination.config.profileId,
+        text: formatNotificationMessage(normalized),
+        ...(destination.config.topicId
+          ? { topicId: destination.config.topicId }
+          : {}),
+      });
+
+      if (!result.ok) {
+        throw new NakamaApiError(
+          result.error ?? "Notification delivery failed.",
+          502
+        );
+      }
+    } catch (error) {
+      await this.databaseAdapter.releaseNotificationWebhookDelivery(
+        destinationId,
+        eventId
       );
+      throw error;
     }
   }
 }

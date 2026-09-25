@@ -737,6 +737,15 @@ export interface DatabaseAdapter {
   }): Promise<boolean>;
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
+  /**
+   * Atomically claims an idempotency key for a notification webhook delivery.
+   * Returns true when this caller owns the first claim; false on replay.
+   */
+  claimNotificationWebhookDelivery(
+    destinationId: string,
+    eventId: string,
+    createdAt: string
+  ): Promise<boolean>;
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
@@ -1185,6 +1194,13 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  /**
+   * Drops a claimed idempotency key so a failed outbound send can be retried.
+   */
+  releaseNotificationWebhookDelivery(
+    destinationId: string,
+    eventId: string
+  ): Promise<void>;
   renameFilePins(
     orgId: string,
     profileId: string,
