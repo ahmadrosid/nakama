@@ -394,7 +394,7 @@ function RecentChats() {
               <ArrowDown01Icon
                 aria-hidden="true"
                 className={cn(
-                  "sidebar-nav-group-chevron size-3.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100",
+                  "sidebar-nav-group-chevron size-3.5 opacity-0 transition-[opacity,transform] group-focus-within:opacity-100 group-hover:opacity-100",
                   pinnedCollapsed && "-rotate-90"
                 )}
                 strokeWidth={1.75}
@@ -439,7 +439,7 @@ function RecentChats() {
           </Button>
         </div>
       </div>
-      {sessions.length > 0 ? (
+      {!collapsed && sessions.length > 0 ? (
         <div
           className={cn(
             "relative shrink-0 px-2",
@@ -477,7 +477,7 @@ function RecentChats() {
           />
         </div>
       ) : null}
-      {searchQuery
+      {!collapsed && searchQuery
         ? renderList(
             results.data.filter((session) => !session.pinned),
             results.data.length === 0 ? "No chats match" : null
