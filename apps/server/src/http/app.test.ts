@@ -3,7 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NakamaClient } from "@nakama/client";
-import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
+import {
+  loadLocalAuthToken,
+  NakamaApiError,
+  verifyLocalAuthToken,
+} from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
   createInMemoryDatabaseAdapter,
@@ -65,11 +69,43 @@ function expectCookiesSecure(setCookies: string[], expected: boolean): void {
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
+  let sessionAppUserId: string | undefined;
   return {
     agent: {
+      assertSessionProfileAccess: async (
+        _sessionId: string,
+        _orgId: string,
+        _access: unknown,
+        appUserId: string | undefined,
+        requireAppUser = false
+      ) => {
+        if (requireAppUser && appUserId !== sessionAppUserId) {
+          throw new NakamaApiError("Session not found", 404);
+        }
+      },
       beginSessionTurn: async () => true,
-      createSession: async () => "session_1",
+      createSession: async (
+        _orgId: string,
+        _channel: string,
+        _profileId: string,
+        _userId: string,
+        options: { appUserId?: string } = {}
+      ) => {
+        sessionAppUserId = options.appUserId;
+        return "session_1";
+      },
       getProfile: async () => ({ profile: { id: "default" } }),
+      getSessionMessages: async () => ({
+        channel: "web",
+        contextUsage: null,
+        messageMeta: [],
+        messages: [],
+        model: null,
+        questionnaire: null,
+        todos: [],
+      }),
+      getSessionQuestionnaire: async () => null,
+      getSessionTodos: async () => [],
       getWhatsAppSettings: async () => ({ enabled: false }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       listSessions: async (
@@ -1333,9 +1369,9 @@ describe("createHonoApp", () => {
         app.fetch(new Request(input, init))) as typeof fetch,
       orgId: adminSession.orgId,
     });
-    const missingCreateAppUser = await client.createSession("web").catch(
-      (error: unknown) => error
-    );
+    const missingCreateAppUser = await client
+      .createSession("web")
+      .catch((error: unknown) => error);
     expect(missingCreateAppUser).toMatchObject({ status: 400 });
     const session = await client.createSession("web", {
       appUserId: "alice-123",
@@ -1347,10 +1383,9 @@ describe("createHonoApp", () => {
     expect(missingCreateAppUser).toBeInstanceOf(Error);
 
     const wrongAppUser = await app.fetch(
-      new Request(
-        `http://localhost:4310/v1/sessions/${session.id}/messages`,
-        { headers: { ...apiKeyHeaders, "X-Nakama-App-User-Id": "bob-123" } }
-      )
+      new Request(`http://localhost:4310/v1/sessions/${session.id}/messages`, {
+        headers: { ...apiKeyHeaders, "X-Nakama-App-User-Id": "bob-123" },
+      })
     );
     expect(wrongAppUser.status).toBe(404);
     const missingAppUser = await app.fetch(
