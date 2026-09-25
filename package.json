@@ -41,7 +41,7 @@
     "libsignal": "6.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.14",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
     "knip": "6.32.2",
