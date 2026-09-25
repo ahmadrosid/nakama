@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { getProfileSoulDir, NakamaApiError, nanoid } from "@nakama/core";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import {
@@ -27,6 +30,67 @@ async function seedProfile(
 
   return profile.id;
 }
+
+describe("McpClientManager", () => {
+  test("closes the stdio transport when listing tools fails", async () => {
+    using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
+      undefined
+    );
+    using _listTools = spyOn(Client.prototype, "listTools").mockRejectedValue(
+      new Error("list tools failed")
+    );
+    let closeCount = 0;
+    using _close = spyOn(
+      StdioClientTransport.prototype,
+      "close"
+    ).mockImplementation(async () => {
+      closeCount += 1;
+    });
+    const manager = new McpClientManager();
+
+    await expect(
+      manager.connect({
+        cachedTools: [],
+        config: { command: "fake-mcp" },
+        createdAt: "",
+        enabled: true,
+        id: "stdio-server",
+        lastError: null,
+        name: "fake",
+        status: "disconnected",
+        transport: "stdio",
+        updatedAt: "",
+      })
+    ).rejects.toThrow("list tools failed");
+
+    expect(closeCount).toBe(1);
+    expect(manager.getConnectedCount()).toBe(0);
+  });
+
+  test("closes the HTTP transport when listing tools fails", async () => {
+    using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
+      undefined
+    );
+    using _listTools = spyOn(Client.prototype, "listTools").mockRejectedValue(
+      new Error("list tools failed")
+    );
+    let closeCount = 0;
+    using _close = spyOn(
+      StreamableHTTPClientTransport.prototype,
+      "close"
+    ).mockImplementation(async () => {
+      closeCount += 1;
+    });
+    const manager = new McpClientManager();
+
+    await expect(
+      manager.connectHttpEndpoint("http-server", "https://example.com/mcp")
+    ).rejects.toThrow("list tools failed");
+
+    expect(closeCount).toBe(1);
+    expect(manager.getConnectedCount()).toBe(0);
+  });
+});
 
 describe("McpService", () => {
   test("refreshes tools from a new MCP connection", async () => {
