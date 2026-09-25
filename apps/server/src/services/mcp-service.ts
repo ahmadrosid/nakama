@@ -236,8 +236,9 @@ export class McpService {
     const configChanged =
       JSON.stringify(server.config) !== JSON.stringify(config) ||
       server.transport !== transport;
+    const enabledChanged = updated.enabled !== server.enabled;
 
-    if (configChanged) {
+    if (configChanged || enabledChanged) {
       await this.manager.disconnect(serverId);
       updated.status = "disconnected";
       updated.lastError = null;

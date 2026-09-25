@@ -7,6 +7,7 @@ import {
 } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
+import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 
 async function seedProfile(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>
@@ -57,6 +58,67 @@ describe("McpService", () => {
     expect((await db.getMcpServer(created.server.id))?.cachedTools).toEqual([
       { description: "New tool", inputSchema: {}, name: "new_tool" },
     ]);
+  });
+
+  test("disabling disconnects and blocks current and future tool use", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const calls: string[] = [];
+    const manager = {
+      async connect() {
+        calls.push("connect");
+        return [{ description: "Read a file", inputSchema: {}, name: "read_file" }];
+      },
+      async disconnect() {
+        calls.push("disconnect");
+      },
+      async ensureConnected() {
+        calls.push("ensureConnected");
+      },
+      async callTool() {
+        calls.push("callTool");
+        return { ok: true };
+      },
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { command: "mcp-filesystem" },
+      name: "filesystem",
+      transport: "stdio",
+    });
+    const profileId = await seedProfile(db);
+
+    await service.assignServerToProfile(profileId, created.server.id);
+
+    const existingTools = buildMcpToolDefinitions(
+      await db.listMcpServersForProfile(profileId),
+      manager,
+      db,
+      "org_test",
+      profileId
+    );
+    expect(existingTools).toHaveLength(1);
+    const updated = await service.updateServer(created.server.id, {
+      enabled: false,
+    });
+    const futureTools = buildMcpToolDefinitions(
+      await db.listMcpServersForProfile(profileId),
+      manager,
+      db,
+      "org_test",
+      profileId
+    );
+    const existingResult = await existingTools[0]!.run({}, {});
+
+    expect(updated.server).toMatchObject({
+      enabled: false,
+      status: "disconnected",
+    });
+    expect(futureTools).toEqual([]);
+    expect(existingResult).toEqual({ error: expect.any(String) });
+    await expect(
+      service.connectServer(created.server.id)
+    ).rejects.toThrow();
+    expect(calls).toEqual(["connect", "disconnect"]);
   });
 
   test("creates and lists MCP servers", async () => {
