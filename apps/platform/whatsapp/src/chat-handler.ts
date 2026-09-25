@@ -164,6 +164,28 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (isStopCommand(trimmed)) {
+      await authStore.reload();
+      const stopSenderJids = [...inbound.senderJids];
+      let stopAuthorized =
+        inbound.fromMe ||
+        authStore.isAuthorized(stopSenderJids) ||
+        stopSenderJids.some((senderJid) =>
+          isWhatsAppBotAddress(senderJid, inbound.me)
+        );
+
+      if (!stopAuthorized && isGroup) {
+        const resolvedSenderJids = await resolveGroupSenderJids(
+          jid,
+          stopSenderJids
+        );
+        stopSenderJids.push(...resolvedSenderJids);
+        stopAuthorized = authStore.isAuthorized(stopSenderJids);
+      }
+
+      if (!stopAuthorized) {
+        return;
+      }
+
       if (!stopActiveStream(conversationKey)) {
         await sendText(jid, "Nothing to stop.");
       }
