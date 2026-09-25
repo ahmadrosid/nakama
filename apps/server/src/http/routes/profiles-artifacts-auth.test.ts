@@ -244,10 +244,13 @@ function createApp() {
     readProfileArtifact: async (
       _orgId: string,
       _profileId: string,
-      _filename: string,
+      filename: string,
       options: { render?: "markdown" } = {}
     ) => {
       readCalls.push(options);
+      if (filename === "missing.md") {
+        throw new NakamaApiError(`Artifact not found: ${filename}`, 404);
+      }
       return {
         bytes: new TextEncoder().encode("# Report"),
         contentType: "text/markdown",
@@ -348,6 +351,31 @@ describe("profile artifact content auth", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Disposition")).toContain("attachment");
+  });
+
+  test("org viewer can check with HEAD whether an artifact still exists", async () => {
+    const { app, databaseAdapter } = createApp();
+    const viewerSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "viewer-head@example.com",
+      "viewer"
+    );
+    const head = (path: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=${path}`,
+          {
+            headers: viewerSession.headers({}, viewerSession.orgId),
+            method: "HEAD",
+          }
+        )
+      );
+
+    const present = await head("report.md");
+    expect(present.status).toBe(200);
+    expect(await present.text()).toBe("");
+    expect((await head("missing.md")).status).toBe(404);
   });
 
   test("forwards render=markdown so a .docx is converted for preview", async () => {
