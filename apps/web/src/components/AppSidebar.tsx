@@ -401,7 +401,18 @@ function RecentChats() {
               />
             </button>
           </div>
-          {pinnedCollapsed ? null : pinnedSessions.map(renderSession)}
+          <div
+            aria-hidden={pinnedCollapsed}
+            className={cn(
+              "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+              pinnedCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+            )}
+            inert={pinnedCollapsed}
+          >
+            <div className="min-h-0 overflow-hidden">
+              {pinnedSessions.map(renderSession)}
+            </div>
+          </div>
         </div>
       ) : null}
       <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
