@@ -1499,6 +1499,7 @@ describe("createHonoApp", () => {
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify(buildSetupAuthBody()),
+          headers: { "Content-Type": "application/json" },
           method: "POST",
         })
       );
@@ -1587,6 +1588,7 @@ describe("createHonoApp", () => {
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify(buildSetupAuthBody()),
+          headers: { "Content-Type": "application/json" },
           method: "POST",
         })
       );
