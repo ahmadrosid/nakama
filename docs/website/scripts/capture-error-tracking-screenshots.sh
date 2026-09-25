@@ -16,7 +16,7 @@ VIEWPORT_WIDTH=1280
 if command -v agent-browser >/dev/null 2>&1; then
   AB="$(command -v agent-browser)"
 else
-  AB="npx --yes agent-browser"
+  AB="npx --yes agent-browser@0.38.1"
 fi
 
 cleanup() {
