@@ -59,6 +59,7 @@ import {
 import { listChannelOwners } from "@nakama/core/channel-config-shared";
 import { readTextIfExists } from "@nakama/core/fs";
 import {
+  BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
@@ -71,6 +72,7 @@ import {
   ensureBuiltinToolDefinitions,
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
+import { isTenantBashEnabled } from "../tools/bash-config";
 import {
   CUSTOM_TOOL_HANDLERS,
   type CustomToolType,
@@ -670,6 +672,13 @@ export class ProfileService {
 
     if (!tool) {
       throw new Error("Tool not found.");
+    }
+
+    if (request.toolId === BASH_TOOL_ID && !isTenantBashEnabled()) {
+      throw new NakamaApiError(
+        "The bash tool runs on the Nakama server process and is disabled for profiles. Set NAKAMA_TENANT_BASH=1 to enable it.",
+        403
+      );
     }
 
     if (tool.orgId && tool.orgId !== orgId) {

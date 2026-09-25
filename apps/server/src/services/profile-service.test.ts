@@ -11,9 +11,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, writeArtifactShareSnapshot } from "@nakama/core";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  ensureBashToolDefinition,
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -1117,6 +1119,63 @@ describe("profile service plugin tool org scope", () => {
         (tool) => tool.id === "tool_other"
       )
     ).toBe(false);
+  });
+});
+
+describe("profile service bash tool policy", () => {
+  let tempConfigDir = "";
+  const originalTenantBash = process.env.NAKAMA_TENANT_BASH;
+
+  afterEach(async () => {
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalTenantBash === undefined) {
+      delete process.env.NAKAMA_TENANT_BASH;
+    } else {
+      process.env.NAKAMA_TENANT_BASH = originalTenantBash;
+    }
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { force: true, recursive: true });
+      tempConfigDir = "";
+    }
+  });
+
+  async function seedBashProfile() {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-bash-policy-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    await ensureBashToolDefinition(db);
+    const service = new ProfileService(db);
+    const profile = await service.createProfile(ORG_ID, { name: "Ops" });
+    return { db, profile };
+  }
+
+  test("refuses to assign bash while the tenant policy is off", async () => {
+    delete process.env.NAKAMA_TENANT_BASH;
+    const { db, profile } = await seedBashProfile();
+    const service = new ProfileService(db);
+
+    await expect(
+      service.assignTool(ORG_ID, profile.profile.id, { toolId: BASH_TOOL_ID })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(
+      (await db.listToolsForProfile(profile.profile.id)).map((tool) => tool.id)
+    ).not.toContain(BASH_TOOL_ID);
+  });
+
+  test("assigns bash once the deployment opts in", async () => {
+    process.env.NAKAMA_TENANT_BASH = "1";
+    const { db, profile } = await seedBashProfile();
+    const service = new ProfileService(db);
+
+    await service.assignTool(ORG_ID, profile.profile.id, {
+      toolId: BASH_TOOL_ID,
+    });
+    expect(
+      (await db.listToolsForProfile(profile.profile.id)).map((tool) => tool.id)
+    ).toContain(BASH_TOOL_ID);
   });
 });
 
