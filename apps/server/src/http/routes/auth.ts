@@ -1251,18 +1251,12 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     if (!activated) {
       return errorResponse("MFA setup has already been completed.", 400);
     }
-1: await databaseAdapter.revokeBrowserSessionsForUserExcept(
+    await databaseAdapter.revokeBrowserSessionsForUserExcept(
       auth.user.id,
       auth.mode === "browser-session" ? (auth.session?.id ?? null) : null,
       now
     );
     const backupCodes = await issueBackupCodes(auth.user.id, now);
-2: await databaseAdapter.revokeBrowserSessionsForUserExcept(
-      auth.user.id,
-      auth.mode === "browser-session" ? (auth.session?.id ?? null) : null,
-      new Date().toISOString()
-    );
-    await clearBackupCodesIfNoFactors(auth.user.id);
     return json({ backupCodes, enabled: true });
   });
 
@@ -1334,13 +1328,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       },
       new Date().toISOString()
     );
-1: await databaseAdapter.revokeBrowserSessionsForUserExcept(
-      auth.user.id,
-      auth.mode === "browser-session" ? (auth.session?.id ?? null) : null,
-      now
-    );
-    const backupCodes = await issueBackupCodes(auth.user.id, now);
-2: await databaseAdapter.revokeBrowserSessionsForUserExcept(
+    await databaseAdapter.revokeBrowserSessionsForUserExcept(
       auth.user.id,
       auth.mode === "browser-session" ? (auth.session?.id ?? null) : null,
       new Date().toISOString()
