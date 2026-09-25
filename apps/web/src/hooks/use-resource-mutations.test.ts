@@ -8,8 +8,9 @@ import {
   spyOn,
   test,
 } from "bun:test";
-import { NakamaApiError } from "@nakama/core/api-error";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
@@ -120,9 +121,10 @@ describe("artifact share controls with a stale share ID", () => {
     setup: unusedAuthAction,
     switchOrg: unusedAuthAction,
     updateOrg: unusedAuthAction,
-    user: null,
+    user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
   };
   const storageKey = artifactShareStorageKey(
+    "admin",
     "org",
     variables.profileId,
     variables.path
@@ -242,6 +244,64 @@ describe("artifact share controls with a stale share ID", () => {
 
     expect(publish).not.toHaveBeenCalled();
     expect(store.has(storageKey)).toBe(true);
+  });
+
+  test("does not recover account A share after logout and account B login", async () => {
+    const accountA = { ...auth, user: { ...auth.user!, id: "account-a" } };
+    const accountB = { ...auth, user: { ...auth.user!, id: "account-b" } };
+    const accountAStorageKey = artifactShareStorageKey(
+      "account-a",
+      "org",
+      variables.profileId,
+      variables.path
+    );
+    store.set(
+      accountAStorageKey,
+      JSON.stringify({
+        shareId: variables.shareId,
+        shareUrl: "https://example.com/s/account-a",
+      })
+    );
+    queryClient.setQueryData(queryKey, { active: false });
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let controls: ReturnType<typeof useArtifactShareControls>;
+    function Probe() {
+      controls = useArtifactShareControls({
+        artifactPath: variables.path,
+        profileId: variables.profileId,
+      });
+      return null;
+    }
+    const render = (value: AuthContextValue) =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(
+            AuthContext.Provider,
+            { value },
+            createElement(Probe)
+          )
+        )
+      );
+
+    try {
+      await act(async () => render(accountA));
+      await act(async () => controls.openViewShareDialog());
+      expect(controls!.publishedUrl).toBe("https://example.com/s/account-a");
+
+      await act(async () => render({ ...accountA, user: null, activeOrg: null }));
+      await act(async () => render(accountB));
+      await act(async () => controls.openViewShareDialog());
+
+      expect(controls!.publishedUrl).toBeNull();
+      expect(controls!.isShared).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 });
 

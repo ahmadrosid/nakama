@@ -22,7 +22,8 @@ export function useArtifactShareControls({
   profileId: string;
   artifactPath: string;
 }) {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
+  const userId = user?.id ?? "";
   const orgId = activeOrg?.id ?? "";
   const [copied, setCopied] = useState(false);
   const [storedUrl, setStoredUrl] = useState<string | null>(null);
@@ -49,14 +50,21 @@ export function useArtifactShareControls({
     statusQuery.isLoading;
 
   useEffect(() => {
-    if (!orgId) {
+    if (!orgId || !userId) {
+      setStoredUrl(null);
+      storedShareIdRef.current = null;
       return;
     }
 
-    const stored = readStoredArtifactShare({ artifactPath, orgId, profileId });
+    const stored = readStoredArtifactShare({
+      artifactPath,
+      orgId,
+      profileId,
+      userId,
+    });
     setStoredUrl(stored?.shareUrl ?? null);
     storedShareIdRef.current = stored?.shareId ?? null;
-  }, [orgId, profileId, artifactPath, statusQuery.dataUpdatedAt]);
+  }, [orgId, userId, profileId, artifactPath, statusQuery.dataUpdatedAt]);
 
   useEffect(() => {
     if (!copied) {
@@ -133,6 +141,7 @@ export function useArtifactShareControls({
       artifactPath,
       orgId,
       profileId,
+      userId,
       shareId,
       shareUrl: url,
     });
@@ -205,7 +214,7 @@ export function useArtifactShareControls({
         profileId,
         shareId,
       });
-      clearStoredArtifactShare({ artifactPath, orgId, profileId });
+      clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
       setStoredUrl(null);
       storedShareIdRef.current = null;
 
@@ -256,7 +265,7 @@ export function useArtifactShareControls({
       profileId,
       shareId,
     });
-    clearStoredArtifactShare({ artifactPath, orgId, profileId });
+    clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
     setStoredUrl(null);
     storedShareIdRef.current = null;
     toast(
