@@ -1040,6 +1040,14 @@ describe("createHonoApp", () => {
     expect(
       csrfClears.some((cookie) => !/;\s*Secure(?:;|$)/i.test(cookie))
     ).toBe(true);
+    // The host-bound pair is Secure by definition and is cleared too, so a
+    // session survives neither scheme on the same browser.
+    expect(
+      clearCookies.some((cookie) => cookie.startsWith("__Host-nakama_session="))
+    ).toBe(true);
+    expect(
+      clearCookies.some((cookie) => cookie.startsWith("__Host-nakama_csrf="))
+    ).toBe(true);
   });
 
   test("disconnect routes all agent channels to their scoped connection", async () => {

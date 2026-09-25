@@ -69,6 +69,14 @@ Use readiness checks to keep traffic away from an unavailable database, and requ
 - Use `/healthz` for liveness and `/readyz` for readiness on port 4310. Readiness returns 200 when the active connection can read the migrated database, or 503 when unavailable. It does not track restore progress and can remain ready while the old connection is still usable. Neither probe needs login or checks external providers or worker connectivity. The existing `/health` behavior is unchanged.
 - Set `NAKAMA_METRICS=true` to enable `/metrics`; otherwise it returns 404. It serves Prometheus-format HTTP response and server-error counters, which reset on process restart. Nakama sends nothing to an external collector. The endpoint needs no login and uses the same listener as the dashboard: restrict access through your network or reverse proxy before enabling it.
 
+### HTTPS and session cookies
+
+On HTTPS, the session and CSRF cookies are issued as `__Host-nakama_session` and `__Host-nakama_csrf`. Browsers bind those to the exact host, so a sibling host under the same parent domain cannot plant or overwrite a session.
+
+- A proxy that terminates TLS must send `X-Forwarded-Proto: https`, otherwise Nakama treats the request as plain HTTP, issues the unprefixed `nakama_session` and `nakama_csrf` cookies, and loses the host binding.
+- Unprefixed cookies are ignored on HTTPS, so the first sign-in after upgrading happens once more. Signing in again reissues the host-bound pair and clears the old cookies.
+- Plain HTTP deployments keep the unprefixed cookies, because browsers discard `Secure` cookies on `http://` origins.
+
 ### First-boot seed (optional)
 
 To skip the setup wizard on a fresh data volume, set all three admin seed variables before the first boot. Nakama creates the admin account and a `Personal` org (override with `NAKAMA_SEED_ORG_NAME`). No provider is created: after the first login, open `/setup` to add one. Self-hosted installs without these variables behave as today.
