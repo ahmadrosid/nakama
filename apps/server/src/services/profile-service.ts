@@ -35,6 +35,7 @@ import {
   DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
   getKnowledgeBaseDir,
+  migrateLegacyKnowledgeBaseDir,
   getProfileSharedDocumentIds,
   getProfileSoulDir,
   hasProfileAvatar,
@@ -139,6 +140,7 @@ async function copyKnowledgeBaseTo(
   sourceId: string,
   profileId: string
 ): Promise<void> {
+  await migrateLegacyKnowledgeBaseDir(orgId, sourceId);
   const from = getKnowledgeBaseDir(orgId, sourceId);
 
   if (!(await pathExists(from))) {

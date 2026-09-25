@@ -834,6 +834,63 @@ describe("profile service cloneProfile", () => {
     ).toBe("kb body");
   });
 
+  test("migrates a legacy knowledge base before cloning it", async () => {
+    const { service, sourceId } = await setup();
+    await rm(path.join(soulDirOf(sourceId), "knowledge-base"), {
+      force: true,
+      recursive: true,
+    });
+    const legacyDir = path.join(
+      soulDirOf(sourceId),
+      "data",
+      "knowledge-base"
+    );
+    await mkdir(path.join(legacyDir, "extracted"), { recursive: true });
+    await mkdir(path.join(legacyDir, "uploads", "kb_legacy"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(legacyDir, "manifest.json"),
+      JSON.stringify({
+        documents: [
+          {
+            filename: "legacy.txt",
+            id: "kb_legacy",
+            mediaType: "text/plain",
+            sizeBytes: 11,
+            status: "ready",
+            uploadedAt: "2026-06-13T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8"
+    );
+    await writeFile(
+      path.join(legacyDir, "extracted", "kb_legacy.txt"),
+      "# source: legacy.txt\n\nlegacy body\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(legacyDir, "uploads", "kb_legacy", "legacy.txt"),
+      "legacy body\n",
+      "utf8"
+    );
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+    const cloneKbDir = path.join(soulDirOf(profile.id), "knowledge-base");
+    const manifest = await readFile(
+      path.join(cloneKbDir, "manifest.json"),
+      "utf8"
+    );
+
+    expect(manifest).toContain("kb_legacy");
+    expect(
+      (await service.listKnowledgeBase(ORG_ID, profile.id)).documents.map(
+        (document) => document.id
+      )
+    ).toEqual(["kb_legacy"]);
+  });
+
   test("gives each clone a unique id", async () => {
     const { service, sourceId } = await setup();
     const first = await service.cloneProfile(ORG_ID, sourceId, {});

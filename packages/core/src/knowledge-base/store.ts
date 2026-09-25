@@ -106,7 +106,7 @@ function legacyKnowledgeBaseDir(orgId: string, profileId: string): string {
   return join(getProfileSoulDir(orgId, profileId), "data", "knowledge-base");
 }
 
-async function migrateLegacyKnowledgeBaseDir(
+export async function migrateLegacyKnowledgeBaseDir(
   orgId: string,
   profileId: string
 ): Promise<void> {
