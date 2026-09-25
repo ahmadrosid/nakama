@@ -10,8 +10,7 @@ import {
 } from "bun:test";
 import { NakamaApiError } from "@nakama/core/api-error";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
 import {
@@ -332,25 +331,33 @@ test("useArtifactsExist hides only the artifacts the server reports missing", as
     );
     return null;
   }
-  const root = createRoot(document.createElement("div"));
+  const render = () =>
+    renderToString(
+      createElement(
+        QueryClientProvider,
+        { client: existsClient },
+        createElement(Probe)
+      )
+    );
 
   try {
-    await act(async () => {
-      root.render(
-        createElement(
-          QueryClientProvider,
-          { client: existsClient },
-          createElement(Probe)
-        )
-      );
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    render();
+    // Nothing is known yet, so every chip stays.
+    expect(result).toEqual([true, true, true, true]);
+
+    // A server render registers the queries without running them.
+    await Promise.allSettled(
+      existsClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.fetch())
+    );
+    render();
 
     expect(result).toEqual([true, false, true, true]);
     expect(exists.mock.calls).toContainEqual(["other", "shared.md"]);
   } finally {
-    act(() => root.unmount());
     exists.mockRestore();
+    existsClient.clear();
   }
 });
