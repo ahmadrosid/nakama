@@ -164,6 +164,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (isStopCommand(trimmed)) {
+      await authStore.reload();
       const stopSenderJids = [...inbound.senderJids];
       let stopAuthorized =
         inbound.fromMe ||
