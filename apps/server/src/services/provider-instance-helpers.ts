@@ -19,6 +19,7 @@ import {
   parseWireApi,
   readXaiOAuthFromInstance,
   resolveOllamaHostMode,
+  saveUserConfig,
   type UserConfig,
   validateCustomModels,
   validateDisplayName,
@@ -48,6 +49,10 @@ import {
   validateOpenRouterCustomModels,
 } from "../providers";
 import {
+  chatgptAccountNeedsReauth,
+  getChatgptAccountCooldowns,
+} from "../providers/chatgpt";
+import {
   type CreateProviderForInstanceOptions,
   createProviderForInstance,
 } from "../providers/create";
@@ -57,6 +62,12 @@ export function toProviderInstanceSummary(
   modelCount: number
 ): ProviderInstanceSummary {
   const chatgptConnected = isChatgptProviderConnected(instance);
+  const cooldownUntil =
+    instance.type === "chatgpt"
+      ? getChatgptAccountCooldowns()[instance.id]
+      : undefined;
+  const needsReauth =
+    instance.type === "chatgpt" && chatgptAccountNeedsReauth(instance.id);
 
   return {
     baseUrl: instance.baseUrl ?? null,
@@ -77,6 +88,16 @@ export function toProviderInstanceSummary(
       : {}),
     createdAt: instance.createdAt,
     modelCount,
+    ...(instance.type === "chatgpt"
+      ? {
+          accountStatus: needsReauth
+            ? ("reauth_required" as const)
+            : cooldownUntil
+              ? ("rate_limited" as const)
+              : ("ready" as const),
+          ...(cooldownUntil ? { accountStatusUntil: cooldownUntil } : {}),
+        }
+      : {}),
   };
 }
 
@@ -253,6 +274,19 @@ export function buildProviderInstanceFromCreateRequest(
       throw new NakamaApiError(
         "Sign in with ChatGPT before saving this provider.",
         400
+      );
+    }
+
+    if (
+      existing.some(
+        (provider) =>
+          provider.type === "chatgpt" &&
+          provider.chatgptAccountId === request.chatgptOAuth?.accountId
+      )
+    ) {
+      throw new NakamaApiError(
+        "This ChatGPT account is already connected.",
+        409
       );
     }
 
@@ -722,6 +756,21 @@ export async function createProviderForProfile(
     selection.instance,
     selection.model,
     process.env,
-    options
+    {
+      fallbackInstances: userConfig.providers,
+      onChatgptTokenRefresh: async (instanceId, oauth) => {
+        if (options?.onChatgptTokenRefresh) {
+          await options.onChatgptTokenRefresh(instanceId, oauth);
+          return;
+        }
+        userConfig.providers = userConfig.providers.map((instance) =>
+          instance.id === instanceId
+            ? applyChatgptOAuthToInstance(instance, oauth)
+            : instance
+        );
+        await saveUserConfig(userConfig);
+      },
+      ...options,
+    }
   );
 }

@@ -237,6 +237,9 @@ export function wrapProviderWithUsageTracking(
         totalTokens: inputTokens + outputTokens,
         ...(estimated ? { estimated: true } : {}),
         ...(cachedInputTokens == null ? {} : { cachedInputTokens }),
+        ...(result.usage?.providerInstanceId
+          ? { providerInstanceId: result.usage.providerInstanceId }
+          : {}),
         ...(costUsd == null ? {} : { costUsd }),
       },
     };

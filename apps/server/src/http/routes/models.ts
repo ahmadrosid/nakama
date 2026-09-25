@@ -1621,6 +1621,21 @@ export function registerModelRoutes(
     }
   });
 
+  app.put("/v1/providers/chatgpt-order", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ providerIds?: string[] }>(c.req.raw);
+    try {
+      await agent.reorderChatgptAccounts(body.providerIds ?? []);
+      return json<ListProvidersResponse>(await agent.listProviders());
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
   app.patch("/v1/providers/:providerId", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateProviderRequest>(c.req.raw);
@@ -1727,7 +1742,9 @@ export function registerModelRoutes(
       const models = await fetchChatgptCodexModels(chatgptOAuth).catch(
         () => []
       );
-      return json({ chatgptOAuth, models });
+      return c.json({ chatgptOAuth, models }, 200, {
+        "Cache-Control": "no-store",
+      });
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);

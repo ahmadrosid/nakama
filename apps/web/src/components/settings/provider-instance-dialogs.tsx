@@ -1,5 +1,6 @@
 import type {
   ChatgptOAuthCredentials,
+  CustomModelEntry,
   ProviderInstanceSummary,
   WireApi,
   XaiOAuthCredentials,
@@ -44,6 +45,7 @@ export function ProviderReplaceKeyDialog({
   onOpenChange,
   onApiKeyChange,
   onChatgptOAuthChange,
+  onChatgptModelsChange,
   onToggleShowApiKey,
   onSave,
 }: {
@@ -60,6 +62,7 @@ export function ProviderReplaceKeyDialog({
   onOpenChange: (open: boolean) => void;
   onApiKeyChange: (value: string) => void;
   onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
+  onChatgptModelsChange: (models: CustomModelEntry[]) => void;
   onToggleShowApiKey: () => void;
   onSave: () => void;
 }) {
@@ -106,6 +109,7 @@ export function ProviderReplaceKeyDialog({
         <ChatgptSignInPanel
           disabled={busy}
           oauth={chatgptOAuth}
+          onModelsChange={onChatgptModelsChange}
           onOAuthChange={onChatgptOAuthChange}
         />
       );

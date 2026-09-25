@@ -514,6 +514,33 @@ describe("buildProviderInstanceFromCreateRequest", () => {
     ).toBe(true);
   });
 
+  test("rejects connecting the same ChatGPT account twice", () => {
+    expect(() =>
+      buildProviderInstanceFromCreateRequest(
+        {
+          apiKey: "",
+          chatgptOAuth: {
+            accessToken: "new-token",
+            accountId: "acct_1",
+            expiresAt: "2027-01-01T01:00:00.000Z",
+            refreshToken: "new-refresh",
+          },
+          type: "chatgpt",
+        },
+        [
+          {
+            apiKey: "",
+            chatgptAccountId: "acct_1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            id: "existing",
+            label: "Main ChatGPT",
+            type: "chatgpt",
+          },
+        ]
+      )
+    ).toThrow(/already connected/i);
+  });
+
   test("keeps the signed-in account's discovered models in the ChatGPT picker", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {

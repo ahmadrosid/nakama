@@ -666,6 +666,15 @@ export class NakamaClient {
     return this.request<ListProvidersResponse>("/v1/providers");
   }
 
+  async reorderChatgptAccounts(
+    providerIds: string[]
+  ): Promise<ListProvidersResponse> {
+    return this.request<ListProvidersResponse>("/v1/providers/chatgpt-order", {
+      body: JSON.stringify({ providerIds }),
+      method: "PUT",
+    });
+  }
+
   async createProvider(
     request: CreateProviderRequest
   ): Promise<CreateProviderResponse> {
