@@ -120,9 +120,11 @@ test("an org A draft and error cannot be submitted after rerendering for org B",
   const update = spyOn(client, "updateOrgMemory").mockResolvedValue({
     content: DRAFT_B,
   });
-  const get = spyOn(client, "getOrgMemory").mockImplementation(async (orgId) => ({
-    content: orgId === ORG_A ? MEMORY_A : MEMORY_B,
-  }));
+  const get = spyOn(client, "getOrgMemory").mockImplementation(
+    async (orgId) => ({
+      content: orgId === ORG_A ? MEMORY_A : MEMORY_B,
+    })
+  );
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
