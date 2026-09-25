@@ -228,13 +228,13 @@ describe("legacy profile id migration", () => {
       `);
 
       const expected = {
-        id: "default",
-        org_id: "org_legacy",
-        is_default: 1,
         automations_enabled: 0,
-        skills_write_approval: 1,
-        skills_post_turn_review: 0,
+        id: "default",
+        is_default: 1,
+        org_id: "org_legacy",
         skills_curator_consolidate_enabled: 1,
+        skills_post_turn_review: 0,
+        skills_write_approval: 1,
       };
       const selectMigratedProfile = `
         SELECT
