@@ -500,6 +500,7 @@ describe("McpService", () => {
     const tools = buildMcpToolDefinitions(
       [scopedServer],
       manager,
+      db,
       orgId,
       profileId
     );
