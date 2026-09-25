@@ -16,11 +16,11 @@ See [Workflows](/workflows) for the step kinds and receipt model.
 
 An automation is a name, a prompt, a profile, and one trigger:
 
-| Trigger | Shape | Runs |
+| Trigger | Shape | Scheduled behavior |
 | --- | --- | --- |
-| `manual` | none | Only when you press **Run now** |
-| `schedule` | 5-field cron plus a timezone | Every time the cron matches |
-| `runAt` | an ISO timestamp plus a timezone | Once, at that instant |
+| `manual` | none | Never starts by itself |
+| `schedule` | 5-field cron plus a timezone | Runs each time the cron matches |
+| `runAt` | an ISO timestamp plus a timezone | Tries to run once at that instant, then disables itself |
 
 The **profile** is which agent soul, tools, and skills the run uses. Edit an automation to pick a different profile; the detail view shows the bound profile name. Creating from the API without a `profileId` uses the org default profile. Creating from chat without a `profileId` uses the chat profile. Members cannot bind Super Bot.
 
@@ -28,20 +28,21 @@ Cron is validated on save, so a malformed expression is rejected rather than sil
 
 A `runAt` automation whose timestamp has already passed is not scheduled. Disabled automations are not scheduled either, whatever their trigger.
 
-### The worker
+### The worker and schedule reloads
 
-Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Workers** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
+Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Workers** tells you whether schedules are actually being served, with the worker's running state, scheduled job count, and active runs. If the worker is down, manual runs still work and scheduled ones do not fire.
+
+The worker loads the schedule list at startup and reloads it on a polling interval. The default interval is five minutes, and it accepts 1 to 1440 minutes. An organization admin can change it on **System → Organization**, on the **Skill curator** card. Polling doesn't send a live schedule-change event to the worker.
+
+This reload boundary matters for new schedules. A schedule created just after a reload can wait for the next poll before it is registered. A one-time `runAt` that passes before the worker sees it is missed rather than caught up later. Allow for the polling interval when you create time-sensitive one-time automations, and make sure the worker is running before you create them.
 
 See [Docker](/docker) for how the worker is started in a container.
 
 ### Run history
 
-Every run is recorded with a status of `running`, `completed`, or `failed`, plus its output or its error, and start and finish timestamps. From the run list you can:
+Every run is recorded with a status of `running`, `completed`, or `failed`, plus its output or error and start and finish timestamps. Open a run to read the full output, copy its text, or delete it. Opening an automation automatically marks its runs read, so the unread dot and notification count clear without a separate **Mark runs read** control.
 
-- Open a run to read the full output
-- Press **Run again** on a failed run
-- Delete a run
-- Mark runs read, which is what clears the unread badge
+You can start any enabled automation manually with **Run now**, the run API, or the chat automation tool. **Run again** appears on a failed run and starts the automation again. It does not retry a completed one-time `runAt`: that automation disables itself before its first run, including when that run fails, so **Run again** reports that it is disabled. Create another one-time automation when you need a fresh timestamp.
 
 Unread run counts feed the **Notifications** page, so a schedule that started failing overnight is visible without opening each automation.
 
@@ -58,9 +59,9 @@ An automation can post its result to a channel instead of leaving it in the run 
 | `whatsapp` | All paired users |
 | `email` | The `to` address, which is required |
 
-`notifyOn` decides which runs deliver: `success` (the default), `failure`, or `both`. Each run records its own delivery status of `sent`, `failed`, or `skipped`, with the error when there is one, so a delivery that silently did not happen is distinguishable from one that was never meant to.
+`notifyOn` decides which runs deliver: `success` (the default), `failure`, or `both`. Each run records `sent`, `failed`, or `skipped` when delivery is configured and attempted. A run with no delivery configuration has a `null` delivery status; `null` does not mean that delivery was skipped. Failed deliveries also record the error.
 
-Delivery config is validated on save against what the instance actually has. Pointing an automation at Discord on an instance with no Discord bridge fails at save time, not at 3am on the first scheduled run.
+Delivery configuration is validated on save against the channels the instance has. Pointing an automation at a channel with no configured bridge fails at save time instead of silently failing on a later run.
 
 ## Permissions
 

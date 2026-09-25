@@ -26,9 +26,9 @@ Importing is a whole-install restore:
 1. Preview the ZIP first
 2. Confirm restore to replace the current local data root
 
-Plan for downtime during restore. This replaces the active data root rather than merging individual records.
+The import accepts a ZIP up to 100 MB, up to 10,000 entries of 100 MB each, and up to 500 MB of uncompressed data. A larger archive is rejected before restore. Plan for downtime during restore because this replaces the active data root rather than merging individual records.
 
-On a fresh install, you can also restore during [first-time setup](/first-time-setup) before creating a new admin account.
+On a fresh install, you can also restore during [First-time setup](/first-time-setup) before creating a new admin account.
 
 Restored plugins stay **disabled** until an organization admin enables them on **System → Plugins**. If a restored package no longer matches its stored hash, that release stays unavailable and must be installed again.
 
@@ -37,6 +37,14 @@ Restored plugins stay **disabled** until an organization admin enables them on *
 To move **one** profile without a full-root backup, use **System → Profiles → Export profile / Import profile**. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
 
 Those packs deliberately omit secrets and are not interchangeable with Export ZIP above.
+
+## Desktop data
+
+Nakama Desktop uses `~/.nakama-desktop` for server data instead of the normal `~/.nakama` root. Its browser session lives in Electron's `Nakama Desktop Electron` app-data directory. The desktop app does not import an existing web server's `~/.nakama` data, and restoring a normal Export ZIP doesn't automatically merge those stores.
+
+To move Desktop server data, quit the app and copy the complete `~/.nakama-desktop` directory. To restore it on another machine, place the copy at `~/.nakama-desktop` before opening the app. Keep the browser session directory too when you want the saved login and window state. See [Desktop](/desktop) for supported platforms and local-server behavior.
+
+Desktop packaging and source builds are separate from backups. Build on macOS ARM64 or Windows x64. The macOS package targets macOS 15 or later on Apple Silicon; the Windows package targets Windows 10 build 19041 or later through the Microsoft Store. Cloud models still require internet access and provider credentials.
 
 ## Docker volumes
 
