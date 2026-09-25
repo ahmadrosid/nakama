@@ -114,4 +114,52 @@ describe("McpClientManager", () => {
     expect(manager.getConnectedCount()).toBe(0);
     expect(listToolsCount).toBe(1);
   });
+
+  test("ensureConnected reconnects after disconnect following a shared connect", async () => {
+    let releaseListTools!: () => void;
+    const listToolsGate = new Promise<void>((resolve) => {
+      releaseListTools = resolve;
+    });
+    let clientConnectCount = 0;
+
+    using _connect = spyOn(Client.prototype, "connect").mockImplementation(
+      async () => {
+        clientConnectCount += 1;
+      }
+    );
+    using _listTools = spyOn(Client.prototype, "listTools").mockImplementation(
+      async () => {
+        await listToolsGate;
+        return {
+          tools: [{ description: "Demo", inputSchema: {}, name: "demo_tool" }],
+        };
+      }
+    );
+    using _close = spyOn(
+      StdioClientTransport.prototype,
+      "close"
+    ).mockImplementation(async () => undefined);
+
+    const manager = new McpClientManager();
+    const server = fakeStdioServer("stdio-reconnect");
+    const orgId = "org_1";
+    const profileId = "profile_1";
+
+    const shared = Promise.all([
+      manager.ensureConnected(server, orgId, profileId),
+      manager.ensureConnected(server, orgId, profileId),
+    ]);
+    releaseListTools();
+    await shared;
+    expect(manager.getConnectedCount()).toBe(1);
+    expect(clientConnectCount).toBe(1);
+
+    await manager.disconnect(server.id);
+    expect(manager.getConnectedCount()).toBe(0);
+
+    await manager.ensureConnected(server, orgId, profileId);
+    expect(manager.getConnectedCount()).toBe(1);
+    expect(clientConnectCount).toBe(2);
+  });
+
 });

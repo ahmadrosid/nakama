@@ -57,7 +57,10 @@ export class McpClientManager {
     const pending = this.inflight.get(key);
     if (pending) {
       await pending;
-      return;
+      // Disconnect may have run after the shared connect settled.
+      if (this.connections.has(key)) {
+        return;
+      }
     }
 
     await this.connect(server, { orgId, profileId });
