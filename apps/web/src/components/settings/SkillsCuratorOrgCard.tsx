@@ -195,8 +195,8 @@ function useSkillsCuratorOrgCard() {
     runRequestRef,
     setBusyOrgId,
     setPollIntervalState,
-    setRunState,
     setRunningOrgId,
+    setRunState,
     updateOrg,
     user,
   };
