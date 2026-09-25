@@ -818,6 +818,10 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
+  getAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<StoredAutomationRunRecord | null>;
   getApiKeyByPrefix(keyPrefix: string): Promise<StoredApiKeyRecord | null>;
   getArtifactShareById(
     orgId: string,
