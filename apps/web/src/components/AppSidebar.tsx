@@ -54,7 +54,9 @@ import {
 } from "@/lib/navigation";
 import { sessionSearchQuery } from "@/lib/session-list";
 import {
+  getInitialPinnedCollapsed,
   getInitialRecentsCollapsed,
+  SIDEBAR_PINNED_COLLAPSED_KEY,
   SIDEBAR_RECENTS_COLLAPSED_KEY,
 } from "@/lib/sidebar";
 
@@ -276,6 +278,11 @@ function RecentChats() {
     SIDEBAR_RECENTS_COLLAPSED_KEY,
     getInitialRecentsCollapsed
   );
+  const { collapsed: pinnedCollapsed, toggle: togglePinned } =
+    useLocalStorageFlag(
+      SIDEBAR_PINNED_COLLAPSED_KEY,
+      getInitialPinnedCollapsed
+    );
   const pinnedSessions = sessions.filter((session) => session.pinned);
   const recentSessions = sessions.filter((session) => !session.pinned);
   const renderSession = (session: (typeof sessions)[number]) => {
@@ -376,8 +383,25 @@ function RecentChats() {
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
       {pinnedSessions.length > 0 ? (
         <div className="mb-3">
-          <p className="sidebar-nav-group-label px-2 text-sm">Pinned</p>
-          {pinnedSessions.map(renderSession)}
+          <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
+            <button
+              aria-expanded={!pinnedCollapsed}
+              className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
+              onClick={togglePinned}
+              type="button"
+            >
+              <span>Pinned</span>
+              <ArrowDown01Icon
+                aria-hidden="true"
+                className={cn(
+                  "sidebar-nav-group-chevron size-3.5",
+                  pinnedCollapsed && "-rotate-90"
+                )}
+                strokeWidth={1.75}
+              />
+            </button>
+          </div>
+          {pinnedCollapsed ? null : pinnedSessions.map(renderSession)}
         </div>
       ) : null}
       <div className="mb-1.5 flex shrink-0 items-center gap-1 px-2">
