@@ -1120,6 +1120,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session authentication required", 403);
+    }
     const records = await databaseAdapter.listBrowserSessionsForUser(
       auth.user.id,
       new Date().toISOString()
@@ -1142,6 +1145,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session authentication required", 403);
+    }
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const sessionId = c.req.param("sessionId");
