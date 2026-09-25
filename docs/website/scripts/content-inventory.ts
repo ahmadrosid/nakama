@@ -9,7 +9,7 @@ export interface ContentPage {
   title: string;
 }
 
-export function mdxPathToRelativePath(relativeMdxPath: string): string {
+function mdxPathToRelativePath(relativeMdxPath: string): string {
   if (relativeMdxPath === "docs.mdx") {
     return "docs/index.md";
   }
@@ -36,7 +36,7 @@ function frontmatterValue(frontmatter: string, key: string): string {
   return value;
 }
 
-export function parseMdxPage(
+function parseMdxPage(
   source: string,
   mdxPath: string
 ): ContentPage {
