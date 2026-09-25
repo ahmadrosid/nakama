@@ -209,12 +209,12 @@ describe("per-owner Discord config", () => {
 
       const results = await Promise.allSettled([
         saveDiscordConfig(
-          { orgId: "org_a", profileId: "a" },
-          { botToken: "discord-token-a" }
+          { botToken: "discord-token-a" },
+          { orgId: "org_a", profileId: "a" }
         ),
         saveDiscordConfig(
-          { orgId: "org_b", profileId: "b" },
-          { botToken: "discord-token-b" }
+          { botToken: "discord-token-b" },
+          { orgId: "org_b", profileId: "b" }
         ),
       ]);
 
