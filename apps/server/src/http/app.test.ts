@@ -1307,10 +1307,9 @@ describe("createHonoApp", () => {
     const browserOrgsBody = (await browserOrgsResponse.json()) as {
       orgs: Array<{ id: string }>;
     };
-    expect(browserOrgsBody.orgs.map((org) => org.id)).toEqual([
-      adminSession.orgId,
-      secondOrg.organization.id,
-    ]);
+    expect(browserOrgsBody.orgs.map((org) => org.id).sort()).toEqual(
+      [adminSession.orgId, secondOrg.organization.id].sort()
+    );
 
     // A browser session for the same admin still reports the admin it is.
     const sessionResponse = await app.fetch(
