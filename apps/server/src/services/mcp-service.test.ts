@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NakamaApiError, nanoid } from "@nakama/core";
+import { getProfileSoulDir, NakamaApiError, nanoid } from "@nakama/core";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import {
   createInMemoryDatabaseAdapter,
@@ -432,5 +432,82 @@ describe("McpService", () => {
     const listed = await service.listServers();
 
     expect(listed.servers[0]?.assignedProfileCount).toBe(1);
+  });
+
+  test("defers stdio startup and opens one process in the profile cwd", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const startupConnections: string[] = [];
+    const spawns: Array<{
+      cwd: string;
+      orgId: string;
+      profileId: string;
+    }> = [];
+    const manager = {
+      async callTool(
+        _serverId: string,
+        _transport: "stdio",
+        _toolName: string,
+        _input: unknown,
+        profileId: string,
+        orgId: string
+      ) {
+        return { orgId, profileId };
+      },
+      async connect(server: { id: string }) {
+        startupConnections.push(server.id);
+        return [];
+      },
+      async ensureConnected(
+        _server: unknown,
+        orgId: string,
+        profileId: string
+      ) {
+        spawns.push({
+          cwd: getProfileSoulDir(orgId, profileId),
+          orgId,
+          profileId,
+        });
+      },
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { command: "fake-stdio-server" },
+      connect: false,
+      name: "filesystem",
+      transport: "stdio",
+    });
+    const server = await db.getMcpServer(created.server.id);
+
+    await service.connectEnabledServers();
+
+    expect(startupConnections).toEqual([]);
+
+    const profileId = await seedProfile(db);
+    await service.assignServerToProfile(profileId, created.server.id);
+    const orgId = "org_test";
+    expect(server).not.toBeNull();
+    const scopedServer = {
+      ...server!,
+      cachedTools: [
+        {
+          description: "Read a scoped file",
+          inputSchema: { type: "object" },
+          name: "read",
+        },
+      ],
+    };
+    await db.upsertMcpServer(scopedServer);
+    const tools = buildMcpToolDefinitions(
+      [scopedServer],
+      manager,
+      orgId,
+      profileId
+    );
+    const result = await tools[0]!.run({}, {});
+
+    expect(spawns).toEqual([
+      { cwd: getProfileSoulDir(orgId, profileId), orgId, profileId },
+    ]);
+    expect(result).toEqual({ orgId, profileId });
   });
 });

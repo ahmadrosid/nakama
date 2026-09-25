@@ -448,7 +448,9 @@ export class McpService {
     const servers = await this.db.listMcpServers();
 
     for (const server of servers) {
-      if (!server.enabled) {
+      if (!server.enabled || server.transport === "stdio") {
+        // Stdio connections are profile-scoped; defer them until a profile
+        // calls a tool.
         continue;
       }
 
