@@ -638,6 +638,51 @@ describe("agent chat tool loop", () => {
     expect(session.getHistory()).toEqual([{ content: "say hi", role: "user" }]);
   });
 
+  test("terminates cleanly at the tool iteration cap", async () => {
+    let providerCalls = 0;
+    let toolRuns = 0;
+    const tool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        toolRuns += 1;
+        return { ok: true };
+      },
+    };
+    const provider: ProviderClient = {
+      generateChat() {
+        providerCalls += 1;
+        return Promise.resolve(
+          toolTurn([
+            {
+              arguments: { message: "keep going" },
+              id: `call_${providerCalls}`,
+              name: tool.name,
+            },
+          ])
+        );
+      },
+      generateText() {
+        return Promise.resolve({ content: "{}" });
+      },
+      name: "openai",
+      streamChat() {
+        throw new Error("Unexpected stream call");
+      },
+    };
+    const session = createAgentChatSession({ provider, tools: [tool] });
+
+    const reply = await session.send("Keep calling tools");
+
+    expect(providerCalls).toBe(100);
+    expect(toolRuns).toBe(100);
+    expect(reply).toBe(
+      "Stopped because this turn reached its tool iteration limit. Send another message to continue."
+    );
+    const history = session.getHistory();
+    expect(history.at(-2)?.role).toBe("tool");
+    expect(history.at(-1)).toEqual({ content: reply, role: "assistant" });
+  });
+
   test("appends resolvePromptContext to the system prompt each turn", async () => {
     const systems: string[] = [];
     const provider: ProviderClient = {
