@@ -1,6 +1,6 @@
 import { Key, matchesKey } from "@earendil-works/pi-tui";
 import { type ImageAttachment, validateImageAttachments } from "@nakama/core";
-import { readClipboardImage } from "./clipboard-image";
+import { pastedImagePath, readClipboardImage } from "./clipboard-image";
 import type { PromptSuggestion } from "./commands";
 import type { PromptLineResult } from "./prompt";
 import { normalizePastedText } from "./prompt-display";
@@ -41,6 +41,7 @@ export class PersistentPrompt {
   ) => void;
 
   private value = "";
+  private textPastes: { start: number; end: number }[] = [];
   private attachedImages: ImageAttachment[] = [];
   private cursorVisible = true;
   private active = false;
@@ -94,6 +95,7 @@ export class PersistentPrompt {
 
   prefill(value: string): void {
     this.value = value;
+    this.textPastes = [];
     this.attachedImages = [];
     this.resetSelection();
     this.cursorVisible = true;
@@ -134,13 +136,21 @@ export class PersistentPrompt {
       label: suggestion.label,
     }));
 
+    let display = "";
+    let offset = 0;
+    for (const [index, paste] of this.textPastes.entries()) {
+      display += `${this.value.slice(offset, paste.start)}[Text #${index + 1}]`;
+      offset = paste.end;
+    }
+    display += this.value.slice(offset);
+
     this.renderer.setComposerState({
       cursorVisible: this.cursorVisible,
       imageCount: this.attachedImages.length || undefined,
       prefix: this.prefix,
       selectedIndex: this.selectedIndex,
       suggestions,
-      value: this.value,
+      value: display,
     });
   }
 
@@ -154,9 +164,9 @@ export class PersistentPrompt {
     this.render();
   }
 
-  private queueClipboardAttach(): void {
+  private queueClipboardAttach(filePath?: string): void {
     this.clipboardAttachTask = this.clipboardAttachTask.then(async () => {
-      await this.attachClipboardImage();
+      await this.attachClipboardImage(filePath);
     });
   }
 
@@ -164,9 +174,9 @@ export class PersistentPrompt {
     await this.clipboardAttachTask;
   }
 
-  private async attachClipboardImage(): Promise<boolean> {
+  private async attachClipboardImage(filePath?: string): Promise<boolean> {
     try {
-      const image = await readClipboardImage();
+      const image = await readClipboardImage(filePath);
 
       if (!image) {
         this.notifyClipboard(
@@ -197,8 +207,17 @@ export class PersistentPrompt {
     this.startBlink();
 
     const normalized = normalizePastedText(pasted);
+    const filePath = pastedImagePath(pasted);
+    if (filePath) {
+      this.queueClipboardAttach(filePath);
+      return;
+    }
 
     if (normalized.trim()) {
+      this.textPastes.push({
+        end: this.value.length + normalized.length,
+        start: this.value.length,
+      });
       this.value += normalized;
       this.resetSelection();
       this.cursorVisible = true;
@@ -239,6 +258,7 @@ export class PersistentPrompt {
     submitAfter = false
   ): void {
     this.value = suggestion.insertValue.trimEnd();
+    this.textPastes = [];
     this.selectedIndex = 0;
     this.hasNavigated = false;
     this.cursorVisible = true;
@@ -260,6 +280,7 @@ export class PersistentPrompt {
     };
 
     this.value = "";
+    this.textPastes = [];
     this.attachedImages = [];
     this.resetSelection();
     this.cursorVisible = true;
@@ -418,7 +439,11 @@ export class PersistentPrompt {
     }
 
     if (key === "\u007f" || key === "\b") {
-      if (this.value.length > 0) {
+      const lastPaste = this.textPastes.at(-1);
+      if (lastPaste && lastPaste.end === this.value.length) {
+        this.value = this.value.slice(0, lastPaste.start);
+        this.textPastes.pop();
+      } else if (this.value.length > 0) {
         this.value = this.value.slice(0, -1);
       } else if (this.attachedImages.length > 0) {
         this.attachedImages.pop();

@@ -47,7 +47,15 @@ export function buildComposerLines(
     const padding = " ".repeat(
       Math.max(0, composerWidth - visibleLength(content))
     );
-    return styledLine(`${content}${padding}`, { background: "surface" });
+    return {
+      segments: `${content}${padding}`.split(/(\[Text #\d+\])/).flatMap(
+        (part) =>
+          styledLine(part, {
+            background: "surface",
+            ...(/^\[Text #\d+\]$/.test(part) ? { color: "cyan" as const } : {}),
+          }).segments
+      ),
+    };
   };
   const pendingLines = formatPendingDisplayLines(
     state.pendingMessages,

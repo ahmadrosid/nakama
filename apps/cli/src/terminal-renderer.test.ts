@@ -15,6 +15,27 @@ function composerLine(text: string, width: number) {
 }
 
 describe("buildComposerLines", () => {
+  test("renders compact text markers in cyan beside the cursor", () => {
+    const lines = buildComposerLines(
+      {
+        composer: {
+          cursorVisible: true,
+          prefix: "> ",
+          selectedIndex: 0,
+          suggestions: [],
+          value: "[Text #1]",
+        },
+        pendingMessages: [],
+      },
+      40
+    );
+    expect(styledLineText(lines[1]!).trimEnd()).toBe("> [Text #1]▌");
+    expect(lines[1]!.segments).toContainEqual({
+      style: { background: "surface", color: "cyan" },
+      text: "[Text #1]",
+    });
+    expect(lines).toHaveLength(3);
+  });
   test("shows attached images without adding them to the message text", () => {
     const lines = buildComposerLines(
       {

@@ -131,6 +131,46 @@ describe("PersistentPrompt", () => {
     }
   });
 
+  test("attaches a pasted image path and preserves text typed while it loads", async () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+    const pending = Promise.withResolvers<{
+      data: string;
+      mediaType: string;
+    }>();
+    const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+    const read = spyOn(clipboard, "readClipboardImage").mockReturnValue(
+      pending.promise
+    );
+    const terminalInput = new FakeTerminalInput();
+    const renderer = new FakeRenderer();
+    const submitted: PromptLineResult[] = [];
+    const prompt = new PersistentPrompt({
+      onCancel: () => {},
+      onSubmit: (result) => submitted.push(result),
+      renderer,
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+    prompts.push(prompt);
+    try {
+      prompt.start();
+      terminalInput.emit("\x1b[200~'/tmp/screen shot.png'");
+      terminalInput.emit("\x1b[201~");
+      terminalInput.emit("\x1b[200~describe this\x1b[201~");
+      terminalInput.emit("!");
+      terminalInput.emit("\r");
+      await Bun.sleep(0);
+      expect(read).toHaveBeenCalledWith("/tmp/screen shot.png");
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(submitted).toEqual([]);
+      pending.resolve(image);
+      await Bun.sleep(0);
+      expect(submitted).toEqual([{ images: [image], text: "describe this!" }]);
+    } finally {
+      pending.resolve(image);
+      read.mockRestore();
+    }
+  });
+
   test("trackpad scrolling reaches history without changing the draft", () => {
     stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
       () => true
@@ -161,6 +201,41 @@ describe("PersistentPrompt", () => {
     expect(renderer.state?.value).toBe("unfinished draft");
     prompt.stop();
     expect(terminalInput.mouseTracking).toBe(false);
+  });
+
+  test("collapses text pastes, deletes whole blocks, and sends their original content", async () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+    const terminalInput = new FakeTerminalInput();
+    const renderer = new FakeRenderer();
+    const submitted: PromptLineResult[] = [];
+    const prompt = new PersistentPrompt({
+      onCancel: () => {},
+      onSubmit: (result) => submitted.push(result),
+      renderer,
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+    prompts.push(prompt);
+    prompt.start();
+    prompt.prefill("Review: ");
+    terminalInput.emit("\x1b[200~first\r\nsecond\x1b[201~");
+    terminalInput.emit(" ");
+    terminalInput.emit("\x1b[200~third\x1b[201~");
+    terminalInput.emit("!");
+    expect(renderer.state?.value).toBe("Review: [Text #1] [Text #2]!");
+    terminalInput.emit("\u007f");
+    terminalInput.emit("\u007f");
+    expect(renderer.state?.value).toBe("Review: [Text #1] ");
+    terminalInput.emit("\x1b[200~replacement\x1b[201~");
+    terminalInput.emit("\r");
+    await Bun.sleep(0);
+    expect(submitted).toEqual([{ text: "Review: first\nsecond replacement" }]);
+    expect(renderer.state?.value).toBe("");
+    terminalInput.emit("\x1b[200~next draft\x1b[201~");
+    expect(renderer.state?.value).toBe("[Text #1]");
+    prompt.prefill("[Text #1]");
+    terminalInput.emit("\r");
+    await Bun.sleep(0);
+    expect(submitted[1]).toEqual({ text: "[Text #1]" });
   });
 
   test("prefill renders suggestions for the inserted value", () => {
