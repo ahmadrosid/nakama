@@ -72,7 +72,7 @@ async function createScenario() {
     },
   ]);
 
-  return { agent, app, databaseAdapter, victimSessionId };
+  return { agent, app, authService, databaseAdapter, victimSessionId };
 }
 
 const CROSS_ORG_ROUTES: Array<{
@@ -337,16 +337,25 @@ describe("session routes are scoped to the caller's active org", () => {
     });
     expect(created.status).toBe(201);
     const { sessionId } = (await created.json()) as { sessionId: string };
-    const listPath =
-      "/v1/sessions?profileId=profile_victim&channel=web";
+    await databaseAdapter.replaceMessagesForSession(sessionId, [
+      {
+        createdAt: new Date().toISOString(),
+        id: "msg_api_user_scope",
+        payload: { content: "app user scope", role: "user" },
+        seq: 0,
+        sessionId,
+      },
+    ]);
+    const listPath = "/v1/sessions?profileId=profile_victim&channel=web";
 
     const listed = await apiRequest(listPath, { appUserId: "alice" });
     expect(listed.status).toBe(200);
-    expect(await listed.json()).toMatchObject({ sessions: [{ id: sessionId }] });
-    const messages = await apiRequest(
-      `/v1/sessions/${sessionId}/messages`,
-      { appUserId: "alice" }
-    );
+    expect(await listed.json()).toMatchObject({
+      sessions: [{ id: sessionId }],
+    });
+    const messages = await apiRequest(`/v1/sessions/${sessionId}/messages`, {
+      appUserId: "alice",
+    });
     expect(messages.status).toBe(200);
 
     const wrongAppUserList = await apiRequest(listPath, { appUserId: "bob" });
