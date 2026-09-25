@@ -1385,13 +1385,8 @@ describe("createChatHandler group chats", () => {
       expect(sent.length).toBe(sentBeforeStop);
       expect(authStore.isAuthorized("9999999999@s.whatsapp.net")).toBe(false);
 
-      try {
-        getStreamControl()?.complete();
-        await chatPromise;
-      } finally {
-        getStreamControl()?.complete();
-        await chatPromise.catch(() => undefined);
-      }
+      getStreamControl()?.complete();
+      await chatPromise.catch(() => undefined);
 
       expect(calls.sendStream).toBe(1);
     });
