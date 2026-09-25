@@ -424,7 +424,7 @@ function RecentChats() {
         <div className="ml-auto flex items-center gap-1">
           <Button
             aria-label="New chat"
-            className="text-muted-foreground/55"
+            className="text-muted-foreground/55 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
             nativeButton={false}
             render={<Link to={navHrefForPage("chat", profileId)} />}
             size="icon-sm"
