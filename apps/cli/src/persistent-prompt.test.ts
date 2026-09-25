@@ -71,6 +71,7 @@ describe("PersistentPrompt", () => {
       const submitted: PromptLineResult[] = [];
       const prompt = new PersistentPrompt({
         onCancel: () => {},
+        onScrollHistory: () => {},
         onSubmit: (result) => submitted.push(result),
         renderer,
         terminalInput: terminalInput as unknown as TerminalInput,
@@ -84,6 +85,7 @@ describe("PersistentPrompt", () => {
         }
         await Bun.sleep(0);
         expect(renderer.state?.imageCount).toBe(1);
+        expect(terminalInput.mouseTracking).toBe(false);
         terminalInput.emit("\r");
         await Bun.sleep(0);
         expect(submitted).toEqual([{ images: [image], text: "Describe this" }]);
@@ -171,7 +173,7 @@ describe("PersistentPrompt", () => {
     }
   });
 
-  test("trackpad scrolling reaches history without changing the draft", () => {
+  test("keyboard scrolling reaches history without capturing mouse selection", () => {
     stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
       () => true
     );
@@ -188,16 +190,13 @@ describe("PersistentPrompt", () => {
     prompts.push(prompt);
     prompt.start();
     prompt.prefill("unfinished draft");
-    expect(terminalInput.mouseTracking).toBe(true);
+    expect(terminalInput.mouseTracking).toBe(false);
 
-    const { events } = consumeTerminalInput(
-      "\x1b[<64;12;8M\x1b[<65;12;8M\x1b[<80;12;8M" +
-        "\x1b[<0;12;8M\x1b[<64;12;8m\x1b[<66;12;8M"
-    );
+    const { events } = consumeTerminalInput("\x1b[5~\x1b[6~\x1b[H\x1b[F");
     for (const event of events) {
       terminalInput.emit(event);
     }
-    expect(scrolls).toEqual(["line_up", "line_down", "line_up"]);
+    expect(scrolls).toEqual(["page_up", "page_down", "home", "end"]);
     expect(renderer.state?.value).toBe("unfinished draft");
     prompt.stop();
     expect(terminalInput.mouseTracking).toBe(false);

@@ -71,9 +71,6 @@ export class PersistentPrompt {
 
     this.active = true;
     this.unsubscribeInput = this.terminalInput.onInput(this.onData);
-    if (this.onScrollHistory) {
-      this.terminalInput.setMouseTracking(true);
-    }
     this.startBlink();
     this.render();
   }
@@ -87,9 +84,6 @@ export class PersistentPrompt {
     this.stopBlink();
     this.unsubscribeInput?.();
     this.unsubscribeInput = null;
-    if (this.onScrollHistory) {
-      this.terminalInput.setMouseTracking(false);
-    }
     process.stdout.write("\x1b[?25h");
   }
 

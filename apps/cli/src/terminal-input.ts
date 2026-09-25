@@ -149,7 +149,6 @@ export function consumeTerminalInput(buffer: string): {
 
 export class TerminalInput {
   private active = false;
-  private mouseTracking = false;
   private pending = "";
   private listeners = new Set<(chunk: string) => void>();
   private cursorWaiters = new Set<(row: number) => void>();
@@ -164,10 +163,6 @@ export class TerminalInput {
     this.active = true;
     this.previousEncoding = process.stdin.readableEncoding;
     this.terminal.start(this.handleData, () => {});
-
-    if (this.mouseTracking) {
-      process.stdout.write("\x1b[?1000h\x1b[?1006h");
-    }
   }
 
   stop(): void {
@@ -179,11 +174,6 @@ export class TerminalInput {
     this.terminal.stop();
     restoreReadableEncoding(process.stdin, this.previousEncoding);
     this.previousEncoding = undefined;
-
-    if (this.mouseTracking) {
-      process.stdout.write("\x1b[?1000l\x1b[?1006l");
-      this.mouseTracking = false;
-    }
 
     this.listeners.clear();
     this.cursorWaiters.clear();
@@ -197,22 +187,6 @@ export class TerminalInput {
   onInput(listener: (chunk: string) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
-  }
-
-  setMouseTracking(enabled: boolean): void {
-    if (this.mouseTracking === enabled) {
-      return;
-    }
-
-    this.mouseTracking = enabled;
-
-    if (!this.active) {
-      return;
-    }
-
-    process.stdout.write(
-      enabled ? "\x1b[?1000h\x1b[?1006h" : "\x1b[?1000l\x1b[?1006l"
-    );
   }
 
   async requestCursorRow(timeoutMs = 750): Promise<number | null> {
