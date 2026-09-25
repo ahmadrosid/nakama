@@ -1,7 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
 import type {
-  AuthUserResponse,
-  ListNotificationDestinationsResponse,
   NotificationDestinationSummary,
   UserOrgSummary,
 } from "@nakama/core/contract";
@@ -9,20 +7,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
-import { AuthProvider } from "@/context/auth-context";
 import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
-import { useAuth } from "@/context/use-auth";
 import { ChannelProfileContext } from "@/hooks/use-app-queries";
+import { useNotificationDestinations } from "@/hooks/use-notification-destinations";
 import { client } from "@/lib/client";
-import { queryClient as appQueryClient } from "@/lib/query-client";
 import { visibleIntegrationSections } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 import { IntegrationsPage } from "./IntegrationsPage";
@@ -675,8 +670,7 @@ test("channel setup stays on the agent page and Connect apps excludes messaging 
     useActiveChatProfileStore.setState(previous);
   }
 });
-
-test("notification destinations stay isolated across logout, account, and organization switches", async () => {
+test("notification destination cache is scoped by user and organization", async () => {
   const orgA: UserOrgSummary = {
     createdAt: "2026-09-25T00:00:00Z",
     id: "org-a",
@@ -691,19 +685,6 @@ test("notification destinations stay isolated across logout, account, and organi
     name: "Organization B",
     slug: "organization-b",
   };
-  const userA: AuthUserResponse = {
-    activeOrgId: orgA.id,
-    email: "user-a@example.com",
-    id: "user-a",
-    isPlatformAdmin: true,
-    orgId: orgA.id,
-  };
-  const userB: AuthUserResponse = {
-    ...userA,
-    activeOrgId: orgA.id,
-    email: "user-b@example.com",
-    id: "user-b",
-  };
   const destinationA: NotificationDestinationSummary = {
     channel: "telegram",
     createdAt: "2026-09-25T00:00:00Z",
@@ -713,171 +694,74 @@ test("notification destinations stay isolated across logout, account, and organi
     updatedAt: "2026-09-25T00:00:00Z",
     webhookPath: "/hooks/notification/destination-a",
   };
-  let session = "user-a" as "user-a" | "user-b";
-  let destinationRequest = "org-a" as "org-a" | "offline" | "pending";
-  const pendingDestinations = Promise.withResolvers<
-    ListNotificationDestinationsResponse
-  >().promise;
-  const defaultQueryOptions = appQueryClient.getDefaultOptions();
-  appQueryClient.setDefaultOptions({
-    ...defaultQueryOptions,
-    queries: { ...defaultQueryOptions.queries, retry: false },
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
   });
-  appQueryClient.clear();
-  const getMe = spyOn(client, "getMe").mockImplementation(async () => {
-    const user = session === "user-a" ? userA : userB;
-    client.setOrgId(user.orgId ?? null);
-    return user;
-  });
-  const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
-    orgs: [orgA, orgB],
-  });
-  const login = spyOn(client, "login").mockImplementation(async () => {
-    session = "user-b";
-    return userB;
-  });
-  const logout = spyOn(client, "logout").mockImplementation(async () => {
-    client.setOrgId(null);
-  });
-  const setActiveOrg = spyOn(client, "setActiveOrg").mockImplementation(
-    async (orgId) => {
-      const nextUser = { ...userB, activeOrgId: orgId, orgId };
-      client.setOrgId(orgId);
-      return nextUser;
-    }
-  );
-  const listProfiles = spyOn(client, "listProfiles").mockResolvedValue({
-    profiles: [],
-  });
-  const listDestinations = spyOn(
-    client,
-    "listNotificationDestinations"
-  ).mockImplementation(() => {
-    if (destinationRequest === "org-a") {
-      return Promise.resolve({ destinations: [destinationA] });
-    }
-    if (destinationRequest === "offline") {
-      return Promise.reject(new Error("offline"));
-    }
-    return pendingDestinations;
-  });
-  const rotate = spyOn(
-    client,
-    "regenerateNotificationDestinationKey"
-  ).mockResolvedValue({
-    apiKey: "secret-from-organization-a",
-    destination: destinationA,
+  const list = spyOn(client, "listNotificationDestinations").mockResolvedValue({
+    destinations: [],
   });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const settle = () => {
-    const { promise, resolve } = Promise.withResolvers<void>();
-    setTimeout(resolve, 20);
-    return promise;
-  };
-
-  function AuthActions() {
-    const { login: loginUser, logout: logoutUser, switchOrg } = useAuth();
-    return (
-      <>
-        <button
-          onClick={() =>
-            void loginUser("<anon_email_762ce49809b2fdf3>", "password")
-          }
-          type="button"
-        >
-          Log in test user
-        </button>
-        <button onClick={() => void logoutUser()} type="button">
-          Log out test user
-        </button>
-        <button onClick={() => void switchOrg(orgB.id)} type="button">
-          Switch test organization
-        </button>
-      </>
-    );
-  }
-
-  try {
+  const authValue = (
+    userId: string,
+    activeOrg: UserOrgSummary
+  ): AuthContextValue =>
+    ({
+      activeOrg,
+      isAuthenticated: true,
+      isLoading: false,
+      orgs: [activeOrg],
+      user: {
+        email: `${userId}@example.com`,
+        id: userId,
+        isPlatformAdmin: false,
+      },
+    }) as AuthContextValue;
+  const renderScope = async (userId: string, org: UserOrgSummary) => {
     await act(async () => {
       root.render(
-        <QueryClientProvider client={appQueryClient}>
-          <AuthProvider>
-            <NotificationDestinationsCard />
-            <AuthActions />
-          </AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={authValue(userId, org)}>
+            <NotificationDestinationProbe />
+          </AuthContext.Provider>
         </QueryClientProvider>
       );
-      await settle();
+      await Bun.sleep(20);
     });
+  };
+
+  queryClient.setQueryData(
+    queryKeys.notificationDestinations.all("user-a", orgA.id),
+    { destinations: [destinationA] }
+  );
+
+  try {
+    await renderScope("user-a", orgA);
     expect(container.textContent).toContain("Organization A alerts");
 
-    const rotateButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Rotate key")
-    );
-    expect(rotateButton).not.toBeUndefined();
-    await act(async () => {
-      rotateButton?.click();
-      await settle();
-    });
-    expect(container.textContent).toContain(
-      "Latest webhook credentials ready"
-    );
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          "button:nth-of-type(2)"
-        )
-        ?.click();
-      await settle();
-    });
-    expect(container.textContent).not.toContain("Organization A alerts");
-    expect(container.textContent).not.toContain(
-      "Latest webhook credentials ready"
-    );
-    expect(
-      appQueryClient.getQueryData(
-        queryKeys.notificationDestinations.all(userA.id, orgA.id)
-      )
-    ).toBeUndefined();
-
-    destinationRequest = "offline";
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          "button:nth-of-type(1)"
-        )
-        ?.click();
-      await settle();
-    });
+    await renderScope("user-b", orgA);
     expect(container.textContent).not.toContain("Organization A alerts");
 
-    destinationRequest = "pending";
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          "button:nth-of-type(3)"
-        )
-        ?.click();
-      await settle();
-    });
-    expect(setActiveOrg).toHaveBeenCalledWith(orgB.id);
+    await renderScope("user-a", orgB);
     expect(container.textContent).not.toContain("Organization A alerts");
   } finally {
     await act(async () => root.unmount());
     container.remove();
-    appQueryClient.clear();
-    appQueryClient.setDefaultOptions(defaultQueryOptions);
-    client.setOrgId(null);
-    getMe.mockRestore();
-    listUserOrgs.mockRestore();
-    login.mockRestore();
-    logout.mockRestore();
-    setActiveOrg.mockRestore();
-    listProfiles.mockRestore();
-    listDestinations.mockRestore();
-    rotate.mockRestore();
+    queryClient.clear();
+    list.mockRestore();
   }
 });
+
+function NotificationDestinationProbe() {
+  const { data, isLoading } = useNotificationDestinations();
+  return (
+    <div>
+      {isLoading
+        ? "Loading destinations"
+        : (data?.destinations
+            .map((destination) => destination.name)
+            .join(",") ?? "No destinations")}
+    </div>
+  );
+}

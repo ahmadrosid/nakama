@@ -43,9 +43,9 @@ export const queryKeys = {
   models: ["models"] as const,
   modelsDev: ["modelsDev"] as const,
   notificationDestinations: {
-    root: ["notificationDestinations"] as const,
     all: (userId: string, orgId: string) =>
       ["notificationDestinations", userId, orgId] as const,
+    root: ["notificationDestinations"] as const,
   },
   openRouterModels: ["openRouterModels"] as const,
   orgApiKeys: (orgId: string) => ["orgApiKeys", orgId] as const,

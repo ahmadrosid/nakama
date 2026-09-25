@@ -189,8 +189,7 @@ function LatestSecret({
 
 export function NotificationDestinationsCard() {
   const { activeOrg, user } = useAuth();
-  const sessionKey =
-    user && activeOrg ? `${user.id}:${activeOrg.id}` : "none";
+  const sessionKey = user && activeOrg ? `${user.id}:${activeOrg.id}` : "none";
 
   return <NotificationDestinationsCardContent key={sessionKey} />;
 }
