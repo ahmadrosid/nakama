@@ -488,3 +488,117 @@ test("switching chats does not refetch the profile list", async () => {
     });
   }
 });
+
+test("waits for the active org profile query before selecting a profile", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const previousStorage = globalThis.localStorage;
+  const stored: Record<string, string> = {
+    "nakama:active-chat-profile": "org-a-profile",
+  };
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => stored[key] ?? null,
+      removeItem: (key: string) => {
+        delete stored[key];
+      },
+      setItem: (key: string, value: string) => {
+        stored[key] = value;
+      },
+    },
+  });
+
+  const profiles = Promise.withResolvers<{
+    profiles: Array<{ id: string; name: string }>;
+  }>();
+  const getMe = spyOn(client, "getMe").mockResolvedValue({
+    activeOrgId: "org-b",
+    id: "u1",
+    isPlatformAdmin: false,
+    orgId: "org-b",
+  } as never);
+  const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+    orgs: [{ id: "org-b", name: "Org B", role: "admin" }],
+  } as never);
+  const listProfiles = spyOn(client, "listProfiles").mockImplementation(
+    async () => profiles.promise
+  );
+  const getProfile = spyOn(client, "getProfile").mockResolvedValue({
+    profile: { id: "default", name: "Default", skills: [] },
+  } as never);
+  const getThinkingSettings = spyOn(client, "getThinkingSettings").mockResolvedValue(
+    { effort: "medium", enabled: false } as never
+  );
+  const getSessionMessages = spyOn(client, "getSessionMessages").mockResolvedValue({
+    channel: "web",
+    messageMeta: [],
+    messages: [],
+    model: null,
+    questionnaire: null,
+    todos: [],
+  } as never);
+  const getSessionStatus = spyOn(client, "getSessionStatus").mockResolvedValue({
+    active: false,
+  } as never);
+  const chatSession = client.createChatSession("new-session", "web");
+  const sendStream = spyOn(chatSession, "sendStream").mockResolvedValue("reply");
+  const createSession = spyOn(client, "createSession").mockResolvedValue(
+    chatSession
+  );
+
+  let page!: ChatPageState;
+  function Probe() {
+    page = useChatPage();
+    return null;
+  }
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/chat"]}>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <Probe />
+            </AuthProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    await act(async () => {
+      profiles.resolve({ profiles: [{ id: "default", name: "Default" }] });
+    });
+
+    expect(getProfile.mock.calls[0]?.[0]).toBe("default");
+    expect(stored["nakama:active-chat-profile:org-b"]).toBe("default");
+    expect(stored["nakama:active-chat-profile"]).toBe("org-a-profile");
+
+    await act(async () => {
+      await page.sendMessage("hello");
+    });
+    expect(createSession.mock.calls[0]?.[1]?.profileId).toBe("default");
+  } finally {
+    await act(async () => root.unmount());
+    queryClient.clear();
+    for (const mock of [
+      getMe,
+      listUserOrgs,
+      listProfiles,
+      getProfile,
+      getThinkingSettings,
+      getSessionMessages,
+      getSessionStatus,
+      sendStream,
+      createSession,
+    ]) {
+      mock.mockRestore();
+    }
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousStorage,
+    });
+  }
+});

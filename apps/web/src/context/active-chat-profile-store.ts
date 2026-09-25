@@ -20,7 +20,7 @@ export interface ActiveChatProfileState {
 export const useActiveChatProfileStore = create<ActiveChatProfileState>(
   (set, get) => ({
     orgId: null,
-    profileId: readStoredActiveChatProfileId(),
+    profileId: null,
     setProfileId: (profileId) => {
       writeStoredActiveChatProfileId(profileId, get().orgId);
       set({ profileId });

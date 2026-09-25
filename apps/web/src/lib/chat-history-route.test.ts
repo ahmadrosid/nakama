@@ -240,10 +240,11 @@ describe("chat history route helpers", () => {
     });
 
     try {
-      writeStoredActiveChatProfileId("super");
+      writeStoredActiveChatProfileId("super", "org-a");
 
       expect(
         resolveRecentChatsProfileId({
+          orgId: "org-a",
           profiles,
           search: "",
         })
@@ -285,7 +286,7 @@ describe("chat history route helpers", () => {
     expect(resolveDefaultProfileId([{ id: "alpha" }])).toBe("alpha");
   });
 
-  test("readInitialDraftChatProfileId restores stored selection on refresh", () => {
+  test("readInitialDraftChatProfileId restores the active org selection", () => {
     const store = new Map<string, string>();
     const previousLocalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -302,22 +303,33 @@ describe("chat history route helpers", () => {
     });
 
     try {
-      writeStoredActiveChatProfileId("super");
+      writeStoredActiveChatProfileId("super", "org-a");
+      store.set("nakama:active-chat-profile", "global-profile");
 
       expect(
         readInitialDraftChatProfileId({
+          orgId: "org-b",
+          search: "",
+        })
+      ).toBe("");
+
+      expect(
+        readInitialDraftChatProfileId({
+          orgId: "org-a",
           search: "",
         })
       ).toBe("super");
 
       expect(
         readInitialDraftChatProfileId({
+          orgId: "org-a",
           search: "?new=1&profile=default",
         })
       ).toBe("default");
 
       expect(
         readInitialDraftChatProfileId({
+          orgId: "org-a",
           routeProfileId: "session-profile",
           search: "",
         })
