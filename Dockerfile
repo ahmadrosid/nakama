@@ -1,8 +1,12 @@
 # Nakama — one container: API, web dashboard, automation + task workers
 # Build & run: ./scripts/docker-build-run.sh
 
+# Multi-arch index digest for oven/bun:1.4-slim. Refresh with:
+#   docker buildx imagetools inspect oven/bun:1.4-slim
+ARG BUN_BASE_IMAGE=oven/bun:1.4-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61
+
 # --- Build architecture-independent web and JavaScript bundles once ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4-slim AS web-builder
+FROM --platform=$BUILDPLATFORM ${BUN_BASE_IMAGE} AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -28,7 +32,7 @@ COPY --from=web-builder /app/apps/platform/whatsapp/dist /app/apps/platform/what
 COPY --from=web-builder /app/apps/platform/discord/dist /app/apps/platform/discord/dist
 COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/dist
 
-FROM oven/bun:1.4-slim AS runtime-deps
+FROM ${BUN_BASE_IMAGE} AS runtime-deps
 RUN mkdir -p /runtime-deps \
   && printf '{"private":true}\n' > /runtime-deps/package.json \
   && cd /runtime-deps \
@@ -37,7 +41,7 @@ RUN mkdir -p /runtime-deps \
     @vscode/ripgrep@1.18.0 @firecrawl/anydoc@0.1.3
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.4-slim AS runtime
+FROM ${BUN_BASE_IMAGE} AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
