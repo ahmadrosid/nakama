@@ -35,10 +35,12 @@ Slack replies are text only for now. Images, files, and saved artifacts are not 
 
 Nakama gives you an app manifest so you do not have to set scopes and events by hand.
 
-1. Open **Agents → your agent → Connections → Slack** for the agent that should answer in Slack (you need to be an org admin)
+1. Open **Agent → your agent → Channels → Slack** for the agent that should answer in Slack (you need to be an org admin)
 2. Click **Copy manifest**
 3. Open [Slack apps](https://api.slack.com/apps?new_app=1), choose **From a manifest**, pick your workspace, and paste the manifest
 4. Review the summary and click **Create**
+
+The channel settings route is `/profiles/:profileId/channels/slack`.
 
 The manifest turns on Socket Mode, the app's **Messages** tab, and these bot scopes:
 
@@ -64,7 +66,7 @@ If your workspace requires admin approval for new apps, the install step sends a
 
 ## Step 3: Save in Nakama
 
-On **Agents → your agent → Connections → Slack**:
+On **Agent → your agent → Channels → Slack**:
 
 1. Paste the bot token and the app token
 2. Click **Save**. Nakama checks both tokens with Slack before saving, including that both come from the same Slack app, and shows Slack's error if one is wrong.
@@ -75,7 +77,7 @@ These settings belong to this agent. Another agent sees Slack as not connected u
 
 ## Step 4: Start the Slack bridge
 
-Use the worker controls on **Agents → your agent → Connections → Slack** to start the worker. The agent's Connections list shows Slack as **Connected** once the bridge is running and at least one member can chat.
+Use the worker controls on **Agent → your agent → Channels → Slack** to start the worker. The agent's Channels list shows Slack as **Connected** once the bridge is running and at least one member can chat.
 
 For local development only, you can instead run `bun run dev:slack` from the repo root.
 
@@ -93,7 +95,7 @@ A code works once. Click **New code** for the next person; the card updates by i
 
 ## Optional: Let everyone in the workspace chat
 
-Pairing members one by one does not scale to a whole team. Turn on **Everyone in the workspace** on **Agents → your agent → Connections → Slack** and click **Save**: every full member of your Slack workspace can then use the app with no pairing.
+Pairing members one by one does not scale to a whole team. Turn on **Everyone in the workspace** on **Agent → your agent → Channels → Slack** and click **Save**: every full member of your Slack workspace can then use the app with no pairing.
 
 What members do: nothing to set up. They open **Nakama** under **Apps** and send a message, or `@mention` Nakama in a channel the app was added to.
 
@@ -114,7 +116,7 @@ Everyone who can chat reaches this agent and its tools like a paired member does
 Instead of pairing, you can allow Slack members up front:
 
 1. In Slack, open the member's profile, click **⋯**, and choose **Copy member ID**
-2. On **Agents → your agent → Connections → Slack**, paste the ID into **Allowed users** and press **Enter**. It turns into a badge; paste several IDs at once and each becomes its own badge. Click **×** on a badge to remove it.
+2. On **Agent → your agent → Channels → Slack**, paste the ID into **Allowed users** and press **Enter**. It turns into a badge; paste several IDs at once and each becomes its own badge. Click **×** on a badge to remove it.
 3. Click **Save**
 
 Member IDs start with `U` or `W`, for example `U01ABCDEF`. Display names do not work here.
@@ -191,7 +193,7 @@ The app token is missing the `connections:write` scope, or Socket Mode is off. G
 
 Check these first:
 
-1. The worker is running on **Agents → your agent → Connections → Slack**
+1. The worker is running on **Agent → your agent → Channels → Slack**
 2. The Nakama server is running
 3. The Slack member is paired or listed under **Allowed users**
 4. Only one Slack bridge worker runs for this app

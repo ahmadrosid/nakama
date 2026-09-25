@@ -19,9 +19,9 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 ## How to use them
 
-**1. Install a package (platform admin).** Open **System → Plugins**, enter the public npm package name and exact version, choose **Preview package**, review what it declares, and install it. Installation stores the package. It does not run plugin code and does not turn the plugin on for any organization.
+**1. Install a package (platform admin).** Open **Control center → Agent tools → Plugins**, enter the public npm package name and exact version, choose **Preview package**, review what it declares, and install it. Installation stores the package. It does not run plugin code and does not turn the plugin on for any organization.
 
-**2. Activate it in the organization (org admin).** Still on **System → Plugins**, add the plugin to the active organization, then enable it. Enable is what creates the organization's data store and makes the page available.
+**2. Activate it in the organization (org admin).** Stay in **Control center → Agent tools → Plugins**, add the plugin to the active organization, then enable it. Enable is what creates the organization's data store and makes the page available.
 
 **3. Assign capabilities (platform admin).** Use the existing profile skill and tool pickers. Plugin items show as owned by the plugin. Assign them the same way you assign other skills and tools.
 
@@ -33,12 +33,12 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 Use Supermemory for the agent memory, shared organization memory, and knowledge base you already use in Nakama. Your existing memory tools, approval flow, and knowledge uploads stay in place.
 
-1. An org admin opens **System → Plugins → Official plugins → Supermemory → Install**.
+1. An org admin opens **Control center → Agent tools → Plugins → Official plugins → Supermemory → Install**.
 2. Enable the plugin. Nakama automatically uses your default OpenAI provider, or the first saved OpenAI provider if your default uses another service. If you use a separately managed server, open **Supermemory → Settings**, save its URL and API token, and use **Check saved connection**.
 3. Keep using your agent's memory and knowledge base. Existing content moves to Supermemory when it is next read or searched; new knowledge uploads also sync automatically. Shared organization facts still require the usual approval before they are saved.
 4. Ask your agent to search its knowledge base using everyday language. Explicit regular-expression searches still use the local extracted text.
 
-The managed worker automatically reuses a saved OpenAI provider’s API key, URL, and default model for extraction, with local embeddings. Add an OpenAI provider in **Settings** if none is available. ChatGPT subscription connections are not supported by this worker. Restart Supermemory in **Workers** after adding or changing your OpenAI provider. A changed provider configuration reindexes existing content on its next access, including failed documents. Verification makes a small API request; extraction and reindexing can incur provider charges. For a separately managed [Supermemory server](https://supermemory.ai/docs/self-hosting/quickstart#bunx), use its [provider settings](https://supermemory.ai/docs/self-hosting/configuration) and [embedding settings](https://supermemory.ai/docs/self-hosting/embeddings). Content processed by OpenAI leaves your local server.
+The managed worker automatically reuses a saved OpenAI provider’s API key, URL, and default model for extraction, with local embeddings. Add an OpenAI provider in **Control center → Agent tools → AI Providers** if none is available. ChatGPT subscription connections are not supported by this worker. Restart Supermemory in **Control center → Workspace → Workers** after adding or changing your OpenAI provider. A changed provider configuration reindexes existing content on its next access, including failed documents. Verification makes a small API request; extraction and search also require the configured provider.
 
 Nakama keeps local copies for recovery. Disabling the plugin returns your existing tools to those copies. Before the managed worker first becomes ready, memory stays local. After migration starts, an unavailable backend reports an error; restart the worker or disable the plugin to continue locally. Search can ask you to retry while new content is indexing.
 
@@ -67,7 +67,7 @@ An installed plugin is trusted code. Approving a package lets that code run with
 
 ## Backup
 
-Plugin data is included in a full **Settings → Export ZIP** backup as a consistent snapshot. Restore leaves plugins disabled until an admin enables them again. If a restored package no longer matches its stored hash, that release stays unavailable.
+Plugin data is included in a full **Control center → Workspace → Settings → Export ZIP** backup as a consistent snapshot. Restore leaves plugins disabled until an admin enables them again. If a restored package no longer matches its stored hash, that release stays unavailable.
 
 See [Backup and restore](/backup-restore).
 

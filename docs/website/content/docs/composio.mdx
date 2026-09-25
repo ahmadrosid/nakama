@@ -26,7 +26,7 @@ You do not need to set anything up inside Composio beyond creating the account. 
 
 Take the **project API key**. Composio also has an *MCP consumer key* that starts with `ck_`, found under AI Clients. That one looks like a key and does not work here, so if Nakama rejects what you pasted, this is usually why.
 
-**2. Paste it into Nakama.** As a platform admin, open **Integrations**, then **Composio**, paste the key in the **Project API key** box, and press **Save**. The project key is shared by every organization on this installation.
+**2. Paste it into Nakama.** As a platform admin, open **Control center → Integrations → Composio**, paste the key in the **Project API key** box, and press **Save**. The project key is shared by every organization on this installation.
 
 ![The Composio page in Nakama before a key is saved, with the Project API key box and a link to the dashboard](/screenshots/composio-api-key.png)
 
@@ -38,7 +38,7 @@ For a container or secrets manager, keep the key outside Nakama's data directory
 COMPOSIO_API_KEY_FILE=/run/secrets/composio_api_key
 ```
 
-You can also set `COMPOSIO_API_KEY` directly. The direct value takes priority over the mounted file, and either one takes priority over a key saved through **Integrations**.
+You can also set `COMPOSIO_API_KEY` directly. The direct value takes priority over the mounted file, and either one takes priority over a key saved through **Control center → Integrations → Composio**.
 
 **3. Enable the app you want.** As an org admin, find the app and press **Enable**. This decides what your organisation is allowed to use. It does not touch anyone's account yet.
 
@@ -62,10 +62,10 @@ That is the whole setup. Ask the agent to check your inbox and it will.
 
 | What you see | What it means | What to do |
 | --- | --- | --- |
-| The agent says it cannot reach your account | You are signed in to Nakama as someone who has not connected that app yet | Open Integrations and press Connect |
-| The agent never mentions the app at all | The app was enabled, but not given to this agent | Press the profiles button on the app's row and tick that agent |
-| Composio says "not reachable" on the Integrations card | The API key is saved but Composio is not answering | Check the key, and check that the server has internet access |
-| On Telegram or WhatsApp, the agent says it cannot start the sign-in | The sign-in link would point at the server's own machine, which your phone cannot open | Set a public web address in Settings, then restart the channel |
+| The agent says it cannot reach your account | You are signed in to Nakama as someone who has not connected that app yet | Open **Control center → Integrations → Composio** and press **Connect** |
+| The agent never mentions the app at all | The app was enabled, but not given to this agent | Press the agent button on the app's row and select that agent |
+| Composio says "not reachable" on the Composio card | The API key is saved but Composio is not answering | Check the key, and check that the server has internet access |
+| On Telegram or WhatsApp, the agent says it cannot start the sign-in | The sign-in link would point at the server's own machine, which your phone cannot open | Set **Control center → Workspace → Settings → Public web URL**, then restart the channel |
 
 ## Who can do what
 
@@ -85,7 +85,7 @@ Disabling an app for the organisation stops it for everybody at once. Disconnect
 For anyone who wants the mechanics rather than the steps.
 
 - Nakama talks to Composio through the `@composio/core` SDK, and the agent reaches the tools over an MCP session that Composio hosts.
-- An API key saved through **Integrations** is stored as `api_key` in `~/.nakama/composio/config.ini` on the server. `COMPOSIO_API_KEY` and `COMPOSIO_API_KEY_FILE` keep it outside that file.
+- An API key saved through **Control center → Integrations → Composio** is stored as `api_key` in `~/.nakama/composio/config.ini` on the server. `COMPOSIO_API_KEY` and `COMPOSIO_API_KEY_FILE` keep it outside that file.
 - Nakama creates the Composio auth config for a toolkit the first time somebody connects it, which is why the Google Cloud project and consent screen walkthrough in Composio's own documentation does not apply here.
 - An agent never sees hundreds of tools at once. It gets two, `composio__search_actions` to find an action and `composio__invoke_action` to run it, so the prompt stays the same size no matter how large the toolkit is. When an account is not connected it also gets `composio__connect_account`, which produces a sign-in link the agent can paste into the reply.
 - Each member's connection lives in `composio_user_connections`, and the Composio user id is `nakama:user:{userId}`. Web chat resolves tools against the connection of the person talking. On Telegram, WhatsApp, Discord, and CLI, it uses the connection of the earliest org admin.
@@ -95,9 +95,9 @@ For anyone who wants the mechanics rather than the steps.
 - Everything is scoped to one organisation. Enable the app and assign the agent in the same org your Telegram `/org` selection points at.
 - `GET /health` reports whether a key is saved, and always reports `composioAvailable: false` because it runs local checks only. Reachability is on `GET /v1/system/status`.
 
-If you connected apps before per-member connections existed, those connections move to the first org admin on startup. Everyone else connects their own account from Integrations.
+If you connected apps before per-member connections existed, those connections move to the first org admin on startup. Everyone else connects their own account from **Control center → Integrations → Composio**.
 
 ## Related docs
 
 - [MCP servers](/mcp), for connecting an MCP server yourself, which is separate from Composio
-- [Integrations](/integrations), for the other channels and bridges
+- [Integrations](/integrations), for the other Control center integrations

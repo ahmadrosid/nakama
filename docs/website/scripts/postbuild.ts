@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildLlmsTxt } from "../lib/site-meta";
 
@@ -21,6 +21,40 @@ function mdxPathToRelativePath(relativeMdxPath: string): string {
     return dir ? `${dir}/index.md` : "index.md";
   }
   return `${withoutExt}.md`;
+}
+
+async function validateInternalLinks(
+  mdxFile: string,
+  source: string,
+  documentationRoutes: ReadonlySet<string>
+): Promise<void> {
+  const missing: string[] = [];
+  const linkPattern = /\[[^\]]*]\(([^)]+)\)/g;
+
+  for (const match of source.matchAll(linkPattern)) {
+    const href = (match[1].trim().split(/\s+/, 1)[0] ?? "").replace(
+      /^<|>$/g,
+      ""
+    );
+    if (!href.startsWith("/") || href.startsWith("//")) {
+      continue;
+    }
+
+    const route = (href.split(/[?#]/, 1)[0] ?? "").replace(/^\/+|\/+$/g, "");
+    if (!route || route === "llms.txt" || documentationRoutes.has(route)) {
+      continue;
+    }
+
+    try {
+      await access(path.join(PUBLIC_DIR, route));
+    } catch {
+      missing.push(`${mdxFile}: ${href}`);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Missing internal documentation paths:\n${missing.join("\n")}`);
+  }
 }
 
 function stripFrontmatter(content: string): string {
@@ -117,6 +151,15 @@ async function main() {
   await cleanGeneratedMirrors();
 
   const mdxFiles = await walkMdxFiles(CONTENT_DIR);
+  const documentationRoutes = new Set([
+    ...mdxFiles.map((mdxFile) =>
+      mdxPathToRelativePath(mdxFile)
+        .replace(/\.md$/, "")
+        .replace(/(^|\/)index$/, "")
+        .replace(/\/$/, "")
+    ),
+    "getting-started",
+  ]);
   const pages = mdxFiles.map(mdxPathToRelativePath);
 
   for (const mdxFile of mdxFiles) {
@@ -124,6 +167,7 @@ async function main() {
     const relativePath = mdxPathToRelativePath(mdxFile);
     const outputPath = path.join(MIRRORS_DIR, relativePath);
     const raw = await readFile(sourcePath, "utf8");
+    await validateInternalLinks(mdxFile, raw, documentationRoutes);
     const markdown = stripFrontmatter(raw);
 
     await mkdir(path.dirname(outputPath), { recursive: true });

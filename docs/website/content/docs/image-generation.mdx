@@ -10,9 +10,9 @@ An agent with the `generate_image` tool can produce an image from a text prompt.
 Two things are required.
 
 1. **An OpenAI provider.** Image generation runs against OpenAI's Images API, so the instance needs a provider of type `openai` with a working key. Nakama uses your default provider when it is an OpenAI one, otherwise the first OpenAI provider configured. The key comes from that provider, or from `OPENAI_API_KEY`.
-2. **A model, set in Settings.** Pick **Image generation model** in the same card group as the vision and transcription models. The only allowlisted choice today is `gpt-image-2`.
+2. **A model, set in AI Providers.** Pick **Image generation model** in the same card group as the vision and transcription models. The only allowlisted choice today is `gpt-image-2`.
 
-Until a model is set, the tool refuses with `Configure an image generation model in Settings before generating images.` The card shows **Not configured** in that state, and **No OpenAI provider** when the provider is the missing half.
+Until a model is set, the tool refuses to generate images. The card shows **Not configured** in that state, and **No OpenAI provider** when the provider is the missing half.
 
 Assign the `generate_image` tool to a profile the same way as any other builtin. See [Builtin tools](/builtin-tools).
 
@@ -26,7 +26,7 @@ Ask in plain language. The agent calls `generate_image` with a prompt and, optio
 | `filename` | no | Output name under `artifacts/`, defaults to a generated `.png` |
 | `size` | no | `1024x1024` (default), `1024x1536`, `1536x1024`, or `auto` |
 
-The model is deliberately **not** a parameter. It comes from Settings, so a prompt cannot talk the agent into a model the workspace has not allowlisted. An unsupported size is rejected with the allowed list rather than silently rounded to the nearest one.
+The model is deliberately **not** a parameter. It comes from **AI Providers**, so a prompt cannot talk the agent into a model the workspace has not allowlisted. An unsupported size is rejected with the allowed list rather than silently rounded to the nearest one.
 
 ## Where the image goes
 
@@ -36,11 +36,11 @@ Each generated image is written under the profile workspace:
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
 ```
 
-The image appears in **Files** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which is what makes it render inline in the conversation rather than only in the Files list. Web chat and the channel bridges both recognize `generate_image` output, so a Telegram or Discord turn gets the picture too.
+The image appears in **Browse Files → Artifacts** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which is what makes it render inline in the conversation rather than only in the Files list. Web chat and the channel bridges both recognize `generate_image` output, so a Telegram or Discord turn gets the picture too.
 
 Attachments are capped at 5 MB.
 
-See [Artifacts and files](/artifacts) for previewing, editing, and publishing what comes out.
+See [Browse Files and artifacts](/artifacts) for previewing, editing, and publishing what comes out.
 
 ## Cost
 
