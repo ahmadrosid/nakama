@@ -89,7 +89,7 @@ export class RetryableToolError extends Error {
  * are replayed. Timeouts, exit codes other than {@link TOOL_RETRYABLE_EXIT_CODE},
  * validation failures, and plain `Error` throws are permanent.
  */
-export function isRetryableToolError(error: unknown): boolean {
+function isRetryableToolError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
   }
