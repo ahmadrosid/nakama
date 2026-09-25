@@ -1216,6 +1216,15 @@ export interface DatabaseAdapter {
     userId: string,
     revokedAt: string
   ): Promise<boolean>;
+  /**
+   * Every active browser session except the caller's current session. A null
+   * session id revokes all of them for non-browser authentication modes.
+   */
+  revokeBrowserSessionsForUserExcept(
+    userId: string,
+    sessionId: string | null,
+    revokedAt: string
+  ): Promise<number>;
   revokeBrowserSessionsForUser(
     userId: string,
     revokedAt: string
