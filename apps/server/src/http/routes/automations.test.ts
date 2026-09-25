@@ -8,42 +8,43 @@ import {
   getTelegramConfigDir,
   getTelegramConfigPath,
 } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+} from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
 import { createHonoApp } from "../app";
 import { seedOrgForUser } from "../test-org-helpers";
 import {
+  type AppFetch,
   loginUserSession,
   setupFreshInstallSession,
 } from "../test-session-helpers";
+import type { ServerOptions } from "../types";
 
 const PROFILE_ID = "profile_default";
 const MEMBER_EMAIL = "member@example.com";
 const MEMBER_PASSWORD = "password123";
 
-interface RouteTestOptions {
-  agent: unknown;
+interface RouteTestFixture {
+  app: ReturnType<typeof createHonoApp>;
   authService: AuthService;
   automationService: AutomationService;
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>;
-  mcpService: unknown;
-  orgService: OrgService;
-  systemStatus: unknown;
-  webDistDir: null;
-  workerManager: unknown;
+  databaseAdapter: DatabaseAdapter;
 }
 
-function createServerOptions(): RouteTestOptions {
+function createFixture(): RouteTestFixture {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   const orgService = new OrgService(databaseAdapter, authService);
   const automationService = new AutomationService(databaseAdapter, {
     getUserTimezone: async () => "UTC",
   });
-
-  return {
+  // Only the automation surface is exercised; the remaining collaborators are
+  // unreachable stubs, so they are cast once instead of fully constructed.
+  const options = {
     agent: { providerConfigured: true, runAutomation: async () => ({}) },
     authService,
     automationService,
@@ -53,15 +54,22 @@ function createServerOptions(): RouteTestOptions {
     systemStatus: {},
     webDistDir: null,
     workerManager: {},
+  } as unknown as ServerOptions;
+
+  return {
+    app: createHonoApp(options),
+    authService,
+    automationService,
+    databaseAdapter,
   };
 }
 
 async function seedProfile(
-  options: RouteTestOptions,
+  fixture: RouteTestFixture,
   orgId: string
 ): Promise<void> {
   const now = new Date().toISOString();
-  await options.databaseAdapter.upsertProfile({
+  await fixture.databaseAdapter.upsertProfile({
     createdAt: now,
     id: PROFILE_ID,
     isDefault: true,
@@ -75,32 +83,44 @@ async function seedProfile(
 }
 
 /** A real signed-in member: the install owner is always an org admin. */
-async function loginMember(
-  options: RouteTestOptions,
-  app: ReturnType<typeof createHonoApp>
-) {
+async function loginMember(fixture: RouteTestFixture) {
+  // Hono's `fetch` is structurally narrower than the DOM `fetch` the shared
+  // session helper declares; the runtime shape is identical.
+  const app = fixture.app as unknown as AppFetch;
   const install = await setupFreshInstallSession(
     app,
-    options.databaseAdapter,
+    fixture.databaseAdapter,
     "owner@example.com"
   );
+
+  if (!install.orgId) {
+    throw new Error("Install session did not return an org.");
+  }
+
   const now = new Date().toISOString();
-  await options.databaseAdapter.createUser({
+  await fixture.databaseAdapter.createUser({
     createdAt: now,
     email: MEMBER_EMAIL,
     id: "user_route_member",
-    passwordHash: await options.authService.hashPassword(MEMBER_PASSWORD),
+    passwordHash: await fixture.authService.hashPassword(MEMBER_PASSWORD),
     updatedAt: now,
   });
   await seedOrgForUser(
-    options.databaseAdapter,
+    fixture.databaseAdapter,
     MEMBER_EMAIL,
     install.orgId,
     "member"
   );
-  await seedProfile(options, install.orgId);
+  await seedProfile(fixture, install.orgId);
 
-  return loginUserSession(app, MEMBER_EMAIL, MEMBER_PASSWORD, install.orgId);
+  const session = await loginUserSession(
+    app,
+    MEMBER_EMAIL,
+    MEMBER_PASSWORD,
+    install.orgId
+  );
+
+  return { orgId: install.orgId, session };
 }
 
 async function writeChannelConfigs(orgId: string): Promise<string> {
@@ -138,10 +158,10 @@ function automationBody(delivery: unknown): string {
 describe("automation destination authorization over HTTP", () => {
   test("a member cannot create an automation aimed at a foreign destination", async () => {
     const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await loginMember(options, app);
-    const configDir = await writeChannelConfigs(session.orgId);
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+    const app = fixture.app;
+    const configDir = await writeChannelConfigs(orgId);
 
     try {
       for (const delivery of [
@@ -191,14 +211,14 @@ describe("automation destination authorization over HTTP", () => {
 
   test("a member cannot repoint an existing automation at a new destination", async () => {
     const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await loginMember(options, app);
-    const configDir = await writeChannelConfigs(session.orgId);
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+    const app = fixture.app;
+    const configDir = await writeChannelConfigs(orgId);
 
     try {
-      const created = await options.automationService.create(
-        session.orgId,
+      const created = await fixture.automationService.create(
+        orgId,
         {
           delivery: { channel: "telegram", chatId: 111 },
           description: "Report",
