@@ -805,8 +805,9 @@ export class OrgMemoryService {
     content: string,
     change: OrgMemoryChangeContext
   ): Promise<void> {
-    const current = await this.getMemory(orgId);
-    if (current === content) {
+    const current = (await this.getMemory(orgId)).trim();
+    const normalized = content.trim();
+    if (current === normalized) {
       return;
     }
 
