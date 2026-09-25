@@ -1188,11 +1188,14 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
     }
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
+    }
+    assertBrowserCsrf(c.req.raw, auth, authService);
     const policy = await loadMfaPolicy();
     if (!(policy.enabled && policy.keyConfigured)) {
       return errorResponse("MFA is not enabled.", 400);
     }
-    assertBrowserCsrf(c.req.raw, auth, authService);
     const secret = generateTotpSecret();
     await databaseAdapter.setPendingMfaSecret(
       auth.user.id,
@@ -1213,6 +1216,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const auth = getRequestAuth(c);
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
+    }
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
     }
     assertBrowserCsrf(c.req.raw, auth, authService);
     const body = await readJson<{ code: string }>(
@@ -1256,6 +1262,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const auth = getRequestAuth(c);
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
+    }
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
     }
     assertBrowserCsrf(c.req.raw, auth, authService);
     const body = await readJson<{ backupCode?: string; code?: string }>(
