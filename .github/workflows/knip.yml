@@ -41,7 +41,7 @@ jobs:
 
       - name: Install dependencies
         if: github.event_name == 'pull_request'
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Run knip
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}

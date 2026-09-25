@@ -29,7 +29,7 @@
     "doctor": "npx react-doctor@latest",
     "dupes": "bunx jscpd@4 --format typescript,tsx",
     "fix": "ultracite fix",
-    "postinstall": "bun install --cwd docs/website",
+    "postinstall": "bun install --cwd docs/website --frozen-lockfile --ignore-scripts",
     "knip": "knip",
     "prepare": "husky",
     "preview:docs": "bun run --cwd docs/website preview",
