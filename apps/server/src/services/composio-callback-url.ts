@@ -130,10 +130,53 @@ function resolveRequestSelfOrigin(request?: Request): string | undefined {
   } catch {}
 }
 
-export async function persistWebPublicUrl(input: string): Promise<string> {
+/**
+ * The host a persisted callback base may name: the env override, the host the
+ * request landed on, or a loopback origin. The saved value is deliberately
+ * absent — it is the thing being checked, and a poisoned one would vouch for
+ * itself. Deployments that serve the web app from another host than the API
+ * set `NAKAMA_WEB_PUBLIC_URL`, which is what that override is for.
+ */
+function isDeploymentOrigin(candidate: string, request?: Request): boolean {
+  const envOverride =
+    process.env.NAKAMA_WEB_PUBLIC_URL?.trim() ||
+    process.env.NAKAMA_PUBLIC_URL?.trim();
+
+  if (envOverride && sameHost(candidate, envOverride)) {
+    return true;
+  }
+
+  if (isLoopbackComposioCallbackBaseUrl(candidate)) {
+    return true;
+  }
+
+  return (
+    Boolean(request) && sameHost(candidate, resolveRequestSelfOrigin(request))
+  );
+}
+
+/**
+ * Persist the install-wide callback/share base. The value lands in the
+ * `redirect_uri` an OAuth state is delivered to, so it only ever names the
+ * deployment's own origin.
+ */
+export async function persistWebPublicUrl(
+  input: string,
+  request?: Request
+): Promise<string> {
   const trimmed = input.trim();
   if (!(trimmed && isValidBaseUrl(trimmed))) {
-    throw new Error("webPublicUrl must be a valid http or https URL.");
+    throw new NakamaApiError(
+      "webPublicUrl must be a valid http or https URL.",
+      400
+    );
+  }
+
+  if (!isDeploymentOrigin(trimmed, request)) {
+    throw new NakamaApiError(
+      "webPublicUrl must use this deployment's own origin. Set NAKAMA_WEB_PUBLIC_URL to serve the web app from another host.",
+      400
+    );
   }
 
   return saveUserWebPublicUrl(normalizeBaseUrl(trimmed));
