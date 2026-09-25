@@ -6,6 +6,7 @@ description: Read and manage Google Meet capture sessions started from the Chrom
 Use the Google Meet plugin tools only for meetings the user asks you to attend.
 The Chrome extension starts capture. The agent can check progress, read the transcript, or stop an active capture.
 When the user asks about a Google Meet transcript, use the meeting and transcript actions. Do not claim that the agent can join or start Chrome capture.
+When the user asks to import a past recording, use `plugin_google_meet__recordings` to show their Gmail-linked Drive recordings. Import only the recording they choose with `plugin_google_meet__import-recording`; the call can take several minutes. Both Gmail and Google Drive must be connected in Customize → Connections, and an admin must save the OpenAI key in Google Meet Settings. Recorded imports use OpenAI `whisper-1` without speaker labels.
 Tell the user to notify participants that meeting audio will be sent to the configured transcription provider.
 
 1. Ask the user to start capture from the Chrome extension. Read `plugin_google_meet__meetings` to find the resulting meeting ID.

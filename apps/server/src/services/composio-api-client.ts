@@ -211,7 +211,24 @@ export class ComposioApiClient {
   private readonly composio: Composio;
 
   constructor(apiKey: string) {
-    this.composio = new Composio({ apiKey });
+    this.composio = new Composio({
+      apiKey,
+      toolkitVersions: { gmail: "latest", googledrive: "latest" },
+    });
+  }
+
+  async executeTool(
+    slug: string,
+    userId: string,
+    connectedAccountId: string,
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    return this.composio.tools.execute(slug, {
+      arguments: args,
+      connectedAccountId,
+      dangerouslySkipVersionCheck: true,
+      userId,
+    });
   }
 
   async listCatalogToolkits(options?: {

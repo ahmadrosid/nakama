@@ -94,6 +94,177 @@ export class ComposioService {
     private readonly authService: AuthService
   ) {}
 
+  private async meetAccounts(orgId: string, userId: string) {
+    const actingUserId = await this.resolveComposioActingUserId(orgId, userId);
+    const toolkits =
+      await this.databaseAdapter.listComposioToolkitsForOrg(orgId);
+    const connections =
+      await this.databaseAdapter.listComposioUserConnectionsForUser(
+        orgId,
+        actingUserId
+      );
+    const account = (slug: string) => {
+      const toolkit = toolkits.find(
+        (item) => item.toolkitSlug === slug && item.status === "enabled"
+      );
+      const connection = connections.find(
+        (item) => item.toolkitId === toolkit?.id && item.status === "connected"
+      );
+      return connection?.connectedAccountId ?? null;
+    };
+    return {
+      actingUserId: composioUserId(actingUserId),
+      drive: account("googledrive"),
+      gmail: account("gmail"),
+    };
+  }
+
+  async listMeetRecordings(orgId: string, userId: string) {
+    const accounts = await this.meetAccounts(orgId, userId);
+    if (!(accounts.gmail && accounts.drive)) {
+      return {
+        driveConnected: !!accounts.drive,
+        gmailConnected: !!accounts.gmail,
+        recordings: [],
+      };
+    }
+    const client = await this.getApiClient();
+    if (!client) {
+      throw new NakamaApiError(
+        "Configure Composio before importing recordings.",
+        400
+      );
+    }
+    const result = unwrapMeetToolResult(
+      await client.executeTool(
+        "GMAIL_FETCH_EMAILS",
+        accounts.actingUserId,
+        accounts.gmail,
+        {
+          include_payload: true,
+          max_results: 10,
+          query:
+            'subject:("Meeting records" OR "Meeting recording" OR "Meet Recording")',
+          verbose: true,
+        }
+      )
+    );
+    const messages = findMeetMessages(result).slice(0, 10);
+    const recordings: Array<{
+      fileId: string;
+      messageId: string;
+      name: string;
+      size: number;
+      date: string;
+    }> = [];
+    const seen = new Set<string>();
+    for (const message of messages) {
+      const messageId = meetString(message.messageId ?? message.id);
+      if (!messageId) {
+        continue;
+      }
+      let full: unknown;
+      try {
+        full = unwrapMeetToolResult(
+          await client.executeTool(
+            "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
+            accounts.actingUserId,
+            accounts.gmail,
+            { format: "full", message_id: messageId }
+          )
+        );
+      } catch {
+        continue;
+      }
+      for (const fileId of extractMeetDriveIds(full)) {
+        if (seen.has(fileId)) {
+          continue;
+        }
+        seen.add(fileId);
+        let metadata: Record<string, unknown>;
+        try {
+          const value = unwrapMeetToolResult(
+            await client.executeTool(
+              "GOOGLEDRIVE_GET_FILE_METADATA",
+              accounts.actingUserId,
+              accounts.drive,
+              { fields: "id,name,mimeType,size", fileId }
+            )
+          );
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            continue;
+          }
+          metadata = value as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        const name = meetString(metadata.name ?? metadata.title);
+        const mimeType = meetString(metadata.mimeType);
+        const size = metadata.size == null ? 0 : Number(metadata.size);
+        if (
+          !(
+            name &&
+            name.length <= 255 &&
+            !/[\\/\x00-\x1f]/.test(name) &&
+            (mimeType.startsWith("video/") ||
+              /\.(mp4|mov|webm|mkv|m4v)$/i.test(name)) &&
+            Number.isSafeInteger(size) &&
+            size >= 0
+          )
+        ) {
+          continue;
+        }
+        recordings.push({
+          date: meetString(
+            message.messageTimestamp ?? message.internalDate ?? message.date
+          ),
+          fileId,
+          messageId,
+          name,
+          size,
+        });
+      }
+    }
+    return { driveConnected: true, gmailConnected: true, recordings };
+  }
+
+  async downloadMeetRecording(
+    orgId: string,
+    userId: string,
+    messageId: string,
+    fileId: string
+  ) {
+    const listed = await this.listMeetRecordings(orgId, userId);
+    const recording = listed.recordings.find(
+      (item) => item.messageId === messageId && item.fileId === fileId
+    );
+    if (!recording) {
+      throw new NakamaApiError(
+        "Recording not found in your connected accounts.",
+        404
+      );
+    }
+    if (recording.size > 1024 ** 3) {
+      throw new NakamaApiError("Recording is larger than 1 GiB.", 400);
+    }
+    const accounts = await this.meetAccounts(orgId, userId);
+    const client = await this.getApiClient();
+    if (!(client && accounts.drive)) {
+      throw new NakamaApiError("Google Drive is not connected.", 400);
+    }
+    const result = unwrapMeetToolResult(
+      await client.executeTool(
+        "GOOGLEDRIVE_DOWNLOAD_FILE",
+        accounts.actingUserId,
+        accounts.drive,
+        {
+          file_id: fileId,
+        }
+      )
+    );
+    return { file: result, recording };
+  }
+
   reloadConfiguration(): void {
     this.apiClientCache = null;
     this.reachabilityCache = null;
@@ -1009,4 +1180,116 @@ export class ComposioService {
       throw new NakamaApiError("Profile not found for this organization.", 404);
     }
   }
+}
+
+function meetString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function unwrapMeetToolResult(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.successful === false) {
+    throw new Error("Composio request failed.");
+  }
+  if (!("data" in record)) {
+    return value;
+  }
+  if (typeof record.data === "string") {
+    try {
+      return unwrapMeetToolResult(JSON.parse(record.data));
+    } catch {
+      return record.data;
+    }
+  }
+  return unwrapMeetToolResult(record.data);
+}
+
+function findMeetMessages(value: unknown): Record<string, unknown>[] {
+  const found: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const visit = (node: unknown, depth: number) => {
+    if (depth > 6 || !node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child, depth + 1);
+      }
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    const id = meetString(record.messageId ?? record.id);
+    if (
+      id &&
+      (record.messageId ||
+        record.threadId ||
+        record.subject ||
+        record.snippet ||
+        record.payload) &&
+      !seen.has(id)
+    ) {
+      seen.add(id);
+      found.push(record);
+    }
+    for (const child of Object.values(record)) {
+      visit(child, depth + 1);
+    }
+  };
+  visit(value, 0);
+  return found;
+}
+
+function extractMeetDriveIds(value: unknown): string[] {
+  const ids = new Set<string>();
+  const visit = (node: unknown, depth: number) => {
+    if (depth > 10 || !node) {
+      return;
+    }
+    if (typeof node === "string") {
+      let text = node;
+      if (
+        text.length > 50 &&
+        !text.includes("://") &&
+        /^[A-Za-z0-9_+/=\s-]+$/.test(text)
+      ) {
+        const decoded = Buffer.from(
+          text.replace(/-/g, "+").replace(/_/g, "/"),
+          "base64"
+        ).toString("utf8");
+        if (decoded.includes("drive.google.com")) {
+          text = decoded;
+        }
+      }
+      text = text.replace(/&amp;/g, "&");
+      try {
+        text = decodeURIComponent(text);
+      } catch {
+        /* Keep original text. */
+      }
+      for (const pattern of [
+        /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
+        /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
+        /docs\.google\.com\/[A-Za-z]+\/d\/([A-Za-z0-9_-]{10,})/g,
+      ]) {
+        for (const match of text.matchAll(pattern)) {
+          ids.add(match[1]!);
+        }
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child, depth + 1);
+      }
+    } else if (typeof node === "object") {
+      for (const child of Object.values(node)) {
+        visit(child, depth + 1);
+      }
+    }
+  };
+  visit(value, 0);
+  return [...ids];
 }

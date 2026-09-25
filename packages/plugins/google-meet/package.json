@@ -1,6 +1,6 @@
 {
   "name": "@nakama/plugin-google-meet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "files": [
     "nakama.plugin.json",

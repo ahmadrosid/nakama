@@ -23,6 +23,10 @@ function formatTranscript(segments, imported = false) {
 }
 
 // src/store.ts
+function comparableTranscriptText(text) {
+  return text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
 class MeetingStore {
   directory;
   db;
@@ -168,6 +172,22 @@ class MeetingStore {
       throw new Error("Meeting not found");
     }
     this.db.query("INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt,speakerId,speakerName,startMs,endMs) VALUES (?,?,?,?,?,?,?,?)").run(meetingId, segment.id, segment.text, segment.receivedAt, segment.speakerId ?? null, segment.speakerName ?? null, segment.startMs ?? null, segment.endMs ?? null);
+    this.saveTranscript(meetingId);
+  }
+  addCaptionSegment(meetingId, segment) {
+    if (!this.get(meetingId)) {
+      throw new Error("Meeting not found");
+    }
+    const captionText = comparableTranscriptText(segment.text);
+    const match = this.db.query("SELECT sequence,text FROM segments WHERE meetingId=? AND id NOT LIKE 'caption-%' ORDER BY sequence DESC LIMIT 100").all(meetingId).find((row) => {
+      const audioText = comparableTranscriptText(row.text);
+      return audioText === captionText || captionText.length >= 8 && (audioText.startsWith(captionText) || captionText.startsWith(audioText));
+    });
+    if (match) {
+      this.db.query("UPDATE segments SET speakerName=?,startMs=COALESCE(startMs,?),endMs=COALESCE(endMs,?) WHERE sequence=?").run(segment.speakerName, segment.startMs ?? null, segment.endMs ?? null, match.sequence);
+    } else {
+      this.db.query("INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt,speakerId,speakerName,startMs,endMs) VALUES (?,?,?,?,?,?,?,?)").run(meetingId, `caption-${segment.id}`, segment.text, segment.receivedAt, null, segment.speakerName, segment.startMs ?? null, segment.endMs ?? null);
+    }
     this.saveTranscript(meetingId);
   }
   transcriptPath(id) {
@@ -343,6 +363,30 @@ async function run(input, context) {
       }
       return store.importFile(filename, result.text, context.actor.id, context.profileId);
     }
+    if (action === "recordings") {
+      if (!context.host) {
+        throw new Error("Recording import is unavailable; update the server");
+      }
+      return context.host({ op: "meet_recordings" });
+    }
+    if (action === "import-recording") {
+      if (!context.host) {
+        throw new Error("Recording import is unavailable; update the server");
+      }
+      const { messageId, fileId } = input;
+      if (typeof messageId !== "string" || typeof fileId !== "string") {
+        throw new Error("Choose a recording to import");
+      }
+      const result = await context.host({
+        fileId,
+        messageId,
+        op: "import_meet_recording"
+      });
+      if (typeof result.filename !== "string" || !result.filename.trim() || typeof result.text !== "string" || !result.text.trim()) {
+        throw new Error("Recording transcription returned no speech");
+      }
+      return store.importFile(result.filename, result.text, context.actor.id, context.profileId);
+    }
     const meeting = store.get(String(input.meetingId ?? ""));
     if (!(meeting && canAccess(meeting))) {
       throw new Error("Meeting not found");
@@ -372,6 +416,20 @@ async function run(input, context) {
         nextCursor: segments.at(-1)?.sequence ?? after,
         segments
       };
+    }
+    if (action === "caption") {
+      if (typeof input.id !== "string" || typeof input.text !== "string" || typeof input.speakerName !== "string" || !input.text.trim() || !input.speakerName.trim()) {
+        throw new Error("Invalid caption");
+      }
+      store.addCaptionSegment(meeting.id, {
+        endMs: typeof input.endMs === "number" ? input.endMs : null,
+        id: input.id,
+        receivedAt: Date.now(),
+        speakerName: input.speakerName.trim(),
+        startMs: typeof input.startMs === "number" ? input.startMs : null,
+        text: input.text.trim()
+      });
+      return { ok: true };
     }
     throw new Error("Unknown meeting action");
   } finally {

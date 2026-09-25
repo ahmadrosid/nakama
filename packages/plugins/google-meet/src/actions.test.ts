@@ -193,3 +193,74 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     rmSync(dir, { force: true, recursive: true });
   }
 });
+
+test("recording import saves only a complete Whisper result in the member's history", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-recording-import-"));
+  const host = mock(async (request: Record<string, unknown>) =>
+    request.op === "meet_recordings"
+      ? {
+          driveConnected: true,
+          gmailConnected: true,
+          recordings: [
+            {
+              fileId: "drive_file_123",
+              messageId: "msg_1",
+              name: "Sprint.mp4",
+            },
+          ],
+        }
+      : { filename: "Sprint.mp4", text: "Decision one.\n\nDecision two." }
+  );
+  const context = {
+    actionKey: "recordings",
+    actor: { id: "member", role: "member" as const },
+    apiVersion: 1 as const,
+    dataDir: dir,
+    host,
+    invocationId: "test",
+    orgId: "org",
+    pluginId: "google-meet",
+    pluginVersion: "0.1.2",
+    profileId: "profile",
+  };
+  try {
+    const listed = (await run({}, context)) as { recordings: unknown[] };
+    expect(listed.recordings).toHaveLength(1);
+    const meeting = (await run(
+      { fileId: "drive_file_123", messageId: "msg_1" },
+      {
+        ...context,
+        actionKey: "import-recording",
+      }
+    )) as { id: string; state: string };
+    expect(meeting.state).toBe("finished");
+    const store = new MeetingStore(dir, "org");
+    expect(
+      store
+        .transcript(meeting.id)
+        .map((segment) => segment.text)
+        .join("")
+    ).toBe("Decision one.\n\nDecision two.");
+    expect(store.list("member", "profile")).toHaveLength(1);
+    expect(store.list("other", "profile")).toEqual([]);
+    store.close();
+    host.mockRejectedValueOnce(new Error("Whisper unavailable"));
+    await expect(
+      run(
+        { fileId: "drive_file_123", messageId: "msg_1" },
+        {
+          ...context,
+          actionKey: "import-recording",
+        }
+      )
+    ).rejects.toThrow();
+    const after = new MeetingStore(dir, "org");
+    expect(after.list("member", "profile")).toHaveLength(1);
+    after.close();
+    await expect(
+      run({}, { ...context, actor: { id: "viewer", role: "viewer" } })
+    ).rejects.toThrow();
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});

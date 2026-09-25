@@ -26,6 +26,13 @@ type Overview = {
   canConfigure: boolean;
   worker: { state: string; message?: string; captureUrl?: string };
 };
+type Recording = {
+  fileId: string;
+  messageId: string;
+  name: string;
+  size: number;
+  date: string;
+};
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Request failed";
 export const inject = ["slots", "host", "styles", "ui"];
@@ -535,6 +542,108 @@ export function apply(ctx: Context) {
     );
   }
 
+  function RecordingPicker({ close }: { close(): void }) {
+    const [result, setResult] = React.useState<{
+      driveConnected: boolean;
+      gmailConnected: boolean;
+      recordings: Recording[];
+    } | null>(null);
+    const [error, setError] = React.useState("");
+    const [importing, setImporting] = React.useState(false);
+    React.useEffect(() => {
+      let mounted = true;
+      ctx.host.call("recordings").then(
+        (value) => {
+          if (mounted) {
+            setResult(value as NonNullable<typeof result>);
+          }
+        },
+        (reason) => {
+          if (mounted) {
+            setError(message(reason));
+          }
+        }
+      );
+      return () => {
+        mounted = false;
+      };
+    }, []);
+    async function importRecording(recording: Recording) {
+      setImporting(true);
+      setError("");
+      try {
+        await ctx.host.call("import-recording", {
+          fileId: recording.fileId,
+          messageId: recording.messageId,
+        });
+        close();
+      } catch (reason) {
+        setError(message(reason));
+      } finally {
+        setImporting(false);
+      }
+    }
+    return (
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || importing)) {
+            close();
+          }
+        }}
+        open
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import recording</DialogTitle>
+          </DialogHeader>
+          {error && <p role="alert">{error}</p>}
+          {!(result || error) && <p role="status">Finding recordings…</p>}
+          {result && !(result.gmailConnected && result.driveConnected) && (
+            <p>
+              Connect Gmail and Google Drive in{" "}
+              <a href="/customize/connections/composio">
+                Customize → Connections
+              </a>
+              .
+            </p>
+          )}
+          {result?.gmailConnected &&
+            result.driveConnected &&
+            (result.recordings.length ? (
+              <ul className="meet-list">
+                {result.recordings.map((recording) => (
+                  <li
+                    className="meet-meeting"
+                    key={`${recording.messageId}:${recording.fileId}`}
+                  >
+                    <span className="meet-meta">
+                      <strong>{recording.name}</strong>
+                      <span className="meet-status">
+                        {recording.date ||
+                          `${Math.ceil(recording.size / 1024 / 1024)} MB`}
+                      </span>
+                    </span>
+                    <Button
+                      disabled={importing}
+                      onClick={() => void importRecording(recording)}
+                      size="sm"
+                    >
+                      {importing ? "Importing…" : "Import"}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No Meet recording emails found.</p>
+            ))}
+          {importing && (
+            <p role="status">Transcribing with Whisper… keep this page open.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   function Page() {
     const [overview, setOverview] = React.useState<Overview | null>(null);
     const [error, setError] = React.useState("");
@@ -543,6 +652,7 @@ export function apply(ctx: Context) {
     const [settings, setSettings] = React.useState<boolean | null>(null);
     const [deleting, setDeleting] = React.useState<Meeting | null>(null);
     const [selected, setSelected] = React.useState<Meeting | null>(null);
+    const [recordingPicker, setRecordingPicker] = React.useState(false);
     const [uploading, setUploading] = React.useState(false);
     const uploadInput = React.useRef<HTMLInputElement>(null);
     async function upload(file: File) {
@@ -744,6 +854,13 @@ export function apply(ctx: Context) {
                       </span>
                       {group.title === "Meeting history" && (
                         <>
+                          <Button
+                            onClick={() => setRecordingPicker(true)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            Import recording
+                          </Button>
                           <input
                             accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
                             aria-label="Upload audio or Markdown"
@@ -815,6 +932,9 @@ export function apply(ctx: Context) {
             }}
             title="Delete meeting?"
           />
+        )}
+        {recordingPicker && (
+          <RecordingPicker close={() => setRecordingPicker(false)} />
         )}
         {(settings ?? (overview?.canConfigure && !overview.configured)) && (
           <Settings

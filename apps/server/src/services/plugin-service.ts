@@ -1622,13 +1622,19 @@ export class PluginService {
               )
           : undefined,
         timeoutMs:
-          input.context.pluginId === "workflows" &&
-          input.context.actionKey === "run_workflow"
-            ? 300_000
+          input.context.pluginId === "google-meet" &&
+          input.context.actionKey === "import-recording"
+            ? 20 * 60_000
             : input.context.pluginId === "google-meet" &&
-                input.context.actionKey === "upload"
-              ? 150_000
-              : undefined,
+                input.context.actionKey === "recordings"
+              ? 120_000
+              : input.context.pluginId === "workflows" &&
+                  input.context.actionKey === "run_workflow"
+                ? 300_000
+                : input.context.pluginId === "google-meet" &&
+                    input.context.actionKey === "upload"
+                  ? 150_000
+                  : undefined,
       },
       workspaceRoot: input.context.workspaceRoot,
     });

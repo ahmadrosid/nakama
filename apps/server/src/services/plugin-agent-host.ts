@@ -3,10 +3,13 @@ import type { PluginExecutionContext, WorkflowRunRecord } from "@nakama/core";
 import { inspectWorkflowSqlite } from "@nakama/core";
 import { type DatabaseAdapter, DatabaseWorkflowStore } from "@nakama/db";
 import type { AgentService } from "./agent-service";
+import type { ComposioService } from "./composio-service";
+import { importMeetRecording } from "./meet-recording-import";
 
 export function createPluginAgentHost(
   db: DatabaseAdapter,
-  agent: AgentService
+  agent: AgentService,
+  composio?: ComposioService
 ) {
   return async (
     value: unknown,
@@ -22,6 +25,44 @@ export function createPluginAgentHost(
     }
     const request = value as Record<string, unknown>;
     const { orgId } = context;
+    if (
+      request.op === "meet_recordings" ||
+      request.op === "import_meet_recording"
+    ) {
+      if (
+        context.pluginId !== "google-meet" ||
+        !composio ||
+        context.actionKey !==
+          (request.op === "meet_recordings" ? "recordings" : "import-recording")
+      ) {
+        throw new Error("Forbidden");
+      }
+      if (request.op === "meet_recordings") {
+        return composio.listMeetRecordings(orgId, context.actor.id);
+      }
+      if (
+        typeof request.messageId !== "string" ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(request.messageId) ||
+        typeof request.fileId !== "string" ||
+        !/^[A-Za-z0-9_-]{10,128}$/.test(request.fileId)
+      ) {
+        throw new Error("Invalid recording selection.");
+      }
+      return importMeetRecording(
+        composio,
+        {
+          dataDir: context.dataDir,
+          fileId: request.fileId,
+          messageId: request.messageId,
+          orgId,
+          userId: context.actor.id,
+        },
+        AbortSignal.any([
+          ...(signal ? [signal] : []),
+          AbortSignal.timeout(20 * 60_000),
+        ])
+      );
+    }
     if (request.op === "transcribe_audio") {
       const { data, filename } = request;
       if (

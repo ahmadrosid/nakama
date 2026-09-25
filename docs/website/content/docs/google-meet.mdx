@@ -69,6 +69,14 @@ Ask questions such as:
 
 The agent only sees meetings that the current user is allowed to see.
 
+## Import a recorded meeting
+
+If a Meet call was recorded, connect **Gmail** and **Google Drive** in **Customize → Connections**. Ask an organization admin to save an OpenAI key in **Google Meet → Settings**.
+
+Open **Google Meet → Meeting history**, choose **Import recording**, and select the video from your Meet recording email. Keep the page open while Nakama downloads the video and sends its audio to OpenAI Whisper. The finished transcript appears in meeting history and is available to your agent.
+
+The recording must be no larger than 1 GiB or two hours. If an import fails, choose it again. Imported transcripts do not identify speakers.
+
 ## Stop and save
 
 Choose **Leave** in Nakama or stop capture from the Chrome extension. Nakama finishes the current transcript and keeps the saved meeting available under **Saved transcripts**.

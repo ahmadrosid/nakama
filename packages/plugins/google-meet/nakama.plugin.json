@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "google-meet",
   "name": "Google Meet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minNakamaVersion": "0.4.10",
   "author": "Nakama",
   "license": "MIT",
@@ -23,6 +23,37 @@
           "content": { "type": "string", "maxLength": 9786712 }
         },
         "required": ["filename", "content"]
+      }
+    },
+    {
+      "key": "recordings",
+      "access": "member",
+      "effect": "read",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Find Google Meet recording emails linked to videos in the member's connected Google Drive account.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "key": "import-recording",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": true,
+      "description": "Import a discovered Google Meet Drive recording into meeting history using OpenAI Whisper. The page or agent call must remain open until it finishes.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "messageId": { "type": "string", "maxLength": 128 },
+          "fileId": { "type": "string", "maxLength": 128 }
+        },
+        "required": ["messageId", "fileId"]
       }
     },
     {
