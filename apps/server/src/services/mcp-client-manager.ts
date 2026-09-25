@@ -26,6 +26,7 @@ interface ConnectOptions {
 
 export class McpClientManager {
   private readonly connections = new Map<string, ConnectedMcpClient>();
+  private readonly inflight = new Map<string, Promise<CachedMcpTool[]>>();
 
   isConnected(
     serverId: string,
@@ -47,7 +48,15 @@ export class McpClientManager {
     orgId: string,
     profileId: string
   ): Promise<void> {
-    if (this.isConnected(server.id, server.transport, profileId, orgId)) {
+    const key = connectionKey(server.id, server.transport, profileId, orgId);
+
+    if (this.connections.has(key)) {
+      return;
+    }
+
+    const pending = this.inflight.get(key);
+    if (pending) {
+      await pending;
       return;
     }
 
@@ -64,6 +73,27 @@ export class McpClientManager {
       options?.profileId,
       options?.orgId
     );
+
+    const pending = this.inflight.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    const run = this.establishConnection(server, options, key);
+    const tracked = run.finally(() => {
+      if (this.inflight.get(key) === tracked) {
+        this.inflight.delete(key);
+      }
+    });
+    this.inflight.set(key, tracked);
+    return tracked;
+  }
+
+  private async establishConnection(
+    server: StoredMcpServerRecord,
+    options: ConnectOptions | undefined,
+    key: string
+  ): Promise<CachedMcpTool[]> {
     await this.disconnectKey(key);
 
     const transport = createTransport(server.transport, server.config, options);
@@ -77,7 +107,6 @@ export class McpClientManager {
     const tools = normalizeListedTools(result.tools);
 
     this.connections.set(key, { client, transport });
-
     return tools;
   }
 
