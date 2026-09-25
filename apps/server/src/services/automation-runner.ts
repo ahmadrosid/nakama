@@ -19,68 +19,71 @@ export class AutomationRunner {
       return { error: "Automation is already running.", skipped: true };
     }
 
-    const automation = await this.automationService.get(automationId);
-
-    if (!automation) {
-      throw new Error("Automation not found.");
-    }
-
-    if (!automation.enabled) {
-      return { error: "Automation is disabled.", skipped: true };
-    }
-
-    if (
-      !(await this.automationService.isProfileAutomationEnabled(
-        automation.profileId
-      ))
-    ) {
-      return {
-        error: "Automations are disabled for this profile.",
-        skipped: true,
-      };
-    }
-
-    const orgId = automation.orgId?.trim();
-    if (!orgId) {
-      throw new Error("Automation organization is missing.");
-    }
-
-    if (automation.trigger.type === "runAt") {
-      await this.automationService.update(automationId, orgId, {
-        enabled: false,
-      });
-    }
-
     this.running.add(automationId);
-    const run = await this.automationService.createRun(automationId);
 
     try {
-      const output = await this.agentService.runAutomationPrompt(
-        orgId,
-        automation.profileId,
-        automation.prompt,
-        automationId,
-        run.id
-      );
+      const automation = await this.automationService.get(automationId);
 
-      const completedRun = await this.automationService.completeRun(
-        run.id,
-        automationId,
-        { output }
-      );
-      await this.tryDeliver(automation, completedRun);
-      return { output };
-    } catch (error) {
-      const message = formatAutomationRunError(error);
-      const completedRun = await this.automationService.completeRun(
-        run.id,
-        automationId,
-        {
-          error: message,
-        }
-      );
-      await this.tryDeliver(automation, completedRun);
-      return { error: message };
+      if (!automation) {
+        throw new Error("Automation not found.");
+      }
+
+      if (!automation.enabled) {
+        return { error: "Automation is disabled.", skipped: true };
+      }
+
+      if (
+        !(await this.automationService.isProfileAutomationEnabled(
+          automation.profileId
+        ))
+      ) {
+        return {
+          error: "Automations are disabled for this profile.",
+          skipped: true,
+        };
+      }
+
+      const orgId = automation.orgId?.trim();
+      if (!orgId) {
+        throw new Error("Automation organization is missing.");
+      }
+
+      if (automation.trigger.type === "runAt") {
+        await this.automationService.update(automationId, orgId, {
+          enabled: false,
+        });
+      }
+
+      const run = await this.automationService.createRun(automationId);
+
+      try {
+        const output = await this.agentService.runAutomationPrompt(
+          orgId,
+          automation.profileId,
+          automation.prompt,
+          automationId,
+          run.id
+        );
+
+        const completedRun = await this.automationService.completeRun(
+          run.id,
+          automationId,
+          { output }
+        );
+        await this.tryDeliver(automation, completedRun);
+        return { output };
+      } catch (error) {
+        const message = formatAutomationRunError(error);
+        const completedRun = await this.automationService.completeRun(
+          run.id,
+          automationId,
+          {
+            error: message,
+          }
+        );
+        await this.tryDeliver(automation, completedRun);
+        return { error: message };
+      }
     } finally {
       this.running.delete(automationId);
     }
