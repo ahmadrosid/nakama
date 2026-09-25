@@ -36,28 +36,38 @@ describe("buildComposerLines", () => {
     });
     expect(lines).toHaveLength(3);
   });
-  test("shows attached images without adding them to the message text", () => {
-    const lines = buildComposerLines(
-      {
-        composer: {
-          cursorVisible: true,
-          imageCount: 2,
-          prefix: "> ",
-          selectedIndex: 0,
-          suggestions: [],
-          value: "Describe this",
+  test.each(["", "Describe this"])(
+    "shows numbered images inline with the draft: %j",
+    (value) => {
+      const lines = buildComposerLines(
+        {
+          composer: {
+            cursorVisible: true,
+            imageCount: 2,
+            prefix: "> ",
+            selectedIndex: 0,
+            suggestions: [],
+            value,
+          },
+          pendingMessages: [],
         },
-        pendingMessages: [],
-      },
-      40
-    ).map((line) => styledLineText(line).trim());
-    expect(lines).toContain("[2 images attached]");
-    expect(lines).toContain("> Describe this▌");
-  });
+        40
+      );
+      expect(lines).toHaveLength(3);
+      expect(styledLineText(lines[1]!).trimEnd()).toBe(
+        `> [Image #1] [Image #2] ${value}▌`
+      );
+      expect(lines[1]!.segments).toContainEqual({
+        style: { background: "surface", color: "cyan" },
+        text: "[Image #1]",
+      });
+    }
+  );
   test("cursor blinking preserves wrapped input rows and indentation", () => {
     for (const value of ["abcdefgh", "abcdefghijklmno\nqrstuvwxyz"]) {
       const composer: ComposerState = {
         cursorVisible: true,
+        imageCount: 2,
         prefix: "› ",
         selectedIndex: 0,
         suggestions: [],

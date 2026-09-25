@@ -48,20 +48,28 @@ export function buildComposerLines(
       Math.max(0, composerWidth - visibleLength(content))
     );
     return {
-      segments: `${content}${padding}`.split(/(\[Text #\d+\])/).flatMap(
-        (part) =>
-          styledLine(part, {
-            background: "surface",
-            ...(/^\[Text #\d+\]$/.test(part) ? { color: "cyan" as const } : {}),
-          }).segments
-      ),
+      segments: `${content}${padding}`
+        .split(/(\[(?:Text|Image) #\d+\])/)
+        .flatMap(
+          (part) =>
+            styledLine(part, {
+              background: "surface",
+              ...(/^\[(?:Text|Image) #\d+\]$/.test(part)
+                ? { color: "cyan" as const }
+                : {}),
+            }).segments
+        ),
     };
   };
   const pendingLines = formatPendingDisplayLines(
     state.pendingMessages,
     width
   ).map((line) => styledLine(line, { dim: true }));
-  const display = normalizePastedText(state.composer.value);
+  const images = Array.from(
+    { length: state.composer.imageCount ?? 0 },
+    (_, index) => `[Image #${index + 1}] `
+  ).join("");
+  const display = images + normalizePastedText(state.composer.value);
   // Reserve cursor space during both blink phases so input never reflows.
   const inputWidth = Math.max(1, composerWidth - 1);
   const inputLines = splitInputDisplayLines(
@@ -73,18 +81,6 @@ export function buildComposerLines(
   const lines: StyledLine[] = [...pendingLines];
 
   lines.push(composerSurfaceLine(""));
-
-  if (state.composer.imageCount) {
-    const count = state.composer.imageCount;
-    lines.push(
-      composerSurfaceLine(
-        truncateText(
-          `  [${count} image${count === 1 ? "" : "s"} attached]`,
-          width
-        )
-      )
-    );
-  }
 
   for (let index = 0; index < inputLines.length; index += 1) {
     const lineText = inputLines[index] ?? "";
