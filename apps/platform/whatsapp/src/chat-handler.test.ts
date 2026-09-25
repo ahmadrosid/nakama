@@ -1337,6 +1337,66 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("unauthorized /stop in a group does not abort the active stream", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls, getStreamControl } = createMockClient({
+        streaming: true,
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { socket, sent } = createMockSocket();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        getSocket: () => socket as any,
+        orgStore,
+        sessionStore,
+      });
+
+      const chatPromise = handleMessage(
+        groupInbound({
+          text: "hello agent",
+        })
+      );
+
+      await waitForStreamControl(getStreamControl);
+
+      const sentBeforeStop = sent.length;
+      await handleMessage(
+        groupInbound({
+          senderJid: "9999999999@s.whatsapp.net",
+          text: "/stop",
+        })
+      );
+
+      expect(getStreamControl()?.signal?.aborted).toBe(false);
+      expect(sent.length).toBe(sentBeforeStop);
+      expect(authStore.isAuthorized("9999999999@s.whatsapp.net")).toBe(false);
+
+      try {
+        getStreamControl()?.complete();
+        await chatPromise;
+      } finally {
+        getStreamControl()?.complete();
+        await chatPromise.catch(() => undefined);
+      }
+
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
   test("pairs an unpaired group sender when they send a pairing code", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
