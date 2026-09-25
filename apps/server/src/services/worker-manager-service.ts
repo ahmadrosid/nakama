@@ -948,6 +948,12 @@ export class WorkerManagerService {
         ) {
           continue;
         }
+        const heartbeat = await createWorkerHeartbeatStore({
+          getDir: () => getChannelConfigDir(platform, owner),
+        }).read();
+        if (heartbeat && isProcessAlive(heartbeat.pid)) {
+          continue;
+        }
         try {
           await this.startWorker(platform, owner);
         } catch (error) {
