@@ -236,8 +236,9 @@ export class McpService {
     const configChanged =
       JSON.stringify(server.config) !== JSON.stringify(config) ||
       server.transport !== transport;
+    const enabledChanged = updated.enabled !== server.enabled;
 
-    if (configChanged) {
+    if (configChanged || enabledChanged) {
       await this.manager.disconnect(serverId);
       updated.status = "disconnected";
       updated.lastError = null;
@@ -447,7 +448,9 @@ export class McpService {
     const servers = await this.db.listMcpServers();
 
     for (const server of servers) {
-      if (!server.enabled) {
+      if (!server.enabled || server.transport === "stdio") {
+        // Stdio connections are profile-scoped; defer them until a profile
+        // calls a tool.
         continue;
       }
 

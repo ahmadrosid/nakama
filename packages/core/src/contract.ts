@@ -486,6 +486,7 @@ export interface WebPublicUrlSettingsResponse {
 
 export interface AuthUserResponse {
   activeOrgId?: string | null;
+  backupCodesEnabled?: boolean;
   email: string;
   id: string;
   /**
@@ -500,6 +501,7 @@ export interface AuthUserResponse {
   mode?: "api-key" | "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
+  passkeyEnabled?: boolean;
   phone?: string | null;
 }
 
@@ -519,6 +521,39 @@ export interface MfaTotpVerifyResponse {
   backupCodes: string[];
   enabled: boolean;
 }
+export interface MfaBackupCodesResponse {
+  backupCodes: string[];
+}
+export interface PasskeyVerificationResponse {
+  backupCodes: string[];
+  enabled: boolean;
+}
+export interface PasskeyRegistrationOptionsResponse {
+  challenge: string;
+  options: Record<string, unknown>;
+}
+
+export interface PasskeyAuthenticationOptionsResponse {
+  challenge: string;
+  options: Record<string, unknown>;
+}
+
+export interface PasskeyCredentialResponse {
+  authenticatorAttachment?: string;
+  clientExtensionResults: Record<string, unknown>;
+  id: string;
+  rawId: string;
+  response: {
+    attestationObject?: string;
+    authenticatorData?: string;
+    clientDataJSON: string;
+    signature?: string;
+    transports?: string[];
+    userHandle?: string;
+  };
+  type: string;
+}
+
 export interface UpdateAuthProfileRequest {
   currentPassword?: string;
   email?: string;
@@ -1876,6 +1911,7 @@ export interface ProfileRef {
 export interface ApiErrorResponse {
   error: string;
   profiles?: ProfileRef[];
+  totpEnabled?: boolean;
   /** Tokens a failed turn had already spent. They are billable regardless. */
   usage?: ChatTurnUsage;
 }

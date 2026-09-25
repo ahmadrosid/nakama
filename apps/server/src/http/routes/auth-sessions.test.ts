@@ -129,6 +129,88 @@ describe("browser session governance", () => {
     );
   });
 
+  test("an API key cannot list human browser sessions", async () => {
+    const { app, authService, databaseAdapter } = await createApp();
+    const owner = await setupFreshInstallSession(app, databaseAdapter);
+    const user = await databaseAdapter.getUserByEmail("admin@example.com");
+    if (!(user && owner.orgId)) {
+      throw new Error("Expected setup admin");
+    }
+
+    const secret = `nk_live_${"d".repeat(64)}`;
+    await databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: user.id,
+      environment: "live",
+      expiresAt: null,
+      id: "key_auth_sessions_list",
+      keyPrefix: secret.slice(0, 20),
+      lastUsedAt: null,
+      name: "Auth sessions list test",
+      orgId: owner.orgId,
+      revokedAt: null,
+      secretHash: authService.hashToken(secret),
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/sessions", {
+        headers: { Authorization: `Bearer ${secret}` },
+      })
+    );
+
+    expect(response.status).toBe(403);
+    const ownerSessions = await listSessions(app, owner);
+    expect(ownerSessions.sessions.some((entry) => entry.current)).toBe(true);
+  });
+
+  test("an API key cannot revoke a human browser session", async () => {
+    const { app, authService, databaseAdapter } = await createApp();
+    const owner = await setupFreshInstallSession(app, databaseAdapter);
+    const ownerSessions = await listSessions(app, owner);
+    const ownerSessionId = ownerSessions.sessions[0]?.id ?? "";
+    const user = await databaseAdapter.getUserByEmail("admin@example.com");
+    if (!ownerSessionId) {
+      throw new Error("Expected setup admin and browser session");
+    }
+    if (!user) {
+      throw new Error("Expected setup admin and browser session");
+    }
+    if (!owner.orgId) {
+      throw new Error("Expected setup admin and browser session");
+    }
+
+    const secret = `nk_live_${"e".repeat(64)}`;
+    await databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: user.id,
+      environment: "live",
+      expiresAt: null,
+      id: "key_auth_sessions_revoke",
+      keyPrefix: secret.slice(0, 20),
+      lastUsedAt: null,
+      name: "Auth sessions revoke test",
+      orgId: owner.orgId,
+      revokedAt: null,
+      secretHash: authService.hashToken(secret),
+    });
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/auth/sessions/${encodeURIComponent(ownerSessionId)}`,
+        {
+          headers: { Authorization: `Bearer ${secret}` },
+          method: "DELETE",
+        }
+      )
+    );
+
+    expect(response.status).toBe(403);
+    const remaining = await listSessions(app, owner);
+    expect(remaining.sessions.map((entry) => entry.id)).toContain(
+      ownerSessionId
+    );
+  });
+
   test("a platform admin force-revokes every session a user holds", async () => {
     const { app, databaseAdapter } = await createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);

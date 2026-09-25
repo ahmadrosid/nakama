@@ -78,6 +78,8 @@ describe("chat history route helpers", () => {
       "profile 1"
     );
     expect(isChatSessionPath("/chat/profile%201/session%2F2")).toBe(true);
+    expect(chatProfileIdFromPath("/chat/%/s")).toBeNull();
+    expect(isChatSessionPath("/chat/%/s")).toBe(false);
     expect(isChatSessionPath("/chat")).toBe(false);
     expect(parseChatRouteParams({ profileId: "p", sessionId: "s" })).toEqual({
       profileId: "p",

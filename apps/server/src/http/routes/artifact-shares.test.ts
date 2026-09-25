@@ -6,7 +6,7 @@ import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
 } from "@nakama/db";
-import { setupTestConfigDir } from "../../test-config-dir";
+import { setupTestConfigDir, withTestEnv } from "../../test-config-dir";
 import { isPublicRouteRequest } from "../public-routes";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -51,33 +51,6 @@ function saveArtifactRequest(params: {
       method: "PUT",
     }
   );
-}
-
-async function withEnv<T>(
-  vars: Record<string, string | undefined>,
-  run: () => Promise<T>
-): Promise<T> {
-  const previous = new Map(
-    Object.keys(vars).map((key) => [key, process.env[key]] as const)
-  );
-  for (const [key, value] of Object.entries(vars)) {
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-  try {
-    return await run();
-  } finally {
-    for (const [key, value] of previous) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
 }
 
 async function seedProfileArtifact(params: {
@@ -310,7 +283,7 @@ describe("artifact share routes", () => {
   });
 
   test("publish prefers configured web public URL over loopback request URL", async () => {
-    await withEnv(
+    await withTestEnv(
       { NAKAMA_WEB_PUBLIC_URL: "https://deployed.example.com/" },
       async () => {
         const { app, databaseAdapter } = createApp();

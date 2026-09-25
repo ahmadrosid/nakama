@@ -9,20 +9,7 @@ import {
   readSseEvents,
   sanitizeToolCallHistory,
 } from "./shared";
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-
-      controller.close();
-    },
-  });
-}
+import { streamFromChunks } from "./test-helpers";
 
 describe("provider shared helpers", () => {
   test("readSseEvents parses event names and skips done markers", async () => {

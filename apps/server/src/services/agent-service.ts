@@ -3982,6 +3982,7 @@ export class AgentService {
         ...buildMcpToolDefinitions(
           mcpServers,
           this.mcpClientManager,
+          this.db,
           orgId,
           profile.id
         ),

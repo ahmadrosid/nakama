@@ -1,6 +1,7 @@
 import {
   NakamaApiError,
   NakamaAuthExpiredError,
+  readApiErrorDetails,
   readApiErrorMessage,
 } from "@nakama/core/api-error";
 import type {
@@ -115,6 +116,7 @@ import type {
   ListWorkspaceFilesResponse,
   MarkAutomationRunsReadResponse,
   McpServerResponse,
+  MfaBackupCodesResponse,
   MfaPolicyResponse,
   MfaTotpStartResponse,
   MfaTotpVerifyResponse,
@@ -132,6 +134,10 @@ import type {
   OrgMemorySearchRequest,
   OrgMemorySearchResponse,
   OrgPluginDetail,
+  PasskeyAuthenticationOptionsResponse,
+  PasskeyCredentialResponse,
+  PasskeyRegistrationOptionsResponse,
+  PasskeyVerificationResponse,
   PatchSkillRequest,
   PinOrgMemoryRequest,
   PluginContributionChangePreview,
@@ -2508,7 +2514,12 @@ export class NakamaClient {
   async login(
     email: string,
     password: string,
-    mfa?: { backupCode?: string; mfaCode?: string }
+    mfa?: {
+      backupCode?: string;
+      mfaCode?: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+    }
   ): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
       body: JSON.stringify({ email, password, ...mfa }),
@@ -2517,6 +2528,15 @@ export class NakamaClient {
 
     this.applyAuthUserResponse(response);
     return response;
+  }
+  async getPasskeyLoginOptions(): Promise<PasskeyAuthenticationOptionsResponse> {
+    return this.request<PasskeyAuthenticationOptionsResponse>(
+      "/v1/auth/passkey/login/options",
+      {
+        body: JSON.stringify({}),
+        method: "POST",
+      }
+    );
   }
   async getMfaPolicy(): Promise<MfaPolicyResponse> {
     return this.request<MfaPolicyResponse>("/v1/settings/mfa");
@@ -2535,6 +2555,53 @@ export class NakamaClient {
 
   async startTotp(): Promise<MfaTotpStartResponse> {
     return this.request<MfaTotpStartResponse>("/v1/auth/mfa/totp/start", {
+      method: "POST",
+    });
+  }
+  async generateBackupCodes(input: {
+    mfaCode?: string;
+    passkey?: PasskeyCredentialResponse;
+    passkeyChallenge?: string;
+    password?: string;
+  }): Promise<MfaBackupCodesResponse> {
+    return this.request<MfaBackupCodesResponse>("/v1/auth/mfa/backup-codes", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  async startPasskey(): Promise<PasskeyRegistrationOptionsResponse> {
+    return this.request<PasskeyRegistrationOptionsResponse>(
+      "/v1/auth/mfa/passkey/start",
+      { method: "POST" }
+    );
+  }
+
+  async verifyPasskey(
+    challenge: string,
+    credential: PasskeyCredentialResponse,
+    name?: string
+  ): Promise<PasskeyVerificationResponse> {
+    return this.request<PasskeyVerificationResponse>(
+      "/v1/auth/mfa/passkey/verify",
+      {
+        body: JSON.stringify({
+          challenge,
+          credential,
+          ...(name ? { name } : {}),
+        }),
+        method: "POST",
+      }
+    );
+  }
+
+  async disablePasskey(input: {
+    backupCode?: string;
+    challenge?: string;
+    credential?: PasskeyCredentialResponse;
+  }): Promise<{ enabled: boolean }> {
+    return this.request<{ enabled: boolean }>("/v1/auth/mfa/passkey/disable", {
+      body: JSON.stringify(input),
       method: "POST",
     });
   }
@@ -3430,8 +3497,10 @@ async function createApiError(
   response: Response,
   path: string
 ): Promise<NakamaApiError> {
-  const message = await readApiErrorMessage(response);
-  return new NakamaApiError(message, response.status, path);
+  const details = await readApiErrorDetails(response);
+  return new NakamaApiError(details.message, response.status, path, undefined, {
+    totpEnabled: details.totpEnabled,
+  });
 }
 
 function isMutatingMethod(method: string): boolean {

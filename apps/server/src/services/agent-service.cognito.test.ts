@@ -1,28 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ensureBundledSkillFiles, type GenerateChatInput } from "@nakama/core";
 import { pathExists } from "@nakama/core/fs";
-import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
-
-function createDefaultProfile(): StoredProfileRecord {
-  const now = new Date().toISOString();
-  return {
-    createdAt: now,
-    id: "profile_default",
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default",
-    orgId: ORG_ID,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
-  };
-}
 
 /** Answers every turn with a fixed string, no tools. */
 function stubHarness(service: AgentService, reply = "Answered"): void {

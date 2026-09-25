@@ -1,3 +1,4 @@
+import type { UserOrgSummary } from "@nakama/core/contract";
 import { parseOrgMemoryContent } from "@nakama/core/soul/org-memory";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
@@ -169,11 +170,10 @@ function orgMemoryStatusLine(
   return null;
 }
 
-function useOrgMemoryCard() {
-  const { activeOrg } = useAuth();
+function useOrgMemoryCard(org: UserOrgSummary | null) {
   const [searchParams] = useSearchParams();
-  const orgId = activeOrg?.id ?? null;
-  const isAdmin = activeOrg?.role === "admin";
+  const orgId = org?.id ?? null;
+  const isAdmin = org?.role === "admin";
 
   const {
     data,
@@ -374,8 +374,12 @@ function OrgMemoryEditDialog({
 }
 
 export function OrgMemoryCard() {
-  const card = useOrgMemoryCard();
+  const { activeOrg } = useAuth();
+  return <OrgMemoryCardForOrg key={activeOrg?.id} org={activeOrg} />;
+}
 
+function OrgMemoryCardForOrg({ org }: { org: UserOrgSummary | null }) {
+  const card = useOrgMemoryCard(org);
   if (!card.isAdmin) {
     return null;
   }

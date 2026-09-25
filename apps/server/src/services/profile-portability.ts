@@ -43,6 +43,10 @@ import type {
 import { unzipSync, zipSync } from "fflate";
 import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
+import {
+  MAX_IMPORT_ENTRY_BYTES,
+  MAX_IMPORT_UNCOMPRESSED_BYTES,
+} from "./data-portability";
 import { recordProfileChangeEvent } from "./profile-change-history";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
@@ -50,6 +54,7 @@ const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
 const PROFILE_PACK_FORMAT_VERSION = 1;
 const CUSTOM_TOOLS_ARCHIVE_DIR = "custom-tools";
 
+export const MAX_PROFILE_PACK_ENTRY_COUNT = 10_000;
 /** Only these workspace paths ever leave (export) or enter (import) a pack. */
 const ROOT_ALLOWED_FILES = new Set([
   "SOUL.md",
@@ -1227,21 +1232,60 @@ function isAllowlistedProfilePackPath(relativePath: string): boolean {
 function readProfilePackZip(
   archive: Buffer | Uint8Array | ArrayBuffer
 ): ProfilePackZipEntry[] {
+  let entryCount = 0;
+  let uncompressedTotal = 0;
+
+  // fflate invokes the filter after reading ZIP metadata and before allocating
+  // or inflating the entry, so these checks reject bombs from their declarations.
+  const admitEntry = (name: string, size: number): boolean => {
+    entryCount += 1;
+    if (entryCount > MAX_PROFILE_PACK_ENTRY_COUNT) {
+      throw new NakamaApiError(
+        `Profile pack exceeds the ${MAX_PROFILE_PACK_ENTRY_COUNT} entry limit.`,
+        413
+      );
+    }
+
+    if (size > MAX_IMPORT_ENTRY_BYTES) {
+      throw new NakamaApiError(
+        `Profile pack entry ${name} exceeds the ${MAX_IMPORT_ENTRY_BYTES / (1024 * 1024)} MB limit.`,
+        413
+      );
+    }
+
+    uncompressedTotal += size;
+    if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
+      throw new NakamaApiError(
+        `Profile pack exceeds the ${MAX_IMPORT_UNCOMPRESSED_BYTES / (1024 * 1024)} MB uncompressed limit.`,
+        413
+      );
+    }
+
+    return true;
+  };
+
   try {
-    return Object.entries(unzipSync(toBuffer(archive)))
+    return Object.entries(
+      unzipSync(toBuffer(archive), {
+        filter: (file) => admitEntry(file.name, file.originalSize),
+      })
+    )
       .filter(([name]) => !name.endsWith("/"))
       .map(([name, data]) => {
         validateProfilePackEntryPath(name);
         return { data: Buffer.from(data), name };
       });
   } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
     if (error instanceof Error) {
       if (error.message === "invalid zip data") {
-        throw new Error("Invalid ZIP archive.");
+        throw new NakamaApiError("Invalid ZIP archive.", 400);
       }
       throw error;
     }
-    throw new Error("Invalid ZIP archive.");
+    throw new NakamaApiError("Invalid ZIP archive.", 400);
   }
 }
 

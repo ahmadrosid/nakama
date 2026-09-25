@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { PendingMessage } from "./message-queue";
-import { styledLine, styledLineWidth } from "./styled-text";
+import { styledLine, styledLineText, styledLineWidth } from "./styled-text";
 import { TerminalLayout } from "./terminal-layout";
 import {
   buildComposerLines,
@@ -15,6 +15,36 @@ function composerLine(text: string, width: number) {
 }
 
 describe("buildComposerLines", () => {
+  test("cursor blinking preserves wrapped input rows and indentation", () => {
+    for (const value of ["abcdefgh", "abcdefghijklmno\nqrstuvwxyz"]) {
+      const composer: ComposerState = {
+        cursorVisible: true,
+        prefix: "› ",
+        selectedIndex: 0,
+        suggestions: [],
+        value,
+      };
+      const visible = buildComposerLines({ composer, pendingMessages: [] }, 10);
+      const hidden = buildComposerLines(
+        {
+          composer: { ...composer, cursorVisible: false },
+          pendingMessages: [],
+        },
+        10
+      );
+
+      expect(
+        visible.map((line) => styledLineText(line).replace("▌", " "))
+      ).toEqual(hidden.map(styledLineText));
+      expect(
+        visible
+          .slice(2, -1)
+          .every((line) => styledLineText(line).startsWith("  "))
+      ).toBe(true);
+      expect(visible.every((line) => styledLineWidth(line) === 10)).toBe(true);
+    }
+  });
+
   test("renders pending summaries, wrapped input, and selected suggestions", () => {
     const lines = buildComposerLines(
       {

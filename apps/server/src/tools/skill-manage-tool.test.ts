@@ -4,16 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@nakama/core";
 import { pathExists, runWriteFile } from "@nakama/core";
-import {
-  createInMemoryDatabaseAdapter,
-  seedOrgDefaultProfile,
-} from "@nakama/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
 import { SkillProposalService } from "../services/skill-proposal-service";
 import { SkillsService } from "../services/skills-service";
+import {
+  ORG_ID,
+  seedSkillOrg as seedOrgProfile,
+} from "../services/skills-service-test-fixtures";
 import { createSkillManageTools } from "./skill-manage-tool";
 
-const ORG_ID = "org_test";
 const PROFILE_ID = "profile_default";
 
 const researchSkillMarkdown = `---
@@ -47,33 +47,6 @@ function skillManageTool(
     throw new Error("skill_manage tool missing");
   }
   return tool;
-}
-
-async function seedOrgProfile(
-  db: ReturnType<typeof createInMemoryDatabaseAdapter>,
-  options: {
-    orgSkillsWriteApproval?: boolean;
-    profileSkillsWriteApproval?: boolean | null;
-  } = {}
-) {
-  const now = new Date().toISOString();
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    skillsWriteApproval: options.orgSkillsWriteApproval ?? false,
-    slug: "test-org",
-    updatedAt: now,
-  });
-  const profile = await seedOrgDefaultProfile(db, ORG_ID);
-  if (options.profileSkillsWriteApproval !== undefined) {
-    await db.upsertProfile({
-      ...profile,
-      skillsWriteApproval: options.profileSkillsWriteApproval,
-      updatedAt: now,
-    });
-  }
-  return profile;
 }
 
 describe("skill_manage tool", () => {

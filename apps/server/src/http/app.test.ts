@@ -945,6 +945,48 @@ describe("createHonoApp", () => {
 
     expect(response.status).toBe(415);
   });
+  test("accept-invite rejects a body that is not application/json", async () => {
+    const options = createServerOptions();
+    options.orgService = new OrgService(
+      options.databaseAdapter,
+      options.authService,
+      { send: async () => ({ error: "Email unavailable.", ok: false }) }
+    );
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const admin =
+      await options.databaseAdapter.getUserByEmail("admin@example.com");
+    const invite = await options.orgService.createInvite({
+      email: "invitee@example.com",
+      invitedByUserId: admin!.id,
+      orgId: session.orgId!,
+      role: "member",
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+    expect(extractSetCookies(response)).toEqual([]);
+
+    const accepted = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(accepted.status).toBe(200);
+    expect(extractSetCookies(accepted).length).toBeGreaterThan(0);
+  });
 
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
@@ -1230,7 +1272,7 @@ describe("createHonoApp", () => {
     });
   });
 
-  test("auth/me reports what the credential may do, not what its owner may do", async () => {
+  test("API-key auth responses expose only the key's organization", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
     const adminSession = await setupFreshInstallSession(
@@ -1243,6 +1285,11 @@ describe("createHonoApp", () => {
       throw new Error("Expected setup admin");
     }
     expect(admin.isPlatformAdmin).toBe(true);
+    const secondOrg = await options.orgService.createOrganization(
+      { name: "Other Org", slug: "other-org" },
+      admin.id
+    );
+    expect(secondOrg.organization.id).not.toBe(adminSession.orgId);
 
     const secret = `nk_live_${"c".repeat(64)}`;
     await options.databaseAdapter.createApiKey({
@@ -1268,8 +1315,10 @@ describe("createHonoApp", () => {
       })
     );
     const body = (await response.json()) as {
+      activeOrgId?: string;
       isPlatformAdmin?: boolean;
       mode?: string;
+      orgId?: string;
     };
 
     // The key was minted by a platform admin and is de-privileged anyway, which
@@ -1278,6 +1327,31 @@ describe("createHonoApp", () => {
     expect(response.status).toBe(200);
     expect(body.isPlatformAdmin).toBe(false);
     expect(body.mode).toBe("api-key");
+    expect(body.activeOrgId).toBe(adminSession.orgId);
+    expect(body.orgId).toBe(adminSession.orgId);
+
+    const orgsResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: { Authorization: `Bearer ${secret}` },
+      })
+    );
+    const orgsBody = (await orgsResponse.json()) as {
+      orgs: Array<{ id: string }>;
+    };
+    expect(orgsResponse.status).toBe(200);
+    expect(orgsBody.orgs.map((org) => org.id)).toEqual([adminSession.orgId]);
+
+    const browserOrgsResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: adminSession.headers(),
+      })
+    );
+    const browserOrgsBody = (await browserOrgsResponse.json()) as {
+      orgs: Array<{ id: string }>;
+    };
+    expect(browserOrgsBody.orgs.map((org) => org.id).sort()).toEqual(
+      [adminSession.orgId, secondOrg.organization.id].sort()
+    );
 
     // A browser session for the same admin still reports the admin it is.
     const sessionResponse = await app.fetch(
@@ -1785,6 +1859,26 @@ describe("createHonoApp", () => {
         new Request("http://localhost:4310/v1/skills", { headers: orgHeaders })
       );
       expect(skillsResponse.status).toBe(403);
+    });
+    test("returns generic passkey options without authentication", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/passkey/login/options", {
+          body: "{}",
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        challenge: string;
+        options: { allowCredentials?: unknown };
+        totpEnabled?: unknown;
+      };
+      expect(body.challenge).toBeString();
+      expect(body.options.allowCredentials).toBeUndefined();
+      expect(body.totpEnabled).toBeUndefined();
     });
   });
 });

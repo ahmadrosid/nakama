@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  getLocalAuthTokenPath,
+  loadLocalAuthToken,
+  verifyLocalAuthToken,
+} from "@nakama/core/local-auth";
 import { createMinimalHonoApp } from "../../server/src/http/test-app-helpers";
 import { setupFreshInstallSession } from "../../server/src/http/test-session-helpers";
 import { setupTestConfigDir } from "../../server/src/test-config-dir";
@@ -198,4 +205,40 @@ test("server arguments reject insecure URLs and embedded credentials", () => {
     expect(() => parseConnectionArgs(["--server", url])).toThrow();
   }
   expect(() => parseConnectionArgs(["--server"])).toThrow();
+});
+
+test("local logout rotates the persisted token through the CLI entrypoint", async () => {
+  const originalToken = await loadLocalAuthToken("cli@nakama.internal");
+  const configDir = process.env.NAKAMA_CONFIG_DIR;
+  if (!configDir) {
+    throw new Error("Expected an isolated test config directory");
+  }
+
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "run",
+      join(import.meta.dir, "index.ts"),
+      "logout",
+      "--server",
+      "http://127.0.0.1:4310",
+    ],
+    {
+      cwd: join(import.meta.dir, "../../.."),
+      env: { ...process.env, NAKAMA_CONFIG_DIR: configDir },
+      stderr: "pipe",
+      stdout: "pipe",
+    }
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+
+  expect(code, stderr).toBe(0);
+  expect(stdout).toContain("Logged out.");
+  const rotatedToken = (await readFile(getLocalAuthTokenPath(), "utf8")).trim();
+  expect(rotatedToken).not.toBe(originalToken);
+  await expect(verifyLocalAuthToken(originalToken)).resolves.toBeNull();
 });

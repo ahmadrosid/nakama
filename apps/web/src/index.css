@@ -662,6 +662,24 @@
     @apply flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-13 text-muted-foreground motion-reduce:transition-none;
   }
 
+  .sidebar-chat-title-clip {
+    container-type: inline-size;
+  }
+
+  .sidebar-chat-title {
+    transition: transform 300ms ease-out;
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .group:hover .sidebar-chat-title,
+    .group:focus-within .sidebar-chat-title {
+      transform: translateX(min(0px, calc(100cqw - 100%)));
+      transition-delay: 300ms;
+      transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+      transition-duration: 1.4s;
+    }
+  }
+
   .sidebar-nav-link--collapsed {
     @apply relative size-9 w-9 shrink-0 justify-center gap-0 self-center rounded-md px-0 py-0;
   }

@@ -1,5 +1,6 @@
 import type {
   AuthUserResponse,
+  PasskeyCredentialResponse,
   SetupAuthRequest,
   UpdateOrganizationRequest,
   UserOrgSummary,
@@ -101,7 +102,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (
       email: string,
       password: string,
-      mfa?: { backupCode?: string; mfaCode?: string }
+      mfa?: {
+        backupCode?: string;
+        mfaCode?: string;
+        passkey?: PasskeyCredentialResponse;
+        passkeyChallenge?: string;
+      }
     ) => {
       const response = await client.login(email, password, mfa);
       await refreshSession();

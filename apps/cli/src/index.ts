@@ -1,5 +1,8 @@
 import { NakamaApiError, NakamaClient } from "@nakama/client";
-import { loadLocalAuthToken } from "@nakama/core/local-auth";
+import {
+  loadLocalAuthToken,
+  rotateLocalAuthToken,
+} from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { runChat, runCleanupThenExit } from "./chat";
 import {
@@ -113,7 +116,7 @@ try {
       (await loadSavedCliServerUrl()) ??
       resolveServerUrl()
   );
-  const remote = !isLocalServer(serverUrl) || Boolean(connectionArgs.command);
+  const remote = !isLocalServer(serverUrl);
   let client: NakamaClient;
   if (remote) {
     const connection = await createRemoteConnection(serverUrl);
@@ -156,6 +159,11 @@ try {
     await saveCliServerUrl(serverUrl);
     setCliConfigScope(serverUrl, user.id);
   } else {
+    if (connectionArgs.command === "logout") {
+      await rotateLocalAuthToken();
+      console.log("Logged out.");
+      process.exit(0);
+    }
     client = new NakamaClient({
       authToken: (await loadLocalAuthToken("cli@nakama.internal")) ?? undefined,
       baseUrl: serverUrl,

@@ -1,22 +1,25 @@
-import type { ProfileRef } from "./contract";
+import type { ApiErrorResponse, ProfileRef } from "./contract";
 import { LLM_FETCH_TIMEOUT_MS } from "./fetch-idle";
 
 export class NakamaApiError extends Error {
   readonly status: number;
   readonly path?: string;
   readonly profiles?: ProfileRef[];
+  readonly totpEnabled?: boolean;
 
   constructor(
     message: string,
     status: number,
     path?: string,
-    profiles?: ProfileRef[]
+    profiles?: ProfileRef[],
+    options?: Pick<ApiErrorResponse, "totpEnabled">
   ) {
     super(message);
     this.name = "NakamaApiError";
     this.status = status;
     this.path = path;
     this.profiles = profiles;
+    this.totpEnabled = options?.totpEnabled;
   }
 }
 
@@ -28,20 +31,23 @@ export class NakamaAuthExpiredError extends NakamaApiError {
   }
 }
 
-export async function readApiErrorMessage(response: Response): Promise<string> {
+export async function readApiErrorDetails(response: Response): Promise<{
+  message: string;
+  totpEnabled?: boolean;
+}> {
   const status = response.status;
   let bodyText = "";
 
   try {
     bodyText = await response.text();
   } catch {
-    return fallbackApiErrorMessage(status);
+    return { message: fallbackApiErrorMessage(status) };
   }
 
   const trimmed = bodyText.trim();
 
   if (!trimmed) {
-    return fallbackApiErrorMessage(status);
+    return { message: fallbackApiErrorMessage(status) };
   }
 
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
@@ -49,12 +55,19 @@ export async function readApiErrorMessage(response: Response): Promise<string> {
       const payload = JSON.parse(trimmed) as {
         error?: unknown;
         message?: unknown;
+        totpEnabled?: unknown;
       };
       const message =
         extractErrorText(payload.error) ?? extractErrorText(payload.message);
 
       if (message) {
-        return message;
+        return {
+          message,
+          totpEnabled:
+            typeof payload.totpEnabled === "boolean"
+              ? payload.totpEnabled
+              : undefined,
+        };
       }
     } catch {
       // fall through to plain-text handling
@@ -62,10 +75,14 @@ export async function readApiErrorMessage(response: Response): Promise<string> {
   }
 
   if (trimmed.startsWith("<")) {
-    return fallbackApiErrorMessage(status);
+    return { message: fallbackApiErrorMessage(status) };
   }
 
-  return truncate(trimmed.replace(/\s+/g, " "), 240);
+  return { message: truncate(trimmed.replace(/\s+/g, " "), 240) };
+}
+
+export async function readApiErrorMessage(response: Response): Promise<string> {
+  return (await readApiErrorDetails(response)).message;
 }
 
 export function fallbackApiErrorMessage(status: number): string {

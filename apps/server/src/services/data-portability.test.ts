@@ -15,6 +15,7 @@ import {
   createNakamaDataExport,
   decodeArchiveRequestData,
   MAX_IMPORT_ARCHIVE_BYTES,
+  MAX_IMPORT_ENTRIES,
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
   NAKAMA_EXPORT_MANIFEST,
@@ -246,6 +247,19 @@ describe("Nakama data portability", () => {
 
     await expect(previewNakamaDataImport(archive, { rootDir })).rejects.toThrow(
       /big\.bin exceeds/
+    );
+  });
+
+  test("rejects an archive with more entries than the entry-count cap", async () => {
+    const archive = buildZipWithEntries(
+      Array.from({ length: MAX_IMPORT_ENTRIES + 1 }, (_, index) => ({
+        content: "",
+        name: `empty-${index}.txt`,
+      }))
+    );
+
+    await expect(previewNakamaDataImport(archive, { rootDir })).rejects.toThrow(
+      /entry limit/
     );
   });
 

@@ -38,10 +38,14 @@
     "view:cassettes": "bun run apps/server/src/testing/cassettes/serve.ts"
   },
   "overrides": {
+    "@peculiar/asn1-schema": "2.9.5",
     "libsignal": "6.0.0"
   },
+  "dependencies": {
+    "@simplewebauthn/server": "^14.0.2"
+  },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.14",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
     "knip": "6.32.2",

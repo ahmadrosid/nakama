@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 // estimateHistoryTokens is not exported from @nakama/agent, hence the deep path.
 import { estimateHistoryTokens } from "../../../../packages/agent/src/history-compaction";
 import { createAnthropicProvider, toAnthropicMessages } from "./anthropic";
+import { streamFromChunks } from "./test-helpers";
 
 const j = (value: unknown) => JSON.stringify(value);
 const ev = (payload: { type: string }) =>
@@ -11,18 +12,10 @@ const ev = (payload: { type: string }) =>
 const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
 function eventStream(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    }),
-    { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-  );
+  return new Response(streamFromChunks(chunks), {
+    headers: { "Content-Type": "text/event-stream" },
+    status: 200,
+  });
 }
 
 function streamOf(options: { text: string; thinking?: string }): string[] {
