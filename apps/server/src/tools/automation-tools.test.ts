@@ -142,10 +142,11 @@ describe("viewer automation mutation access", () => {
       const tool = getDeleteAutomationTool(service, runner);
 
       await expect(
-        tool.run(
-          { automationId: automation.id },
-          { ...TOOL_CONTEXT, channel, orgRole: "viewer" } as never
-        )
+        tool.run({ automationId: automation.id }, {
+          ...TOOL_CONTEXT,
+          channel,
+          orgRole: "viewer",
+        } as never)
       ).rejects.toMatchObject({ status: 403 });
       expect(await service.get(automation.id, ORG_ID)).not.toBeNull();
     });
@@ -175,10 +176,11 @@ describe("viewer automation mutation access", () => {
       const tool = getRunAutomationTool(service, runner);
 
       await expect(
-        tool.run(
-          { automationId: automation.id },
-          { ...TOOL_CONTEXT, channel, orgRole: "viewer" } as never
-        )
+        tool.run({ automationId: automation.id }, {
+          ...TOOL_CONTEXT,
+          channel,
+          orgRole: "viewer",
+        } as never)
       ).rejects.toMatchObject({ status: 403 });
       expect(runCount).toBe(0);
     });
