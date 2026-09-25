@@ -145,8 +145,8 @@ export class ArtifactShareService {
       orgId: string;
     }
   ): Promise<StoredArtifactShareRecord> {
-    await deleteArtifactShareSnapshot(input.orgId, existing.storagePath);
-
+    // Write + DB first so a failed replacement leaves the public share intact.
+    const previousStoragePath = existing.storagePath;
     const storagePath = await writeArtifactShareSnapshot({
       bytes: input.bytes,
       filename: input.filename,
@@ -160,6 +160,10 @@ export class ArtifactShareService {
       sizeBytes: input.bytes.byteLength,
       storagePath,
     });
+
+    if (storagePath !== previousStoragePath) {
+      await deleteArtifactShareSnapshot(input.orgId, previousStoragePath);
+    }
 
     return {
       ...existing,
