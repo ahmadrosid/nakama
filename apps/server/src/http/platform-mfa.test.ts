@@ -297,7 +297,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
   expect(disableWithBackupResponse.status).toBe(200);
 });
 
-test("enforces MFA enrollment on browser sessions only", async () => {
+test("blocks API keys from mutating browser MFA enrollment", async () => {
   const { app, authService, databaseAdapter } = createMinimalHonoApp();
   const setupSession = await setupFreshInstallSession(
     app as AppFetch,
@@ -423,6 +423,13 @@ test("enforces MFA enrollment on browser sessions only", async () => {
     })
   );
   expect(logoutResponse.status).toBe(200);
+  const apiKeyStart = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      method: "POST",
+    })
+  );
+  expect(apiKeyStart.status).toBe(403);
 
   const startResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
@@ -434,6 +441,17 @@ test("enforces MFA enrollment on browser sessions only", async () => {
   );
   expect(startResponse.status).toBe(200);
   const startBody = (await startResponse.json()) as { secret: string };
+  const apiKeyVerify = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
+      body: JSON.stringify({ code: "000000" }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    })
+  );
+  expect(apiKeyVerify.status).toBe(403);
 
   const verifyResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
@@ -446,6 +464,17 @@ test("enforces MFA enrollment on browser sessions only", async () => {
     })
   );
   expect(verifyResponse.status).toBe(200);
+  const apiKeyDisable = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/disable", {
+      body: JSON.stringify({ backupCode: "API-KEY-MUST-NOT-DISABLE" }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    })
+  );
+  expect(apiKeyDisable.status).toBe(403);
 
   const unblockedProfiles = await app.fetch(
     new Request("http://localhost:4310/v1/profiles", {
