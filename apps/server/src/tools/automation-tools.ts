@@ -1,5 +1,6 @@
 import {
   emptyObjectSchema,
+  NakamaApiError,
   normalizeAutomationDelivery,
   type ToolContext,
   type ToolDefinition,
@@ -54,6 +55,7 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        requireAutomationMutationAccess(context);
         const orgId = requireOrgId(context);
         const name = readString(input, "name");
         const description = readString(input, "description");
@@ -141,6 +143,7 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        requireAutomationMutationAccess(context);
         const orgId = requireOrgId(context);
         const automationId = readString(input, "automationId");
 
@@ -174,6 +177,7 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        requireAutomationMutationAccess(context);
         const orgId = requireOrgId(context);
         const automationId = readString(input, "automationId");
 
@@ -274,6 +278,12 @@ function requireOrgId(context: ToolContext): string {
   }
 
   return orgId;
+}
+
+function requireAutomationMutationAccess(context: ToolContext): void {
+  if (!context.orgRole || context.orgRole === "viewer") {
+    throw new NakamaApiError("Forbidden", 403);
+  }
 }
 
 function readString(input: unknown, key: string): string | null {
