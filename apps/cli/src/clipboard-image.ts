@@ -59,7 +59,7 @@ export async function readClipboardImage(): Promise<ImageAttachment | null> {
     return null;
   }
 
-  const attachment = attachmentFromClipboardBytes(bytes);
+  const attachment = attachmentFromClipboardBytes(Buffer.from(bytes));
   validateImageAttachments([attachment]);
   return attachment;
 }

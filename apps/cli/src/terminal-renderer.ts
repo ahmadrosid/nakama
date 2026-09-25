@@ -20,6 +20,7 @@ export interface ComposerSuggestion {
 
 export interface ComposerState {
   cursorVisible: boolean;
+  imageCount?: number;
   prefix: string;
   selectedIndex: number;
   suggestions: ComposerSuggestion[];
@@ -64,6 +65,18 @@ export function buildComposerLines(
   const lines: StyledLine[] = [...pendingLines];
 
   lines.push(composerSurfaceLine(""));
+
+  if (state.composer.imageCount) {
+    const count = state.composer.imageCount;
+    lines.push(
+      composerSurfaceLine(
+        truncateText(
+          `  [${count} image${count === 1 ? "" : "s"} attached]`,
+          width
+        )
+      )
+    );
+  }
 
   for (let index = 0; index < inputLines.length; index += 1) {
     const lineText = inputLines[index] ?? "";

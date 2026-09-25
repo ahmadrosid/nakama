@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import * as clipboard from "./clipboard-image";
 import type { PromptSuggestion } from "./commands";
 import {
   MAX_BRACKETED_PASTE_BYTES,
@@ -55,6 +56,79 @@ describe("PersistentPrompt", () => {
     stdoutWriteSpy = null;
     stderrWriteSpy?.mockRestore();
     stderrWriteSpy = null;
+  });
+
+  test.each(["\u0016", "\x1b[118;5u", "\x1b[27;5;118~", "\x1b[200~\x1b[201~"])(
+    "pastes an image and sends it with the draft: %j",
+    async (key) => {
+      stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+      const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+      const read = spyOn(clipboard, "readClipboardImage").mockResolvedValue(
+        image
+      );
+      const terminalInput = new FakeTerminalInput();
+      const renderer = new FakeRenderer();
+      const submitted: PromptLineResult[] = [];
+      const prompt = new PersistentPrompt({
+        onCancel: () => {},
+        onSubmit: (result) => submitted.push(result),
+        renderer,
+        terminalInput: terminalInput as unknown as TerminalInput,
+      });
+      prompts.push(prompt);
+      try {
+        prompt.start();
+        prompt.prefill("Describe this");
+        for (const event of consumeTerminalInput(key).events) {
+          terminalInput.emit(event);
+        }
+        await Bun.sleep(0);
+        expect(renderer.state?.imageCount).toBe(1);
+        terminalInput.emit("\r");
+        await Bun.sleep(0);
+        expect(submitted).toEqual([{ images: [image], text: "Describe this" }]);
+        expect(renderer.state?.imageCount).toBeUndefined();
+
+        terminalInput.emit(key);
+        await Bun.sleep(0);
+        terminalInput.emit("\u007f");
+        expect(renderer.state?.imageCount).toBeUndefined();
+      } finally {
+        read.mockRestore();
+      }
+    }
+  );
+
+  test("enter waits for every pending clipboard read", async () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+    const first = Promise.withResolvers<{ data: string; mediaType: string }>();
+    const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+    const read = spyOn(clipboard, "readClipboardImage")
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValue(image);
+    const terminalInput = new FakeTerminalInput();
+    const submitted: PromptLineResult[] = [];
+    const prompt = new PersistentPrompt({
+      onCancel: () => {},
+      onSubmit: (result) => submitted.push(result),
+      renderer: new FakeRenderer(),
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+    prompts.push(prompt);
+    try {
+      prompt.start();
+      terminalInput.emit("\u0016");
+      terminalInput.emit("\u0016");
+      terminalInput.emit("\r");
+      await Bun.sleep(0);
+      expect(submitted).toEqual([]);
+      first.resolve(image);
+      await Bun.sleep(0);
+      expect(submitted).toEqual([{ images: [image, image], text: "" }]);
+    } finally {
+      first.resolve(image);
+      read.mockRestore();
+    }
   });
 
   test("trackpad scrolling reaches history without changing the draft", () => {

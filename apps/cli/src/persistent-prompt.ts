@@ -1,5 +1,5 @@
 import { Key, matchesKey } from "@earendil-works/pi-tui";
-import type { ImageAttachment } from "@nakama/core";
+import { type ImageAttachment, validateImageAttachments } from "@nakama/core";
 import { readClipboardImage } from "./clipboard-image";
 import type { PromptSuggestion } from "./commands";
 import type { PromptLineResult } from "./prompt";
@@ -136,6 +136,7 @@ export class PersistentPrompt {
 
     this.renderer.setComposerState({
       cursorVisible: this.cursorVisible,
+      imageCount: this.attachedImages.length || undefined,
       prefix: this.prefix,
       selectedIndex: this.selectedIndex,
       suggestions,
@@ -154,9 +155,9 @@ export class PersistentPrompt {
   }
 
   private queueClipboardAttach(): void {
-    this.clipboardAttachTask = this.attachClipboardImage().then(
-      () => undefined
-    );
+    this.clipboardAttachTask = this.clipboardAttachTask.then(async () => {
+      await this.attachClipboardImage();
+    });
   }
 
   private async waitForClipboardAttach(): Promise<void> {
@@ -174,12 +175,10 @@ export class PersistentPrompt {
         return false;
       }
 
+      validateImageAttachments([...this.attachedImages, image]);
       this.attachedImages.push(image);
       this.resetSelection();
       this.cursorVisible = true;
-      process.stderr.write(
-        "\x1b[2mImage attached (backspace to remove)\x1b[0m\n"
-      );
       this.render();
       return true;
     } catch (error) {
@@ -393,7 +392,7 @@ export class PersistentPrompt {
       return;
     }
 
-    if (key === "\u0016") {
+    if (matchesKey(key, Key.ctrl("v"))) {
       this.queueClipboardAttach();
       return;
     }

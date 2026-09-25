@@ -15,6 +15,24 @@ function composerLine(text: string, width: number) {
 }
 
 describe("buildComposerLines", () => {
+  test("shows attached images without adding them to the message text", () => {
+    const lines = buildComposerLines(
+      {
+        composer: {
+          cursorVisible: true,
+          imageCount: 2,
+          prefix: "> ",
+          selectedIndex: 0,
+          suggestions: [],
+          value: "Describe this",
+        },
+        pendingMessages: [],
+      },
+      40
+    ).map((line) => styledLineText(line).trim());
+    expect(lines).toContain("[2 images attached]");
+    expect(lines).toContain("> Describe this▌");
+  });
   test("cursor blinking preserves wrapped input rows and indentation", () => {
     for (const value of ["abcdefgh", "abcdefghijklmno\nqrstuvwxyz"]) {
       const composer: ComposerState = {
