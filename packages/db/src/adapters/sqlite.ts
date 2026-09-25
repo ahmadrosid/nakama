@@ -963,6 +963,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listToolsStmt = db.prepare("SELECT * FROM tools");
   const getToolStmt = db.prepare("SELECT * FROM tools WHERE id = ?");
   const getToolByNameStmt = db.prepare("SELECT * FROM tools WHERE name = ?");
+  // The org's own tool wins over a global tool of the same name; tools owned
+  // by another organization are never visible to name lookups.
+  const getToolByNameForOrgStmt = db.prepare(`
+    SELECT * FROM tools
+    WHERE name = ? AND (org_id IS NULL OR org_id = ?)
+    ORDER BY org_id IS NULL
+    LIMIT 1
+  `);
   const upsertToolStmt = db.prepare(`
     INSERT INTO tools (
       id, name, description, handler_type, handler_config, org_id, plugin_id, plugin_key, created_at, updated_at
@@ -3590,6 +3598,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async getToolByName(name) {
       const row = getToolByNameStmt.get(name) as ToolRow | null;
+      return row ? toToolRecord(row) : null;
+    },
+
+    async getToolByNameForOrg(orgId, name) {
+      const row = getToolByNameForOrgStmt.get(name, orgId) as ToolRow | null;
       return row ? toToolRecord(row) : null;
     },
     async getUserByEmail(email) {

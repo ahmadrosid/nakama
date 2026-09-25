@@ -19,6 +19,7 @@ import { ProfileService } from "./profile-service";
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 const ORG = "org_test";
 const DEST = "org_dest";
+const VICTIM = "org_victim";
 
 describe("profile portability", () => {
   let root = "";
@@ -198,6 +199,73 @@ describe("profile portability", () => {
     expect(
       (await db.listToolsForProfile(imported.profileId)).map((t) => t.id)
     ).toContain("tool_dest");
+  });
+
+  test("import never assigns a tool owned by another organization", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Scoped Tool Bot",
+    });
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Source tool",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_source",
+      name: "victim_tool",
+      orgId: ORG,
+      updatedAt: now(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_source");
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+    expect(exported.manifest.meta.toolNames).toEqual(["victim_tool"]);
+
+    await db.deleteTool("tool_source");
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Owned by another tenant",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_victim",
+      name: "victim_tool",
+      orgId: VICTIM,
+      updatedAt: now(),
+    });
+
+    const preview = await previewProfilePackImport(db, DEST, exported.data);
+    expect(
+      preview.skippedAssignments.some(
+        (item) => item.path === "tool:victim_tool"
+      )
+    ).toBe(true);
+
+    const imported = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+    });
+    expect(
+      imported.skippedAssignments.some(
+        (item) => item.path === "tool:victim_tool"
+      )
+    ).toBe(true);
+    expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
+
+    // The importing organization's own tool of the same name still resolves.
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Owned by the importing tenant",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_dest",
+      name: "victim_tool",
+      orgId: DEST,
+      updatedAt: now(),
+    });
+    const local = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+    });
+    expect(
+      (await db.listToolsForProfile(local.profileId)).map((tool) => tool.id)
+    ).toEqual(["tool_dest"]);
   });
 
   test("export packs assigned custom tool source and import restores it", async () => {
