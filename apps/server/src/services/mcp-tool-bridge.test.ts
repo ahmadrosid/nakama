@@ -169,12 +169,12 @@ describe("mcp tool bridge", () => {
     let enabled = true;
     const calls: string[] = [];
     const manager = {
-      async ensureConnected() {
-        calls.push("ensureConnected");
-      },
       async callTool() {
         calls.push("callTool");
         return { ok: true };
+      },
+      async ensureConnected() {
+        calls.push("ensureConnected");
       },
     } as unknown as McpClientManager;
     const server: StoredMcpServerRecord = {

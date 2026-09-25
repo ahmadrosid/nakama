@@ -64,19 +64,21 @@ describe("McpService", () => {
     const db = createInMemoryDatabaseAdapter();
     const calls: string[] = [];
     const manager = {
+      async callTool() {
+        calls.push("callTool");
+        return { ok: true };
+      },
       async connect() {
         calls.push("connect");
-        return [{ description: "Read a file", inputSchema: {}, name: "read_file" }];
+        return [
+          { description: "Read a file", inputSchema: {}, name: "read_file" },
+        ];
       },
       async disconnect() {
         calls.push("disconnect");
       },
       async ensureConnected() {
         calls.push("ensureConnected");
-      },
-      async callTool() {
-        calls.push("callTool");
-        return { ok: true };
       },
     } as unknown as McpClientManager;
     const service = new McpService(db, manager);
@@ -115,9 +117,7 @@ describe("McpService", () => {
     });
     expect(futureTools).toEqual([]);
     expect(existingResult).toEqual({ error: expect.any(String) });
-    await expect(
-      service.connectServer(created.server.id)
-    ).rejects.toThrow();
+    await expect(service.connectServer(created.server.id)).rejects.toThrow();
     expect(calls).toEqual(["connect", "disconnect"]);
   });
 
