@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
+import { NakamaClient } from "@nakama/client";
 import type {
   HealthResponse,
   ModelsResponse,
@@ -18,9 +20,13 @@ import {
   isEscInterruptKey,
   needsTrailingStreamNewline,
   previewToolValue,
+  runChat,
   runCleanupThenExit,
   toolResultFailed,
 } from "./chat";
+import * as profile from "./profile";
+import * as promptModule from "./prompt";
+import { TerminalRenderer } from "./terminal-renderer";
 
 describe("needsTrailingStreamNewline", () => {
   test("adds a newline when no chunk was rendered", () => {
@@ -346,5 +352,100 @@ describe("disableRawModeIfActive", () => {
         },
       } as NodeJS.ReadStream)
     ).not.toThrow();
+  });
+});
+
+describe("non-TTY slash commands and EOF", () => {
+  const selected = {
+    id: "test",
+    model: null,
+    name: "Test",
+  } as ProfileSummary;
+
+  async function runBlockingInput(input: string | null) {
+    const client = new NakamaClient();
+    const session = client.createChatSession("test", "cli");
+    const output: string[] = [];
+    const clear = spyOn(session, "clear").mockResolvedValue(undefined);
+    const sendStream = spyOn(session, "sendStream").mockResolvedValue("");
+    let promptCount = 0;
+    const spies = [
+      spyOn(profile, "resolveStartupProfile").mockResolvedValue({
+        profile: selected,
+        profileId: selected.id,
+      }),
+      spyOn(client, "createSession").mockResolvedValue(session),
+      spyOn(client, "listProfiles").mockResolvedValue({ profiles: [selected] }),
+      spyOn(TerminalRenderer.prototype, "apply").mockReturnValue(false),
+      spyOn(promptModule, "promptLine").mockImplementation(async () => {
+        if (input === null || promptCount > 0) {
+          throw new promptModule.PromptCancelledError();
+        }
+        promptCount += 1;
+        return { text: input };
+      }),
+      spyOn(console, "log").mockImplementation((...args) => {
+        output.push(args.map(String).join(" "));
+      }),
+    ];
+
+    try {
+      await runChat({
+        channel: "cli",
+        client,
+        offline: true,
+      });
+
+      return {
+        clearCalls: clear.mock.calls.length,
+        output,
+        sendCalls: sendStream.mock.calls.length,
+      };
+    } finally {
+      for (const currentSpy of spies) {
+        currentSpy.mockRestore();
+      }
+      clear.mockRestore();
+      sendStream.mockRestore();
+    }
+  }
+
+  test("runs /help locally without sending it to the model", async () => {
+    const result = await runBlockingInput("/help");
+
+    expect(result.output.some((line) => line.includes("/help"))).toBe(true);
+    expect(result.sendCalls).toBe(0);
+  });
+
+  test("runs /clear locally without sending it to the model", async () => {
+    const result = await runBlockingInput("/clear");
+
+    expect(result.clearCalls).toBe(1);
+    expect(result.sendCalls).toBe(0);
+  });
+
+  test("rejects interactive-only commands without sending them", async () => {
+    const result = await runBlockingInput("/compact");
+
+    expect(
+      result.output.some((line) =>
+        line.includes("/compact requires an interactive terminal")
+      )
+    ).toBe(true);
+    expect(result.sendCalls).toBe(0);
+  });
+
+  test("treats EOF as clean cancellation", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const pendingPrompt = promptModule.promptLine("> ", input, output);
+    input.end();
+
+    await expect(pendingPrompt).rejects.toBeInstanceOf(
+      promptModule.PromptCancelledError
+    );
+
+    const result = await runBlockingInput(null);
+    expect(result.sendCalls).toBe(0);
   });
 });
