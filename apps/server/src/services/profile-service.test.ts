@@ -840,11 +840,7 @@ describe("profile service cloneProfile", () => {
       force: true,
       recursive: true,
     });
-    const legacyDir = path.join(
-      soulDirOf(sourceId),
-      "data",
-      "knowledge-base"
-    );
+    const legacyDir = path.join(soulDirOf(sourceId), "data", "knowledge-base");
     await mkdir(path.join(legacyDir, "extracted"), { recursive: true });
     await mkdir(path.join(legacyDir, "uploads", "kb_legacy"), {
       recursive: true,

@@ -113,11 +113,11 @@ export async function migrateLegacyKnowledgeBaseDir(
   const legacyDir = legacyKnowledgeBaseDir(orgId, profileId);
   const currentDir = getKnowledgeBaseDir(orgId, profileId);
 
-  if (!(await pathExists(legacyDir)) || (await pathExists(currentDir))) {
-    return;
+  if ((await pathExists(legacyDir)) && !(await pathExists(currentDir))) {
+    await rename(legacyDir, currentDir);
   }
 
-  await rename(legacyDir, currentDir);
+  await flattenKnowledgeBaseLayout(currentDir);
 }
 
 async function moveIfPresent(from: string, to: string): Promise<void> {
