@@ -254,26 +254,26 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
         );
       }
 
-      const readResult = await new Promise<ReadableStreamReadResult<Uint8Array>>(
-        (resolve, reject) => {
-          const remainingIdleMs = Math.max(
-            0,
-            idleMs - (Date.now() - lastDataAt)
+      const readResult = await new Promise<
+        ReadableStreamReadResult<Uint8Array>
+      >((resolve, reject) => {
+        const remainingIdleMs = Math.max(0, idleMs - (Date.now() - lastDataAt));
+        const idleTimeout = setTimeout(() => {
+          void reader.cancel();
+          reject(
+            new Error(
+              `Chat stream timed out after ${Math.round(idleMs / 1000)}s waiting for the model. The provider may be rate-limited, misconfigured, or unavailable — try another model or check Settings.`
+            )
           );
-          const idleTimeout = setTimeout(() => {
-            void reader.cancel();
-            reject(
-              new Error(
-                `Chat stream timed out after ${Math.round(idleMs / 1000)}s waiting for the model. The provider may be rate-limited, misconfigured, or unavailable — try another model or check Settings.`
-              )
-            );
-          }, remainingIdleMs);
+        }, remainingIdleMs);
 
-          void reader.read().then(resolve, reject).finally(() => {
+        void reader
+          .read()
+          .then(resolve, reject)
+          .finally(() => {
             clearTimeout(idleTimeout);
           });
-        }
-      );
+      });
 
       const { done, value } = readResult;
 
