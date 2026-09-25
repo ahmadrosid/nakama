@@ -1,3 +1,4 @@
+import uFuzzy from "@leeoniya/ufuzzy";
 import type {
   AutomationRunRecord,
   StoredAutomation,
@@ -25,6 +26,10 @@ import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
 const EMPTY_UNREAD_BY_AUTOMATION_ID: Record<string, number> = {};
+const automationSearch = new uFuzzy({
+  compare: () => 0,
+  intraIns: Number.POSITIVE_INFINITY,
+});
 
 export function useAutomationsPage() {
   const { navigateToNewChat } = useAppNavigation();
@@ -78,14 +83,21 @@ export function useAutomationsPage() {
     automations.find((automation) => automation.id === selectedId) ?? null;
 
   const filteredAutomations = useMemo(() => {
-    const query = trimmedSearch.toLowerCase();
-    return automations.filter(
-      (automation) =>
-        !query ||
-        automation.name.toLowerCase().includes(query) ||
-        automation.description.toLowerCase().includes(query) ||
-        automation.id.toLowerCase().includes(query)
+    const query = trimmedSearch.trim().toLowerCase();
+    if (!query) {
+      return automations;
+    }
+
+    const [indices, info, order] = automationSearch.search(
+      automations.map((automation) =>
+        [automation.name, automation.description, automation.id].join(" ")
+      ),
+      query
     );
+
+    const matches =
+      info && order ? order.map((index) => info.idx[index]) : indices;
+    return (matches ?? []).map((index) => automations[index]!);
   }, [automations, trimmedSearch]);
 
   const selectedRunSummary = useMemo(() => {

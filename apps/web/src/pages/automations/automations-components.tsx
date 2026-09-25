@@ -6,6 +6,7 @@ import type {
   ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
+import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import {
@@ -215,40 +216,45 @@ export function AutomationListSkeleton() {
 export function AutomationSearch({
   value,
   disabled,
-  isSearching,
   onChange,
   onClear,
 }: {
   value: string;
   disabled: boolean;
-  isSearching: boolean;
   onChange: (value: string) => void;
   onClear: () => void;
 }) {
   return (
     <div className="relative">
-      <Search01Icon
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-      />
-      <Input
-        aria-label="Search automations"
-        className={cn("pl-9", isSearching && "pr-9")}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Search…"
-        value={value}
-      />
-      {isSearching ? (
+      {value ? (
         <button
           aria-label="Clear search"
-          className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
           onClick={onClear}
           type="button"
         >
-          <Cancel01Icon className="size-4" />
+          <Cancel01Icon aria-hidden className="size-4" />
         </button>
-      ) : null}
+      ) : (
+        <Search01Icon
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+      )}
+      <Input
+        aria-label="Search automations"
+        className="border-border/60 bg-white pr-8 pl-2 shadow-none focus-visible:border-border/60 focus-visible:ring-0"
+        disabled={disabled}
+        maxLength={MAX_SESSION_SEARCH_LENGTH}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onClear();
+          }
+        }}
+        placeholder="Search automations"
+        value={value}
+      />
     </div>
   );
 }
