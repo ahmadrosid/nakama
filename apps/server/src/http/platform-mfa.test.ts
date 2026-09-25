@@ -557,8 +557,8 @@ test("MFA enrollment and disable revoke other browser sessions", async () => {
   const sessionAfterEnrollment = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
+        backupCode: enrollmentResult.backupCodes[0],
         email: "admin@example.com",
-        mfaCode: createTotpCode(enrollmentBody.secret),
         password: "password123",
       }),
       headers: { "Content-Type": "application/json" },
@@ -570,7 +570,7 @@ test("MFA enrollment and disable revoke other browser sessions", async () => {
 
   const disable = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/disable", {
-      body: JSON.stringify({ backupCode: enrollmentResult.backupCodes[0] }),
+      body: JSON.stringify({ backupCode: enrollmentResult.backupCodes[1] }),
       headers: current.headers({
         "Content-Type": "application/json",
         "X-CSRF-Token": current.csrfToken,
