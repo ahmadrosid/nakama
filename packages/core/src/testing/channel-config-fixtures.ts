@@ -3,7 +3,18 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 
-export const HANDSHAKE_CODE_PATTERN = /^[0-9A-F]{8}$/;
+export const HANDSHAKE_CODE_PATTERN = /^[0-9A-F]{32}$/;
+
+/** A code that is still live when the bridge reads it back. */
+export function liveHandshakeCode(code = "A".repeat(32)): {
+  handshakeCode: string;
+  handshakeExpiresAt: string;
+} {
+  return {
+    handshakeCode: code,
+    handshakeExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+  };
+}
 
 export async function withTempHomedir(
   prefix: string,
@@ -22,8 +33,8 @@ export async function withTempHomedir(
 
 export type ChannelIniConfig = {
   botToken: string;
-  profileId?: string;
   handshakeCode?: string | null;
+  handshakeExpiresAt?: string | null;
   pairedUserIds?: Array<string | number>;
   allowedUserIds?: Array<string | number>;
 };
@@ -45,6 +56,10 @@ export async function writeChannelIniConfig(
 
   if (config.handshakeCode) {
     lines.push(`handshake_code=${config.handshakeCode}`);
+  }
+
+  if (config.handshakeExpiresAt) {
+    lines.push(`handshake_expires_at=${config.handshakeExpiresAt}`);
   }
 
   if (config.pairedUserIds?.length) {
@@ -82,12 +97,13 @@ type SharedChannelConfigCase<TId extends string | number> = {
   };
   mask: (token: string) => string | null;
   normalize: (input: string) => string;
-  generateHandshakeCode: () => string;
+  generatePairingCode: () => string;
   isUserAuthorized: (
     userId: TId,
     access: { allowedUserIds: TId[]; pairedUserIds: TId[] }
   ) => boolean;
   verifyAndPair: (code: string, userId: TId) => Promise<{ ok: boolean }>;
+  regenerate: () => Promise<{ handshakeCode: string | null }>;
   saveConfig: (input: {
     botToken: string;
     allowedUserIds?: string;
@@ -128,9 +144,9 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
       });
     });
 
-    describe("normalizeHandshakeInput", () => {
-      test("strips spaces and uppercases", () => {
-        expect(tc.normalize(" ab cd12 ")).toBe("ABCD12");
+    describe("normalizePairingCode", () => {
+      test("strips spaces and grouping, and uppercases", () => {
+        expect(tc.normalize(" ab-cd 12 ")).toBe("ABCD12");
       });
     });
 
@@ -157,21 +173,25 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
       });
     });
 
-    describe("generateHandshakeCode", () => {
-      test("returns 8 uppercase hex chars", () => {
-        expect(tc.generateHandshakeCode()).toMatch(HANDSHAKE_CODE_PATTERN);
+    describe("generatePairingCode", () => {
+      test("returns 32 uppercase hex chars", () => {
+        expect(tc.generatePairingCode()).toMatch(HANDSHAKE_CODE_PATTERN);
       });
     });
 
     describe("verifyAndPair", () => {
-      test("pairs a user and clears the handshake code", async () => {
+      test("pairs a user and consumes the code", async () => {
         await withTempHomedir(tempPrefix, async (homeDir) => {
+          const code = liveHandshakeCode("A1B2C3D4E5F60718293A4B5C6D7E8F90");
           await writeChannelIniConfig(homeDir, tc.name, {
             botToken: tc.botToken,
-            handshakeCode: "AABBCCDD",
+            ...code,
           });
 
-          const result = await tc.verifyAndPair("aa bb cc dd", tc.sampleId);
+          const result = await tc.verifyAndPair(
+            code.handshakeCode.toLowerCase(),
+            tc.sampleId
+          );
 
           expect(result.ok).toBe(true);
 
@@ -181,26 +201,117 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
         });
       });
 
-      test("rejects invalid pairing codes", async () => {
+      test("rejects a code whose expiry has passed", async () => {
         await withTempHomedir(tempPrefix, async (homeDir) => {
           await writeChannelIniConfig(homeDir, tc.name, {
             botToken: tc.botToken,
-            handshakeCode: "AABBCCDD",
+            handshakeCode: liveHandshakeCode().handshakeCode,
+            handshakeExpiresAt: new Date(Date.now() - 1000).toISOString(),
           });
 
-          const result = await tc.verifyAndPair("DEADBEEF", tc.sampleId);
+          const result = await tc.verifyAndPair(
+            liveHandshakeCode().handshakeCode,
+            tc.sampleId
+          );
 
           expect(result.ok).toBe(false);
 
           const config = await tc.loadConfigFile();
           expect(config?.pairedUserIds).toEqual([]);
-          expect(config?.handshakeCode).toBe("AABBCCDD");
+        });
+      });
+
+      test("gives an expired code the same answer as a wrong one", async () => {
+        await withTempHomedir(tempPrefix, async (homeDir) => {
+          await writeChannelIniConfig(homeDir, tc.name, {
+            botToken: tc.botToken,
+            ...liveHandshakeCode(),
+          });
+          const wrong = await tc.verifyAndPair(
+            liveHandshakeCode("B".repeat(32)).handshakeCode,
+            tc.sampleId
+          );
+
+          await writeChannelIniConfig(homeDir, tc.name, {
+            botToken: tc.botToken,
+            handshakeCode: liveHandshakeCode("C".repeat(32)).handshakeCode,
+            handshakeExpiresAt: new Date(Date.now() - 1000).toISOString(),
+          });
+          const expired = await tc.verifyAndPair(
+            liveHandshakeCode("C".repeat(32)).handshakeCode,
+            tc.authorize.unauthorized
+          );
+
+          expect(expired).toEqual(wrong);
+        });
+      });
+
+      test("rejects invalid pairing codes and keeps the code", async () => {
+        await withTempHomedir(tempPrefix, async (homeDir) => {
+          const code = liveHandshakeCode();
+          await writeChannelIniConfig(homeDir, tc.name, {
+            botToken: tc.botToken,
+            ...code,
+          });
+
+          const result = await tc.verifyAndPair("F".repeat(32), tc.sampleId);
+
+          expect(result.ok).toBe(false);
+
+          const config = await tc.loadConfigFile();
+          expect(config?.pairedUserIds).toEqual([]);
+          expect(config?.handshakeCode).toBe(code.handshakeCode);
+        });
+      });
+
+      test("retires the code once the per-code attempt budget is spent", async () => {
+        await withTempHomedir(tempPrefix, async (homeDir) => {
+          const code = liveHandshakeCode();
+          await writeChannelIniConfig(homeDir, tc.name, {
+            botToken: tc.botToken,
+            ...code,
+          });
+
+          for (let attempt = 0; attempt < 4; attempt += 1) {
+            expect(
+              (await tc.verifyAndPair("F".repeat(32), tc.sampleId)).ok
+            ).toBe(false);
+          }
+          expect((await tc.loadConfigFile())?.handshakeCode).toBe(
+            code.handshakeCode
+          );
+
+          expect((await tc.verifyAndPair("F".repeat(32), tc.sampleId)).ok).toBe(
+            false
+          );
+
+          expect((await tc.loadConfigFile())?.handshakeCode).toBeNull();
+        });
+      });
+
+      test("pairs with a regenerated code after the budget was spent", async () => {
+        await withTempHomedir(tempPrefix, async (homeDir) => {
+          await writeChannelIniConfig(homeDir, tc.name, {
+            botToken: tc.botToken,
+            ...liveHandshakeCode(),
+          });
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            await tc.verifyAndPair("F".repeat(32), tc.sampleId);
+          }
+
+          const fresh = await tc.regenerate();
+          const result = await tc.verifyAndPair(
+            fresh.handshakeCode as string,
+            tc.sampleId
+          );
+
+          expect(result.ok).toBe(true);
         });
       });
 
       test("rejects pairing when channel is not configured", async () => {
         await withTempHomedir(tempPrefix, async () => {
-          const result = await tc.verifyAndPair("AABBCCDD", tc.sampleId);
+          const result = await tc.verifyAndPair("A".repeat(32), tc.sampleId);
 
           expect(result.ok).toBe(false);
         });
@@ -269,6 +380,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             allowedUserIds: tc.resolveFile.allowedUserIds,
             botToken: "file-token",
             handshakeCode: "ABCD1234",
+            handshakeExpiresAt: "2099-01-01T00:00:00.000Z",
             pairedUserIds: tc.resolveFile.pairedUserIds,
             profileId: "profile_from_file",
           },
@@ -278,6 +390,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
           allowedUserIds: tc.env.allowlistParsed,
           botToken: "env-token",
           handshakeCode: "ABCD1234",
+          handshakeExpiresAt: "2099-01-01T00:00:00.000Z",
           pairedUserIds: tc.resolveFile.pairedUserIds,
           profileId: "profile_from_file",
         });
@@ -316,7 +429,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             allowedUserIds: tc.allowlistParsed,
             botToken: "file-token",
             handshakeCode: null,
-            pairedUserIds: [],
+            handshakeExpiresAt: null,
             profileId: "profile_from_file",
           },
         });

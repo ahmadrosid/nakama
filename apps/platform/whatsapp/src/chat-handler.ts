@@ -34,7 +34,8 @@ import {
 import { pickProfileForOrg } from "@nakama/core/profiles";
 import {
   DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION,
-  normalizePairingCode,
+  hasActivePairingCode,
+  looksLikePairingCode,
 } from "@nakama/core/whatsapp-config";
 import {
   downloadContentFromMessage,
@@ -197,7 +198,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       if (!authorized) {
-        if (!authStore.getConfig()?.pairingCode) {
+        if (!hasActivePairingCode(authStore.getConfig())) {
           if (isChannelDebugEnabled()) {
             console.log(
               [
@@ -213,7 +214,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
 
         if (isGroup) {
-          if (looksLikePairingCodeAttempt(pairingText)) {
+          if (looksLikePairingCode(pairingText)) {
             await handlePairing(inbound.senderJid, pairingText);
             return;
           }
@@ -230,7 +231,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      if (looksLikePairingCodeAttempt(pairingText)) {
+      if (looksLikePairingCode(pairingText)) {
         await sendText(jid, ALREADY_LINKED_REPLY);
         return;
       }
@@ -312,7 +313,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    if (!looksLikePairingCodeAttempt(text)) {
+    if (!looksLikePairingCode(text)) {
       await sendText(jid, PAIRING_PROMPT);
       return;
     }
@@ -922,20 +923,6 @@ function parseCommand(text: string): string {
 
 function isStopCommand(text: string): boolean {
   return parseCommand(text) === "/stop";
-}
-
-function looksLikePairingCodeAttempt(text: string): boolean {
-  const trimmed = text.trim();
-
-  if (!trimmed || /\s/.test(trimmed) || trimmed.startsWith("/")) {
-    return false;
-  }
-
-  if (/^[0-9A-F]{8}$/.test(normalizePairingCode(trimmed))) {
-    return true;
-  }
-
-  return trimmed === trimmed.toUpperCase() && /^[A-Z0-9-]{4,12}$/.test(trimmed);
 }
 
 export function resetChatLocksForTests(): void {
