@@ -945,6 +945,49 @@ describe("createHonoApp", () => {
 
     expect(response.status).toBe(415);
   });
+  test("accept-invite rejects a body that is not application/json", async () => {
+    const options = createServerOptions();
+    options.orgService = new OrgService(
+      options.databaseAdapter,
+      options.authService,
+      { send: async () => ({ error: "Email unavailable.", ok: false }) }
+    );
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const admin = await options.databaseAdapter.getUserByEmail(
+      "admin@example.com"
+    );
+    const invite = await options.orgService.createInvite({
+      email: "invitee@example.com",
+      invitedByUserId: admin!.id,
+      orgId: session.orgId!,
+      role: "member",
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+    expect(extractSetCookies(response)).toEqual([]);
+
+    const accepted = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(accepted.status).toBe(200);
+    expect(extractSetCookies(accepted).length).toBeGreaterThan(0);
+  });
 
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
