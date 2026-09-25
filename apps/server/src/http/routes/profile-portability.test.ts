@@ -128,6 +128,127 @@ describe("profile pack routes", () => {
     );
   }, 30_000);
 
+  test("org admin import does not grant another org's MCP server", async () => {
+    const { app, authService, databaseAdapter, profileService } = createApp();
+    const owner = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "pack-mcp-owner",
+      "pack-mcp-owner@example.com"
+    );
+    const createSecondOrg = await app.fetch(
+      new Request(`${BASE}/v1/platform/orgs`, {
+        body: JSON.stringify({
+          admin: {
+            email: "pack-mcp-attacker@example.com",
+            name: "Mallory Admin",
+            phone: "+628123456780",
+          },
+          name: "Mallory",
+          slug: "pack-mcp-attacker",
+        }),
+        headers: owner.platformSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": owner.platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createSecondOrg.status).toBe(201);
+    const secondOrg = (await createSecondOrg.json()) as {
+      adminMember: { temporaryPassword: string };
+      organization: { id: string };
+    };
+    const attacker = {
+      adminSession: await loginUserSession(
+        app,
+        "pack-mcp-attacker@example.com",
+        secondOrg.adminMember.temporaryPassword,
+        secondOrg.organization.id
+      ),
+      orgId: secondOrg.organization.id,
+    };
+    const host = await profileService.createProfile(owner.orgId, {
+      name: "Ops Bot",
+    });
+    await databaseAdapter.upsertMcpServer({
+      cachedTools: [{ description: "wipe", inputSchema: {}, name: "wipe" }],
+      config: { headers: { authorization: "Bearer prod" } },
+      createdAt: new Date().toISOString(),
+      enabled: true,
+      id: "mcp_prod_admin",
+      lastError: null,
+      name: "Production Admin MCP",
+      status: "connected",
+      transport: "http",
+      updatedAt: new Date().toISOString(),
+    });
+    await databaseAdapter.assignMcpServerToProfile(
+      host.profile.id,
+      "mcp_prod_admin"
+    );
+
+    const exportResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${host.profile.id}/pack/export`, {
+        headers: owner.adminSession.headers({}, owner.orgId),
+      })
+    );
+    expect(exportResponse.status).toBe(200);
+    const data = Buffer.from(await exportResponse.arrayBuffer()).toString(
+      "base64"
+    );
+
+    const previewResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/pack/import/preview`, {
+        body: JSON.stringify({ data }),
+        headers: attacker.adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": attacker.adminSession.csrfToken,
+          },
+          attacker.orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(previewResponse.status).toBe(200);
+    const preview = (await previewResponse.json()) as {
+      skippedAssignments: Array<{ path: string; reason: string }>;
+    };
+    expect(preview.skippedAssignments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "MCP server:Production Admin MCP",
+          reason: expect.stringContaining("not available to this organization"),
+        }),
+      ])
+    );
+
+    const importResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/pack/import`, {
+        body: JSON.stringify({
+          confirm: true,
+          data,
+          name: "Stolen MCP Bot",
+        }),
+        headers: attacker.adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": attacker.adminSession.csrfToken,
+          },
+          attacker.orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(importResponse.status).toBe(200);
+    const imported = (await importResponse.json()) as { profileId: string };
+    expect(
+      await databaseAdapter.listMcpServersForProfile(imported.profileId)
+    ).toEqual([]);
+  }, 30_000);
+
   test.each([
     ["preview", "/v1/profiles/pack/import/preview"],
     ["import", "/v1/profiles/pack/import"],

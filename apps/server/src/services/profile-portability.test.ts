@@ -432,6 +432,75 @@ describe("profile portability", () => {
     ).toBe(true);
   });
 
+  test("pack import only attaches MCP servers granted to the importing org", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Privileged Bot",
+    });
+    await db.upsertMcpServer({
+      cachedTools: [{ description: "drop db", inputSchema: {}, name: "drop" }],
+      config: {
+        env: { PROD_TOKEN: "shh" },
+        headers: { authorization: "Bearer prod" },
+      },
+      createdAt: now(),
+      enabled: true,
+      id: "mcp_prod",
+      lastError: null,
+      name: "Production Admin MCP",
+      status: "connected",
+      transport: "http",
+      updatedAt: now(),
+    });
+    await db.assignMcpServerToProfile(profile.id, "mcp_prod");
+
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+    expect(exported.manifest.meta.mcpServerNames).toEqual([
+      "Production Admin MCP",
+    ]);
+
+    const preview = await previewProfilePackImport(db, DEST, exported.data);
+    expect(
+      preview.skippedAssignments.some(
+        (item) =>
+          item.path === "MCP server:Production Admin MCP" &&
+          item.reason.includes("not available to this organization")
+      )
+    ).toBe(true);
+
+    const imported = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+    });
+    expect(
+      (await db.listMcpServersForProfile(imported.profileId)).map(
+        (server) => server.id
+      )
+    ).toEqual([]);
+
+    const adminImported = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+      isPlatformAdmin: true,
+      name: "Platform Restored Bot",
+    });
+    expect(
+      (await db.listMcpServersForProfile(adminImported.profileId)).map(
+        (server) => server.id
+      )
+    ).toEqual(["mcp_prod"]);
+
+    const granted = await service.createProfile(DEST, { name: "Granted Host" });
+    await db.assignMcpServerToProfile(granted.profile.id, "mcp_prod");
+    const grantedImport = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+      name: "Granted Bot",
+    });
+    expect(
+      (await db.listMcpServersForProfile(grantedImport.profileId)).map(
+        (server) => server.id
+      )
+    ).toEqual(["mcp_prod"]);
+  });
+
   test("guards: Super Bot, confirm, preview-only, and kind mismatch", async () => {
     const { db, service } = await setup();
     const normal = await service.createProfile(ORG, { name: "Bot" });
