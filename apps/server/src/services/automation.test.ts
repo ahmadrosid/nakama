@@ -529,7 +529,9 @@ describe("AutomationService", () => {
     await service.completeRun(firstRun.id, automation.id, { output: "First" });
 
     const runs = await service.listRuns(automation.id);
-    expect(runs.find((run) => run.id === firstRun.id)?.status).toBe("completed");
+    expect(runs.find((run) => run.id === firstRun.id)?.status).toBe(
+      "completed"
+    );
     expect(runs.find((run) => run.id === secondRun.id)?.status).toBe("running");
     expect((await service.getActiveRun(automation.id))?.id).toBe(secondRun.id);
   });
@@ -691,7 +693,9 @@ describe("AutomationRunner", () => {
     expect(result.output).toBe("Hello from automation");
     expect(createAttempts).toBe(2);
     expect(await service.getActiveRun(automation.id)).toBeNull();
-    expect((await service.listRuns(automation.id))[0]?.status).toBe("completed");
+    expect((await service.listRuns(automation.id))[0]?.status).toBe(
+      "completed"
+    );
   });
 
   test("passes automation scope to the agent prompt", async () => {

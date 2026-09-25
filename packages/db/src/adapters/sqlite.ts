@@ -3181,14 +3181,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toAutomationRunRecord(row) : null;
     },
 
-    async getAutomationRun(automationId, runId) {
-      const row = getAutomationRunStmt.get(
-        automationId,
-        runId
-      ) as AutomationRunRow | null;
-      return row ? toAutomationRunRecord(row) : null;
-    },
-
     async getApiKeyByPrefix(keyPrefix) {
       const row = getApiKeyByPrefixStmt.get(keyPrefix) as ApiKeyRow | null;
       return row ? toApiKeyRecord(row) : null;
@@ -3218,6 +3210,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getAutomation(id) {
       const row = getAutomationStmt.get(id) as AutomationRow | null;
       return row ? toAutomationRecord(row) : null;
+    },
+
+    async getAutomationRun(automationId, runId) {
+      const row = getAutomationRunStmt.get(
+        automationId,
+        runId
+      ) as AutomationRunRow | null;
+      return row ? toAutomationRunRecord(row) : null;
     },
 
     async getAutomationRunReadThrough(userId, orgId, automationId) {

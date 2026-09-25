@@ -818,10 +818,6 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
-  getAutomationRun(
-    automationId: string,
-    runId: string
-  ): Promise<StoredAutomationRunRecord | null>;
   getApiKeyByPrefix(keyPrefix: string): Promise<StoredApiKeyRecord | null>;
   getArtifactShareById(
     orgId: string,
@@ -833,6 +829,10 @@ export interface DatabaseAdapter {
   ): Promise<StoredArtifactShareRecord | null>;
   getAttachment(id: string): Promise<StoredAttachmentRecord | null>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;
+  getAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<StoredAutomationRunRecord | null>;
 
   getAutomationRunReadThrough(
     userId: string,
