@@ -70,6 +70,9 @@ export class PersistentPrompt {
 
     this.active = true;
     this.unsubscribeInput = this.terminalInput.onInput(this.onData);
+    if (this.onScrollHistory) {
+      this.terminalInput.setMouseTracking(true);
+    }
     this.startBlink();
     this.render();
   }
@@ -83,6 +86,9 @@ export class PersistentPrompt {
     this.stopBlink();
     this.unsubscribeInput?.();
     this.unsubscribeInput = null;
+    if (this.onScrollHistory) {
+      this.terminalInput.setMouseTracking(false);
+    }
     process.stdout.write("\x1b[?25h");
   }
 
@@ -311,6 +317,16 @@ export class PersistentPrompt {
 
     if (key === "\u0003") {
       this.onCancel();
+      return;
+    }
+
+    const mouse = key.match(/^\x1b\[<(\d+);\d+;\d+M$/);
+    if (mouse) {
+      // biome-ignore lint/suspicious/noBitwiseOperators: SGR mouse buttons encode Shift/Alt/Ctrl in bits 2–4.
+      const button = Number(mouse[1]) & ~28;
+      if (button === 64 || button === 65) {
+        this.onScrollHistory?.(button === 64 ? "line_up" : "line_down");
+      }
       return;
     }
 

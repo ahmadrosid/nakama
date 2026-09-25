@@ -5,7 +5,7 @@ import {
   PersistentPrompt,
 } from "./persistent-prompt";
 import type { PromptLineResult } from "./prompt";
-import type { TerminalInput } from "./terminal-input";
+import { consumeTerminalInput, type TerminalInput } from "./terminal-input";
 import type { ComposerState, TerminalRenderer } from "./terminal-renderer";
 
 class FakeRenderer implements Pick<TerminalRenderer, "setComposerState"> {
@@ -17,7 +17,12 @@ class FakeRenderer implements Pick<TerminalRenderer, "setComposerState"> {
 }
 
 class FakeTerminalInput {
+  mouseTracking = false;
   private listener: ((chunk: string) => void) | null = null;
+
+  setMouseTracking(enabled: boolean): void {
+    this.mouseTracking = enabled;
+  }
 
   onInput(listener: (chunk: string) => void): () => void {
     this.listener = listener;
@@ -50,6 +55,38 @@ describe("PersistentPrompt", () => {
     stdoutWriteSpy = null;
     stderrWriteSpy?.mockRestore();
     stderrWriteSpy = null;
+  });
+
+  test("trackpad scrolling reaches history without changing the draft", () => {
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const terminalInput = new FakeTerminalInput();
+    const renderer = new FakeRenderer();
+    const scrolls: string[] = [];
+    const prompt = new PersistentPrompt({
+      onCancel: () => {},
+      onScrollHistory: (event) => scrolls.push(event),
+      onSubmit: () => {},
+      renderer,
+      terminalInput: terminalInput as unknown as TerminalInput,
+    });
+    prompts.push(prompt);
+    prompt.start();
+    prompt.prefill("unfinished draft");
+    expect(terminalInput.mouseTracking).toBe(true);
+
+    const { events } = consumeTerminalInput(
+      "\x1b[<64;12;8M\x1b[<65;12;8M\x1b[<80;12;8M" +
+        "\x1b[<0;12;8M\x1b[<64;12;8m\x1b[<66;12;8M"
+    );
+    for (const event of events) {
+      terminalInput.emit(event);
+    }
+    expect(scrolls).toEqual(["line_up", "line_down", "line_up"]);
+    expect(renderer.state?.value).toBe("unfinished draft");
+    prompt.stop();
+    expect(terminalInput.mouseTracking).toBe(false);
   });
 
   test("prefill renders suggestions for the inserted value", () => {
