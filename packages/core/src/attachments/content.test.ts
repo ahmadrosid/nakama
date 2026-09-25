@@ -52,6 +52,43 @@ describe("attachment content helpers", () => {
     expect(saved).toHaveLength(2);
   });
 
+  test("normalizes data URLs before persisting attachment bytes", async () => {
+    const saved: Buffer[] = [];
+    const data = Buffer.from("png").toString("base64");
+
+    await persistInlineAttachmentsInContent(
+      [
+        {
+          data: `data:image/png;base64,${data}`,
+          mediaType: "image/png",
+          type: "image",
+        },
+      ],
+      async (input) => {
+        saved.push(input.bytes);
+        return { attachmentId: "att_1", size: input.bytes.byteLength };
+      }
+    );
+
+    expect(saved[0]?.toString()).toBe("png");
+  });
+
+  test("rejects invalid base64 before persistence", async () => {
+    let saveCalls = 0;
+
+    await expect(
+      persistInlineAttachmentsInContent(
+        [{ data: "!!!!", mediaType: "image/png", type: "image" }],
+        async () => {
+          saveCalls += 1;
+          return { attachmentId: "att_1", size: 0 };
+        }
+      )
+    ).rejects.toThrow();
+
+    expect(saveCalls).toBe(0);
+  });
+
   test("rehydrateAttachmentRefsInContent restores inline provider parts", async () => {
     const pngBase64 = Buffer.from("png").toString("base64");
     const pdfBase64 = Buffer.from("pdf").toString("base64");

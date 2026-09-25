@@ -3,6 +3,11 @@ import type {
   ChatMessage,
   MessageContentPart,
 } from "../contract";
+import {
+  MAX_DOCUMENT_BYTES,
+  MAX_IMAGE_BYTES,
+  normalizeAttachmentBase64,
+} from "../message-content";
 
 export interface SavedInlineAttachment {
   attachmentId: string;
@@ -107,7 +112,10 @@ export async function persistInlineAttachmentsInContent(
 
   for (const part of content) {
     if (part.type === "image") {
-      const bytes = Buffer.from(part.data, "base64");
+      const bytes = Buffer.from(
+        normalizeAttachmentBase64(part.data, MAX_IMAGE_BYTES, "image"),
+        "base64"
+      );
       const saved = await save({
         bytes,
         kind: "image",
@@ -124,7 +132,10 @@ export async function persistInlineAttachmentsInContent(
     }
 
     if (part.type === "document") {
-      const bytes = Buffer.from(part.data, "base64");
+      const bytes = Buffer.from(
+        normalizeAttachmentBase64(part.data, MAX_DOCUMENT_BYTES, "document"),
+        "base64"
+      );
       const saved = await save({
         bytes,
         filename: part.filename,
