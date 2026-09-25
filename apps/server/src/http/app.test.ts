@@ -1293,6 +1293,59 @@ describe("createHonoApp", () => {
     expect(sessionBody.mode).toBe("browser-session");
   });
 
+  test("API keys cannot mutate the human owner's profile", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const adminSession = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const admin =
+      await options.databaseAdapter.getUserByEmail("admin@example.com");
+    if (!(admin && adminSession.orgId)) {
+      throw new Error("Expected setup admin");
+    }
+    const userBefore = await options.databaseAdapter.getUserById(admin.id);
+    if (!userBefore) {
+      throw new Error("Expected setup admin record");
+    }
+
+    const secret = `nk_live_${"e".repeat(64)}`;
+    await options.databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: admin.id,
+      environment: "live",
+      expiresAt: null,
+      id: "key_update_auth_me_test",
+      keyPrefix: secret.slice(0, 20),
+      lastUsedAt: null,
+      name: "update auth/me test",
+      orgId: adminSession.orgId,
+      revokedAt: null,
+      secretHash: options.authService.hashToken(secret),
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        body: JSON.stringify({
+          name: "Changed by API key",
+          phone: "+15555550199",
+        }),
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "Content-Type": "application/json",
+          "X-Org-Id": adminSession.orgId,
+        },
+        method: "PATCH",
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(await options.databaseAdapter.getUserById(admin.id)).toEqual(
+      userBefore
+    );
+  });
+
   test("API-key sessions require an app user id", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
