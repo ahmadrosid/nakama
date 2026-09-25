@@ -43,7 +43,13 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
+import {
+  getRequestAppUserScope,
+  getRequestAuth,
+  json,
+  readJson,
+  readOptionalJson,
+} from "../shared";
 import type { HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
@@ -1299,6 +1305,7 @@ export function registerProfileRoutes(
   app.get("/v1/profiles/:profileId/artifacts", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+    const { appUserId } = getRequestAppUserScope(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
     const offsetRaw = c.req.query("offset");
@@ -1325,9 +1332,7 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
-        // Same header the session routes take. Absent, this is the shared
-        // profile folder and today's behaviour exactly.
-        appUserId: c.req.header("X-Nakama-App-User-Id")?.trim() || undefined,
+        appUserId,
         folder: c.req.query("folder"),
         limit,
         offset,
@@ -1337,6 +1342,7 @@ export function registerProfileRoutes(
 
   app.get("/v1/profiles/:profileId/artifacts/content", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
+    const { appUserId } = getRequestAppUserScope(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
 
@@ -1351,7 +1357,7 @@ export function registerProfileRoutes(
       profileId,
       artifactPath,
       {
-        appUserId: c.req.header("X-Nakama-App-User-Id")?.trim() || undefined,
+        appUserId,
         render,
       }
     );
