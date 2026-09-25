@@ -4271,22 +4271,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
-    async revokeBrowserSessionsForUserExcept(
-      userId,
-      sessionId,
-      revokedAt
-    ) {
+    async revokeBrowserSessionsForUser(userId, revokedAt) {
+      const result = revokeBrowserSessionsForUserStmt.run(revokedAt, userId);
+      return result.changes;
+    },
+
+    async revokeBrowserSessionsForUserExcept(userId, sessionId, revokedAt) {
       const result = revokeBrowserSessionsForUserExceptStmt.run(
         revokedAt,
         userId,
         sessionId,
         sessionId
       );
-      return result.changes;
-    },
-
-    async revokeBrowserSessionsForUser(userId, revokedAt) {
-      const result = revokeBrowserSessionsForUserStmt.run(revokedAt, userId);
       return result.changes;
     },
     async setFilePinned(orgId, userId, profileId, path, pinned) {

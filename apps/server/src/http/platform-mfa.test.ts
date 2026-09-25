@@ -540,18 +540,22 @@ test("MFA enrollment and disable revoke other browser sessions", async () => {
     backupCodes: string[];
   };
   expect(
-    (await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        headers: oldSession.headers(),
-      })
-    )).status
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: oldSession.headers(),
+        })
+      )
+    ).status
   ).toBe(401);
   expect(
-    (await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        headers: current.headers(),
-      })
-    )).status
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
   ).toBe(200);
 
   const sessionAfterEnrollment = await app.fetch(
@@ -580,17 +584,21 @@ test("MFA enrollment and disable revoke other browser sessions", async () => {
   );
   expect(disable.status).toBe(200);
   expect(
-    (await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        headers: sessionToRevoke.headers(),
-      })
-    )).status
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: sessionToRevoke.headers(),
+        })
+      )
+    ).status
   ).toBe(401);
   expect(
-    (await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        headers: current.headers(),
-      })
-    )).status
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
   ).toBe(200);
 });
