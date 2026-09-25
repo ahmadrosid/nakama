@@ -812,9 +812,9 @@ async function runConversation(
       (message): message is Extract<ChatMessage, { role: "assistant" }> =>
         message.role === "assistant"
     );
-  const stoppedReply = lastAssistant?.content ?? "";
-  const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached its tool iteration limit. Send another message to continue.`;
-  const content = stoppedReply + notice;
+  const lastAssistantContent = lastAssistant?.content ?? "";
+  const notice = `${lastAssistantContent ? "\n\n" : ""}Stopped because this turn reached its tool iteration limit. Send another message to continue.`;
+  const content = lastAssistantContent + notice;
   history.push({ content, role: "assistant" });
   if (mode === "stream") {
     handlers?.onChunk(notice);
