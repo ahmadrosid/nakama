@@ -27,6 +27,8 @@ export const DEFAULT_DISCORD_PROFILE_ID = "default";
 
 export const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 export const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
+export const DISCORD_USER_AGENT =
+  "DiscordBot (https://github.com/ahmadrosid/nakama, 1.0)";
 
 export function isDiscordSnowflake(value: string): boolean {
   return SNOWFLAKE_PATTERN.test(value);

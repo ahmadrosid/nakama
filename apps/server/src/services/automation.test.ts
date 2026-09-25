@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { NakamaApiError } from "@nakama/core";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  getDiscordConfigDir,
+  getDiscordConfigPath,
+  getTelegramConfigDir,
+  getTelegramConfigPath,
+  NakamaApiError,
+} from "@nakama/core";
 import type { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
@@ -509,6 +518,146 @@ describe("AutomationService", () => {
     );
     expect(runs.find((run) => run.id === secondRun.id)?.status).toBe("running");
     expect((await service.getActiveRun(automation.id))?.id).toBe(secondRun.id);
+  });
+
+  test("refuses a member automation that targets a foreign destination", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-dest-"));
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      await mkdir(getTelegramConfigDir(owner), { recursive: true });
+      await writeFile(
+        getTelegramConfigPath(owner),
+        "bot_token=test-token\npaired_user_ids=111\n",
+        "utf8"
+      );
+      await mkdir(getDiscordConfigDir(owner), { recursive: true });
+      await writeFile(
+        getDiscordConfigPath(owner),
+        "bot_token=test-token\npaired_user_ids=123456789012345678\n",
+        "utf8"
+      );
+
+      for (const delivery of [
+        { channel: "telegram", chatId: 999 } as const,
+        { channel: "discord", channelId: "123456789012345679" } as const,
+      ]) {
+        const error = await service
+          .create(
+            ORG_ID,
+            {
+              delivery,
+              description: "Report",
+              name: "Report",
+              prompt: "Summarize the week",
+              trigger: { type: "manual" },
+            },
+            PROFILE_ID,
+            { isPlatformAdmin: false, orgRole: "member" }
+          )
+          .then(
+            () => null,
+            (thrown: unknown) => thrown
+          );
+
+        expect(error).toBeInstanceOf(NakamaApiError);
+        expect((error as NakamaApiError).status).toBe(403);
+      }
+
+      // A member-owned automation that stays on the paired set is unaffected.
+      const paired = await service.create(
+        ORG_ID,
+        {
+          delivery: { channel: "telegram", chatId: 111 },
+          description: "Report",
+          name: "Report",
+          prompt: "Summarize the week",
+          trigger: { type: "manual" },
+        },
+        PROFILE_ID,
+        { isPlatformAdmin: false, orgRole: "member" }
+      );
+
+      expect(paired.delivery).toEqual({ channel: "telegram", chatId: 111 });
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("re-locks a member who retargets an admin-approved destination", async () => {
+    const db = await createTestDb();
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-dest-"));
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      await mkdir(getDiscordConfigDir(owner), { recursive: true });
+      await writeFile(
+        getDiscordConfigPath(owner),
+        "bot_token=test-token\npaired_user_ids=123456789012345678\n",
+        "utf8"
+      );
+      const service = new AutomationService(db, {
+        getUserTimezone: async () => "UTC",
+      });
+      const now = new Date().toISOString();
+      await db.upsertAutomation({
+        createdAt: now,
+        definition: {
+          delivery: {
+            channel: "discord",
+            channelId: "123456789012345679",
+          },
+          description: "Report",
+          name: "Report",
+          prompt: "Summarize the week",
+          steps: [],
+          trigger: { type: "manual" },
+          version: 1,
+        },
+        enabled: true,
+        id: "automation_admin_owned",
+        name: "Report",
+        orgId: ORG_ID,
+        profileId: PROFILE_ID,
+        updatedAt: now,
+        version: 1,
+      });
+
+      const error = await service
+        .update(
+          "automation_admin_owned",
+          ORG_ID,
+          { delivery: { channel: "discord", channelId: "987654321098765432" } },
+          { isPlatformAdmin: false, orgRole: "member" }
+        )
+        .then(
+          () => null,
+          (thrown: unknown) => thrown
+        );
+
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect((error as NakamaApiError).status).toBe(403);
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+      await rm(configDir, { force: true, recursive: true });
+    }
   });
 });
 
