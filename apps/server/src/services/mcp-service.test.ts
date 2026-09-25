@@ -6,8 +6,8 @@ import {
   ensurePreinstalledMcpServers,
 } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
-import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { McpService } from "./mcp-service";
+import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 
 async function seedProfile(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>
@@ -382,6 +382,16 @@ describe("McpService", () => {
       profileId: string;
     }> = [];
     const manager = {
+      async callTool(
+        _serverId: string,
+        _transport: "stdio",
+        _toolName: string,
+        _input: unknown,
+        profileId: string,
+        orgId: string
+      ) {
+        return { orgId, profileId };
+      },
       async connect(server: { id: string }) {
         startupConnections.push(server.id);
         return [];
@@ -396,16 +406,6 @@ describe("McpService", () => {
           orgId,
           profileId,
         });
-      },
-      async callTool(
-        _serverId: string,
-        _transport: "stdio",
-        _toolName: string,
-        _input: unknown,
-        profileId: string,
-        orgId: string
-      ) {
-        return { orgId, profileId };
       },
     } as unknown as McpClientManager;
     const service = new McpService(db, manager);
@@ -425,8 +425,19 @@ describe("McpService", () => {
     await service.assignServerToProfile(profileId, created.server.id);
     const orgId = "org_test";
     expect(server).not.toBeNull();
+    const scopedServer = {
+      ...server!,
+      cachedTools: [
+        {
+          description: "Read a scoped file",
+          inputSchema: { type: "object" },
+          name: "read",
+        },
+      ],
+    };
+    await db.upsertMcpServer(scopedServer);
     const tools = buildMcpToolDefinitions(
-      [server!],
+      [scopedServer],
       manager,
       orgId,
       profileId
