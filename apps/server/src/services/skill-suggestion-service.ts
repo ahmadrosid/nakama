@@ -18,10 +18,8 @@ import type {
   SkillSuggestionAction,
   StoredSkillSuggestion,
 } from "@nakama/db";
-import {
-  isSkillWriteApprovalRequired,
-  type SkillProposalService,
-} from "./skill-proposal-service";
+import type { SkillProposalService } from "./skill-proposal-service";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 import type { SkillsService } from "./skills-service";
 
 export function toSkillSuggestion(

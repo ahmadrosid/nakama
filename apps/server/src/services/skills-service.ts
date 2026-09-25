@@ -35,6 +35,7 @@ import {
   composeMatchedSkillsPrompt,
   composeSkillMarkdown,
   composeSkillsCatalog,
+  createBlockedSkillCodeTool,
   createId,
   createSkillFile,
   type DiscoveredSkill,
@@ -61,6 +62,7 @@ import {
   removeProfileSkillSupportingFile,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
+  resolveSkillCodeExecutionPolicy,
   SKILL_FILE_NAME,
   writeProfileSkillSupportingFile,
   writeRawProfileSkillMarkdown,
@@ -80,6 +82,7 @@ import {
   withAssignmentChange,
 } from "./profile-change-history";
 import { loadPythonSkillTool } from "./python-skill-tool-loader";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 
 export interface SkillUsageRecordingContext {
   seenCatalogSkillIds: Set<string>;
@@ -1068,9 +1071,47 @@ export class SkillsService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    const skillTools = assigned.filter(
-      (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
-    );
+    // What a member asks the agent to write lands under this profile's own
+    // skills dir, and a skill's tool module and `scripts:` entries are host
+    // code. They load only once the org reviews every write to them, which is
+    // the admin approval that code needs before it can reach the deployment
+    // secret store or another tenant's workspace. Approval is read fail-closed:
+    // a database hiccup, or an org the adapter cannot resolve, must not read as
+    // approved. The write path still 404s on a profile that is really missing,
+    // so only the exec decision degrades.
+    const memberAuthoredCodeApproved = await isSkillWriteApprovalRequired(
+      this.db,
+      orgId,
+      profileId
+    ).catch((error: unknown) => {
+      console.warn(
+        `[nakama:skills] Treating ${orgId}/${profileId} skill code as unapproved:`,
+        error instanceof Error ? error.message : error
+      );
+      return false;
+    });
+    const loadable: typeof assigned = [];
+    const blocked: Array<{
+      discovered: DiscoveredSkill;
+      reason: string;
+    }> = [];
+    for (const item of assigned) {
+      if (isPluginOwnedSkill(item.record)) {
+        continue;
+      }
+      const policy = resolveSkillCodeExecutionPolicy({
+        directory: item.discovered.directory,
+        memberAuthoredCodeApproved,
+        orgId,
+        profileId,
+      });
+      if (policy.executable) {
+        loadable.push(item);
+      } else {
+        blocked.push({ discovered: item.discovered, reason: policy.reason });
+      }
+    }
+    const skillTools = loadable.filter((item) => item.discovered.hasTool);
     const javascriptTools = await loadSkillTools(
       skillTools
         .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
@@ -1079,21 +1120,52 @@ export class SkillsService {
     const pythonTools = await Promise.all(
       skillTools
         .filter((item) => item.discovered.toolPath?.endsWith(".py"))
-        .map((item) => loadPythonSkillTool(item.discovered))
+        .map((item) =>
+          loadPythonSkillTool(item.discovered, undefined, {
+            exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+          })
+        )
     );
     // Scripts named in `scripts:` each become their own tool, so a skill is no
     // longer capped at the single tool.py slot.
     const declaredTools = await Promise.all(
-      assigned
-        .filter((item) => !isPluginOwnedSkill(item.record))
-        .flatMap((item) =>
-          item.discovered.scriptTools.map((script) =>
-            loadPythonSkillTool(item.discovered, script)
-          )
+      loadable.flatMap((item) =>
+        item.discovered.scriptTools.map((script) =>
+          loadPythonSkillTool(item.discovered, script, {
+            exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+          })
         )
+      )
     );
+    // The refusals keep the tool names occupied so the model is told why the
+    // skill's code did nothing, rather than finding an unknown tool and
+    // answering from the script's text as if it had run. A blocked tool
+    // module's own exported name is never read, because reading it means
+    // importing it, which is exactly what is being refused.
+    const refusals = blocked.flatMap(({ discovered, reason }) => {
+      const moduleStub = discovered.toolPath
+        ? [
+            createBlockedSkillCodeTool({
+              description: discovered.description,
+              name: discovered.name,
+              reason,
+            }),
+          ]
+        : [];
+      return [
+        ...moduleStub,
+        ...discovered.scriptTools.map((script) =>
+          createBlockedSkillCodeTool({
+            description: script.description,
+            name: script.name,
+            reason,
+          })
+        ),
+      ];
+    });
     return [
       ...javascriptTools,
+      ...refusals,
       ...[...pythonTools, ...declaredTools].filter(
         (tool): tool is ToolDefinition => tool !== null
       ),
