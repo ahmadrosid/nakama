@@ -20,6 +20,7 @@ import {
   isEscInterruptKey,
   needsTrailingStreamNewline,
   previewToolValue,
+  runChat,
   runCleanupThenExit,
   toolResultFailed,
 } from "./chat";

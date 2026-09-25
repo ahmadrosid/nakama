@@ -22,8 +22,8 @@ import {
   formatSlashCommands,
   isActiveModelOption,
   resolveModelSwitchTarget,
-  resolveSuggestions,
   resolveSlashCommand,
+  resolveSuggestions,
 } from "./commands";
 import { formatCliDisplayPath } from "./display-path";
 import { mergeSendInput, parseImageLine } from "./image-input";
