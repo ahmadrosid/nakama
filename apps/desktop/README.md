@@ -8,7 +8,13 @@ From an Apple Silicon Mac or Windows x64 machine with this Git checkout and Bun 
 
 ```sh
 bun install
-bun run dev:desktop
+bun run desktop
+```
+
+You can also run the desktop workspace directly:
+
+```sh
+bun run --cwd apps/desktop dev
 ```
 
 Create the macOS app, DMG, and ZIP:
@@ -30,7 +36,7 @@ The server binds only to `127.0.0.1`, on an available port. Desktop waits for it
 To use an existing server instead:
 
 ```sh
-NAKAMA_DESKTOP_URL=https://nakama.example/chat bun run dev:desktop
+NAKAMA_DESKTOP_URL=https://nakama.example/chat bun run desktop
 ```
 
 External links open in the system browser. Remote content has no Node access or exposed native APIs. An isolated preload keeps the native title bar in sync with Nakama's Light, Dark, or System theme. Microphone, camera, and notification permissions remain disabled in this preview. Optional tools that need external programs, such as Python or a coding CLI, still require those programs to be installed.

@@ -91,12 +91,18 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 ./scripts/docker-build-run.sh
 ```
 
-**Fresh start:**
+**Fresh start (destroys data):**
 
 ```bash
 ./scripts/docker-destroy.sh
 ./scripts/docker-build-run.sh
 ```
+
+The reset script also removes every container publishing port 4310, including
+unrelated containers. It does not remove the cached
+`ghcr.io/ahmadrosid/nakama:latest` image. See the
+[Docker reset documentation](https://ahmadrosid.github.io/nakama/docker#reset-a-local-docker-install)
+for the complete cleanup scope.
 
 Open the dashboard at http://localhost:4310.
 
