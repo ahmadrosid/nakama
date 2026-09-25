@@ -144,6 +144,38 @@ describe("isWorkerSchedulable", () => {
     ).toBe(true);
   });
 
+  test("includes one-shots that became due within the reload grace window", () => {
+    const now = Date.parse("2026-09-25T12:00:00.000Z");
+    expect(
+      isWorkerSchedulable(
+        {
+          enabled: true,
+          trigger: {
+            at: new Date(now - 60_000).toISOString(),
+            type: "runAt",
+          },
+        },
+        now
+      )
+    ).toBe(true);
+  });
+
+  test("excludes one-shots older than the reload grace window", () => {
+    const now = Date.parse("2026-09-25T12:00:00.000Z");
+    expect(
+      isWorkerSchedulable(
+        {
+          enabled: true,
+          trigger: {
+            at: new Date(now - 60_001).toISOString(),
+            type: "runAt",
+          },
+        },
+        now
+      )
+    ).toBe(false);
+  });
+
   test("excludes past runAt automations", () => {
     expect(
       isWorkerSchedulable({

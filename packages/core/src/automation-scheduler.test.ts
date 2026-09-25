@@ -93,6 +93,33 @@ describe("AutomationScheduler", () => {
     scheduler.stop();
   });
 
+  test("runs one-shots due during reload", async () => {
+    let now = Date.parse("2026-09-25T12:00:00.000Z");
+    const runAt = new Date(now + 10).toISOString();
+    const runs: string[] = [];
+    const delegate = createDelegate({
+      getDefaultTimezone: async () => {
+        now = Date.parse(runAt);
+        return "UTC";
+      },
+      listScheduledAutomations: async () => [
+        schedule({ cron: undefined, id: "a1", runAt }),
+      ],
+      runAutomation: async (id) => {
+        runs.push(id);
+        return { ok: true };
+      },
+    });
+
+    const scheduler = new AutomationScheduler(delegate, () => now);
+    await scheduler.start();
+    await scheduler.reload();
+    await Promise.resolve();
+
+    expect(runs).toEqual(["a1"]);
+    scheduler.stop();
+  });
+
   test("run delegate receives the schedule's org id", async () => {
     const at = new Date(Date.now() + 20).toISOString();
     const runs: Array<{ id: string; orgId: string }> = [];
