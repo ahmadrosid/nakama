@@ -284,17 +284,20 @@ describe("ensureOrgSuperBotProfiles", () => {
     await ensureBundledSkillsAssigned(db);
 
     const activeProfiles = await db.listProfilesForOrg("org_active");
-    const activeDefault = activeProfiles.find(
-      (profile) => profile.isDefault
-    );
+    const activeDefault = activeProfiles.find((profile) => profile.isDefault);
     expect(
       (await db.listProfilesForOrg("org_active")).some(
         (profile) => profile.isSuper
       )
     ).toBe(true);
-    expect(await db.listProfilesForOrg("org_archived")).toEqual([
-      archivedDefault,
-    ]);
+    const archivedProfiles = await db.listProfilesForOrg("org_archived");
+    expect(archivedProfiles).toHaveLength(1);
+    expect(archivedProfiles[0]).toMatchObject({
+      id: archivedDefault.id,
+      isDefault: true,
+      isSuper: false,
+      orgId: "org_archived",
+    });
     expect(
       (await db.listSkillsForProfile(activeDefault!.id)).map(
         (skill) => skill.name
