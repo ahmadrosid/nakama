@@ -64,6 +64,7 @@ import type {
   PatchSkillRequest,
   ProfileResponse,
   ProviderChatOptions,
+  ProviderInstance,
   ProviderClient,
   RunToolResponse,
   SaveInlineAttachment,
@@ -386,7 +387,6 @@ type ChatProfileAccess = Pick<
 >;
 
 export class AgentService {
-  private harness: AgentDependencies;
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
@@ -483,15 +483,6 @@ export class AgentService {
     this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured =
       isProviderConfigured(userConfig) && provider !== null;
-    const activeInstance = getActiveProviderInstance(userConfig);
-    this.harness = this.createHarness({
-      modelId: activeInstance
-        ? resolveDefaultModelForInstance(activeInstance)
-        : null,
-      provider,
-      providerInstance: activeInstance,
-      thinking: this.resolveWorkspaceThinkingDefaults(),
-    });
   }
 
   /**
@@ -742,15 +733,6 @@ export class AgentService {
       };
     }
 
-    this.harness = this.createHarness({
-      modelId: (() => {
-        const active = getActiveProviderInstance(this.userConfig);
-        return active ? resolveDefaultModelForInstance(active) : null;
-      })(),
-      provider: createProviderFromActiveConfig(this.userConfig, process.env),
-      providerInstance: getActiveProviderInstance(this.userConfig),
-      thinking: this.resolveWorkspaceThinkingDefaults(),
-    });
     this.sessions.clear();
 
     return { thinking };
@@ -997,7 +979,8 @@ export class AgentService {
   }
 
   async generateImage(
-    input: GenerateImageRequest
+    input: GenerateImageRequest,
+    orgId: string | null
   ): Promise<GenerateImageResponse> {
     await this.ensureImageGenerationSettingsLoaded();
 
@@ -1023,11 +1006,14 @@ export class AgentService {
       inputTokens: 0,
       outputTokens: 0,
     };
-    this.llmUsageTracker?.record(
-      result.model,
-      usage.inputTokens,
-      usage.outputTokens
-    );
+    if (orgId) {
+      this.llmUsageTracker?.record(
+        result.model,
+        usage.inputTokens,
+        usage.outputTokens,
+        { orgId }
+      );
+    }
 
     return {
       data: Buffer.from(result.data).toString("base64"),
@@ -2552,12 +2538,19 @@ export class AgentService {
     return session.compact(options);
   }
 
-  async draftAutomation(prompt: string, channel: AgentChannel) {
+  async draftAutomation(
+    prompt: string,
+    channel: AgentChannel,
+    orgId: string | null
+  ) {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
     }
 
-    return createAutomationFromPrompt(this.harness, { channel, prompt });
+    return createAutomationFromPrompt(this.createWorkspaceHarness(orgId), {
+      channel,
+      prompt,
+    });
   }
 
   async discoverModels(
@@ -2889,7 +2882,7 @@ export class AgentService {
     };
 
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
 
     if (isFirst) {
       await this.ensureSoulScaffolded();
@@ -2926,7 +2919,7 @@ export class AgentService {
 
     this.userConfig = { ...this.userConfig, providers };
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
 
     return {
       provider: toProviderInstanceSummary(
@@ -2962,7 +2955,7 @@ export class AgentService {
     };
 
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
 
     return { defaultProviderId };
   }
@@ -2989,7 +2982,7 @@ export class AgentService {
       ),
     };
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
   }
   async persistChatgptOAuth(
     providerId: string,
@@ -3013,7 +3006,7 @@ export class AgentService {
       ),
     };
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
   }
 
   async getModels(
@@ -3098,9 +3091,15 @@ export class AgentService {
     };
   }
 
-  getLlmUsageStats() {
+  /**
+   * The requester's own ledger only. Usage is tenant data, so a status
+   * response must never be able to answer with another org's totals (#1306).
+   */
+  async getLlmUsageStats(orgId: string | null) {
+    const stored = orgId ? await this.llmUsageTracker?.getStats(orgId) : null;
+
     return (
-      this.llmUsageTracker?.getStats() ?? {
+      stored ?? {
         estimatedCostUsd: 0,
         inputTokens: 0,
         outputTokens: 0,
@@ -3111,8 +3110,10 @@ export class AgentService {
     );
   }
 
-  getLlmUsageStatsByModel() {
-    return this.llmUsageTracker?.getStatsByModel() ?? [];
+  async getLlmUsageStatsByModel(orgId: string | null) {
+    return orgId
+      ? ((await this.llmUsageTracker?.getStatsByModel(orgId)) ?? [])
+      : [];
   }
 
   async configureProvider(
@@ -3143,26 +3144,18 @@ export class AgentService {
     };
   }
 
-  private refreshHarness(): void {
+  private refreshProviderConfig(): void {
     const provider = createProviderFromActiveConfig(this.userConfig);
-    const active = getActiveProviderInstance(this.userConfig);
     this._providerConfigured =
       isProviderConfigured(this.userConfig) && provider !== null;
-    this.harness = this.createHarness({
-      modelId: active ? resolveDefaultModelForInstance(active) : null,
-      provider,
-      providerInstance: active,
-      thinking: this.resolveWorkspaceThinkingDefaults(),
-    });
     this.sessions.clear();
   }
 
   /** After a data-root restore, reload provider config and clear in-memory session state. */
   async reloadAfterDataRestore(): Promise<void> {
     this.userConfig = await loadUserConfig();
-    this.refreshHarness();
+    this.refreshProviderConfig();
     this.composioService?.reloadConfiguration();
-    await this.llmUsageTracker?.reloadFromDatabase();
     this.visionSettingsPromise = null;
     this.transcriptionSettingsPromise = null;
     await this.ensureVisionSettingsLoaded();
@@ -3806,20 +3799,31 @@ export class AgentService {
     );
   }
 
+  /**
+   * `orgId` is the tenant the calls made through this harness are billed to.
+   * Without one the provider is left unwrapped: the ledger has no unattributed
+   * bucket, so an org-less harness must not be allowed to add to any org's.
+   */
   private createHarness(options: {
     provider: ProviderClient | null;
-    providerInstance?: ReturnType<typeof getActiveProviderInstance>;
+    providerInstance?: ProviderInstance | null;
     modelId?: string | null;
+    orgId?: string | null;
     thinking: ThinkingSettings;
   }): AgentDependencies {
     const providerInstance = options.providerInstance ?? null;
+    const usageOrgId = options.orgId?.trim() ?? "";
 
     const trackedProvider =
-      options.provider && this.llmUsageTracker && options.modelId
+      options.provider &&
+      this.llmUsageTracker &&
+      options.modelId &&
+      usageOrgId
         ? wrapProviderWithUsageTracking(
             options.provider,
             this.llmUsageTracker,
             options.modelId,
+            usageOrgId,
             {
               provider: providerInstance?.type ?? options.provider.name,
               providerInstance,
@@ -3834,6 +3838,24 @@ export class AgentService {
       ),
       provider: trackedProvider ?? undefined,
     };
+  }
+
+  /**
+   * The workspace provider has no profile to inherit a tenant from, so the
+   * org-scoped callers (the automation drafter) pass their own.
+   */
+  private createWorkspaceHarness(orgId: string | null): AgentDependencies {
+    const activeInstance = getActiveProviderInstance(this.userConfig);
+
+    return this.createHarness({
+      modelId: activeInstance
+        ? resolveDefaultModelForInstance(activeInstance)
+        : null,
+      orgId,
+      provider: createProviderFromActiveConfig(this.userConfig, process.env),
+      providerInstance: activeInstance,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+    });
   }
 
   getUsageStatusFields(): {
@@ -4267,6 +4289,7 @@ export class AgentService {
             visionProvider,
             this.llmUsageTracker,
             visionSelection.model,
+            orgId,
             {
               provider: visionSelection.instance.type,
               providerInstance: visionSelection.instance,
@@ -4611,6 +4634,7 @@ export class AgentService {
     if (!resolved) {
       return this.createHarness({
         modelId: null,
+        orgId: profile.orgId,
         provider: null,
         providerInstance: null,
         thinking: this.resolveWorkspaceThinkingDefaults(),
@@ -4641,6 +4665,7 @@ export class AgentService {
 
     return this.createHarness({
       modelId: resolved.model,
+      orgId: profile.orgId,
       provider: resolvedProvider,
       providerInstance: resolved.instance,
       thinking: this.resolveWorkspaceThinkingDefaults(),

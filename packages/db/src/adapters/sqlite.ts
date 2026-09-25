@@ -226,6 +226,7 @@ interface LlmUsageStatsRow {
   estimated_cost_usd: number;
   id: string;
   input_tokens: number;
+  org_id: string;
   output_tokens: number;
   request_count: number;
   tracked_since: string;
@@ -236,6 +237,7 @@ interface LlmUsageModelStatsRow {
   estimated_cost_usd: number;
   input_tokens: number;
   model_id: string;
+  org_id: string;
   output_tokens: number;
   request_count: number;
   tracked_since: string;
@@ -1195,10 +1197,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
 
   const getLlmUsageStatsStmt = db.prepare(
-    "SELECT * FROM llm_usage_stats WHERE id = ?"
+    "SELECT * FROM llm_usage_stats WHERE org_id = ? AND id = ?"
   );
   const listLlmUsageStatsByModelStmt = db.prepare(`
     SELECT * FROM llm_usage_model_stats
+    WHERE org_id = ?
     ORDER BY request_count DESC, input_tokens + output_tokens DESC, model_id ASC
   `);
   const listMcpServersStmt = db.prepare("SELECT * FROM mcp_servers");
@@ -1412,6 +1415,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const incrementLlmUsageStatsStmt = db.prepare(`
     INSERT INTO llm_usage_stats (
+      org_id,
       id,
       request_count,
       input_tokens,
@@ -1420,8 +1424,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       tracked_since,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, id) DO UPDATE SET
       request_count = llm_usage_stats.request_count + excluded.request_count,
       input_tokens = llm_usage_stats.input_tokens + excluded.input_tokens,
       output_tokens = llm_usage_stats.output_tokens + excluded.output_tokens,
@@ -1430,6 +1434,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const incrementLlmUsageStatsByModelStmt = db.prepare(`
     INSERT INTO llm_usage_model_stats (
+      org_id,
       model_id,
       request_count,
       input_tokens,
@@ -1438,8 +1443,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       tracked_since,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(model_id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, model_id) DO UPDATE SET
       request_count = llm_usage_model_stats.request_count + excluded.request_count,
       input_tokens = llm_usage_model_stats.input_tokens + excluded.input_tokens,
       output_tokens = llm_usage_model_stats.output_tokens + excluded.output_tokens,
@@ -2098,6 +2103,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     for (const table of [
       "llm_turn_usage",
       "llm_usage_stats",
+      "llm_usage_model_stats",
       "mcp_servers",
       "skills",
       "tool_output_savings",
@@ -3367,8 +3373,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toProfileRecord(row) : null;
     },
 
-    async getLlmUsageStats() {
+    async getLlmUsageStats(orgId) {
       const row = getLlmUsageStatsStmt.get(
+        orgId,
         LLM_USAGE_STATS_ID
       ) as LlmUsageStatsRow | null;
       return row ? toLlmUsageStatsRecord(row) : null;
@@ -3642,9 +3649,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
-    async incrementLlmUsageStats(delta, trackedSince) {
+    async incrementLlmUsageStats(orgId, delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsStmt.run(
+        orgId,
         LLM_USAGE_STATS_ID,
         delta.requestCount,
         delta.inputTokens,
@@ -3655,9 +3663,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
-    async incrementLlmUsageStatsByModel(modelId, delta, trackedSince) {
+    async incrementLlmUsageStatsByModel(orgId, modelId, delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsByModelStmt.run(
+        orgId,
         modelId,
         delta.requestCount,
         delta.inputTokens,
@@ -3869,9 +3878,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }));
     },
 
-    async listLlmUsageStatsByModel() {
+    async listLlmUsageStatsByModel(orgId) {
       return listLlmUsageStatsByModelStmt
-        .all()
+        .all(orgId)
         .map((row) => toLlmUsageModelStatsRecord(row as LlmUsageModelStatsRow));
     },
 
@@ -5077,6 +5086,7 @@ function toLlmUsageStatsRecord(
     estimatedCostUsd: row.estimated_cost_usd,
     id: row.id,
     inputTokens: row.input_tokens,
+    orgId: row.org_id,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
     trackedSince: row.tracked_since,
@@ -5091,6 +5101,7 @@ function toLlmUsageModelStatsRecord(
     estimatedCostUsd: row.estimated_cost_usd,
     inputTokens: row.input_tokens,
     modelId: row.model_id,
+    orgId: row.org_id,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
     trackedSince: row.tracked_since,

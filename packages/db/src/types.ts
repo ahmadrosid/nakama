@@ -179,7 +179,7 @@ export interface StoredLlmUsageStatsRecord {
   estimatedCostUsd: number;
   id: string;
   inputTokens: number;
-  orgId?: string | null;
+  orgId: string;
   outputTokens: number;
   requestCount: number;
   trackedSince: string;
@@ -190,7 +190,7 @@ export interface StoredLlmUsageModelStatsRecord {
   estimatedCostUsd: number;
   inputTokens: number;
   modelId: string;
-  orgId?: string | null;
+  orgId: string;
   outputTokens: number;
   requestCount: number;
   trackedSince: string;
@@ -887,7 +887,7 @@ export interface DatabaseAdapter {
   ): Promise<StoredComposioUserConnectionRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
 
-  getLlmUsageStats(): Promise<StoredLlmUsageStatsRecord | null>;
+  getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getMcpServer(id: string): Promise<StoredMcpServerRecord | null>;
   getMcpServerByName(name: string): Promise<StoredMcpServerRecord | null>;
   getNotificationDestination(
@@ -992,10 +992,12 @@ export interface DatabaseAdapter {
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageStats(
+    orgId: string,
     delta: LlmUsageStatsDelta,
     trackedSince: string
   ): Promise<void>;
   incrementLlmUsageStatsByModel(
+    orgId: string,
     modelId: string,
     delta: LlmUsageStatsDelta,
     trackedSince: string
@@ -1067,7 +1069,9 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
-  listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
+  listLlmUsageStatsByModel(
+    orgId: string
+  ): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
 
   listMcpServers(): Promise<StoredMcpServerRecord[]>;

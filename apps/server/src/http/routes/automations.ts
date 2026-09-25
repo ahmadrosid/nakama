@@ -328,7 +328,8 @@ export function registerAutomationRoutes(
     const body = await readJson<DraftAutomationRequest>(c.req.raw);
     const automation = await agent.draftAutomation(
       body.prompt,
-      parseChannel(body.channel)
+      parseChannel(body.channel),
+      getRequestAuth(c).activeOrgId ?? null
     );
     return json<DraftAutomationResponse>({ automation });
   });
