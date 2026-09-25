@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getUserConfigDir, saveAttachmentBytes } from "@nakama/core";
+import {
+  getKnowledgeBaseDir,
+  getOrgKnowledgeBaseDir,
+  getProfileArtifactsDir,
+  getUserConfigDir,
+  saveAttachmentBytes,
+} from "@nakama/core";
 import { unzipSync } from "fflate";
-import { NAKAMA_USER_EXPORT_MANIFEST } from "../../services/data-portability";
+import {
+  NAKAMA_ORG_EXPORT_MANIFEST,
+  NAKAMA_USER_EXPORT_MANIFEST,
+} from "../../services/data-portability";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -222,6 +231,232 @@ describe("data portability routes", () => {
     expect(missingResponse.status).toBe(404);
   });
 
+  test("platform admin exports one organization's data without secrets or other tenants", async () => {
+    const { app, authService, databaseAdapter, orgService } = createApp();
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const targetOrg = await orgService.createOrganization({
+      name: "Target Export Org",
+      slug: "target-export-org",
+    });
+    const otherOrg = await orgService.createOrganization({
+      name: "Other Export Org",
+      slug: "other-export-org",
+    });
+    const [targetProfile] = await databaseAdapter.listProfilesForOrg(
+      targetOrg.organization.id
+    );
+    const [otherProfile] = await databaseAdapter.listProfilesForOrg(
+      otherOrg.organization.id
+    );
+    expect(targetProfile).toBeDefined();
+    expect(otherProfile).toBeDefined();
+
+    const now = new Date().toISOString();
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "org-export-member@example.com",
+      id: "user_org_export",
+      name: "Org Export Member",
+      passwordHash: await authService.hashPassword("target-password"),
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: targetOrg.organization.id,
+      role: "member",
+      userId: "user_org_export",
+    });
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_org_export",
+      model: null,
+      orgId: targetOrg.organization.id,
+      profileId: targetProfile!.id,
+      title: "Portable org chat",
+      userId: "user_org_export",
+    });
+    await databaseAdapter.appendMessagesForSession("session_org_export", [
+      {
+        createdAt: now,
+        id: "message_org_export",
+        payload: { content: "portable org message", role: "user" },
+        seq: 0,
+        sessionId: "session_org_export",
+      },
+    ]);
+    const attachmentPath = await saveAttachmentBytes(
+      targetOrg.organization.id,
+      targetProfile!.id,
+      "attachment_org_export",
+      Buffer.from("portable org attachment")
+    );
+    await databaseAdapter.insertAttachment({
+      channel: "web",
+      createdAt: now,
+      ephemeral: false,
+      filename: "org-note.txt",
+      id: "attachment_org_export",
+      kind: "document",
+      mediaType: "text/plain",
+      orgId: targetOrg.organization.id,
+      profileId: targetProfile!.id,
+      sessionId: "session_org_export",
+      sizeBytes: 23,
+      storagePath: attachmentPath,
+    });
+    await databaseAdapter.upsertAutomation({
+      createdAt: now,
+      definition: { prompt: "portable org automation" },
+      enabled: true,
+      id: "automation_org_export",
+      name: "Portable automation",
+      orgId: targetOrg.organization.id,
+      profileId: targetProfile!.id,
+      updatedAt: now,
+      version: 1,
+    });
+    await databaseAdapter.insertAutomationRun({
+      automationId: "automation_org_export",
+      completedAt: now,
+      error: null,
+      id: "automation_run_org_export",
+      output: "portable automation result",
+      startedAt: now,
+      status: "completed",
+    });
+
+    const artifactDir = getProfileArtifactsDir(
+      targetOrg.organization.id,
+      targetProfile!.id
+    );
+    const profileKnowledgeBaseDir = getKnowledgeBaseDir(
+      targetOrg.organization.id,
+      targetProfile!.id
+    );
+    const orgKnowledgeBaseDir = getOrgKnowledgeBaseDir(
+      targetOrg.organization.id
+    );
+    await mkdir(artifactDir, { recursive: true });
+    await mkdir(profileKnowledgeBaseDir, { recursive: true });
+    await mkdir(orgKnowledgeBaseDir, { recursive: true });
+    await writeFile(join(artifactDir, "report.txt"), "portable artifact");
+    await writeFile(
+      join(profileKnowledgeBaseDir, "profile-note.md"),
+      "portable profile knowledge"
+    );
+    await writeFile(
+      join(orgKnowledgeBaseDir, "org-note.md"),
+      "portable organization knowledge"
+    );
+
+    await databaseAdapter.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_other_org_export",
+      model: null,
+      orgId: otherOrg.organization.id,
+      profileId: otherProfile!.id,
+      title: "Other tenant chat",
+    });
+    await databaseAdapter.appendMessagesForSession("session_other_org_export", [
+      {
+        createdAt: now,
+        id: "message_other_org_export",
+        payload: { content: "other-tenant-secret", role: "user" },
+        seq: 0,
+        sessionId: "session_other_org_export",
+      },
+    ]);
+    await writeFile(
+      join(getUserConfigDir(), "config.ini"),
+      "api_key=provider-secret"
+    );
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${targetOrg.organization.id}/data/export`,
+        { headers: session.headers() }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/zip");
+    expect(response.headers.get("content-disposition")).toContain(
+      "nakama-org-export-target-export-org-"
+    );
+    const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(Object.keys(archive)).toContain(NAKAMA_ORG_EXPORT_MANIFEST);
+    expect(Object.keys(archive)).toContain(
+      `profiles/${targetProfile!.id}/artifacts/report.txt`
+    );
+    expect(Object.keys(archive)).toContain(
+      `profiles/${targetProfile!.id}/knowledge-base/profile-note.md`
+    );
+    expect(Object.keys(archive)).toContain(
+      "organization/knowledge-base/org-note.md"
+    );
+    expect(Object.keys(archive)).toContain("attachments/attachment_org_export");
+
+    const manifest = JSON.parse(
+      Buffer.from(archive[NAKAMA_ORG_EXPORT_MANIFEST]!).toString("utf8")
+    ) as {
+      automations: Array<{ id: string; runs: Array<{ id: string }> }>;
+      members: Array<{ user: { email?: string; id: string } }>;
+      organization: { id: string };
+      profiles: Array<{ id: string }>;
+      sessions: Array<{
+        id: string;
+        messages: Array<{ payload: { content: string } }>;
+      }>;
+    };
+    expect(manifest.organization.id).toBe(targetOrg.organization.id);
+    expect(manifest.members).toContainEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({
+          email: "org-export-member@example.com",
+          id: "user_org_export",
+        }),
+      })
+    );
+    expect(manifest.profiles.map((profile) => profile.id)).toContain(
+      targetProfile!.id
+    );
+    expect(manifest.automations).toContainEqual(
+      expect.objectContaining({
+        id: "automation_org_export",
+        runs: [expect.objectContaining({ id: "automation_run_org_export" })],
+      })
+    );
+    expect(manifest.sessions).toHaveLength(1);
+    expect(manifest.sessions[0]!.messages[0]!.payload.content).toBe(
+      "portable org message"
+    );
+
+    const exportedText = Object.values(archive)
+      .map((entry) => Buffer.from(entry).toString("utf8"))
+      .join("\n");
+    expect(exportedText).not.toContain("passwordHash");
+    expect(exportedText).not.toContain("provider-secret");
+    expect(exportedText).not.toContain("other-tenant-secret");
+
+    const missingResponse = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/platform/orgs/org_missing/data/export",
+        { headers: session.headers() }
+      )
+    );
+    expect(missingResponse.status).toBe(404);
+  });
+
   test("platform admin can preview import without mutating local data", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const session = await loginPlatformAdminSession(
@@ -369,6 +604,12 @@ describe("data portability routes", () => {
         { headers: orgSession.headers() }
       )
     );
+    const orgExportResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${created.organization.id}/data/export`,
+        { headers: orgSession.headers() }
+      )
+    );
     const previewResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/data/import/preview", {
         body: JSON.stringify({ data: Buffer.from("bad").toString("base64") }),
@@ -382,6 +623,7 @@ describe("data portability routes", () => {
 
     expect(exportResponse.status).toBe(403);
     expect(userExportResponse.status).toBe(403);
+    expect(orgExportResponse.status).toBe(403);
     expect(previewResponse.status).toBe(403);
   });
 
