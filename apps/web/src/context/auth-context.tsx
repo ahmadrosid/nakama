@@ -25,6 +25,9 @@ import { queryKeys } from "@/lib/query-keys";
 
 function refreshAuthenticatedQueries(): void {
   queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
+  queryClient.removeQueries({
+    queryKey: queryKeys.notificationDestinations.root,
+  });
   queryClient.removeQueries({ queryKey: queryKeys.skills.all });
   queryClient.removeQueries({
     predicate: (query) => query.queryKey[0] === "sessions",
@@ -118,6 +121,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // cookies and revokes every browser session server-side).
     }
     client.setOrgId(null);
+    queryClient.removeQueries({
+      queryKey: queryKeys.notificationDestinations.root,
+    });
     setUser(null);
     setOrgs([]);
   }, []);
