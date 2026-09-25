@@ -31,6 +31,38 @@ test("scoped clients keep session requests in their original organization", asyn
   ).toBe(true);
 });
 
+test("forwards appUserId and preserves it on later session requests", async () => {
+  const requests: Request[] = [];
+  const client = new NakamaClient({
+    authToken: "api-key",
+    baseUrl: "http://localhost:4310",
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      if (new URL(String(input)).pathname === "/v1/sessions") {
+        return Response.json({ sessionId: "session_1" }, { status: 201 });
+      }
+      return Response.json({
+        channel: "web",
+        messageMeta: [],
+        messages: [],
+        model: null,
+        questionnaire: null,
+        todos: [],
+      });
+    }) as typeof fetch,
+    orgId: "org_1",
+  });
+
+  const session = await client.createSession("web", { appUserId: "alice" });
+  await session.getMessages();
+
+  expect(await requests[0]!.json()).toEqual({
+    appUserId: "alice",
+    channel: "web",
+  });
+  expect(requests[1]!.headers.get("X-Nakama-App-User-Id")).toBe("alice");
+});
+
 test("plugin access requests retain their explicit organization", async () => {
   const requests: Request[] = [];
   const client = new NakamaClient({

@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { NakamaClient } from "@nakama/client";
 import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
@@ -1293,7 +1294,7 @@ describe("createHonoApp", () => {
     expect(sessionBody.mode).toBe("browser-session");
   });
 
-  test("API-key sessions require an app user id", async () => {
+  test("API-key client creates and accesses an app-user session", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
     const adminSession = await setupFreshInstallSession(
@@ -1325,38 +1326,39 @@ describe("createHonoApp", () => {
       Authorization: `Bearer ${secret}`,
       "Content-Type": "application/json",
     };
-    const headers = {
-      ...apiKeyHeaders,
-      "X-Org-Id": adminSession.orgId,
-    };
+    const client = new NakamaClient({
+      authToken: secret,
+      baseUrl: "http://localhost:4310",
+      fetch: (async (input, init) =>
+        app.fetch(new Request(input, init))) as typeof fetch,
+      orgId: adminSession.orgId,
+    });
+    const missingCreateAppUser = await client.createSession("web").catch(
+      (error: unknown) => error
+    );
+    expect(missingCreateAppUser).toMatchObject({ status: 400 });
+    const session = await client.createSession("web", {
+      appUserId: "alice-123",
+    });
+    const messages = await session.getMessages();
+
+    expect(messages).toEqual([]);
+
+    expect(missingCreateAppUser).toBeInstanceOf(Error);
+
+    const wrongAppUser = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/sessions/${session.id}/messages`,
+        { headers: { ...apiKeyHeaders, "X-Nakama-App-User-Id": "bob-123" } }
+      )
+    );
+    expect(wrongAppUser.status).toBe(404);
     const missingAppUser = await app.fetch(
-      new Request("http://localhost:4310/v1/sessions", {
-        body: JSON.stringify({ channel: "web", profileId: "default" }),
-        headers,
-        method: "POST",
+      new Request(`http://localhost:4310/v1/sessions/${session.id}/messages`, {
+        headers: apiKeyHeaders,
       })
     );
     expect(missingAppUser.status).toBe(400);
-
-    const created = await app.fetch(
-      new Request("http://localhost:4310/v1/sessions", {
-        body: JSON.stringify({
-          appUserId: "alice-123",
-          channel: "web",
-        }),
-        headers: apiKeyHeaders,
-        method: "POST",
-      })
-    );
-    expect(created.status).toBe(201);
-
-    const missingHeader = await app.fetch(
-      new Request(
-        "http://localhost:4310/v1/sessions?profileId=default&channel=web",
-        { headers }
-      )
-    );
-    expect(missingHeader.status).toBe(400);
   });
 
   test("GET /v1/sessions rejects missing or invalid channel", async () => {
