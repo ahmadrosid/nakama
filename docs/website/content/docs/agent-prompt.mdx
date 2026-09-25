@@ -51,7 +51,7 @@ After the main profile prompt, Nakama may append:
 
 The chat runtime then wraps the profile prompt with general chat instructions:
 
-- User context from `USER.md`, when available (filled in at setup step 4 or from **Settings → Personalisation**)
+- User context from `USER.md`, when available. Setup answers and `USER.md` are stored per authenticated user within the active organization, not shared organization-wide.
 - The user's timezone
 - Tool-use guidance for assigned tools
 - Memory and skill rules when `read_file` and `edit_file` are available (bundled `update-profile-memory` and `archive-profile-memory` skills)
@@ -60,7 +60,12 @@ The chat runtime then wraps the profile prompt with general chat instructions:
 - Coding-agent harness context when `coding-agent` matches ([Coding agent](/coding-agent))
 - Telegram or WhatsApp behavior when the message comes from those channels
 - Discord behavior when the message comes from a server channel (public replies)
+- Slack behavior when the message comes from a Slack DM or channel thread, including the channel audience and Slack Markdown rules
 
+An API-key session with an `appUserId` is separate from the authenticated
+organization user's session. It does not load that user's `USER.md`; its private
+workspace and artifacts are scoped to the stable app-user id, so keep each app
+user's session and files separate.
 When soul is active, Nakama tells the agent to use tools while staying in character.
 
 ## Per-turn context

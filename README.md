@@ -18,7 +18,7 @@
 > Your next hire will still be human.
 > Nakama runs the agents. Your team keeps the important work.
 
-Nakama is an AI agent platform for your team. You chat in a dashboard that feels like ChatGPT. Behind that, each agent can use tools, skills, memory, and channels (Telegram, WhatsApp, Discord) — with its own identity and permissions.
+Nakama is an AI agent platform for your team. You chat in a dashboard that feels like ChatGPT. Behind that, each agent can use tools, skills, memory, and channels (Telegram, WhatsApp, Discord, and Slack) — with its own identity and permissions.
 
 It was built for teams from day one: one server, many orgs, invites and roles, agents isolated from each other. Set it up in the browser — demo, managed cloud, or one Docker container.
 
@@ -109,8 +109,8 @@ checksum verified, the first time the toggle is switched on. Set
 
 ### Integrations
 
-Nakama connects to **Telegram**, **WhatsApp**, and **Composio**.
-With Composio, you can connect to more than 1,000 external apps.
+Nakama connects to **Telegram**, **WhatsApp**, **Discord**, **Slack**, and
+**Composio**. With Composio, you can connect to more than 1,000 external apps.
 Enable them in the web app under **Integrations**.
 
 On the first run, the server asks for a provider and an API key if none is configured.
