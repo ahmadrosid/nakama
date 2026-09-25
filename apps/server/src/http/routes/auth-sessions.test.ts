@@ -133,7 +133,7 @@ describe("browser session governance", () => {
     const { app, authService, databaseAdapter } = await createApp();
     const owner = await setupFreshInstallSession(app, databaseAdapter);
     const user = await databaseAdapter.getUserByEmail("admin@example.com");
-    if (!user || !owner.orgId) {
+    if (!(user && owner.orgId)) {
       throw new Error("Expected setup admin");
     }
 
@@ -169,7 +169,13 @@ describe("browser session governance", () => {
     const ownerSessions = await listSessions(app, owner);
     const ownerSessionId = ownerSessions.sessions[0]?.id ?? "";
     const user = await databaseAdapter.getUserByEmail("admin@example.com");
-    if (!ownerSessionId || !user || !owner.orgId) {
+    if (!ownerSessionId) {
+      throw new Error("Expected setup admin and browser session");
+    }
+    if (!user) {
+      throw new Error("Expected setup admin and browser session");
+    }
+    if (!owner.orgId) {
       throw new Error("Expected setup admin and browser session");
     }
 
