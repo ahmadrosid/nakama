@@ -48,6 +48,10 @@ export async function loadPythonSkillTool(
           cwd: path.dirname(modulePath),
           input,
           label: "Python skill tool",
+          // A skill ships with a profile, so its Python is tenant-authored.
+          // The config dir holds deployment secrets and every org's workspace,
+          // so it stays out of the child environment.
+          transport: { includeConfigDir: false },
           workspaceRoot:
             typeof context.workspaceRoot === "string"
               ? context.workspaceRoot
