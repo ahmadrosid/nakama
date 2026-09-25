@@ -980,6 +980,10 @@ export interface DatabaseAdapter {
   ): Promise<StoredSkillUsageRecord | null>;
   getTool(id: string): Promise<StoredToolRecord | null>;
   getToolByName(name: string): Promise<StoredToolRecord | null>;
+  getToolByNameForOrg(
+    orgId: string,
+    name: string
+  ): Promise<StoredToolRecord | null>;
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   getUserContext(orgId: string, userId: string): Promise<string | null>;
