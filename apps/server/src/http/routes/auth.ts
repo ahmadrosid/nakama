@@ -1478,6 +1478,8 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     const body = await readJson<{ token: string; password?: string }>(
       c.req.raw,
       acceptInviteSchema
