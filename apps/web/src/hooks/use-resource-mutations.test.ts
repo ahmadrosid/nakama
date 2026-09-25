@@ -8,10 +8,10 @@ import {
   spyOn,
   test,
 } from "bun:test";
+import { NakamaApiError } from "@nakama/core/api-error";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
 import {
@@ -279,11 +279,7 @@ describe("artifact share controls with a stale share ID", () => {
         createElement(
           QueryClientProvider,
           { client: queryClient },
-          createElement(
-            AuthContext.Provider,
-            { value },
-            createElement(Probe)
-          )
+          createElement(AuthContext.Provider, { value }, createElement(Probe))
         )
       );
 
@@ -292,7 +288,9 @@ describe("artifact share controls with a stale share ID", () => {
       await act(async () => controls.openViewShareDialog());
       expect(controls!.publishedUrl).toBe("https://example.com/s/account-a");
 
-      await act(async () => render({ ...accountA, user: null, activeOrg: null }));
+      await act(async () =>
+        render({ ...accountA, activeOrg: null, user: null })
+      );
       await act(async () => render(accountB));
       await act(async () => controls.openViewShareDialog());
 

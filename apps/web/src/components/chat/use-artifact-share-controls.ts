@@ -32,6 +32,12 @@ export function useArtifactShareControls({
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishWarning, setPublishWarning] = useState<string | null>(null);
   const storedShareIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    setCopied(false);
+    setPublishDialogOpen(false);
+    setPublishedUrl(null);
+    setPublishWarning(null);
+  }, [orgId, userId]);
 
   const statusQuery = useArtifactShareStatusQuery(
     profileId,
@@ -50,7 +56,7 @@ export function useArtifactShareControls({
     statusQuery.isLoading;
 
   useEffect(() => {
-    if (!orgId || !userId) {
+    if (!(orgId && userId)) {
       setStoredUrl(null);
       storedShareIdRef.current = null;
       return;
@@ -141,9 +147,9 @@ export function useArtifactShareControls({
       artifactPath,
       orgId,
       profileId,
-      userId,
       shareId,
       shareUrl: url,
+      userId,
     });
     setStoredUrl(url);
     storedShareIdRef.current = shareId;
