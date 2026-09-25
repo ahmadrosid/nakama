@@ -74,6 +74,16 @@ test("switching orgs removes old usage and ignores its deferred response", async
   };
 
   try {
+    await act(async () => {
+      root.render(
+        <AuthContext.Provider value={{ ...auth, activeOrg: null }}>
+          <OrgLlmQuotaCard />
+        </AuthContext.Provider>
+      );
+    });
+    expect(container.childElementCount).toBe(0);
+    expect(getQuota).not.toHaveBeenCalled();
+
     await renderOrg("org-a");
     expect(container.textContent).toContain(quotaA.month);
 
