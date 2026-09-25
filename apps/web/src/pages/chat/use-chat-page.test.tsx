@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { AppProvider } from "@/context/app-context";
+import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { AuthProvider } from "@/context/auth-context";
 import { client } from "@/lib/client";
 import { type ChatPageState, useChatPage } from "./use-chat-page";
@@ -493,6 +494,7 @@ test("waits for the active org profile query before selecting a profile", async 
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  useActiveChatProfileStore.setState({ orgId: null, profileId: null });
   const previousStorage = globalThis.localStorage;
   const stored: Record<string, string> = {
     "nakama:active-chat-profile": "org-a-profile",
@@ -562,7 +564,9 @@ test("waits for the active org profile query before selecting a profile", async 
         <MemoryRouter initialEntries={["/chat"]}>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <Probe />
+              <AppProvider>
+                <Probe />
+              </AppProvider>
             </AuthProvider>
           </QueryClientProvider>
         </MemoryRouter>
@@ -570,6 +574,7 @@ test("waits for the active org profile query before selecting a profile", async 
     );
     await act(async () => {
       profiles.resolve({ profiles: [{ id: "default", name: "Default" }] });
+      await Bun.sleep(20);
     });
 
     expect(getProfile.mock.calls[0]?.[0]).toBe("default");
