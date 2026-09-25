@@ -1131,6 +1131,10 @@ export function useChatPage() {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.sessions(profileId),
         });
+        // The turn may have removed a file an earlier turn's chip still links.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.artifacts.profile(profileId),
+        });
 
         if (!detached) {
           streamAbortRef.current = null;
