@@ -12,10 +12,8 @@ export function OrgLlmQuotaCard() {
     quota: OrgLlmQuotaStatusResponse | null;
   } | null>(null);
   const activeOrgId = activeOrg?.id;
-  const quota =
-    quotaState?.orgId === activeOrgId ? quotaState.quota : null;
-  const error =
-    quotaState?.orgId === activeOrgId ? quotaState.error : null;
+  const quota = quotaState?.orgId === activeOrgId ? quotaState.quota : null;
+  const error = quotaState?.orgId === activeOrgId ? quotaState.error : null;
 
   useEffect(() => {
     if (!activeOrg || activeOrg.role !== "admin") {

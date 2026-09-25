@@ -14,7 +14,7 @@ const quotaA: OrgLlmQuotaStatusResponse = {
   status: "ok",
   tokenLimit: 10_000,
   tokens: 100,
-  turnLimit: 1_000,
+  turnLimit: 1000,
   turns: 10,
   warningPercent: 80,
 };
@@ -35,9 +35,7 @@ const auth = {
 } as unknown as AuthContextValue;
 
 test("switching orgs removes old usage and ignores its deferred response", async () => {
-  let resolveLateA:
-    | ((quota: OrgLlmQuotaStatusResponse) => void)
-    | undefined;
+  let resolveLateA: ((quota: OrgLlmQuotaStatusResponse) => void) | undefined;
   const lateA = new Promise<OrgLlmQuotaStatusResponse>((resolve) => {
     resolveLateA = resolve;
   });
@@ -46,15 +44,16 @@ test("switching orgs removes old usage and ignores its deferred response", async
     rejectB = reject;
   });
   let requestsA = 0;
-  const getQuota = spyOn(client, "getOrganizationLlmQuotaStatus").mockImplementation(
-    async (orgId) => {
-      if (orgId === "org-a") {
-        requestsA += 1;
-        return requestsA === 1 ? quotaA : lateA;
-      }
-      return pendingB;
+  const getQuota = spyOn(
+    client,
+    "getOrganizationLlmQuotaStatus"
+  ).mockImplementation(async (orgId) => {
+    if (orgId === "org-a") {
+      requestsA += 1;
+      return requestsA === 1 ? quotaA : lateA;
     }
-  );
+    return pendingB;
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
