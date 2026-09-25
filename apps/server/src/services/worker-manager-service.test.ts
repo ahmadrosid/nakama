@@ -622,11 +622,11 @@ describe("WorkerManagerService", () => {
       await setWorkerDesiredRunning("automation", false);
       await setWorkerDesiredRunning("whatsapp", true, owner);
       await writeFile(
-        join(
-          getChannelConfigDir("whatsapp", owner),
-          "worker-heartbeat.json"
-        ),
-        JSON.stringify({ pid: process.pid, updatedAt: new Date().toISOString() })
+        join(getChannelConfigDir("whatsapp", owner), "worker-heartbeat.json"),
+        JSON.stringify({
+          pid: process.pid,
+          updatedAt: new Date().toISOString(),
+        })
       );
       const mockPm2 = createMockPm2();
       const service = new WorkerManagerService(projectRoot, mockPm2);
