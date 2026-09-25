@@ -925,6 +925,24 @@ describe("createHonoApp", () => {
     );
   });
 
+  test("setup rejects a body that is not application/json", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup", {
+        body: JSON.stringify(buildSetupAuthBody("admin@example.com")),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+    expect(extractSetCookies(response)).toEqual([]);
+    expect(await options.databaseAdapter.countHumanUsers()).toBe(0);
+    expect(await options.databaseAdapter.listOrganizations()).toEqual([]);
+  });
+
   test("login rejects a body that is not application/json", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);

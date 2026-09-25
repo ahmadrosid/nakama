@@ -494,6 +494,8 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     const humanUserCount = await databaseAdapter.countHumanUsers();
     if (humanUserCount > 0) {
       return errorResponse("Admin user already exists", 409);
