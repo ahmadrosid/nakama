@@ -123,6 +123,10 @@ export class AutomationService {
     await this.assertProfileAutomationEnabled(profileId);
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
+      access: {
+        isPlatformAdmin: access?.isPlatformAdmin,
+        orgRole: access?.orgRole,
+      },
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
@@ -193,10 +197,15 @@ export class AutomationService {
     }
 
     await validateAutomationDelivery(delivery, {
+      access: {
+        isPlatformAdmin: access?.isPlatformAdmin,
+        orgRole: access?.orgRole,
+      },
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
       orgId,
+      previousDelivery: existing.delivery,
       profileId,
     });
 
