@@ -1229,6 +1229,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM mcp_servers
     INNER JOIN profile_mcp_servers ON profile_mcp_servers.server_id = mcp_servers.id
     WHERE profile_mcp_servers.profile_id = ?
+    AND mcp_servers.enabled = 1
     ORDER BY mcp_servers.name ASC
   `);
   const assignMcpServerStmt = db.prepare(`
