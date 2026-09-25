@@ -86,10 +86,9 @@ test("clears a one-time secret while the next organization's destinations load",
   ).mockResolvedValue({
     destinations: [destinationA],
   });
-  const listB = spyOn(
-    clientB,
-    "listNotificationDestinations"
-  ).mockReturnValue(nextOrgDestinations.promise);
+  const listB = spyOn(clientB, "listNotificationDestinations").mockReturnValue(
+    nextOrgDestinations.promise
+  );
   const rotate = spyOn(
     clientA,
     "regenerateNotificationDestinationKey"
@@ -134,9 +133,7 @@ test("clears a one-time secret while the next organization's destinations load",
       rotateButton?.click();
       await settle();
     });
-    expect(container.textContent).toContain(
-      "Latest webhook credentials ready"
-    );
+    expect(container.textContent).toContain("Latest webhook credentials ready");
     expect(container.textContent).toContain("Org A destination");
 
     activeOrg = org(ORG_B, "Org B");

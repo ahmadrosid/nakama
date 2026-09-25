@@ -49,7 +49,9 @@ export function useUpdateNotificationDestination(orgId: string) {
       destinationId: string;
       request: UpdateNotificationDestinationRequest;
     }) =>
-      client.forOrg(orgId).updateNotificationDestination(destinationId, request),
+      client
+        .forOrg(orgId)
+        .updateNotificationDestination(destinationId, request),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notificationDestinations(orgId),
