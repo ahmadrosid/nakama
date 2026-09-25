@@ -51,21 +51,71 @@ export type CustomToolType = keyof typeof CUSTOM_TOOL_HANDLERS;
 export const TOOL_RETRY_LIMIT = 2;
 
 /**
+ * Subprocess exit code that opts a custom tool into retries (sysexits
+ * `EX_TEMPFAIL`). Any other non-zero exit is treated as permanent — the tool
+ * may already have performed a side effect.
+ */
+export const TOOL_RETRYABLE_EXIT_CODE = 75;
+
+/**
  * Base backoff between attempts; each retry doubles it: 500ms, then 1s.
  */
 const TOOL_RETRY_BASE_DELAY_MS = 500;
 
+/** Node errno codes that mean the child never started or the socket never got going. */
+const RETRYABLE_SPAWN_ERRNOS = new Set([
+  "EAGAIN",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+]);
+
+/**
+ * Explicit opt-in for a transient custom-tool failure. Arbitrary thrown errors
+ * are permanent by default so a write-then-throw path is never replayed.
+ */
+export class RetryableToolError extends Error {
+  readonly retryable = true as const;
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "RetryableToolError";
+  }
+}
+
+/**
+ * Only errors that opt into retries (or known pre-start spawn errno codes)
+ * are replayed. Timeouts, exit codes other than {@link TOOL_RETRYABLE_EXIT_CODE},
+ * validation failures, and plain `Error` throws are permanent.
+ */
+export function isRetryableToolError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  if ((error as { retryable?: unknown }).retryable === true) {
+    return true;
+  }
+  if (
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return RETRYABLE_SPAWN_ERRNOS.has((error as { code: string }).code);
+  }
+  return false;
+}
+
 /**
  * Wraps a custom tool run with at-most-two retries and exponential backoff.
  *
- * Thrown errors (including timeouts) are transient by default and get
- * retried; an aborted `context.signal` stops immediately and is never
- * retried, including mid-backoff. Cancellation preserves the signal's reason;
- * other final failures are re-thrown unchanged.
+ * Retries only {@link isRetryableToolError} failures. Arbitrary throws,
+ * timeouts, and ordinary non-zero exits are permanent on the first attempt so
+ * a tool that already wrote data is not replayed. An aborted `context.signal`
+ * stops immediately and is never retried, including mid-backoff. Cancellation
+ * preserves the signal's reason; other final failures are re-thrown unchanged.
  *
- * A failure that uses up the budget is also mirrored to the operator's error
- * tracker, tagged `tool:<name>`. That is the only place that can tell an
- * exhausted tool from a single failed attempt.
+ * A final failure (exhausted retryable budget, or a permanent error) is also
+ * mirrored to the operator's error tracker, tagged `tool:<name>`.
  */
 export function withToolRetries(
   run: (input: unknown, context: ToolContext) => Promise<unknown>,
@@ -80,7 +130,9 @@ export function withToolRetries(
       } catch (error) {
         attempts += 1;
         context.signal?.throwIfAborted();
-        if (attempts > TOOL_RETRY_LIMIT) {
+        const canRetry =
+          isRetryableToolError(error) && attempts <= TOOL_RETRY_LIMIT;
+        if (!canRetry) {
           // Not awaited: reportError queues synchronously and never throws, and
           // the model should not wait out the tracker's HTTP timeout on a turn
           // that has already failed.
