@@ -16,6 +16,7 @@ import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  Cancel01Icon,
   Delete02Icon,
   PencilEdit02Icon,
   PinIcon,
@@ -374,13 +375,24 @@ function RecentChats() {
   return (
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
       <div className="relative mb-3 shrink-0">
-        <Search01Icon
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-        />
+        {search ? (
+          <button
+            aria-label="Clear search"
+            className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
+            onClick={() => setSearch("")}
+            type="button"
+          >
+            <Cancel01Icon aria-hidden className="size-4" />
+          </button>
+        ) : (
+          <Search01Icon
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+          />
+        )}
         <Input
           aria-label="Search chats"
-          className="border-border/60 bg-muted/20 pl-8 shadow-none"
+          className="border-border/60 bg-white pr-8 pl-2 shadow-none focus-visible:border-border/60 focus-visible:ring-0"
           maxLength={MAX_SESSION_SEARCH_LENGTH}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
@@ -389,7 +401,7 @@ function RecentChats() {
             }
           }}
           placeholder="Search chats"
-          type="search"
+          type="text"
           value={search}
         />
       </div>
