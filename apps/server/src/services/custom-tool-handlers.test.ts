@@ -15,6 +15,7 @@ import {
   TOOL_RETRY_LIMIT,
   withToolRetries,
 } from "./custom-tool-handlers";
+import { spawnJsonTool } from "./custom-tool-subprocess";
 
 function ctx(signal?: AbortSignal): ToolContext {
   return { signal };
@@ -364,4 +365,87 @@ export async function run(input, context) {
       await rm(configDir, { force: true, recursive: true });
     }
   });
+});
+
+describe("spawnJsonTool process cleanup", () => {
+  // This integration test exercises real OS process groups; fake timers cannot
+  // verify that the descendant is actually reaped by the kernel.
+  function isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function waitForPid(pidFile: string): Promise<number> {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const pid = Number(
+        await Bun.file(pidFile)
+          .text()
+          .catch(() => "")
+      );
+      if (Number.isInteger(pid) && pid > 0) {
+        return pid;
+      }
+      await Bun.sleep(10);
+    }
+    throw new Error("descendant pid was not written");
+  }
+
+  test("terminates descendants when the tool is aborted", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const workspaceRoot = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-tool-tree-")
+    );
+    const modulePath = path.join(workspaceRoot, "spawn-child.js");
+    const pidFile = path.join(workspaceRoot, "descendant.pid");
+    await writeFile(
+      modulePath,
+      `import { writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+  stdio: "ignore",
+});
+writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+process.on("SIGTERM", () => {});
+setInterval(() => {}, 1000);
+`,
+      "utf8"
+    );
+
+    const controller = new AbortController();
+    const pending = spawnJsonTool({
+      args: [modulePath],
+      bin: process.execPath,
+      context: { signal: controller.signal },
+      cwd: workspaceRoot,
+      input: {},
+      label: "process tree test",
+    });
+    const descendantPid = await waitForPid(pidFile);
+    controller.abort();
+
+    try {
+      await expect(pending).rejects.toThrow("was cancelled");
+      for (
+        let attempt = 0;
+        attempt < 200 && isProcessAlive(descendantPid);
+        attempt += 1
+      ) {
+        await Bun.sleep(50);
+      }
+      expect(isProcessAlive(descendantPid)).toBe(false);
+    } finally {
+      if (isProcessAlive(descendantPid)) {
+        process.kill(descendantPid, "SIGKILL");
+      }
+      await rm(workspaceRoot, { force: true, recursive: true });
+    }
+  }, 15_000);
 });
