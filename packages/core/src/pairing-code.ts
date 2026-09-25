@@ -5,7 +5,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  * agent's channel tools, so they carry 128 bits, live for minutes, are spent
  * exactly once, and every failure spends part of a small attempt budget.
  */
-export const PAIRING_CODE_BYTES = 16;
+const PAIRING_CODE_BYTES = 16;
 export const PAIRING_CODE_LENGTH = PAIRING_CODE_BYTES * 2;
 
 /** Long enough to copy a code out of the dashboard, short enough to be useless later. */
