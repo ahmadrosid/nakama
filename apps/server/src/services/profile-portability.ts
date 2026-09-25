@@ -41,12 +41,12 @@ import type {
   StoredToolRecord,
 } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
+import { readHandlerModulePath } from "./custom-tool-shared";
 import {
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
 } from "./data-portability";
-import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
-import { readHandlerModulePath } from "./custom-tool-shared";
 import { recordProfileChangeEvent } from "./profile-change-history";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
