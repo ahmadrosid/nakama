@@ -24,11 +24,11 @@ BEFORE_SERVER_PID=""
 AFTER_WEB_PID=""
 BEFORE_WEB_PID=""
 
-if command -v agent-browser >/dev/null 2>&1; then
-  AB="$(command -v agent-browser)"
-else
-  AB="npx --yes agent-browser"
+if ! command -v agent-browser >/dev/null 2>&1; then
+  echo "agent-browser is required on PATH (npm i -g agent-browser && agent-browser install)" >&2
+  exit 1
 fi
+AB="$(command -v agent-browser)"
 
 cleanup() {
   $AB --session "$SESSION_AFTER" close --all 2>/dev/null || true

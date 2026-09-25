@@ -26,8 +26,8 @@
     "dev:telegram": "bun run --filter @nakama/telegram dev",
     "dev:web": "bun run --filter @nakama/web dev",
     "dev:whatsapp": "bun run --filter @nakama/whatsapp dev",
-    "doctor": "npx react-doctor@latest",
-    "dupes": "bunx jscpd@4 --format typescript,tsx",
+    "doctor": "bun x react-doctor",
+    "dupes": "bun x jscpd --format typescript,tsx .",
     "fix": "ultracite fix",
     "postinstall": "bun install --cwd docs/website",
     "knip": "knip",
@@ -48,7 +48,9 @@
     "@biomejs/biome": "2.5.14",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
+    "jscpd": "4.3.0",
     "knip": "6.32.2",
+    "react-doctor": "0.9.14",
     "ultracite": "7.11.0"
   },
   "patchedDependencies": {

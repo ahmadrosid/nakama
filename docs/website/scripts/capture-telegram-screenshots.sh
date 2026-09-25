@@ -12,20 +12,20 @@ SERVER_PID=""
 VIEWPORT_WIDTH=1280
 VIEWPORT_HEIGHT=900
 
-if command -v agent-browser >/dev/null 2>&1; then
-  AB="$(command -v agent-browser)"
-elif [[ -x "/Users/ahmadrosid/Library/pnpm/nodejs/22.23.1/bin/agent-browser" ]]; then
-  AB="/Users/ahmadrosid/Library/pnpm/nodejs/22.23.1/bin/agent-browser"
-else
-  AB="npx --yes agent-browser"
+if ! command -v agent-browser >/dev/null 2>&1; then
+  echo "agent-browser is required on PATH (npm i -g agent-browser && agent-browser install)" >&2
+  exit 1
 fi
+AB="$(command -v agent-browser)"
 
 cleanup() {
   $AB --session "$SESSION" close 2>/dev/null || true
   # Kill the isolated PM2 daemon and its workers so they don't keep respawning
   # a server on the test port after the script exits.
   if [[ -n "${PM2_HOME:-}" ]]; then
-    ( PM2_HOME="$PM2_HOME" npx --yes pm2 kill >/dev/null 2>&1 ) || true
+    if command -v pm2 >/dev/null 2>&1; then
+      ( PM2_HOME="$PM2_HOME" pm2 kill >/dev/null 2>&1 ) || true
+    fi
   fi
   if [[ -n "$SERVER_PID" ]]; then
     kill "$SERVER_PID" 2>/dev/null || true
