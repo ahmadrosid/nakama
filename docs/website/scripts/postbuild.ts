@@ -1,4 +1,11 @@
-import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { buildLlmsTxt } from "../lib/site-meta";
 
@@ -41,7 +48,14 @@ async function validateInternalLinks(
     }
 
     const route = (href.split(/[?#]/, 1)[0] ?? "").replace(/^\/+|\/+$/g, "");
-    if (!route || route === "llms.txt" || documentationRoutes.has(route)) {
+    const documentationRoute = route.endsWith(".md")
+      ? route.slice(0, -3)
+      : route;
+    if (
+      !route ||
+      documentationRoute === "llms.txt" ||
+      documentationRoutes.has(documentationRoute)
+    ) {
       continue;
     }
 
@@ -53,7 +67,9 @@ async function validateInternalLinks(
   }
 
   if (missing.length > 0) {
-    throw new Error(`Missing internal documentation paths:\n${missing.join("\n")}`);
+    throw new Error(
+      `Missing internal documentation paths:\n${missing.join("\n")}`
+    );
   }
 }
 
