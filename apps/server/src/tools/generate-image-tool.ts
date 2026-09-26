@@ -146,6 +146,7 @@ export async function runGenerateImageTool(
       apiKey: selection.apiKey,
       model: selection.model,
       prompt,
+      signal: context.signal,
       size,
     });
   } catch (error) {

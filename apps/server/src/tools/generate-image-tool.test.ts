@@ -206,6 +206,39 @@ describe("generate_image tool persistence (U4)", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
   }
 
+  test("forwards the turn's cancel signal to the provider call", async () => {
+    await setupWorkspace();
+    const turn = new AbortController();
+    let seen: AbortSignal | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      {
+        orgId: "org_1",
+        profileId: "profile_1",
+        signal: turn.signal,
+        workspaceRoot,
+      },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async (input) => {
+          seen = input.signal;
+          return {
+            data: PNG_BYTES,
+            mediaType: "image/png",
+            model: "gpt-image-2",
+            size: "1024x1024",
+          };
+        },
+        getUserConfig: () =>
+          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+      }
+    );
+
+    expect(seen).toBe(turn.signal);
+  });
+
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
