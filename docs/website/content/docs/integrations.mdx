@@ -1,20 +1,52 @@
 ---
 title: "Integrations"
-description: "See which dashboard integration sections manage channels, Composio, and related deployment settings."
+description: "See which dashboard sections manage channels, Composio, and related deployment settings."
 ---
 
-Use **Integrations** in the Nakama dashboard to connect channels, bridge workers, and external tool providers.
+Use **Integrations** in the Nakama dashboard to connect external tool providers and manage deployment-level settings. Channel credentials and workers now live with the profile that owns them.
 
 ## Available sections
 
 - [Telegram](/telegram): configure the bot token, pairing flow, allowed users, and bridge worker behavior
-- [WhatsApp](/whatsapp): link a phone number, pair accounts, choose group mention behavior, and manage the WhatsApp bridge
+- [WhatsApp](/whatsapp): link a device with QR, choose group mention behavior, and manage the WhatsApp bridge
 - [Discord](/discord): save the bot token, invite the bot, pair users, and run the Discord worker
 - [Slack](/slack): create the app from a manifest, save the bot and app tokens, pair members, and run the Slack worker
 - [Composio](/composio): connect SaaS toolkits with per-user OAuth and assign them to profiles
 - [MCP Servers](/mcp): connect external MCP servers and expose their tools to profiles
 - [Error tracking](/error-tracking): send this instance's own crashes to your Sentry, GlitchTip, or Bugsink project
 - **Coding agents**: choose Nakama provider passthrough (default) or harness login on this server — see [Coding agent](/coding-agent#provider-passthrough)
+
+## Where channel settings live
+
+Telegram, WhatsApp, Discord, and Slack connections are scoped to one organization and one profile. Open **Agent → profile → Channels**, then choose the channel. The dashboard route is:
+
+```text
+/profiles/:profileId/channels/:channel
+```
+
+The profile in the route owns the credentials, pairings, worker controls, and channel sessions. **Stop** keeps a connection available for later. **Disconnect** removes its credentials, pairings, and channel session/thread data.
+
+Each channel worker is long-lived. After rotating a Telegram, Discord, WhatsApp, or Slack token or account credential, save the new value and restart that profile's worker. A running worker keeps the configuration it loaded at startup.
+
+## Direct worker runs
+
+The dashboard supplies the organization and profile scope when it starts a worker. A direct worker run must provide both values explicitly:
+
+```bash
+export NAKAMA_CHANNEL_ORG_ID="org_your_org"
+export NAKAMA_CHANNEL_PROFILE_ID="your-profile"
+```
+
+Use the channel's normal local command, for example:
+
+```bash
+bun run dev:telegram
+bun run dev:whatsapp
+bun run dev:discord
+bun run dev:slack
+```
+
+Save the connection in the same Nakama config directory first. Set `NAKAMA_CONFIG_DIR` when the config root is non-default, and set `NAKAMA_SERVER_URL` when the workers should call a separate server. A direct run cannot infer a profile from the dashboard URL; the two `NAKAMA_CHANNEL_*` variables tell the worker which profile-scoped directory to read.
 
 ## Backend API keys
 
@@ -28,9 +60,11 @@ The dashboard groups together deployment-level and organization-level configurat
 
 Common examples:
 
-- channel credentials such as Telegram, WhatsApp, and Discord tokens
-- bridge worker controls and pairing codes
 - Composio toolkit enablement and OAuth connection management
+- MCP server connections
+- error-tracking and other deployment settings
+
+Channel credentials and bridge workers are intentionally not global: they are managed from **Agent → profile → Channels** so one profile's conversations stay with that profile.
 
 ## Related docs
 
