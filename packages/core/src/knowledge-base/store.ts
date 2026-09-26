@@ -106,18 +106,18 @@ function legacyKnowledgeBaseDir(orgId: string, profileId: string): string {
   return join(getProfileSoulDir(orgId, profileId), "data", "knowledge-base");
 }
 
-async function migrateLegacyKnowledgeBaseDir(
+export async function migrateLegacyKnowledgeBaseDir(
   orgId: string,
   profileId: string
 ): Promise<void> {
   const legacyDir = legacyKnowledgeBaseDir(orgId, profileId);
   const currentDir = getKnowledgeBaseDir(orgId, profileId);
 
-  if (!(await pathExists(legacyDir)) || (await pathExists(currentDir))) {
-    return;
+  if ((await pathExists(legacyDir)) && !(await pathExists(currentDir))) {
+    await rename(legacyDir, currentDir);
   }
 
-  await rename(legacyDir, currentDir);
+  await flattenKnowledgeBaseLayout(currentDir);
 }
 
 async function moveIfPresent(from: string, to: string): Promise<void> {
