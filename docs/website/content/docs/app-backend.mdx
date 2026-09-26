@@ -3,33 +3,67 @@ title: "Build an AI app with Nakama"
 description: "Connect a web app or app builder to Nakama as a secure AI agent backend."
 ---
 
-Use any app frontend with Nakama as the AI agent backend. Keep the Nakama API key in a server-side function or backend route, never in browser JavaScript.
+Use any app frontend with Nakama as the AI agent backend. Keep the Nakama API
+key in a server-side function or backend route, never in browser JavaScript.
 
 ## What you need
 
-1. A reachable Nakama instance with an LLM provider and an organization default profile configured. Use HTTPS when Nakama is reached over a network.
+1. A reachable Nakama instance with an LLM provider and an organization default
+   profile configured. Use HTTPS when Nakama is reached over a network.
 2. An organization backend API key.
 3. An app with a server-side function or backend route.
 
-From the Nakama dashboard, open **Organization → Backend API keys**, enter a descriptive name such as `My app production`, and select **Create key**. Copy the secret immediately; it is shown only once.
+## Create an organization backend key
 
-Use the key name to identify its use, for example `My app production`, `My app staging`, or `My app preview`. Create separate keys when you want to revoke one environment without affecting another.
+Open **Organization → Backend API keys**, enter a descriptive name such as
+`My app production`, and select **Create key**. Copy the secret immediately;
+it is shown only once.
 
-You can also create a key from an authenticated admin environment:
+You must be an active member with the **admin** role in the organization that
+owns the key. A platform administrator without active admin membership in that
+organization cannot create or manage its keys. Use the key name to identify its
+use, for example `My app production`, `My app staging`, or `My app preview`.
+Create separate keys when you want to revoke one environment without affecting
+another.
+
+You can create a key from an authenticated environment only when that user is
+an active admin of the organization in `X-Org-Id`:
 
 ```bash
 curl -X POST "$NAKAMA_URL/v1/orgs/$NAKAMA_ORG_ID/api-keys" \
   -H "Authorization: Bearer $NAKAMA_ADMIN_TOKEN" \
   -H "X-Org-Id: $NAKAMA_ORG_ID" \
   -H "Content-Type: application/json" \
-  -d '{"name":"My app production"}'
+  -d '{"name":"My app production","expiresAt":"2027-01-01T00:00:00.000Z"}'
 ```
 
-Save the returned `secret` as a server-side secret named `NAKAMA_API_KEY`. Also save `NAKAMA_URL`. The API key identifies the Nakama organization, and Nakama uses that organization's default profile. The secret is returned only once; rotate it if it is exposed.
+`name` is required and can contain up to 120 characters. `expiresAt` is
+optional; set it to an ISO 8601 datetime to make the key expire automatically,
+or omit it or send `null` for no scheduled expiration. The response includes
+the expiration as `expiresAt`, along with the key metadata. Nakama rejects the
+key after that time even if the secret is unchanged.
+
+Save the returned `secret` as a server-side secret named `NAKAMA_API_KEY`. Also
+save `NAKAMA_URL`. The key selects its organization and Nakama uses that
+organization's default profile when you omit `profileId`.
+
+### Keep key ownership in your offboarding plan
+
+An API key authenticates as the active admin who created it. Keep that creator
+in the organization and enabled while the key is in use. Removing the creator's
+organization membership prevents organization routes from resolving for the
+key. Disabling the creator also makes the key unusable, and permanently
+deleting the creator deletes the key.
+
+Before offboarding a key creator, create a replacement key or rotate the key
+while another active organization admin performs the action. Rotation revokes
+the old key and creates a new secret owned by the admin who performed the
+rotation. Update your app's server-side secret before removing or disabling the
+previous creator.
 
 ## Give your coding tool the Nakama context
 
-Paste this into your coding tool’s chat:
+Paste this into your coding tool's chat:
 
 ```text
 Integrate this existing app with Nakama as the AI agent backend.
@@ -39,18 +73,26 @@ https://ahmadrosid.github.io/nakama/app-backend.md
 https://ahmadrosid.github.io/nakama/llms.txt
 
 Requirements:
-- Inspect the existing app and preserve its current UI, authentication, and data model.
-- Keep NAKAMA_API_KEY server-side. Never expose it in client code, HTML, logs, or URLs.
+- Inspect the existing app and preserve its current UI, authentication, and
+  data model.
+- Keep NAKAMA_API_KEY server-side. Never expose it in client code, HTML, logs,
+  or URLs.
 - Add a server-side POST /api/chat route that calls Nakama.
 - Read only NAKAMA_URL and NAKAMA_API_KEY from server-side secrets.
-- Pass the authenticated app user's stable ID as `appUserId` when creating a Nakama session.
+- Pass the authenticated app user's stable ID as `appUserId` when creating a
+  Nakama session. Keep it between 1 and 200 characters.
 - Omit `profileId` so Nakama uses the organization's default profile.
-- Send `X-Nakama-App-User-Id` with every request for that session.
-- Create one Nakama web session per browser conversation and reuse its sessionId.
-- Nakama gives each `appUserId` its own profile workspace, including private memory and files.
-- Forward the user message to Nakama and return the assistant reply to the existing UI.
-- Support streaming SSE with `chunk`, `done`, and `error` events if streaming is enabled.
-- Keep each app user's Nakama session and memory isolated by their stable authenticated user ID.
+- Send the same `X-Nakama-App-User-Id` with every request for that session.
+- Create one Nakama web session per browser conversation and reuse its
+  sessionId.
+- Treat appUserId as session, memory, and artifact scoping, not as a complete
+  file or skill isolation boundary. Profile instructions, knowledge, skills,
+  and non-artifact file tools remain profile-scoped.
+- Forward the user message and any base64 images or documents to Nakama, then
+  return the assistant reply to the existing UI.
+- Support streaming SSE with the current chunk, tool, sub-agent, done, and
+  error event shapes if streaming is enabled.
+- Reject a second concurrent turn for one session with HTTP 409.
 - Show loading, error, retry, and empty states.
 - Do not call Nakama directly from the browser.
 ```
@@ -67,8 +109,8 @@ const session = await fetch(`${process.env.NAKAMA_URL}/v1/sessions`, {
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    channel: "web",
     appUserId: authenticatedUser.id,
+    channel: "web",
   }),
 });
 
@@ -78,7 +120,10 @@ if (!session.ok) {
 const { sessionId } = await session.json();
 ```
 
-Then send each message with that `sessionId`:
+`appUserId` is required when an API key creates a session. Nakama trims it and
+requires 1 to 200 characters. It doesn't create a Nakama organization user.
+
+Then send each message with that `sessionId` and the same app user header:
 
 ```ts
 const reply = await fetch(
@@ -87,8 +132,8 @@ const reply = await fetch(
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.NAKAMA_API_KEY}`,
-      "X-Nakama-App-User-Id": authenticatedUser.id,
       "Content-Type": "application/json",
+      "X-Nakama-App-User-Id": authenticatedUser.id,
     },
     body: JSON.stringify({ message: userMessage }),
   }
@@ -100,7 +145,50 @@ if (!reply.ok) {
 const { reply: answer } = await reply.json();
 ```
 
-The non-streaming response is JSON:
+Nakama stores `appUserId` on the session. API-key requests that list, read,
+update, stream, or delete the session must send the same
+`X-Nakama-App-User-Id`. A missing header returns `400`; a different app user
+returns `404`. Session listings are filtered to that app user. Keep the ID in
+your server-side auth session and never trust a browser-supplied replacement.
+
+### Send images and documents
+
+The message body can include base64-encoded images and documents. Send raw
+base64 without a `data:` URL prefix:
+
+```json
+{
+  "message": "Summarize these files.",
+  "images": [
+    {
+      "mediaType": "image/png",
+      "data": "<base64-encoded PNG bytes>"
+    }
+  ],
+  "documents": [
+    {
+      "filename": "quarterly-report.pdf",
+      "mediaType": "application/pdf",
+      "data": "<base64-encoded PDF bytes>"
+    }
+  ]
+}
+```
+
+A message can contain at most 5 images and documents combined. Each decoded
+attachment can be at most 5 MiB. Supported images are JPEG, PNG, GIF, and
+WebP. Supported documents are PDF, DOCX, XLS, XLSX, XLSM, XLSB, CSV, plain
+text, and Markdown.
+
+Nakama stores message attachments at organization and profile scope and links
+each attachment to the session. They do not live in the app user's artifact
+directory. Purging a session with `DELETE /v1/sessions/{sessionId}?purge=true`
+deletes its stored attachments; clearing a session without `purge=true` does
+not provide that attachment cleanup.
+
+### Read the JSON response and billable usage
+
+A successful non-streaming response is JSON:
 
 ```json
 {
@@ -115,64 +203,173 @@ The non-streaming response is JSON:
     "source": "estimate",
     "usableContextTokens": 120000,
     "usedTokens": 1710
+  },
+  "usage": {
+    "cachedInputTokens": 0,
+    "calls": [
+      {
+        "inputTokens": 1290,
+        "modelId": "gemini-2.5-flash",
+        "outputTokens": 64,
+        "totalTokens": 1354
+      }
+    ],
+    "estimated": false,
+    "inputTokens": 1290,
+    "outputTokens": 64,
+    "totalTokens": 1354
   }
 }
 ```
 
-`contextUsage` is optional. Use `reply` as the assistant message and ignore `contextUsage` unless you want to display context or token information.
+`usage` is the billable `ChatTurnUsage` for the complete turn. It can include
+`costUsd`, and `calls` contains one `ChatUsage` entry for each provider call.
+Failed non-streaming turns can also return `usage` in the JSON error body:
 
-For streaming replies, send `{"message":"...","stream":true}`. Nakama returns Server-Sent Events. Each event is one JSON object on a `data:` line:
+```json
+{
+  "error": "The provider request failed.",
+  "usage": {
+    "cachedInputTokens": 0,
+    "calls": [
+      {
+        "inputTokens": 840,
+        "modelId": "gemini-2.5-flash",
+        "outputTokens": 0,
+        "totalTokens": 840
+      }
+    ],
+    "estimated": false,
+    "inputTokens": 840,
+    "outputTokens": 0,
+    "totalTokens": 840
+  }
+}
+```
+
+Use `usage` for billing. `contextUsage` describes context-window occupancy and
+re-counts shared prompt and tool-definition tokens, so it is not a billing
+substitute.
+
+## Stream a reply
+
+For streaming replies, send `{"message":"...","stream":true}`. Nakama returns
+Server-Sent Events. Each event is one JSON object on a `data:` line:
 
 ```text
 data: {"type":"chunk","delta":"Hello"}
 
 data: {"type":"chunk","delta":"!"}
 
-data: {"type":"done","reply":"Hello!","contextUsage":{"contextWindow":128000,"source":"estimate","usableContextTokens":120000,"usedTokens":1710}}
+data: {"type":"done","reply":"Hello!","contextUsage":{"contextWindow":128000,"source":"estimate","usableContextTokens":120000,"usedTokens":1710},"usage":{"cachedInputTokens":0,"calls":[{"inputTokens":1290,"modelId":"gemini-2.5-flash","outputTokens":64,"totalTokens":1354}],"estimated":false,"inputTokens":1290,"outputTokens":64,"totalTokens":1354}}
 
 ```
 
-Append each `chunk.delta` to the assistant message. Stop on `done`; show `error.error` if an `error` event arrives. Other events can report `thinking`, tool activity, todos, questions, or usage. Proxy the SSE response through your backend to the browser.
-
-Tool activity uses these events:
+Append each `chunk.delta` to the assistant message. Stop on `done` and read its
+optional `usage` as the billable turn total. A failed turn emits this exact
+error shape:
 
 ```text
-data: {"type":"tool_start","toolCallId":"call_1","tool":"search_files","input":{"query":"pricing"}}
-
-data: {"type":"tool_end","toolCallId":"call_1","tool":"search_files","result":{"matches":[]}}
+data: {"type":"error","error":"The provider request failed.","usage":{"cachedInputTokens":0,"calls":[{"inputTokens":840,"modelId":"gemini-2.5-flash","outputTokens":0,"totalTokens":840}],"estimated":false,"inputTokens":840,"outputTokens":0,"totalTokens":840}}
 ```
 
-Other event examples:
+Read `payload.error`, not `payload.error.error`. The terminal `done` and
+`error` events can both contain billable `usage` for provider calls that
+already ran. A nonterminal `usage` event reports an individual provider call
+as `ChatUsage`; don't treat it as the final turn total.
 
-```text
-data: {"type":"thinking","delta":"Checking the available files..."}
+The current `StreamEvent` union also includes these optional progress events:
 
-data: {"type":"usage","usage":{"inputTokens":1200,"outputTokens":80,"totalTokens":1280}}
+- `thinking` adds `delta` to the model's visible reasoning stream.
+- `tool_input_delta` carries `toolCallId`, `tool`, and an input `delta`.
+  `accumulatedArguments` contains the arguments received so far when the
+  provider supplies them. `toolGroupId` can group related calls.
+- `tool_start` carries `toolCallId`, `tool`, and the complete `input` object.
+- `tool_end` carries `toolCallId`, `tool`, and the complete `result`.
+- `sub_agent_activity` carries the parent `parentToolCallId` and a display
+  `label` for delegated work.
+- `todos_updated` carries the current `AgentTodo[]`.
+- `questionnaire_updated` carries an `AgentQuestionnaire` or `null`.
+- `usage` carries one provider call as `ChatUsage`.
 
-data: {"type":"todos_updated","todos":[{"id":"todo_1","content":"Check pricing files","status":"completed"}]}
+Proxy the SSE response through your backend to the browser. Most clients only
+need `chunk`, `done`, and `error`; use the other events for optional progress
+UI.
 
-data: {"type":"questionnaire_updated","questionnaire":{"id":"question_1","title":"Need more details","questions":[]}}
-```
+## List, inspect, and reconnect sessions
 
-Render tool activity or thinking as optional progress UI. Most clients only need to handle `chunk`, `done`, and `error`.
+Use the current session routes with the API key and the same
+`X-Nakama-App-User-Id` that owns the sessions:
 
-## App-user workspace and storage
+- `GET /v1/sessions?profileId={profileId}` lists that app user's sessions.
+  You can also use `channel` or comma-separated `channels`, `limit` from 1 to
+  100, `q` up to 200 characters, and the previous response's `nextCursor`.
+- `GET /v1/sessions/{sessionId}` returns the `SessionSummary`.
+- `GET /v1/sessions/{sessionId}/messages` returns the `SessionMessagesResponse`
+  history, message metadata, model, todos, questionnaire, and current context
+  usage.
+- `GET /v1/sessions/{sessionId}/status` returns `active` and, while active,
+  `startedAt`. `active` describes the serving process's current turn registry.
+- `GET /v1/sessions/{sessionId}/stream` reconnects to an active turn's SSE
+  stream. It returns `204` when no turn is active.
 
-Nakama creates the private workspace when an app user starts their first API-key session. It does not create a Nakama organization user.
+The reconnect stream contains events emitted after subscription; it doesn't
+replay earlier chunks. After it ends, load `/messages` to recover the complete
+persisted history.
 
-The initial workspace creates empty `memory-archive` and `artifacts` directories. The profile's soul, style, and instructions are shared and read live, so they are not copied for each user. The initial logical file content is effectively **0 KB per user**; practical disk usage is usually only a few KB for directory entries. For 1,000 users, plan for roughly **a few MB** before memory, uploads, and artifacts are added.
+Only one response can run at a time for a session. A second
+`POST /v1/sessions/{sessionId}/messages` returns HTTP `409` with
+`"A response is already in progress for this session."` Don't start parallel
+turns on one `sessionId`. Create a separate session for a parallel branch, or
+wait for the current terminal `done` or `error` event before retrying.
 
-Memory, archived memories, uploaded files, and saved artifacts grow beyond this baseline. The workspace is created on first session use, not when an app user record is created.
+## Understand app-user storage
 
-Assigned skills are shared profile capabilities. Their user-created files stay in the app user's private workspace, but public API users cannot change the profile's shared skill configuration.
+Nakama creates a hashed directory for each `appUserId` under the selected
+profile when the app user starts a session. It does not create a Nakama
+organization user. The initial directory contains empty `memory-archive` and
+`artifacts` directories, without copying the profile soul.
+
+The app-user boundary is narrower than complete profile isolation:
+
+- `MEMORY.md`, `memory-archive`, and `artifacts/...` follow the app user.
+- `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, the knowledge base, and assigned
+  skills remain shared profile data. Missing non-memory soul files fall back to
+  the profile root.
+- Generic file tools use the shared profile root for paths other than
+  `artifacts/...`. They can therefore address shared files under `skills/...`.
+  App-user sessions don't receive `skill_manage`, but that doesn't make the
+  shared profile skill tree a security boundary.
+- Message attachments use shared organization and profile attachment storage,
+  with a session link, rather than the app-user artifact directory.
+
+Don't use `appUserId` as the only boundary between mutually untrusted tenants
+when the default profile has broad or mutating tools. Use separate profiles or
+organizations, and assign only the tools and skills each trust boundary needs.
+
+App-user offboarding has a similar limit. List the user's sessions and purge
+each one to remove session history and linked attachments. The public session
+API does not provide an app-user offboarding operation that deletes the hashed
+app-user memory and artifact directories, so include that server-side data
+lifecycle in your offboarding process.
 
 ## Security checklist
 
 - Never use `NAKAMA_API_KEY` in a React component or browser fetch.
 - Never commit the key or include it in a client-visible response.
-- Use separate named keys for production and preview deployments where possible.
-- Revoke or rotate a key when a project is duplicated, shared, or compromised.
-- Keep `appUserId` from your server-side auth session; never trust it from the browser.
-- Keep `appUserId` stable for the same person so Nakama can return that person's workspace.
+- Use separate named keys for production and preview deployments where
+  possible.
+- Set `expiresAt` when a key only needs temporary access.
+- Revoke or rotate a key when a project is duplicated, shared, compromised, or
+  its creator is being offboarded.
+- Keep `appUserId` from your server-side auth session; never trust it from the
+  browser.
+- Keep `appUserId` stable and at most 200 characters so Nakama can return the
+  same person's sessions, memory, and artifacts.
+- Enforce one active turn per session and handle HTTP `409` as a conflict.
+- Treat profile instructions, knowledge, skills, generic file tools, and
+  attachments as shared profile data when choosing an isolation boundary.
 
-The generated AI-agent context index is available at [`/llms.txt`](/llms.txt). This integration guide is also available as Markdown at [`/app-backend.md`](/app-backend.md).
+The generated AI-agent context index is available at [`/llms.txt`](/llms.txt).
+This integration guide is also available as Markdown at
+[`/app-backend.md`](/app-backend.md).
