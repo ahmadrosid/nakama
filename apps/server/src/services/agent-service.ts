@@ -4152,9 +4152,11 @@ export class AgentService {
       !cognito,
       workspaceRoot
     );
-    // Per-org override for the tool-output optimiser. Undefined leaves the
-    // decision to the server's env var, so an operator who never opened the UI
-    // keeps whatever they configured.
+    // Install-wide override for the tool-output optimiser, read from the single
+    // `workspace_settings` row: one flag governs every org on this host, which
+    // is why only platform admins can write it. Undefined leaves the decision
+    // to the server's env var, so an operator who never opened the UI keeps
+    // whatever they configured.
     const tokenOptimizerEnabled = (await this.db.getWorkspaceSettings())
       ?.tokenOptimizerEnabled;
     const resolvedSystemPrompt = profile.isSuper

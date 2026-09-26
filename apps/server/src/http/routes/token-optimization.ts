@@ -10,7 +10,7 @@ import { mergeWorkspaceSettings } from "@nakama/db";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminFromContext,
+  requirePlatformAdminFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -150,8 +150,13 @@ export function registerTokenOptimizationRoutes(
   });
 
   app.put("/v1/token-optimization", async (c) => {
-    // Admin only: this changes what every session in the org does.
-    requireOrgAdminFromContext(c);
+    // Install-wide, not org-scoped: the flag is one column on the single
+    // `workspace_settings` row and every session in every org resolves through
+    // it, so an org admin writing it would retune the optimizer — and the
+    // host's install state — for tenants they do not own. Platform admins
+    // only. The org-scoped half of this panel (the measurements above) stays
+    // open to org admins.
+    requirePlatformAdminFromContext(c);
     const body = await readJson<{ enabled: boolean }>(c.req.raw);
     const enabled = Boolean(body.enabled);
     const existing = await options.databaseAdapter.getWorkspaceSettings();
