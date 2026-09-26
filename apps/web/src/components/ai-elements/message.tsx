@@ -103,13 +103,21 @@ const MessageResponseBody = memo(
       {...props}
     />
   ),
-  (prevProps, nextProps) =>
+  messageResponseBodyPropsEqual
+);
+
+export function messageResponseBodyPropsEqual(
+  prevProps: MessageResponseProps,
+  nextProps: MessageResponseProps
+): boolean {
+  return (
     prevProps.children === nextProps.children &&
-    nextProps.isAnimating === nextProps.isAnimating &&
+    prevProps.isAnimating === nextProps.isAnimating &&
     prevProps.shikiTheme === nextProps.shikiTheme &&
     prevProps.linkSafety === nextProps.linkSafety &&
     prevProps.components === nextProps.components
-);
+  );
+}
 
 MessageResponseBody.displayName = "MessageResponseBody";
 

@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeContext } from "@/context/theme-context-shared";
 import { transformChatUrl } from "@/lib/transform-chat-url";
-import { MessageResponse } from "./message";
+import {
+  MessageResponse,
+  type MessageResponseProps,
+  messageResponseBodyPropsEqual,
+} from "./message";
 
 test("Markdown images use the proxy, but links and local attachments do not", () => {
   const remote = "https://images.example.com/photo.png?x=1&y=two";
@@ -54,4 +58,11 @@ test("protocol-relative images are proxied and unsafe schemes remain blocked", (
       node
     )
   ).toBe(`${window.location.origin}/v1/attachments/abc/content`);
+});
+
+test("a change in isAnimating alone re-renders the markdown body", () => {
+  const base: MessageResponseProps = { children: "same content" };
+  expect(
+    messageResponseBodyPropsEqual(base, { ...base, isAnimating: true })
+  ).toBe(false);
 });
