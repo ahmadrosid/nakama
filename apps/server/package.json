@@ -15,6 +15,7 @@
     "@hono/zod-openapi": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@nakama/agent": "workspace:*",
+    "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*",
     "@nakama/db": "workspace:*",
     "@openrouter/sdk": "^1.2.108",
