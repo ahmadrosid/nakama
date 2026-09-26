@@ -54,8 +54,16 @@ export async function ensureBundledSkillsAssigned(
   db: DatabaseAdapter
 ): Promise<void> {
   const profiles = await db.listProfiles();
+  const activeOrgIds = new Set(
+    (await db.listOrganizations())
+      .filter((org) => !org.archivedAt)
+      .map((org) => org.id)
+  );
 
   for (const profile of profiles) {
+    if (profile.orgId && !activeOrgIds.has(profile.orgId)) {
+      continue;
+    }
     await ensureProfileDefaultBundledSkills(db, profile.id);
   }
 }
@@ -145,6 +153,9 @@ export async function ensureOrgSuperBotProfiles(
   const orgs = await db.listOrganizations();
 
   for (const org of orgs) {
+    if (org.archivedAt) {
+      continue;
+    }
     await seedOrgSuperBotProfile(db, org.id);
   }
 }

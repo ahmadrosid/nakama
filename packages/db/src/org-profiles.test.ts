@@ -255,4 +255,54 @@ describe("ensureOrgSuperBotProfiles", () => {
     expect(profiles).toHaveLength(2);
     expect(profiles.some((profile) => profile.isSuper)).toBe(true);
   });
+
+  test("archived organizations are not seeded", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_active",
+      name: "Active Org",
+      slug: "active-org",
+      updatedAt: now,
+    });
+    await db.upsertOrganization({
+      archivedAt: now,
+      createdAt: now,
+      id: "org_archived",
+      name: "Archived Org",
+      slug: "archived-org",
+      updatedAt: now,
+    });
+
+    await seedOrgDefaultProfile(db, "org_active");
+    const archivedDefault = await seedOrgDefaultProfile(db, "org_archived");
+    await upsertSkill(db, "create-automation");
+
+    await ensureOrgSuperBotProfiles(db);
+    await ensureBundledSkillsAssigned(db);
+
+    const activeProfiles = await db.listProfilesForOrg("org_active");
+    const activeDefault = activeProfiles.find((profile) => profile.isDefault);
+    expect(
+      (await db.listProfilesForOrg("org_active")).some(
+        (profile) => profile.isSuper
+      )
+    ).toBe(true);
+    const archivedProfiles = await db.listProfilesForOrg("org_archived");
+    expect(archivedProfiles).toHaveLength(1);
+    expect(archivedProfiles[0]).toMatchObject({
+      id: archivedDefault.id,
+      isDefault: true,
+      isSuper: false,
+      orgId: "org_archived",
+    });
+    expect(
+      (await db.listSkillsForProfile(activeDefault!.id)).map(
+        (skill) => skill.name
+      )
+    ).toContain("create-automation");
+    expect(await db.listSkillsForProfile(archivedDefault.id)).toEqual([]);
+  });
 });
