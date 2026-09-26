@@ -56,11 +56,11 @@ Nakama **caches** the tool list at connect time — it is not re-fetched on ever
 
 ## Setup
 
-Platform admins manage servers at **Agent → System → MCP** and assign them on **Agent → Profiles** → profile → **MCP servers**. Registering a server does not assign it to any profile.
+Platform admins manage servers in **Control center → Agent tools → MCP** and assign them by opening **Agent**, selecting a profile, and choosing **MCP**. Registering a server does not assign it to any profile.
 
 ### Add a server
 
-1. Open **Agent → System → MCP** → **Add server**
+1. Open **Control center → Agent tools → MCP**, then select **Add server**
 2. Pick the server type: **HTTP** (a URL, with an API key header if it needs one),
    **Sign-in** (a URL that authenticates through your browser) or **Command** (a local
    process), then enter the name and config
@@ -68,8 +68,8 @@ Platform admins manage servers at **Agent → System → MCP** and assign them o
 
 ### Assign to a profile
 
-1. Open the profile on **Agent → Profiles**
-2. In **MCP servers**, click **Add MCP server**, then pick an existing server or create a new one
+1. Open **Agent** and select a profile
+2. In the **MCP** tab, click **Add MCP server**, then pick an existing server or create a new one
 3. Unassigning removes tools from the next chat; deleting a server removes it from all profiles
 
 ### Example: Exa web search
@@ -96,7 +96,7 @@ Tools appear as `exa__web_search_exa` and `exa__web_fetch_exa`.
 
 ### Example: Firecrawl
 
-Nakama ships a preinstalled **firecrawl** server (`https://mcp.firecrawl.dev/v2/mcp`) with no API key. Assign it on **Agent → Profiles** when a profile needs JS-rendered public pages.
+Nakama ships a preinstalled **firecrawl** server (`https://mcp.firecrawl.dev/v2/mcp`) with no API key. Assign it from **Agent** when a profile needs JS-rendered public pages.
 
 Keyless tools appear as `firecrawl__firecrawl_search`, `firecrawl__firecrawl_scrape`, and `firecrawl__firecrawl_parse`. Use scrape for JS-heavy public pages. Search is extra surface next to Exa and builtin [`web_search`](/builtin-tools#web_search). Hosted parse is not for files in the profile workspace — use [`extract_document_text`](/builtin-tools#extract_document_text).
 
@@ -148,7 +148,7 @@ Two things this needs:
 
 - **A reachable public URL.** The provider redirects your browser back to
   `{your Nakama URL}/v1/mcp/oauth/callback/{serverId}`, so set the public URL under
-  **Settings** (or `NAKAMA_WEB_PUBLIC_URL`) for anything other than a local install
+  **Control center → Workspace → Settings → Public web URL** (or `NAKAMA_WEB_PUBLIC_URL`) for anything other than a local install
 - **Dynamic client registration**, which Nakama uses to register itself with the provider.
   Servers that instead hand you a `client_id` and `client_secret` to paste in are not
   supported yet

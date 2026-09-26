@@ -70,10 +70,10 @@ If one team needs different bots but should still share users and data boundarie
 
 ## Remove an organization
 
-A leftover or test organization can stay in the switcher and keep scheduled work running. A **platform admin** can take it out of use from **System → Organization**.
+A leftover or test organization can stay in the switcher and keep scheduled work running. A **platform admin** can take it out of use from **Control center → Workspace → Organization**.
 
 1. Switch into the organization you want to remove
-2. Open **System → Organization**
+2. Open **Control center → Workspace → Organization**
 3. Confirm **Delete organization**
 
 That hides the organization from the switcher, chat, and workers. Members, profiles, and files stay on disk. The last remaining organization cannot be removed. Org admins cannot do this.
@@ -95,7 +95,7 @@ organization memory stay scoped to one organization.
 
 Org admins manage members, but creating and cloning profiles (and most tool / MCP / skill provisioning) is still a platform-admin responsibility.
 
-**Exception:** org admins can **export and import a single profile pack** (secrets-free zip) for profiles in their active org. Import creates a new profile and re-links tools/MCP by name when they already exist in the destination — it does not open general profile create/clone or unrestricted tool assignment. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
+**Exception:** org admins can **export and import a single agent pack** (secrets-free zip) for agents in their active org. Import creates a new profile and re-links tools/MCP by name when they already exist in the destination — it does not open general agent creation or cloning, or unrestricted tool assignment. See [Export and import an agent pack](/profiles#export-and-import-a-profile-pack).
 
 So the split is:
 

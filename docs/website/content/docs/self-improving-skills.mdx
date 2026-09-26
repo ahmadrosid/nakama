@@ -80,7 +80,7 @@ By default, skill changes apply immediately. Turn on **write approval** when you
 
 ### Turn it on
 
-Org admins: **System → Organization → Skill write approval → Gate settings**.
+Org admins: **Control center → Workspace → Organization → Skill write approval → Gate settings**.
 
 - Flip the toggle to require approval for skill writes org-wide.
 - Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
@@ -101,7 +101,7 @@ Open **Review** to see the full skill content (or the before/after for an edit).
 
 Nakama flags suspicious patterns in proposals the same way it does for org memory — worth a closer look before approving.
 
-Platform admins managing a specific bot can also open **Agent → Profiles**, select the profile, and use the **Proposals** tab there.
+Platform admins managing a specific bot can also open **Agent**, select the profile, and use the **Proposals** tab.
 
 ## Learn after a turn (optional)
 
@@ -109,12 +109,12 @@ In-session saves can still miss a good workflow: the agent finishes a long tool-
 
 ### Turn it on
 
-Org admins: **System → Organization**, on the **Learn after a turn** card (next to Skill write approval). Platform admins can also flip it on **Agent → Profiles → Config**.
+Org admins: **Control center → Workspace → Organization**, on the **Learn after a turn** card (next to Skill write approval). Platform admins can also flip it on after opening **Agent** and selecting the profile.
 
 - Default is **off** (no extra review pass).
 - Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
 
-![Learn after a turn switch on a profile Config tab](/screenshots/learn-after-a-turn-profile.png)
+![Learn after a turn switch on an agent settings page](/screenshots/learn-after-a-turn-profile.png)
 
 ![Learn after a turn org switch and per-profile overrides](/screenshots/learn-after-a-turn-org.png)
 
@@ -149,7 +149,7 @@ Both help agents stay consistent across your team, but they solve different prob
 | **What it stores** | Repeatable workflows for one bot | Shared facts for the whole org |
 | **Example** | "How we triage support tickets" | "Support hours are 9–6 SGT" |
 | **Who approves agent writes** | Optional — only when write approval is on | Always — members propose, admins approve |
-| **Where admins manage it** | **System → Organization → Skill write approval** | **System → Organization → Org Memory** |
+| **Where admins manage it** | **Control center → Workspace → Organization → Skill write approval** | **Control center → Workspace → Settings → Org Memory** |
 
 Use org memory for facts everyone should know. Use skills for how a specific bot should run a task.
 
@@ -157,7 +157,7 @@ Use org memory for facts everyone should know. Use skills for how a specific bot
 
 After your team has been chatting for a while, you may wonder which skills actually help and which just sit on the shelf. Nakama tracks that automatically for each **assigned** skill on a profile.
 
-Open **Agent → Profiles**, select a bot, and scroll to **Skills**. Each skill shows a short hint such as **Last matched 2 days ago · 5 uses**, or **Never matched** when it has not been selected for a turn yet. Skills with no match for the configured stale interval (30 days by default) get an **Unused** badge. **Bundled system skills** (shipped with Nakama, such as `manage-skills` and `save-artifact`) never get the Unused badge; they stay assigned by design.
+Open **Agent**, select a bot, and scroll to **Skills**. Each skill shows a short hint such as **Last matched 2 days ago · 5 uses**, or **Never matched** when it has not been selected for a turn yet. Skills with no match for the configured stale interval (30 days by default) get an **Unused** badge. **Bundled system skills** (shipped with Nakama, such as `manage-skills` and `save-artifact`) never get the Unused badge; they stay assigned by design.
 
 Click a skill to open its detail dialog for the full breakdown:
 
@@ -184,7 +184,7 @@ Default is **off**. The first scheduled pass after you enable it only records a 
 
 ### Turn it on
 
-Org admins: **System → Organization → Skill curator**.
+Org admins: **Control center → Workspace → Organization → Skill curator**.
 
 - Set **Freshness clocks**. Defaults are 30 days stale and 90 days archive; stale must be before archive.
 - Set **Automation worker poll interval** if this installation needs a different schedule reload cadence. It is workspace-global and defaults to 5 minutes.

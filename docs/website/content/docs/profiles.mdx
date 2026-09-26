@@ -33,7 +33,7 @@ If a session or channel config omits a profile id — or names one that does not
 
 Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` when those builtins are available. Default and super-bot profiles also receive bundled skills (memory, automations, skill authoring) when installed on the server. Assign more tools, MCP servers, and skills from the dashboard.
 
-Super Bot can also create profiles from chat using a confirm-first factory. For profile-creation requests, it drafts soul files and a tool plan in chat, waits for your explicit OK, then calls `create_profile`. New profiles keep `MEMORY.md` empty and receive basic file/knowledge tools automatically; extra tools still need an explicit ask. On the Profiles page, use **Ask Super Bot** (empty state or create dialog) when a Super Bot profile exists.
+Super Bot can also create profiles from chat using a confirm-first factory. For profile-creation requests, it drafts soul files and a tool plan in chat, waits for your explicit OK, then calls `create_profile`. New profiles keep `MEMORY.md` empty and receive basic file/knowledge tools automatically; extra tools still need an explicit ask. On the **Agent** page, use **Ask Super Bot** (empty state or create dialog) when a Super Bot profile exists.
 
 Super Bot can also change a profile's stored `systemPrompt` from chat. Ask it to update the prompt, review the draft, then confirm — it calls `update_profile` only after you say OK. That edits the database prompt, not soul files. Edit soul files on the profile **Prompt** tab.
 
@@ -153,8 +153,8 @@ Memory writes and archives use bundled skills (`update-profile-memory`, `archive
 | Org memory | Yes (appended as `## Org Memory` for non-viewers) | Org admins via Settings or API — see [Org memory](/org-memory) |
 | `MEMORY.md` | Yes (via soul stack) | `update-profile-memory` skill + `read_file` / `edit_file` / `write_file` |
 | `memory-archive/` | No | `archive-profile-memory` skill + file tools |
-| `artifacts/` | No ([Files page](/artifacts), download API, web chat preview) | `save-artifact` skill + `write_file` or `write_docx` |
-| Knowledge base | Via `knowledge_base_search` when assigned | Upload via **Profiles → Knowledge**; search at runtime |
+| `artifacts/` | No (**Browse Files → Artifacts**, download API, web chat preview) | `save-artifact` skill + `write_file` or `write_docx` |
+| Knowledge base | Via `knowledge_base_search` when assigned | Upload from **Browse Files → Knowledge**; search at runtime |
 | Profile skills | Via skill matcher when relevant | `manage-skills` skill or dashboard |
 
 Active `MEMORY.md` has a **4096-byte** soft limit. When it is full, the agent should archive old bullets before adding new ones.
@@ -163,7 +163,7 @@ Org memory has separate limits: **8192 bytes** for the live file and **2048 byte
 
 This data is isolated per org and per profile. Two orgs never read or write the same directory, even if profile ids happen to match.
 
-Each profile also sees the default Nakama documentation source on **Profiles → Knowledge**:
+Each profile also sees the default Nakama documentation source in **Browse Files → Knowledge**:
 
 ```text
 https://ahmadrosid.github.io/nakama/llms.txt
@@ -197,7 +197,7 @@ Create separate profiles when you need different:
 
 ## Clone a profile
 
-Tuning an agent and then wanting a close variant is common, so **System → Profiles** has a **Clone** button on the selected profile. It creates `{name} (copy)` in the same organization and selects it.
+Tuning an agent and then wanting a close variant is common, so open **Agent**, select the profile, and choose **Clone agent**. It creates `{name} (copy)` in the same organization and selects it.
 
 The clone gets its own soul directory, avatar and knowledge base, and starts with the same system prompt, model, tools, skills, MCP servers and Composio toolkits as the source. It never becomes the organization default.
 
@@ -212,8 +212,8 @@ Use a **profile pack** when you need to move or share **one** agent between orga
 
 Org admins and platform admins can:
 
-1. Open **System → Profiles**, select a profile, and choose **Export profile** to download a `.zip`
-2. On Profiles, choose **Import profile**, preview what will be created or skipped, then confirm
+1. Open **Agent**, select a profile, and choose **Export** to download a `.zip`
+2. On **Agent**, choose **Import**, preview what will be created or skipped, then confirm
 
 Import always creates a **new** profile in the active org. It never overwrites an existing one.
 
