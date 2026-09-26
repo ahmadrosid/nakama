@@ -1,4 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
+import type {
+  NotificationDestinationSummary,
+  UserOrgSummary,
+} from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,6 +16,7 @@ import {
   type AuthContextValue,
 } from "@/context/auth-context-shared";
 import { ChannelProfileContext } from "@/hooks/use-app-queries";
+import { useNotificationDestinations } from "@/hooks/use-notification-destinations";
 import { client } from "@/lib/client";
 import { visibleIntegrationSections } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
@@ -665,3 +670,98 @@ test("channel setup stays on the agent page and Connect apps excludes messaging 
     useActiveChatProfileStore.setState(previous);
   }
 });
+test("notification destination cache is scoped by user and organization", async () => {
+  const orgA: UserOrgSummary = {
+    createdAt: "2026-09-25T00:00:00Z",
+    id: "org-a",
+    name: "Organization A",
+    role: "admin",
+    slug: "organization-a",
+    updatedAt: "2026-09-25T00:00:00Z",
+  };
+  const orgB: UserOrgSummary = {
+    ...orgA,
+    id: "org-b",
+    name: "Organization B",
+    slug: "organization-b",
+  };
+  const destinationA: NotificationDestinationSummary = {
+    channel: "telegram",
+    createdAt: "2026-09-25T00:00:00Z",
+    id: "destination-a",
+    name: "Organization A alerts",
+    telegram: { chatId: 1001, topicId: 11 },
+    updatedAt: "2026-09-25T00:00:00Z",
+    webhookPath: "/hooks/notification/destination-a",
+  };
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const list = spyOn(client, "listNotificationDestinations").mockResolvedValue({
+    destinations: [],
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const authValue = (
+    userId: string,
+    activeOrg: UserOrgSummary
+  ): AuthContextValue =>
+    ({
+      activeOrg,
+      isAuthenticated: true,
+      isLoading: false,
+      orgs: [activeOrg],
+      user: {
+        email: `${userId}@example.com`,
+        id: userId,
+        isPlatformAdmin: false,
+      },
+    }) as AuthContextValue;
+  const renderScope = async (userId: string, org: UserOrgSummary) => {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={authValue(userId, org)}>
+            <NotificationDestinationProbe />
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      );
+      await Bun.sleep(20);
+    });
+  };
+
+  queryClient.setQueryData(
+    queryKeys.notificationDestinations.all("user-a", orgA.id),
+    { destinations: [destinationA] }
+  );
+
+  try {
+    await renderScope("user-a", orgA);
+    expect(container.textContent).toContain("Organization A alerts");
+
+    await renderScope("user-b", orgA);
+    expect(container.textContent).not.toContain("Organization A alerts");
+
+    await renderScope("user-a", orgB);
+    expect(container.textContent).not.toContain("Organization A alerts");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+    list.mockRestore();
+  }
+});
+
+function NotificationDestinationProbe() {
+  const { data, isLoading } = useNotificationDestinations();
+  return (
+    <div>
+      {isLoading
+        ? "Loading destinations"
+        : (data?.destinations
+            .map((destination) => destination.name)
+            .join(",") ?? "No destinations")}
+    </div>
+  );
+}

@@ -16,6 +16,7 @@ import {
   ViewOffIcon,
 } from "hugeicons-react";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useCreateNotificationDestination,
@@ -187,6 +188,13 @@ function LatestSecret({
 }
 
 export function NotificationDestinationsCard() {
+  const { activeOrg, user } = useAuth();
+  const sessionKey = user && activeOrg ? `${user.id}:${activeOrg.id}` : "none";
+
+  return <NotificationDestinationsCardContent key={sessionKey} />;
+}
+
+function NotificationDestinationsCardContent() {
   const { data: profiles = [] } = useProfilesQuery();
   const [profileId, setProfileId] = useState("");
   const { data, isLoading, error } = useNotificationDestinations();
