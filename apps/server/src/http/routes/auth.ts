@@ -1371,6 +1371,12 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse(
+        "Sign in through the dashboard to update your profile.",
+        403
+      );
+    }
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const body = await readJson<UpdateAuthProfileRequest>(
