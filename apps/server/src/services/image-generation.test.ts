@@ -122,6 +122,31 @@ describe("generateImageWithOpenAI", () => {
   });
 });
 
+describe("generateImageWithOpenAI cancellation", () => {
+  test("a cancelled turn aborts the provider request", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError"))
+        );
+      })) as typeof fetch;
+
+    try {
+      const turn = new AbortController();
+      const pending = generateImageWithOpenAI({
+        apiKey: "test-key",
+        prompt: "a cat",
+        signal: turn.signal,
+      });
+      turn.abort();
+      await expect(pending).rejects.toThrow("aborted");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
+
 describe("AgentService image generation settings", () => {
   test("round-trips allowlisted model and clears with null", async () => {
     const db = createInMemoryDatabaseAdapter();

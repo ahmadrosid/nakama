@@ -1,12 +1,12 @@
 import type { SkillSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import { useEffect, useRef } from "react";
-import type { ComposerSlashSuggestion } from "@/lib/chat-composer-skills";
+import type { ComposerSuggestion } from "@/lib/chat-composer-skills";
 
 interface ChatSkillPickerProps {
   activeIndex: number;
-  onSelect: (suggestion: ComposerSlashSuggestion) => void;
-  suggestions: ComposerSlashSuggestion[];
+  onSelect: (suggestion: ComposerSuggestion) => void;
+  suggestions: ComposerSuggestion[];
 }
 
 function skillDescription(skill: SkillSummary): string | null {
@@ -32,26 +32,44 @@ function skillMeta(skill: SkillSummary): string {
   return parts.join(" · ");
 }
 
-function suggestionKey(suggestion: ComposerSlashSuggestion): string {
+function suggestionKey(suggestion: ComposerSuggestion): string {
+  if (suggestion.kind === "mention") {
+    return `mention:${suggestion.mention.name}`;
+  }
+
   return suggestion.kind === "command"
     ? `command:${suggestion.command.name}`
     : `skill:${suggestion.skill.id}`;
 }
 
-function suggestionTitle(suggestion: ComposerSlashSuggestion): string {
+function suggestionTitle(suggestion: ComposerSuggestion): string {
+  if (suggestion.kind === "mention") {
+    return `@${suggestion.mention.name}`;
+  }
+
   return suggestion.kind === "command"
     ? `/${suggestion.command.name}`
     : suggestion.skill.name;
 }
 
-function suggestionDescription(
-  suggestion: ComposerSlashSuggestion
-): string | null {
+function suggestionDescription(suggestion: ComposerSuggestion): string | null {
+  if (suggestion.kind === "mention") {
+    return suggestion.mention.description;
+  }
+
   if (suggestion.kind === "command") {
     return suggestion.command.description;
   }
 
   return skillDescription(suggestion.skill);
+}
+
+function suggestionMeta(suggestion: ComposerSuggestion): string {
+  if (suggestion.kind === "skill") {
+    return skillMeta(suggestion.skill);
+  }
+
+  return suggestion.kind === "mention" ? "tool" : "command";
 }
 
 export function ChatSkillPicker({
@@ -67,7 +85,7 @@ export function ChatSkillPicker({
 
   return (
     <div
-      aria-label="Available slash commands and skills"
+      aria-label="Available commands, skills and tools"
       className="absolute bottom-full left-0 z-30 mb-2 max-h-[min(20rem,40dvh)] w-full max-w-md overflow-y-auto overscroll-contain rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-sm"
       role="listbox"
     >
@@ -79,10 +97,7 @@ export function ChatSkillPicker({
         suggestions.map((suggestion, index) => {
           const active = index === activeIndex;
           const description = suggestionDescription(suggestion);
-          const meta =
-            suggestion.kind === "skill"
-              ? skillMeta(suggestion.skill)
-              : "command";
+          const meta = suggestionMeta(suggestion);
 
           return (
             <button

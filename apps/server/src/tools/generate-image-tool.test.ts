@@ -22,6 +22,7 @@ import { IMAGE_MODEL_REQUIRED_MESSAGE } from "../services/image-generation";
 import { resolveToolsFromStorage } from "../services/tool-resolver";
 import {
   createGenerateImageTool,
+  formatImageMentionContext,
   GENERATE_IMAGE_TOOL_NAME,
   runGenerateImageTool,
 } from "./generate-image-tool";
@@ -205,6 +206,39 @@ describe("generate_image tool persistence (U4)", () => {
     workspaceRoot = await mkdtemp(path.join(tmpdir(), "nakama-gen-img-ws-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
   }
+
+  test("forwards the turn's cancel signal to the provider call", async () => {
+    await setupWorkspace();
+    const turn = new AbortController();
+    let seen: AbortSignal | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      {
+        orgId: "org_1",
+        profileId: "profile_1",
+        signal: turn.signal,
+        workspaceRoot,
+      },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async (input) => {
+          seen = input.signal;
+          return {
+            data: PNG_BYTES,
+            mediaType: "image/png",
+            model: "gpt-image-2",
+            size: "1024x1024",
+          };
+        },
+        getUserConfig: () =>
+          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+      }
+    );
+
+    expect(seen).toBe(turn.signal);
+  });
 
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
@@ -419,5 +453,29 @@ describe("generate_image tool persistence (U4)", () => {
     );
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
+  });
+});
+
+describe("formatImageMentionContext", () => {
+  const withTool = [GENERATE_IMAGE_TOOL_NAME];
+
+  test("asks for generate_image when the message is tagged @image", () => {
+    for (const message of ["@image a red fox", "draw this @image", "@IMAGE"]) {
+      expect(formatImageMentionContext(message, withTool)).toContain(
+        `Call ${GENERATE_IMAGE_TOOL_NAME}`
+      );
+    }
+  });
+
+  test("ignores emails, longer words and untagged messages", () => {
+    for (const message of ["me@image.dev", "@images please", "a red fox"]) {
+      expect(formatImageMentionContext(message, withTool)).toBe("");
+    }
+  });
+
+  test("explains the missing tool instead of asking for it", () => {
+    const context = formatImageMentionContext("@image a red fox", ["bash"]);
+    expect(context).toContain("not assigned to this agent");
+    expect(context).not.toContain(`Call ${GENERATE_IMAGE_TOOL_NAME}`);
   });
 });

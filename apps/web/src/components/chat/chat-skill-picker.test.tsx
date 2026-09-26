@@ -44,3 +44,33 @@ test("keeps the active command visible when navigating a long list", async () =>
     container.remove();
   }
 });
+
+test("renders an @ mention with its description and tool badge", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const onSelect = mock();
+  try {
+    await act(async () =>
+      root.render(
+        <ChatSkillPicker
+          activeIndex={0}
+          onSelect={onSelect}
+          suggestions={[
+            {
+              kind: "mention",
+              mention: { description: "Generate an image", name: "image" },
+            },
+          ]}
+        />
+      )
+    );
+    const option = container.querySelector('[role="option"]');
+    expect(option?.textContent).toContain("@image");
+    expect(option?.textContent).toContain("Generate an image");
+    expect(option?.textContent?.toLowerCase()).toContain("tool");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});

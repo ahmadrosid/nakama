@@ -34,6 +34,11 @@ export type ComposerSlashSuggestion =
   | { kind: "command"; command: ReservedSlashCommand }
   | { kind: "skill"; skill: SkillSummary };
 
+/** Anything the composer picker lists: slash entries plus `@` mentions. */
+export type ComposerSuggestion =
+  | ComposerSlashSuggestion
+  | { kind: "mention"; mention: ReservedSlashCommand };
+
 const EXPLICIT_SKILL_TOKEN_PATTERN = /(?:^|\s)\/skill\s+([a-z0-9-]+)\b/g;
 const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
   "create-automation",
@@ -79,13 +84,29 @@ export const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
   },
 ];
 
+/** `@` tokens the server acts on (`@image` asks the agent for generate_image). */
+const COMPOSER_MENTIONS: ReservedSlashCommand[] = [
+  {
+    description: "Generate an image from your message",
+    name: "image",
+  },
+];
+
+const MENTION_TOKEN_PATTERN = new RegExp(
+  String.raw`(^|\s)(@(?:` +
+    COMPOSER_MENTIONS.map((mention) => mention.name).join("|") +
+    String.raw`))(?=\s|$)`,
+  "gi"
+);
+
 export function findActiveSkillSlashRange(
   value: string,
-  cursorIndex: number
+  cursorIndex: number,
+  trigger: "/" | "@" = "/"
 ): SkillSlashRange | null {
   const boundedCursor = Math.max(0, Math.min(cursorIndex, value.length));
   const beforeCursor = value.slice(0, boundedCursor);
-  const slashIndex = beforeCursor.lastIndexOf("/");
+  const slashIndex = beforeCursor.lastIndexOf(trigger);
 
   if (slashIndex === -1) {
     return null;
@@ -130,6 +151,14 @@ export function filterReservedSlashCommands(
   const matches =
     info && order ? order.map((index) => info.idx[index]) : indices;
   return (matches ?? []).map((index) => commands[index]);
+}
+
+export function filterComposerMentionSuggestions(
+  query: string
+): ComposerSuggestion[] {
+  return filterReservedSlashCommands(query, COMPOSER_MENTIONS).map(
+    (mention) => ({ kind: "mention" as const, mention })
+  );
 }
 
 export function matchComposerAddCommand(
@@ -216,9 +245,10 @@ export function replaceSlashRangeWithSkillInvocation(
 export function replaceSlashRangeWithReservedCommand(
   value: string,
   range: SkillSlashRange,
-  command: Pick<ReservedSlashCommand, "name">
+  command: Pick<ReservedSlashCommand, "name">,
+  trigger: "/" | "@" = "/"
 ): { value: string; cursorIndex: number } {
-  const insertion = `/${command.name} `;
+  const insertion = `${trigger}${command.name} `;
   const nextValue = `${value.slice(0, range.start)}${insertion}${value.slice(range.end)}`;
 
   return {
@@ -283,4 +313,13 @@ export function getReservedCommandTokenRanges(
       start,
     },
   ];
+}
+
+/** Ranges of `@image`-style mention tokens for composer highlighting. */
+export function getMentionTokenRanges(value: string): SkillTokenRange[] {
+  return [...value.matchAll(MENTION_TOKEN_PATTERN)].map((match) => {
+    const start = (match.index ?? 0) + (match[1]?.length ?? 0);
+    const token = match[2] ?? "";
+    return { end: start + token.length, name: token.slice(1), start };
+  });
 }
