@@ -239,6 +239,7 @@ import {
   resolveXaiOAuthCredentials,
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
+import { formatImageMentionContext } from "../tools/generate-image-tool";
 import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
@@ -4315,6 +4316,15 @@ export class AgentService {
           if (composioContext.trim()) {
             parts.push(composioContext.trim());
           }
+        }
+
+        const imageMentionContext = formatImageMentionContext(
+          context?.userMessage ?? "",
+          tools.map((tool) => tool.name)
+        );
+
+        if (imageMentionContext) {
+          parts.push(imageMentionContext);
         }
 
         if (this.skillsService && context?.userMessage?.trim()) {
