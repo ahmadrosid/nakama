@@ -9,8 +9,8 @@ An agent with the `generate_image` tool can produce an image from a text prompt.
 
 Two things are required.
 
-1. **An OpenAI provider.** Image generation runs against OpenAI's Images API, so the instance needs a provider of type `openai` with a working key. Nakama uses your default provider when it is an OpenAI one, otherwise the first OpenAI provider configured. The key comes from that provider, or from `OPENAI_API_KEY`.
-2. **A model, set in Settings.** Pick **Image generation model** in the same card group as the vision and transcription models. The only allowlisted choice today is `gpt-image-2`.
+1. **An AI-image provider.** Image generation runs against the OpenAI Images API contract, served by an `openai` provider or an **OpenAI-compatible** provider with a base URL (that is, a self-hosted backend). Nakama uses your default provider when it matches, otherwise the first eligible provider configured. The key comes from that provider, or from `OPENAI_API_KEY`.
+2. **A model, set in Settings.** Pick **Image generation model** in the same card group as the vision and transcription models. The allowlisted choices today are `gpt-image-2` against an OpenAI provider, or `openai_compatible::gpt-image-2` against a compatible instance. See [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription).
 
 Until a model is set, the tool refuses with `Configure an image generation model in Settings before generating images.` The card shows **Not configured** in that state, and **No OpenAI provider** when the provider is the missing half.
 
@@ -48,6 +48,6 @@ Every generation records usage through the same token pricing bridge as chat, so
 
 ## Limits
 
-- One model, `gpt-image-2`, and one provider type, OpenAI. There is no Stability, Replicate, or local diffusion path.
+- One model, `gpt-image-2`, served by an OpenAI provider or an OpenAI-compatible provider with a base URL (see [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription)). There is no Stability or Replicate path.
 - No image editing or variations. Generation from a prompt only.
 - No streaming or progress. A generation is one tool call that returns when the image is ready.

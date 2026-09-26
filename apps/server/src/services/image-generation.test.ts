@@ -56,6 +56,44 @@ describe("resolveImageGenerationSelection", () => {
     ).toThrow(NakamaApiError);
   });
 
+  test("resolves openai_compatible::gpt-image-2 with a baseUrl", () => {
+    const resolved = resolveImageGenerationSelection({
+      defaultProviderId: "p-local",
+      imageModel: "openai_compatible::gpt-image-2",
+      providers: [
+        {
+          apiKey: "local-key",
+          baseUrl: "http://100.64.0.1:8000/v1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: "p-local",
+          label: "Local",
+          type: "openai_compatible",
+        },
+      ],
+    });
+    expect(resolved?.instance.type).toBe("openai_compatible");
+    expect(resolved?.baseUrl).toBe("http://100.64.0.1:8000/v1");
+    expect(resolved?.apiKey).toBe("local-key");
+  });
+
+  test("rejects openai_compatible::gpt-image-2 without a baseUrl", () => {
+    expect(() =>
+      resolveImageGenerationSelection({
+        defaultProviderId: "p-local",
+        imageModel: "openai_compatible::gpt-image-2",
+        providers: [
+          {
+            apiKey: "local-key",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            id: "p-local",
+            label: "Local",
+            type: "openai_compatible",
+          },
+        ],
+      })
+    ).toThrow(NakamaApiError);
+  });
+
   test("fails when OpenAI API key is missing", () => {
     expect(() =>
       resolveImageGenerationSelection(
@@ -119,6 +157,33 @@ describe("generateImageWithOpenAI", () => {
         prompt: "a cat",
       })
     ).rejects.toThrow(NakamaApiError);
+  });
+
+  test("routes to the configured baseUrl instead of api.openai.com", async () => {
+    let requestedUrl = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      // Return a minimal valid Images API payload.
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("png").toString("base64") }],
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      );
+    }) as typeof fetch;
+
+    try {
+      await generateImageWithOpenAI({
+        apiKey: "local-key",
+        baseUrl: "http://100.64.0.1:8000/v1",
+        prompt: "a cat",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requestedUrl).toBe("http://100.64.0.1:8000/v1/images/generations");
   });
 });
 

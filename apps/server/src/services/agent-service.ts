@@ -1014,6 +1014,7 @@ export class AgentService {
 
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
+      baseUrl: selection.baseUrl,
       model: selection.model,
       prompt,
       size: input.size,
