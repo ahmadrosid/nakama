@@ -1174,7 +1174,7 @@ describe("createChatHandler group chats", () => {
     });
   });
 
-  test("unpaired plain group message reaches the agent when mention is not required", async () => {
+  test("unpaired plain group message is ignored when mention is not required", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
         pairingCode: "ABCD1234",
@@ -1207,7 +1207,8 @@ describe("createChatHandler group chats", () => {
         })
       );
 
-      expect(calls.sendStream).toBe(1);
+      expect(calls.createSession).toBe(0);
+      expect(calls.sendStream).toBe(0);
     });
   });
 
@@ -1596,7 +1597,7 @@ describe("createChatHandler group chats", () => {
     });
   });
 
-  test("answers any group member when mention is not required", async () => {
+  test("does not answer an unpaired group member when mention is not required", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
         pairedJid: PAIRED_JID,
@@ -1612,7 +1613,7 @@ describe("createChatHandler group chats", () => {
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
-      const { socket } = createMockSocket();
+      const { socket, sent } = createMockSocket();
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1629,7 +1630,8 @@ describe("createChatHandler group chats", () => {
         })
       );
 
-      expect(calls.sendStream).toBe(1);
+      expect(sent).toEqual([]);
+      expect(calls.sendStream).toBe(0);
     });
   });
 
