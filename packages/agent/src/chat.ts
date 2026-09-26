@@ -812,8 +812,14 @@ async function runConversation(
       (message): message is Extract<ChatMessage, { role: "assistant" }> =>
         message.role === "assistant"
     );
-
-  return lastAssistant?.content ?? "";
+  const lastAssistantContent = lastAssistant?.content ?? "";
+  const notice = `${lastAssistantContent ? "\n\n" : ""}Stopped because this turn reached its tool iteration limit. Send another message to continue.`;
+  const content = lastAssistantContent + notice;
+  history.push({ content, role: "assistant" });
+  if (mode === "stream") {
+    handlers?.onChunk(notice);
+  }
+  return content;
 }
 
 async function executeToolCalls(
