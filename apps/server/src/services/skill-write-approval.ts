@@ -4,9 +4,8 @@ import type { DatabaseAdapter } from "@nakama/db";
 /**
  * Whether writes to a profile's skills are staged for admin review instead of
  * applying immediately. The org default is off, so a member's writes land
- * directly — which is why the same switch also decides whether the code in
- * those skills may run (see `resolveSkillCodeExecutionPolicy`): the approval
- * is the admin looking at what a member wrote.
+ * directly. Code loading also checks this switch, then verifies each code
+ * file against an approved proposal so older writes are not auto-approved.
  *
  * Lives apart from the proposal service so `SkillsService` can read it while
  * deciding which skill tools to load, without a module cycle.

@@ -163,9 +163,12 @@ A skill written into a profile's own skills directory — by hand, or by an
 organization member asking the agent to create one with `skill_manage` — does
 not, until the org reviews its writes. Turn on **Skill write approval** for the
 profile in **Agent → Profiles** and every write to that profile's skills is
-staged for an admin to approve; once it is on, the skill's code runs like any
-other. With approval off, the skill still reads as instructions, and calling its
-tool returns an error saying the code is not runnable here.
+staged for an admin to approve. Code already in the skill stays blocked until
+reviewed: ask the agent to use `skill_manage` with `action: approve_code`, the
+skill name, and the code file path, then approve its proposal. Each code file
+must match what the admin approved; changing it blocks the skill's code again.
+With approval off, the skill still reads as instructions, and calling its tool
+returns an error saying the code is not runnable here.
 
 Python skill processes for member-authored skills are spawned without
 `NAKAMA_CONFIG_DIR`, so they are not told where the deployment keeps its

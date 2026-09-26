@@ -9,7 +9,7 @@ import { isPathWithinProfileSkillsDir } from "./write";
  * the model then answers from the script's text as if it had run.
  */
 export const MEMBER_AUTHORED_SKILL_CODE_REFUSAL =
-  "This skill's code is not runnable here. It was authored for this profile by an agent, and its scripts and tool modules run on the host, so they stay inert until skill write approval is enabled for this profile and an admin has reviewed them. Answer from the skill's instructions instead.";
+  "This skill's code is not runnable here. Its scripts and tool modules run on the host, so skill write approval must be enabled and an admin must review the exact code files before they run. Answer from the skill's instructions instead.";
 
 /**
  * True when the skill directory sits under one profile's own skills directory,
@@ -39,11 +39,9 @@ export function isMemberAuthoredSkillDirectory(options: {
 /**
  * Whether a skill's own code may be loaded as callable tools.
  *
- * Server-shipped skills always may. A profile's own skills only once the org
- * has turned on skill write approval for that profile, which routes every
- * write to them through an admin review — the explicit approval the code needs
- * before it runs. The default, approval off, leaves the skill readable as
- * instructions and its code inert.
+ * Server-shipped skills always may. A profile's own code runs only when write
+ * approval is enabled and the caller has verified its files against reviewed
+ * proposals. The default leaves the skill readable as instructions.
  */
 export function resolveSkillCodeExecutionPolicy(options: {
   directory: string;

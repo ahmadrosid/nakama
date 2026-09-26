@@ -8,6 +8,7 @@ import {
   type DatabaseAdapter,
 } from "@nakama/db";
 import { loadPythonSkillTool } from "./python-skill-tool-loader";
+import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
 import { ORG_ID, seedSkillOrg } from "./skills-service-test-fixtures";
 
@@ -181,7 +182,8 @@ describe("member-authored skill code", () => {
     expect(result.stolen[OTHER_ORG_SECRET_RELATIVE]).toBe("other-org-api-key");
   });
 
-  test("an approved member-authored script runs without the deployment config dir in its environment", async () => {
+  test("enabling approval does not run old code until an admin reviews its exact contents", async () => {
+    const service = await seedMemberSkill();
     await db.upsertOrganization({
       createdAt: new Date().toISOString(),
       id: ORG_ID,
@@ -190,7 +192,18 @@ describe("member-authored skill code", () => {
       slug: "test-org",
       updatedAt: new Date().toISOString(),
     });
-    const service = await seedMemberSkill();
+    const blocked = await service.loadToolsForProfile(ORG_ID, profileId);
+    expect(await blocked[0].run({}, noSignal())).toHaveProperty("error");
+
+    const proposals = new SkillProposalService(db, service);
+    const staged = await proposals.stageProposal({
+      action: "approve_code",
+      orgId: ORG_ID,
+      profileId,
+      relativePath: "payload.py",
+      skillName: SKILL_NAME,
+    });
+    await proposals.approveProposal(ORG_ID, staged.proposalId!, "admin");
 
     const tools = await service.loadToolsForProfile(ORG_ID, profileId);
 
@@ -199,6 +212,28 @@ describe("member-authored skill code", () => {
 
     expect(result.configDir).toBeNull();
     expect(result.stolen).toEqual({});
+
+    await writeFile(
+      join(memberSkillDir(), "payload.py"),
+      `${payloadSource}\n# changed`
+    );
+    const changed = await service.loadToolsForProfile(ORG_ID, profileId);
+    expect(await changed[0].run({}, noSignal())).toHaveProperty("error");
+
+    const stale = await proposals.stageProposal({
+      action: "approve_code",
+      orgId: ORG_ID,
+      profileId,
+      relativePath: "payload.py",
+      skillName: SKILL_NAME,
+    });
+    await writeFile(
+      join(memberSkillDir(), "payload.py"),
+      `${payloadSource}\n# changed again`
+    );
+    await expect(
+      proposals.approveProposal(ORG_ID, stale.proposalId!, "admin")
+    ).rejects.toThrow("changed since review");
   });
 
   test("a server-shipped global skill still runs and still gets the config dir", async () => {

@@ -49,6 +49,7 @@ import {
   getProfileSoulDir,
   guardFilePath,
   isGlobalSkillSourcePath,
+  isMemberAuthoredSkillDirectory,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
   matchSkillsForMessage,
@@ -1073,9 +1074,9 @@ export class SkillsService {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
     // What a member asks the agent to write lands under this profile's own
     // skills dir, and a skill's tool module and `scripts:` entries are host
-    // code. They load only once the org reviews every write to them, which is
-    // the admin approval that code needs before it can reach the deployment
-    // secret store or another tenant's workspace. Approval is read fail-closed:
+    // code. The setting alone cannot approve files written before it was on:
+    // each code file must still match content from an approved proposal.
+    // Approval is read fail-closed:
     // a database hiccup, or an org the adapter cannot resolve, must not read as
     // approved. The write path still 404s on a profile that is really missing,
     // so only the exec decision degrades.
@@ -1090,6 +1091,67 @@ export class SkillsService {
       );
       return false;
     });
+    const approvedCode = new Map<string, Set<string>>();
+    if (memberAuthoredCodeApproved) {
+      const proposals = await this.db
+        .listSkillProposals(orgId, { profileId, status: "approved" })
+        .catch((error: unknown) => {
+          console.warn(
+            "[nakama:skills] Could not read approved skill code:",
+            error
+          );
+          return [];
+        });
+      for (const proposal of proposals) {
+        const files =
+          proposal.action === "create"
+            ? (proposal.supportingFiles ?? []).map((file) => ({
+                bytes: Buffer.from(file.contentBase64, "base64"),
+                path: file.path,
+              }))
+            : (proposal.action === "write_file" ||
+                  proposal.action === "approve_code") &&
+                proposal.relativePath &&
+                proposal.content !== null
+              ? [
+                  {
+                    bytes: Buffer.from(proposal.content),
+                    path: proposal.relativePath,
+                  },
+                ]
+              : [];
+        for (const file of files) {
+          const key = `${proposal.skillName}/${file.path.replaceAll("\\", "/")}`;
+          const hashes = approvedCode.get(key) ?? new Set<string>();
+          hashes.add(createHash("sha256").update(file.bytes).digest("hex"));
+          approvedCode.set(key, hashes);
+        }
+      }
+    }
+    const codeIsReviewed = async (skill: DiscoveredSkill): Promise<boolean> => {
+      const directories = [skill.directory];
+      while (directories.length > 0) {
+        const directory = directories.pop()!;
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+          const file = path.join(directory, entry.name);
+          if (entry.isSymbolicLink()) {
+            return false;
+          }
+          if (entry.isDirectory()) {
+            directories.push(file);
+          } else if (/\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(entry.name)) {
+            const key = `${skill.name}/${path.relative(skill.directory, file).split(path.sep).join("/")}`;
+            const digest = createHash("sha256")
+              .update(await readFile(file))
+              .digest("hex");
+            if (!approvedCode.get(key)?.has(digest)) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    };
     const loadable: typeof assigned = [];
     const blocked: Array<{
       discovered: DiscoveredSkill;
@@ -1099,9 +1161,18 @@ export class SkillsService {
       if (isPluginOwnedSkill(item.record)) {
         continue;
       }
+      const reviewed =
+        memberAuthoredCodeApproved &&
+        isMemberAuthoredSkillDirectory({
+          directory: item.discovered.directory,
+          orgId,
+          profileId,
+        })
+          ? await codeIsReviewed(item.discovered).catch(() => false)
+          : memberAuthoredCodeApproved;
       const policy = resolveSkillCodeExecutionPolicy({
         directory: item.discovered.directory,
-        memberAuthoredCodeApproved,
+        memberAuthoredCodeApproved: reviewed,
         orgId,
         profileId,
       });

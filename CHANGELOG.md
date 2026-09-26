@@ -11,7 +11,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ### Fixed
 
-- Member-authored skill scripts stay inert until an admin approves the profile's skill writes, and their subprocess no longer inherits the deployment config dir ([#1270]) *(in review)*
+- Member-authored skill code stays inert until an admin reviews its exact files, and its subprocess no longer inherits the deployment config dir ([#1270]) *(in review)*
 
 ## [0.4.10] - 2026-09-08
 
