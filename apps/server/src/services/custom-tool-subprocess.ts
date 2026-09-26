@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
+import path from "node:path";
 import type { ToolContext } from "@nakama/core";
 
 // Shared subprocess machinery for custom tool loaders (javascript, python).
@@ -9,6 +10,46 @@ import type { ToolContext } from "@nakama/core";
 const SIGKILL_GRACE_MS = 5000;
 const MAX_OUTPUT_CHARS = 1_000_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (!child.pid) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    const args =
+      signal === "SIGKILL"
+        ? ["/F", "/T", "/PID", String(child.pid)]
+        : ["/T", "/PID", String(child.pid)];
+    const killer = spawn(
+      path.join(
+        process.env.SystemRoot ?? "C:\\Windows",
+        "System32",
+        "taskkill.exe"
+      ),
+      args,
+      { stdio: "ignore", windowsHide: true }
+    );
+    killer.once("error", () => {
+      try {
+        child.kill(signal);
+      } catch {
+        // already exited
+      }
+    });
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+      // already exited
+    }
+  }
+}
 
 function resolveCustomToolTimeoutMs(): number {
   const configured = Number(process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS);
@@ -85,10 +126,12 @@ export async function spawnJsonTool(
       // does not leave a tool process holding the session open.
       const child = spawn(bin, args, {
         cwd,
+        detached: process.platform !== "win32",
         env,
         stdio: transport?.onHostRequest
           ? ["pipe", "pipe", "pipe", "ipc"]
           : ["pipe", "pipe", "pipe"],
+        windowsHide: true,
       });
       const hostAbort = new AbortController();
 
@@ -143,17 +186,9 @@ export async function spawnJsonTool(
 
       const killChild = () => {
         hostAbort.abort();
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // already exited
-        }
+        killProcessTree(child, "SIGTERM");
         setTimeout(() => {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            // already exited
-          }
+          killProcessTree(child, "SIGKILL");
         }, SIGKILL_GRACE_MS).unref();
       };
 
