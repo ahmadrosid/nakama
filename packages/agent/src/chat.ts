@@ -702,98 +702,109 @@ async function runConversation(
         llmTools,
         providerReplaysThinking(provider.name)
       ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
-    await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
-
-    const toolGroupId = createId("toolgroup");
-    const result = await generateReply(
-      provider,
-      systemPrompt,
-      history,
-      llmTools,
-      providerOptions,
-      mode,
-      handlers,
-      rehydrateMessagesForProvider,
-      signal,
-      toolGroupId
-    );
-
-    const usedTokens =
-      result.usage?.inputTokens ??
-      estimateHistoryTokens(
-        history,
-        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
-        llmTools,
-        providerReplaysThinking(provider.name)
-      );
-    onContextUsage?.(
-      usedTokens,
-      result.usage && !result.usage.estimated ? "provider" : "estimate"
-    );
-
-    // The arm is what the optimiser did in this session, not what a setting
-    // says: a session where nothing was ever shortened belongs in the control
-    // arm even with the feature switched on, or the comparison flatters itself.
+    // The reservation is a hold on the org's monthly limit, not a charge
+    // against it. Real usage is recorded from the provider's own numbers
+    // afterwards, so the hold has to go back on every exit from this
+    // iteration, including the throws below and a cancelled turn.
+    const releaseLlmTurn =
+      (await toolContext?.assertCanStartLlmTurn?.(reservedTokens)) ??
+      (async () => {});
     try {
-      toolContext.recordTurnUsage?.({
-        estimated: Boolean(result.usage?.estimated ?? !result.usage),
-        inputTokens: result.usage?.inputTokens ?? 0,
-        // Overwritten by the session wrapper, which is the only scope that
-        // knows whether anything was shortened.
-        optimized: false,
-        outputTokens: result.usage?.outputTokens ?? 0,
+      const toolGroupId = createId("toolgroup");
+      const result = await generateReply(
+        provider,
+        systemPrompt,
+        history,
+        llmTools,
+        providerOptions,
+        mode,
+        handlers,
+        rehydrateMessagesForProvider,
+        signal,
+        toolGroupId
+      );
+
+      const usedTokens =
+        result.usage?.inputTokens ??
+        estimateHistoryTokens(
+          history,
+          `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+          llmTools,
+          providerReplaysThinking(provider.name)
+        );
+      onContextUsage?.(
+        usedTokens,
+        result.usage && !result.usage.estimated ? "provider" : "estimate"
+      );
+
+      // The arm is what the optimiser did in this session, not what a setting
+      // says: a session where nothing was ever shortened belongs in the control
+      // arm even with the feature switched on, or the comparison flatters itself.
+      try {
+        toolContext.recordTurnUsage?.({
+          estimated: Boolean(result.usage?.estimated ?? !result.usage),
+          inputTokens: result.usage?.inputTokens ?? 0,
+          // Overwritten by the session wrapper, which is the only scope that
+          // knows whether anything was shortened.
+          optimized: false,
+          outputTokens: result.usage?.outputTokens ?? 0,
+        });
+      } catch {
+        // never let accounting break a turn
+      }
+
+      // Backstop for providers that ignore the signal. The in-flight request is
+      // aborted through GenerateChatInput.signal; this only catches the case where
+      // it returned anyway, so a cancelled turn never starts another tool batch.
+      signal?.throwIfAborted();
+
+      if (result.usage) {
+        handlers?.onUsage?.(result.usage);
+        onTurnUsage?.(result.usage);
+      }
+      producedTokens += Math.max(
+        result.usage?.outputTokens ?? 0,
+        estimateHistoryTokens([result.assistantMessage], "")
+      );
+      if (
+        enableToolLoop &&
+        producedTokens >= MAX_TURN_OUTPUT_TOKENS &&
+        result.toolCalls.length > 0
+      ) {
+        // Keep visible text, but not tool calls that will never execute.
+        stoppedReply = result.content;
+        break;
+      }
+      history.push(
+        result.usage
+          ? { ...result.assistantMessage, usage: result.usage }
+          : result.assistantMessage
+      );
+
+      if (!enableToolLoop || result.toolCalls.length === 0) {
+        return result.content;
+      }
+
+      const toolHistoryStart = history.length;
+      await executeToolCalls(
+        iterationTools,
+        result.toolCalls,
+        history,
+        handlers,
+        toolContext,
+        preprocessUserContent,
+        toolGroupId
+      );
+      // Check between batches: one batch can overshoot, but no next request runs.
+      producedTokens += estimateHistoryTokens(
+        history.slice(toolHistoryStart),
+        ""
+      );
+    } finally {
+      await releaseLlmTurn().catch(() => {
+        // Already logged inside the release; never fail a turn over it.
       });
-    } catch {
-      // never let accounting break a turn
     }
-
-    // Backstop for providers that ignore the signal. The in-flight request is
-    // aborted through GenerateChatInput.signal; this only catches the case where
-    // it returned anyway, so a cancelled turn never starts another tool batch.
-    signal?.throwIfAborted();
-
-    if (result.usage) {
-      handlers?.onUsage?.(result.usage);
-      onTurnUsage?.(result.usage);
-    }
-    producedTokens += Math.max(
-      result.usage?.outputTokens ?? 0,
-      estimateHistoryTokens([result.assistantMessage], "")
-    );
-    if (
-      enableToolLoop &&
-      producedTokens >= MAX_TURN_OUTPUT_TOKENS &&
-      result.toolCalls.length > 0
-    ) {
-      // Keep visible text, but not tool calls that will never execute.
-      stoppedReply = result.content;
-      break;
-    }
-    history.push(
-      result.usage
-        ? { ...result.assistantMessage, usage: result.usage }
-        : result.assistantMessage
-    );
-
-    if (!enableToolLoop || result.toolCalls.length === 0) {
-      return result.content;
-    }
-
-    const toolHistoryStart = history.length;
-    await executeToolCalls(
-      iterationTools,
-      result.toolCalls,
-      history,
-      handlers,
-      toolContext,
-      preprocessUserContent,
-      toolGroupId
-    );
-    // Check between batches: one batch can overshoot, but no next request runs.
-    producedTokens += estimateHistoryTokens(
-      history.slice(toolHistoryStart),
-      ""
-    );
   }
 
   if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {

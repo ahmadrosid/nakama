@@ -160,4 +160,18 @@ describe("SystemStatusService", () => {
       composioConfigured: true,
     });
   });
+
+  test("omits the install-wide LLM ledger unless the caller asked for it", async () => {
+    await withConfigDir();
+    const service = createService(null);
+
+    // Default: the route did not grant access, so nothing global is returned.
+    expect((await service.getStatus(null)).llmUsage).toBeUndefined();
+
+    const granted = await service.getStatus(null, { includeLlmUsage: true });
+    expect(granted.llmUsage).toMatchObject({
+      currentModel: "gpt-4o",
+      provider: "openai",
+    });
+  });
 });

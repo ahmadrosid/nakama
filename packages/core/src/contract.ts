@@ -337,7 +337,13 @@ export interface SystemStatusResponse {
   automationWorker: AutomationWorkerStatus;
   checkedAt: string;
   discordWorker: DiscordWorkerStatus;
-  llmUsage: LlmUsageStatus;
+  /**
+   * The LLM usage tracker is one install-wide ledger with no organization
+   * dimension, so these numbers span every tenant. They are only populated for
+   * org admins and platform admins; other members get a response without this
+   * key rather than the cross-tenant totals.
+   */
+  llmUsage?: LlmUsageStatus;
   mcp: McpStatus;
   server: HealthResponse;
   slackWorker: SlackWorkerStatus;
@@ -2837,8 +2843,17 @@ export interface ProviderClient {
 export interface ToolContext {
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
-  /** Atomically reserves quota before a new LLM invocation. */
-  assertCanStartLlmTurn?: (reservedTokens: number) => Promise<void>;
+  /**
+   * Atomically reserves quota before a new LLM invocation, and returns the
+   * function that gives the reservation back. The agent loop must call it once
+   * the turn is settled, including when it throws or is cancelled — the
+   * reservation is a hold on the org's monthly limit, not a charge for it.
+   * Reservations are only taken when the org has a limit configured, so the
+   * returned function is a no-op otherwise.
+   */
+  assertCanStartLlmTurn?: (
+    reservedTokens: number
+  ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
   /** Session channel when known (used for interactive-only tool gates). */

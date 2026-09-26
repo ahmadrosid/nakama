@@ -17,6 +17,7 @@ import {
   writeTextFile,
 } from "../fs";
 import { createId } from "../ids";
+import { withKeyedLock } from "../keyed-lock";
 import { MAX_KNOWLEDGE_DOCUMENT_BYTES } from "../message-content";
 import { getProfileSoulDir } from "../soul/resolve";
 import { getOrgConfigDir } from "../user-config";
@@ -450,9 +451,26 @@ async function uploadDocumentTo(
     ...(error ? { error } : {}),
   };
 
-  const manifest = await readManifestFrom(dir);
-  manifest.documents.push(document);
-  await writeManifestTo(dir, manifest);
+  // The manifest is one file rewritten whole, so the read-modify-write below
+  // has to be serialized per knowledge base. Two uploads that both read the
+  // manifest first each push their own entry and the later write drops the
+  // other's — the document's bytes are on disk but nothing indexes them, so
+  // search can never find it and nothing ever cleans it up.
+  await withKeyedLock(manifestLockKey(dir), async () => {
+    try {
+      const manifest = await readManifestFrom(dir);
+      manifest.documents.push(document);
+      await writeManifestTo(dir, manifest);
+    } catch (error) {
+      // The entry never reached the manifest, so the files written above are
+      // unreachable. Leaving them would strand the bytes on disk forever.
+      await removeIfPresent(
+        getKnowledgeBaseStoredDocumentPath(dir, documentId, safeFilename)
+      );
+      await removeIfPresent(getKnowledgeBaseExtractedPath(dir, documentId));
+      throw error;
+    }
+  });
 
   return { document, outcome };
 }
@@ -520,42 +538,58 @@ async function listProfileIdsOnDisk(orgId: string): Promise<string[]> {
     .map((entry) => entry.name);
 }
 
+/** One lock per knowledge base directory: the manifest is per-directory. */
+function manifestLockKey(dir: string): string {
+  return `kb-manifest:${dir}`;
+}
+
+async function removeIfPresent(path: string): Promise<void> {
+  if (await pathExists(path)) {
+    await removeFile(path);
+  }
+}
+
 async function deleteDocumentFrom(
   dir: string,
   documentId: string,
   guardRemoval?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
-  const manifest = await readManifestFrom(dir);
-  const index = manifest.documents.findIndex(
-    (document) => document.id === documentId
-  );
+  const found = await withKeyedLock(manifestLockKey(dir), async () => {
+    const manifest = await readManifestFrom(dir);
+    const index = manifest.documents.findIndex(
+      (document) => document.id === documentId
+    );
 
-  if (index < 0) {
+    if (index < 0) {
+      return null;
+    }
+
+    if (guardRemoval) {
+      await guardRemoval(documentId);
+    }
+
+    const document = manifest.documents[index]!;
+    manifest.documents.splice(index, 1);
+    await writeManifestTo(dir, manifest);
+    return document;
+  });
+
+  if (!found) {
     return false;
   }
 
-  if (guardRemoval) {
-    await guardRemoval(documentId);
-  }
-
-  const document = manifest.documents[index]!;
-  manifest.documents.splice(index, 1);
-  await writeManifestTo(dir, manifest);
-
+  // Outside the lock: the manifest already dropped the entry, so a concurrent
+  // upload no longer cares about these paths. Deleting under the lock would
+  // hold it across two extra filesystem round trips.
   const storedPath = getKnowledgeBaseStoredDocumentPath(
     dir,
     documentId,
-    document.filename
+    found.filename
   );
   const extractedPath = getKnowledgeBaseExtractedPath(dir, documentId);
 
-  if (await pathExists(storedPath)) {
-    await removeFile(storedPath);
-  }
-
-  if (await pathExists(extractedPath)) {
-    await removeFile(extractedPath);
-  }
+  await removeIfPresent(storedPath);
+  await removeIfPresent(extractedPath);
 
   return true;
 }
@@ -599,11 +633,15 @@ export async function attachSharedKnowledgeBaseDocument(
     throw new Error("Shared knowledge base document not found.");
   }
   const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  const manifest = await readManifestFrom(dir);
-  manifest.sharedDocumentIds = [
-    ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
-  ];
-  await writeManifestTo(dir, manifest);
+  // Shares the manifest lock with uploads and deletes on the same directory,
+  // so an attach cannot be dropped by a concurrent rewrite of the manifest.
+  await withKeyedLock(manifestLockKey(dir), async () => {
+    const manifest = await readManifestFrom(dir);
+    manifest.sharedDocumentIds = [
+      ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
+    ];
+    await writeManifestTo(dir, manifest);
+  });
 }
 
 export async function detachSharedKnowledgeBaseDocument(
@@ -612,14 +650,16 @@ export async function detachSharedKnowledgeBaseDocument(
   documentId: string
 ): Promise<boolean> {
   const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  const manifest = await readManifestFrom(dir);
-  const ids = manifest.sharedDocumentIds ?? [];
-  if (!ids.includes(documentId)) {
-    return false;
-  }
-  manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
-  await writeManifestTo(dir, manifest);
-  return true;
+  return withKeyedLock(manifestLockKey(dir), async () => {
+    const manifest = await readManifestFrom(dir);
+    const ids = manifest.sharedDocumentIds ?? [];
+    if (!ids.includes(documentId)) {
+      return false;
+    }
+    manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
+    await writeManifestTo(dir, manifest);
+    return true;
+  });
 }
 
 /**

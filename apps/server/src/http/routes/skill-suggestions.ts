@@ -9,7 +9,13 @@ import {
   toSkillSuggestion,
 } from "../../services/skill-suggestion-service";
 import type { ServerOptions } from "../context";
-import { requireNotViewerFromContext } from "../org-guards";
+import {
+  requireNotViewerFromContext,
+  requireRouteOrgMatchesAuth,
+} from "../org-guards";
+
+const resolveOrgId = requireRouteOrgMatchesAuth;
+
 import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -32,17 +38,6 @@ export function registerSkillSuggestionRoutes(
     .object({})
     .passthrough()
     .openapi("ApplySkillSuggestionResponse");
-
-  function resolveOrgId(
-    c: { req: { param: (n: string) => string } },
-    authOrgId: string
-  ): string {
-    const orgId = decodeURIComponent(c.req.param("orgId"));
-    if (authOrgId !== orgId) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    return orgId;
-  }
 
   function requireService(): SkillSuggestionService {
     if (!skillSuggestionService) {

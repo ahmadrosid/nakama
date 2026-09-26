@@ -1110,6 +1110,93 @@ describe("ephemeral attachment marking", () => {
   });
 });
 
+describe("pre-org profile migration", () => {
+  test("keeps org-less profiles and their history when no organization exists", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      // A database that reaches boot with profiles but no organization: the
+      // pre-org state, or a failed org bootstrap.
+      db.exec(`
+        INSERT INTO profiles (
+          id, name, system_prompt, is_super, created_at, updated_at
+        ) VALUES (
+          'profile_legacy', 'Legacy', 'legacy prompt', 0,
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+        INSERT INTO sessions (
+          id, profile_id, channel, title, created_at, updated_at
+        ) VALUES (
+          'session_legacy', 'profile_legacy', 'web', 'Old chat',
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+        INSERT INTO session_messages (
+          id, session_id, seq, payload, created_at
+        ) VALUES (
+          'message_legacy', 'session_legacy', 0,
+          '{"role":"user","content":"do not lose me"}',
+          '2026-06-19T00:00:00.000Z'
+        );
+      `);
+
+      // Re-running migrations is what every boot does. The old code deleted the
+      // profile here, cascading the session and its messages away.
+      migrateDatabase(db);
+
+      expect(
+        db.prepare("SELECT id FROM profiles WHERE id = 'profile_legacy'").get()
+      ).toEqual({ id: "profile_legacy" });
+      expect(
+        db.prepare("SELECT id FROM sessions WHERE id = 'session_legacy'").get()
+      ).toEqual({ id: "session_legacy" });
+      expect(
+        db
+          .prepare(
+            "SELECT payload FROM session_messages WHERE id = 'message_legacy'"
+          )
+          .get()
+      ).toEqual({ payload: '{"role":"user","content":"do not lose me"}' });
+    } finally {
+      db.close();
+    }
+  });
+
+  test("still adopts org-less profiles into the first organization", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO profiles (
+          id, name, system_prompt, is_super, created_at, updated_at
+        ) VALUES (
+          'profile_legacy', 'Legacy', 'legacy prompt', 0,
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES (
+          'org_acme', 'Acme', 'acme',
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+      `);
+
+      migrateDatabase(db);
+
+      expect(
+        db
+          .prepare("SELECT org_id FROM profiles WHERE id = 'profile_legacy'")
+          .get()
+      ).toEqual({ org_id: "org_acme" });
+    } finally {
+      db.close();
+    }
+  });
+});
+
 test("file pins migrate existing databases, survive reopen and cascade with profiles", () => {
   const directory = mkdtempSync(join(tmpdir(), "nakama-file-pins-"));
   const filename = join(directory, "pins.sqlite");

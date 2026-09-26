@@ -463,6 +463,68 @@ describe("session persistence", () => {
     expect(await db.getAttachment("attachment")).toBeNull();
   });
 
+  test("purging a session keeps attachment bytes a branch still names", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Test",
+      orgId: "org_1",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const service = new AgentService(null, null, db);
+    const sourceSessionId = await service.createSession(
+      "org_1",
+      "web",
+      "profile"
+    );
+    const attachmentPath = await saveAttachmentBytes(
+      "org_1",
+      "profile",
+      "shared-attachment",
+      Buffer.from("shared")
+    );
+    await db.insertAttachment({
+      channel: "web",
+      createdAt: now,
+      ephemeral: false,
+      filename: "shared.txt",
+      id: "shared-attachment",
+      kind: "document",
+      mediaType: "text/plain",
+      orgId: "org_1",
+      profileId: "profile",
+      sessionId: sourceSessionId,
+      sizeBytes: 6,
+      storagePath: attachmentPath,
+    });
+    // The message payload names the attachment id, which is what a branch
+    // copies verbatim.
+    await replaceSessionHistory(db, sourceSessionId, [
+      {
+        content: JSON.stringify([
+          { attachmentId: "shared-attachment", type: "image_ref" },
+        ]),
+        role: "user",
+      },
+    ] as never);
+
+    const branch = await service.branchSession(sourceSessionId, 0, "org_1");
+    expect(branch).not.toBeNull();
+
+    expect(await service.purgeSession(sourceSessionId, "org_1")).toBe(true);
+
+    // The source is gone but the branch still renders the attachment, so the
+    // bytes and the metadata row have to survive it.
+    expect(await readFile(attachmentPath, "utf8")).toBe("shared");
+    expect(await db.getAttachment("shared-attachment")).not.toBeNull();
+  });
+
   test("clear during an archive write does not resurrect history or leave an archive", async () => {
     const db = createInMemoryDatabaseAdapter();
     await seedSession(db, "cleared");
@@ -577,5 +639,56 @@ describe("session persistence", () => {
     wrapPersistedSession("session_1", session, db).clear();
 
     expect(cleared).toBe(true);
+  });
+
+  test("a turn in flight does not repopulate history cleared mid-turn", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await seedSession(db, "cleared_mid_turn");
+
+    // A session whose turn is still running when the user clears: the message
+    // only lands after the clear, which is the ordering that repopulated the
+    // session before the epoch guard existed.
+    const history: unknown[] = [];
+    let revision = 0;
+    let releaseTurn: (() => void) | undefined;
+    const turnGate = new Promise<void>((resolve) => {
+      releaseTurn = resolve;
+    });
+    const inner = {
+      clear() {
+        history.length = 0;
+        revision += 1;
+      },
+      compact: async () => ({ action: "none", messagesAfter: 0 }),
+      createAutomation: () => undefined,
+      getContextUsage: () => undefined,
+      getHistory: () => history,
+      getHistoryRevision: () => revision,
+      getTurnUsage: () => undefined,
+      async send(_message: string, _options: unknown) {
+        // Hold the turn open so the clear happens while it is in flight.
+        await turnGate;
+        history.push({ content: "late reply", role: "assistant" });
+        revision += 1;
+        return "late reply";
+      },
+      async sendStream(_message: string) {
+        await turnGate;
+        history.push({ content: "late reply", role: "assistant" });
+        revision += 1;
+        return "late reply";
+      },
+    } as unknown as AgentChatSession;
+    const session = wrapPersistedSession("cleared_mid_turn", inner, db);
+
+    // Start the turn, clear while it is blocked, then let it finish.
+    const inFlight = session.send("hello", {});
+    session.clear();
+    releaseTurn?.();
+    await inFlight;
+
+    // The late assistant message must not be written back: the user asked for
+    // an empty session, and it is empty.
+    expect(await db.listMessagesForSession("cleared_mid_turn")).toEqual([]);
   });
 });

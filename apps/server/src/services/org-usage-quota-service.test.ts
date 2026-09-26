@@ -159,4 +159,55 @@ describe("OrgUsageQuotaService", () => {
       status: 429,
     });
   });
+
+  test("a released reservation does not consume the monthly turn limit", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const orgId = "org_release";
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: orgId,
+      monthlyLlmTurnLimit: 2,
+      name: "Release organization",
+      slug: "release-organization",
+      updatedAt: now,
+    });
+
+    const quota = new OrgUsageQuotaService(db);
+
+    // Two turns that reserve and then fail. Neither spends anything, so the
+    // limit must still allow a real third turn afterwards.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const release = await quota.reserveLlmTurn(orgId);
+      await release();
+    }
+
+    const release = await quota.reserveLlmTurn(orgId);
+    expect(release).toBeFunction();
+    await release();
+  });
+
+  test("releasing the same reservation twice only returns it once", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const orgId = "org_double_release";
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: orgId,
+      monthlyLlmTurnLimit: 1,
+      name: "Double release organization",
+      slug: "double-release-organization",
+      updatedAt: now,
+    });
+
+    const quota = new OrgUsageQuotaService(db);
+    const release = await quota.reserveLlmTurn(orgId);
+    await release();
+    await release();
+
+    // A turn limit of 1 is still available, so a double release did not drive
+    // the reservation counter negative and lock the org out.
+    const second = await quota.reserveLlmTurn(orgId);
+    expect(second).toBeFunction();
+  });
 });

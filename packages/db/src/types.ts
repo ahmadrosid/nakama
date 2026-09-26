@@ -1128,6 +1128,14 @@ export interface DatabaseAdapter {
 
   listSessions(): Promise<StoredSessionRecord[]>;
   listSessionsForUser(userId: string): Promise<StoredSessionRecord[]>;
+
+  /**
+   * Session ids whose stored messages still name this attachment. Branching
+   * copies message payloads verbatim, so a branch and its source share
+   * attachment ids; a caller deleting the bytes has to check this first or it
+   * takes the branch's attachments with it.
+   */
+  listSessionsReferencingAttachment(attachmentId: string): Promise<string[]>;
   listSkillProposals(
     orgId: string,
     options?: {
@@ -1185,6 +1193,18 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  /**
+   * Returns a slot taken by tryReserveMonthlyLlmQuota. A reservation is a hold,
+   * not a charge, so every path that reserved and then failed to produce a turn
+   * has to call this — otherwise the accumulated holds exhaust the org's limits
+   * even though nothing was actually spent.
+   */
+  releaseMonthlyLlmQuota(input: {
+    month: string;
+    orgId: string;
+    reservedTokens: number;
+    updatedAt: string;
+  }): Promise<void>;
   renameFilePins(
     orgId: string,
     profileId: string,

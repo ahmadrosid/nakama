@@ -31,12 +31,18 @@ const SEEN_EVENT_LIMIT = 500;
  */
 export function connectSlackSocket(options: {
   appToken: string;
-  onEvent: (event: SlackMessageEvent) => void;
+  /**
+   * Handles one event. The envelope is acked only after this settles, so a
+   * throw leaves the event unacked and Slack redelivers it. A handler that
+   * never settles would stall that envelope, so the ack path below is bounded.
+   */
+  onEvent: (event: SlackMessageEvent) => Promise<void> | void;
   onStatus: (connected: boolean) => void;
 }): { close: () => void } {
   let socket: WebSocket | null = null;
   let closed = false;
   let backoffMs = 1000;
+  let envelopeQueue: Promise<void> = Promise.resolve();
   const seenEventIds = new Set<string>();
 
   function scheduleReconnect(): void {
@@ -47,18 +53,31 @@ export function connectSlackSocket(options: {
     backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
   }
 
-  function handleEnvelope(envelope: SocketEnvelope): void {
-    if (envelope.envelope_id) {
-      socket?.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
+  function ack(envelopeId: string): void {
+    try {
+      socket?.send(JSON.stringify({ envelope_id: envelopeId }));
+    } catch (error) {
+      // A failed ack means Slack redelivers, which is the safe direction: the
+      // dedupe set stops it running twice.
+      console.error("Slack ack failed:", error);
     }
+  }
 
+  async function handleEnvelope(envelope: SocketEnvelope): Promise<void> {
     if (envelope.type === "hello") {
+      // Slack redelivers a hello until it is acked, so ack before returning.
+      if (envelope.envelope_id) {
+        ack(envelope.envelope_id);
+      }
       backoffMs = 1000;
       options.onStatus(true);
       return;
     }
 
     if (envelope.type === "disconnect") {
+      if (envelope.envelope_id) {
+        ack(envelope.envelope_id);
+      }
       socket?.close();
       return;
     }
@@ -66,19 +85,37 @@ export function connectSlackSocket(options: {
     const event = envelope.payload?.event;
     const eventId = envelope.payload?.event_id;
     if (envelope.type !== "events_api" || !event) {
+      if (envelope.envelope_id) {
+        ack(envelope.envelope_id);
+      }
       return;
     }
     // Slack redelivers when an ack is late; never run the same turn twice.
-    if (eventId) {
-      if (seenEventIds.has(eventId)) {
-        return;
+    // Only recorded once the work is done, so a redelivery after a failure is
+    // still processed instead of being dropped as a duplicate.
+    if (eventId && seenEventIds.has(eventId)) {
+      if (envelope.envelope_id) {
+        ack(envelope.envelope_id);
       }
-      seenEventIds.add(eventId);
-      if (seenEventIds.size > SEEN_EVENT_LIMIT) {
-        seenEventIds.delete(seenEventIds.values().next().value as string);
-      }
+      return;
     }
-    options.onEvent(event);
+
+    // Ack after the work, not before. Acking first meant a crash or a throw
+    // lost the message with no redelivery and no record of the failure.
+    try {
+      await options.onEvent(event);
+      if (eventId) {
+        seenEventIds.add(eventId);
+        if (seenEventIds.size > SEEN_EVENT_LIMIT) {
+          seenEventIds.delete(seenEventIds.values().next().value as string);
+        }
+      }
+      if (envelope.envelope_id) {
+        ack(envelope.envelope_id);
+      }
+    } catch (error) {
+      console.error("Slack event handling failed, leaving it unacked:", error);
+    }
   }
 
   async function open(): Promise<void> {
@@ -101,11 +138,20 @@ export function connectSlackSocket(options: {
     const next = new WebSocket(url);
     socket = next;
     next.addEventListener("message", (message) => {
-      try {
-        handleEnvelope(JSON.parse(String(message.data)) as SocketEnvelope);
-      } catch (error) {
-        console.error("Slack envelope error:", error);
-      }
+      // Envelopes are handled in arrival order. A disconnect must not overtake
+      // the event envelopes sent before it, and acking is now asynchronous —
+      // concurrent handling let the close win and swallow the pending acks.
+      envelopeQueue = envelopeQueue
+        .then(async () => {
+          try {
+            await handleEnvelope(
+              JSON.parse(String(message.data)) as SocketEnvelope
+            );
+          } catch (error) {
+            console.error("Slack envelope error:", error);
+          }
+        })
+        .catch(() => undefined);
     });
     next.addEventListener("close", () => {
       if (socket === next) {

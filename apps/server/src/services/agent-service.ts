@@ -507,10 +507,7 @@ export class AgentService {
 
     const scopedOrgId = orgId.trim();
     return (reservedTokens: number) =>
-      this.orgUsageQuotaService.assertCanStartLlmTurn(
-        scopedOrgId,
-        reservedTokens
-      );
+      this.orgUsageQuotaService.reserveLlmTurn(scopedOrgId, reservedTokens);
   }
 
   private turnUsageRecorderFor(orgId: string | undefined) {
@@ -2345,13 +2342,35 @@ export class AgentService {
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
     await deleteSessionHistoryArchive(orgId, sessionId);
+    // A branch copies message payloads verbatim, so its messages name the same
+    // attachment ids as the session they came from. The attachment row is keyed
+    // by that id, and the bytes live at a path built from it, so the reference
+    // is shared: the bytes may only be deleted once no surviving session still
+    // names the id. Deleting unconditionally is what made purging a session
+    // destroy its own branches.
     const attachments = await this.db.listAttachmentsForSession(sessionId);
+    await this.db.deleteSession(sessionId);
     for (const attachment of attachments) {
+      if (await this.isAttachmentStillReferenced(attachment.id)) {
+        continue;
+      }
       await deleteAttachmentBytes(orgId, attachment.profileId, attachment.id);
       await this.db.deleteAttachment(attachment.id);
     }
-    await this.db.deleteSession(sessionId);
     return true;
+  }
+
+  /**
+   * True when any surviving session's messages still name this attachment id.
+   * The purged session's own row is gone by the time this runs, so it can no
+   * longer keep its own attachments alive.
+   */
+  private async isAttachmentStillReferenced(
+    attachmentId: string
+  ): Promise<boolean> {
+    return (
+      (await this.db.listSessionsReferencingAttachment(attachmentId)).length > 0
+    );
   }
 
   async resolveSession(
@@ -2525,6 +2544,12 @@ export class AgentService {
       await this.agentQuestionnaireState.clear(sessionId);
       return true;
     }
+
+    // Stop the turn first. A turn already running would otherwise persist its
+    // assistant messages after the DELETE below and refill the session the
+    // user just cleared. cancelTurn only drops the registry's subscribers; the
+    // epoch inside wrapPersistedSession is what actually stops the write.
+    sessionTurnRegistry.cancelTurn(sessionId);
 
     const stored = this.sessions.get(sessionId);
 

@@ -408,4 +408,43 @@ describe("OrgMemoryService", () => {
     const parsed = parseOrgMemoryContent(await service.getMemory("org_b"));
     expect(parsed.pinned).toEqual(["active fact"]);
   });
+
+  test("concurrent fact additions all survive", async () => {
+    const service = await setup();
+
+    // Every call reads MEMORY.md, appends its own bullet, and rewrites the
+    // whole file. Started together they all read the same base, so without
+    // serialization the last writer wins and all but one fact disappear.
+    const facts = [
+      "first fact",
+      "second fact",
+      "third fact",
+      "fourth fact",
+      "fifth fact",
+    ];
+    await Promise.all(
+      facts.map((fact) => service.addFact("org_a", fact, { pin: true }))
+    );
+
+    const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
+    for (const fact of facts) {
+      expect(parsed.pinned).toContain(fact);
+    }
+  });
+
+  test("concurrent adds to different organizations do not block each other", async () => {
+    const service = await setup();
+
+    await Promise.all([
+      service.addFact("org_a", "a fact", { pin: true }),
+      service.addFact("org_b", "b fact", { pin: true }),
+    ]);
+
+    expect(
+      parseOrgMemoryContent(await service.getMemory("org_a")).pinned
+    ).toEqual(["a fact"]);
+    expect(
+      parseOrgMemoryContent(await service.getMemory("org_b")).pinned
+    ).toEqual(["b fact"]);
+  });
 });
