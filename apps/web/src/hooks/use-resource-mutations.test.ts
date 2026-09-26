@@ -22,6 +22,7 @@ import { artifactShareStorageKey } from "@/lib/artifact-share-storage";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  useArtifactsExist,
   useAssignToolMutation,
   useRevokeArtifactShareMutation,
   useUnassignToolMutation,
@@ -358,3 +359,63 @@ test.each(["assign", "unassign"])(
     }
   }
 );
+
+test("useArtifactsExist hides only the artifacts the server reports missing", async () => {
+  const exists = spyOn(client, "hasProfileArtifact").mockImplementation(
+    async (_profileId, path) => {
+      if (path === "gone.md") {
+        return false;
+      }
+      if (path === "flaky.md") {
+        throw new NakamaApiError("Bad gateway", 502);
+      }
+      return true;
+    }
+  );
+  const existsClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  let result: boolean[] = [];
+  function Probe() {
+    result = useArtifactsExist(
+      [
+        { path: "kept.md" },
+        { path: "gone.md" },
+        { path: "flaky.md" },
+        { ownerProfileId: "other", path: "shared.md" },
+      ],
+      "profile",
+      true
+    );
+    return null;
+  }
+  const render = () =>
+    renderToString(
+      createElement(
+        QueryClientProvider,
+        { client: existsClient },
+        createElement(Probe)
+      )
+    );
+
+  try {
+    render();
+    // Nothing is known yet, so every chip stays.
+    expect(result).toEqual([true, true, true, true]);
+
+    // A server render registers the queries without running them.
+    await Promise.allSettled(
+      existsClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.fetch())
+    );
+    render();
+
+    expect(result).toEqual([true, false, true, true]);
+    expect(exists.mock.calls).toContainEqual(["other", "shared.md"]);
+  } finally {
+    exists.mockRestore();
+    existsClient.clear();
+  }
+});

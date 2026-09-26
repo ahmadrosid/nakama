@@ -3720,12 +3720,17 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    options: { appUserId?: string | null; render?: "markdown" } = {}
+    options: {
+      appUserId?: string | null;
+      headOnly?: boolean;
+      render?: "markdown";
+    } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
       appUserId: options.appUserId,
       filename,
+      headOnly: options.headOnly,
       orgId,
       profileId,
       render: options.render,
