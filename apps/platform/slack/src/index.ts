@@ -157,9 +157,9 @@ try {
           `[slack] ${event.type} channel_type=${event.channel_type} subtype=${event.subtype ?? "-"} user=${event.user ?? "-"} thread=${event.thread_ts ? "yes" : "no"}`
         );
       }
-      handleEvent(event).catch((error) => {
-        console.error("Slack message handler error:", error);
-      });
+      // Returned so the socket acks only after the turn is handled. Swallowing
+      // it here would ack first and lose the message on any failure.
+      return handleEvent(event);
     },
     onStatus: (next) => {
       connected = next;

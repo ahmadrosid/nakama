@@ -15,7 +15,11 @@ import type { ServerOptions } from "../context";
 import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
+  requireRouteOrgMatchesAuth,
 } from "../org-guards";
+
+const resolveOrgId = requireRouteOrgMatchesAuth;
+
 import {
   json,
   parseOptionalQueryEnum,
@@ -65,17 +69,6 @@ export function registerOrgMemoryRoutes(
   const unpinOrgMemorySchema = z
     .object({ bullet: z.string() })
     .openapi("UnpinOrgMemoryRequest");
-
-  function resolveOrgId(
-    c: { req: { param: (n: string) => string } },
-    authOrgId: string
-  ): string {
-    const orgId = decodeURIComponent(c.req.param("orgId"));
-    if (authOrgId !== orgId) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    return orgId;
-  }
 
   function requireService() {
     if (!orgMemoryService) {

@@ -98,9 +98,25 @@ export class ChannelSessionStore {
     });
   }
 
+  /**
+   * The whole map is rewritten from whatever `this.map` holds when the write
+   * starts, so two saves that overlap can finish out of order and the earlier
+   * one lands last, silently reverting whatever the later one changed. Callers
+   * mutate through the store and then save from outside any per-conversation
+   * lock, so the file has to serialize itself: one write at a time, each one
+   * serializing the map as of its own turn.
+   */
+  private writeChain: Promise<void> = Promise.resolve();
+
   async save(): Promise<void> {
-    await writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: dirname(this.path),
+    const write = this.writeChain.then(async () => {
+      await writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
+        ensureDir: dirname(this.path),
+      });
     });
+    // The chain must keep going after a failed write, so a rejected link is
+    // swallowed here while the caller still sees the error.
+    this.writeChain = write.catch(() => undefined);
+    await write;
   }
 }

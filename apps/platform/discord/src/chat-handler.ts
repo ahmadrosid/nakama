@@ -604,28 +604,39 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      // These three rewrite the conversation's state, so they take the same
+      // lock the generation path holds. stopActiveStream only aborts the
+      // controller — it does not wait for the turn to unwind, so without the
+      // lock a /clear can land while the aborted turn is still running and the
+      // two then race over the same history and artifacts.
       switch (commandName) {
         case "clear": {
           stopActiveStream(conversationKey);
-          const session = await resolveSession(conversationKey);
-          await session.clear();
-          await clearSessionArtifactState(conversationKey);
-          await messenger.send("History cleared.");
+          await withChatLock(conversationKey, async () => {
+            const session = await resolveSession(conversationKey);
+            await session.clear();
+            await clearSessionArtifactState(conversationKey);
+            await messenger.send("History cleared.");
+          });
           return;
         }
         case "compact": {
           stopActiveStream(conversationKey);
-          const session = await resolveSession(conversationKey);
-          const result = await session.compact({ force: true });
-          await messenger.send(
-            `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
-          );
+          await withChatLock(conversationKey, async () => {
+            const session = await resolveSession(conversationKey);
+            const result = await session.compact({ force: true });
+            await messenger.send(
+              `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
+            );
+          });
           return;
         }
         case "new": {
           stopActiveStream(conversationKey);
-          await createAndBindSession(conversationKey);
-          await messenger.send("Started a new conversation.");
+          await withChatLock(conversationKey, async () => {
+            await createAndBindSession(conversationKey);
+            await messenger.send("Started a new conversation.");
+          });
           return;
         }
         case "sessions":

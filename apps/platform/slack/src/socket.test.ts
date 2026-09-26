@@ -68,3 +68,51 @@ test("acks envelopes, drops redelivered events, and reconnects on disconnect", a
   expect(opens).toBe(2);
   expect(statuses.slice(0, 3)).toEqual([true, false, true]);
 });
+
+test("leaves an envelope unacked when handling fails, so Slack redelivers", async () => {
+  const acks: string[] = [];
+  const server = Bun.serve({
+    fetch: (request, srv) =>
+      srv.upgrade(request) ? undefined : new Response("no", { status: 400 }),
+    port: 0,
+    websocket: {
+      message: (_socket, raw) => {
+        acks.push(
+          (JSON.parse(String(raw)) as { envelope_id: string }).envelope_id
+        );
+      },
+      open: (socket) => {
+        socket.send(JSON.stringify({ type: "hello" }));
+        socket.send(
+          JSON.stringify({
+            envelope_id: "env-fail",
+            payload: {
+              event: { channel: "D1", text: "boom", ts: "1", type: "message" },
+              event_id: "EvFail",
+            },
+            type: "events_api",
+          })
+        );
+      },
+    },
+  });
+  globalThis.fetch = (async () =>
+    Response.json({
+      ok: true,
+      url: `ws://localhost:${server.port}`,
+    })) as unknown as typeof fetch;
+
+  const socket = connectSlackSocket({
+    appToken: "xapp-test",
+    onEvent: () => Promise.reject(new Error("handler exploded")),
+    onStatus: () => {},
+  });
+
+  await Bun.sleep(200);
+  socket.close();
+  server.stop(true);
+
+  // Acking first would have told Slack the event was handled, so a failure
+  // here loses the message with no redelivery.
+  expect(acks).toEqual([]);
+});

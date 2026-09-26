@@ -186,8 +186,17 @@ export function wrapPersistedSession(
 ): AgentChatSession {
   let lastPersistedRevision = session.getHistoryRevision();
   let lastPersistedLength = session.getHistory().length;
+  // Bumped by clear() so a turn still in flight cannot repopulate the history
+  // that was just deleted. A turn records the epoch it started in; if a clear
+  // lands mid-turn, that turn's final persist is skipped outright rather than
+  // racing the clear's DELETE and re-inserting the assistant messages the user
+  // just deleted.
+  let epoch = 0;
 
-  async function persistHistory() {
+  async function persistHistory(turnEpoch: number) {
+    if (turnEpoch !== epoch) {
+      return;
+    }
     if (session.getHistoryRevision() > lastPersistedRevision) {
       await replaceSessionHistory(db, sessionId, session.getHistory());
     } else {
@@ -198,12 +207,16 @@ export function wrapPersistedSession(
         lastPersistedLength
       );
     }
+    if (turnEpoch !== epoch) {
+      return;
+    }
     lastPersistedRevision = session.getHistoryRevision();
     lastPersistedLength = session.getHistory().length;
   }
 
   return {
     clear() {
+      epoch += 1;
       session.clear();
       lastPersistedRevision = session.getHistoryRevision();
       lastPersistedLength = session.getHistory().length;
@@ -225,30 +238,32 @@ export function wrapPersistedSession(
     getTurnUsage: () => session.getTurnUsage(),
     async send(message, sendOptions) {
       options.onBeginTurn?.(sessionId);
+      const turnEpoch = epoch;
       try {
         return await session.send(message, {
           ...sendOptions,
           async onUserMessage() {
-            await persistHistory();
+            await persistHistory(turnEpoch);
             await sendOptions?.onUserMessage?.();
           },
         });
       } finally {
-        await persistHistory();
+        await persistHistory(turnEpoch);
       }
     },
     async sendStream(message, handlers, streamOptions) {
       options.onBeginTurn?.(sessionId);
+      const turnEpoch = epoch;
       try {
         return await session.sendStream(message, handlers, {
           ...streamOptions,
           async onUserMessage() {
-            await persistHistory();
+            await persistHistory(turnEpoch);
             await streamOptions?.onUserMessage?.();
           },
         });
       } finally {
-        await persistHistory();
+        await persistHistory(turnEpoch);
       }
     },
   };

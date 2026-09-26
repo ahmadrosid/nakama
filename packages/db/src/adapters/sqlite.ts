@@ -1107,6 +1107,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteAttachmentStmt = db.prepare(
     "DELETE FROM attachments WHERE id = ?"
   );
+  // Attachment ids are shared by every session branched off the one that
+  // uploaded them, so deleting the bytes has to know whether any other
+  // session's stored messages still name the id. The id is embedded in the
+  // message payload JSON, so this matches the serialized form.
+  const listSessionsReferencingAttachmentStmt = db.prepare(`
+    SELECT DISTINCT s.id
+    FROM sessions AS s
+    JOIN session_messages AS m ON m.session_id = s.id
+    WHERE m.payload LIKE '%' || ? || '%'
+  `);
   // Keyset paging on the sort columns. `position` is each row's place in the
   // whole list, so the caller can tell when chats crossed a cursor between two
   // page requests. The preview is read only for the rows of the page, after the
@@ -2147,6 +2157,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         OR org_llm_monthly_quota.reserved_turns + 1 <= (SELECT monthly_llm_turn_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id))
       AND (COALESCE((SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id), 0) <= 0
         OR org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens <= (SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id));
+  `);
+  // Gives a reservation back. Without this the reserve above is pure
+  // accumulation and a turn that throws or is cancelled burns its slot for
+  // good, so a burst of failures reads as exhausted quota. Clamped at zero so
+  // a double release cannot drive the counters negative.
+  const releaseMonthlyLlmQuotaStmt = db.prepare(`
+    UPDATE org_llm_monthly_quota
+    SET reserved_turns = MAX(0, reserved_turns - 1),
+        reserved_tokens = MAX(0, reserved_tokens - ?),
+        updated_at = ?
+    WHERE org_id = ? AND month = ?
   `);
   const listOrganizationsStmt = db.prepare(`
     SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
@@ -4043,6 +4064,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toSessionRecord(row as SessionRow));
     },
 
+    async listSessionsReferencingAttachment(attachmentId) {
+      return (
+        listSessionsReferencingAttachmentStmt.all(attachmentId) as {
+          id: string;
+        }[]
+      ).map((row) => row.id);
+    },
+
     async listSkillProposals(orgId, options = {}) {
       const { status, profileId, sessionId } = options;
       let rows: SkillProposalRow[];
@@ -4201,6 +4230,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
+    },
+
+    async releaseMonthlyLlmQuota(input) {
+      releaseMonthlyLlmQuotaStmt.run(
+        input.reservedTokens,
+        input.updatedAt,
+        input.orgId,
+        input.month
+      );
     },
 
     async renameFilePins(orgId, profileId, oldPath, newPath) {

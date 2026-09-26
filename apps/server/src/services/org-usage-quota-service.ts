@@ -58,10 +58,17 @@ export class OrgUsageQuotaService {
     };
   }
 
-  async assertCanStartLlmTurn(
+  /**
+   * Reserves one turn's worth of quota, or throws 429. Resolves to a release
+   * function the caller must invoke once the turn is settled — a throw, a
+   * cancellation, or a turn that ends without reaching the provider all burn
+   * the hold otherwise. The release is idempotent so a caller with several
+   * exit paths can just call it from each one.
+   */
+  async reserveLlmTurn(
     orgId: string,
     reservedTokens = 0
-  ): Promise<void> {
+  ): Promise<() => Promise<void>> {
     const organization = (await this.db.getOrganizationById(
       orgId
     )) as OrganizationWithLlmTurnLimit | null;
@@ -74,7 +81,7 @@ export class OrgUsageQuotaService {
           organization.monthlyLlmTokenLimit > 0)
       )
     ) {
-      return;
+      return async () => {};
     }
 
     const status = await this.getStatus(orgId);
@@ -88,16 +95,50 @@ export class OrgUsageQuotaService {
     ) {
       throw new NakamaApiError("Monthly LLM quota reached.", 429);
     }
+    const tokens = Math.max(0, Math.ceil(reservedTokens));
     const reserved = await this.db.tryReserveMonthlyLlmQuota({
       existingTokens: status.tokens,
       existingTurns: status.turns,
       month: status.month,
       orgId,
-      reservedTokens: Math.max(0, Math.ceil(reservedTokens)),
+      reservedTokens: tokens,
       updatedAt: new Date().toISOString(),
     });
     if (!reserved) {
       throw new NakamaApiError("Monthly LLM quota reached.", 429);
     }
+
+    let released = false;
+    return async () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      try {
+        await this.db.releaseMonthlyLlmQuota({
+          month: status.month,
+          orgId,
+          reservedTokens: tokens,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        // Never let the release turn a finished turn into a failure.
+        console.warn(
+          `Failed to release LLM quota reservation for org ${orgId}:`,
+          error
+        );
+      }
+    };
+  }
+
+  /**
+   * Kept for callers that only need the gate. Prefer reserveLlmTurn, which
+   * also returns the release.
+   */
+  async assertCanStartLlmTurn(
+    orgId: string,
+    reservedTokens = 0
+  ): Promise<void> {
+    await this.reserveLlmTurn(orgId, reservedTokens);
   }
 }

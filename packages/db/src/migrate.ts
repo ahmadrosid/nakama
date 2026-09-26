@@ -1141,7 +1141,22 @@ function migrateProfileOrgColumns(db: Database): void {
         }
       }
     } else {
-      db.prepare("DELETE FROM profiles WHERE org_id IS NULL").run();
+      // No organization exists yet, so there is nothing to adopt these into.
+      // The rows used to be deleted here, which took their sessions,
+      // session_messages, attachments, automations and join rows with them via
+      // ON DELETE CASCADE — real chat history destroyed on a boot whose only
+      // fault was that org bootstrap had not run yet. profiles.org_id is
+      // nullable, so an unadopted profile is simply invisible to org-scoped
+      // queries and still intact if and when an org shows up. This runs on
+      // every boot, so the delete was not even one-shot.
+      const orphans = db
+        .prepare("SELECT COUNT(*) AS count FROM profiles WHERE org_id IS NULL")
+        .get() as { count: number };
+      if (orphans.count > 0) {
+        console.warn(
+          `[nakama] Kept ${orphans.count} profile(s) with no organization. They are not assigned to any org and will stay hidden until one exists.`
+        );
+      }
     }
 
     db.prepare(`

@@ -12,7 +12,11 @@ import type { ServerOptions } from "../context";
 import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
+  requireRouteOrgMatchesAuth,
 } from "../org-guards";
+
+const resolveOrgId = requireRouteOrgMatchesAuth;
+
 import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -35,17 +39,6 @@ export function registerSkillProposalRoutes(
     .object({})
     .passthrough()
     .openapi("SkillProposalResponse");
-
-  function resolveOrgId(
-    c: { req: { param: (n: string) => string } },
-    authOrgId: string
-  ): string {
-    const orgId = decodeURIComponent(c.req.param("orgId"));
-    if (authOrgId !== orgId) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    return orgId;
-  }
 
   function requireService(): SkillProposalService {
     if (!skillProposalService) {

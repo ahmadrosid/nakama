@@ -60,6 +60,30 @@ describe("knowledge base store", () => {
     );
   }
 
+  test("concurrent uploads all land in the manifest", async () => {
+    const profileId = "profile_kb_concurrent";
+    await setupProfile(profileId);
+
+    // Each upload writes its own files, then reads the manifest, pushes its
+    // entry and rewrites the whole file. Started together they all read the
+    // same base, so without serialization the last rewrite wins and the other
+    // documents exist on disk with no manifest entry pointing at them.
+    const uploads = ["alpha", "beta", "gamma", "delta", "epsilon"].map((word) =>
+      uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+        data: Buffer.from(`content for ${word}`, "utf8").toString("base64"),
+        filename: `${word}.txt`,
+        mediaType: "text/plain",
+      })
+    );
+    const results = await Promise.all(uploads);
+
+    const listed = await listKnowledgeBaseDocuments(ORG_ID, profileId);
+    expect(listed).toHaveLength(results.length);
+    for (const { document } of results) {
+      expect(listed.map((entry) => entry.id)).toContain(document.id);
+    }
+  });
+
   test("uploads, lists, and deletes text documents", async () => {
     const profileId = "profile_kb_test";
     await setupProfile(profileId);

@@ -70,3 +70,23 @@ export function requireActiveOrgIdFromContext(c: Context<AppEnv>): string {
 
   return orgId;
 }
+
+/**
+ * Matches a route's `:orgId` against the caller's active org and 404s on a
+ * mismatch, so one org cannot probe another by guessing ids. The decoded form
+ * is compared because Hono hands back the raw segment.
+ *
+ * This is a tenant-isolation boundary, so it lives here rather than being
+ * reimplemented per route file: four copies existed and a fix to one would not
+ * have reached the others.
+ */
+export function requireRouteOrgMatchesAuth(
+  c: { req: { param: (name: string) => string } },
+  authOrgId: string
+): string {
+  const orgId = decodeURIComponent(c.req.param("orgId"));
+  if (authOrgId !== orgId) {
+    throw new NakamaApiError("Not found", 404);
+  }
+  return orgId;
+}

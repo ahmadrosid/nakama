@@ -448,7 +448,23 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
   return <LlmUsageTrackedBody modelLabel={modelLabel} usage={usage} />;
 }
 
-function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
+function LlmUsageSection({ usage }: { usage?: LlmUsageStatus }) {
+  // The server omits the ledger for callers who are not org admins, because the
+  // tracked totals span every organization on the install.
+  if (!usage) {
+    return (
+      <section className="min-w-0">
+        <Card className="w-full shadow-none">
+          <CardContent>
+            <p className="text-muted-foreground text-sm">
+              LLM usage is only available to organization admins.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
+
   return (
     <section className="min-w-0 space-y-8">
       <Card className="w-full shadow-none">

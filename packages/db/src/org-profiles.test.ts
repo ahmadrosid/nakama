@@ -122,13 +122,19 @@ describe("seedOrgSuperBotProfile", () => {
     );
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
-      if (toolId !== BUILTIN_TOOL_IDS.delete_file) {
+      // email is opt-in: the mailbox is one config shared by the whole
+      // deployment, so it is never auto-assigned to a new profile.
+      if (
+        toolId !== BUILTIN_TOOL_IDS.delete_file &&
+        toolId !== BUILTIN_TOOL_IDS.email
+      ) {
         expect(toolIds).toContain(toolId);
       }
     }
 
     expect(toolIds).toContain(BASH_TOOL_ID);
     expect(toolIds).not.toContain(BUILTIN_TOOL_IDS.delete_file);
+    expect(toolIds).not.toContain(BUILTIN_TOOL_IDS.email);
     expect(toolIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
   });
 

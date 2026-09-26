@@ -6,7 +6,13 @@ import type {
   SkillCuratorRunResponse,
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
-import { requireOrgAdminFromContext } from "../org-guards";
+import {
+  requireOrgAdminFromContext,
+  requireRouteOrgMatchesAuth,
+} from "../org-guards";
+
+const resolveOrgId = requireRouteOrgMatchesAuth;
+
 import { json, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -32,17 +38,6 @@ export function registerOrgCuratorRoutes(
     .object({})
     .passthrough()
     .openapi("SkillCuratorLatestResponse");
-
-  function resolveOrgId(
-    c: { req: { param: (n: string) => string } },
-    authOrgId: string
-  ): string {
-    const orgId = decodeURIComponent(c.req.param("orgId"));
-    if (authOrgId !== orgId) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    return orgId;
-  }
 
   function requireCurator() {
     if (!skillCuratorService) {

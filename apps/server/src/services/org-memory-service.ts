@@ -21,6 +21,7 @@ import {
   type OrgMemoryChangeLogEntry,
   parseOrgMemoryContent,
   rebuildOrgMemoryContent,
+  withKeyedLock,
 } from "@nakama/core";
 import {
   pathExists,
@@ -285,22 +286,29 @@ export class OrgMemoryService {
   ): Promise<void> {
     await this.requireActiveOrganization(orgId);
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
+    // MEMORY.md is one file rewritten wholesale, so every mutation that reads
+    // it has to hold the org's lock for the whole read-transform-write. Two
+    // concurrent adds both read the same text and the second write drops the
+    // first fact, which is only ever recoverable from a history entry nobody
+    // has written yet.
+    await withKeyedLock(this.lockKey(orgId), async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
 
-    if (parsed.pinned.some((existing) => existing.trim() === text)) {
-      return;
-    }
-
-    const next = applyApprovedOrgMemoryBullet(content, text, { pin: true });
-    await this.commitMemory(
-      orgId,
-      next,
-      options.change ?? {
-        action: "add_fact",
-        label: `Added fact: ${truncateLabel(text)}`,
+      if (parsed.pinned.some((existing) => existing.trim() === text)) {
+        return;
       }
-    );
+
+      const next = applyApprovedOrgMemoryBullet(content, text, { pin: true });
+      await this.commitMemory(
+        orgId,
+        next,
+        options.change ?? {
+          action: "add_fact",
+          label: `Added fact: ${truncateLabel(text)}`,
+        }
+      );
+    });
   }
 
   async addRecentLogFact(
@@ -310,23 +318,25 @@ export class OrgMemoryService {
     change?: OrgMemoryChangeContext
   ): Promise<void> {
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsedBefore = parseOrgMemoryContent(content);
-    if (this.bulletExistsInMemory(parsedBefore, text)) {
-      return;
-    }
-    const next = applyApprovedOrgMemoryBullet(content, text, {
-      dateUtc,
-      pin: false,
-    });
-    await this.commitMemory(
-      orgId,
-      next,
-      change ?? {
-        action: "add_fact",
-        label: `Added recent log fact: ${truncateLabel(text)}`,
+    await withKeyedLock(this.lockKey(orgId), async () => {
+      const content = await this.getMemory(orgId);
+      const parsedBefore = parseOrgMemoryContent(content);
+      if (this.bulletExistsInMemory(parsedBefore, text)) {
+        return;
       }
-    );
+      const next = applyApprovedOrgMemoryBullet(content, text, {
+        dateUtc,
+        pin: false,
+      });
+      await this.commitMemory(
+        orgId,
+        next,
+        change ?? {
+          action: "add_fact",
+          label: `Added recent log fact: ${truncateLabel(text)}`,
+        }
+      );
+    });
   }
 
   /** Pin an existing bullet (move to pinned if dated, or add). */
@@ -336,31 +346,33 @@ export class OrgMemoryService {
     change?: OrgMemoryChangeContext
   ): Promise<void> {
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
+    await withKeyedLock(this.lockKey(orgId), async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
 
-    if (parsed.pinned.some((existing) => existing.trim() === text)) {
-      return;
-    }
+      if (parsed.pinned.some((existing) => existing.trim() === text)) {
+        return;
+      }
 
-    for (const section of parsed.sections) {
-      const index = section.bullets.findIndex(
-        (existing) => existing.trim() === text
+      for (const section of parsed.sections) {
+        const index = section.bullets.findIndex(
+          (existing) => existing.trim() === text
+        );
+        if (index !== -1) {
+          section.bullets.splice(index, 1);
+        }
+      }
+
+      parsed.pinned.push(text);
+      await this.commitMemory(
+        orgId,
+        rebuildOrgMemoryContent(parsed),
+        change ?? {
+          action: "pin",
+          label: `Pinned fact: ${truncateLabel(text)}`,
+        }
       );
-      if (index !== -1) {
-        section.bullets.splice(index, 1);
-      }
-    }
-
-    parsed.pinned.push(text);
-    await this.commitMemory(
-      orgId,
-      rebuildOrgMemoryContent(parsed),
-      change ?? {
-        action: "pin",
-        label: `Pinned fact: ${truncateLabel(text)}`,
-      }
-    );
+    });
   }
 
   /** Remove a bullet from the pinned section. 404 if it is not pinned. */
@@ -370,24 +382,26 @@ export class OrgMemoryService {
     change?: OrgMemoryChangeContext
   ): Promise<void> {
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
+    await withKeyedLock(this.lockKey(orgId), async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
 
-    const index = parsed.pinned.findIndex(
-      (existing) => existing.trim() === text
-    );
-    if (index === -1) {
-      throw new NakamaApiError("Pinned fact not found.", 404);
-    }
-    parsed.pinned.splice(index, 1);
-    await this.commitMemory(
-      orgId,
-      rebuildOrgMemoryContent(parsed),
-      change ?? {
-        action: "unpin",
-        label: `Unpinned fact: ${truncateLabel(text)}`,
+      const index = parsed.pinned.findIndex(
+        (existing) => existing.trim() === text
+      );
+      if (index === -1) {
+        throw new NakamaApiError("Pinned fact not found.", 404);
       }
-    );
+      parsed.pinned.splice(index, 1);
+      await this.commitMemory(
+        orgId,
+        rebuildOrgMemoryContent(parsed),
+        change ?? {
+          action: "unpin",
+          label: `Unpinned fact: ${truncateLabel(text)}`,
+        }
+      );
+    });
   }
 
   async archiveEntries(
@@ -455,33 +469,52 @@ export class OrgMemoryService {
     }
     const append = `${appendLines.join("\n")}\n`;
 
-    const archiveExists = await pathExists(archivePath);
-    const archiveContent = archiveExists
-      ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${append}`
-      : `# Archived Org Memory\n\n---\n\n${append}`;
-
     const activeContent = rebuildOrgMemoryContent({
       pinned: kept,
       preamble: parsed.preamble,
       sections: parsed.sections,
     });
-    await writeTextFile(archivePath, archiveContent, {
-      ensureDir: archiveDir,
-    });
-    await this.commitMemory(
-      orgId,
-      activeContent,
-      options.change ?? {
-        action: "archive",
-        label: `Archived ${archived.length} pinned ${archived.length === 1 ? "fact" : "facts"}`,
-      }
-    );
 
-    return {
-      activeBytes: Buffer.byteLength(activeContent, "utf8"),
-      archived: archived.length,
-      archivePath,
-    };
+    // The archive file is read, appended to and rewritten too, so this holds
+    // the same org lock for the whole cycle — two concurrent archives would
+    // otherwise each build an archive from the same base and one batch of
+    // entries would vanish from the history.
+    return withKeyedLock(this.lockKey(orgId), async () => {
+      const current = await this.getMemory(orgId);
+      const currentParsed = parseOrgMemoryContent(current);
+      const currentKept = currentParsed.pinned.filter(
+        (bullet) => !targets.has(bullet.trim())
+      );
+      const stillArchived = targets.size;
+
+      const archiveExists = await pathExists(archivePath);
+      const archiveContent = archiveExists
+        ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${append}`
+        : `# Archived Org Memory\n\n---\n\n${append}`;
+
+      const nextActive = rebuildOrgMemoryContent({
+        pinned: currentKept,
+        preamble: currentParsed.preamble,
+        sections: currentParsed.sections,
+      });
+      await writeTextFile(archivePath, archiveContent, {
+        ensureDir: archiveDir,
+      });
+      await this.commitMemory(
+        orgId,
+        nextActive,
+        options.change ?? {
+          action: "archive",
+          label: `Archived ${stillArchived} pinned ${stillArchived === 1 ? "fact" : "facts"}`,
+        }
+      );
+
+      return {
+        activeBytes: Buffer.byteLength(nextActive, "utf8"),
+        archived: stillArchived,
+        archivePath,
+      };
+    });
   }
 
   async listProposals(
@@ -607,17 +640,21 @@ export class OrgMemoryService {
 
     const pin = options.pin ?? false;
     const dateUtc = utcDateString();
-    const content = await this.getMemory(orgId);
 
-    const next = applyApprovedOrgMemoryBullet(content, proposal.bullet, {
-      dateUtc,
-      pin,
-    });
-
-    await this.commitMemory(orgId, next, {
-      action: "approve",
-      actorUserId: reviewerUserId,
-      label: `Approved proposal: ${truncateLabel(proposal.bullet)}`,
+    // The apply and the commit have to be one critical section: computing the
+    // next content under the lock and writing it after the lock is released
+    // would let another writer land in between and be overwritten.
+    await withKeyedLock(this.lockKey(orgId), async () => {
+      const content = await this.getMemory(orgId);
+      const next = applyApprovedOrgMemoryBullet(content, proposal.bullet, {
+        dateUtc,
+        pin,
+      });
+      await this.commitMemory(orgId, next, {
+        action: "approve",
+        actorUserId: reviewerUserId,
+        label: `Approved proposal: ${truncateLabel(proposal.bullet)}`,
+      });
     });
 
     const reviewedAt = new Date().toISOString();
@@ -784,6 +821,14 @@ export class OrgMemoryService {
     // POST /memory/facts is a person who meant it, and still gets through.
     assertNoOrgMemoryInjection(bullet, text);
     return text;
+  }
+
+  /**
+   * One lock per organization, so two orgs never contend and one org's writes
+   * are always serialized against each other.
+   */
+  private lockKey(orgId: string): string {
+    return `org-memory:${orgId}`;
   }
 
   private requireDatabase(): DatabaseAdapter {
