@@ -780,6 +780,20 @@ function buildConfigIniLines(
     );
   }
 
+  if (mergedGlobal.image_model?.trim()) {
+    lines.push(`image_model=${mergedGlobal.image_model.trim()}`);
+  }
+
+  if (mergedGlobal.transcription_model?.trim()) {
+    lines.push(
+      `transcription_model=${mergedGlobal.transcription_model.trim()}`
+    );
+  }
+
+  if (mergedGlobal.vision_model?.trim()) {
+    lines.push(`vision_model=${mergedGlobal.vision_model.trim()}`);
+  }
+
   if (mergedGlobal.timezone?.trim()) {
     lines.push(`timezone=${mergedGlobal.timezone.trim()}`);
   }
