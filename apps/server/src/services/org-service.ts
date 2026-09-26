@@ -55,6 +55,7 @@ import {
   seedOrgDefaultProfile,
   seedOrgSuperBotProfile,
 } from "@nakama/db";
+import { isTenantBashEnabled } from "../tools/bash-config";
 import type { AuthService } from "./auth-service";
 import { loadMfaPolicy } from "./mfa-config";
 
@@ -1420,7 +1421,8 @@ export class OrgService {
 
     const superBotProfile = await seedOrgSuperBotProfile(
       this.databaseAdapter,
-      orgId
+      orgId,
+      { grantBash: isTenantBashEnabled() }
     );
     await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
   }
