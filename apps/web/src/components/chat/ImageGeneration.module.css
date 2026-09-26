@@ -13,7 +13,6 @@
   gap: 14px;
   align-items: flex-start;
   width: 100%;
-  max-width: 208px;
   font-family: var(--font-sans);
   color: var(--c-text);
 }
@@ -21,7 +20,7 @@
 .igCanvas {
   position: relative;
   width: 100%;
-  max-width: 208px;
+  max-width: 32rem;
   aspect-ratio: 1 / 1;
   overflow: hidden;
   background: var(--c-surface);
@@ -30,11 +29,12 @@
 }
 
 .igCanvasPortrait {
+  max-width: 24rem;
   aspect-ratio: 2 / 3;
 }
 
 .igCanvasLandscape {
-  max-width: 260px;
+  max-width: 40rem;
   aspect-ratio: 3 / 2;
 }
 
