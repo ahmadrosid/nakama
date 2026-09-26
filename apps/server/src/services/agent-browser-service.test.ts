@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { setupFreshInstallSession } from "../http/test-session-helpers";
 import {
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
+  installAgentBrowser,
 } from "../services/agent-browser-service";
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
@@ -79,6 +81,50 @@ describe("agent-browser service", () => {
       expect(await waitForExit(pid, 2000)).toBe(true);
     });
   }, 5000);
+
+  test("tells admins to install an exact version, not a floating name", () => {
+    expect(getAgentBrowserInstallCommand()).toMatch(
+      /^(?:npm install -g|bun install -g --trust) agent-browser@\d+\.\d+\.\d+ && agent-browser install$/
+    );
+  });
+
+  test("never runs the package manager when the registry hash is not the pinned one", async () => {
+    const npmRan = join(tempBinDir, "npm-ran");
+    await writeFile(join(tempBinDir, "npm"), `#!/bin/sh\ntouch ${npmRan}\n`);
+    await chmod(join(tempBinDir, "npm"), 0o755);
+    process.env.PATH = `${tempBinDir}:${originalPath}`;
+
+    // A registry that answers for the right version with someone else's
+    // tarball, which is what a hijacked or mirrored registry looks like.
+    const server = Bun.serve({
+      fetch(request) {
+        const url = new URL(request.url);
+        const version = url.pathname.split("/").pop() ?? "";
+
+        return Response.json({
+          dist: {
+            integrity:
+              "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==",
+            tarball: `${url.origin}/tarball.tgz`,
+          },
+          name: "agent-browser",
+          version,
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      await expect(
+        installAgentBrowser(undefined, {
+          registry: `http://localhost:${server.port}`,
+        })
+      ).rejects.toThrow("install refused");
+      expect(existsSync(npmRan)).toBe(false);
+    } finally {
+      server.stop(true);
+    }
+  }, 20_000);
 });
 
 describe("agent-browser settings routes", () => {
