@@ -1131,9 +1131,9 @@ export function useChatPage() {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.sessions(profileId),
         });
-        // The turn may have removed a file an earlier turn's chip still links.
+        // A turn can remove an artifact owned by any profile.
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.artifacts.profile(profileId),
+          queryKey: ["artifacts"],
         });
 
         if (!detached) {

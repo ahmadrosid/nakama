@@ -1475,12 +1475,6 @@ export class NakamaClient {
     };
   }
 
-  /**
-   * False once the file is gone, e.g. removed by a later tool call. Any other
-   * failure throws, so a flaky request never reads as a deleted artifact.
-   * ponytail: HEAD runs the GET handler, which reads the whole file; add a
-   * stat-only route if large artifacts make chat chips slow to settle.
-   */
   async hasProfileArtifact(
     profileId: string,
     artifactPath: string

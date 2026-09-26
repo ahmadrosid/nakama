@@ -222,7 +222,11 @@ test("workspace rename requires platform admin access and updates pins for every
 
 function createApp() {
   const listCalls: Array<{ appUserId?: string }> = [];
-  const readCalls: Array<{ appUserId?: string; render?: "markdown" }> = [];
+  const readCalls: Array<{
+    appUserId?: string;
+    headOnly?: boolean;
+    render?: "markdown";
+  }> = [];
   const writeCalls: Array<{ content: string; filename: string }> = [];
   const agent = {
     getProfile: async (_orgId: string, profileId: string) => {
@@ -253,7 +257,11 @@ function createApp() {
       _orgId: string,
       _profileId: string,
       filename: string,
-      options: { appUserId?: string; render?: "markdown" } = {}
+      options: {
+        appUserId?: string;
+        headOnly?: boolean;
+        render?: "markdown";
+      } = {}
     ) => {
       readCalls.push(options);
       if (filename === "missing.md") {
@@ -419,7 +427,7 @@ describe("profile artifact content auth", () => {
   });
 
   test("org viewer can check with HEAD whether an artifact still exists", async () => {
-    const { app, databaseAdapter } = createApp();
+    const { app, databaseAdapter, readCalls } = createApp();
     const viewerSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
@@ -441,6 +449,10 @@ describe("profile artifact content auth", () => {
     expect(present.status).toBe(200);
     expect(await present.text()).toBe("");
     expect((await head("missing.md")).status).toBe(404);
+    expect(readCalls).toEqual([
+      { appUserId: undefined, headOnly: true, render: undefined },
+      { appUserId: undefined, headOnly: true, render: undefined },
+    ]);
   });
 
   test("forwards render=markdown so a .docx is converted for preview", async () => {

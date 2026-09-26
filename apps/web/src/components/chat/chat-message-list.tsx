@@ -455,7 +455,7 @@ function AssistantTurn({
       {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {liveArtifacts.map((artifact) => {
-            const chipId = `${artifactTurnKey}:${artifact.path}`;
+            const chipId = `${artifactTurnKey}:${artifact.ownerProfileId ?? profileId}:${artifact.path}`;
 
             return (
               <ArtifactAttachmentPreview
