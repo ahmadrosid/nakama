@@ -36,9 +36,9 @@ Each generated image is written under the profile workspace:
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
 ```
 
-The image appears in **Files** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which is what makes it render inline in the conversation rather than only in the Files list. Web chat and the channel bridges both recognize `generate_image` output, so a Telegram or Discord turn gets the picture too.
+The image appears in **Files** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which makes it render inline in web chat. The tool refuses generated files over 5 MB.
 
-Attachments are capped at 5 MB.
+Channel behavior follows each channel's artifact rules. Telegram receives a share link after the save and caps a native document attachment at 5 MB. Discord sends supported native attachments up to 8 MB and otherwise falls back to the share link. WhatsApp automatically sends the newly saved PNG as a native document up to 16 MB. See [Artifacts on channels](/artifacts#artifact-limits-and-channels) for the delivery details.
 
 See [Artifacts and files](/artifacts) for previewing, editing, and publishing what comes out.
 
@@ -49,5 +49,6 @@ Every generation records usage through the same token pricing bridge as chat, so
 ## Limits
 
 - One model, `gpt-image-2`, and one provider type, OpenAI. There is no Stability, Replicate, or local diffusion path.
-- No image editing or variations. Generation from a prompt only.
+- Generation only. A request can't edit an input image, create variations, or choose another model.
+- One PNG per call, up to 5 MB, with `1024x1024`, `1024x1536`, `1536x1024`, or `auto` output size.
 - No streaming or progress. A generation is one tool call that returns when the image is ready.

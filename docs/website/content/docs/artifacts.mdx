@@ -7,39 +7,40 @@ description: "Browse, preview, edit, and publish the files your agent saves, fro
 
 This page covers the dashboard side. For how an agent saves a file in the first place, see [Artifact saves](/builtin-tools#artifact-saves).
 
-## The Files page
+## Open Files
 
-**Files** lists artifacts the agent saved for the active profile. Upload and manage knowledge-base documents from the **Knowledge** tab on [Profiles](/profiles).
+Open **Chat → Browse Files**. The **Files** page is the primary surface for all files saved in the selected profile. It has three views:
 
-![The Files page, with a markdown artifact open in the preview panel](/screenshots/artifact-markdown-toc.png)
+- **All files** browses the profile workspace one folder at a time. It includes artifacts, soul and memory files, custom tools, and other profile data. Pinned workspace files appear first.
+- **Artifacts** groups saved output into folders. Search, type filters, and list or grid view work in this view.
+- **Knowledge** manages documents that `knowledge_base_search` can use, including organization documents attached to the profile.
 
-The artifact list gives you:
+The page follows your active chat profile. If that profile isn't available, it selects the organization default. The **Files** page is restricted to platform administrators; other roles can't browse or manage workspace files, artifacts, or knowledge documents from this surface.
 
-- **Search** by filename
-- **Type filters**: All types, Documents, HTML, Images, Markdown, Text, Video, Other
-- **Folders** for nested paths such as `coding-agent-runs/`, so you open a directory instead of scanning a flat list
-- **List or grid view**, remembered across visits
-- Endless scroll, so a profile with hundreds of files does not need paging
+**All files** and **Artifacts** show one folder at a time. Artifact search searches all artifacts and shows full paths. The dashboard initially renders 30 folders and files, then **Show more** reveals another 30. Its API request returns the full matching metadata list rather than sending `limit` or `offset`; an API caller that supplies `limit` must use 1–100 with a non-negative `offset`.
+
+The **Knowledge** view accepts TXT, Markdown, CSV, and PDF files up to 20 MB each. Duplicate filenames require you to skip or replace the existing document. A platform administrator can attach shared organization documents to a profile; deleting an attached organization document detaches it rather than deleting the organization's source file.
 
 ![The Files page grouping nested coding-agent-runs logs into a folder](/screenshots/files-artifacts-after-folders.png)
 
-Each row shows the file type, size, and last modified time. Nakama infers the type from the extension and reads the size and modification time from the file. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or a `notes.abc` still previews as text instead of being written off as binary. Existing metadata files remain supported.
+Each file shows its inferred type, size, and last modified time. Nakama infers type from the extension. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or `notes.abc` can preview as text instead of being treated as binary.
 
-## Previews by content type
+## Preview files
 
-Clicking a file opens a resizable panel that renders by type, not by extension:
+The preview panel renders content by type:
 
 | Type | Preview |
 | --- | --- |
 | Markdown | Rendered, with a toggle to the raw source |
 | HTML | Rendered in a sandboxed frame |
 | Images | Inline, with a download action |
-| Video | `<video controls>` for MP4, WebM, MOV, OGV |
+| Video | MP4, WebM, MOV, and OGV playback |
+| PDF | Inline document preview |
 | Code | Syntax highlighted by extension |
-| Text, CSV, logs | Plain, unhighlighted |
+| Text, CSV, and logs | Plain or delimited-table preview |
 | Word (`.docx`) | Converted to Markdown for reading |
 
-Legacy `.doc` (Word 97-2003) is refused with a message asking you to convert it. There is no dependable JS parser for the OLE format, and emitting mojibake would be worse than saying no.
+The **All files** view loads raw images, video, PDF, and text previews only when the file is 10 MB or smaller. Word documents are converted on the server, so their preview doesn't use the raw-file cap. Files above the cap or in an unsupported format offer **Download file** instead of a preview.
 
 ## Table of contents for markdown
 
@@ -57,42 +58,27 @@ Below two headings nothing renders, so a one-paragraph note keeps the preview it
 
 The list lives in the shared artifact body, so the chat panel, the Files preview, and the public share page all show it.
 
-## Editing a markdown artifact
+## Edit an artifact
 
-The artifact actions menu carries **Download**, **Edit artifact**, and **Share artifact**.
+An artifact's actions menu provides **Rename**, **Download**, **Delete**, and artifact sharing actions. The artifact preview also lets non-viewers edit Markdown and delimited spreadsheet source in place. Editing is limited to those source formats; a `.docx` can't be overwritten with the Markdown produced by its preview.
 
-![The artifact actions menu with Download, Edit artifact, and Share artifact](/screenshots/artifact-actions-menu.png)
+![The artifact actions menu with Rename, Download, Delete, and sharing actions](/screenshots/artifact-actions-menu.png)
 
-**Edit artifact** opens the markdown source in a textarea with Save and Cancel, so fixing one heading does not need another agent turn.
+Saving an edit returns to the preview and refreshes its timestamp. A failed save keeps the editor contents open so you can retry.
 
-![Editing the markdown source in place](/screenshots/artifact-markdown-editor.png)
+![Editing the Markdown source in place](/screenshots/artifact-markdown-editor.png)
 
-Saving returns to the rendered preview, and the row in the list picks up the new timestamp.
+The **Files** management page and its listing, rename, delete, and knowledge controls are platform-admin-only. The separate artifact preview editor requires a non-viewer role when opened from an authorized chat attachment.
 
-![The saved artifact back in rendered preview, with an updated timestamp in the list](/screenshots/artifact-markdown-saved.png)
+Authorized active-organization members can still read artifact content through chat attachments and the content API even though they can't open the **Files** management page.
 
-Three things to know:
-
-- **Markdown only.** The write path refuses anything whose resolved type is not `text/markdown` with a 400, so a `.docx` cannot be replaced by the markdown its own preview was converted into.
-- **A failed save keeps your buffer** and shows the error, rather than dropping what you typed.
-- **The size and timestamp update** in the Files list after saving.
-
-A failed save looks like this. The error is shown, the buffer is still there, and Save is still available:
-
-![A failed save keeps the edited buffer and shows the error](/screenshots/artifact-edit-failed-save.png)
-
-Editing requires a non-viewer role in the active org. Viewers can read and download.
-
-## Publishing a public share
+## Publish a public share
 
 **Share artifact** publishes the file at a tokenized URL that needs no login, and gives you a link to copy.
 
 ![The published artifact on its public share page](/screenshots/artifact-public-share.png)
 
-A published share serves a **snapshot** taken at publish time, not the live file. That is deliberate: a public URL should not change under a reader because an agent turn rewrote the file. Two consequences:
-
-- Saving a hand edit refreshes the snapshot, so the public link keeps up with what you just changed.
-- An agent rewrite does not. Use **Update snapshot** when you want the published copy to catch up.
+A published share serves a **snapshot** taken at publish time, not the live file. Saving an artifact edit refreshes the snapshot. An agent rewrite does not; use **Update snapshot** to catch up the published copy.
 
 HTML and SVG artifacts are never served inline on the app origin, so a published page cannot run script against your session.
 
@@ -115,8 +101,10 @@ See [Profiles](/profiles#knowledge-base-and-memory) for the rest of the workspac
 | `GET` | `/v1/profiles/:profileId/artifacts/shares/status` |
 | `DELETE` | `/v1/profiles/:profileId/artifacts/shares/:shareId` |
 
-Deleting every artifact for a profile is a platform-admin action. Deleting one file is available from its row menu to any non-viewer.
+## Artifact limits and channels
 
-## Artifacts on channels
+Telegram and Discord publish share links after successful artifact saves. Discord also sends a supported native attachment up to 8 MB; an attachment that's too large or unsupported keeps the share link. Telegram native document attachments are capped at 5 MB. WhatsApp sends newly saved non-scratch files as native documents up to 16 MB instead of posting share links; a natural-language retry sends the whole deliverable set, while `/attach` sends only the most recent deliverable file. Files over the WhatsApp cap receive a download instruction instead of an attachment.
 
-Telegram, Discord, and WhatsApp post a share link after the reply when the agent saves a file. On Discord and WhatsApp you can also ask for the file itself and get a native attachment (WhatsApp also supports `/attach`). See [Telegram](/telegram/chat#saved-artifacts-and-share-links), [Discord](/discord#saved-artifacts-and-share-links), and [WhatsApp](/whatsapp#saved-artifacts-and-share-links).
+Only successful artifact saves enter channel delivery. Delivery failures don't delete the saved artifact.
+
+See [Telegram](/telegram/chat#saved-artifacts-and-share-links), [Discord](/discord#saved-artifacts-and-share-links), and [WhatsApp](/whatsapp#saved-artifacts-and-share-links) for channel-specific flows.
