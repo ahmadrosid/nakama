@@ -55,7 +55,10 @@
       "entry": ["src/shims/*.ts", "sw/service-worker.ts"]
     },
     // Not in package.json#workspaces; Knip would skip it otherwise.
-    "docs/website": {}
+    "docs/website": {
+      "ignoreDependencies": ["react-dom", "@types/react-dom"],
+      "ignoreBinaries": ["next"]
+    }
   },
   // Type-only import Knip cannot resolve.
   "ignoreUnresolved": ["../../services/auth-service"],

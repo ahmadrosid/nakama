@@ -35,6 +35,7 @@
     "image-generation",
     "token-optimiser",
     "coding-agent",
+    "workflows",
     "agent-browser",
     "mcp",
     "composio",

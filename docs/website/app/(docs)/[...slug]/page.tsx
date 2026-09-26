@@ -32,10 +32,15 @@ export default async function Page(props: PageProps) {
   const MDX = page.data.body;
   const relativePath = slugToRelativePath(page.slugs);
   const markdownUrl = withBasePath(`/${relativePath}`);
+  const metadata = buildPageMetadata(
+    relativePath,
+    page.data.title,
+    page.data.description ?? ""
+  );
   const jsonLd = buildJsonLd(
     relativePath,
-    buildPageMetadata(relativePath, page.data.title).title ?? page.data.title,
-    page.data.description ?? ""
+    metadata.title,
+    metadata.description
   );
 
   return (
@@ -80,5 +85,9 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
   }
 
   const relativePath = slugToRelativePath(page.slugs);
-  return buildPageMetadata(relativePath, page.data.title);
+  return buildPageMetadata(
+    relativePath,
+    page.data.title,
+    page.data.description ?? ""
+  );
 }

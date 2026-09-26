@@ -10,7 +10,10 @@
     "screenshots": "./scripts/capture-setup-screenshots.sh",
     "screenshots:chat": "./scripts/capture-chat-screenshots.sh",
     "screenshots:self-improving-skills": "./scripts/capture-self-improving-skills-screenshots.sh",
-    "screenshots:telegram": "./scripts/capture-telegram-screenshots.sh"
+    "screenshots:telegram": "./scripts/capture-telegram-screenshots.sh",
+    "screenshots:error-tracking": "./scripts/capture-error-tracking-screenshots.sh",
+    "screenshots:mcp": "./scripts/capture-mcp-screenshots.sh",
+    "check:pipeline": "bun run scripts/check-docs-pipeline.ts"
   },
   "dependencies": {
     "fumadocs-core": "^16.15.12",

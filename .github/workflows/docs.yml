@@ -32,6 +32,10 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: docs/website
 
+      - name: Check docs pipeline
+        run: bun run check:pipeline
+        working-directory: docs/website
+
       - name: Build docs
         run: bun run build
         working-directory: docs/website
