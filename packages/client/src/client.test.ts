@@ -6,6 +6,39 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test.each(["http://localhost:4310", "https://nakama.example.com"])(
+  "CLI images are uploaded in the request body to %s",
+  async (baseUrl) => {
+    const requests: Request[] = [];
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl,
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+        return new Response('data: {"type":"done","reply":"ok"}\n\n', {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      },
+      orgId: "org-a",
+    });
+    const images = [{ data: "aW1hZ2U=", mediaType: "image/png" }];
+    const session = client.createChatSession("session-1", "cli");
+    await session.sendStream({ images, message: "Describe this" }, () => {});
+    expect(requests).toHaveLength(1);
+    const request = requests[0]!;
+    expect(request.url).toBe(
+      `${baseUrl}/v1/sessions/session-1/messages?stream=true`
+    );
+    expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+    expect(request.headers.get("X-Org-Id")).toBe("org-a");
+    expect(await request.json()).toMatchObject({
+      images,
+      message: "Describe this",
+      stream: true,
+    });
+  }
+);
+
 test("scoped clients keep session requests in their original organization", async () => {
   const requests: Request[] = [];
   const client = new NakamaClient({

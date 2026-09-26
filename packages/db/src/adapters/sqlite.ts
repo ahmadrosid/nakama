@@ -617,6 +617,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY started_at DESC
     LIMIT 1
   `);
+  const getAutomationRunStmt = db.prepare(`
+    SELECT * FROM automation_runs
+    WHERE automation_id = ? AND id = ?
+    LIMIT 1
+  `);
   const insertAutomationRunStmt = db.prepare(`
     INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1224,6 +1229,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM mcp_servers
     INNER JOIN profile_mcp_servers ON profile_mcp_servers.server_id = mcp_servers.id
     WHERE profile_mcp_servers.profile_id = ?
+    AND mcp_servers.enabled = 1
     ORDER BY mcp_servers.name ASC
   `);
   const assignMcpServerStmt = db.prepare(`
@@ -3302,6 +3308,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getAutomation(id) {
       const row = getAutomationStmt.get(id) as AutomationRow | null;
       return row ? toAutomationRecord(row) : null;
+    },
+
+    async getAutomationRun(automationId, runId) {
+      const row = getAutomationRunStmt.get(
+        automationId,
+        runId
+      ) as AutomationRunRow | null;
+      return row ? toAutomationRunRecord(row) : null;
     },
 
     async getAutomationRunReadThrough(userId, orgId, automationId) {

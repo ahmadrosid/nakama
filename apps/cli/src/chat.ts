@@ -22,6 +22,7 @@ import {
   formatSlashCommands,
   isActiveModelOption,
   resolveModelSwitchTarget,
+  resolveSlashCommand,
   resolveSuggestions,
 } from "./commands";
 import { formatCliDisplayPath } from "./display-path";
@@ -1072,8 +1073,7 @@ async function runStickyChat(
       if (!(line || hasImages)) {
         return;
       }
-
-      if (line.startsWith("/") || isExitCommand(line)) {
+      if (resolveSlashCommand(line) || isExitCommand(line)) {
         let outcome: "handled" | "exit" | "unhandled";
         activeCommands += 1;
         try {
@@ -1246,6 +1246,27 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         continue;
       }
 
+      const registeredCommand = resolveSlashCommand(line);
+
+      if (line === "/clear") {
+        try {
+          await session.clear();
+          printLine("Chat history cleared.");
+        } catch (error) {
+          printError(error);
+        }
+
+        continue;
+      }
+
+      if (line === "/help") {
+        for (const helpLine of HELP_TEXT.split("\n")) {
+          printLine(helpLine);
+        }
+
+        continue;
+      }
+
       if (line === "/status") {
         const currentProfile =
           profilesCache.find((entry) => entry.id === currentProfileId) ?? null;
@@ -1288,6 +1309,13 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         } catch (error) {
           printError(error);
         }
+        continue;
+      }
+
+      if (registeredCommand && registeredCommand.name !== "/learn") {
+        printLine(
+          `${registeredCommand.name} requires an interactive terminal.`
+        );
         continue;
       }
 

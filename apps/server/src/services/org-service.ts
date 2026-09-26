@@ -335,11 +335,20 @@ export class OrgService {
     return { organization };
   }
 
-  async listUserOrgs(userId: string): Promise<ListUserOrgsResponse> {
+  async listUserOrgs(
+    userId: string,
+    orgId?: string | null
+  ): Promise<ListUserOrgsResponse> {
     const memberships =
       await this.databaseAdapter.listUserOrganizations(userId);
+    const scopedMemberships =
+      orgId === undefined
+        ? memberships
+        : memberships.filter(
+            (membership) => membership.organization.id === orgId
+          );
     return {
-      orgs: memberships.map((membership) => ({
+      orgs: scopedMemberships.map((membership) => ({
         ...toOrganizationSummary(membership.organization),
         role: membership.role,
       })),

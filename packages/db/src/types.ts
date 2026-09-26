@@ -860,6 +860,10 @@ export interface DatabaseAdapter {
   ): Promise<StoredArtifactShareRecord | null>;
   getAttachment(id: string): Promise<StoredAttachmentRecord | null>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;
+  getAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<StoredAutomationRunRecord | null>;
 
   getAutomationRunReadThrough(
     userId: string,

@@ -79,7 +79,9 @@ Paste an image path or use clipboard attach:
 /paste
 ```
 
-When your terminal supports it, paste with an empty prompt (`Ctrl+V` / `Cmd+V`) to attach from the clipboard.
+Copy an image, press **Ctrl+V** in the CLI, then type a message and press **Enter**. The prompt shows the attached image count. With an empty message, **Backspace** removes the last image. **Cmd+V** also works when your terminal sends an empty paste event; otherwise use **Ctrl+V** or `/paste` to send the clipboard image directly.
+
+Images are read on the computer running the CLI and uploaded to the connected server, whether local or remote. Run the CLI on your own computer to use your clipboard with a remote server; an SSH session cannot read your computer’s image clipboard.
 
 ## Rotate local auth token
 

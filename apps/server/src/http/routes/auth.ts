@@ -1188,11 +1188,14 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
     }
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
+    }
+    assertBrowserCsrf(c.req.raw, auth, authService);
     const policy = await loadMfaPolicy();
     if (!(policy.enabled && policy.keyConfigured)) {
       return errorResponse("MFA is not enabled.", 400);
     }
-    assertBrowserCsrf(c.req.raw, auth, authService);
     const secret = generateTotpSecret();
     await databaseAdapter.setPendingMfaSecret(
       auth.user.id,
@@ -1213,6 +1216,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const auth = getRequestAuth(c);
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
+    }
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
     }
     assertBrowserCsrf(c.req.raw, auth, authService);
     const body = await readJson<{ code: string }>(
@@ -1256,6 +1262,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const auth = getRequestAuth(c);
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
+    }
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
     }
     assertBrowserCsrf(c.req.raw, auth, authService);
     const body = await readJson<{ backupCode?: string; code?: string }>(
@@ -1339,7 +1348,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const authBody = await orgService.buildAuthUserResponse(
       user,
       auth.session?.id,
-      auth.session?.activeOrgId
+      auth.session?.activeOrgId ?? auth.activeOrgId
     );
     // The builder answers from the user record, which describes whoever created
     // the credential. An API key is de-privileged whatever its owner is, and the
@@ -1469,6 +1478,8 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     const body = await readJson<{ token: string; password?: string }>(
       c.req.raw,
       acceptInviteSchema
@@ -1535,7 +1546,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
-    const orgs = await orgService.listUserOrgs(auth.user.id);
+    const orgs = await orgService.listUserOrgs(
+      auth.user.id,
+      auth.mode === "api-key" ? (auth.activeOrgId ?? null) : undefined
+    );
     return json<ListUserOrgsResponse>(orgs);
   });
 
@@ -1591,6 +1605,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session authentication required", 403);
+    }
     const records = await databaseAdapter.listBrowserSessionsForUser(
       auth.user.id,
       new Date().toISOString()
@@ -1613,6 +1630,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session authentication required", 403);
+    }
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const sessionId = c.req.param("sessionId");

@@ -48,6 +48,7 @@ export const NAKAMA_USER_EXPORT_FORMAT_VERSION = 1;
 // Setup import is unauthenticated until the first admin exists, so an archive
 // has to be capped on the way in rather than once it is already in memory.
 export const MAX_IMPORT_ARCHIVE_BYTES = 100 * 1024 * 1024;
+export const MAX_IMPORT_ENTRIES = 10_000;
 export const MAX_IMPORT_ENTRY_BYTES = 100 * 1024 * 1024;
 export const MAX_IMPORT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024;
 /** Base64 carries 3 bytes per 4 characters. */
@@ -561,10 +562,19 @@ async function writeRestoredEntry(
 }
 
 function readZip(buffer: Buffer): ZipEntry[] {
+  let entryCount = 0;
   let uncompressedTotal = 0;
   // fflate sizes each output buffer from the entry's declared uncompressed
   // size, so refusing here is what stops a bomb from being inflated at all.
   const admitEntry = (name: string, size: number): boolean => {
+    entryCount += 1;
+    if (entryCount > MAX_IMPORT_ENTRIES) {
+      throw new NakamaApiError(
+        `Archive exceeds the ${MAX_IMPORT_ENTRIES} entry limit.`,
+        400
+      );
+    }
+
     if (size > MAX_IMPORT_ENTRY_BYTES) {
       throw new NakamaApiError(
         `Archive entry ${name} exceeds the ${megabytes(MAX_IMPORT_ENTRY_BYTES)} limit.`,

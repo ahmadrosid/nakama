@@ -6,25 +6,37 @@ import { client, formatError } from "@/lib/client";
 
 export function OrgLlmQuotaCard() {
   const { activeOrg } = useAuth();
-  const [quota, setQuota] = useState<OrgLlmQuotaStatusResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [quotaState, setQuotaState] = useState<{
+    error: string | null;
+    orgId: string;
+    quota: OrgLlmQuotaStatusResponse | null;
+  } | null>(null);
+  const activeOrgId = activeOrg?.id;
+  const quota =
+    quotaState && quotaState.orgId === activeOrgId ? quotaState.quota : null;
+  const error =
+    quotaState && quotaState.orgId === activeOrgId ? quotaState.error : null;
 
   useEffect(() => {
     if (!activeOrg || activeOrg.role !== "admin") {
       return;
     }
+    const orgId = activeOrg.id;
     let cancelled = false;
     void client
-      .getOrganizationLlmQuotaStatus(activeOrg.id)
+      .getOrganizationLlmQuotaStatus(orgId)
       .then((next) => {
         if (!cancelled) {
-          setQuota(next);
-          setError(null);
+          setQuotaState({ error: null, orgId, quota: next });
         }
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
-          setError(formatError(cause));
+          setQuotaState({
+            error: formatError(cause),
+            orgId,
+            quota: null,
+          });
         }
       });
     return () => {

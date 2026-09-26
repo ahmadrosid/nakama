@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getUserConfigDir, saveAttachmentBytes } from "@nakama/core";
-import { unzipSync } from "fflate";
-import { NAKAMA_USER_EXPORT_MANIFEST } from "../../services/data-portability";
+import { unzipSync, zipSync } from "fflate";
+import {
+  createNakamaDataExport,
+  MAX_IMPORT_ENTRIES,
+  NAKAMA_USER_EXPORT_MANIFEST,
+} from "../../services/data-portability";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -20,6 +24,17 @@ function createApp() {
       providerConfigured: true,
     },
   });
+}
+
+async function createArchiveOverEntryLimit(): Promise<Buffer> {
+  const archive = (
+    await createNakamaDataExport({ rootDir: getUserConfigDir() })
+  ).data;
+  const entries = unzipSync(archive);
+  for (let index = 0; index < MAX_IMPORT_ENTRIES; index += 1) {
+    entries[`empty-${index}.txt`] = new Uint8Array();
+  }
+  return Buffer.from(zipSync(entries, { level: 0 }));
 }
 
 describe("data portability routes", () => {
@@ -415,5 +430,43 @@ describe("data portability routes", () => {
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("keep");
+  });
+
+  test("platform preview and restore reject archives over the entry limit", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "keep");
+    const archive = await createArchiveOverEntryLimit();
+    const data = archive.toString("base64");
+
+    const previewResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/import/preview", {
+        body: JSON.stringify({ data }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(previewResponse.status).toBe(400);
+
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/import/restore", {
+        body: JSON.stringify({ confirm: true, data }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(restoreResponse.status).toBe(400);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
 });

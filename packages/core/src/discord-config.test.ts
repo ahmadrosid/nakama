@@ -191,3 +191,39 @@ describeSharedChannelConfigTests({
   saveConfig: saveDiscordConfig,
   verifyAndPair: verifyAndPairDiscordUser,
 });
+
+describe("per-owner Discord config", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("claims one application ID across concurrent owners", async () => {
+    await withTempHomedir("nakama-discord-claim-race-", async () => {
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ id: "1525937133096013954" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        })) as typeof fetch;
+
+      const results = await Promise.allSettled([
+        saveDiscordConfig(
+          { botToken: "discord-token-a" },
+          { orgId: "org_a", profileId: "a" }
+        ),
+        saveDiscordConfig(
+          { botToken: "discord-token-b" },
+          { orgId: "org_b", profileId: "b" }
+        ),
+      ]);
+
+      expect(
+        results.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+      expect(
+        results.filter((result) => result.status === "rejected")
+      ).toHaveLength(1);
+    });
+  });
+});

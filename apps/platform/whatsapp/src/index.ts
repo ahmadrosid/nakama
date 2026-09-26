@@ -29,6 +29,7 @@ import { installBaileysConsoleRedaction } from "./baileys-logger";
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
 import { startWhatsAppOutboundServer } from "./outbound-server";
+import { registerProcessLifecycleHandlers } from "./process-lifecycle";
 import { createWhatsAppSocket } from "./socket";
 
 installErrorHandlers("worker:whatsapp");
@@ -56,8 +57,7 @@ function persistWorkerHeartbeat(): void {
   });
 }
 
-registerProcessLifecycleLogging();
-registerCleanupHandlers(async () => {
+registerProcessLifecycleHandlers(async () => {
   outboundServer?.stop();
   await socketHandle?.stop();
   if (heartbeatTimer) {
@@ -219,33 +219,4 @@ try {
   await clearWhatsAppQrCode(orgId);
   stopSpawnedServer(spawnedChild);
   process.exit(1);
-}
-
-function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-    process.on(signal, () => {
-      console.log(`WhatsApp worker received ${signal}. Shutting down.`);
-      void (async () => {
-        try {
-          await cleanup();
-        } finally {
-          process.exit(0);
-        }
-      })();
-    });
-  }
-}
-
-function registerProcessLifecycleLogging(): void {
-  process.on("exit", (code) => {
-    console.log(`WhatsApp worker exiting with code ${code}.`);
-  });
-
-  process.on("uncaughtException", (error) => {
-    console.error("WhatsApp worker uncaught exception.", error);
-  });
-
-  process.on("unhandledRejection", (reason) => {
-    console.error("WhatsApp worker unhandled rejection.", reason);
-  });
 }
