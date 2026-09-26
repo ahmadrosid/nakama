@@ -6,15 +6,31 @@ Nakama plugins are trusted npm packages. A platform admin installs the bytes. An
 
 The **Official plugins** catalog is an allowlist shipped with Nakama. Organization admins can install these packages with one click; no npm lookup or separate platform approval is required. Third-party package installation still requires platform approval.
 
-Workflows lives in `packages/plugins/workflows`. Its manifest, bundled actions, UI, skills, and migrations are copied into the same immutable release store used for npm plugins. It uses the existing organization lifecycle, contribution ownership, private database generations, backup, and retained-data deletion. A package's `author` or id never makes it official.
+The shipped official catalog contains **Workflows**, **Supermemory**, and
+**Google Meet**. Workflows lives in `packages/plugins/workflows`; Supermemory
+lives in `packages/plugins/supermemory`; and Google Meet lives in
+`packages/plugins/google-meet`. Their manifests, bundled actions, UI, skills,
+and migrations are copied into the same immutable release store used for npm
+plugins. A package's `author` or id never makes it official.
 
 Official catalog entries declare required host support and an optional setup action. Installation checks requirements before publishing a release. If setup fails after this install enabled the plugin, it disables the plugin while retaining its data for retry; a plugin that was already enabled is left running.
 
 This follows the declared-dependency and reversible-effect ideas described in [DeepSeek Harness's Cordis primer](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md). Nakama uses its existing package and organization lifecycle for these guarantees.
 
-Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated action and UI bundles in the change. Runtime images include the package under `packages/plugins`; source development and built server entrypoints use the same catalog.
+Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated action and UI bundles in the change. Runtime images include the packages under `packages/plugins`; source development and built server entrypoints use the same catalog.
 
 For local development, rebuild the plugin, then choose **System → Plugins → Official plugins → Reinstall**. Organization admins can reload the bundled files without manually bumping the package version. Reinstall preserves workflows, run history, and the enabled/disabled state. It creates an immutable development release for changed content and switches only the active organization; other organizations keep their selected code. Unchanged content reuses its development release. If an update or migration fails, the plugin remains disabled with its previous data available for recovery.
+
+### Google Meet
+
+`packages/plugins/google-meet` is the official Google Meet capture and
+transcription plugin. Its Chrome extension captures meeting audio, and the
+plugin worker transcribes recordings with the organization's configured
+transcription provider. Install the plugin from **System → Plugins**, then
+enable it for the active organization. See [Google Meet](/google-meet) for the
+Chrome extension and capture workflow. Rebuild it with
+`bun run --cwd packages/plugins/google-meet build` and include the action, UI,
+worker, and extension files in a source change.
 
 ### Supermemory
 

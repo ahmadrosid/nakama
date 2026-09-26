@@ -62,7 +62,9 @@ See [Agent prompts](/agent-prompt) for the full assembly order.
 
 ## Agent tools
 
-Three org memory tools are **automatically available on every profile**. They are not assigned from the dashboard like other builtins.
+The three org memory tools are added when a profile has at least one assigned
+or resolved tool. They are not attached to a profile with no tools, and you do
+not assign these three from the dashboard like other builtins.
 
 | Tool | Purpose |
 |------|---------|
@@ -70,7 +72,7 @@ Three org memory tools are **automatically available on every profile**. They ar
 | `org_memory_list` | Return the current live org memory content |
 | `propose_org_memory` | Propose an org-wide fact for admin approval (member+) |
 
-Viewers cannot call these tools. Automations and sub-agents run with member-level org context.
+Viewers cannot call these tools. Automations and sub-agents run with member-level org context when the profile has tools available.
 
 Agents propose durable org facts via `propose_org_memory`; proposals land in a staging queue until an admin approves or rejects them in **Settings → Org Memory → Proposals**. Admins can still add facts directly from the UI (bypasses the queue). Do not propose secrets, credentials, or PII.
 
@@ -127,8 +129,8 @@ Members can read and search; viewers are blocked on all org memory routes.
 
 | Role | Read | Search | Write (UI/API) | Prompt injection | Agent tools |
 |------|------|--------|----------------|------------------|-------------|
-| **admin** | yes | yes | yes | yes | yes |
-| **member** | yes | yes | no | yes | yes |
+| **admin** | yes | yes | yes | yes | yes, when the profile has tools |
+| **member** | yes | yes | no | yes | yes, when the profile has tools |
 | **viewer** | no | no | no | no | no |
 
 Cross-org requests return **404** — the path `orgId` must match the active organization.

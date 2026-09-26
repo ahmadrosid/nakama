@@ -230,7 +230,7 @@ Profiles receive bundled skills for common workflows:
 - `coding-agent` — invoke a coding agent for repo work via `bash` (Super Bot by default; see [Coding agent](/coding-agent))
 - `agent-browser` — interactive browser automation via `bash` (opt-in; see [Agent browser](/agent-browser))
 
-New custom profiles receive the file tools and `knowledge_base_search` by default when those builtins are available. Default and super-bot profiles also receive the bundled skills above when they are installed and synced on the server (except opt-in skills such as `agent-browser`). Super Bot also receives `bash` for one-off host commands and coding-agent workflows.
+Every profile receives the default bundled skills above when they are installed and synced on the server, including `manage-skills` for skill authoring. Nakama backfills missing default bundled skills onto existing profiles during startup. Super Bot additionally receives its Super Bot-specific skills, while opt-in skills such as `agent-browser` still require assignment.
 
 To reuse a skill from GitHub, ask in web or CLI chat: **“Install this skill”** and paste its public GitHub directory or SKILL.md link. The agent installs it for the current profile, ready on the next turn. If write approval is enabled, an admin must approve it first. References, scripts, and assets are included. Reinstalling the same skill restores missing files. External programs required by a skill still need separate setup. Existing skills with different content are not overwritten.
 

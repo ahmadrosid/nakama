@@ -14,6 +14,7 @@ flowchart TB
     tg["apps/platform/telegram"]
     wa["apps/platform/whatsapp"]
     dc["apps/platform/discord"]
+    sl["apps/platform/slack"]
   end
 
   subgraph sdk ["@nakama/client"]
@@ -52,6 +53,7 @@ flowchart TB
     telegram["telegram worker"]
     whatsapp["whatsapp worker"]
     discord["discord worker"]
+    slack["slack worker"]
     pluginworkers["plugin workers"]
   end
 
@@ -94,13 +96,13 @@ nakama/
 │   ├── server/                 # HTTP API, auth, org, agent runtime
 │   ├── web/                    # Dashboard
 │   ├── cli/                    # Terminal client
-│   └── platform/{automation,telegram,whatsapp,discord}/
+│   └── platform/{automation,telegram,whatsapp,discord,slack}/
 ├── packages/
 │   ├── agent/                  # Prompt assembly, tool loop, chat session
 │   ├── core/                   # Contracts, soul, config, builtin tools
 │   ├── db/                     # SQLite schema, adapters, migrations
 │   ├── client/                 # Shared HTTP/SSE client
-│   ├── plugins/                # Bundled plugins, including workflows
+│   ├── plugins/                # Bundled plugins, including workflows, Supermemory, and Google Meet
 │   ├── telegram-manager/      # Telegram manager client and store
 │   └── ui/                    # Shared UI components
 └── docs/website/
@@ -115,7 +117,7 @@ nakama/
 | `packages/agent` | This package owns prompts, the tool loop, compaction, and `AgentChatSession`. |
 | `packages/core` | This package owns contracts, soul compose, builtins, channel helpers, and config. |
 | `packages/db` | This package owns the schema and adapters for persisted entities. |
-| `packages/plugins` | Bundled plugins add capabilities such as workflows. `PluginService` manages releases and org installations. |
+| `packages/plugins` | Bundled plugins add capabilities such as workflows, Supermemory, and Google Meet. `PluginService` manages releases and org installations. |
 
 ## HTTP
 
@@ -187,7 +189,7 @@ Tool definitions are shared; `profile_tools` controls which custom tools a profi
 The server starts workers with PM2 through [`worker-manager-service.ts`](./apps/server/src/services/worker-manager-service.ts).
 
 - `apps/platform/automation` does scheduled work and skill-curator ticks.
-- `apps/platform/telegram`, `whatsapp`, and `discord` are channel bridges.
+- `apps/platform/telegram`, `whatsapp`, `discord`, and `slack` are channel bridges.
 - Installed plugins can contribute their own workers.
 
 The database stores automations in `automations` and `automation_runs`.
