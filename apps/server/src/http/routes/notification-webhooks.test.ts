@@ -75,6 +75,7 @@ describe("notification webhook routes", () => {
           }),
           headers: {
             "Content-Type": "application/json",
+            "Idempotency-Key": "evt_route_success_1",
             "X-API-Key": "secret_key",
           },
           method: "POST",
@@ -112,6 +113,7 @@ describe("notification webhook routes", () => {
         body: JSON.stringify({ body: "Hello" }),
         headers: {
           "Content-Type": "application/json",
+          "Idempotency-Key": "evt_route_invalid_1",
           "X-API-Key": "wrong",
         },
         method: "POST",
@@ -138,6 +140,7 @@ describe("notification webhook routes", () => {
           body: JSON.stringify({ body: "Hello" }),
           headers: {
             "Content-Type": "application/json",
+            "Idempotency-Key": "evt_route_internal_1",
             "X-API-Key": "secret_key",
           },
           method: "POST",
@@ -150,6 +153,63 @@ describe("notification webhook routes", () => {
       });
     } finally {
       lookupSpy.mockRestore();
+    }
+  });
+
+  test("rejects a replayed idempotency key without a second telegram send", async () => {
+    const telegramCalls: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_input, init) => {
+      telegramCalls.push(init?.body);
+      return new Response("ok", { status: 200 });
+    };
+
+    try {
+      const { app, databaseAdapter, authService } = await createApp();
+      await seedOrgAdmin(databaseAdapter, {
+        orgId: "org_1",
+        profileId: "agent_1",
+      });
+      await databaseAdapter.upsertOrganization({
+        createdAt: "2026-07-04T10:00:00.000Z",
+        id: "org_1",
+        name: "Acme",
+        slug: "acme",
+        updatedAt: "2026-07-04T10:00:00.000Z",
+      });
+      await databaseAdapter.upsertNotificationDestination({
+        channel: "telegram",
+        config: { profileId: "agent_1", chatId: 1001, topicId: 22 },
+        createdAt: "2026-07-04T10:00:00.000Z",
+        id: "dest_1",
+        name: "Payments",
+        orgId: "org_1",
+        secretHash: authService.hashToken("secret_key"),
+        updatedAt: "2026-07-04T10:00:00.000Z",
+      });
+
+      const requestInit = {
+        body: JSON.stringify({ body: "Customer: Ahmad" }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "evt_route_replay_1",
+          "X-API-Key": "secret_key",
+        },
+        method: "POST" as const,
+      };
+
+      const first = await app.fetch(
+        new Request("http://localhost:4310/v1/notify/dest_1", requestInit)
+      );
+      const second = await app.fetch(
+        new Request("http://localhost:4310/v1/notify/dest_1", requestInit)
+      );
+
+      expect(first.status).toBe(204);
+      expect(second.status).toBe(409);
+      expect(telegramCalls).toHaveLength(1);
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 
@@ -191,6 +251,7 @@ describe("notification webhook routes", () => {
           body: JSON.stringify({ body: "Hello" }),
           headers: {
             "Content-Type": "application/json",
+            "Idempotency-Key": "evt_route_archived_1",
             "X-API-Key": "secret_key",
           },
           method: "POST",
