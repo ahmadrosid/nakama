@@ -483,3 +483,122 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
   );
   expect(unblockedProfiles.status).toBe(200);
 });
+
+test("MFA enrollment and disable revoke other browser sessions", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+  const current = await setupFreshInstallSession(
+    app as AppFetch,
+    databaseAdapter
+  );
+
+  const policyResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/settings/mfa", {
+      body: JSON.stringify({ enabled: true }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "PUT",
+    })
+  );
+  expect(policyResponse.status).toBe(200);
+
+  const enrollmentStart = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
+      headers: current.headers({ "X-CSRF-Token": current.csrfToken }),
+      method: "POST",
+    })
+  );
+  expect(enrollmentStart.status).toBe(200);
+  const enrollmentBody = (await enrollmentStart.json()) as { secret: string };
+
+  const oldSessionResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: "admin@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+  expect(oldSessionResponse.status).toBe(200);
+  const oldSession = browserSessionFromResponse(oldSessionResponse);
+
+  const enrollment = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
+      body: JSON.stringify({ code: createTotpCode(enrollmentBody.secret) }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(enrollment.status).toBe(200);
+  const enrollmentResult = (await enrollment.json()) as {
+    backupCodes: string[];
+  };
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: oldSession.headers(),
+        })
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
+
+  const sessionAfterEnrollment = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        backupCode: enrollmentResult.backupCodes[0],
+        email: "admin@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+  expect(sessionAfterEnrollment.status).toBe(200);
+  const sessionToRevoke = browserSessionFromResponse(sessionAfterEnrollment);
+
+  const disable = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/disable", {
+      body: JSON.stringify({ backupCode: enrollmentResult.backupCodes[1] }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(disable.status).toBe(200);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: sessionToRevoke.headers(),
+        })
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
+});

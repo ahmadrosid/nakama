@@ -1221,6 +1221,15 @@ export interface DatabaseAdapter {
     userId: string,
     revokedAt: string
   ): Promise<number>;
+  /**
+   * Every active browser session except the caller's current session. A null
+   * session id revokes all of them for non-browser authentication modes.
+   */
+  revokeBrowserSessionsForUserExcept(
+    userId: string,
+    sessionId: string | null,
+    revokedAt: string
+  ): Promise<number>;
   setFilePinned(
     orgId: string,
     userId: string,

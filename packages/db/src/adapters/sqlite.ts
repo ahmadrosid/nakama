@@ -2005,6 +2005,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET revoked_at = ?
     WHERE id = ? AND user_id = ? AND revoked_at IS NULL
   `);
+  const revokeBrowserSessionsForUserExceptStmt = db.prepare(`
+    UPDATE browser_sessions
+    SET revoked_at = ?
+    WHERE user_id = ? AND (? IS NULL OR id != ?) AND revoked_at IS NULL
+  `);
   const revokeBrowserSessionsForUserStmt = db.prepare(`
     UPDATE browser_sessions
     SET revoked_at = ?
@@ -4268,6 +4273,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async revokeBrowserSessionsForUser(userId, revokedAt) {
       const result = revokeBrowserSessionsForUserStmt.run(revokedAt, userId);
+      return result.changes;
+    },
+
+    async revokeBrowserSessionsForUserExcept(userId, sessionId, revokedAt) {
+      const result = revokeBrowserSessionsForUserExceptStmt.run(
+        revokedAt,
+        userId,
+        sessionId,
+        sessionId
+      );
       return result.changes;
     },
     async setFilePinned(orgId, userId, profileId, path, pinned) {
