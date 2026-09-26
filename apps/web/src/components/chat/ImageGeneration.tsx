@@ -72,7 +72,9 @@ export function ImageGeneration({
         ) : isComplete ? (
           <span className={styles.igPrompt}>Generated image</span>
         ) : (
-          <span className={styles.igLabel}>Generating image</span>
+          <span className={cn(styles.igLabel, "ai-rainbow-text")}>
+            Generating image
+          </span>
         )}
         <span className={styles.igPrompt}>“{prompt}”</span>
       </div>
