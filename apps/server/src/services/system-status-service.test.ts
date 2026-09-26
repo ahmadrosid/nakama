@@ -8,6 +8,9 @@ import {
   type WorkerProcessInfo,
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import type { AgentService } from "./agent-service";
+import { LlmUsageTracker } from "./llm-usage-tracker";
 import { SystemStatusService } from "./system-status-service";
 
 let configDir: string | null = null;
@@ -32,19 +35,26 @@ function createService(
   automationProcess: WorkerProcessInfo | null,
   extras?: {
     composioService?: { isReachable: () => Promise<boolean> } | null;
+    llmUsageTracker?: LlmUsageTracker;
   }
 ) {
+  const usageTracker = extras?.llmUsageTracker;
+
   return new SystemStatusService(
+    // The service only reads these members; the rest of AgentService is not
+    // part of what a status response depends on.
     {
-      getLlmUsageStats: () => ({
-        estimatedCostUsd: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        requestCount: 0,
-        totalTokens: 0,
-        trackedSince: new Date().toISOString(),
-      }),
-      getLlmUsageStatsByModel: () => [],
+      getLlmUsageStats: async (orgId: string | null) =>
+        (orgId ? await usageTracker?.getStats(orgId) : null) ?? {
+          estimatedCostUsd: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          requestCount: 0,
+          totalTokens: 0,
+          trackedSince: new Date().toISOString(),
+        },
+      getLlmUsageStatsByModel: async (orgId: string | null) =>
+        (orgId ? await usageTracker?.getStatsByModel(orgId) : null) ?? [],
       getModels: async () => ({ models: [], provider: "openai" }),
       getUsageStatusFields: () => ({
         costEstimated: false,
@@ -52,7 +62,7 @@ function createService(
         displayName: "OpenAI",
       }),
       providerConfigured: true,
-    } as any,
+    } as unknown as AgentService,
     { getActiveRunCount: () => 2 } as any,
     {
       getAllWorkerStatuses: async () => ({
@@ -159,5 +169,37 @@ describe("SystemStatusService", () => {
       composioAvailable: true,
       composioConfigured: true,
     });
+  });
+
+  test("usage is org scoped", async () => {
+    await withConfigDir();
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
+
+    tracker.record("gpt-4o", 100, 50, { orgId: "org_a" });
+    tracker.record("gpt-4o", 900_000, 400_000, { orgId: "org_b" });
+
+    const service = createService(null, { llmUsageTracker: tracker });
+
+    const orgA = await service.getStatus("org_a");
+    const orgB = await service.getStatus("org_b");
+
+    expect(orgA.llmUsage).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 50,
+      requestCount: 1,
+      totalTokens: 150,
+    });
+    expect(orgA.llmUsage.models).toMatchObject([
+      { inputTokens: 100, modelId: "gpt-4o", requestCount: 1 },
+    ]);
+    expect(orgB.llmUsage).toMatchObject({
+      inputTokens: 900_000,
+      outputTokens: 400_000,
+      requestCount: 1,
+      totalTokens: 1_300_000,
+    });
+    expect(orgB.llmUsage.models).toMatchObject([
+      { inputTokens: 900_000, modelId: "gpt-4o", requestCount: 1 },
+    ]);
   });
 });

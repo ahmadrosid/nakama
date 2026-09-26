@@ -1883,7 +1883,9 @@ export function registerModelRoutes(
     const body = await readJson<GenerateImageRequest>(c.req.raw);
 
     try {
-      return json<GenerateImageResponse>(await agent.generateImage(body));
+      return json<GenerateImageResponse>(
+        await agent.generateImage(body, getRequestAuth(c).activeOrgId ?? null)
+      );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         if (error.status >= 500) {

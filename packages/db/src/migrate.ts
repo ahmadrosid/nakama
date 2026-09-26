@@ -51,7 +51,7 @@ export function migrateDatabase(db: Database): void {
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateWorkspaceSettingsTable);
-  atomic(migrateLlmUsageModelStatsTable);
+  atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateAttachmentsTable);
@@ -455,16 +455,45 @@ function migratePasskeyTables(db: Database): void {
   }
 }
 
-function migrateLlmUsageModelStatsTable(db: Database): void {
+/**
+ * LLM usage is a tenant ledger: the system status page reports it per org, so
+ * one install-wide row answered every organization's request with the whole
+ * install's tokens and cost (#1306).
+ *
+ * Both tables are rebuilt rather than ALTERed because the org has to join the
+ * primary key — one row per org, one row per org and model. The rows that
+ * existed carry no org at all: every write path used to omit it, so there is
+ * nothing to attribute them to and no way to tell whose spend they were. They
+ * are counters with no history worth keeping, so both tables start empty and
+ * each org begins accumulating from its next request.
+ */
+function migrateLlmUsageOrgScope(db: Database): void {
+  for (const table of ["llm_usage_stats", "llm_usage_model_stats"] as const) {
+    db.exec(`DROP TABLE IF EXISTS ${table};`);
+  }
+
   db.exec(`
-    CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
-      model_id TEXT PRIMARY KEY NOT NULL,
+    CREATE TABLE IF NOT EXISTS llm_usage_stats (
+      org_id TEXT NOT NULL,
+      id TEXT NOT NULL,
       request_count INTEGER NOT NULL DEFAULT 0,
       input_tokens INTEGER NOT NULL DEFAULT 0,
       output_tokens INTEGER NOT NULL DEFAULT 0,
       estimated_cost_usd REAL NOT NULL DEFAULT 0,
       tracked_since TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
+      org_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, model_id)
     );
   `);
 }
@@ -961,7 +990,6 @@ const TENANT_ORG_ID_TABLES = [
   "tools",
   "mcp_servers",
   "skills",
-  "llm_usage_stats",
   "workspace_settings",
 ] as const;
 
