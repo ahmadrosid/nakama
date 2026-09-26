@@ -189,6 +189,75 @@ describe("legacy profile id migration", () => {
       db.close();
     }
   });
+
+  test("legacy profile rename preserves org and default profile settings", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES (
+          'org_legacy', 'Legacy Org', 'legacy-org',
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+
+        INSERT INTO profiles (
+          id,
+          name,
+          system_prompt,
+          model,
+          thinking_enabled,
+          thinking_effort,
+          is_super,
+          org_id,
+          is_default,
+          automations_enabled,
+          skills_write_approval,
+          skills_post_turn_review,
+          skills_curator_consolidate_enabled,
+          created_at,
+          updated_at
+        ) VALUES (
+          'profile_default', 'Buddy', 'default prompt', NULL, NULL, NULL, 0,
+          'org_legacy', 1, 0, 1, 0, 1,
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+      `);
+
+      const expected = {
+        automations_enabled: 0,
+        id: "default",
+        is_default: 1,
+        org_id: "org_legacy",
+        skills_curator_consolidate_enabled: 1,
+        skills_post_turn_review: 0,
+        skills_write_approval: 1,
+      };
+      const selectMigratedProfile = `
+        SELECT
+          id,
+          org_id,
+          is_default,
+          automations_enabled,
+          skills_write_approval,
+          skills_post_turn_review,
+          skills_curator_consolidate_enabled
+        FROM profiles
+        WHERE id = 'default'
+      `;
+
+      migrateDatabase(db);
+      expect(db.prepare(selectMigratedProfile).get()).toEqual(expected);
+
+      migrateDatabase(db);
+      expect(db.prepare(selectMigratedProfile).get()).toEqual(expected);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("coding-delegation skill rename migration", () => {

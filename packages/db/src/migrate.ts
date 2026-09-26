@@ -1334,6 +1334,12 @@ function copyProfileRow(
       thinking_enabled,
       thinking_effort,
       is_super,
+      org_id,
+      is_default,
+      automations_enabled,
+      skills_write_approval,
+      skills_post_turn_review,
+      skills_curator_consolidate_enabled,
       created_at,
       updated_at
     )
@@ -1345,6 +1351,12 @@ function copyProfileRow(
       thinking_enabled,
       thinking_effort,
       is_super,
+      org_id,
+      is_default,
+      automations_enabled,
+      skills_write_approval,
+      skills_post_turn_review,
+      skills_curator_consolidate_enabled,
       created_at,
       updated_at
     FROM profiles
