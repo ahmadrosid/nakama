@@ -10,6 +10,8 @@ export type ImageGenerationAspect = "square" | "portrait" | "landscape";
 export interface ImageGenerationProps {
   aspect?: ImageGenerationAspect;
   className?: string;
+  /** Generation already finished; a missing imageUrl only means the preview is still loading. */
+  done?: boolean;
   /** When set (and no imageUrl), shows a failure canvas. */
   error?: string | null;
   /** When set, replaces the shimmer canvas with the generated image. */
@@ -24,6 +26,7 @@ export function ImageGeneration({
   aspect = "square",
   imageUrl = null,
   error = null,
+  done = false,
   className,
 }: ImageGenerationProps) {
   const canvasClass = cn(
@@ -33,7 +36,7 @@ export function ImageGeneration({
   );
 
   const isFailed = !imageUrl && Boolean(error);
-  const isComplete = Boolean(imageUrl);
+  const isComplete = Boolean(imageUrl) || (done && !isFailed);
 
   return (
     <div className={cn(styles.igWrap, className)}>
@@ -58,6 +61,8 @@ export function ImageGeneration({
               <span className={styles.igFailedLabel}>Generation failed</span>
             )}
           </div>
+        ) : isComplete ? (
+          <span aria-hidden className={styles.igDots} />
         ) : (
           <>
             <span aria-hidden className={styles.igDots} />
