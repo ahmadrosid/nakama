@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
-import { cp } from "node:fs/promises";
+import { cp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   AssignMcpServerRequest,
@@ -277,12 +277,43 @@ export class ProfileService {
       updatedAt: now,
     });
 
-    await this.copyProfileSoul(orgId, sourceId, profileId);
-    await this.copyProfileAssignments(sourceId, profileId);
-    await copyProfileAvatarTo(orgId, sourceId, profileId);
-    await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+    try {
+      await this.copyProfileSoul(orgId, sourceId, profileId);
+      await this.copyProfileAssignments(sourceId, profileId);
+      await copyProfileAvatarTo(orgId, sourceId, profileId);
+      await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+    } catch (error) {
+      await this.cleanupFailedClone(orgId, sourceId, profileId);
+      throw error;
+    }
 
     return this.getProfile(orgId, profileId);
+  }
+
+  private async cleanupFailedClone(
+    orgId: string,
+    sourceId: string,
+    profileId: string
+  ): Promise<void> {
+    await rm(getProfileSoulDir(orgId, profileId), {
+      force: true,
+      recursive: true,
+    });
+
+    for (const tool of await this.db.listToolsForProfile(sourceId)) {
+      await this.db.unassignToolFromProfile(profileId, tool.id);
+    }
+
+    for (const skill of await this.db.listSkillsForProfile(sourceId)) {
+      await this.db.unassignSkillFromProfile(profileId, skill.id);
+    }
+
+    for (const server of await this.db.listMcpServersForProfile(sourceId)) {
+      await this.db.unassignMcpServerFromProfile(profileId, server.id);
+    }
+
+    await this.db.replaceProfileComposioToolkits(profileId, []);
+    await this.db.deleteProfile(profileId);
   }
 
   private async copyProfileSoul(
