@@ -227,7 +227,8 @@ export function resolveProfileSkillSupportingFilePath(
   orgId: string,
   profileId: string,
   name: string,
-  relativePath: string
+  relativePath: string,
+  allowSkillTool = false
 ): { absolutePath: string; relativePath: string } {
   const directory = resolveProfileSkillDirectory(orgId, profileId, name);
   const trimmed = relativePath.trim();
@@ -258,7 +259,9 @@ export function resolveProfileSkillSupportingFilePath(
     throw new Error("Path escapes the skill directory.");
   }
 
-  assertSupportingFileAllowed(absolutePath);
+  if (!allowSkillTool) {
+    assertSupportingFileAllowed(absolutePath);
+  }
   return { absolutePath, relativePath: segments.join("/") };
 }
 

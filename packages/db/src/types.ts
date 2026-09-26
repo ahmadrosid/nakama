@@ -621,7 +621,8 @@ export type SkillProposalAction =
   | "delete"
   | "edit"
   | "write_file"
-  | "remove_file";
+  | "remove_file"
+  | "approve_code";
 
 export interface StoredSkillProposal {
   action: SkillProposalAction;

@@ -111,8 +111,8 @@ This is useful when the workflow needs both:
 `tool.ts` and `tool.js` are imported into the server process. `tool.py` runs as
 a separate process instead: Nakama spawns `python3 <file>`, writes the call
 arguments to stdin as JSON, and reads one JSON value back from stdout. It gets a
-trimmed environment (`PATH`, `NAKAMA_CONFIG_DIR`, `NAKAMA_WORKSPACE_ROOT`) and
-30 seconds to answer.
+trimmed environment (`PATH`, `NAKAMA_WORKSPACE_ROOT`, and `NAKAMA_CONFIG_DIR`
+only for server-shipped skills) and 30 seconds to answer.
 
 ```python
 # tool.py
@@ -151,6 +151,28 @@ runnable rather than silently ignored.
 A script can import its siblings by bare name. Python puts the running script's
 own directory first on `sys.path`, so `scripts/invoice.py` can `import pricing`
 with no packaging.
+
+### Whose code runs
+
+A skill's tool module and scripts are host code: `tool.py` and every declared
+script are spawned as a process, and `tool.ts` / `tool.js` are imported into the
+server. A skill that ships with Nakama, or that an operator installed globally,
+always runs.
+
+A skill written into a profile's own skills directory — by hand, or by an
+organization member asking the agent to create one with `skill_manage` — does
+not, until the org reviews its writes. Turn on **Skill write approval** for the
+profile in **Agent → Profiles** and every write to that profile's skills is
+staged for an admin to approve. Code already in the skill stays blocked until
+reviewed: ask the agent to use `skill_manage` with `action: approve_code`, the
+skill name, and the code file path, then approve its proposal. Each code file
+must match what the admin approved; changing it blocks the skill's code again.
+With approval off, the skill still reads as instructions, and calling its tool
+returns an error saying the code is not runnable here.
+
+Python skill processes for member-authored skills are spawned without
+`NAKAMA_CONFIG_DIR`, so they are not told where the deployment keeps its
+configuration and API keys.
 
 ### What Python is available
 
