@@ -44,7 +44,7 @@ Send a `POST` request with JSON like this:
 Required headers:
 
 - `X-API-Key` — the destination API key
-- `Idempotency-Key` — a unique id per event (max 128 characters). Replays of the same key are rejected and do not send again.
+- `Idempotency-Key` — a unique id per event (max 128 characters). Replays of the same key are rejected and do not send again. Claims are kept for 7 days (including after a failed Telegram send) so a lost success response cannot unlock a second delivery.
 
 `body` is required.
 `title` is optional.

@@ -739,7 +739,8 @@ export interface DatabaseAdapter {
   checkHealth(): Promise<void>;
   /**
    * Atomically claims an idempotency key for a notification webhook delivery.
-   * Returns true when this caller owns the first claim; false on replay.
+   * Prunes rows older than the replay window, then returns true on first claim
+   * and false on replay within that window.
    */
   claimNotificationWebhookDelivery(
     destinationId: string,
@@ -1194,13 +1195,6 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
-  /**
-   * Drops a claimed idempotency key so a failed outbound send can be retried.
-   */
-  releaseNotificationWebhookDelivery(
-    destinationId: string,
-    eventId: string
-  ): Promise<void>;
   renameFilePins(
     orgId: string,
     profileId: string,

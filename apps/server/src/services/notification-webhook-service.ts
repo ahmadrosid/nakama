@@ -73,6 +73,8 @@ export class NotificationWebhookService {
     /**
      * Required Idempotency-Key header value. Claimed in SQLite before any
      * Telegram send so replays and concurrent duplicates never double-deliver.
+     * The claim is kept even when Telegram fails — a lost success response must
+     * not unlock a second send.
      */
     idempotencyKey: string | null
   ): Promise<void> {
@@ -117,30 +119,22 @@ export class NotificationWebhookService {
       throw new NakamaApiError("Duplicate notification delivery.", 409);
     }
 
-    try {
-      const result = await this.telegram.send({
-        chatIds: [destination.config.chatId],
-        orgId: destination.orgId,
-        parseMode: "HTML",
-        profileId: destination.config.profileId,
-        text: formatNotificationMessage(normalized),
-        ...(destination.config.topicId
-          ? { topicId: destination.config.topicId }
-          : {}),
-      });
+    const result = await this.telegram.send({
+      chatIds: [destination.config.chatId],
+      orgId: destination.orgId,
+      parseMode: "HTML",
+      profileId: destination.config.profileId,
+      text: formatNotificationMessage(normalized),
+      ...(destination.config.topicId
+        ? { topicId: destination.config.topicId }
+        : {}),
+    });
 
-      if (!result.ok) {
-        throw new NakamaApiError(
-          result.error ?? "Notification delivery failed.",
-          502
-        );
-      }
-    } catch (error) {
-      await this.databaseAdapter.releaseNotificationWebhookDelivery(
-        destinationId,
-        eventId
+    if (!result.ok) {
+      throw new NakamaApiError(
+        result.error ?? "Notification delivery failed.",
+        502
       );
-      throw error;
     }
   }
 }

@@ -581,6 +581,9 @@ export async function createSqliteDatabase(
   };
 }
 
+/** How long claim rows block replays before prune (also caps table growth). */
+const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAutomationsStmt = db.prepare("SELECT * FROM automations");
   const listAutomationsForOrgStmt = db.prepare(
@@ -1546,9 +1549,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     )
     VALUES (?, ?, ?)
   `);
-  const releaseNotificationWebhookDeliveryStmt = db.prepare(`
+  const pruneNotificationWebhookDeliveriesStmt = db.prepare(`
     DELETE FROM notification_webhook_deliveries
-    WHERE destination_id = ? AND event_id = ?
+    WHERE created_at < ?
   `);
   const listComposioToolkitsForOrgStmt = db.prepare(`
     SELECT
@@ -2862,6 +2865,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
+      // Bound ledger growth: drop rows outside the replay window before claim.
+      const createdAtMs = Date.parse(createdAt);
+      if (Number.isFinite(createdAtMs)) {
+        pruneNotificationWebhookDeliveriesStmt.run(
+          new Date(
+            createdAtMs - NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS
+          ).toISOString()
+        );
+      }
       return (
         claimNotificationWebhookDeliveryStmt.run(
           destinationId,
@@ -4223,10 +4235,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
-    },
-
-    async releaseNotificationWebhookDelivery(destinationId, eventId) {
-      releaseNotificationWebhookDeliveryStmt.run(destinationId, eventId);
     },
 
     async renameFilePins(orgId, profileId, oldPath, newPath) {

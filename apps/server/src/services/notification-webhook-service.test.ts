@@ -157,7 +157,7 @@ describe("NotificationWebhookService", () => {
     expect(sendCount).toBe(1);
   });
 
-  test("releases the claim when telegram delivery fails so retries can send", async () => {
+  test("keeps the claim when telegram delivery fails so a retry cannot double-send", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
     let sendCount = 0;
     const service = new NotificationWebhookService(
@@ -166,10 +166,7 @@ describe("NotificationWebhookService", () => {
       {
         send: async () => {
           sendCount += 1;
-          if (sendCount === 1) {
-            return { error: "telegram down", ok: false };
-          }
-          return { ok: true };
+          return { error: "telegram down", ok: false };
         },
       }
     );
@@ -180,8 +177,37 @@ describe("NotificationWebhookService", () => {
 
     await expect(
       service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_retry_1")
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(sendCount).toBe(1);
+  });
+
+  test("allows the same idempotency key again after the replay window is pruned", async () => {
+    const { apiKey, authService, databaseAdapter } = await seedDestination();
+    let sendCount = 0;
+    const service = new NotificationWebhookService(
+      databaseAdapter,
+      authService,
+      {
+        send: async () => {
+          sendCount += 1;
+          return { ok: true };
+        },
+      }
+    );
+
+    expect(
+      await databaseAdapter.claimNotificationWebhookDelivery(
+        "dest_1",
+        "evt_window_1",
+        "2020-01-01T00:00:00.000Z"
+      )
+    ).toBe(true);
+
+    await expect(
+      service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_window_1")
     ).resolves.toBeUndefined();
 
-    expect(sendCount).toBe(2);
+    expect(sendCount).toBe(1);
   });
 });
