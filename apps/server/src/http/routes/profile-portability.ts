@@ -200,7 +200,10 @@ export function registerProfilePortabilityRoutes(
         db,
         orgId,
         decodeArchiveRequestData(body.data),
-        { restoreCustomTools: auth.isPlatformAdmin }
+        {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          restoreCustomTools: auth.isPlatformAdmin,
+        }
       );
       return json<ProfilePackPreviewResponse>(
         body.name?.trim()
@@ -229,6 +232,7 @@ export function registerProfilePortabilityRoutes(
         {
           actorUserId: auth.user.id,
           confirm: body.confirm,
+          isPlatformAdmin: auth.isPlatformAdmin,
           name: body.name,
           restoreCustomTools: auth.isPlatformAdmin,
         }

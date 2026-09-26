@@ -48,6 +48,7 @@ import {
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
 } from "./data-portability";
+import { findMcpServerForOrg } from "./mcp-server-access";
 import { recordProfileChangeEvent } from "./profile-change-history";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
@@ -128,6 +129,7 @@ export interface CreateProfilePackOptions {
 }
 
 export interface PreviewProfilePackImportOptions {
+  isPlatformAdmin?: boolean;
   restoreCustomTools?: boolean;
 }
 
@@ -140,6 +142,7 @@ export interface CreateProfilePackResult {
 export interface ImportProfilePackOptions {
   actorUserId?: string | null;
   confirm: boolean;
+  isPlatformAdmin?: boolean;
   name?: string;
   now?: Date;
   restoreCustomTools?: boolean;
@@ -244,11 +247,14 @@ export async function previewProfilePackImport(
   );
   await eachNamedOrSkip(
     manifest.meta.mcpServerNames,
-    (name) => db.getMcpServerByName(name),
+    (name) =>
+      findMcpServerForOrg(db, orgId, name, {
+        isPlatformAdmin: options.isPlatformAdmin,
+      }),
     skippedAssignments,
     (name) => ({
       path: `MCP server:${name}`,
-      reason: `MCP server "${name}" was not found in the destination and will be skipped.`,
+      reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
     })
   );
   await eachNamedOrSkip(
@@ -362,11 +368,14 @@ export async function importProfilePack(
     );
     await eachNamedOrSkip(
       manifest.meta.mcpServerNames,
-      (serverName) => db.getMcpServerByName(serverName),
+      (serverName) =>
+        findMcpServerForOrg(db, orgId, serverName, {
+          isPlatformAdmin: options.isPlatformAdmin,
+        }),
       skippedAssignments,
       (name) => ({
         path: `MCP server:${name}`,
-        reason: `MCP server "${name}" was not found in the destination and was skipped.`,
+        reason: `MCP server "${name}" is not available to this organization and was skipped.`,
       }),
       async (server) => {
         await db.assignMcpServerToProfile(profileId, server.id);
