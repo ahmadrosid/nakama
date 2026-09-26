@@ -30,10 +30,10 @@ function pairingCodeDescription(
 ): string {
   if (pairingCode) {
     if (isPaired) {
-      return "Message this code to your bot to link another account.";
+      return "Message this code to your bot to link another account. It expires in 10 minutes.";
     }
 
-    return "Message this code to your bot to finish linking.";
+    return "Message this code to your bot to finish linking. It expires in 10 minutes.";
   }
 
   if (isPaired) {

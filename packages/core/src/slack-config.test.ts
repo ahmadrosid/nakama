@@ -94,6 +94,7 @@ describe("slack config", () => {
       allowWorkspace: false,
       botToken: "xoxb-1",
       handshakeCode: null,
+      handshakeExpiresAt: null,
       orgId: null,
       pairedUserIds: [],
       profileId: "default",
@@ -116,7 +117,7 @@ describe("slack config", () => {
         appToken: "xapp-1",
         botToken: "xoxb-1",
       });
-      expect(saved.handshakeCode).toMatch(/^[0-9A-F]{8}$/);
+      expect(saved.handshakeCode).toMatch(/^[0-9A-F]{32}$/);
 
       // Paired members are part of the same list: omitting one revokes it.
       await verifyAndPairSlackUser(

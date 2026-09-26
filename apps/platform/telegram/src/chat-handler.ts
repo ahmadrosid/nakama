@@ -28,7 +28,10 @@ import {
   resolveProfileInput,
   resolveProfileInScopes,
 } from "@nakama/core/profiles";
-import { normalizeHandshakeInput } from "@nakama/core/telegram-config";
+import {
+  hasActiveHandshakeCode,
+  looksLikePairingCode,
+} from "@nakama/core/telegram-config";
 import type { Context } from "grammy";
 import {
   buildTelegramDocumentInput,
@@ -186,7 +189,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      if (isGroup && text && looksLikeHandshakeAttempt(text)) {
+      if (isGroup && text && looksLikePairingCode(text)) {
         await telegram.send(LINK_IN_PRIVATE_REPLY);
         return;
       }
@@ -292,7 +295,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const command = parseTelegramCommand(text);
     const fileConfig = authStore.getConfig();
-    const hasHandshake = Boolean(fileConfig?.handshakeCode);
+    const hasHandshake = hasActiveHandshakeCode(fileConfig);
 
     if (command === "/help") {
       await replyChunks(telegram, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);
@@ -309,7 +312,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    if (!looksLikeHandshakeAttempt(text)) {
+    if (!looksLikePairingCode(text)) {
       await telegram.send(PAIRING_PROMPT);
       return;
     }
@@ -938,10 +941,6 @@ async function replyChunks(
   for (const chunk of splitTelegramMessage(text)) {
     await telegram.send(chunk);
   }
-}
-
-function looksLikeHandshakeAttempt(text: string): boolean {
-  return /^[0-9A-F]{8}$/.test(normalizeHandshakeInput(text));
 }
 
 function parseTelegramCommand(text: string): string {

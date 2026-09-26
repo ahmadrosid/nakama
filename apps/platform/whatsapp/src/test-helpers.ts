@@ -264,6 +264,8 @@ export async function writeWhatsAppConfigIni(
     phoneNumber: string;
     profileId?: string;
     pairingCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    pairingCodeExpiresAt?: string | null;
     pairedJid?: string | null;
     allowedPhones?: string[];
     requireGroupMention?: boolean;
@@ -280,6 +282,10 @@ export async function writeWhatsAppConfigIni(
 
   if (config.pairingCode) {
     lines.push(`pairing_code=${config.pairingCode}`);
+  }
+
+  if (config.pairingCodeExpiresAt) {
+    lines.push(`pairing_code_expires_at=${config.pairingCodeExpiresAt}`);
   }
 
   if (config.pairedJid) {

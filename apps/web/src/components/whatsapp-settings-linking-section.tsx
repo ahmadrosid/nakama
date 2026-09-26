@@ -17,7 +17,7 @@ function pairingCodeDescription(
   paired: boolean
 ): string {
   if (pairingCode) {
-    return "Open Linked Devices in WhatsApp and enter this code.";
+    return "Open Linked Devices in WhatsApp and enter this code. It expires in 10 minutes.";
   }
 
   if (paired) {

@@ -1,15 +1,41 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { lstatSync } from "node:fs";
-import { mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readFile,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   parseIni,
   readDirectoryOrEmpty,
   readTextOrNull,
   writeTextFile,
 } from "./fs";
+import {
+  createPairingCodeSecret,
+  fingerprintPairingCode,
+  getPairingAttemptBudget,
+  isPairingCodeActive,
+  type PairingCodeSecret,
+  pairingCodesMatch,
+  pairingFailureMessage,
+} from "./pairing-code";
 import { maskTrailingSecret } from "./secret-mask";
 import { getOrgConfigDir, getUserConfigDir } from "./user-config";
+
+export {
+  createPairingCodeSecret,
+  generatePairingCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
+  PAIRING_CODE_TTL_MS,
+  resetPairingAttemptBudget,
+} from "./pairing-code";
 
 export type ChannelPlatform = "telegram" | "discord" | "whatsapp" | "slack";
 export interface ChannelOwner {
@@ -177,21 +203,89 @@ export function maskBotToken(secret: string): string | null {
   return maskTrailingSecret(secret);
 }
 
-export function generateHandshakeCode(): string {
-  return randomBytes(4).toString("hex").toUpperCase();
+/** A crashed bridge must not wedge pairing forever, so a lock goes stale. */
+const PAIRING_LOCK_STALE_MS = 15_000;
+const PAIRING_LOCK_WAIT_MS = 5000;
+const PAIRING_LOCK_FILE = "pairing.lock";
+
+export class ChannelConfigBusyError extends Error {}
+
+/**
+ * Serializes pairing transactions through an exclusive lock file, so two
+ * bridges sharing a config directory cannot both consume the same code.
+ */
+export async function withPairingConfigLock<T>(
+  configDir: string,
+  run: () => Promise<T>
+): Promise<T> {
+  const path = join(configDir, PAIRING_LOCK_FILE);
+  assertChannelPath(path);
+  await mkdir(configDir, { mode: 0o700, recursive: true });
+  const deadline = Date.now() + PAIRING_LOCK_WAIT_MS;
+
+  for (;;) {
+    try {
+      await writeFile(path, `${process.pid}\n`, { flag: "wx", mode: 0o600 });
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+
+      const held = await lstat(path).catch(() => null);
+
+      if (!held) {
+        continue;
+      }
+
+      if (Date.now() - held.mtimeMs > PAIRING_LOCK_STALE_MS) {
+        await rm(path, { force: true });
+        continue;
+      }
+
+      if (Date.now() >= deadline) {
+        throw new ChannelConfigBusyError("Pairing is already in progress.");
+      }
+
+      await sleep(25);
+    }
+  }
+
+  try {
+    return await run();
+  } finally {
+    await rm(path, { force: true });
+  }
 }
 
-export function normalizeHandshakeInput(input: string): string {
-  return input.trim().replace(/\s+/g, "").toUpperCase();
-}
+export type HandshakeSecret = {
+  handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
+};
 
 export type BotChannelConfigFile<TId extends string | number> = {
   allowedUserIds: TId[];
   botToken: string;
   handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   pairedUserIds: TId[];
   profileId: string;
 };
+
+/** A stored code is only usable while its own expiry is still in the future. */
+export function hasActiveHandshakeCode(
+  config: Pick<
+    BotChannelConfigFile<string | number>,
+    "handshakeCode" | "handshakeExpiresAt"
+  > | null,
+  now = Date.now()
+): boolean {
+  return isPairingCodeActive(
+    config?.handshakeCode ?? null,
+    config?.handshakeExpiresAt ?? null,
+    now
+  );
+}
 
 export type ChannelPairResult =
   | { ok: true; message: string }
@@ -207,21 +301,28 @@ export function isBotChannelUserAuthorized<TId extends string | number>(
   );
 }
 
-export function resolveHandshakeCodeOnSave<TId extends string | number>(
+export function resolveHandshakeOnSave<TId extends string | number>(
   existing: Pick<
     BotChannelConfigFile<TId>,
-    "pairedUserIds" | "handshakeCode"
+    "handshakeCode" | "handshakeExpiresAt" | "pairedUserIds"
   > | null,
   allowedUserIds: TId[]
-): string | null {
+): HandshakeSecret {
   const pairedUserIds = existing?.pairedUserIds ?? [];
-  const handshakeCode = existing?.handshakeCode ?? null;
+  const stored: HandshakeSecret = {
+    handshakeCode: existing?.handshakeCode ?? null,
+    handshakeExpiresAt: existing?.handshakeExpiresAt ?? null,
+  };
 
-  if (pairedUserIds.length > 0 || allowedUserIds.length > 0 || handshakeCode) {
-    return handshakeCode;
+  if (
+    pairedUserIds.length > 0 ||
+    allowedUserIds.length > 0 ||
+    hasActiveHandshakeCode(existing)
+  ) {
+    return stored;
   }
 
-  return generateHandshakeCode();
+  return toHandshakeSecret(createPairingCodeSecret());
 }
 
 export async function loadBotChannelIniConfig<
@@ -241,6 +342,7 @@ export async function loadBotChannelIniConfig<
   const botToken = values.bot_token?.trim() ?? "";
   const profileId = values.profile_id?.trim() || options.defaultProfileId;
   const handshakeCode = values.handshake_code?.trim() || null;
+  const handshakeExpiresAt = values.handshake_expires_at?.trim() || null;
   const pairedRaw = values.paired_user_ids?.trim() ?? "";
   const allowlistRaw = values.allowed_user_ids?.trim() ?? "";
 
@@ -252,6 +354,7 @@ export async function loadBotChannelIniConfig<
     allowedUserIds: allowlistRaw ? options.parseUserIds(allowlistRaw) : [],
     botToken,
     handshakeCode,
+    handshakeExpiresAt,
     pairedUserIds: pairedRaw ? options.parseUserIds(pairedRaw) : [],
     profileId,
   };
@@ -270,7 +373,14 @@ export async function writeBotChannelIniConfig<
     `# Nakama ${options.label} bridge`,
     `bot_token=${config.botToken}`,
     `profile_id=${config.profileId}`,
-    ...(config.handshakeCode ? [`handshake_code=${config.handshakeCode}`] : []),
+    ...(config.handshakeCode
+      ? [
+          `handshake_code=${config.handshakeCode}`,
+          ...(config.handshakeExpiresAt
+            ? [`handshake_expires_at=${config.handshakeExpiresAt}`]
+            : []),
+        ]
+      : []),
     ...(config.pairedUserIds.length > 0
       ? [`paired_user_ids=${config.pairedUserIds.join(",")}`]
       : []),
@@ -285,10 +395,17 @@ export async function writeBotChannelIniConfig<
   });
 }
 
+/**
+ * One pairing transaction: check the budget, compare in constant time, then
+ * consume the code under an exclusive lock. Every rejection returns the same
+ * message, so an attacker cannot tell an expired code from a wrong one.
+ */
 export async function verifyAndPairBotChannelUser<
   TId extends string | number,
   TConfig extends BotChannelConfigFile<TId> = BotChannelConfigFile<TId>,
 >(options: {
+  /** Channel config directory: the pairing lock and attempt budget both key off it. */
+  configDir: string;
   handshakeInput: string;
   isAuthorized: (
     userId: TId,
@@ -296,53 +413,79 @@ export async function verifyAndPairBotChannelUser<
   ) => boolean;
   label: string;
   load: () => Promise<TConfig | null>;
+  /** Network the guess arrived from. */
+  sourceKey: string;
   userId: TId;
   write: (config: TConfig) => Promise<void>;
 }): Promise<ChannelPairResult> {
-  const config = await options.load();
-
-  if (!config) {
-    return {
-      message: `${options.label} is not configured on the server yet.`,
-      ok: false,
-    };
-  }
-
-  if (options.isAuthorized(options.userId, config)) {
-    return { message: "This chat is already linked.", ok: true };
-  }
-
-  const expected = config.handshakeCode;
-
-  if (!expected) {
-    return {
-      message: `No pairing code is active. Open this agent’s Connections → ${options.label} and generate a new code.`,
-      ok: false,
-    };
-  }
-
-  if (
-    normalizeHandshakeInput(options.handshakeInput) !==
-    normalizeHandshakeInput(expected)
-  ) {
-    return {
-      message: `Invalid pairing code. Copy it from this agent’s Connections → ${options.label} and try again.`,
-      ok: false,
-    };
-  }
-
-  const pairedUserIds = [...new Set([...config.pairedUserIds, options.userId])];
-
-  await options.write({
-    ...config,
-    handshakeCode: null,
-    pairedUserIds,
-  });
-
-  return {
-    message: "Linked successfully. You can chat with Nakama now.",
-    ok: true,
+  const failure: ChannelPairResult = {
+    message: pairingFailureMessage(options.label),
+    ok: false,
   };
+
+  try {
+    return await withPairingConfigLock(options.configDir, async () => {
+      const config = await options.load();
+
+      if (!config) {
+        return failure;
+      }
+
+      if (options.isAuthorized(options.userId, config)) {
+        return { message: "This chat is already linked.", ok: true };
+      }
+
+      if (!hasActiveHandshakeCode(config)) {
+        return failure;
+      }
+
+      const expected = config.handshakeCode as string;
+      const budget = getPairingAttemptBudget(options.configDir);
+      const attempt = {
+        codeFingerprint: fingerprintPairingCode(expected),
+        senderKey: String(options.userId),
+        sourceKey: options.sourceKey,
+      };
+
+      if (budget.blocked(attempt) !== null) {
+        return failure;
+      }
+
+      if (!pairingCodesMatch(options.handshakeInput, expected)) {
+        // Exhausting the per-code budget retires the code, so a guessing run
+        // cannot keep at the same secret.
+        if (budget.recordFailure(attempt) === "code") {
+          await options.write({ ...config, ...SPENT_HANDSHAKE });
+        }
+        return failure;
+      }
+
+      const pairedUserIds = [
+        ...new Set([...config.pairedUserIds, options.userId]),
+      ];
+
+      await options.write({ ...config, ...SPENT_HANDSHAKE, pairedUserIds });
+
+      return {
+        message: "Linked successfully. You can chat with Nakama now.",
+        ok: true,
+      };
+    });
+  } catch (error) {
+    if (error instanceof ChannelConfigBusyError) {
+      return failure;
+    }
+    throw error;
+  }
+}
+
+const SPENT_HANDSHAKE: HandshakeSecret = {
+  handshakeCode: null,
+  handshakeExpiresAt: null,
+};
+
+function toHandshakeSecret(secret: PairingCodeSecret): HandshakeSecret {
+  return { handshakeCode: secret.code, handshakeExpiresAt: secret.expiresAt };
 }
 
 export function channelOwnerFromEnv(

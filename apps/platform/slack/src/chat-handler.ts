@@ -10,9 +10,11 @@ import { createChatLock } from "@nakama/core/channel-chat-lock";
 import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
+  hasActiveHandshakeCode,
   isSlackUserAuthorized,
   isSlackWorkspaceMember,
   loadSlackConfigFile,
+  looksLikePairingCode,
   type SlackMember,
   verifyAndPairSlackUser,
 } from "@nakama/core/slack-config";
@@ -80,10 +82,6 @@ export function normalizeSlackText(text: string, botUserId: string): string {
     .replaceAll("&gt;", ">")
     .replaceAll("&amp;", "&")
     .trim();
-}
-
-function looksLikePairingCode(text: string): boolean {
-  return /^[0-9A-F]{8}$/i.test(text.replace(/\s+/g, ""));
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
@@ -161,7 +159,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
         return;
       }
-      if (!config?.handshakeCode) {
+      if (!hasActiveHandshakeCode(config)) {
         await reply(NO_CODE_PROMPT);
         return;
       }

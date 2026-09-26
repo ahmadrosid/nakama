@@ -30,6 +30,10 @@ import {
 
 const PAIRED_JID = "1234567890@s.whatsapp.net";
 
+const PAIRING_CODE = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+const LIVE_CODE_EXPIRY = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+const WRONG_PAIRING_CODE = "0".repeat(32);
+
 function createMockSocket() {
   const sent: Array<{
     jid: string;
@@ -246,7 +250,8 @@ describe("createChatHandler", () => {
   test("blocks unauthorized JID from chatting", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
-        pairingCode: "ABCD1234",
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
         phoneNumber: "1234567890",
       });
 
@@ -342,7 +347,8 @@ describe("createChatHandler", () => {
   test("rejects invalid pairing codes", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
-        pairingCode: "ABCD1234",
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
         phoneNumber: "1234567890",
       });
 
@@ -392,10 +398,13 @@ describe("createChatHandler", () => {
         sessionStore,
       });
 
-      await handleMessage({ jid: "9999999999@s.whatsapp.net", text: "WRONG" });
+      await handleMessage({
+        jid: "9999999999@s.whatsapp.net",
+        text: WRONG_PAIRING_CODE,
+      });
 
       expect(sent.length).toBe(1);
-      expect(sent[0].text).toContain("Invalid pairing code");
+      expect(sent[0].text).toContain("That pairing code did not work");
       expect(calls.sendStream).toBe(0);
     });
   });
@@ -403,7 +412,8 @@ describe("createChatHandler", () => {
   test("pairs a JID with a valid code and allows chatting", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
-        pairingCode: "ABCD1234",
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
         phoneNumber: "1234567890",
       });
 
@@ -454,7 +464,7 @@ describe("createChatHandler", () => {
       });
 
       const pairJid = "1234567890@s.whatsapp.net";
-      await handleMessage({ jid: pairJid, text: "ABCD1234" });
+      await handleMessage({ jid: pairJid, text: PAIRING_CODE });
 
       expect(sent.length).toBe(1);
       expect(sent[0].text).toContain("Linked successfully");
@@ -1177,7 +1187,8 @@ describe("createChatHandler group chats", () => {
   test("unpaired plain group message reaches the agent when mention is not required", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
-        pairingCode: "ABCD1234",
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
         phoneNumber: "1234567890",
         requireGroupMention: false,
       });
@@ -1299,7 +1310,8 @@ describe("createChatHandler group chats", () => {
   test("unpaired @mention redirects to private chat without pairing", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
-        pairingCode: "ABCD1234",
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
         phoneNumber: "1234567890",
       });
 
@@ -1340,7 +1352,8 @@ describe("createChatHandler group chats", () => {
   test("pairs an unpaired group sender when they send a pairing code", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
-        pairingCode: "ABCD1234",
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
         phoneNumber: "1234567890",
       });
 
@@ -1366,7 +1379,7 @@ describe("createChatHandler group chats", () => {
         groupInbound({
           mentionedJids: [BOT_ME.id],
           senderJid: "9999999999@s.whatsapp.net",
-          text: "@Nakama ABCD1234",
+          text: `@Nakama ${PAIRING_CODE}`,
         })
       );
 
@@ -1549,7 +1562,7 @@ describe("createChatHandler group chats", () => {
         sessionStore,
       });
 
-      await handleMessage({ jid: PAIRED_JID, text: "7A2F629D" });
+      await handleMessage({ jid: PAIRED_JID, text: PAIRING_CODE });
 
       expect(sent.map((message) => message.text)).toEqual([
         "This number is already linked.",
