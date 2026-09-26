@@ -446,12 +446,15 @@ export class OrgService {
       mfaEnrolled: Boolean(
         (user.mfaEnabled && user.mfaTotpSecretEnc) || passkeyEnabled
       ),
+      // Mirrors isPendingBrowserMfa: platform admins are covered by a required
+      // policy even when they hold no membership in the active organization.
       mfaRequired:
         mfaPolicy.enabled &&
         mfaPolicy.required &&
-        (activeMember
-          ? mfaPolicy.enforcedRoles.includes(activeMember.role)
-          : false),
+        (Boolean(user.isPlatformAdmin) ||
+          (activeMember
+            ? mfaPolicy.enforcedRoles.includes(activeMember.role)
+            : false)),
       name: user.name ?? null,
       orgId: activeOrgId,
       passkeyEnabled,
