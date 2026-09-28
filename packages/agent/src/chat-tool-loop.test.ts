@@ -218,75 +218,87 @@ describe("agent chat tool loop", () => {
     }
   );
 
-  test("delivers images from a generic visual tool outside its JSON result", async () => {
-    const data =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    const calls: GenerateChatInput[] = [];
-    const provider: ProviderClient = {
-      async generateChat(input) {
-        calls.push(structuredClone(input));
-        return calls.length === 1
-          ? toolTurn([
-              {
-                arguments: {},
-                id: "observe1",
-                name: "computer_observe",
-              },
-            ])
-          : textReply("I can see it.");
+  test.each([
+    {
+      metadata: { frameId: "frame-1", height: 800, width: 1280 },
+      name: "computer_observe",
+    },
+    {
+      metadata: {
+        content: "School page",
+        finalUrl: "https://school.example/",
+        imageUrl: "https://school.example/photo.png?width=1200&format=png",
       },
-      async generateText() {
-        return { content: "unused" };
-      },
-      name: "openai",
-      async streamChat(input, handlers) {
-        const result = await this.generateChat(input);
-        handlers.onChunk(result.content);
-        return result;
-      },
-    };
-    const session = createAgentChatSession({
-      provider,
-      tools: [
-        {
-          description: "Observe the profile computer",
-          name: "computer_observe",
-          async run() {
-            return {
-              frameId: "frame-1",
-              height: 800,
-              images: [{ data, mediaType: "image/png" }],
-              width: 1280,
-            };
-          },
+      name: "web_fetch",
+    },
+  ])(
+    "delivers $name images outside JSON without losing metadata",
+    async ({ name, metadata }) => {
+      const data =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      const calls: GenerateChatInput[] = [];
+      const provider: ProviderClient = {
+        async generateChat(input) {
+          calls.push(structuredClone(input));
+          return calls.length === 1
+            ? toolTurn([
+                {
+                  arguments: {},
+                  id: "observe1",
+                  name,
+                },
+              ])
+            : textReply("I can see it.");
         },
-      ],
-    });
+        async generateText() {
+          return { content: "unused" };
+        },
+        name: "openai",
+        async streamChat(input, handlers) {
+          const result = await this.generateChat(input);
+          handlers.onChunk(result.content);
+          return result;
+        },
+      };
+      const session = createAgentChatSession({
+        provider,
+        tools: [
+          {
+            description: "Return a verified image with source metadata",
+            name,
+            async run() {
+              return {
+                ...metadata,
+                images: [{ data, mediaType: "image/png" }],
+              };
+            },
+          },
+        ],
+      });
 
-    expect(await session.send("Observe the screen")).toBe("I can see it.");
-    expect(calls[1]!.messages.map((message) => message.role)).toEqual([
-      "user",
-      "assistant",
-      "tool",
-      "user",
-    ]);
-    const toolMessage = calls[1]!.messages[2]!;
-    expect(JSON.parse(String(toolMessage.content))).toEqual({
-      frameId: "frame-1",
-      height: 800,
-      width: 1280,
-    });
-    expect(calls[1]!.messages.at(-1)?.content).toEqual(
-      expect.arrayContaining([{ data, mediaType: "image/png", type: "image" }])
-    );
-    const persistedTool = session
-      .getHistory()
-      .find((message) => message.role === "tool");
-    expect(persistedTool?.content).not.toContain(data);
-    expect(persistedTool?.role === "tool" && persistedTool.attachments).toEqual(
-      [{ data, mediaType: "image/png", type: "image" }]
-    );
-  });
+      expect(await session.send("Observe the screen")).toBe("I can see it.");
+      expect(calls[1]!.messages.map((message) => message.role)).toEqual([
+        "user",
+        "assistant",
+        "tool",
+        "user",
+      ]);
+      const toolMessage = calls[1]!.messages[2]!;
+      expect(JSON.parse(String(toolMessage.content))).toEqual(metadata);
+      expect(calls[1]!.messages.at(-1)?.content).toEqual(
+        expect.arrayContaining([
+          { data, mediaType: "image/png", type: "image" },
+        ])
+      );
+      const persistedTool = session
+        .getHistory()
+        .find((message) => message.role === "tool");
+      expect(persistedTool?.content).not.toContain(data);
+      expect(
+        persistedTool?.role === "tool" && persistedTool.attachments
+      ).toEqual([{ data, mediaType: "image/png", type: "image" }]);
+    }
+  );
 
   test.each([false, true])(
     "persists tool execution times (parallel: %s)",

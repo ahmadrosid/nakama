@@ -4,7 +4,7 @@ import { BlockList, isIP } from "node:net";
 import { NodeHtmlMarkdown } from "node-html-markdown";
 import robotsParser from "robots-parser";
 import { z } from "zod";
-import type { JsonSchema, ToolDefinition } from "../contract";
+import type { ImageAttachment, JsonSchema, ToolDefinition } from "../contract";
 import { type BunFetchInit, withDisabledFetchIdle } from "../fetch-idle";
 import { MAX_IMAGE_BYTES } from "../message-content";
 
@@ -24,7 +24,7 @@ export const webFetchInputSchema = z
       .boolean()
       .optional()
       .describe(
-        "When true, verify the fetched page's og:image URL, if suitable."
+        "When true, verify the fetched page's og:image URL and attach the image for visual inspection, if suitable."
       ),
     raw: z
       .boolean()
@@ -51,6 +51,7 @@ export interface WebFetchOutput {
   content: string;
   contentType: string;
   finalUrl: string;
+  images?: ImageAttachment[];
   imageUrl?: string | null;
   status: number;
   truncated: boolean;
@@ -494,7 +495,7 @@ export async function convertHtmlToMarkdown(html: string): Promise<string> {
 export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
   description:
     "Fetch a single public HTTP(S) URL and return its content. HTML pages are converted to Markdown. " +
-    "Set imageMetadata=true to return imageUrl only when the page declares a same-site HTTPS og:image permitted by robots.txt and its bytes verify as a raster image; otherwise null. This does not prove what the image depicts. " +
+    "Set imageMetadata=true to return imageUrl only when the page declares a same-site HTTPS og:image permitted by robots.txt and its bytes verify as a raster image; otherwise null. The verified image is attached for visual inspection. Inspect it before claiming what it depicts; the URL alone is not proof. " +
     `Content is capped at ${MAX_CONTENT_CHARS} characters; when truncated is true the tail was dropped, ` +
     "so fetch a more specific URL rather than assuming you have the whole document. " +
     "Use for retrieving a known URL; use web_search when you need to discover sources.",
@@ -596,6 +597,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
       const bytes = Buffer.byteLength(body, "utf8");
 
       let imageUrl: string | null = null;
+      let images: ImageAttachment[] | undefined;
       const page = new URL(finalUrl);
       if (
         parsed.imageMetadata &&
@@ -636,13 +638,19 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
               /\.(?:jpe?g|png|gif|webp)$/i.test(image.pathname)
             ) {
               checkAllowed?.(image);
-              await fetchRemoteImage(
+              const verifiedImage = await fetchRemoteImage(
                 image.toString(),
                 controller.signal,
                 () => {
                   throw new Error("og:image must be a direct image URL.");
                 }
               );
+              images = [
+                {
+                  data: verifiedImage.bytes.toString("base64"),
+                  mediaType: verifiedImage.contentType,
+                },
+              ];
               imageUrl = image.toString();
             }
           } catch {
@@ -675,6 +683,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
         contentType,
         finalUrl,
         ...(parsed.imageMetadata ? { imageUrl } : {}),
+        ...(images ? { images } : {}),
         status: response.status,
         truncated,
         url: url.toString(),
