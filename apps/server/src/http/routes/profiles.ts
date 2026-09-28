@@ -1358,6 +1358,7 @@ export function registerProfileRoutes(
       artifactPath,
       {
         appUserId,
+        ...(c.req.method === "HEAD" ? { headOnly: true } : {}),
         render,
       }
     );

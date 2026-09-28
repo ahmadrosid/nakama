@@ -29,6 +29,12 @@ export const DEFAULT_IMAGE_GENERATION_SIZE: ImageGenerationSize = "1024x1024";
 const OPENAI_IMAGES_GENERATIONS_URL =
   "https://api.openai.com/v1/images/generations";
 
+/**
+ * Generation usually lands in 25-80s. A provider that trickles its response
+ * (one took 11 minutes) must fail with a clear error instead of hanging the turn.
+ */
+const IMAGE_GENERATION_TIMEOUT_MS = 180_000;
+
 export interface ResolvedImageGenerationSelection {
   apiKey: string;
   instance: ProviderInstance;
@@ -54,6 +60,8 @@ export interface GenerateImageInput {
   apiKey: string;
   model?: string;
   prompt: string;
+  /** The turn's cancel signal, so a stopped chat stops the download too. */
+  signal?: AbortSignal;
   size?: string;
 }
 
@@ -202,6 +210,17 @@ export async function generateImageWithOpenAI(
     );
   }
 
+  const deadline = AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS);
+  const rethrowTimeout = (error: unknown): never => {
+    if (deadline.aborted && !input.signal?.aborted) {
+      throw new NakamaApiError(
+        `Image generation timed out after ${IMAGE_GENERATION_TIMEOUT_MS / 1000}s waiting for the provider.`,
+        504
+      );
+    }
+    throw error;
+  };
+
   const response = await fetch(OPENAI_IMAGES_GENERATIONS_URL, {
     body: JSON.stringify({
       model,
@@ -216,17 +235,18 @@ export async function generateImageWithOpenAI(
       "Content-Type": "application/json",
     },
     method: "POST",
-  });
+    signal: input.signal ? AbortSignal.any([input.signal, deadline]) : deadline,
+  }).catch(rethrowTimeout);
 
   if (!response.ok) {
-    const body = await response.text();
+    const body = await response.text().catch(rethrowTimeout);
     throw new NakamaApiError(
       `Image generation failed (${response.status}): ${body}`,
       502
     );
   }
 
-  const payload = (await response.json()) as {
+  const payload = (await response.json().catch(rethrowTimeout)) as {
     data?: Array<{ b64_json?: string; revised_prompt?: string }>;
     output_format?: string;
     usage?: { input_tokens?: number; output_tokens?: number };
