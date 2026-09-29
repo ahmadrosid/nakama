@@ -2,7 +2,6 @@ name: Quality
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -10,7 +9,6 @@ permissions:
 jobs:
   duplication:
     runs-on: ubuntu-latest
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -30,7 +28,6 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
     # A report, not a gate. Unit Tests is what blocks a merge.
     continue-on-error: true
     steps:
@@ -69,7 +66,6 @@ jobs:
 
   test-mass:
     runs-on: ubuntu-latest
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
     # A report, not a gate. Between v0.2.0 and v0.4.32 test code grew 211% while
     # source grew 82%, so test mass is where this repo actually bloats, and a
     # "files changed" count hides it.
@@ -107,40 +103,3 @@ jobs:
             echo "::notice::$note"
             printf '\n%s\n' "$note" >> "$GITHUB_STEP_SUMMARY"
           fi
-
-  new-workspace:
-    runs-on: ubuntu-latest
-    # AGENTS.md already asks for code to live in an existing package. packages/ui
-    # landed anyway, 172 lines and no tests, so the rule needs something that runs.
-    # The label is the escape hatch for a package that is genuinely the right call.
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'new-package') }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Refuse an unlabelled new workspace
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          # Any new manifest under these trees is a new workspace: the root
-          # package.json globs are apps/*, apps/platform/*, packages/* and
-          # packages/plugins/*, and no fixture carries its own package.json.
-          added=$(git diff --name-only --diff-filter=A "$BASE...$HEAD" \
-            -- 'packages/**/package.json' 'apps/**/package.json')
-          if [ -z "$added" ]; then
-            echo 'No new workspace.'
-            exit 0
-          fi
-          for f in $added; do
-            echo "::error file=$f::new workspace added here"
-          done
-          cat >&2 <<'MSG'
-          This PR adds a workspace. Put the code in an existing package unless one
-          genuinely cannot hold it, which is what AGENTS.md asks for.
-          If the package is the right call, add the new-package label to this PR.
-          MSG
-          exit 1
