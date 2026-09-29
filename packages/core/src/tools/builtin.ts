@@ -282,61 +282,113 @@ export function refuseSkillLocalToolFileWrite(resolvedPath: string): void {
 }
 
 /**
+ * Profile-owned subtrees that stay shared when a session runs scoped to a
+ * single app user. The skills and the knowledge base belong to the profile
+ * and every user of it reads and maintains them; nothing else under the
+ * profile root is reachable from an app-user session.
+ */
+const SHARED_PROFILE_DIRS = ["knowledge-base", "skills"] as const;
+
+function isSharedProfilePath(relativePath: string): boolean {
+  const [head] = normalizeArtifactPath(relativePath).split("/");
+
+  return SHARED_PROFILE_DIRS.some((dir) => dir === head);
+}
+
+/**
  * Named apart from the `resolveWorkspaceRoot` in `paths.ts` and the one in
  * `bash.ts`, which have different signatures and are easy to reach for by
  * mistake.
+ *
+ * `context.workspaceRoot` is the session's own workspace: the hashed app-user
+ * soul dir for an app-user session, the profile soul dir otherwise. It wins
+ * over the profile default, so an app-user session cannot reach a sibling user
+ * through `users/<hash>/...`.
  */
 function fileToolWorkspaceRoot(
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): string {
   const { orgId, profileId } = requireProfileScope(context);
+  const sessionRoot = context.workspaceRoot?.trim();
+
+  if (sessionRoot) {
+    assertAbsoluteWorkspaceRoot(sessionRoot);
+  }
+
   const workspaceRoot =
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+    options.workspaceRoot ?? sessionRoot ?? getProfileSoulDir(orgId, profileId);
   assertAbsoluteWorkspaceRoot(workspaceRoot);
 
   return workspaceRoot;
 }
 
+/**
+ * The profile root as a second, explicitly enumerated root — null when the
+ * session already runs on the profile, and when a caller pinned its own root
+ * and asked for exactly that one.
+ */
+function sharedProfileRoot(
+  context: ToolContext,
+  options: FileToolRunOptions
+): string | null {
+  if (options.workspaceRoot) {
+    return null;
+  }
+
+  const { orgId, profileId } = requireProfileScope(context);
+  const profileRoot = getProfileSoulDir(orgId, profileId);
+
+  return fileToolWorkspaceRoot(context, options) === profileRoot
+    ? null
+    : profileRoot;
+}
+
+function sharedProfileDirs(
+  context: ToolContext,
+  options: FileToolRunOptions
+): string[] {
+  const profileRoot = sharedProfileRoot(context, options);
+
+  return profileRoot
+    ? SHARED_PROFILE_DIRS.map((dir) => path.join(profileRoot, dir))
+    : [];
+}
+
+/**
+ * Which root a path resolves against. An app-user session runs in its own soul
+ * dir, so artifacts and every other personal file stay there — that is where
+ * the artifact read side looks — while the shared skills and knowledge base
+ * follow the profile. A profile session resolves everything on the profile.
+ */
+function resolvePathRoot(
+  context: ToolContext,
+  options: FileToolRunOptions,
+  targetPath: string
+): string {
+  const profileRoot = sharedProfileRoot(context, options);
+
+  return profileRoot && isSharedProfilePath(targetPath)
+    ? profileRoot
+    : fileToolWorkspaceRoot(context, options);
+}
+
 function buildFileGuardOptions(
   context: ToolContext,
-  options: FileToolRunOptions = {}
+  options: FileToolRunOptions = {},
+  targetPath = ""
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
 
   return {
     ...defaultGuardOptions,
-    allowedDirs: [workspaceRoot, getCustomToolsDir()],
-    cwd: workspaceRoot,
+    allowedDirs: [
+      workspaceRoot,
+      ...sharedProfileDirs(context, options),
+      getCustomToolsDir(),
+    ],
+    cwd: resolvePathRoot(context, options, targetPath),
   };
-}
-
-/**
- * Where `artifacts/...` resolves to. A session created for an app user runs with
- * that user's soul dir as its workspace root, and the artifact read side looks
- * for the file under `users/<hash>/artifacts`. Resolving the write against the
- * profile root instead put every generated document where the read never looks.
- *
- * Only artifact paths follow the app user. The rest of the soul stack, the
- * knowledge base and the skills live on the profile, and an app-user session
- * still has to read them.
- */
-function artifactWriteRoot(
-  context: ToolContext,
-  options: FileToolRunOptions,
-  targetPath: string
-): string {
-  const profileRoot = fileToolWorkspaceRoot(context, options);
-
-  if (options.workspaceRoot || !isArtifactPath(targetPath)) {
-    return profileRoot;
-  }
-
-  const sessionRoot = context.workspaceRoot?.trim();
-
-  return sessionRoot && path.isAbsolute(sessionRoot)
-    ? sessionRoot
-    : profileRoot;
 }
 
 function assertAbsoluteWorkspaceRoot(workspaceRoot: string): void {
@@ -386,14 +438,13 @@ export async function runWriteFile(
   const parsed = parseToolInput(writeFileInputSchema, input);
   refuseWordExtension(parsed.path);
   const contentBytes = Buffer.byteLength(parsed.content, "utf8");
-  const guardOptions = buildFileGuardOptions(context, options);
-  const artifactRoot = artifactWriteRoot(context, options, parsed.path);
+  const guardOptions = buildFileGuardOptions(context, options, parsed.path);
 
   const guarded = await guardFilePath(
     parsed.path,
     parsed.cwd ?? null,
     contentBytes,
-    { ...guardOptions, cwd: artifactRoot }
+    guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -402,7 +453,7 @@ export async function runWriteFile(
     fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
-  const workspaceRoot = artifactRoot;
+  const workspaceRoot = resolvePathRoot(context, options, parsed.path);
   let filePath = guarded.resolved;
   const normalizedPath = normalizeArtifactPath(parsed.path);
 
@@ -462,15 +513,12 @@ export async function runWriteDocx(
   }
 
   const bytes = await markdownToDocx(parsed.markdown);
-  const guardOptions = buildFileGuardOptions(context, options);
+  const guardOptions = buildFileGuardOptions(context, options, parsed.path);
   const guarded = await guardFilePath(
     parsed.path,
     parsed.cwd ?? null,
     bytes.length,
-    {
-      ...guardOptions,
-      cwd: artifactWriteRoot(context, options, parsed.path),
-    }
+    guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -507,7 +555,7 @@ export async function runDeleteFile(
   options: FileToolRunOptions = {}
 ): Promise<DeleteFileOutput> {
   const parsed = parseToolInput(deleteFileInputSchema, input);
-  const guardOptions = buildFileGuardOptions(context, options);
+  const guardOptions = buildFileGuardOptions(context, options, parsed.path);
 
   const guarded = await guardFilePath(
     parsed.path,
@@ -547,7 +595,7 @@ export async function runEditFile(
   // Editing a Word document as UTF-8 text would corrupt the archive.
   refuseWordExtension(parsed.path);
 
-  const guardOptions = buildFileGuardOptions(context, options);
+  const guardOptions = buildFileGuardOptions(context, options, parsed.path);
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
   const guarded = await guardFilePath(
     parsed.path,
@@ -844,7 +892,7 @@ export async function runReadFile(
   options: FileToolRunOptions = {}
 ): Promise<ReadFileOutput> {
   const parsed = parseToolInput(readFileInputSchema, input);
-  const guardOptions = buildFileGuardOptions(context, options);
+  const guardOptions = buildFileGuardOptions(context, options, parsed.path);
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 

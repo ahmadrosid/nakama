@@ -1188,4 +1188,51 @@ describe("file builtin tools", () => {
       await realpath(path.join(profileRoot, "artifacts", "shared.docx"))
     );
   });
+
+  test("app user file tools stay inside workspace", async () => {
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const otherRoot = await ensureAppUserSoulDir(
+      PROFILE_CONTEXT.orgId,
+      PROFILE_CONTEXT.profileId,
+      "app-user-b"
+    );
+    const otherMemory = path.join(otherRoot, "MEMORY.md");
+    await writeFile(otherMemory, "private to user b", "utf8");
+    const userRoot = await ensureAppUserSoulDir(
+      PROFILE_CONTEXT.orgId,
+      PROFILE_CONTEXT.profileId,
+      "app-user-a"
+    );
+    const context = buildToolExecutionContext({
+      ...PROFILE_CONTEXT,
+      workspaceRoot: userRoot,
+    });
+    // What a model reaches for: the sibling folder is one `..` away.
+    const siblingPath = path.join("..", path.basename(otherRoot), "MEMORY.md");
+
+    await expect(
+      runReadFile({ path: siblingPath }, context)
+    ).rejects.toBeInstanceOf(PathGuardError);
+    await expect(
+      runReadFile({ path: otherMemory }, context)
+    ).rejects.toBeInstanceOf(PathGuardError);
+    await expect(
+      runWriteFile({ content: "overwritten", path: siblingPath }, context)
+    ).rejects.toBeInstanceOf(PathGuardError);
+    await expect(
+      runDeleteFile({ path: siblingPath }, context)
+    ).rejects.toBeInstanceOf(PathGuardError);
+    expect(await readFile(otherMemory, "utf8")).toBe("private to user b");
+
+    // Its own workspace still takes ordinary writes, and reads them back.
+    const written = await runWriteFile(
+      { content: "mine", path: "notes.md" },
+      context
+    );
+    expect(written.path).toBe(await realpath(path.join(userRoot, "notes.md")));
+    await expect(
+      runReadFile({ path: "notes.md" }, context)
+    ).resolves.toMatchObject({ content: "mine" });
+  });
 });

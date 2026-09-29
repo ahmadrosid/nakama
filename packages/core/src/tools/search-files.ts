@@ -63,8 +63,12 @@ export async function runSearchFiles(
 
   const parsed = parseToolInput(searchFilesInputSchema, input);
 
+  // Same precedence as bash and the file tools: an app-user session searches
+  // its own soul dir, not the whole profile every user of it shares.
   const workspaceRoot = await resolveWorkspaceRoot(
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
+    options.workspaceRoot ??
+      context.workspaceRoot ??
+      getProfileSoulDir(orgId, profileId)
   );
   const searchRoot = await resolveSearchRoot(
     workspaceRoot,
