@@ -118,7 +118,7 @@ git push -u origin HEAD
 gh pr create
 ```
 
-Put `Fixes #123` in the body so the issue closes on merge.
+Put `Fixes #123` in the body so the issue closes on merge. CI checks that a PR references an issue at all, because the issue thread is where direction gets settled and hearing "we are not doing that" there is much cheaper than hearing it after the code exists. `part of #123` counts when the PR does not close the issue. A change with genuinely no issue, such as a typo or a release, takes the `no-issue` label instead.
 
 5. PR body uses the ADHD PR format in [`.agents/skills/adhd-pr-description/SKILL.md`](./.agents/skills/adhd-pr-description/SKILL.md): outcome lead, Before/After, Why safe (≤3), residual risk, tight test plan. Agents opening PRs via `ce-commit-push-pr` must follow that skill.
 
