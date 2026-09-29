@@ -25,12 +25,14 @@ With Telegram enabled, users can:
 ## Create a bot with a QR code
 
 QR setup connects your Telegram bot without copying a token from BotFather.
-An organization admin can open **Agents → your agent → Connections → Telegram**, and select **Create with QR**.
+An organization admin can open **Agent → your agent → Channels → Telegram**, and select **Create with QR**.
 
 1. Scan the QR code or select **Open Telegram to Create Bot**.
 2. If Telegram prompts you, press **Start**, then create the bot with the supplied button.
 3. Keep the suggested username so Nakama can match your bot securely.
 4. Return to Nakama and select **Connect bot** once the bot is ready.
+
+The channel settings route is `/profiles/:profileId/channels/telegram`.
 
 The pairing expires after 10 minutes. If it expires or you change the suggested
 username, cancel and start again.
@@ -61,13 +63,13 @@ Keep the token secret. Anyone with the token can control your Telegram bot.
 
 ## Step 2: Save Telegram settings in Nakama
 
-Open **Agents → your agent → Connections → Telegram** in the Nakama web app, then:
+Open **Agent → your agent → Channels → Telegram** in the Nakama web app, then:
 
 1. Paste the bot token
 2. Check that you opened the agent you want to connect
 3. Save
 
-![Paste the bot token from @BotFather on Agents → your agent → Connections → Telegram](/screenshots/telegram-bot-token.png)
+![Paste the bot token from @BotFather on Agent → your agent → Channels → Telegram](/screenshots/telegram-bot-token.png)
 
 When you save for the first time, Nakama can generate a pairing code for linking your Telegram account.
 
@@ -77,7 +79,7 @@ Each agent can own one Telegram bot. Its chats, pairing, worker controls, and lo
 
 Organization admins and platform admins manage connections. **Stop** keeps the connection for later. **Disconnect** removes its credentials and pairings while keeping chat history. Disconnect channels before moving an agent to another organization. Cloning or exporting an agent does not copy its connections.
 
-Existing connections move automatically when Nakama can identify their owner. If ownership is unclear, the worker stays stopped. Open **Integrations → Telegram**, choose an agent, and claim the existing connection. Only a platform admin can claim an installation-wide connection.
+Existing connections move automatically when Nakama can identify their owner. If ownership is unclear, the worker stays stopped. Open the target agent's **Agent → your agent → Channels → Telegram** settings to configure the connection. Only a platform admin can resolve an installation-wide connection.
 
 ## Step 3: Enable audio transcription for voice chat
 
@@ -85,21 +87,21 @@ Telegram voice notes and audio files are turned into text before they are sent t
 
 To enable that:
 
-1. Open **Customize → LLM providers** in the Nakama web app
-2. Add an **OpenAI** provider in **LLM providers** if you have not added one yet
+1. Open **Control center → Agent tools → AI Providers** in the Nakama web app
+2. Add an **OpenAI** provider if you have not added one yet
 3. In **Audio transcription model**, choose an OpenAI model such as Whisper
 4. Wait for the `Saved` confirmation
 
 If no OpenAI provider is connected, the audio transcription setting stays unavailable.
 Without this setting, text chat still works, but Telegram audio messages will not be transcribed for the agent.
 
-![Choose an OpenAI audio transcription model under LLM providers](/screenshots/telegram-audio-transcription.png)
+![Choose an OpenAI audio transcription model under AI Providers](/screenshots/telegram-audio-transcription.png)
 
 ## Step 4: Pair your Telegram account
 
 Pairing is required so random Telegram users cannot talk to your internal Nakama bot.
 
-1. Copy the pairing code from **Agents → your agent → Connections → Telegram**
+1. Copy the pairing code from **Agent → your agent → Channels → Telegram**
 2. Start a private chat with your bot
 3. Send the pairing code as a normal text message
 
@@ -131,13 +133,13 @@ This is useful when you want to pre-authorize specific users without the one-tim
 
 To add users from the dashboard:
 
-1. Open **Agents → your agent → Connections → Telegram**
+1. Open **Agent → your agent → Channels → Telegram**
 2. In **Allowed users**, click **Manage**
 3. Paste a numeric Telegram user ID and click **Add**
 
 To paste raw Telegram update JSON instead:
 
-1. Open **Agents → your agent → Connections → Telegram**
+1. Open **Agent → your agent → Channels → Telegram**
 2. In **Allowed users**, click **Manage**
 3. Click **Import JSON**
 4. Paste the raw Telegram update JSON

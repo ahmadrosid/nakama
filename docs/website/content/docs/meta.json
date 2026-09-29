@@ -28,6 +28,7 @@
     "profiles",
     "artifacts",
     "automations",
+    "workflows",
     "agent-prompt",
     "---Extend---",
     "builtin-tools",

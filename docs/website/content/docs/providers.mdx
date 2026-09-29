@@ -1,13 +1,13 @@
 ---
 title: "Providers"
-description: "Configure LLM providers, API keys, and models in Nakama Settings."
+description: "Configure LLM providers, API keys, and models in the Control center."
 ---
 
 ## Configure a provider
 
-1. Sign in as a platform admin and open **Settings**
-2. Go to **LLM providers**
-3. Add a provider and paste your API key
+1. Sign in as a platform admin and open **Control center → Agent tools → AI Providers**
+2. Select **Add provider**
+3. Paste the API key
 4. Browse or enter models for that provider
 5. Assign a model to each profile that should use it
 
@@ -59,7 +59,7 @@ Nakama supports these built-in provider types:
 | Qwen (DashScope CN) | Alibaba DashScope China (`QWEN_CN_API_KEY`) |
 | Perplexity Sonar | Search-grounded Sonar models with citation links |
 | Cerebras | Cerebras models |
-| Cloudflare Worker AI | Workers AI models; add an API key and account ID in Settings (saved to `config.ini`). Llama 3.1 8B is the cheaper catalog option. `CLOUDFLARE_ACCOUNT_ID` is a fallback only |
+| Cloudflare Worker AI | Workers AI models; add an API key and account ID in **AI Providers** (saved to `config.ini`). Llama 3.1 8B is the cheaper catalog option. `CLOUDFLARE_ACCOUNT_ID` is a fallback only |
 | Fireworks | Fireworks AI models |
 | Ollama | Local or Ollama Cloud; multiple instances allowed |
 | OpenCode Go | OpenCode Go endpoint |
@@ -71,11 +71,11 @@ Most built-in types allow one configured instance each. **Ollama** and **Custom 
 
 Some capabilities depend on the active provider:
 
-- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter or ChatGPT (Plus/Pro). Configure a custom back-end (Exa, Firecrawl, or any JSON search endpoint) in **Settings → Web search** to lift this restriction
-- **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Settings → Audio transcription model** (ChatGPT Plus/Pro cannot replace this)
-- **Image parsing** — used when the chat model cannot see images. Set **Settings → Image parsing model**. The list only includes models marked as vision-capable. For a custom endpoint, turn **Vision** on for that model under **Settings → LLM providers**
-- **Responses API endpoints**: a custom endpoint that serves `/responses` rather than `/chat/completions`. Set **API** to Responses under **Settings → LLM providers**, or answer `responses` in the CLI setup wizard. Required for endpoints that do not serve chat/completions at all, and it keeps reasoning available alongside tools on models that reject the pair on chat/completions
-- **Context window**: models in the built-in catalog carry their own size. A model Nakama does not recognise (a custom endpoint, an OpenRouter slug, a self-hosted build) falls back to 128k, which cuts history early on a larger model and overflows a smaller one. Set **Context** for that model under **Settings → LLM providers** to the real token window; leave it on auto to keep the fallback. Browsing models.dev fills it in for you
+- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter or ChatGPT (Plus/Pro). Configure a custom back-end (Exa, Firecrawl, or any JSON search endpoint) in **Web search** to lift this restriction
+- **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Audio transcription model** (ChatGPT Plus/Pro cannot replace this)
+- **Image parsing** — used when the chat model cannot see images. Set **Image parsing model**. The list only includes models marked as vision-capable. For a custom endpoint, turn **Vision** on for that model under **AI Providers**
+- **Responses API endpoints**: a custom endpoint that serves `/responses` rather than `/chat/completions`. Set **API** to Responses under **AI Providers**, or answer `responses` in the CLI setup wizard. Required for endpoints that do not serve chat/completions at all, and it keeps reasoning available alongside tools on models that reject the pair on chat/completions
+- **Context window**: models in the built-in catalog carry their own size. A model Nakama does not recognise (a custom endpoint, an OpenRouter slug, a self-hosted build) falls back to 128k, which cuts history early on a larger model and overflows a smaller one. Set **Context** for that model under **AI Providers** to the real token window; leave it on auto to keep the fallback. Browsing models.dev fills it in for you
 - **Coding agent provider passthrough** — spawn-time credentials for Claude Code / Codex / OpenCode; see [Coding agent](/coding-agent)
 
 ## Per-profile models
@@ -86,18 +86,18 @@ Platform admins manage provider credentials globally. Org members use the models
 
 ## ChatGPT (Plus/Pro)
 
-ChatGPT Plus/Pro is **not** an OpenAI API key. In **Settings → LLM providers**, choose **ChatGPT (Plus/Pro)**, click **Sign in with ChatGPT**, open the device link, enter the code, then save.
+ChatGPT Plus/Pro is **not** an OpenAI API key. In **AI Providers**, choose **ChatGPT (Plus/Pro)**, click **Sign in with ChatGPT**, open the device link, enter the code, then save.
 
 - One ChatGPT account covers the whole Nakama instance (operator use, not per-user login)
 - Usage comes from your ChatGPT plan quota, not pay-as-you-go API billing
 - Whisper transcription and image generation still need a regular OpenAI API key provider
-- Coding-agent provider passthrough does not apply to this provider type — use **Integrations → Coding agents → harness login** with `codex login` for Codex CLI subscription use
+- Coding-agent provider passthrough does not apply to this provider type — use **Control center → Integrations → Coding agents → Harness login** with `codex login` for Codex CLI subscription use
 
 ## Grok (SuperGrok / Premium+)
 
 Connect your Grok subscription to chat with Grok models in Nakama without entering an API key.
 
-1. In **Settings → LLM providers → Add provider**, choose **Grok (SuperGrok / Premium+)**.
+1. In **AI Providers → Add provider**, choose **Grok (SuperGrok / Premium+)**.
 2. Click **Sign in with Grok**, open the displayed link, and enter the code. For Premium+, use the xAI account linked to your X account.
 3. Approve access, choose a model, and click **Add provider**.
 

@@ -216,10 +216,10 @@ npm login
 npm publish --access public
 ```
 
-1. As a platform admin, open **System → Plugins**. Enter your package name and exact version, choose **Preview package**, then install it.
+1. As a platform admin, open **Control center → Agent tools → Plugins**. Enter your package name and exact version, choose **Preview package**, then install it.
 2. As an org admin, add and enable Greeting in the active organization.
 3. Open **Greeting** from the sidebar. Enter a name and click **Greet**.
-4. As a platform admin, open **System → Profiles** and assign the Greeting tool to a profile.
+4. As a platform admin, open **Agent**, select a profile, and assign the Greeting tool.
 5. Chat with that profile: “Use the Greeting plugin to greet Ada.” The result should use your `GreetingCard`.
 
 Assigned plugin tools are discovered through the agent's `find_tools` capability. Installing a package alone does not assign its tools to every profile.

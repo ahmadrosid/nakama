@@ -85,7 +85,7 @@ Use an appropriate `bash` `timeoutMs` (often 10–30 minutes for large tasks; se
 
 ### Provider passthrough
 
-Nakama injects your configured LLM provider credentials at coding-agent spawn time — the same provider and model as chat (Settings → Provider). Each harness uses its native override mechanism:
+Nakama injects your configured LLM provider credentials at coding-agent spawn time — the same provider and model as chat (**Control center → Agent tools → AI Providers**). Each harness uses its native override mechanism:
 
 | Harness | Mechanism |
 |---------|-----------|
@@ -96,15 +96,15 @@ Nakama injects your configured LLM provider credentials at coding-agent spawn ti
 
 **Requirements:**
 
-- A compatible provider configured in Nakama (Settings → Provider)
+- A compatible provider configured in **Control center → Agent tools → AI Providers**
 - Claude Code requires an **Anthropic** provider; Codex and OpenCode support OpenAI-compatible providers (OpenAI, OpenRouter, DeepSeek, etc.)
 
-This is the default. Org admins can switch to **harness login on this server** under **Integrations → Coding agents** when coding CLIs should use their own vendor accounts instead of the Nakama-configured provider.
+This is the default. Org admins can switch to **harness login on this server** under **Control center → Integrations → Coding agents** when coding CLIs should use their own vendor accounts instead of the Nakama-configured provider.
 
 When harness login is on:
 
 - Nakama does **not** inject provider API keys into the subprocess
-- Readiness treats vendor login as success (not a Settings → Provider error)
+- Readiness treats vendor login as success, not an **AI Providers** error
 - Log in on the host with `codex login`, `claude auth login`, `opencode auth login`, or `pi login` as needed
 
 Cursor Agent always uses host Cursor auth, regardless of this toggle.
@@ -182,8 +182,8 @@ Tool and skill assignment remain per profile.
 | Cursor Agent missing / auth fails | Install and authenticate Cursor Agent CLI on the server host; verify with `agent --version` |
 | Nakama asks which coding agent to use | Multiple CLIs are installed; answer for this conversation |
 | Nakama explains instead of coding | Message may not match the skill; ask for an explicit repo change |
-| Claude Code asks for `/login` | Provider passthrough not applied — ensure Settings → Provider is compatible and the bash command starts with `claude`. If **Integrations → Coding agents** uses harness login, run `claude auth login` on the server |
-| Provider passthrough inactive / no provider | Configure a compatible model provider in Nakama Settings, or turn off **Use Nakama provider** on **Integrations → Coding agents** and log the CLI in on the host |
+| Claude Code asks for `/login` | Provider passthrough is not applied. Confirm the provider in **Control center → Agent tools → AI Providers** and check that the bash command starts with `claude`. If **Control center → Integrations → Coding agents** uses harness login, run `claude auth login` on the server |
+| Provider passthrough inactive / no provider | Configure a model provider in **Control center → Agent tools → AI Providers**, or turn off **Use Nakama provider** in **Control center → Integrations → Coding agents** and log the CLI in on the host |
 | Run times out | Increase `bash` `timeoutMs`; split the task into smaller coding-agent runs |
 | Changes land outside the workspace | Command `cwd` or backend `--dir` may point outside the profile tree |
 

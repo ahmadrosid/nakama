@@ -5,7 +5,7 @@ description: "Shared, admin-curated facts for an organization — injected into 
 
 **Org memory** is shared context for the whole organization.
 
-Every non-viewer agent in the org sees a summary of pinned facts plus recent log entries in its system prompt. Org admins curate facts from **Settings → Org Memory** and review agent proposals on the **Proposals** tab. Members can read and search; viewers are blocked entirely.
+Every non-viewer agent in the org sees a summary of pinned facts plus recent log entries in its system prompt. Org admins curate facts from **Control center → Workspace → Settings → Org Memory** and review agent proposals on the **Proposals** tab. Members can read and search; viewers are blocked entirely.
 
 Org memory is separate from [profile memory](/profiles#knowledge-base-and-memory). Profile `MEMORY.md` is per-bot continuity that agents update themselves. Org memory is team-wide facts that admins maintain.
 
@@ -72,7 +72,7 @@ Three org memory tools are **automatically available on every profile**. They ar
 
 Viewers cannot call these tools. Automations and sub-agents run with member-level org context.
 
-Agents propose durable org facts via `propose_org_memory`; proposals land in a staging queue until an admin approves or rejects them in **Settings → Org Memory → Proposals**. Admins can still add facts directly from the UI (bypasses the queue). Do not propose secrets, credentials, or PII.
+Agents propose durable org facts via `propose_org_memory`; proposals land in a staging queue until an admin approves or rejects them in **Control center → Workspace → Settings → Org Memory → Proposals**. Admins can still add facts directly from the UI (bypasses the queue). Do not propose secrets, credentials, or PII.
 
 When an admin approves a proposal, Nakama merges the new fact into live memory:
 
@@ -85,7 +85,7 @@ Proposal rows live in the SQLite database and are **not** included in workspace 
 
 ## Admin UI
 
-Org admins manage org memory from **Settings → Org Memory** (`/settings`).
+Org admins manage org memory from **Control center → Workspace → Settings → Org Memory** (`/settings`).
 
 The card has three tabs:
 
