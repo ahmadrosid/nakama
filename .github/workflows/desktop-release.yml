@@ -10,8 +10,10 @@ on:
         required: false
         type: string
 
+# Default to read-only. Jobs that publish declare contents: write themselves, so
+# an install or build step never runs with a release-capable token.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: desktop-release
@@ -23,6 +25,8 @@ jobs:
     environment: code-signing
     runs-on: macos-15
     timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -44,8 +48,13 @@ jobs:
             test -n "${!key}" || { echo "Missing release secret: $key"; exit 1; }
           done
 
+      # Signing secrets live in the job environment, so no lifecycle script may
+      # run during install. Electron's own install step runs explicitly, and
+      # Unit Tests does the same.
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun apps/desktop/node_modules/electron/install.js
 
       - name: Build runtime and run smoke tests
         run: |
@@ -74,6 +83,31 @@ jobs:
           spctl --assess --type execute apps/desktop/dist/electron/mac-arm64/Nakama.app
           NAKAMA_DESKTOP_TEST_RUNTIME="$PWD/apps/desktop/dist/electron/mac-arm64/Nakama.app/Contents/Resources/runtime" bun run --cwd apps/desktop test:runtime
 
+      # Hand-off only: publishing runs in a separate job without signing access.
+      - name: Upload signed build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nakama-desktop-mac
+          path: apps/desktop/dist/electron
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+      - name: Download signed build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nakama-desktop-mac
+          path: apps/desktop/dist/electron
       - name: Publish version and update channel
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,13 +122,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
     env:
       RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
-      WINDOWS_STORE_IDENTITY_NAME: ${{ secrets.WINDOWS_STORE_IDENTITY_NAME }}
-      WINDOWS_STORE_PUBLISHER: ${{ secrets.WINDOWS_STORE_PUBLISHER }}
-      WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
-      WINDOWS_STORE_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_DISPLAY_NAME }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -114,12 +144,21 @@ jobs:
           }
           gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # No Store credentials in this job's environment yet, and no lifecycle
+      # script runs while installing.
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun apps/desktop/node_modules/electron/install.js
       - name: Test desktop
         run: bun run --cwd apps/desktop test
       - name: Build unsigned Store package
         run: bun run --cwd apps/desktop package:store
+        env:
+          WINDOWS_STORE_IDENTITY_NAME: ${{ secrets.WINDOWS_STORE_IDENTITY_NAME }}
+          WINDOWS_STORE_PUBLISHER: ${{ secrets.WINDOWS_STORE_PUBLISHER }}
+          WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
+          WINDOWS_STORE_DISPLAY_NAME: ${{ secrets.WINDOWS_STORE_DISPLAY_NAME }}
       - name: Verify packaged runtime
         shell: pwsh
         run: |
@@ -131,6 +170,26 @@ jobs:
           name: nakama-windows-store
           path: apps/desktop/dist/electron/*.msix
           if-no-files-found: error
+
+  # The only job that can attach a Store package to a release.
+  windows-store-publish:
+    needs: [release, windows-store]
+    if: ${{ !cancelled() && needs.windows-store.result == 'success' && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+      - name: Download Store package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nakama-windows-store
+          path: apps/desktop/dist/electron
       - name: Upload Windows package to release
         if: env.RELEASE_TAG != ''
         shell: pwsh

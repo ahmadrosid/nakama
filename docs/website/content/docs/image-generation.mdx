@@ -20,6 +20,8 @@ Assign the `generate_image` tool to a profile the same way as any other builtin.
 
 Ask in plain language. The agent calls `generate_image` with a prompt and, optionally, a filename and a size.
 
+To be explicit, type `@` in the web chat composer, pick **@image**, and describe the picture. A message tagged `@image` tells the agent to call `generate_image` straight away. When the profile does not have the tool, the agent says so and points to the tool assignment and the Settings model instead of answering in text. The tag only counts at the start of a word, so an address such as `me@image.dev` stays plain text.
+
 | Parameter | Required | Notes |
 | --- | --- | --- |
 | `prompt` | yes | What to draw |
@@ -50,4 +52,4 @@ Every generation records usage through the same token pricing bridge as chat, so
 
 - One model, `gpt-image-2`, and one provider type, OpenAI. There is no Stability, Replicate, or local diffusion path.
 - No image editing or variations. Generation from a prompt only.
-- No streaming or progress. A generation is one tool call that returns when the image is ready.
+- No streaming or progress. A generation is one tool call that returns when the image is ready. A provider that has not answered completely within 180 seconds fails with a timeout error, and stopping the chat aborts the request.

@@ -64,6 +64,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
   atomic(migrateFilePinsTable);
+  atomic(migrateNotificationWebhookDeliveriesTable);
 }
 
 function migrateSessionAppUserId(db: Database): void {
@@ -1923,5 +1924,20 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+  `);
+}
+
+function migrateNotificationWebhookDeliveriesTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
   `);
 }

@@ -1,6 +1,7 @@
 import type { SkillSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import {
+  getMentionTokenRanges,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
   profileCanUseLearnCommand,
@@ -24,9 +25,11 @@ export function ChatSkillTokenOverlay({
   const commandRanges = getReservedCommandTokenRanges(value, {
     enableLearn: profileCanUseLearnCommand(skills),
   });
-  const tokenRanges = [...skillRanges, ...commandRanges].sort(
-    (a, b) => a.start - b.start
-  );
+  const tokenRanges = [
+    ...skillRanges,
+    ...commandRanges,
+    ...getMentionTokenRanges(value),
+  ].sort((a, b) => a.start - b.start);
 
   if (tokenRanges.length === 0) {
     return null;

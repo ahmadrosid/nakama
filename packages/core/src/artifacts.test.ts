@@ -461,6 +461,15 @@ test("serves a markdown artifact without a sidecar as text/markdown", async () =
 
   expect(artifact.contentType).toBe("text/markdown");
   expect(artifact.bytes.toString("utf8")).toBe("# Title\n");
+
+  const head = await readArtifactFile({
+    filename: "report.md",
+    headOnly: true,
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(head.contentType).toBe("text/markdown");
+  expect(head.bytes).toHaveLength(0);
 });
 
 test("prefers the sidecar mime type when present", async () => {

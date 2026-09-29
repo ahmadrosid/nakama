@@ -621,7 +621,8 @@ export type SkillProposalAction =
   | "delete"
   | "edit"
   | "write_file"
-  | "remove_file";
+  | "remove_file"
+  | "approve_code";
 
 export interface StoredSkillProposal {
   action: SkillProposalAction;
@@ -737,6 +738,16 @@ export interface DatabaseAdapter {
   }): Promise<boolean>;
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
+  /**
+   * Atomically claims an idempotency key for a notification webhook delivery.
+   * Prunes rows older than the replay window, then returns true on first claim
+   * and false on replay within that window.
+   */
+  claimNotificationWebhookDelivery(
+    destinationId: string,
+    eventId: string,
+    createdAt: string
+  ): Promise<boolean>;
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
