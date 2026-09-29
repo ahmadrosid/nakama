@@ -3922,15 +3922,8 @@ export class AgentService {
     orgId: string,
     profileId?: string
   ): Promise<string> {
-    if (profileId?.trim()) {
-      const requestedProfile = await this.db.getProfileForOrg(
-        profileId.trim(),
-        orgId
-      );
-
-      if (requestedProfile) {
-        return profileId.trim();
-      }
+    if (profileId !== undefined) {
+      return (await this.requireProfile(orgId, profileId.trim())).id;
     }
 
     const defaultProfile = await this.db.getDefaultProfileForOrg(orgId);
