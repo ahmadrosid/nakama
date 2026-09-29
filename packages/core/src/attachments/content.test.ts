@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { MessageContentPart } from "../contract";
 import {
   persistInlineAttachmentsInContent,
   rehydrateAttachmentRefsInContent,
@@ -122,6 +123,84 @@ describe("attachment content helpers", () => {
       { data: pngBase64, mediaType: "image/png", type: "image" },
       {
         data: pdfBase64,
+        filename: "report.pdf",
+        mediaType: "application/pdf",
+        type: "document",
+      },
+    ]);
+  });
+
+  test("rehydrateMessagesForProvider sends an earlier document as a reference", async () => {
+    const attached = {
+      content: [
+        { text: "read this", type: "text" as const },
+        {
+          attachmentId: "att_pdf",
+          filename: "report.pdf",
+          mediaType: "application/pdf",
+          size: 4,
+          type: "document_ref" as const,
+        },
+      ],
+      role: "user" as const,
+    };
+    const loaded: string[] = [];
+    const load = async (attachmentId: string) => {
+      loaded.push(attachmentId);
+      return {
+        bytes: Buffer.from("pdf"),
+        filename: "report.pdf",
+        mediaType: "application/pdf",
+      };
+    };
+
+    const result = await rehydrateMessagesForProvider(
+      [
+        attached,
+        { content: "here is the summary", role: "assistant" },
+        { content: "now add a section", role: "user" },
+      ],
+      load
+    );
+
+    const parts = result[0]?.content as MessageContentPart[];
+    expect(parts.some((part) => part.type === "document")).toBe(false);
+    expect(parts[1]).toEqual({
+      text: expect.stringContaining('documentRef "att_pdf"'),
+      type: "text",
+    });
+    // The store is never read, so the bytes are not paid for a second time.
+    expect(loaded).toEqual([]);
+  });
+
+  test("rehydrateMessagesForProvider sends the newest document in full", async () => {
+    const result = await rehydrateMessagesForProvider(
+      [
+        { content: "hello", role: "user" },
+        { content: "hi", role: "assistant" },
+        {
+          content: [
+            {
+              attachmentId: "att_pdf",
+              filename: "report.pdf",
+              mediaType: "application/pdf",
+              size: 3,
+              type: "document_ref" as const,
+            },
+          ],
+          role: "user",
+        },
+      ],
+      async () => ({
+        bytes: Buffer.from("pdf"),
+        filename: "report.pdf",
+        mediaType: "application/pdf",
+      })
+    );
+
+    expect(result[2]?.content).toEqual([
+      {
+        data: Buffer.from("pdf").toString("base64"),
         filename: "report.pdf",
         mediaType: "application/pdf",
         type: "document",
