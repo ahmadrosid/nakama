@@ -334,6 +334,7 @@ CREATE TABLE IF NOT EXISTS user_passkey_challenges (
 );
 
 CREATE TABLE IF NOT EXISTS organizations (
+  allowed_invite_domains TEXT NOT NULL DEFAULT '[]',
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
