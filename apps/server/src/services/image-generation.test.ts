@@ -33,6 +33,29 @@ const openaiConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
 
 const imagesUrl = "https://api.openai.com/v1/images/generations";
 
+const gatewayConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
+  defaultProviderId: "p-openai",
+  providers: [
+    ...openaiConfig().providers,
+    {
+      apiKey: "gateway-key",
+      baseUrl: "https://gateway.example/v1/",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      customModels: [
+        {
+          id: "cb/gpt-image-2",
+          inputPerMillionUsd: 2,
+          outputPerMillionUsd: 40,
+        },
+      ],
+      id: "p-gateway",
+      label: "Gateway",
+      type: "openai_compatible",
+    },
+  ],
+  ...overrides,
+});
+
 describe("resolveImageGenerationSelection", () => {
   test("returns null when image model is not configured", () => {
     expect(resolveImageGenerationSelection(openaiConfig())).toBeNull();
@@ -90,6 +113,45 @@ describe("resolveImageGenerationSelection", () => {
             type: "openai_compatible",
           },
         ],
+      })
+    ).toThrow(NakamaApiError);
+  });
+
+  test("resolves <providerId>::<modelId> on an OpenAI-compatible provider", () => {
+    const resolved = resolveImageGenerationSelection(
+      gatewayConfig({ imageModel: "p-gateway::cb/gpt-image-2" })
+    );
+    expect(resolved?.instance.id).toBe("p-gateway");
+    expect(resolved?.model).toBe("cb/gpt-image-2");
+    expect(resolved?.baseUrl).toBe("https://gateway.example/v1");
+    expect(resolved?.apiKey).toBe("gateway-key");
+  });
+
+  test("rejects a model the compatible provider does not list", () => {
+    expect(() =>
+      resolveImageGenerationSelection(
+        gatewayConfig({ imageModel: "p-gateway::cb/dall-e-3" })
+      )
+    ).toThrow(NakamaApiError);
+  });
+
+  test("rejects <providerId>::<modelId> on a provider that is not OpenAI-compatible", () => {
+    expect(() =>
+      resolveImageGenerationSelection(
+        gatewayConfig({ imageModel: "p-openai::gpt-image-2" })
+      )
+    ).toThrow(NakamaApiError);
+  });
+
+  test("rejects a compatible provider without a baseUrl", () => {
+    const config = gatewayConfig({ imageModel: "p-gateway::cb/gpt-image-2" });
+    expect(() =>
+      resolveImageGenerationSelection({
+        ...config,
+        providers: config.providers.map((provider) => ({
+          ...provider,
+          baseUrl: undefined,
+        })),
       })
     ).toThrow(NakamaApiError);
   });
@@ -184,6 +246,37 @@ describe("generateImageWithOpenAI", () => {
     }
 
     expect(requestedUrl).toBe("http://100.64.0.1:8000/v1/images/generations");
+  });
+
+  test("sends a custom model id to a custom baseUrl", async () => {
+    let requestedModel = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit
+    ) => {
+      requestedModel = JSON.parse(String(init?.body)).model;
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("png").toString("base64") }],
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      );
+    }) as typeof fetch;
+
+    try {
+      const result = await generateImageWithOpenAI({
+        apiKey: "gateway-key",
+        baseUrl: "https://gateway.example/v1",
+        model: "cb/gpt-image-2",
+        prompt: "a cat",
+      });
+      expect(result.model).toBe("cb/gpt-image-2");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requestedModel).toBe("cb/gpt-image-2");
   });
 });
 
