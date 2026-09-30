@@ -12,8 +12,14 @@ OUTPUT="${ROOT}/docs/website/public/screenshots/chat-thinking-effort-preview.png
 VIEWPORT_WIDTH=1280
 VIEWPORT_HEIGHT=900
 
+if ! command -v agent-browser >/dev/null 2>&1; then
+  echo "agent-browser is required on PATH (npm i -g agent-browser && agent-browser install)" >&2
+  exit 1
+fi
+AB="$(command -v agent-browser)"
+
 cleanup() {
-  npx --yes agent-browser --session "$SESSION" close --all 2>/dev/null || true
+  $AB --session "$SESSION" close --all 2>/dev/null || true
   if [[ -n "$SERVER_PID" ]]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
@@ -82,16 +88,16 @@ curl -sf -b "$COOKIE_JAR" -X PUT "${BASE_URL}/v1/settings/thinking" \
   -H "X-Org-Id: ${ORG_ID}" \
   -d '{"enabled": true, "effort": "medium"}' >/dev/null
 
-npx --yes agent-browser --session "$SESSION" close --all 2>/dev/null || true
-npx --yes agent-browser --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
+$AB --session "$SESSION" close --all 2>/dev/null || true
+$AB --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
-npx --yes agent-browser --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
+$AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
   --url "${BASE_URL}/" --sameSite Lax
-npx --yes agent-browser --session "$SESSION" open "${BASE_URL}/chat"
-npx --yes agent-browser --session "$SESSION" wait 2500
-npx --yes agent-browser --session "$SESSION" set viewport "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT"
-npx --yes agent-browser --session "$SESSION" set media dark
-npx --yes agent-browser --session "$SESSION" wait 500
-npx --yes agent-browser --session "$SESSION" screenshot "$OUTPUT"
+$AB --session "$SESSION" open "${BASE_URL}/chat"
+$AB --session "$SESSION" wait 2500
+$AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT"
+$AB --session "$SESSION" set media dark
+$AB --session "$SESSION" wait 500
+$AB --session "$SESSION" screenshot "$OUTPUT"
 
 echo "Screenshot saved to $OUTPUT"
