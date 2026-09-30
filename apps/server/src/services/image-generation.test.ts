@@ -359,6 +359,41 @@ describe("AgentService image generation settings", () => {
   });
 });
 
+describe("AgentService compatible image model settings", () => {
+  test("saves a custom model listed on an OpenAI-compatible provider", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(gatewayConfig(), null, db);
+
+    await expect(
+      service.setImageGenerationSettings({ model: "p-gateway::cb/gpt-image-2" })
+    ).resolves.toEqual({
+      imageGeneration: { model: "p-gateway::cb/gpt-image-2" },
+    });
+    expect(await db.getWorkspaceSettings()).toMatchObject({
+      imageModel: "p-gateway::cb/gpt-image-2",
+    });
+  });
+
+  test("rejects a model the provider does not list and keeps the stored one", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(gatewayConfig(), null, db);
+    await service.setImageGenerationSettings({
+      model: "p-gateway::cb/gpt-image-2",
+    });
+
+    await expect(
+      service.setImageGenerationSettings({ model: "p-gateway::cb/dall-e-3" })
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(await db.getWorkspaceSettings()).toMatchObject({
+      imageModel: "p-gateway::cb/gpt-image-2",
+    });
+    expect(await service.getImageGenerationSettings()).toEqual({
+      imageGeneration: { model: "p-gateway::cb/gpt-image-2" },
+    });
+  });
+});
+
 describe("AgentService image generation usage (AE5)", () => {
   test("successful generate increments gpt-image-2 stats and estimated cost", async () => {
     const db = createInMemoryDatabaseAdapter();
