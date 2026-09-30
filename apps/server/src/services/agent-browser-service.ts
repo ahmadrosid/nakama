@@ -4,7 +4,10 @@ import {
   ensureProcessPath,
 } from "../lib/ensure-process-path";
 import {
-  buildGlobalPackageInstallPlan,
+  buildPinnedPackageInstallPlan,
+  detectNpmOrBun,
+  downloadPinnedPackageTarball,
+  type PinnedNpmPackage,
   probeCliVersion,
   runTimedInstallCommand,
   summarizeInstallOutput,
@@ -13,13 +16,27 @@ import {
 const AGENT_BROWSER_PACKAGE = "agent-browser";
 const AGENT_BROWSER_COMMAND = "agent-browser";
 
-function buildAgentBrowserCliInstallPlan() {
-  return buildGlobalPackageInstallPlan(AGENT_BROWSER_PACKAGE);
-}
+/**
+ * The reviewed release. Bumping the pin is a code change, and the hash is what
+ * makes the bump checkable: a tampered tarball fails the install instead of
+ * running lifecycle scripts as the server.
+ */
+const AGENT_BROWSER_PINNED_PACKAGE: PinnedNpmPackage = {
+  integrity:
+    "sha512-k58FCz0yUOCANoNkMiqJe+H2y6r6sUZazqXsWF+MYq1iRC42PjtLcBoag6SSTOD/FRQppvPDvE5HDYEhclvnhw==",
+  name: AGENT_BROWSER_PACKAGE,
+  version: "0.38.1",
+};
 
 export function getAgentBrowserInstallCommand(): string {
-  const cliPlan = buildAgentBrowserCliInstallPlan();
-  return `${cliPlan.displayCommand} && ${AGENT_BROWSER_COMMAND} install`;
+  const spec = `${AGENT_BROWSER_PACKAGE}@${AGENT_BROWSER_PINNED_PACKAGE.version}`;
+  const manager = detectNpmOrBun();
+  const install =
+    manager === "bun"
+      ? `bun install -g --trust ${spec}`
+      : `npm install -g ${spec}`;
+
+  return `${install} && ${AGENT_BROWSER_COMMAND} install`;
 }
 
 async function getAgentBrowserRuntimeStatus(): Promise<
@@ -71,40 +88,70 @@ export interface AgentBrowserInstallProgress {
 
 export async function installAgentBrowser(
   onProgress?: (progress: AgentBrowserInstallProgress) => void,
-  options: { signal?: AbortSignal } = {}
+  options: { registry?: string; signal?: AbortSignal } = {}
 ): Promise<AgentBrowserStatusResponse> {
   const emitProgress = (message: string) => {
     onProgress?.({ message });
   };
 
-  const cliPlan = buildAgentBrowserCliInstallPlan();
-  if (cliPlan.command === "bun") {
-    ensureBunGlobalInstallDirs();
-  }
-
   emitProgress("Starting agent-browser install.");
-  emitProgress(cliPlan.displayCommand);
 
-  const cliResult = await runTimedInstallCommand(cliPlan, emitProgress, {
-    signal: options.signal,
-  });
-  const cliOutput = [cliResult.stdout, cliResult.stderr]
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-
-  if (cliResult.timedOut) {
-    throw new NakamaApiError(
-      "Install timed out while installing the agent-browser CLI.",
-      502
+  try {
+    // Nothing is installed until the tarball matches the pinned hash, so a
+    // compromised registry or mirror fails here rather than in a
+    // lifecycle script running as the server.
+    const tarball = await downloadPinnedPackageTarball(
+      AGENT_BROWSER_PINNED_PACKAGE,
+      {
+        onProgress: emitProgress,
+        registry: options.registry,
+        signal: options.signal,
+      }
     );
-  }
 
-  if (cliResult.exitCode !== 0) {
+    try {
+      const cliPlan = buildPinnedPackageInstallPlan(tarball.path);
+      if (cliPlan.command === "bun") {
+        ensureBunGlobalInstallDirs();
+      }
+
+      emitProgress(cliPlan.displayCommand);
+
+      const cliResult = await runTimedInstallCommand(cliPlan, emitProgress, {
+        signal: options.signal,
+      });
+      const cliOutput = [cliResult.stdout, cliResult.stderr]
+        .filter(Boolean)
+        .join("\n")
+        .trim();
+
+      if (cliResult.timedOut) {
+        throw new NakamaApiError(
+          "Install timed out while installing the agent-browser CLI.",
+          502
+        );
+      }
+
+      if (cliResult.exitCode !== 0) {
+        throw new NakamaApiError(
+          cliOutput
+            ? `agent-browser CLI install failed: ${summarizeInstallOutput(cliOutput)}`
+            : "agent-browser CLI install failed.",
+          502
+        );
+      }
+    } finally {
+      await tarball.cleanup();
+    }
+  } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
+
     throw new NakamaApiError(
-      cliOutput
-        ? `agent-browser CLI install failed: ${summarizeInstallOutput(cliOutput)}`
-        : "agent-browser CLI install failed.",
+      `agent-browser CLI install refused: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
       502
     );
   }
