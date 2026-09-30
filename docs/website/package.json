@@ -13,7 +13,7 @@
     "screenshots:telegram": "./scripts/capture-telegram-screenshots.sh"
   },
   "dependencies": {
-    "fumadocs-core": "^16.15.12",
+    "fumadocs-core": "^16.15.14",
     "fumadocs-mdx": "^15.4.3",
     "fumadocs-ui": "^16.15.12",
     "hugeicons-react": "^0.4.0",
