@@ -140,8 +140,9 @@ async function runPythonTool(
   apiKey?: string
 ): Promise<unknown> {
   // No try/catch here on purpose: a failed spawn must reject so the retry
-  // policy in withToolRetries can retry transient failures. executeToolCall
-  // converts the throw into `{ error: message }`.
+  // policy in withToolRetries can retry explicitly opt-in transient failures
+  // (RetryableToolError / exit 75). executeToolCall converts the throw into
+  // `{ error: message }`.
   return spawnJsonTool({
     apiKey,
     args: [modulePath],

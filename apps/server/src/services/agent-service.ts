@@ -240,6 +240,7 @@ import {
   resolveXaiOAuthCredentials,
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
+import { formatImageMentionContext } from "../tools/generate-image-tool";
 import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
@@ -1015,6 +1016,7 @@ export class AgentService {
 
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
+      baseUrl: selection.baseUrl,
       model: selection.model,
       prompt,
       size: input.size,
@@ -2955,10 +2957,10 @@ export class AgentService {
   }
 
   async reorderChatgptAccounts(providerIds: string[]): Promise<void> {
-    const providers = this.userConfig?.providers;
-    if (!providers) {
+    if (!this.userConfig) {
       throw new NakamaApiError("Providers are not configured.", 400);
     }
+    const providers = this.userConfig.providers;
     const currentIds = providers
       .filter((instance) => instance.type === "chatgpt")
       .map((instance) => instance.id);
@@ -3778,12 +3780,17 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    options: { appUserId?: string | null; render?: "markdown" } = {}
+    options: {
+      appUserId?: string | null;
+      headOnly?: boolean;
+      render?: "markdown";
+    } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
       appUserId: options.appUserId,
       filename,
+      headOnly: options.headOnly,
       orgId,
       profileId,
       render: options.render,
@@ -3974,15 +3981,8 @@ export class AgentService {
     orgId: string,
     profileId?: string
   ): Promise<string> {
-    if (profileId?.trim()) {
-      const requestedProfile = await this.db.getProfileForOrg(
-        profileId.trim(),
-        orgId
-      );
-
-      if (requestedProfile) {
-        return profileId.trim();
-      }
+    if (profileId !== undefined) {
+      return (await this.requireProfile(orgId, profileId.trim())).id;
     }
 
     const defaultProfile = await this.db.getDefaultProfileForOrg(orgId);
@@ -4374,6 +4374,15 @@ export class AgentService {
           if (composioContext.trim()) {
             parts.push(composioContext.trim());
           }
+        }
+
+        const imageMentionContext = formatImageMentionContext(
+          context?.userMessage ?? "",
+          tools.map((tool) => tool.name)
+        );
+
+        if (imageMentionContext) {
+          parts.push(imageMentionContext);
         }
 
         if (this.skillsService && context?.userMessage?.trim()) {

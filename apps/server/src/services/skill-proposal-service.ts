@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import {
   archiveSkillDirectory,
   detectOrgMemoryInjectionWarnings,
@@ -5,7 +6,6 @@ import {
   isPathWithinProfileSkillsDir,
   NakamaApiError,
   parseRawProfileSkillContent,
-  resolveProfileOrgBooleanOverride,
   resolveProfileSkillSupportingFilePath,
 } from "@nakama/core";
 import type { SkillProposal } from "@nakama/core/contract";
@@ -18,6 +18,7 @@ import type {
   SkillProposalAction,
   StoredSkillProposal,
 } from "@nakama/db";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 import type { SkillsService } from "./skills-service";
 
 export function toSkillProposal(
@@ -54,25 +55,6 @@ export interface StageSkillProposalResult {
   /** Present for supporting-file proposals (including already_pending echoes). */
   relativePath?: string;
   warnings?: string[];
-}
-
-export async function isSkillWriteApprovalRequired(
-  database: DatabaseAdapter,
-  orgId: string,
-  profileId: string
-): Promise<boolean> {
-  const org = await database.getOrganizationById(orgId);
-  if (!org) {
-    throw new NakamaApiError("Organization not found.", 404);
-  }
-  const profile = await database.getProfileForOrg(profileId, orgId);
-  if (!profile) {
-    throw new NakamaApiError("Profile not found.", 404);
-  }
-  return resolveProfileOrgBooleanOverride(
-    profile.skillsWriteApproval ?? null,
-    org.skillsWriteApproval ?? false
-  );
 }
 
 export class SkillProposalService {
@@ -115,6 +97,9 @@ export class SkillProposalService {
     }
     if (input.action === "remove_file") {
       return this.stageRemoveFile(input);
+    }
+    if (input.action === "approve_code") {
+      return this.stageApproveCode(input);
     }
     return this.stageDelete(input);
   }
@@ -234,6 +219,20 @@ export class SkillProposalService {
         proposal.skillName,
         relativePath
       );
+    } else if (proposal.action === "approve_code") {
+      const { absolutePath } = resolveProfileSkillSupportingFilePath(
+        orgId,
+        proposal.profileId,
+        proposal.skillName,
+        proposal.relativePath ?? "",
+        true
+      );
+      if ((await readFile(absolutePath, "utf8")) !== proposal.content) {
+        throw new NakamaApiError(
+          "Skill code changed since review was requested.",
+          409
+        );
+      }
     } else {
       await skills.deleteAssignedProfileSkill(
         orgId,
@@ -609,6 +608,45 @@ export class SkillProposalService {
 
     return {
       message: `Staged remove_file for skill "${name}" path "${relativePath}" (proposal ${proposal.id}). An org admin must approve before it is removed.`,
+      outcome: "created",
+      proposalId: proposal.id,
+      relativePath,
+    };
+  }
+
+  private async stageApproveCode(
+    input: StageSkillProposalInput
+  ): Promise<StageSkillProposalResult> {
+    const name = this.readSkillName(input);
+    await this.assertProfileOwnedSkill(input.orgId, input.profileId, name);
+    const relativePath = input.relativePath?.trim() ?? "";
+    if (!/\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(relativePath)) {
+      throw new NakamaApiError("Choose a skill code file to review.", 400);
+    }
+    const { absolutePath } = resolveProfileSkillSupportingFilePath(
+      input.orgId,
+      input.profileId,
+      name,
+      relativePath,
+      true
+    );
+    const content = await readFile(absolutePath, "utf8");
+    this.assertContentSize(content);
+    const pending = await this.pendingForSkillOrAlready(input, name);
+    if (pending) {
+      return pending;
+    }
+    const proposal = await this.insertProposal({
+      ...input,
+      action: "approve_code",
+      content,
+      patchNewString: null,
+      patchOldString: null,
+      relativePath,
+      skillName: name,
+    });
+    return {
+      message: `Staged code review for skill "${name}" path "${relativePath}" (proposal ${proposal.id}). An org admin must approve before it can run.`,
       outcome: "created",
       proposalId: proposal.id,
       relativePath,

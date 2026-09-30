@@ -287,6 +287,7 @@ export async function readArtifactFile(input: {
   orgId: string;
   profileId: string;
   filename: string;
+  headOnly?: boolean;
   /**
    * Convert the artifact to Markdown for preview instead of serving raw bytes.
    * Downloads must stay byte-exact, so this is opt-in.
@@ -309,12 +310,24 @@ export async function readArtifactFile(input: {
     fileStat.size,
     fileStat.mtime.toISOString()
   );
-  const bytes = await readFile(filePath);
   const filename = path.basename(filePath);
 
   const isWordLike =
     isDocxFile(filename, metadata.mimeType) ||
     isLegacyDocFile(filename, metadata.mimeType);
+
+  if (input.headOnly) {
+    return {
+      bytes: Buffer.alloc(0),
+      contentType:
+        input.render === "markdown" && isWordLike
+          ? "text/markdown"
+          : metadata.mimeType,
+      filePath,
+    };
+  }
+
+  const bytes = await readFile(filePath);
 
   if (input.render === "markdown" && isWordLike) {
     const markdown = await convertDocxToMarkdown(bytes);

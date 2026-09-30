@@ -25,8 +25,11 @@ function toIsoDate(value: Date | string | undefined): string {
   return new Date().toISOString();
 }
 
-function asUidList(uids: number[] | false): number[] {
-  return uids === false ? [] : uids;
+// imapflow 2.x resolves search() to undefined as well as false when the command
+// returns nothing usable. Both mean no uids, so both collapse to an empty list
+// here rather than at each call site.
+function asUidList(uids: number[] | false | undefined): number[] {
+  return uids || [];
 }
 
 function attachmentMetadata(

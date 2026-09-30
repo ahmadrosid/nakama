@@ -159,9 +159,27 @@ export async function persistInlineAttachmentsInContent(
   return result;
 }
 
+export interface RehydrateOptions {
+  /**
+   * Replace `document_ref` parts with a reference line instead of the bytes.
+   * Used for turns the model has already answered: the bytes cost their full
+   * price on every later provider call, and converting them to text saves
+   * nothing (a 204-page PDF measured 53k tokens as bytes and 52k as text), so
+   * the model gets the id and reopens the document only when it needs it.
+   */
+  documentsAsReference?: boolean;
+}
+
+export function documentReferenceText(
+  part: Extract<MessageContentPart, { type: "document_ref" }>
+): string {
+  return `[File: ${part.filename ?? "document"} was attached earlier in this conversation and is still stored. Its contents are not repeated here. Call extract_document_text with documentRef "${part.attachmentId}" to read it again.]`;
+}
+
 export async function rehydrateAttachmentRefsInContent(
   content: string | MessageContentPart[],
-  load: LoadAttachmentBytes
+  load: LoadAttachmentBytes,
+  options: RehydrateOptions = {}
 ): Promise<string | MessageContentPart[]> {
   if (typeof content === "string") {
     return content;
@@ -194,6 +212,11 @@ export async function rehydrateAttachmentRefsInContent(
     }
 
     if (part.type === "document_ref") {
+      if (options.documentsAsReference) {
+        result.push({ text: documentReferenceText(part), type: "text" });
+        continue;
+      }
+
       const loaded = await load(part.attachmentId);
 
       if (!loaded) {
@@ -219,9 +242,16 @@ export async function rehydrateMessagesForProvider(
   messages: readonly ChatMessage[],
   load: LoadAttachmentBytes
 ): Promise<ChatMessage[]> {
+  // Only the newest user message still needs its documents in full. Anything
+  // earlier has already been answered, so repeating it bills the same tokens
+  // once per provider call for the rest of the session (nakama#1454).
+  const lastUserIndex = messages.reduce(
+    (last, message, index) => (message.role === "user" ? index : last),
+    -1
+  );
   const result: ChatMessage[] = [];
 
-  for (const message of messages) {
+  for (const [index, message] of messages.entries()) {
     if (message.role !== "user") {
       result.push(message);
       continue;
@@ -229,7 +259,9 @@ export async function rehydrateMessagesForProvider(
 
     result.push({
       ...message,
-      content: await rehydrateAttachmentRefsInContent(message.content, load),
+      content: await rehydrateAttachmentRefsInContent(message.content, load, {
+        documentsAsReference: index !== lastUserIndex,
+      }),
     });
   }
 

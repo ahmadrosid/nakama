@@ -47,6 +47,7 @@ describe("platform org routes", () => {
         temporaryPassword: null,
       },
       organization: {
+        allowedInviteDomains: [],
         archivedAt: null,
         createdAt: expect.any(String),
         id: expect.stringMatching(/^org_/),

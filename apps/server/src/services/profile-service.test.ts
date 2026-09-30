@@ -912,6 +912,32 @@ describe("profile service cloneProfile", () => {
       service.cloneProfile(ORG_ID, "does-not-exist", {})
     ).rejects.toThrow(/not found/i);
   });
+
+  test("failed clone removes partial profile and workspace", async () => {
+    const { db, service, sourceId } = await setup();
+    const kbDir = path.join(soulDirOf(sourceId), "knowledge-base");
+    await mkdir(kbDir, { recursive: true });
+    await writeFile(path.join(kbDir, "doc_1--notes.txt"), "kb body", "utf8");
+
+    const destId = "ghost-clone";
+    const destKbPath = path.join(soulDirOf(destId), "knowledge-base");
+    await mkdir(path.dirname(destKbPath), { recursive: true });
+    await writeFile(destKbPath, "blocker", "utf8");
+
+    await expect(
+      service.cloneProfile(ORG_ID, sourceId, { id: destId })
+    ).rejects.toThrow();
+
+    expect(await db.getProfile(destId)).toBeFalsy();
+    await expect(access(soulDirOf(destId))).rejects.toThrow();
+    expect(await db.listToolsForProfile(destId)).toHaveLength(0);
+
+    const retry = await service.cloneProfile(ORG_ID, sourceId, {
+      id: destId,
+    });
+    expect(retry.profile.id).toBe(destId);
+    expect(retry.profile.tools.length).toBeGreaterThan(0);
+  });
 });
 
 describe("profile service deleteProfile", () => {

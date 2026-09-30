@@ -4,8 +4,11 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 ## Rules
 
+**Before code**
+- Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Four questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
+
 **Code**
-- Prefer edit over extract; no new package/file unless an existing module cannot hold the change
+- Prefer edit over extract; no new package/file unless an existing module cannot hold the change. CI fails a new workspace unless the PR carries the `new-package` label
 - No new abstractions for a single call site
 - Tests assert behavior (status, data, side effects), not prompt/description/error copy
 - React UI: one self-explanatory heading/label; no subtitles or helper copy unless the user asks or misunderstanding would cause errors

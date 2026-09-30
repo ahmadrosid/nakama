@@ -406,7 +406,7 @@ describe("AgentService branching", () => {
     ).rejects.toThrow("messageIndex is out of bounds.");
   });
 
-  test("falls back to org default when the requested profile is missing", async () => {
+  test("falls back to org default only when no profile is requested", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
     const now = new Date().toISOString();
@@ -433,11 +433,12 @@ describe("AgentService branching", () => {
       });
 
       const service = new AgentService(null, null, db);
-      const sessionId = await service.createSession(
-        ORG_ID,
-        "web",
-        "missing_profile"
-      );
+      await expect(
+        service.createSession(ORG_ID, "web", "missing_profile")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.listSessions()).toEqual([]);
+
+      const sessionId = await service.createSession(ORG_ID, "web");
       const session = await db.getSession(sessionId);
 
       expect(session?.profileId).toBe("profile_custom");

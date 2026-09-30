@@ -298,17 +298,51 @@ function fileToolWorkspaceRoot(
   return workspaceRoot;
 }
 
+/**
+ * A session that belongs to an app user may reach its own user directory and
+ * nothing else under `users/`. The profile stays readable because the soul
+ * stack, the knowledge base and the skills live there, and `users/` is the one
+ * part of it that belongs to somebody in particular.
+ *
+ * Without this, every app user of a profile could read every other app user's
+ * generated documents: the read side rooted at the profile while only the
+ * artifact write side followed the app user.
+ */
 function buildFileGuardOptions(
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
+  const sessionRoot = appUserSessionRoot(context);
+  const allowedDirs = [workspaceRoot, getCustomToolsDir()];
+
+  if (sessionRoot) {
+    allowedDirs.push(sessionRoot);
+  }
 
   return {
     ...defaultGuardOptions,
-    allowedDirs: [workspaceRoot, getCustomToolsDir()],
+    allowedDirs,
     cwd: workspaceRoot,
+    deniedDirs: sessionRoot ? [appUsersDir(workspaceRoot)] : [],
   };
+}
+
+/** The session's own app user directory, or null for a profile-level session. */
+function appUserSessionRoot(context: ToolContext): string | null {
+  const sessionRoot = context.workspaceRoot?.trim();
+
+  return sessionRoot && path.isAbsolute(sessionRoot) ? sessionRoot : null;
+}
+
+/**
+ * `<root>/users` — denied as a whole, with the session's own dir allowed back in.
+ * Derived from the effective workspace root rather than the profile dir, so an
+ * `options.workspaceRoot` override keeps the guard pointing at the same tree the
+ * tools actually read.
+ */
+function appUsersDir(workspaceRoot: string): string {
+  return path.join(workspaceRoot, "users");
 }
 
 /**
