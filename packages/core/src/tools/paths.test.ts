@@ -86,4 +86,59 @@ describe("guardFilePath", () => {
     expect(guarded.resolved).toBe(path.join(realWorkspace, "SOUL.md"));
     expect(guarded.resolved).not.toBe(path.join(process.cwd(), "SOUL.md"));
   });
+  test("refuses another app user's directory and keeps the session's own", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "nakama-app-users-"));
+    try {
+      const profile = path.join(root, "profiles", "hsse-agent");
+      const users = path.join(profile, "users");
+      const mine = path.join(users, "aaa");
+      const theirs = path.join(users, "bbb");
+      await mkdir(path.join(mine, "artifacts"), { recursive: true });
+      await mkdir(path.join(theirs, "artifacts"), { recursive: true });
+      await mkdir(path.join(profile, "skills", "rkk"), { recursive: true });
+
+      const options = {
+        allowedDirs: [profile, mine],
+        cwd: profile,
+        deniedDirs: [users],
+      };
+
+      // The profile stays readable: the soul stack, knowledge base and skills
+      // live there and an app-user session still has to reach them.
+      const skill = await guardFilePath(
+        "skills/rkk/SKILL.md",
+        null,
+        undefined,
+        options
+      );
+      expect(skill.resolved).toBe(
+        path.join(await realpath(profile), "skills", "rkk", "SKILL.md")
+      );
+
+      // Its own artifacts stay reachable because `mine` is more specific
+      // than the denied `users` directory.
+      const own = await guardFilePath(
+        path.join(mine, "artifacts", "draft.docx"),
+        null,
+        undefined,
+        options
+      );
+      expect(own.resolved).toBe(
+        path.join(await realpath(mine), "artifacts", "draft.docx")
+      );
+
+      // Somebody else's artifacts do not, by absolute path or by traversal.
+      for (const attempt of [
+        path.join(theirs, "artifacts", "draft.docx"),
+        "users/bbb/artifacts/draft.docx",
+        path.join(mine, "..", "bbb", "artifacts", "draft.docx"),
+      ]) {
+        const refused = guardFilePath(attempt, null, undefined, options);
+        await expect(refused).rejects.toBeInstanceOf(PathGuardError);
+        await expect(refused).rejects.toMatchObject({ code: "CROSS_TENANT" });
+      }
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
