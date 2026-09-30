@@ -22,14 +22,25 @@ import {
   nextOrgIdAfterArchive,
 } from "@/lib/org-archive";
 import { queryClient } from "@/lib/query-client";
-import { queryKeys } from "@/lib/query-keys";
 
+/**
+ * Every query is organization-scoped, but most query keys do not carry the org
+ * id, so the cache cannot be filtered per-org. On an org switch the safe move
+ * is to cancel whatever is in flight and drop the whole authenticated cache:
+ *
+ * - cancelQueries makes react-query discard any response that was already
+ *   requested under the previous org, so a late reply cannot write old-org
+ *   data into a component now rendering the new org. The underlying fetch may
+ *   still finish; its result is dropped rather than committed.
+ * - removeQueries clears cached values so nothing stale is served before the
+ *   refetch lands.
+ *
+ * The previous org's data is never wrong to drop: it is unreachable after the
+ * switch, and this runs on an explicit user action.
+ */
 function refreshAuthenticatedQueries(): void {
-  queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
-  queryClient.removeQueries({ queryKey: queryKeys.skills.all });
-  queryClient.removeQueries({
-    predicate: (query) => query.queryKey[0] === "sessions",
-  });
+  void queryClient.cancelQueries();
+  queryClient.removeQueries();
   void queryClient.invalidateQueries();
 }
 

@@ -13,7 +13,15 @@ import {
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
-const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS);
+/**
+ * `email` is excluded from the defaults. The mailbox is one IMAP/SMTP config
+ * shared by the whole deployment, so auto-assigning it handed every org member
+ * read and send on the deployment mailbox. It stays assignable through the
+ * normal tool assignment flow — an admin opts a profile in.
+ */
+const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS).filter(
+  (toolId) => toolId !== BUILTIN_TOOL_IDS.email
+);
 
 export async function ensureProfileDefaultBuiltinTools(
   db: DatabaseAdapter,

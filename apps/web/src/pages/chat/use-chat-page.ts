@@ -845,6 +845,24 @@ export function useChatPage() {
     activeOrg?.id,
   ]);
 
+  // An org switch invalidates any load already in flight: its request was
+  // issued with the previous org's header, so its response describes data the
+  // user is no longer looking at. Bumping the counter makes the in-flight
+  // resumeSession bail at its next isCurrentLoad() check instead of writing it
+  // into page state, and nulling the route marker lets the route effect
+  // re-resolve for the new org.
+  const orgSwitchRef = useRef(activeOrg?.id ?? null);
+  useEffect(() => {
+    const previousOrgId = orgSwitchRef.current;
+    const nextOrgId = activeOrg?.id ?? null;
+    if (previousOrgId === nextOrgId) {
+      return;
+    }
+    orgSwitchRef.current = nextOrgId;
+    sessionLoadRef.current += 1;
+    loadedRouteRef.current = null;
+  }, [activeOrg?.id]);
+
   useEffect(() => {
     if (!profileId || routeSession) {
       return;
@@ -860,14 +878,17 @@ export function useChatPage() {
     if (!routeSession) {
       return;
     }
-    const routeKey = `${routeSession.profileId}:${routeSession.sessionId}`;
+    // The org is part of the key: the same profile and session ids can exist in
+    // two orgs, and without it an org switch that leaves the route unchanged
+    // never re-resolves, so the page keeps showing the previous org's session.
+    const routeKey = `${activeOrg?.id ?? "no-org"}:${routeSession.profileId}:${routeSession.sessionId}`;
     if (loadedRouteRef.current === routeKey) {
       return;
     }
     loadedRouteRef.current = routeKey;
     skipNextProfileSessionRef.current = true;
     void resumeSession(routeSession.profileId, routeSession.sessionId);
-  }, [routeSession, resumeSession]);
+  }, [activeOrg?.id, routeSession, resumeSession]);
 
   useEffect(() => {
     if (profilesQuery.error) {

@@ -50,4 +50,33 @@ describe("ChannelSessionStore hot session cache", () => {
       await rm(dir, { force: true, recursive: true });
     }
   });
+
+  test("concurrent saves do not roll back another conversation's state", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "nakama-session-store-"));
+    const filePath = path.join(dir, "chat-sessions.json");
+    try {
+      const store = new ChannelSessionStore(filePath);
+      store.set("chat_a", {
+        profileId: "default",
+        sessionId: "session_a",
+        updatedAt: new Date().toISOString(),
+      });
+      store.set("chat_b", {
+        profileId: "default",
+        sessionId: "session_b",
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Both conversations are live and each saves the whole shared file. The
+      // last write must contain both, not just whichever save finished last.
+      await Promise.all([store.save(), store.save()]);
+
+      const reloaded = new ChannelSessionStore(filePath);
+      await reloaded.load();
+      expect(reloaded.get("chat_a")?.sessionId).toBe("session_a");
+      expect(reloaded.get("chat_b")?.sessionId).toBe("session_b");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
 });

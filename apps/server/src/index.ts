@@ -399,6 +399,8 @@ if (server.port !== requestedPort) {
 console.log(`Nakama server listening on ${serverUrl}`);
 console.log(`Nakama database ready at ${config.databaseUrl}`);
 
+warnIfServingPlainHttpOnAllInterfaces(host);
+
 void initializeOptionalServices({
   agent,
   database,
@@ -524,6 +526,30 @@ function isAddressInUseError(error: unknown): error is { code: string } {
     error !== null &&
     "code" in error &&
     error.code === "EADDRINUSE"
+  );
+}
+
+/**
+ * The server has no built-in TLS, so anything beyond a local bind is cleartext.
+ * On a wildcard bind that means login credentials, session cookies and the whole
+ * API cross the network unencrypted, and because the requests are plain HTTP the
+ * cookies go out without `Secure` and no HSTS header is sent. A localhost bind
+ * stays silent — that is the desktop and CLI case, not an exposure.
+ */
+function warnIfServingPlainHttpOnAllInterfaces(host: string): void {
+  if (host !== "0.0.0.0" && host !== "::" && host !== "::0") {
+    return;
+  }
+
+  console.warn(
+    [
+      "",
+      `WARNING: Nakama is serving plain HTTP on ${host}.`,
+      "There is no built-in TLS, so logins, session cookies and the API are cleartext on the network.",
+      "Session cookies will be set without the Secure flag and no HSTS header is sent.",
+      "Terminate TLS in front of this port (reverse proxy, load balancer, or a tunnel) before exposing it.",
+      "",
+    ].join("\n")
   );
 }
 

@@ -109,6 +109,90 @@ describe("per-call usage", () => {
     expect(calls).toBe(0);
   });
 
+  test("releases the LLM quota reservation when a turn throws", async () => {
+    let calls = 0;
+    const provider = {
+      generateChat: () => {
+        calls += 1;
+        return Promise.reject(new Error("provider exploded"));
+      },
+      name: "openai",
+    };
+    let released = 0;
+    const session = createAgentChatSession(
+      { provider, tools: [] },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.resolve(async () => {
+              released += 1;
+            }),
+        },
+      }
+    );
+
+    await expect(session.send("hi")).rejects.toThrow("provider exploded");
+    expect(calls).toBe(1);
+    // A failed turn spends nothing, so its hold must be returned or the org's
+    // monthly limit drains on failures alone.
+    expect(released).toBe(1);
+  });
+
+  test("releases the LLM quota reservation once per tool-loop iteration", async () => {
+    let calls = 0;
+    const provider = {
+      generateChat: () => {
+        calls += 1;
+        return Promise.resolve(
+          calls === 1
+            ? {
+                assistantMessage: { content: "", role: "assistant" },
+                content: "",
+                toolCalls: [
+                  {
+                    arguments: {},
+                    id: "call-1",
+                    name: "noop",
+                  },
+                ],
+              }
+            : {
+                assistantMessage: { content: "done", role: "assistant" },
+                content: "done",
+                toolCalls: [],
+              }
+        );
+      },
+      name: "openai",
+    };
+    let released = 0;
+    const session = createAgentChatSession(
+      {
+        provider,
+        tools: [
+          {
+            description: "noop",
+            name: "noop",
+            parameters: { properties: {}, type: "object" },
+            run: () => Promise.resolve("ok"),
+          },
+        ],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.resolve(async () => {
+              released += 1;
+            }),
+        },
+      }
+    );
+
+    await session.send("hi");
+    expect(calls).toBe(2);
+    expect(released).toBe(2);
+  });
+
   test("emits onUsage per LLM call and stores usage on history messages", async () => {
     const session = createAgentChatSession(
       { provider: providerWithUsage(), tools: [pingTool] },

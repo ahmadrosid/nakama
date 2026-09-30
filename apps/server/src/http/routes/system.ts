@@ -15,7 +15,7 @@ import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
   requireOrgAdminFromContext,
-  requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgAdminOrPlatformAdmin,
 } from "../org-guards";
 import { errorResponse, getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -240,14 +240,20 @@ export function registerSystemRoutes(
 
   app.openapi(systemStatusRoute, async (c) => {
     const profileId = c.req.query("profileId")?.trim();
-    const orgId = getRequestAuth(c).activeOrgId ?? null;
+    const auth = getRequestAuth(c);
+    const orgId = auth.activeOrgId ?? null;
     if (profileId) {
-      requireOrgAdminOrPlatformAdminFromContext(c);
+      requireOrgAdminOrPlatformAdmin(auth);
       await agent.getProfile(requireActiveOrgIdFromContext(c), profileId);
     }
+    // The LLM tracker behind llmUsage is one install-wide ledger with no org
+    // dimension, so it reports every tenant's tokens and cost. Only admins get
+    // it; a member's response omits the key entirely.
+    const isAdmin = auth.orgRole === "admin" || auth.isPlatformAdmin;
     return c.json(
       await systemStatus.getStatus(
-        profileId && orgId ? { orgId, profileId } : orgId
+        profileId && orgId ? { orgId, profileId } : orgId,
+        { includeLlmUsage: isAdmin }
       ),
       200
     );

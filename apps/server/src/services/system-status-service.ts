@@ -35,7 +35,16 @@ export class SystemStatusService {
     private readonly databaseAdapter: DatabaseAdapter | null = null
   ) {}
 
-  async getStatus(orgId: ChannelConfigScope): Promise<SystemStatusResponse> {
+  /**
+   * `includeLlmUsage` is the caller's decision, not this service's: the ledger
+   * behind it is install-wide, so the route decides who is allowed to see it
+   * and passes the verdict in. Defaulting it to false keeps a future caller
+   * from leaking the totals by omission.
+   */
+  async getStatus(
+    orgId: ChannelConfigScope,
+    options: { includeLlmUsage?: boolean } = {}
+  ): Promise<SystemStatusResponse> {
     const providerConfigured = this.agent.providerConfigured;
     const models = await this.agent.getModels();
     const usageFields = this.agent.getUsageStatusFields();
@@ -76,13 +85,17 @@ export class SystemStatusService {
       },
       checkedAt: new Date().toISOString(),
       discordWorker: discordStatus,
-      llmUsage: this.getLlmUsage(
-        models.provider,
-        usageFields.currentModel,
-        providerConfigured,
-        usageFields,
-        this.agent.getLlmUsageStatsByModel()
-      ),
+      ...(options.includeLlmUsage
+        ? {
+            llmUsage: this.getLlmUsage(
+              models.provider,
+              usageFields.currentModel,
+              providerConfigured,
+              usageFields,
+              this.agent.getLlmUsageStatsByModel()
+            ),
+          }
+        : {}),
       mcp: this.mcpService
         ? await this.mcpService.getStatusSummary()
         : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },

@@ -76,6 +76,7 @@ export * from "./fetch-idle";
 export * from "./fs";
 export * from "./ids";
 export * from "./image-content";
+export * from "./keyed-lock";
 export * from "./knowledge-base";
 export * from "./local-auth";
 export { log } from "./logger";
