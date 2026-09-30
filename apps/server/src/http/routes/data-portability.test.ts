@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -8,9 +8,11 @@ import {
   getUserConfigDir,
   saveAttachmentBytes,
 } from "@nakama/core";
+import * as fflate from "fflate";
 import { unzipSync, zipSync } from "fflate";
 import {
   createNakamaDataExport,
+  MAX_IMPORT_ARCHIVE_BYTES,
   MAX_IMPORT_ENTRIES,
   NAKAMA_ORG_EXPORT_MANIFEST,
   NAKAMA_USER_EXPORT_MANIFEST,
@@ -45,6 +47,30 @@ async function createArchiveOverEntryLimit(): Promise<Buffer> {
 }
 
 describe("data portability routes", () => {
+  test("platform export returns 413 instead of downloading an unrestorable ZIP", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const zipMock = spyOn(fflate, "zipSync").mockReturnValue(
+      new Uint8Array(MAX_IMPORT_ARCHIVE_BYTES + 1)
+    );
+    try {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/platform/data/export", {
+          headers: session.headers(),
+        })
+      );
+      expect(response.status).toBe(413);
+      expect(response.headers.get("content-disposition")).toBeNull();
+      expect(typeof (await response.json()).error).toBe("string");
+    } finally {
+      zipMock.mockRestore();
+    }
+  });
+
   test("platform admin can download a Nakama export ZIP", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const session = await loginPlatformAdminSession(

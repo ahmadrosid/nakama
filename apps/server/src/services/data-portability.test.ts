@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as fsPromises from "node:fs/promises";
 import {
   lstat,
   mkdir,
@@ -11,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NakamaApiError } from "@nakama/core";
+import * as fflate from "fflate";
 import {
   createNakamaDataExport,
   decodeArchiveRequestData,
@@ -37,6 +40,104 @@ afterEach(async () => {
 });
 
 describe("Nakama data portability", () => {
+  test("round-trips a backup at the restore entry-byte limit", async () => {
+    const filePath = join(rootDir, "at-budget.bin");
+    await writeFile(filePath, Buffer.alloc(MAX_IMPORT_ENTRY_BYTES));
+    const exported = await createNakamaDataExport({
+      databasePath: null,
+      rootDir,
+    });
+    const preview = await previewNakamaDataImport(exported.data, { rootDir });
+    expect(preview.archiveFileCount).toBe(1);
+    expect(preview.archiveTotalBytes).toBe(MAX_IMPORT_ENTRY_BYTES);
+
+    const restored = await restoreNakamaDataImport(exported.data, {
+      confirm: true,
+      rootDir,
+    });
+    expect(restored.restoredFileCount).toBe(1);
+    expect((await lstat(filePath)).size).toBe(MAX_IMPORT_ENTRY_BYTES);
+  }, 30_000);
+
+  test("rejects an export whose SQLite snapshot exceeds the restore entry budget", async () => {
+    const databasePath = join(rootDir, "nakama.sqlite");
+    const db = new Database(databasePath);
+    try {
+      db.exec("CREATE TABLE retained_data (payload BLOB)");
+      db.run("INSERT INTO retained_data VALUES (zeroblob(?))", [
+        MAX_IMPORT_ENTRY_BYTES + 1,
+      ]);
+    } finally {
+      db.close();
+    }
+
+    await expect(
+      createNakamaDataExport({ databasePath, rootDir })
+    ).rejects.toMatchObject({ status: 413 });
+    expect(await readdir(rootDir)).toEqual(["nakama.sqlite"]);
+    const original = new Database(databasePath, { readonly: true });
+    try {
+      expect(
+        original
+          .query("SELECT length(payload) AS size FROM retained_data")
+          .get()
+      ).toEqual({
+        size: MAX_IMPORT_ENTRY_BYTES + 1,
+      });
+    } finally {
+      original.close();
+    }
+  }, 30_000);
+
+  test("counts the manifest against the export entry budget", async () => {
+    for (let start = 0; start < MAX_IMPORT_ENTRIES; start += 100) {
+      await Promise.all(
+        Array.from({ length: 100 }, (_, index) =>
+          writeFile(join(rootDir, `empty-${start + index}.txt`), "")
+        )
+      );
+    }
+
+    await expect(
+      createNakamaDataExport({ databasePath: null, rootDir })
+    ).rejects.toMatchObject({ status: 413 });
+    expect((await readdir(rootDir)).length).toBe(MAX_IMPORT_ENTRIES);
+  }, 30_000);
+
+  test("counts the manifest against the export expanded-byte budget", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await writeFile(join(rootDir, `part-${index}.bin`), "original");
+    }
+    const readMock = spyOn(fsPromises, "readFile").mockResolvedValue(
+      Buffer.alloc(MAX_IMPORT_ENTRY_BYTES)
+    );
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({ status: 413 });
+    } finally {
+      readMock.mockRestore();
+    }
+    expect((await readdir(rootDir)).length).toBe(5);
+  });
+
+  test("rejects a ZIP result above the compressed restore budget", async () => {
+    await writeFile(join(rootDir, "config.ini"), "original");
+    const zipMock = spyOn(fflate, "zipSync").mockReturnValue(
+      new Uint8Array(MAX_IMPORT_ARCHIVE_BYTES + 1)
+    );
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({ status: 413 });
+    } finally {
+      zipMock.mockRestore();
+    }
+    expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
+      "original"
+    );
+  });
+
   test("exports plugin worker data but omits redownloadable runtime caches", async () => {
     const worker = join(rootDir, "orgs/org-1/plugins/memory/workers/server");
     await mkdir(join(worker, "cache"), { recursive: true });
