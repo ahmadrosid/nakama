@@ -150,8 +150,10 @@ agent.setServerTools({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
-    recordUsage: (modelId, inputTokens, outputTokens) => {
-      llmUsageTracker.record(modelId, inputTokens, outputTokens);
+    recordUsage: (modelId, inputTokens, outputTokens, providerInstance) => {
+      llmUsageTracker.record(modelId, inputTokens, outputTokens, 0, {
+        providerInstance,
+      });
     },
   }),
   session: createSessionTools(agent),

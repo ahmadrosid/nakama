@@ -5,6 +5,7 @@ import {
   inferArtifactMimeType,
   MAX_IMAGE_BYTES,
   NakamaApiError,
+  type ProviderInstance,
   pathExists,
   type ToolContext,
   type ToolDefinition,
@@ -75,7 +76,8 @@ export interface GenerateImageToolDeps {
   recordUsage?: (
     modelId: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
+    providerInstance: ProviderInstance
   ) => void;
 }
 
@@ -242,7 +244,8 @@ export async function runGenerateImageTool(
     deps.recordUsage(
       result.model,
       result.usage.inputTokens,
-      result.usage.outputTokens
+      result.usage.outputTokens,
+      selection.instance
     );
   }
 

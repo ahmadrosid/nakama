@@ -279,6 +279,34 @@ describe("generate_image tool persistence (U4)", () => {
     expect(seenBaseUrl).toBe("http://127.0.0.1:8000/v1");
   });
 
+  test("records usage against the provider instance that served the call", async () => {
+    await setupWorkspace();
+    let pricedOn: string | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async () => ({
+          data: PNG_BYTES,
+          mediaType: "image/png",
+          model: "gpt-image-2",
+          size: "1024x1024",
+          usage: { inputTokens: 8, outputTokens: 200 },
+        }),
+        getUserConfig: () =>
+          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        recordUsage: (_model, _input, _output, providerInstance) => {
+          pricedOn = providerInstance.id;
+        },
+      }
+    );
+
+    expect(pricedOn).toBe("p-openai");
+  });
+
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
