@@ -641,7 +641,7 @@ function RunHistoryItemSummary({
           : `Run from ${formatSessionRelativeTime(run.startedAt)}`
       }
       className={cn(
-        "flex min-w-0 flex-1 items-start gap-2.5 text-left",
+        "flex min-w-0 flex-1 items-center gap-2.5 text-left",
         !hasBody && "cursor-default"
       )}
       disabled={!hasBody}
@@ -688,7 +688,7 @@ function RunHistoryItemSummary({
         <ArrowRight01Icon
           aria-hidden
           className={cn(
-            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
             expanded && "rotate-90"
           )}
         />
@@ -872,7 +872,7 @@ function RunHistoryItem({
 
   return (
     <li className="min-w-0 px-4">
-      <div className="flex items-start gap-2 py-3">
+      <div className="flex items-center gap-2 py-3">
         <RunHistoryItemSummary
           expanded={expanded}
           hasBody={hasBody}
@@ -882,7 +882,7 @@ function RunHistoryItem({
 
         <Button
           aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
-          className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+          className="shrink-0 text-muted-foreground hover:text-destructive"
           disabled={busy}
           onClick={onDelete}
           size="icon-sm"
@@ -906,7 +906,7 @@ function RunHistoryItem({
 }
 
 function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
-  const className = "mt-0.5 size-4 shrink-0";
+  const className = "size-4 shrink-0";
 
   if (status === "completed") {
     return (
